@@ -59,6 +59,7 @@ public class XFDmRegistry extends ScriptableSystem {
   private let m_phoneHost: wref<NewHudPhoneGameController>;
   private let m_lines: array<Int32>;
   private let m_callContact: String;
+  private let m_callRingS: Float;
   private let m_warning: String;
   private let m_onscreen: String;
 
@@ -181,6 +182,17 @@ public class XFDmRegistry extends ScriptableSystem {
 
   public func SetCallContact(contact: String) -> Void {
     this.m_callContact = contact;
+    if StrLen(contact) == 0 { this.m_callRingS = 0.0; }
+  }
+
+  // 0.8.18 (Borg 3): how long the bridge wants the owned call to ring; 0 when none is owned. The game's HUD phone ends a ring
+  // after its own timeout (about 8 s) whatever the request says, so the HUD wrap below lends its timer this value.
+  public func SetCallRing(seconds: Float) -> Void {
+    this.m_callRingS = seconds;
+  }
+
+  public func CallRing() -> Float {
+    return this.m_callRingS;
   }
 
   public func CallContact() -> String {
@@ -1202,7 +1214,26 @@ public abstract class XFDmPhone {
     return "the phone is disabled or busy (a status effect, a device in use, another call)";
   }
 
-  public static func Ring(cid: String, contact: String, mode: String, rejectable: Bool) -> String {
+  // 0.8.18: the contact's name as the phone shows it, in the player's language (JournalContact.GetLocalizedName, as the HUD phone's
+  // call widget reads it, newHudPhoneGameController.script:956).
+  public static func ContactName(cid: String, contact: String) -> String {
+    let journal = GameInstance.GetJournalManager(GetGameInstance());
+    if !IsDefined(journal) { return XFJson.Fail("not_ready", "the journal isn't there yet"); }
+    let context: JournalRequestContext;
+    context.stateFilter.active = true;
+    let entries: array<wref<JournalEntry>>;
+    journal.GetContacts(context, entries);
+    for entry in entries {
+      let found = entry as JournalContact;
+      if IsDefined(found) && Equals(found.GetId(), contact) {
+        let name = GetLocalizedText(found.GetLocalizedName(journal));
+        return "{\"ok\":true,\"name\":" + XFJson.Str(name) + "}";
+      }
+    }
+    return "{\"ok\":true,\"name\":\"\"}";
+  }
+
+  public static func Ring(cid: String, contact: String, mode: String, rejectable: Bool, ringS: Float) -> String {
     let phone = XFDmPhone.System();
     let player = XFPlayer.Player();
     if !IsDefined(phone) || !IsDefined(player) {
@@ -1219,8 +1250,35 @@ public abstract class XFDmPhone {
     let registry = XFDmRegistry.Get();
     if IsDefined(registry) {
       registry.SetCallContact(contact);
+      registry.SetCallRing(ringS);
     }
-    XFBridgeLog.Info(cid, "dm call ringing from " + contact + " (" + mode + ")");
+    XFBridgeLog.Info(cid, "dm call ringing from " + contact + " (" + mode + ", rings up to " + FloatToString(ringS) + " s)");
+    return "{\"ok\":true}";
+  }
+
+  // 0.8.18 (Borg 3): the phone's own pickup for the call the bridge placed, what the answer key's release queues in the HUD phone
+  // (newHudPhoneGameController.script:455-463): a PickupPhoneRequest holding the call's information, not rejected. It answers
+  // only the owned call, and only while the phone shows it ringing.
+  public static func Answer(cid: String, contact: String) -> String {
+    let registry = XFDmRegistry.Get();
+    if !IsDefined(registry) || !Equals(registry.CallContact(), contact) {
+      return XFJson.Fail("not_ready", "the bridge doesn't own a call from " + contact);
+    }
+    let phone = XFDmPhone.System();
+    if !IsDefined(phone) {
+      return XFJson.Fail("not_ready", "the game's phone system isn't there yet");
+    }
+    let board = GameInstance.GetBlackboardSystem(GetGameInstance()).Get(GetAllBlackboardDefs().UI_ComDevice);
+    if !IsDefined(board) { return XFJson.Fail("not_ready", "the phone state is unavailable"); }
+    let current = FromVariant<PhoneCallInformation>(board.GetVariant(GetAllBlackboardDefs().UI_ComDevice.PhoneCallInformation));
+    if NotEquals(current.contactName, StringToName(contact)) || NotEquals(current.callPhase, questPhoneCallPhase.IncomingCall) {
+      return XFJson.Fail("not_ready", "the phone isn't ringing for " + contact + " now");
+    }
+    let pickup = new PickupPhoneRequest();
+    pickup.CallInformation = current;
+    pickup.shouldBeRejected = false;
+    phone.QueueRequest(pickup);
+    XFBridgeLog.Info(cid, "dm call from " + contact + " answered by the bridge (the phone's own pickup)");
     return "{\"ok\":true}";
   }
 
@@ -1266,6 +1324,24 @@ public abstract class XFDmPhone {
     XFBridgeLog.Info(cid, "dm message toast from " + contact);
     return "{\"ok\":true,\"shown\":true}";
   }
+}
+
+// 0.8.18 (Borg 3, DP3: ring_s 30 ignored, the call missed after about 8 s): the HUD phone arms its own timeout when a call starts
+// ringing (StartTimeoutFailsafe, m_TimeoutPeroid, newHudPhoneGameController.script:1041-1046), which ends the ring through
+// PhoneTimeoutRequest whatever the quest request says. For the call the bridge owns, the timer is armed with the ring_s that was
+// asked for, then put back, so the game's own calls keep their own.
+@wrapMethod(NewHudPhoneGameController)
+public final func StartTimeoutFailsafe() -> Void {
+  let registry = XFDmRegistry.Get();
+  let own = false;
+  let kept = this.m_TimeoutPeroid;
+  if XFBridge_Live() && IsDefined(registry) {
+    let ring = registry.CallRing();
+    own = ring > 0.0 && Equals(registry.CallContact(), NameToString(this.m_CurrentCallInformation.contactName));
+    if own { this.m_TimeoutPeroid = ring; }
+  }
+  wrappedMethod();
+  if own { this.m_TimeoutPeroid = kept; }
 }
 
 @wrapMethod(NewHudPhoneGameController)

@@ -130,7 +130,9 @@ struct Ops
     std::function<json(const std::map<std::string, std::string>&)> presence;
     std::function<void(const TimedLine&)> showLine;
     std::function<void(uint64_t aLineId)> hideLine;
-    std::function<void(const std::string& aContact, const std::string& aMode, bool aRejectable)> callRing;
+    std::function<void(const std::string& aContact, const std::string& aMode, bool aRejectable, double aRingS)> callRing;
+    std::function<void(const std::string& aContact)> callAnswer;
+    std::function<std::string(const std::string& aContact)> contactName;
     std::function<void(const std::string& aContact, const std::string& aMode)> callStart;
     std::function<bool(const std::string& aContact)> callEnd;
     std::function<void(const std::vector<Quest>& aQuests)> tracker;

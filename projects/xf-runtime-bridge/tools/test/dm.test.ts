@@ -474,7 +474,7 @@ describe("0.8.12 dm against the self-test host's world", () => {
     expect(((await world(api)).call as Any).starts).toBe(1);
     await until(async () => Object.keys(((await world(api)).lines as Any)).length > 0);
     const lines = Object.values((await world(api)).lines as Any) as string[];
-    expect(lines[0]).toMatch(/^2\|test_fixer\|First line\.$/); // the holocall style, the contact's id as the speaker
+    expect(lines[0]).toMatch(/^2\|Fixer Test\|First line\.$/); // the holocall style, the contact's name (0.8.18; the id when unreadable) as the speaker
     await event(api, "dm.phone", since, (e) => e.data?.what === "ended", 12000);
     expect(((await world(api)).call as Any).state).toBe("ended");
     expect((await ok(api, "phone.state")).call.state).toBe("ended");
@@ -500,6 +500,29 @@ describe("0.8.12 dm against the self-test host's world", () => {
     expect(((await world(api)).call as Any).state).toBe("ended");
     expect(await refused(api, "phone.call", { contact: "test_fixer", lines: [] })).toBe("bad_input");
   }, 30_000);
+
+  test("0.8.18 (Borg 3): ring_s reaches the game's phone, and auto_answer answers the ring with no key press", async () => {
+    const since = await latest(api);
+    const before = ((await world(api)).call as Any);
+    const call = await ok(api, "phone.call", { contact: "test_friend", ring_s: 45, auto_answer: true, lines: [{ text: "No key needed.", seconds: 1.5 }] });
+    expect(call).toMatchObject({ state: "ringing", ring_s: 45, auto_answer: true });
+    // The simulated phone rings (fact 1); the session sees it and answers once, as the phone's own pickup does.
+    await event(api, "dm.phone", since, (e) => e.data?.what === "auto_answer");
+    await event(api, "dm.phone", since, (e) => e.data?.what === "answered");
+    const after = ((await world(api)).call as Any);
+    expect(after).toMatchObject({ ring_s: 45 });
+    expect(after.answers - before.answers).toBe(1);
+    expect(after.starts - before.starts).toBe(1);
+    await event(api, "dm.phone", since, (e) => e.data?.what === "ended", 12000);
+    // Without auto_answer nothing answers: the call keeps ringing for the player.
+    const plain = await ok(api, "phone.call", { contact: "test_friend", ring_s: 30, lines: [{ text: "Pick up." }] });
+    expect(plain).toMatchObject({ ring_s: 30, auto_answer: false });
+    await sleep(700);
+    expect(((await world(api)).call as Any)).toMatchObject({ state: "ringing", answers: after.answers });
+    await ok(api, "phone.end");
+    // An unknown flag is still refused by name.
+    expect(await refused(api, "phone.call", { contact: "test_friend", lines: [{ text: "x" }], auto_reply: true })).toBe("bad_input");
+  }, 40_000);
 
   test("the quest tracker: an XF quest, its objectives, the toasts, a HUD that isn't up, an area that completes an objective", async () => {
     await world(api, { hud: true });

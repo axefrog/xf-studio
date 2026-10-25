@@ -1,6 +1,7 @@
 #include "core/Recording.hpp"
 #include "core/Bridge.hpp"
 #include "core/Lifecycle.hpp"
+#include "core/Dispatcher.hpp"
 #include <cstdio>
 #include <fstream>
 #include <future>
@@ -183,6 +184,17 @@ int RecordingUnitTests()
     Check(taps.Ingress("voice", R"({"event":"voice.requested","trigger":"greeting"})", 600.02, 7, 4, 2), "voice request accepted");
     auto events = taps.Read({{"run", 1}}, 600.1);
     Check(events["records"].size() == 2 && events["records"][0]["source_s"] == 600.01 && events["records"][1]["channel"] == "voice", "events in shared sequence with source time");
+    {
+        // 0.8.18 (Borg 3): the ellipsis and the inverted exclamation mark of a real subtitle come back byte for byte, in the ring's
+        // rows and in the wire text the pipe carries.
+        Service text; text.Start({{"channels", {"subtitles"}}}, 650, 7, 4, "utf8-test");
+        const std::string line = "I need a napâ¦ just a short one. Â¡Pide ayuda! ð";
+        Check(text.Ingress("subtitles", json{{"event", "line.delivered"}, {"display_text", line}, {"text", "<kiroshi o=\"Â¡Pide ayuda!\"/>"}}.dump(-1, ' ', false), 650.01, 7, 4, 1), "utf-8 line accepted");
+        const auto read = text.Read({{"run", 1}}, 650.1);
+        const auto wire = SerializeJson(read);
+        Check(read["records"][0]["data"]["display_text"].get<std::string>() == line, "utf-8 line: the row's text is byte for byte");
+        Check(wire.find("napâ¦ just") != std::string::npos && wire.find("ï¿½") == std::string::npos, "utf-8 line: the wire text keeps the ellipsis and has no replacement character");
+    }
     Check(!taps.Ingress("voice", std::string(9000, 'x'), 600.03, 7, 4, 3), "oversize ingress refused");
     Check(!taps.Ingress("voice", "{bad", 600.04, 7, 4, 3), "malformed ingress refused");
     Check(!taps.Ingress("voice", std::string(20, '[') + "0" + std::string(20, ']'), 600.05, 7, 4, 3), "nested ingress refused before parse");
@@ -210,6 +222,32 @@ int RecordingUnitTests()
     Check(fu.Ingress("face", R"({"event":"face.bridge_resend","attitude_prepared":true})", 900.91, 8, 4, 11), "F submission ingress uses same bounded recorder");
     fu.RequestStop("cancelled");
     Check(!fu.Wants("face") && !fu.Wants("ui"), "F/U ingress stops immediately");
+    {
+        // 0.8.18 (Borg 3): a coverage sample that fails says why in its record (the code and the message), is counted invalid,
+        // and a sample that answers valid:false for its own reason is invalid with that reason; a valid one never is.
+        Service failBeat; failBeat.Start({{"channels", {"subtitles", "face"}}}, 1100, 8, 4, "hb-test");
+        recording::Ops failing;
+        failing.guard = [] {};
+        failing.sample = [](const std::string& channel, const std::vector<std::string>&) -> json {
+            if (channel == "subtitles") throw MethodError("failed", "the script layer answered something that isn't JSON");
+            return json{{"event", "face.coverage"}, {"valid", true}};
+        };
+        for (int i = 0; i < 12; ++i) failBeat.Tick(1100.0 + i * 0.1, 8, 4, true, i, failing);
+        int invalidSubtitles = 0, validFace = 0, invalidFace = 0;
+        bool saysWhy = false;
+        uint64_t since = 0;
+        for (int pageNo = 0; pageNo < 6; ++pageNo)
+        {
+        const auto failPage = failBeat.Read({{"run", 1}, {"since", since}}, 1102);
+        since = failPage["next"].get<uint64_t>();
+        for (const auto& row : failPage["records"])
+        {
+            if (row["channel"] == "subtitles" && !row["valid"].get<bool>()) { ++invalidSubtitles; saysWhy = row["data"]["error"] == "failed" && row["data"]["message"].get<std::string>().find("JSON") != std::string::npos; }
+            if (row["channel"] == "face") { if (row["valid"].get<bool>()) ++validFace; else ++invalidFace; }
+        }
+        }
+        Check(invalidSubtitles >= 1 && saysWhy && validFace >= 1 && invalidFace == 0, "heartbeat: a failing sample is invalid with its code and message, a good one is never invalid");
+    }
     Service contacts;
     const auto contactStart = contacts.Start(json::object(), 1000, 8, 4, "contacts");
     Check(contacts.Wants("contacts"), "contacts enabled in default source selection");

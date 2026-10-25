@@ -109,7 +109,8 @@ struct SimDm::State
     std::string callState = "none";
     std::string callContact, callMode;
     int callFact = 0;
-    int callRings = 0, callStarts = 0, callEnds = 0;
+    int callRings = 0, callStarts = 0, callEnds = 0, callAnswers = 0;
+    double callRingS = 0.0;
     std::string lookAt;
     bool combat = false, weapon = false;
     double tod = 43200.0;
@@ -530,7 +531,16 @@ dm::Ops MakeOps(SimDm::State* aState)
         std::scoped_lock _(s->mutex);
         s->lines.erase(static_cast<int32_t>(aLineId & 0xFFFFFFFFULL));
     };
-    ops.callRing = [s](const std::string& aContact, const std::string& aMode, bool) {
+    ops.contactName = [](const std::string& aContact) { return aContact == "test_fixer" ? std::string("Fixer Test") : std::string(); };
+    ops.callAnswer = [s](const std::string& aContact) {
+        std::scoped_lock _(s->mutex);
+        if (s->callContact == aContact && s->callFact == 1)
+        {
+            s->callFact = 2;
+            ++s->callAnswers;
+        }
+    };
+    ops.callRing = [s](const std::string& aContact, const std::string& aMode, bool, double aRingS) {
         std::scoped_lock _(s->mutex);
         FailIfAsked(s, "call");
         if (std::find(s->contacts.begin(), s->contacts.end(), aContact) == s->contacts.end())
@@ -546,6 +556,7 @@ dm::Ops MakeOps(SimDm::State* aState)
         s->callContact = aContact;
         s->callMode = aMode;
         s->callFact = 1;
+        s->callRingS = aRingS;
         ++s->callRings;
     };
     ops.callStart = [s](const std::string& aContact, const std::string& aMode) {
@@ -689,7 +700,7 @@ json Snapshot(SimDm::State* s)
                 {"banners", s->banners},
                 {"banners_hidden", s->bannersHidden},
                 {"toasts", s->toasts},
-                {"call", {{"state", s->callState}, {"contact", s->callContact}, {"mode", s->callMode}, {"fact", s->callFact}, {"rings", s->callRings}, {"starts", s->callStarts}, {"ends", s->callEnds}}},
+                {"call", {{"state", s->callState}, {"contact", s->callContact}, {"mode", s->callMode}, {"fact", s->callFact}, {"rings", s->callRings}, {"answers", s->callAnswers}, {"ring_s", s->callRingS}, {"starts", s->callStarts}, {"ends", s->callEnds}}},
                 {"listening", s->listening},
                 {"released_all", s->releasedAll},
                 {"last_wants", s->lastWants},

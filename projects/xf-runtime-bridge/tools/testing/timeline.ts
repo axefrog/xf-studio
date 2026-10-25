@@ -118,12 +118,18 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   let last = cursor.last_v, healthMin: number | null = null, healthMax: number | null = null;
   const changes: Json = { combat: 0, heat: 0, vehicle: 0, busy: 0 };
   const invalidChannels = new Set<string>();
+  // 0.8.18 (Borg 3): counts[channel] is every record read, but the lists show only valid event records (invalid rows are
+  // counted, polled snapshots are coalesced into <channel>_latest), so a channel's count and its list disagreed (237 against
+  // 22). The detail says where each record went: records = invalid + coalesced + listed (+ omitted from the compact list).
+  const where: Record<string, { records: number; invalid: number; coalesced: number; listed: number }> = {};
+  const track = (channel: string) => where[channel] ??= { records: 0, invalid: 0, coalesced: 0, listed: 0 };
   let lastVRow: Json | undefined;
   for (const row of records) {
     counts[row.channel] = (counts[row.channel] ?? 0) + 1;
+    track(row.channel).records++;
     if (Number.isFinite(row.source_s)) newestReadS = Math.max(newestReadS ?? row.source_s, row.source_s);
     // Invalid samples inside this queried interval (the cursor makes the interval start where the last call ended).
-    if (!row.valid) { gaps.push("invalid_source"); invalidChannels.add(row.channel); continue; }
+    if (!row.valid) { gaps.push("invalid_source"); invalidChannels.add(row.channel); track(row.channel).invalid++; continue; }
     const v = row.data;
     if (v?.event?.startsWith("supervisor.") && v.event !== "supervisor.coverage" && !receiveSupervisor(v, "recorder", row.source_s)) continue;
     if (v?.event === "placement.traffic") alerts.push({ kind: "traffic_risk", seq: row.seq, source_s: row.source_s, ...v });
@@ -135,8 +141,8 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     if (row.channel !== "v") {
       const list: Json[] = channels[row.channel] ??= [];
       // Heartbeats and repeated UI snapshots are coalesced; distinct callbacks remain counted.
-      if (v?.event) list.push({ seq: row.seq, source_s: row.source_s, ...v });
-      else channels[`${row.channel}_latest`] = { seq: row.seq, source_s: row.source_s, ...v };
+      if (v?.event) { list.push({ seq: row.seq, source_s: row.source_s, ...v }); track(row.channel).listed++; }
+      else { channels[`${row.channel}_latest`] = { seq: row.seq, source_s: row.source_s, ...v }; track(row.channel).coalesced++; }
       continue;
     }
     if (!v) continue;
@@ -200,6 +206,9 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   const compact = (list: Json[]) => options.detail ? list : list.slice(-24);
   const omitted: Json = {};
   for (const key of Object.keys(channels)) if (Array.isArray(channels[key])) { omitted[key] = options.detail ? 0 : Math.max(0, channels[key].length - 24); channels[key] = compact(channels[key]); }
+  // Per channel: how the records of counts[channel] divide. listed counts the records of the list before compaction.
+  const countDetail: Json = {};
+  for (const [channel, w] of Object.entries(where)) countDetail[channel] = { ...w, omitted: omitted[channel] ?? 0, shown: w.listed - (omitted[channel] ?? 0), valid: w.records - w.invalid };
   // Source loss counts are cumulative for the run; the gap is what grew since the cursor's baseline.
   const baseline: SourceCounters = saved?.source_counters ?? { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false };
   const counters: SourceCounters = { dropped: status.dropped ?? 0, invalid: status.invalid ?? 0, missed_deadlines: status.missed_deadlines ?? 0, file_error: !!status.file_error };
@@ -234,7 +243,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     v: { current, latest_stale: recordMore, latest_seq: lastVRow?.seq ?? null, latest_source_s: lastVRow?.source_s ?? null,
        samples: counts.v ?? 0, path: options.detail ? path : path.length <= 2 ? path : Array.from({ length: Math.min(8, path.length) }, (_, i) => path[Math.round(i * (path.length - 1) / (Math.min(8, path.length) - 1))]),
       distance_m: travelled, path_points: path.length,
-      health_min: healthMin, health_max: healthMax, changes, latest: last }, channels, counts,
+      health_min: healthMin, health_max: healthMax, changes, latest: last }, channels, counts, count_detail: countDetail,
     events: compact(events), alerts: compact(alerts), omitted: { ...omitted, events: options.detail ? 0 : Math.max(0, events.length - 24), alerts: options.detail ? 0 : Math.max(0, alerts.length - 24) },
     supervisor_summary: { message: supervision.length ? "while you were away: supervisor receipts observed" : "while you were away: no supervisor receipts observed",
       scope: { world_generation: cursor.world, start_s: status.start_s, end_s: status.end_s }, excluded_out_of_scope: outOfScope,

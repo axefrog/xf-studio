@@ -15,7 +15,7 @@ test("2.31 weapon/upper-body interpretation is pinned to script writers, not the
   // :1930–1935 Shoot=8; upperBodyTransitions.script:1326 Aiming=6.
   const player = source("XFRuntimeBridgePlayer.reds");
   for (const [value, name] of [[5, "Ready"], [6, "Safe"], [2, "Reload"], [8, "Shoot"]])
-    expect(player).toContain(`case ${value}: name = "${name}";`);
+    expect(player).toContain(`case ${value}: return "${name}";`); // 0.8.18: RangedStateName (the same writers, as a function)
   expect(player).toContain("upper == 6");
   expect(player).not.toContain('EnumValueToString("gamePSMWeaponStates"');
   for (const file of ["XFRuntimeBridgePlayer.reds", "XFRuntimeBridgeSenses.reds", "XFRuntimeBridgeRecording.reds"])

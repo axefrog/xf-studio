@@ -12,11 +12,20 @@ public abstract class XFRecording {
     let combat = attached ? XFJson.Flag(player.IsInCombat()) : "null";
     return "{\"ok\":true,\"phase\":" + XFJson.Str(phase) + ",\"photo_mode\":" + XFJson.Flag(Equals(phase, "photo_mode")) + ",\"vehicle\":" + vehicle + ",\"combat\":" + combat + "}";
   }
+  // 0.8.18 (Borg 3, B217-3): the script-call layer treats an answer without "ok":true as a failed call, so the tap, face and UI
+  // coverage samples, which are bare objects (they are also the shape of the events the taps record), were counted as invalid
+  // records with error "failed" at every heartbeat: 15 to 25 percent of a run, and an armed capture cancelled by them.
+  // Their own "valid" field is the sample's validity once the answer is a proper envelope.
+  public static func Enveloped(body: String) -> String {
+    if StrBeginsWith(body, "{\"ok\":") { return body; }
+    if !StrBeginsWith(body, "{") || StrLen(body) < 3 { return XFJson.Fail("failed", "the recorder source answered something that isn't a JSON object"); }
+    return "{\"ok\":true," + StrMid(body, 1);
+  }
   public static func Sample(cid: String, channel: String, whos: String) -> String {
     if !XFBridge_Live() { return XFJson.Fail("game_loading", "Recorder live gate closed"); }
-    if Equals(channel, "subtitles") || Equals(channel, "voice") { return XFRecordingTap.Status(channel); }
-    if Equals(channel, "face") { return XFRecordingFace.Status(); }
-    if Equals(channel, "ui") { return XFRecordingUi.Sample(); }
+    if Equals(channel, "subtitles") || Equals(channel, "voice") { return XFRecording.Enveloped(XFRecordingTap.Status(channel)); }
+    if Equals(channel, "face") { return XFRecording.Enveloped(XFRecordingFace.Status()); }
+    if Equals(channel, "ui") { return XFRecording.Enveloped(XFRecordingUi.Sample()); }
     if Equals(channel, "contacts") {
       return "{\"ok\":true,\"valid\":true,\"event\":\"contact.coverage\",\"covered_paths\":[\"PlayerPuppet.OnCarHitPlayer.entry\",\"AbstractLandEvents.OnEnter\",\"WallCollisionHelpers.GetWallCollision\"],\"commissioned\":false,\"continuous\":false,\"no_contact_proof\":false,\"controller_other_identity\":false}";
     }

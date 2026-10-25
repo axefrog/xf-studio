@@ -247,6 +247,7 @@ struct CallRequest
     std::string contact; // a journal contact's id (phone.state {contacts: true} lists them)
     std::vector<CallLine> lines;
     double ringS = 20.0;
+    bool autoAnswer = false; // 0.8.18: answer the ring as the phone's own pickup would (no key press)
     bool video = false; // the holocall frame (a camera feed the game stages for its own calls) instead of the audio call's avatar
     bool rejectable = true;
 };
@@ -474,7 +475,12 @@ struct SessionOps
     std::function<void(uint64_t aLineId)> hideLine;
     // The phone call (PhoneSystem's requests): the incoming ring from a journal contact, the call's start once the player has
     // answered, and its end (also a ring withdrawn). aMode is audio or video.
-    std::function<void(const std::string& aContact, const std::string& aMode, bool aRejectable)> callRing;
+    // aRingS (0.8.18): how long the game's phone may ring before its own timeout misses the call.
+    std::function<void(const std::string& aContact, const std::string& aMode, bool aRejectable, double aRingS)> callRing;
+    // 0.8.18: the phone's own pickup (PickupPhoneRequest, what pressing the answer key queues) for a call the bridge placed.
+    std::function<void(const std::string& aContact)> callAnswer;
+    // 0.8.18: the contact's localised name as the phone shows it ("" when unknown); the speaker of a call line that gave none.
+    std::function<std::string(const std::string& aContact)> contactName;
     std::function<void(const std::string& aContact, const std::string& aMode)> callStart;
     // False means queued, not yet acknowledged; ownership must be retained.
     std::function<bool(const std::string& aContact)> callEnd;
@@ -496,6 +502,7 @@ struct PhoneCall
     CleanupRetry endRetry;
     double ringUntil = 0.0, endsAt = 0.0, startedAt = 0.0;
     bool sawRing = false, sawTalk = false;
+    bool autoAnswer = false, answerSent = false;
 };
 struct PhoneText
 {

@@ -219,10 +219,19 @@ dm::Ops OpsFor(const std::string& aCid)
         int32_t number = static_cast<int32_t>(aLineId & 0xFFFFFFFFULL);
         ScriptCall("XFDmLines", "Hide", {"Int32"}, {&number}, aCid);
     };
-    ops.callRing = [aCid](const std::string& aContact, const std::string& aMode, bool aRejectable) {
+    ops.callRing = [aCid](const std::string& aContact, const std::string& aMode, bool aRejectable, double aRingS) {
         RED4ext::CString contact(aContact.c_str()), mode(aMode.c_str());
         bool rejectable = aRejectable;
-        ScriptCall("XFDmPhone", "Ring", {"String", "String", "Bool"}, {&contact, &mode, &rejectable}, aCid);
+        float ringS = static_cast<float>(aRingS);
+        ScriptCall("XFDmPhone", "Ring", {"String", "String", "Bool", "Float"}, {&contact, &mode, &rejectable, &ringS}, aCid);
+    };
+    ops.contactName = [aCid](const std::string& aContact) {
+        RED4ext::CString contact(aContact.c_str());
+        return ScriptCall("XFDmPhone", "ContactName", {"String"}, {&contact}, aCid).value("name", std::string());
+    };
+    ops.callAnswer = [aCid](const std::string& aContact) {
+        RED4ext::CString contact(aContact.c_str());
+        ScriptCall("XFDmPhone", "Answer", {"String"}, {&contact}, aCid);
     };
     ops.callStart = [aCid](const std::string& aContact, const std::string& aMode) {
         RED4ext::CString contact(aContact.c_str()), mode(aMode.c_str());

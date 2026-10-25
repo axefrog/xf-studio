@@ -169,6 +169,8 @@ SessionOps Service::MakeSessionOps(const Ops& aOps)
     so.showLine = aOps.showLine;
     so.hideLine = aOps.hideLine;
     so.callRing = aOps.callRing;
+    so.callAnswer = aOps.callAnswer;
+    so.contactName = aOps.contactName;
     so.callStart = aOps.callStart;
     so.callEnd = aOps.callEnd;
     so.tracker = aOps.tracker;

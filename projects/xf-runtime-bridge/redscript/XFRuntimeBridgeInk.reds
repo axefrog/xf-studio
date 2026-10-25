@@ -215,7 +215,19 @@ public abstract class XFInkStyle {
   // 0.8.9: a phone screen is open on the HUD: the contact list or dialer (UI_ComDevice.ContactsActive, phoneSystem.script:177),
   // the text messenger (SmsMessengerActive, the player's context listener, player.script:1621-1622) or a message being read
   // (isDisplayingMessage, messagePopup.script:84 and 237). The journal, the codex and the other menus hide the HUD layer
-  // themselves.
+  // themselves. 0.8.18 (Borg 3, DP3: the panel covered the incoming-call widget, its answer and reject key hints): the call
+  // widget is one of the phone's screens too, up from the first ring (IncomingCall) through the call (StartCall) until it ends
+  // (UI_ComDevice.PhoneCallInformation, the variant the HUD phone reads, newHudPhoneGameController.script:459 and 1000-1010).
+  public static func CallWidgetUp() -> Bool {
+    let defs = GetAllBlackboardDefs().UI_ComDevice;
+    let board = GameInstance.GetBlackboardSystem(GetGameInstance()).Get(defs);
+    if !IsDefined(board) {
+      return false;
+    }
+    let info = FromVariant<PhoneCallInformation>(board.GetVariant(defs.PhoneCallInformation));
+    return Equals(info.callPhase, questPhoneCallPhase.IncomingCall) || Equals(info.callPhase, questPhoneCallPhase.StartCall);
+  }
+
   public static func PhoneOpen() -> Bool {
     let defs = GetAllBlackboardDefs().UI_ComDevice;
     let board = GameInstance.GetBlackboardSystem(GetGameInstance()).Get(defs);
@@ -225,7 +237,7 @@ public abstract class XFInkStyle {
     let contacts = board.GetBool(defs.ContactsActive);
     let messenger = board.GetBool(defs.SmsMessengerActive);
     let reading = board.GetBool(defs.isDisplayingMessage);
-    return contacts || messenger || reading;
+    return contacts || messenger || reading || XFInkStyle.CallWidgetUp();
   }
 
   public static func Font() -> String {

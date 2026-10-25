@@ -895,7 +895,7 @@ TextRequest ParseText(const json& aParams)
 
 CallRequest ParseCall(const json& aParams)
 {
-    p::RequireOnly(aParams, {"contact", "lines", "ring_s", "mode", "rejectable"});
+    p::RequireOnly(aParams, {"contact", "lines", "ring_s", "mode", "rejectable", "auto_answer"});
     CallRequest request;
     request.contact = RequiredText(aParams, "contact", 64, "a journal contact's id (phone_state {contacts: true} lists them)");
     if (!NameChars(request.contact, 64, "-."))
@@ -912,17 +912,15 @@ CallRequest ParseCall(const json& aParams)
         RequireOnlyIn(line, {"text", "speaker", "seconds"}, "lines[]");
         CallLine out;
         out.text = RequiredText(line, "text", 300, "the line's words");
+        // Left empty when not given: Session::Call fills it with the contact's localised name (0.8.18), else the id.
         out.speaker = OptionalText(line, "speaker", 48);
-        if (out.speaker.empty())
-        {
-            out.speaker = request.contact;
-        }
         out.seconds = p::CheckNumber(line, "seconds", 0.5, 20.0).value_or(std::clamp(1.2 + 0.06 * static_cast<double>(out.text.size()), 1.5, 8.0));
         request.lines.push_back(out);
     }
     request.ringS = p::CheckNumber(aParams, "ring_s", 3.0, 120.0).value_or(request.ringS);
     request.video = OneOf(aParams, "mode", {"audio", "video"}, "audio") == "video";
     request.rejectable = p::CheckBoolean(aParams, "rejectable").value_or(true);
+    request.autoAnswer = p::CheckBoolean(aParams, "auto_answer").value_or(false);
     return request;
 }
 
@@ -1925,6 +1923,22 @@ void Session::TickCall(const Sample& aSample, double aNow)
         if (aSample.callFact == 1)
         {
             m_call.sawRing = true;
+            // 0.8.18 (Borg 3): the desktop key press that answered a call pulled the Claude window over the game. A call the bridge
+            // placed can be answered the way the phone's own answer key does it, once, as soon as the phone is seen ringing.
+            if (m_call.autoAnswer && !m_call.answerSent && m_ops.callAnswer)
+            {
+                m_call.answerSent = true;
+                try
+                {
+                    m_ops.callAnswer(contact);
+                    Report("phone", "info", "the call from " + contact + " was answered by the bridge", json{{"what", "auto_answer"}, {"call", id}, {"contact", contact}});
+                }
+                catch (const std::exception& e)
+                {
+                    m_call.answerSent = false; // tried again at the next sample while it rings
+                    Report("phone", "warn", std::string("the bridge couldn't answer the call: ") + e.what(), json{{"what", "auto_answer_failed"}, {"call", id}, {"error", e.what()}});
+                }
+            }
         }
         else if (aSample.callFact == 2)
         {
@@ -2186,19 +2200,44 @@ json Session::Call(const CallRequest& aRequest, double aNow)
     // a refusal leaves nothing behind.
     if (m_ops.callRing)
     {
-        m_ops.callRing(aRequest.contact, mode, aRequest.rejectable);
+        m_ops.callRing(aRequest.contact, mode, aRequest.rejectable, aRequest.ringS);
     }
     m_call = PhoneCall{};
     m_call.id = ++m_phoneCounter;
     m_call.contact = aRequest.contact;
     m_call.mode = mode;
     m_call.lines = aRequest.lines;
+    // 0.8.18 (Borg 3): a line that names no speaker is spoken by the contact as the phone shows the name ("Life Coach"), not by
+    // the journal id ("coach"); the id is the fallback when the name can't be read.
+    std::string speaker = aRequest.contact;
+    if (m_ops.contactName)
+    {
+        try
+        {
+            const auto name = m_ops.contactName(aRequest.contact);
+            if (!name.empty())
+            {
+                speaker = name;
+            }
+        }
+        catch (const std::exception&)
+        {
+        }
+    }
+    for (auto& line : m_call.lines)
+    {
+        if (line.speaker.empty())
+        {
+            line.speaker = speaker;
+        }
+    }
     m_call.state = "ringing";
     m_call.startedAt = aNow;
     m_call.ringUntil = aNow + aRequest.ringS;
+    m_call.autoAnswer = aRequest.autoAnswer;
     Report("phone", "info", aRequest.contact + " is calling", json{{"what", "ringing"}, {"call", m_call.id}, {"contact", aRequest.contact}, {"mode", mode}});
     m_now = aNow;
-    return json{{"call", m_call.id}, {"state", "ringing"}, {"contact", aRequest.contact}, {"mode", mode}, {"ring_s", aRequest.ringS}, {"lines", m_call.lines.size()},
+    return json{{"call", m_call.id}, {"state", "ringing"}, {"contact", aRequest.contact}, {"mode", mode}, {"ring_s", aRequest.ringS}, {"auto_answer", aRequest.autoAnswer}, {"lines", m_call.lines.size()},
                 {"undo", {{"method", "phone.end"}, {"params", json::object()}}},
                 {"undo_note", "the result's undo ends the call (the ring or the line stops, the phone is free); an unanswered call ends by itself"}};
 }

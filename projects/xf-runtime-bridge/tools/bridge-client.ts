@@ -22,6 +22,7 @@
 
 import { CATALOGUE, PERMISSIONS, toolName } from "./api/catalogue.ts";
 import { CommandApi } from "./api/command-api.ts";
+import { asciiJson } from "./api/json-ascii.ts";
 import { BridgeClient, PipeConnectError, describeSession, defaultRuntimeDir, readSession } from "./bridge-lib.ts";
 
 const SMOKE_METHODS = [
@@ -36,6 +37,11 @@ const SMOKE_METHODS = [
   "bridge.methods",
 ];
 
+// 0.8.18 (Borg 3): results print as ASCII JSON (non-ASCII as \uXXXX escapes), so a console's code page can't garble a
+// subtitle's ellipsis; --raw-utf8 prints the characters themselves.
+let rawUtf8 = false;
+const printJson = (value: unknown, space?: number) => (rawUtf8 ? JSON.stringify(value, null, space) : asciiJson(value, space));
+
 function parseArgs(argv: string[]) {
   const positional: string[] = [];
   let runtimeDir: string | undefined;
@@ -43,7 +49,8 @@ function parseArgs(argv: string[]) {
   let readOnly = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--runtime-dir") runtimeDir = argv[++i];
+    if (arg === "--raw-utf8") rawUtf8 = true;
+    else if (arg === "--runtime-dir") runtimeDir = argv[++i];
     else if (arg === "--read-only") readOnly = true;
     else if (arg === "--cid") cid = argv[++i];
     else positional.push(arg);
@@ -84,7 +91,7 @@ async function runCommand(name: string | undefined, inputText: string | undefine
   const ms = Math.round(performance.now() - started);
   if (outcome.ok) {
     console.log(`OK   ${outcome.command} cid=${outcome.cid} ${ms}ms`);
-    console.log(JSON.stringify(outcome.result, null, 2));
+    console.log(printJson(outcome.result, 2));
     for (const image of outcome.images ?? []) console.log(`image: ${image.path} (${image.width}x${image.height})`);
     if (outcome.undo) console.log(`undo: ${outcome.undo}`);
     process.exit(0);
@@ -127,7 +134,7 @@ async function main() {
     const response = await client.call(method, params, requestCid);
     const ms = Math.round(performance.now() - started);
     if (!response.ok) failures++;
-    const body = response.ok ? JSON.stringify(response.result) : `${response.error?.code}: ${response.error?.message}`;
+    const body = response.ok ? printJson(response.result) : `${response.error?.code}: ${response.error?.message}`;
     console.log(`${response.ok ? "OK  " : "FAIL"} ${method} cid=${response.cid} ${ms}ms ${body}`);
   };
 

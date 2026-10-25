@@ -198,7 +198,7 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
         const double at = Now();
         json payload; bool valid = false;
         try { ops.guard(); payload = ops.sample(channel, m_actors); valid = !payload.is_null() && payload.value("valid", true); }
-        catch (const MethodError& e) { payload = {{"error", e.code}}; }
+        catch (const MethodError& e) { payload = {{"error", e.code}, {"message", std::string(e.what()).substr(0, 200)}}; }
         catch (...) { payload = {{"error", "sample_failed"}}; }
         const double end = Now();
         if (channel == "ui" && valid && payload.is_object())

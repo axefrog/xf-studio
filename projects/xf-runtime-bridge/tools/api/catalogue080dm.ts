@@ -269,7 +269,7 @@ const DEFINITIONS: CommandDef[] = [
     name: "phone.call",
     title: "Ring V with a call",
     description:
-      "Rings V's phone with a real incoming call from a contact the player has (ids from phone_state {contacts: true}; the game's own ring, name and picture). When the player answers it, the bridge starts the call and shows the lines one after another as subtitles in the call's style, then ends the call; a rejected call, a missed one and a hang-up are events (dm.phone). mode audio (the default) shows the contact's picture; video asks for the holocall frame, which the game fills only with a camera feed it stages for its own calls. A caller the journal doesn't hold is refused: the phone's code would run on a missing contact. Refused while the phone is blocked (combat, a story scene). One call at a time.",
+      "Rings V's phone with a real incoming call from a contact the player has (ids from phone_state {contacts: true}; the game's own ring, name and picture). When the player answers it (or at once, with auto_answer: the bridge answers a call it placed as the phone's own answer key does, so no key press is needed), the bridge starts the call and shows the lines one after another as subtitles in the call's style, then ends the call; a rejected call, a missed one and a hang-up are events (dm.phone). mode audio (the default) shows the contact's picture; video asks for the holocall frame, which the game fills only with a camera feed it stages for its own calls. A caller the journal doesn't hold is refused: the phone's code would run on a missing contact. Refused while the phone is blocked (combat, a story scene). One call at a time.",
     permission: "write-dm",
     input: obj(
       {
@@ -284,14 +284,15 @@ const DEFINITIONS: CommandDef[] = [
             obj(
               {
                 text: str("The words, up to 300 characters.", { minLength: 1, maxLength: 300 }),
-                speaker: str("The name shown (default the contact's id).", { minLength: 1, maxLength: 48 }),
+                speaker: str("The name shown (default the contact's name as the phone shows it, in the player's language; the contact's id if that can't be read).", { minLength: 1, maxLength: 48 }),
                 seconds: num("How long the line shows, 0.5 to 20 (default from its length).", 0.5, 20),
               },
               ["text"],
             ),
           ),
         },
-        ring_s: num("How long it rings before it is missed, 3 to 120. Default 20.", 3, 120),
+        ring_s: num("How long it rings before it is missed, 3 to 120. Default 20. The game's own phone ends a ring after about 8 s whatever a request says (0.8.17 and earlier missed every call then); since 0.8.18 the bridge lends the call's ring timer this value.", 3, 120),
+        auto_answer: bool("Answer the ring as the phone's own answer key does, as soon as the phone is seen ringing (default false: the player answers). Only for this call; needs no desktop key press."),
         mode: oneOf("audio (the default) or video.", ["audio", "video"]),
         rejectable: bool("Whether the player can reject it (default true)."),
       },

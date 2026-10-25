@@ -438,6 +438,10 @@ struct FakeGame
     std::vector<d::MicroBatch> batches;
     std::vector<std::string> events;
     bool refuseRing = false;
+    bool refuseAnswer = false;
+    std::string localisedName;
+    int answers = 0;
+    double ringS = 0.0;
     bool trackerFails = false;
 };
 
@@ -450,12 +454,22 @@ d::SessionOps OpsOf(FakeGame& aGame)
     };
     ops.showLine = [&aGame](const d::TimedLine& aLine) { aGame.shown.push_back(aLine); };
     ops.hideLine = [&aGame](uint64_t aId) { aGame.hidden.push_back(aId); };
-    ops.callRing = [&aGame](const std::string& aContact, const std::string& aMode, bool) {
+    ops.callRing = [&aGame](const std::string& aContact, const std::string& aMode, bool, double aRingS) {
         if (aGame.refuseRing)
         {
             throw xfb::MethodError("contact_unknown", "no such contact");
         }
         aGame.log.push_back("ring:" + aContact + ":" + aMode);
+        aGame.ringS = aRingS;
+    };
+    ops.contactName = [&aGame](const std::string& aContact) { return aGame.localisedName.empty() ? std::string() : aGame.localisedName + " for " + aContact; };
+    ops.callAnswer = [&aGame](const std::string& aContact) {
+        if (aGame.refuseAnswer)
+        {
+            throw xfb::MethodError("not_ready", "the phone isn't ringing");
+        }
+        aGame.log.push_back("answer:" + aContact);
+        ++aGame.answers;
     };
     ops.callStart = [&aGame](const std::string& aContact, const std::string&) { aGame.log.push_back("start:" + aContact); };
     ops.callEnd = [&aGame](const std::string& aContact) { aGame.log.push_back("end:" + aContact); return true; };
@@ -489,6 +503,70 @@ bool Has(const FakeGame& aGame, const std::string& aEntry)
 
 void SessionTests()
 {
+    // 0.8.18 (Borg 3): a call line that names no speaker is spoken by the contact's localised name, else its id.
+    {
+        FakeGame game;
+        game.localisedName = "Life Coach";
+        d::Session session(OpsOf(game));
+        const auto lines = json::array({json{{"text", "One"}, {"seconds", 1.0}}, json{{"text", "Two"}, {"speaker", "Someone"}, {"seconds", 1.0}}});
+        session.Call(d::ParseCall(json{{"contact", "coach"}, {"lines", lines}}), 0.0);
+        game.sample = json{{"v", {1, 2, 3}}, {"call_fact", 1}};
+        session.Tick(0.5);
+        game.sample = json{{"v", {1, 2, 3}}, {"call_fact", 2}};
+        session.Tick(1.0);
+        session.Tick(1.7);
+        session.Tick(3.0);
+        Check("dm: a call line with no speaker is spoken by the contact's localised name, not its id; a named one keeps its name",
+              game.shown.size() >= 1 && game.shown[0].speaker == "Life Coach for coach" && !d::ParseCall(json{{"contact", "coach"}, {"lines", lines}}).lines.empty() &&
+                  d::ParseCall(json{{"contact", "coach"}, {"lines", lines}}).lines[0].speaker.empty());
+        FakeGame plain;
+        d::Session fallback(OpsOf(plain));
+        fallback.Call(d::ParseCall(json{{"contact", "coach"}, {"lines", lines}}), 0.0);
+        plain.sample = json{{"v", {1, 2, 3}}, {"call_fact", 2}};
+        fallback.Tick(1.0);
+        fallback.Tick(1.7);
+        Check("dm: with no readable name the contact's id is the speaker", plain.shown.size() >= 1 && plain.shown[0].speaker == "coach");
+    }
+    // 0.8.18 (Borg 3): ring_s reaches the game's phone, and a call the bridge placed can be answered by the bridge.
+    {
+        FakeGame game;
+        d::Session session(OpsOf(game));
+        const auto lines = json::array({json{{"text", "Hello"}, {"seconds", 2.0}}});
+        const auto asked = d::ParseCall(json{{"contact", "test_fixer"}, {"ring_s", 30.0}, {"lines", lines}, {"auto_answer", true}});
+        const auto out = session.Call(asked, 0.0);
+        Check("dm: ring_s is handed to the game's phone (its own timeout ends a ring after about 8 s otherwise) and auto_answer is reported",
+              Near(game.ringS, 30.0) && out["ring_s"] == 30.0 && out["auto_answer"] == true && !d::ParseCall(json{{"contact", "test_fixer"}, {"lines", lines}}).autoAnswer);
+        game.sample = json{{"v", {1, 2, 3}}, {"call_fact", 0}};
+        session.Tick(0.3);
+        Check("dm: auto_answer waits for the phone to be seen ringing", game.answers == 0);
+        game.sample = json{{"v", {1, 2, 3}}, {"call_fact", 1}};
+        session.Tick(0.5);
+        session.Tick(0.8);
+        Check("dm: auto_answer answers once, as the phone's own pickup, when the ring is seen", game.answers == 1 && Has(game, "answer:test_fixer"));
+        game.sample = json{{"v", {1, 2, 3}}, {"call_fact", 2}};
+        session.Tick(1.0);
+        Check("dm: the bridge's answer starts the call and its lines like the player's key press does",
+              session.PhoneState(1.0)["call"]["state"] == "answered" && Has(game, "start:test_fixer"));
+    }
+    {
+        FakeGame game;
+        d::Session session(OpsOf(game));
+        session.Call(Call(), 0.0);
+        game.sample = json{{"v", {1, 2, 3}}, {"call_fact", 1}};
+        session.Tick(0.5);
+        Check("dm: without auto_answer the bridge never answers (the player does)", game.answers == 0);
+    }
+    {
+        FakeGame game;
+        game.refuseAnswer = true;
+        d::Session session(OpsOf(game));
+        session.Call(d::ParseCall(json{{"contact", "test_fixer"}, {"auto_answer", true}, {"lines", json::array({json{{"text", "Hi"}}})}}), 0.0);
+        game.sample = json{{"v", {1, 2, 3}}, {"call_fact", 1}};
+        session.Tick(0.5);
+        game.refuseAnswer = false;
+        session.Tick(0.8);
+        Check("dm: a refused auto-answer is tried again while it rings, and only then counted", game.answers == 1 && session.PhoneState(0.8)["call"]["state"] == "ringing");
+    }
     {
         FakeGame game;
         d::Session session(OpsOf(game));
@@ -813,7 +891,7 @@ d::Ops FakeOps(FakeWorld& aWorld)
     };
     ops.showLine = [&aWorld](const d::TimedLine& aLine) { aWorld.calls.push_back("line:" + aLine.text); };
     ops.hideLine = [&aWorld](uint64_t) { aWorld.calls.push_back("hide_line"); };
-    ops.callRing = [&aWorld](const std::string& aContact, const std::string&, bool) { aWorld.calls.push_back("ring:" + aContact); };
+    ops.callRing = [&aWorld](const std::string& aContact, const std::string&, bool, double) { aWorld.calls.push_back("ring:" + aContact); };
     ops.callStart = [&aWorld](const std::string& aContact, const std::string&) { aWorld.calls.push_back("start:" + aContact); };
     ops.callEnd = [&aWorld](const std::string& aContact) { aWorld.calls.push_back("call_end:" + aContact); return true; };
     ops.tracker = [&aWorld](const std::vector<d::Quest>& aQuests) { aWorld.calls.push_back("tracker:" + std::to_string(aQuests.size())); };

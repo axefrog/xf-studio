@@ -32,18 +32,108 @@ public abstract class XFPlayer {
   // Script producers, NOT the stale gamePSMWeaponStates enum (R6 §8).
   // 2.31 weaponTransitions.script:756–769 Ready=5, :1789–1819 Reload=2,
   // :1930–1935 Shoot=8; :888–892 Safe=6; upperBodyTransitions.script:1326 Aiming=6.
+  // 0.8.18 (Borg 3, SN6: raw 0 and "unknown" with a weapon drawn, the weapon watcher firing): the PSM's Weapon value belongs to
+  // ranged weapons only; a melee weapon (or the arm cyberware) in hand is the MeleeWeapon value's (meleeTransitions.script,
+  // gamePSMMeleeWeapon), and a ranged weapon the game holds NotReady writes 0 on purpose (NotReadyEvents, weaponTransitions.script:
+  // 840-850) while a status effect, a sliding or dodging V, a takedown, a consumable or a scene tier keeps it from being ready
+  // (IsWeaponReadyToShoot, :594-740). The reader now says what is in hand (kind, from the active weapon object), reads both values,
+  // names the one that applies (a drawn weapon at 0 is NotReady, never "unknown") and lists the readiness blockers it can see.
+  public static func RangedStateName(weapon: Int32) -> String {
+    switch weapon {
+      case 0: return "NotReady";
+      case 1: return "Charging";
+      case 2: return "Reload";
+      case 3: return "QuickMelee";
+      case 4: return "NoAmmo";
+      case 5: return "Ready";
+      case 6: return "Safe";
+      case 7: return "Overheat";
+      case 8: return "Shoot";
+    }
+    return "unknown";
+  }
+
+  public static func MeleeStateName(melee: Int32) -> String {
+    switch melee {
+      case 0: return "NotReady";
+      case 1: return "Equipping";
+      case 2: return "Idle";
+      case 3: return "Safe";
+      case 4: return "PublicSafe";
+      case 5: return "Parried";
+      case 6: return "Hold";
+      case 7: return "ChargedHold";
+      case 8: return "Block";
+      case 9: return "Targeting";
+      case 10: return "Deflect";
+      case 11: return "ComboAttack";
+      case 12: return "FinalAttack";
+      case 13: return "StrongAttack";
+      case 14: return "SafeAttack";
+      case 15: return "BlockAttack";
+      case 16: return "SprintAttack";
+      case 17: return "CrouchAttack";
+      case 18: return "JumpAttack";
+      case 19: return "ThrowAttack";
+      case 20: return "DeflectAttack";
+      case 21: return "EquipAttack";
+      case 22: return "Default";
+    }
+    return "unknown";
+  }
+
+  // What the game's own readiness check can be seen to hold against (a subset of IsWeaponReadyToShoot: the status effects and the
+  // scene tier; the weapon's equip state and the other state machines are not readable from here).
+  public static func WeaponBlockers(player: ref<PlayerPuppet>) -> String {
+    let defs = GetAllBlackboardDefs().PlayerStateMachine;
+    let out = "";
+    let noCombat = StatusEffectSystem.ObjectHasStatusEffectWithTag(player, n"NoCombat");
+    let fastForward = StatusEffectSystem.ObjectHasStatusEffectWithTag(player, n"FastForward");
+    if noCombat && !fastForward { out += (StrLen(out) > 0 ? "," : "") + "\"no_combat_status\""; }
+    let vehicleScene = StatusEffectSystem.ObjectHasStatusEffectWithTag(player, n"VehicleScene");
+    if vehicleScene { out += (StrLen(out) > 0 ? "," : "") + "\"vehicle_scene_status\""; }
+    let stunned = StatusEffectSystem.ObjectHasStatusEffectOfType(player, gamedataStatusEffectType.Stunned);
+    if stunned { out += (StrLen(out) > 0 ? "," : "") + "\"stunned\""; }
+    let jammed = StatusEffectSystem.ObjectHasStatusEffectOfType(player, gamedataStatusEffectType.Jam);
+    if jammed { out += (StrLen(out) > 0 ? "," : "") + "\"weapon_jammed\""; }
+    let tier = XFPlayer.Psm(player, defs.HighLevel);
+    if tier > 1 && tier <= 5 { out += (StrLen(out) > 0 ? "," : "") + "\"scene_tier\""; }
+    let takedown = XFPlayer.Psm(player, defs.Takedown);
+    if takedown == 2 || takedown == 3 || takedown == 4 { out += (StrLen(out) > 0 ? "," : "") + "\"takedown\""; }
+    let gadget = XFPlayer.Psm(player, defs.CombatGadget);
+    if gadget > 0 && gadget < 5 { out += (StrLen(out) > 0 ? "," : "") + "\"combat_gadget\""; }
+    return "[" + out + "]";
+  }
+
   public static func WeaponState(player: ref<PlayerPuppet>) -> String {
     let defs = GetAllBlackboardDefs().PlayerStateMachine;
     let weapon = XFPlayer.Psm(player, defs.Weapon);
+    let melee = XFPlayer.Psm(player, defs.MeleeWeapon);
     let upper = XFPlayer.Psm(player, defs.UpperBody);
-    let name = "unknown";
-    switch weapon {
-      case 5: name = "Ready"; break;
-      case 6: name = "Safe"; break;
-      case 2: name = "Reload"; break;
-      case 8: name = "Shoot"; break;
+    let active = ScriptedPuppet.GetActiveWeapon(player);
+    let drawn = IsDefined(active);
+    let kind = "none";
+    if drawn {
+      let isMelee = active.IsMelee();
+      let isRanged = active.IsRanged();
+      kind = isMelee ? "melee" : isRanged ? "ranged" : "other";
     }
-    return "{\"raw\":" + IntToString(weapon) + ",\"script_name\":" + XFJson.Str(name)
+    let name = "unknown";
+    if Equals(kind, "melee") {
+      name = XFPlayer.MeleeStateName(melee);
+    } else {
+      if Equals(kind, "none") {
+        name = weapon == 0 ? "none" : XFPlayer.RangedStateName(weapon);
+      } else {
+        name = XFPlayer.RangedStateName(weapon);
+      }
+    }
+    let blockers = "[]";
+    if Equals(kind, "ranged") && weapon == 0 {
+      blockers = XFPlayer.WeaponBlockers(player);
+    }
+    return "{\"raw\":" + IntToString(weapon) + ",\"script_name\":" + XFJson.Str(name) + ",\"melee_raw\":" + IntToString(melee)
+      + ",\"kind\":" + XFJson.Str(kind) + ",\"drawn\":" + XFJson.Flag(drawn) + ",\"not_ready_blockers\":" + blockers
       + ",\"upper_body_raw\":" + IntToString(upper) + ",\"aiming\":" + XFJson.Flag(upper == 6)
       + ",\"source\":\"2.31 PSM script writers; R6 section 8\",\"can_fire\":null}";
   }

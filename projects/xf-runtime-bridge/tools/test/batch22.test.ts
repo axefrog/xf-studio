@@ -137,7 +137,9 @@ describe("0.8.9 NPC direction: device screens, the actor's own reactions, the wa
       expect(at, fn).toBeGreaterThan(0);
       expect(npc.slice(at, at + 400)).toContain("XFNpcRegistry.HoldsReactionsOf(this.GetOwner(), ");
     }
-    expect(npc).toContain('(Equals(entry.kind, "actor") && !StrEndsWith(entry.record, "_reactive"))');
+    // 0.8.18: a quiet actor is one without the game's own reactions: neither a _reactive clone nor a combat stand-in.
+    expect(npc).toContain('let ownReactions = StrEndsWith(entry.record, "_reactive") || StrContains(entry.record, "xfs_actor_fighter_");');
+    expect(npc).toContain('(Equals(entry.kind, "actor") && !ownReactions)');
     expect(npc).toContain("reactions.XFBridgeEndReactionLook();");
   });
 
