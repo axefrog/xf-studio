@@ -1,0 +1,6363 @@
+{
+  "schema": "xfb/session-script-3",
+  "name": "st-styling-0822",
+  "title": "In-game styling (0.8.22): ST1-ST12, dark then light",
+  "card": "research/runtime/runtime-bridge-test-card.md#in-game-styling-0822",
+  "requires": [
+    "The XF test profile with the bridge's -writes build staged (0.8.22 or later); the runner sets config.ini's [overlay] and [ui] keys per row and restores the file at the end.",
+    "A private fixtures file (--fixtures): mo2 {exe, profile, executable, arguments: -skipStartScreen}, game_dir, staged_mod, save, cet_overlay_key (Ctrl+` here), commit_floor_gb.",
+    "Borderless windowed, the game window in front; Windows' Do Not Disturb on (focus-taking toasts stopped the Borg 4 key press).",
+    "Captures are evidence for XF · Studio's UI review; a PASS here means the state and the capture, not the design verdict."
+  ],
+  "setup": [
+    {
+      "label": "cet-closed",
+      "do": "set",
+      "value": false,
+      "bind": "cetOpen"
+    },
+    {
+      "label": "commit",
+      "do": "host.commit",
+      "on_fail": "stop"
+    }
+  ],
+  "rows": [
+    {
+      "id": "ST9a-dark",
+      "title": "Motion auto with frame generation loaded reads reduced (ST9, the frame-generation half)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "auto"
+        }
+      ],
+      "steps": [
+        {
+          "label": "ST9a-dark-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST9a-dark-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST9a_dark_overlay"
+        }
+      ],
+      "pass": [
+        {
+          "label": "setting auto",
+          "ref": "$ST9a_dark_overlay.motion.setting",
+          "match": {
+            "equals": "auto"
+          }
+        },
+        {
+          "label": "reduced",
+          "ref": "$ST9a_dark_overlay.motion.effective",
+          "match": {
+            "equals": "reduced"
+          }
+        },
+        {
+          "label": "because of frame generation",
+          "ref": "$ST9a_dark_overlay.motion.reason",
+          "match": {
+            "equals": "frame_generation"
+          }
+        },
+        {
+          "label": "frame-generation modules listed",
+          "ref": "$ST9a_dark_overlay.frame_generation_modules.0",
+          "match": {
+            "exists": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST8-dark-auto",
+      "title": "CET line connected with motion auto under frame generation: a still dot (the Borg 4 ST8 repeat)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "auto"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST8-dark-auto-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST8-dark-auto-line",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": true
+          }
+        },
+        {
+          "label": "ST8-dark-auto-burst",
+          "do": "burst",
+          "name": "ST8-cetline-connected-auto-dark",
+          "frames": 6,
+          "interval_ms": 240,
+          "clear_overlay": false,
+          "bind": "ST8_dark_auto_burst"
+        }
+      ],
+      "pass": [
+        {
+          "label": "the still dot",
+          "ref": "$ST8_dark_auto_burst",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST8-dark-auto-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST9b-dark",
+      "title": "Motion auto follows Windows' Animation effects within 2 s (ST9, the Windows half; the player changes the setting)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "auto"
+        },
+        {
+          "fixture": "allow_windows_animation_check",
+          "note": "the player turns Windows' Animation effects off and back; set allow_windows_animation_check in the fixtures to run it"
+        }
+      ],
+      "steps": [
+        {
+          "label": "ST9b-dark-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST9b-dark-before",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST9b_dark_before"
+        },
+        {
+          "label": "ST9b-dark-off",
+          "do": "ask",
+          "text": "ST9: please turn Windows' Settings > Accessibility > Visual effects > Animation effects OFF, then press Done.",
+          "choices": [
+            "Done"
+          ],
+          "deadline_ms": 300000
+        },
+        {
+          "label": "ST9b-dark-follows",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "motion.reason",
+            "equals": "windows_animations_off"
+          },
+          "interval_ms": 500,
+          "deadline_ms": 5000,
+          "bind": "ST9b_dark_off",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST9b-dark-on",
+          "do": "ask",
+          "text": "ST9: thank you. Please turn Animation effects back ON, then press Done.",
+          "choices": [
+            "Done"
+          ],
+          "deadline_ms": 300000,
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "reduced by Windows",
+          "ref": "$ST9b_dark_off.motion.reason",
+          "match": {
+            "equals": "windows_animations_off"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST8-dark-connected",
+      "title": "CET line, connected, motion full (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST8-dark-connected-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST8-dark-connected-line",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": true
+          },
+          "bind": "ST8_dark_connected_hud"
+        },
+        {
+          "label": "ST8-dark-connected-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST8_dark_connected_overlay"
+        },
+        {
+          "label": "ST8-dark-connected-burst",
+          "do": "burst",
+          "name": "ST8-cetline-connected-dark",
+          "frames": 12,
+          "interval_ms": 200,
+          "clear_overlay": false,
+          "bind": "ST8_dark_connected_burst"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full in force",
+          "ref": "$ST8_dark_connected_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the pulse burst",
+          "ref": "$ST8_dark_connected_burst",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST8-dark-connected-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST8-dark-paused",
+      "title": "CET line, paused (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST8-dark-paused-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST8-dark-paused-line",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": true
+          }
+        },
+        {
+          "label": "ST8-dark-paused-pause",
+          "do": "run",
+          "command": "session.handover",
+          "input": {
+            "note": "ST8-dark-paused: the paused CET line",
+            "restore_ui": false
+          }
+        },
+        {
+          "label": "ST8-dark-paused-wait",
+          "do": "wait",
+          "ms": 800
+        },
+        {
+          "label": "ST8-dark-paused-shot",
+          "do": "capture",
+          "name": "ST8-cetline-paused-dark",
+          "clear_overlay": false,
+          "bind": "ST8_dark_paused_shot"
+        }
+      ],
+      "pass": [
+        {
+          "label": "the paused line",
+          "ref": "$ST8_dark_paused_shot",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST8-dark-paused-resume",
+          "do": "run",
+          "command": "session.resume",
+          "input": {}
+        },
+        {
+          "label": "ST8-dark-paused-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST8-dark-stopped",
+      "title": "CET line, stopped (dark; the bridge is switched off, then the game restarts)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "after": "restart",
+      "steps": [
+        {
+          "label": "ST8-dark-stopped-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST8-dark-stopped-line",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": true
+          }
+        },
+        {
+          "label": "ST8-dark-stopped-kill",
+          "do": "run",
+          "command": "bridge.kill",
+          "input": {}
+        },
+        {
+          "label": "ST8-dark-stopped-wait",
+          "do": "wait",
+          "ms": 800
+        },
+        {
+          "label": "ST8-dark-stopped-shot",
+          "do": "capture",
+          "name": "ST8-cetline-stopped-dark",
+          "clear_overlay": false,
+          "bind": "ST8_dark_stopped_shot"
+        }
+      ],
+      "pass": [
+        {
+          "label": "the stopped line",
+          "ref": "$ST8_dark_stopped_shot",
+          "captured": true
+        }
+      ]
+    },
+    {
+      "id": "ST1-dark",
+      "title": "The XF box with diagnostics, motion full (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST1-dark-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST1-dark-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST1_dark_hud"
+        },
+        {
+          "label": "ST1-dark-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST1_dark_overlay"
+        },
+        {
+          "label": "ST1-dark-ask-and-shoot",
+          "together": [
+            {
+              "do": "ask",
+              "text": "ST1: is the XF box fully visible, or partly cut off?",
+              "choices": [
+                "Fully visible",
+                "Partly cut off"
+              ],
+              "deadline_ms": 90000,
+              "bind": "ST1_dark_answer",
+              "on_fail": "continue"
+            },
+            {
+              "sequence": [
+                {
+                  "do": "wait",
+                  "ms": 800
+                },
+                {
+                  "do": "capture",
+                  "name": "ST1-xfbox-diagnostics-dark",
+                  "clear_overlay": false,
+                  "bind": "ST1_dark_shot"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "pass": [
+        {
+          "label": "the overlay draws",
+          "ref": "$ST1_dark_overlay.drawing_now",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "theme dark",
+          "ref": "$ST1_dark_overlay.theme",
+          "match": {
+            "equals": "dark"
+          }
+        },
+        {
+          "label": "motion full",
+          "ref": "$ST1_dark_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the XF box",
+          "ref": "$ST1_dark_shot",
+          "captured": true
+        },
+        {
+          "label": "the player saw it whole",
+          "ref": "$ST1_dark_answer.label",
+          "match": {
+            "equals": "Fully visible"
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST1-dark-clear",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "clear": true
+          }
+        },
+        {
+          "label": "ST1-dark-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST4-dark-changes",
+      "title": "The dot's pulse with changes allowed, motion full (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST4-dark-changes-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST4-dark-changes-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST4_dark_changes_hud"
+        },
+        {
+          "label": "ST4-dark-changes-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST4_dark_changes_overlay"
+        },
+        {
+          "label": "ST4-dark-changes-burst",
+          "do": "burst",
+          "name": "ST4-xfbox-pulse-changes-dark",
+          "frames": 12,
+          "interval_ms": 200,
+          "clear_overlay": false,
+          "bind": "ST4_dark_changes_burst"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full",
+          "ref": "$ST4_dark_changes_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the pulse burst (12 x 200 ms, one 2.4 s period)",
+          "ref": "$ST4_dark_changes_burst",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST4-dark-changes-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST5-dark",
+      "title": "The settle on a change of state, and none for a second change within 2 s (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST5-dark-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST5-dark-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST5_dark_hud"
+        },
+        {
+          "label": "ST5-dark-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST5_dark_overlay"
+        },
+        {
+          "label": "ST5-dark-change",
+          "together": [
+            {
+              "do": "burst",
+              "name": "ST5-xfbox-settle-dark",
+              "frames": 20,
+              "interval_ms": 100,
+              "clear_overlay": false,
+              "bind": "ST5_dark_burst"
+            },
+            {
+              "sequence": [
+                {
+                  "do": "wait",
+                  "ms": 300
+                },
+                {
+                  "do": "run",
+                  "command": "session.handover",
+                  "input": {
+                    "note": "ST5-dark: settle",
+                    "restore_ui": false
+                  }
+                },
+                {
+                  "do": "wait",
+                  "ms": 700
+                },
+                {
+                  "do": "run",
+                  "command": "session.resume",
+                  "input": {}
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full",
+          "ref": "$ST5_dark_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the settle burst (change at 0.3 s, second change at 1.0 s)",
+          "ref": "$ST5_dark_burst",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST5-dark-resume",
+          "do": "run",
+          "command": "session.resume",
+          "input": {}
+        },
+        {
+          "label": "ST5-dark-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST6-dark-chips",
+      "title": "The chips: Changes allowed, then Paused (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST6-dark-chips-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST6-dark-chips-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST6-dark-chips-cet-before",
+          "do": "capture",
+          "name": "ST6-dark-chips-cet-before",
+          "clear_overlay": false,
+          "bind": "ST6_dark_chips_cetBefore"
+        },
+        {
+          "label": "ST6-dark-chips-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST6-dark-chips-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST6-dark-chips-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST6_dark_chips_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST6-dark-chips-cet-check",
+                "clear_overlay": false,
+                "bind": "ST6_dark_chips_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST6_dark_chips_cetBefore",
+                "b": "$ST6_dark_chips_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST6_dark_chips_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST6-dark-chips-ST6-cet-chip-changes-dark",
+          "do": "capture",
+          "name": "ST6-cet-chip-changes-dark",
+          "clear_overlay": false,
+          "bind": "ST6_dark_chips_changes"
+        },
+        {
+          "label": "ST6-dark-chips-ST6-cet-chip-changes-dark-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST6_dark_chips_changes.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST6-cet-chip-changes-dark-crop"
+          },
+          "on_fail": "continue"
+        },
+        {
+          "label": "ST6-dark-chips-pause",
+          "do": "run",
+          "command": "session.handover",
+          "input": {
+            "note": "ST6-dark-chips: the Paused chip",
+            "restore_ui": false
+          }
+        },
+        {
+          "label": "ST6-dark-chips-wait",
+          "do": "wait",
+          "ms": 800
+        },
+        {
+          "label": "ST6-dark-chips-ST6-cet-chip-paused-dark",
+          "do": "capture",
+          "name": "ST6-cet-chip-paused-dark",
+          "clear_overlay": false,
+          "bind": "ST6_dark_chips_paused"
+        },
+        {
+          "label": "ST6-dark-chips-ST6-cet-chip-paused-dark-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST6_dark_chips_paused.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST6-cet-chip-paused-dark-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "Changes allowed",
+          "ref": "$ST6_dark_chips_changes",
+          "captured": true
+        },
+        {
+          "label": "Paused",
+          "ref": "$ST6_dark_chips_paused",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST6-dark-chips-resume",
+          "do": "run",
+          "command": "session.resume",
+          "input": {}
+        },
+        {
+          "label": "ST6-dark-chips-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST6-dark-chips-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST7-dark-running",
+      "title": "The CET window running with changes allowed, and the disabled Send (ST12) (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST7-dark-running-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-dark-running-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST7-dark-running-cet-before",
+          "do": "capture",
+          "name": "ST7-dark-running-cet-before",
+          "clear_overlay": false,
+          "bind": "ST7_dark_running_cetBefore"
+        },
+        {
+          "label": "ST7-dark-running-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-dark-running-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-dark-running-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST7_dark_running_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST7-dark-running-cet-check",
+                "clear_overlay": false,
+                "bind": "ST7_dark_running_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST7_dark_running_cetBefore",
+                "b": "$ST7_dark_running_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST7_dark_running_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-dark-running-ST7-cet-running-dark",
+          "do": "capture",
+          "name": "ST7-cet-running-dark",
+          "clear_overlay": false,
+          "bind": "ST7_dark_running_running"
+        },
+        {
+          "label": "ST7-dark-running-ST7-cet-running-dark-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_dark_running_running.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-running-dark-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "the window",
+          "ref": "$ST7_dark_running_running",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST7-dark-running-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST7-dark-running-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST7-dark-question",
+      "title": "The CET window: a question waiting (it breathes), then answered with F6 (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST7-dark-question-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-dark-question-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST7-dark-question-cet-before",
+          "do": "capture",
+          "name": "ST7-dark-question-cet-before",
+          "clear_overlay": false,
+          "bind": "ST7_dark_question_cetBefore"
+        },
+        {
+          "label": "ST7-dark-question-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-dark-question-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-dark-question-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST7_dark_question_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST7-dark-question-cet-check",
+                "clear_overlay": false,
+                "bind": "ST7_dark_question_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST7_dark_question_cetBefore",
+                "b": "$ST7_dark_question_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST7_dark_question_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-dark-question-cursor",
+          "do": "cursor",
+          "bind": "ST7_dark_question_cursor"
+        },
+        {
+          "label": "ST7-dark-question-ask",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "level": "ask",
+            "text": "ST7-dark-question: a waiting question (the runner answers it with F6).",
+            "choices": [
+              "First",
+              "Second",
+              "Third"
+            ],
+            "seconds": 180
+          },
+          "bind": "ST7_dark_question_q"
+        },
+        {
+          "label": "ST7-dark-question-wait1",
+          "do": "wait",
+          "ms": 600
+        },
+        {
+          "label": "ST7-dark-question-ST7-cet-question-a-dark",
+          "do": "capture",
+          "name": "ST7-cet-question-a-dark",
+          "clear_overlay": false,
+          "bind": "ST7_dark_question_qa"
+        },
+        {
+          "label": "ST7-dark-question-ST7-cet-question-a-dark-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_dark_question_qa.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-question-a-dark-crop"
+          },
+          "on_fail": "continue"
+        },
+        {
+          "label": "ST7-dark-question-wait2",
+          "do": "wait",
+          "ms": 1200
+        },
+        {
+          "label": "ST7-dark-question-ST7-cet-question-b-dark",
+          "do": "capture",
+          "name": "ST7-cet-question-b-dark",
+          "clear_overlay": false,
+          "bind": "ST7_dark_question_qb"
+        },
+        {
+          "label": "ST7-dark-question-ST7-cet-question-b-dark-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_dark_question_qb.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-question-b-dark-crop"
+          },
+          "on_fail": "continue"
+        },
+        {
+          "label": "ST7-dark-question-breathes",
+          "do": "capture.compare",
+          "a": "$ST7_dark_question_qa",
+          "b": "$ST7_dark_question_qb",
+          "rect": "$win.regions.cet_window",
+          "bind": "ST7_dark_question_breath",
+          "on_fail": "continue"
+        },
+        {
+          "label": "ST7-dark-question-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST7-dark-question-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-dark-question-f6",
+          "do": "host.key",
+          "keys": "F6",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "F6",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-dark-question-answer",
+          "do": "await",
+          "cursor": "$ST7_dark_question_cursor",
+          "kind": "answer",
+          "message_id": "$ST7_dark_question_q.id",
+          "timeout_s": 8,
+          "bind": "ST7_dark_question_answer",
+          "alternatives": [
+            [
+              {
+                "do": "note",
+                "text": "ST7-dark-question: F6 didn't answer the question. Please answer it: F6, or the first answer's button in the XF Runtime Bridge window (CET overlay)."
+              },
+              {
+                "do": "await",
+                "cursor": "$ST7_dark_question_cursor",
+                "kind": "answer",
+                "message_id": "$ST7_dark_question_q.id",
+                "timeout_s": 120,
+                "bind": "ST7_dark_question_answer"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-dark-question-window2",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST7-dark-question-reopen-before",
+          "do": "capture",
+          "name": "ST7-dark-question-cet-before2",
+          "clear_overlay": false,
+          "bind": "ST7_dark_question_cetBefore2"
+        },
+        {
+          "label": "ST7-dark-question-reopen",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-dark-question-reopened",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-dark-question-settle",
+          "do": "wait",
+          "ms": 700
+        },
+        {
+          "label": "ST7-dark-question-ST7-cet-answered-dark",
+          "do": "capture",
+          "name": "ST7-cet-answered-dark",
+          "clear_overlay": false,
+          "bind": "ST7_dark_question_answered"
+        },
+        {
+          "label": "ST7-dark-question-ST7-cet-answered-dark-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_dark_question_answered.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-answered-dark-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "waiting (first)",
+          "ref": "$ST7_dark_question_qa",
+          "captured": true
+        },
+        {
+          "label": "waiting (1.2 s later)",
+          "ref": "$ST7_dark_question_qb",
+          "captured": true
+        },
+        {
+          "label": "the waiting card breathes (the two frames differ in the window)",
+          "ref": "$ST7_dark_question_breath.changed_fraction",
+          "match": {
+            "min": 0.00001
+          }
+        },
+        {
+          "label": "answered",
+          "ref": "$ST7_dark_question_answer.complete",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "answered",
+          "ref": "$ST7_dark_question_answered",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST7-dark-question-clear",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "clear": true
+          }
+        },
+        {
+          "label": "ST7-dark-question-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST7-dark-question-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST7-dark-diagnostics",
+      "title": "The CET window with the DIAGNOSTICS header open (dark; the player opens it)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST7-dark-diagnostics-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-dark-diagnostics-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST7-dark-diagnostics-cet-before",
+          "do": "capture",
+          "name": "ST7-dark-diagnostics-cet-before",
+          "clear_overlay": false,
+          "bind": "ST7_dark_diagnostics_cetBefore"
+        },
+        {
+          "label": "ST7-dark-diagnostics-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-dark-diagnostics-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-dark-diagnostics-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST7_dark_diagnostics_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST7-dark-diagnostics-cet-check",
+                "clear_overlay": false,
+                "bind": "ST7_dark_diagnostics_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST7_dark_diagnostics_cetBefore",
+                "b": "$ST7_dark_diagnostics_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST7_dark_diagnostics_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-dark-diagnostics-ask",
+          "do": "ask",
+          "text": "ST7-dark-diagnostics: please click the DIAGNOSTICS header in the XF Runtime Bridge window to open it, then press Done.",
+          "choices": [
+            "Done"
+          ],
+          "deadline_ms": 180000
+        },
+        {
+          "label": "ST7-dark-diagnostics-settle",
+          "do": "wait",
+          "ms": 500
+        },
+        {
+          "label": "ST7-dark-diagnostics-ST7-cet-diagnostics-dark",
+          "do": "capture",
+          "name": "ST7-cet-diagnostics-dark",
+          "clear_overlay": false,
+          "bind": "ST7_dark_diagnostics_diag"
+        },
+        {
+          "label": "ST7-dark-diagnostics-ST7-cet-diagnostics-dark-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_dark_diagnostics_diag.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-diagnostics-dark-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "Diagnostics open",
+          "ref": "$ST7_dark_diagnostics_diag",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST7-dark-diagnostics-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST7-dark-diagnostics-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST11-dark",
+      "title": "The ink panel's answer flash in photo mode (modal, a waiting question, Esc) (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST11-dark-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST11-dark-photo",
+          "do": "run",
+          "command": "photo.open",
+          "input": {},
+          "deadline_ms": 12000,
+          "retry": {
+            "times": 2,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.open",
+                "input": {
+                  "route": "postmessage"
+                },
+                "deadline_ms": 12000
+              }
+            ],
+            [
+              {
+                "do": "note",
+                "text": "ST11-dark: please open photo mode (your photo-mode key); the runner waits."
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "photo_mode",
+                  "timeout_ms": 120000
+                },
+                "deadline_ms": 125000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST11-dark-prefs",
+          "do": "wait",
+          "ms": 2000
+        },
+        {
+          "label": "ST11-dark-modal",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": true,
+            "modal": true,
+            "layer": "photo_menu"
+          },
+          "bind": "ST11_dark_hud"
+        },
+        {
+          "label": "ST11-dark-ask",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "level": "ask",
+            "text": "ST11-dark: the answers flash when Esc is pressed (no answer needed).",
+            "choices": [
+              "Yes",
+              "No"
+            ],
+            "seconds": 120
+          },
+          "bind": "ST11_dark_q"
+        },
+        {
+          "label": "ST11-dark-wait",
+          "do": "wait",
+          "ms": 600
+        },
+        {
+          "label": "ST11-dark-flash",
+          "together": [
+            {
+              "do": "burst",
+              "name": "ST11-ink-flash-dark",
+              "frames": 14,
+              "interval_ms": 50,
+              "clear_overlay": false,
+              "bind": "ST11_dark_burst"
+            },
+            {
+              "sequence": [
+                {
+                  "do": "wait",
+                  "ms": 150
+                },
+                {
+                  "label": "ST11-dark-esc",
+                  "do": "host.key",
+                  "keys": "Esc",
+                  "retry": {
+                    "times": 2,
+                    "backoff_ms": 1500,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "game_behind",
+                      "match": {
+                        "code": "not_foreground"
+                      },
+                      "run": [
+                        {
+                          "do": "note",
+                          "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                        },
+                        {
+                          "do": "host.key",
+                          "keys": "Esc",
+                          "retry": {
+                            "times": 10,
+                            "backoff_ms": 3000,
+                            "factor": 1,
+                            "on": {
+                              "code": "not_foreground"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST11-dark-held",
+          "do": "run",
+          "command": "game.status",
+          "input": {},
+          "bind": "ST11_dark_after"
+        }
+      ],
+      "pass": [
+        {
+          "label": "the flash burst (14 x 50 ms)",
+          "ref": "$ST11_dark_burst",
+          "captured": true
+        },
+        {
+          "label": "modal held photo mode's exit",
+          "ref": "$ST11_dark_after.phase",
+          "match": {
+            "equals": "photo_mode"
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST11-dark-clear",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "clear": true
+          }
+        },
+        {
+          "label": "ST11-dark-unmodal",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "modal": false
+          }
+        },
+        {
+          "label": "ST11-dark-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        },
+        {
+          "label": "ST11-dark-exit",
+          "do": "run",
+          "command": "photo.exit",
+          "input": {},
+          "when": {
+            "check": {
+              "do": "run",
+              "command": "game.status",
+              "input": {}
+            },
+            "match": {
+              "path": "phase",
+              "equals": "photo_mode"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST10-dark",
+      "title": "Fonts baked once: overlay.state across a window-mode change (alt-Enter twice)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        },
+        {
+          "fixture": "allow_alt_enter",
+          "note": "alt-Enter changes the window mode; set allow_alt_enter in the fixtures to run it"
+        }
+      ],
+      "steps": [
+        {
+          "label": "ST10-dark-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST10-dark-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST10_dark_hud"
+        },
+        {
+          "label": "ST10-dark-before",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST10_dark_before"
+        },
+        {
+          "label": "ST10-dark-toggle",
+          "do": "host.key",
+          "keys": "Alt+Enter",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "Alt+Enter",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST10-dark-w1",
+          "do": "wait",
+          "ms": 5000
+        },
+        {
+          "label": "ST10-dark-mid",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST10_dark_mid"
+        },
+        {
+          "label": "ST10-dark-back",
+          "do": "host.key",
+          "keys": "Alt+Enter",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "Alt+Enter",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST10-dark-w2",
+          "do": "wait",
+          "ms": 5000
+        },
+        {
+          "label": "ST10-dark-after",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST10_dark_after"
+        },
+        {
+          "label": "ST10-dark-window",
+          "do": "host.window",
+          "bind": "win"
+        }
+      ],
+      "pass": [
+        {
+          "label": "a resize was seen",
+          "ref": "$ST10_dark_after.resizes",
+          "match": {
+            "min": 1
+          }
+        },
+        {
+          "label": "frames kept rising",
+          "ref": "$ST10_dark_after.frames",
+          "match": {
+            "min": "$ST10_dark_mid.frames"
+          }
+        },
+        {
+          "label": "still drawing",
+          "ref": "$ST10_dark_after.drawing_now",
+          "match": {
+            "equals": true
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST10-dark-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST7-dark-stopped",
+      "title": "Stopped: the CET window with Reconnect, and the Stopped chip (ST6) (dark; the game restarts after)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "after": "restart",
+      "steps": [
+        {
+          "label": "ST7-dark-stopped-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-dark-stopped-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST7-dark-stopped-cet-before",
+          "do": "capture",
+          "name": "ST7-dark-stopped-cet-before",
+          "clear_overlay": false,
+          "bind": "ST7_dark_stopped_cetBefore"
+        },
+        {
+          "label": "ST7-dark-stopped-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-dark-stopped-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-dark-stopped-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST7_dark_stopped_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST7-dark-stopped-cet-check",
+                "clear_overlay": false,
+                "bind": "ST7_dark_stopped_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST7_dark_stopped_cetBefore",
+                "b": "$ST7_dark_stopped_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST7_dark_stopped_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-dark-stopped-kill",
+          "do": "run",
+          "command": "bridge.kill",
+          "input": {}
+        },
+        {
+          "label": "ST7-dark-stopped-wait",
+          "do": "wait",
+          "ms": 800
+        },
+        {
+          "label": "ST7-dark-stopped-ST7-cet-stopped-dark",
+          "do": "capture",
+          "name": "ST7-cet-stopped-dark",
+          "clear_overlay": false,
+          "bind": "ST7_dark_stopped_stopped"
+        },
+        {
+          "label": "ST7-dark-stopped-ST7-cet-stopped-dark-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_dark_stopped_stopped.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-stopped-dark-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "stopped, with Reconnect",
+          "ref": "$ST7_dark_stopped_stopped",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST7-dark-stopped-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST7-dark-stopped-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST3-dark",
+      "title": "The XF box with motion reduced: a still dot, no settle (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "reduced"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST3-dark-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST3-dark-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST3_dark_hud"
+        },
+        {
+          "label": "ST3-dark-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST3_dark_overlay"
+        },
+        {
+          "label": "ST3-dark-still",
+          "do": "burst",
+          "name": "ST3-xfbox-reduced-dark",
+          "frames": 6,
+          "interval_ms": 240,
+          "clear_overlay": false,
+          "bind": "ST3_dark_still"
+        },
+        {
+          "label": "ST3-dark-change",
+          "together": [
+            {
+              "do": "burst",
+              "name": "ST3-xfbox-reduced-settle-dark",
+              "frames": 10,
+              "interval_ms": 100,
+              "clear_overlay": false,
+              "bind": "ST3_dark_settle"
+            },
+            {
+              "sequence": [
+                {
+                  "do": "wait",
+                  "ms": 300
+                },
+                {
+                  "do": "run",
+                  "command": "session.handover",
+                  "input": {
+                    "note": "ST3-dark: no settle under reduced",
+                    "restore_ui": false
+                  }
+                },
+                {
+                  "do": "wait",
+                  "ms": 400
+                },
+                {
+                  "do": "run",
+                  "command": "session.resume",
+                  "input": {}
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion reduced",
+          "ref": "$ST3_dark_overlay.motion.effective",
+          "match": {
+            "equals": "reduced"
+          }
+        },
+        {
+          "label": "by the setting",
+          "ref": "$ST3_dark_overlay.motion.reason",
+          "match": {
+            "equals": "setting"
+          }
+        },
+        {
+          "label": "still dot (6 x 240 ms)",
+          "ref": "$ST3_dark_still",
+          "captured": true
+        },
+        {
+          "label": "no wash on a change",
+          "ref": "$ST3_dark_settle",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST3-dark-resume",
+          "do": "run",
+          "command": "session.resume",
+          "input": {}
+        },
+        {
+          "label": "ST3-dark-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST6-dark-readonly",
+      "title": "Read-only: the chip and the CET window running read-only (ST6, ST7) (dark; at the menu)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST6-dark-readonly-ready",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": [
+              "main_menu",
+              "gameplay",
+              "menu"
+            ],
+            "timeout_ms": 60000
+          },
+          "deadline_ms": 65000
+        },
+        {
+          "label": "ST6-dark-readonly-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST6-dark-readonly-cet-before",
+          "do": "capture",
+          "name": "ST6-dark-readonly-cet-before",
+          "clear_overlay": false,
+          "bind": "ST6_dark_readonly_cetBefore"
+        },
+        {
+          "label": "ST6-dark-readonly-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST6-dark-readonly-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST6-dark-readonly-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST6_dark_readonly_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST6-dark-readonly-cet-check",
+                "clear_overlay": false,
+                "bind": "ST6_dark_readonly_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST6_dark_readonly_cetBefore",
+                "b": "$ST6_dark_readonly_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST6_dark_readonly_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST6-dark-readonly-ST6-cet-chip-readonly-dark",
+          "do": "capture",
+          "name": "ST6-cet-chip-readonly-dark",
+          "clear_overlay": false,
+          "bind": "ST6_dark_readonly_chip"
+        },
+        {
+          "label": "ST6-dark-readonly-ST6-cet-chip-readonly-dark-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST6_dark_readonly_chip.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST6-cet-chip-readonly-dark-crop"
+          },
+          "on_fail": "continue"
+        },
+        {
+          "label": "ST6-dark-readonly-ST7-cet-running-readonly-dark",
+          "do": "capture",
+          "name": "ST7-cet-running-readonly-dark",
+          "clear_overlay": false,
+          "bind": "ST6_dark_readonly_running"
+        },
+        {
+          "label": "ST6-dark-readonly-ST7-cet-running-readonly-dark-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST6_dark_readonly_running.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-running-readonly-dark-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "Read-only chip",
+          "ref": "$ST6_dark_readonly_chip",
+          "captured": true
+        },
+        {
+          "label": "running read-only",
+          "ref": "$ST6_dark_readonly_running",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST6-dark-readonly-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST6-dark-readonly-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST4-dark-readonly",
+      "title": "The dot's pulse, connected and read-only, motion full (dark; the XF box at the menu)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "dark"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST4-dark-readonly-ready",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": [
+              "main_menu",
+              "gameplay",
+              "menu"
+            ],
+            "timeout_ms": 60000
+          },
+          "deadline_ms": 65000
+        },
+        {
+          "label": "ST4-dark-readonly-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST4_dark_readonly_overlay"
+        },
+        {
+          "label": "ST4-dark-readonly-burst",
+          "do": "burst",
+          "name": "ST4-xfbox-pulse-readonly-dark",
+          "frames": 12,
+          "interval_ms": 200,
+          "clear_overlay": false,
+          "bind": "ST4_dark_readonly_burst"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full",
+          "ref": "$ST4_dark_readonly_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the XF box draws",
+          "ref": "$ST4_dark_readonly_overlay.drawing_now",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "the pulse burst",
+          "ref": "$ST4_dark_readonly_burst",
+          "captured": true
+        }
+      ]
+    },
+    {
+      "id": "ST6-light-readonly",
+      "title": "Read-only: the chip and the CET window running read-only (ST6, ST7) (light; at the menu)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST6-light-readonly-ready",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": [
+              "main_menu",
+              "gameplay",
+              "menu"
+            ],
+            "timeout_ms": 60000
+          },
+          "deadline_ms": 65000
+        },
+        {
+          "label": "ST6-light-readonly-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST6-light-readonly-cet-before",
+          "do": "capture",
+          "name": "ST6-light-readonly-cet-before",
+          "clear_overlay": false,
+          "bind": "ST6_light_readonly_cetBefore"
+        },
+        {
+          "label": "ST6-light-readonly-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST6-light-readonly-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST6-light-readonly-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST6_light_readonly_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST6-light-readonly-cet-check",
+                "clear_overlay": false,
+                "bind": "ST6_light_readonly_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST6_light_readonly_cetBefore",
+                "b": "$ST6_light_readonly_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST6_light_readonly_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST6-light-readonly-ST6-cet-chip-readonly-light",
+          "do": "capture",
+          "name": "ST6-cet-chip-readonly-light",
+          "clear_overlay": false,
+          "bind": "ST6_light_readonly_chip"
+        },
+        {
+          "label": "ST6-light-readonly-ST6-cet-chip-readonly-light-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST6_light_readonly_chip.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST6-cet-chip-readonly-light-crop"
+          },
+          "on_fail": "continue"
+        },
+        {
+          "label": "ST6-light-readonly-ST7-cet-running-readonly-light",
+          "do": "capture",
+          "name": "ST7-cet-running-readonly-light",
+          "clear_overlay": false,
+          "bind": "ST6_light_readonly_running"
+        },
+        {
+          "label": "ST6-light-readonly-ST7-cet-running-readonly-light-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST6_light_readonly_running.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-running-readonly-light-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "Read-only chip",
+          "ref": "$ST6_light_readonly_chip",
+          "captured": true
+        },
+        {
+          "label": "running read-only",
+          "ref": "$ST6_light_readonly_running",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST6-light-readonly-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST6-light-readonly-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST4-light-readonly",
+      "title": "The dot's pulse, connected and read-only, motion full (light; the XF box at the menu)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST4-light-readonly-ready",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": [
+              "main_menu",
+              "gameplay",
+              "menu"
+            ],
+            "timeout_ms": 60000
+          },
+          "deadline_ms": 65000
+        },
+        {
+          "label": "ST4-light-readonly-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST4_light_readonly_overlay"
+        },
+        {
+          "label": "ST4-light-readonly-burst",
+          "do": "burst",
+          "name": "ST4-xfbox-pulse-readonly-light",
+          "frames": 12,
+          "interval_ms": 200,
+          "clear_overlay": false,
+          "bind": "ST4_light_readonly_burst"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full",
+          "ref": "$ST4_light_readonly_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the XF box draws",
+          "ref": "$ST4_light_readonly_overlay.drawing_now",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "the pulse burst",
+          "ref": "$ST4_light_readonly_burst",
+          "captured": true
+        }
+      ]
+    },
+    {
+      "id": "ST2-light",
+      "title": "The XF box with diagnostics, motion full (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST2-light-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST2-light-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST2_light_hud"
+        },
+        {
+          "label": "ST2-light-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST2_light_overlay"
+        },
+        {
+          "label": "ST2-light-ask-and-shoot",
+          "together": [
+            {
+              "do": "ask",
+              "text": "ST2: is the XF box fully visible, or partly cut off?",
+              "choices": [
+                "Fully visible",
+                "Partly cut off"
+              ],
+              "deadline_ms": 90000,
+              "bind": "ST2_light_answer",
+              "on_fail": "continue"
+            },
+            {
+              "sequence": [
+                {
+                  "do": "wait",
+                  "ms": 800
+                },
+                {
+                  "do": "capture",
+                  "name": "ST2-xfbox-diagnostics-light",
+                  "clear_overlay": false,
+                  "bind": "ST2_light_shot"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "pass": [
+        {
+          "label": "the overlay draws",
+          "ref": "$ST2_light_overlay.drawing_now",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "theme light",
+          "ref": "$ST2_light_overlay.theme",
+          "match": {
+            "equals": "light"
+          }
+        },
+        {
+          "label": "motion full",
+          "ref": "$ST2_light_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the XF box",
+          "ref": "$ST2_light_shot",
+          "captured": true
+        },
+        {
+          "label": "the player saw it whole",
+          "ref": "$ST2_light_answer.label",
+          "match": {
+            "equals": "Fully visible"
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST2-light-clear",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "clear": true
+          }
+        },
+        {
+          "label": "ST2-light-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST4-light-changes",
+      "title": "The dot's pulse with changes allowed, motion full (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST4-light-changes-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST4-light-changes-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST4_light_changes_hud"
+        },
+        {
+          "label": "ST4-light-changes-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST4_light_changes_overlay"
+        },
+        {
+          "label": "ST4-light-changes-burst",
+          "do": "burst",
+          "name": "ST4-xfbox-pulse-changes-light",
+          "frames": 12,
+          "interval_ms": 200,
+          "clear_overlay": false,
+          "bind": "ST4_light_changes_burst"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full",
+          "ref": "$ST4_light_changes_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the pulse burst (12 x 200 ms, one 2.4 s period)",
+          "ref": "$ST4_light_changes_burst",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST4-light-changes-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST5-light",
+      "title": "The settle on a change of state, and none for a second change within 2 s (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST5-light-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST5-light-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST5_light_hud"
+        },
+        {
+          "label": "ST5-light-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST5_light_overlay"
+        },
+        {
+          "label": "ST5-light-change",
+          "together": [
+            {
+              "do": "burst",
+              "name": "ST5-xfbox-settle-light",
+              "frames": 20,
+              "interval_ms": 100,
+              "clear_overlay": false,
+              "bind": "ST5_light_burst"
+            },
+            {
+              "sequence": [
+                {
+                  "do": "wait",
+                  "ms": 300
+                },
+                {
+                  "do": "run",
+                  "command": "session.handover",
+                  "input": {
+                    "note": "ST5-light: settle",
+                    "restore_ui": false
+                  }
+                },
+                {
+                  "do": "wait",
+                  "ms": 700
+                },
+                {
+                  "do": "run",
+                  "command": "session.resume",
+                  "input": {}
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full",
+          "ref": "$ST5_light_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the settle burst (change at 0.3 s, second change at 1.0 s)",
+          "ref": "$ST5_light_burst",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST5-light-resume",
+          "do": "run",
+          "command": "session.resume",
+          "input": {}
+        },
+        {
+          "label": "ST5-light-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST6-light-chips",
+      "title": "The chips: Changes allowed, then Paused (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST6-light-chips-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST6-light-chips-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST6-light-chips-cet-before",
+          "do": "capture",
+          "name": "ST6-light-chips-cet-before",
+          "clear_overlay": false,
+          "bind": "ST6_light_chips_cetBefore"
+        },
+        {
+          "label": "ST6-light-chips-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST6-light-chips-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST6-light-chips-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST6_light_chips_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST6-light-chips-cet-check",
+                "clear_overlay": false,
+                "bind": "ST6_light_chips_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST6_light_chips_cetBefore",
+                "b": "$ST6_light_chips_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST6_light_chips_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST6-light-chips-ST6-cet-chip-changes-light",
+          "do": "capture",
+          "name": "ST6-cet-chip-changes-light",
+          "clear_overlay": false,
+          "bind": "ST6_light_chips_changes"
+        },
+        {
+          "label": "ST6-light-chips-ST6-cet-chip-changes-light-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST6_light_chips_changes.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST6-cet-chip-changes-light-crop"
+          },
+          "on_fail": "continue"
+        },
+        {
+          "label": "ST6-light-chips-pause",
+          "do": "run",
+          "command": "session.handover",
+          "input": {
+            "note": "ST6-light-chips: the Paused chip",
+            "restore_ui": false
+          }
+        },
+        {
+          "label": "ST6-light-chips-wait",
+          "do": "wait",
+          "ms": 800
+        },
+        {
+          "label": "ST6-light-chips-ST6-cet-chip-paused-light",
+          "do": "capture",
+          "name": "ST6-cet-chip-paused-light",
+          "clear_overlay": false,
+          "bind": "ST6_light_chips_paused"
+        },
+        {
+          "label": "ST6-light-chips-ST6-cet-chip-paused-light-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST6_light_chips_paused.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST6-cet-chip-paused-light-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "Changes allowed",
+          "ref": "$ST6_light_chips_changes",
+          "captured": true
+        },
+        {
+          "label": "Paused",
+          "ref": "$ST6_light_chips_paused",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST6-light-chips-resume",
+          "do": "run",
+          "command": "session.resume",
+          "input": {}
+        },
+        {
+          "label": "ST6-light-chips-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST6-light-chips-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST7-light-running",
+      "title": "The CET window running with changes allowed, and the disabled Send (ST12) (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST7-light-running-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-light-running-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST7-light-running-cet-before",
+          "do": "capture",
+          "name": "ST7-light-running-cet-before",
+          "clear_overlay": false,
+          "bind": "ST7_light_running_cetBefore"
+        },
+        {
+          "label": "ST7-light-running-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-light-running-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-light-running-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST7_light_running_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST7-light-running-cet-check",
+                "clear_overlay": false,
+                "bind": "ST7_light_running_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST7_light_running_cetBefore",
+                "b": "$ST7_light_running_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST7_light_running_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-light-running-ST7-cet-running-light",
+          "do": "capture",
+          "name": "ST7-cet-running-light",
+          "clear_overlay": false,
+          "bind": "ST7_light_running_running"
+        },
+        {
+          "label": "ST7-light-running-ST7-cet-running-light-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_light_running_running.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-running-light-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "the window",
+          "ref": "$ST7_light_running_running",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST7-light-running-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST7-light-running-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST7-light-question",
+      "title": "The CET window: a question waiting (it breathes), then answered with F6 (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST7-light-question-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-light-question-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST7-light-question-cet-before",
+          "do": "capture",
+          "name": "ST7-light-question-cet-before",
+          "clear_overlay": false,
+          "bind": "ST7_light_question_cetBefore"
+        },
+        {
+          "label": "ST7-light-question-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-light-question-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-light-question-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST7_light_question_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST7-light-question-cet-check",
+                "clear_overlay": false,
+                "bind": "ST7_light_question_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST7_light_question_cetBefore",
+                "b": "$ST7_light_question_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST7_light_question_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-light-question-cursor",
+          "do": "cursor",
+          "bind": "ST7_light_question_cursor"
+        },
+        {
+          "label": "ST7-light-question-ask",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "level": "ask",
+            "text": "ST7-light-question: a waiting question (the runner answers it with F6).",
+            "choices": [
+              "First",
+              "Second",
+              "Third"
+            ],
+            "seconds": 180
+          },
+          "bind": "ST7_light_question_q"
+        },
+        {
+          "label": "ST7-light-question-wait1",
+          "do": "wait",
+          "ms": 600
+        },
+        {
+          "label": "ST7-light-question-ST7-cet-question-a-light",
+          "do": "capture",
+          "name": "ST7-cet-question-a-light",
+          "clear_overlay": false,
+          "bind": "ST7_light_question_qa"
+        },
+        {
+          "label": "ST7-light-question-ST7-cet-question-a-light-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_light_question_qa.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-question-a-light-crop"
+          },
+          "on_fail": "continue"
+        },
+        {
+          "label": "ST7-light-question-wait2",
+          "do": "wait",
+          "ms": 1200
+        },
+        {
+          "label": "ST7-light-question-ST7-cet-question-b-light",
+          "do": "capture",
+          "name": "ST7-cet-question-b-light",
+          "clear_overlay": false,
+          "bind": "ST7_light_question_qb"
+        },
+        {
+          "label": "ST7-light-question-ST7-cet-question-b-light-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_light_question_qb.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-question-b-light-crop"
+          },
+          "on_fail": "continue"
+        },
+        {
+          "label": "ST7-light-question-breathes",
+          "do": "capture.compare",
+          "a": "$ST7_light_question_qa",
+          "b": "$ST7_light_question_qb",
+          "rect": "$win.regions.cet_window",
+          "bind": "ST7_light_question_breath",
+          "on_fail": "continue"
+        },
+        {
+          "label": "ST7-light-question-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST7-light-question-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-light-question-f6",
+          "do": "host.key",
+          "keys": "F6",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "F6",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-light-question-answer",
+          "do": "await",
+          "cursor": "$ST7_light_question_cursor",
+          "kind": "answer",
+          "message_id": "$ST7_light_question_q.id",
+          "timeout_s": 8,
+          "bind": "ST7_light_question_answer",
+          "alternatives": [
+            [
+              {
+                "do": "note",
+                "text": "ST7-light-question: F6 didn't answer the question. Please answer it: F6, or the first answer's button in the XF Runtime Bridge window (CET overlay)."
+              },
+              {
+                "do": "await",
+                "cursor": "$ST7_light_question_cursor",
+                "kind": "answer",
+                "message_id": "$ST7_light_question_q.id",
+                "timeout_s": 120,
+                "bind": "ST7_light_question_answer"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-light-question-window2",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST7-light-question-reopen-before",
+          "do": "capture",
+          "name": "ST7-light-question-cet-before2",
+          "clear_overlay": false,
+          "bind": "ST7_light_question_cetBefore2"
+        },
+        {
+          "label": "ST7-light-question-reopen",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-light-question-reopened",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-light-question-settle",
+          "do": "wait",
+          "ms": 700
+        },
+        {
+          "label": "ST7-light-question-ST7-cet-answered-light",
+          "do": "capture",
+          "name": "ST7-cet-answered-light",
+          "clear_overlay": false,
+          "bind": "ST7_light_question_answered"
+        },
+        {
+          "label": "ST7-light-question-ST7-cet-answered-light-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_light_question_answered.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-answered-light-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "waiting (first)",
+          "ref": "$ST7_light_question_qa",
+          "captured": true
+        },
+        {
+          "label": "waiting (1.2 s later)",
+          "ref": "$ST7_light_question_qb",
+          "captured": true
+        },
+        {
+          "label": "the waiting card breathes (the two frames differ in the window)",
+          "ref": "$ST7_light_question_breath.changed_fraction",
+          "match": {
+            "min": 0.00001
+          }
+        },
+        {
+          "label": "answered",
+          "ref": "$ST7_light_question_answer.complete",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "answered",
+          "ref": "$ST7_light_question_answered",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST7-light-question-clear",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "clear": true
+          }
+        },
+        {
+          "label": "ST7-light-question-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST7-light-question-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST7-light-diagnostics",
+      "title": "The CET window with the DIAGNOSTICS header open (light; the player opens it)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST7-light-diagnostics-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-light-diagnostics-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST7-light-diagnostics-cet-before",
+          "do": "capture",
+          "name": "ST7-light-diagnostics-cet-before",
+          "clear_overlay": false,
+          "bind": "ST7_light_diagnostics_cetBefore"
+        },
+        {
+          "label": "ST7-light-diagnostics-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-light-diagnostics-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-light-diagnostics-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST7_light_diagnostics_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST7-light-diagnostics-cet-check",
+                "clear_overlay": false,
+                "bind": "ST7_light_diagnostics_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST7_light_diagnostics_cetBefore",
+                "b": "$ST7_light_diagnostics_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST7_light_diagnostics_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-light-diagnostics-ask",
+          "do": "ask",
+          "text": "ST7-light-diagnostics: please click the DIAGNOSTICS header in the XF Runtime Bridge window to open it, then press Done.",
+          "choices": [
+            "Done"
+          ],
+          "deadline_ms": 180000
+        },
+        {
+          "label": "ST7-light-diagnostics-settle",
+          "do": "wait",
+          "ms": 500
+        },
+        {
+          "label": "ST7-light-diagnostics-ST7-cet-diagnostics-light",
+          "do": "capture",
+          "name": "ST7-cet-diagnostics-light",
+          "clear_overlay": false,
+          "bind": "ST7_light_diagnostics_diag"
+        },
+        {
+          "label": "ST7-light-diagnostics-ST7-cet-diagnostics-light-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_light_diagnostics_diag.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-diagnostics-light-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "Diagnostics open",
+          "ref": "$ST7_light_diagnostics_diag",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST7-light-diagnostics-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST7-light-diagnostics-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST11-light",
+      "title": "The ink panel's answer flash in photo mode (modal, a waiting question, Esc) (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST11-light-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST11-light-photo",
+          "do": "run",
+          "command": "photo.open",
+          "input": {},
+          "deadline_ms": 12000,
+          "retry": {
+            "times": 2,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.open",
+                "input": {
+                  "route": "postmessage"
+                },
+                "deadline_ms": 12000
+              }
+            ],
+            [
+              {
+                "do": "note",
+                "text": "ST11-light: please open photo mode (your photo-mode key); the runner waits."
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "photo_mode",
+                  "timeout_ms": 120000
+                },
+                "deadline_ms": 125000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST11-light-prefs",
+          "do": "wait",
+          "ms": 2000
+        },
+        {
+          "label": "ST11-light-modal",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": true,
+            "modal": true,
+            "layer": "photo_menu"
+          },
+          "bind": "ST11_light_hud"
+        },
+        {
+          "label": "ST11-light-ask",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "level": "ask",
+            "text": "ST11-light: the answers flash when Esc is pressed (no answer needed).",
+            "choices": [
+              "Yes",
+              "No"
+            ],
+            "seconds": 120
+          },
+          "bind": "ST11_light_q"
+        },
+        {
+          "label": "ST11-light-wait",
+          "do": "wait",
+          "ms": 600
+        },
+        {
+          "label": "ST11-light-flash",
+          "together": [
+            {
+              "do": "burst",
+              "name": "ST11-ink-flash-light",
+              "frames": 14,
+              "interval_ms": 50,
+              "clear_overlay": false,
+              "bind": "ST11_light_burst"
+            },
+            {
+              "sequence": [
+                {
+                  "do": "wait",
+                  "ms": 150
+                },
+                {
+                  "label": "ST11-light-esc",
+                  "do": "host.key",
+                  "keys": "Esc",
+                  "retry": {
+                    "times": 2,
+                    "backoff_ms": 1500,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "game_behind",
+                      "match": {
+                        "code": "not_foreground"
+                      },
+                      "run": [
+                        {
+                          "do": "note",
+                          "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                        },
+                        {
+                          "do": "host.key",
+                          "keys": "Esc",
+                          "retry": {
+                            "times": 10,
+                            "backoff_ms": 3000,
+                            "factor": 1,
+                            "on": {
+                              "code": "not_foreground"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST11-light-held",
+          "do": "run",
+          "command": "game.status",
+          "input": {},
+          "bind": "ST11_light_after"
+        }
+      ],
+      "pass": [
+        {
+          "label": "the flash burst (14 x 50 ms)",
+          "ref": "$ST11_light_burst",
+          "captured": true
+        },
+        {
+          "label": "modal held photo mode's exit",
+          "ref": "$ST11_light_after.phase",
+          "match": {
+            "equals": "photo_mode"
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST11-light-clear",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "clear": true
+          }
+        },
+        {
+          "label": "ST11-light-unmodal",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "modal": false
+          }
+        },
+        {
+          "label": "ST11-light-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        },
+        {
+          "label": "ST11-light-exit",
+          "do": "run",
+          "command": "photo.exit",
+          "input": {},
+          "when": {
+            "check": {
+              "do": "run",
+              "command": "game.status",
+              "input": {}
+            },
+            "match": {
+              "path": "phase",
+              "equals": "photo_mode"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST7-light-stopped",
+      "title": "Stopped: the CET window with Reconnect, and the Stopped chip (ST6) (light; the game restarts after)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "after": "restart",
+      "steps": [
+        {
+          "label": "ST7-light-stopped-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-light-stopped-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST7-light-stopped-cet-before",
+          "do": "capture",
+          "name": "ST7-light-stopped-cet-before",
+          "clear_overlay": false,
+          "bind": "ST7_light_stopped_cetBefore"
+        },
+        {
+          "label": "ST7-light-stopped-cet-key",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST7-light-stopped-cet-flag",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST7-light-stopped-cet-seen",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 2000,
+          "bind": "ST7_light_stopped_cetState",
+          "alternatives": [
+            [
+              {
+                "do": "wait",
+                "ms": 500
+              },
+              {
+                "do": "capture",
+                "name": "ST7-light-stopped-cet-check",
+                "clear_overlay": false,
+                "bind": "ST7_light_stopped_cetCheck"
+              },
+              {
+                "do": "capture.compare",
+                "a": "$ST7_light_stopped_cetBefore",
+                "b": "$ST7_light_stopped_cetCheck",
+                "rect": "$win.regions.cet_window",
+                "min_changed": 0.15,
+                "bind": "ST7_light_stopped_cetSeen"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST7-light-stopped-kill",
+          "do": "run",
+          "command": "bridge.kill",
+          "input": {}
+        },
+        {
+          "label": "ST7-light-stopped-wait",
+          "do": "wait",
+          "ms": 800
+        },
+        {
+          "label": "ST7-light-stopped-ST7-cet-stopped-light",
+          "do": "capture",
+          "name": "ST7-cet-stopped-light",
+          "clear_overlay": false,
+          "bind": "ST7_light_stopped_stopped"
+        },
+        {
+          "label": "ST7-light-stopped-ST7-cet-stopped-light-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_light_stopped_stopped.full.path",
+            "rect": "$win.regions.cet_window",
+            "name": "ST7-cet-stopped-light-crop"
+          },
+          "on_fail": "continue"
+        }
+      ],
+      "pass": [
+        {
+          "label": "stopped, with Reconnect",
+          "ref": "$ST7_light_stopped_stopped",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST7-light-stopped-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST7-light-stopped-cet-closed",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST3-light",
+      "title": "The XF box with motion reduced: a still dot, no settle (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "reduced"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST3-light-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST3-light-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST3_light_hud"
+        },
+        {
+          "label": "ST3-light-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST3_light_overlay"
+        },
+        {
+          "label": "ST3-light-still",
+          "do": "burst",
+          "name": "ST3-xfbox-reduced-light",
+          "frames": 6,
+          "interval_ms": 240,
+          "clear_overlay": false,
+          "bind": "ST3_light_still"
+        },
+        {
+          "label": "ST3-light-change",
+          "together": [
+            {
+              "do": "burst",
+              "name": "ST3-xfbox-reduced-settle-light",
+              "frames": 10,
+              "interval_ms": 100,
+              "clear_overlay": false,
+              "bind": "ST3_light_settle"
+            },
+            {
+              "sequence": [
+                {
+                  "do": "wait",
+                  "ms": 300
+                },
+                {
+                  "do": "run",
+                  "command": "session.handover",
+                  "input": {
+                    "note": "ST3-light: no settle under reduced",
+                    "restore_ui": false
+                  }
+                },
+                {
+                  "do": "wait",
+                  "ms": 400
+                },
+                {
+                  "do": "run",
+                  "command": "session.resume",
+                  "input": {}
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion reduced",
+          "ref": "$ST3_light_overlay.motion.effective",
+          "match": {
+            "equals": "reduced"
+          }
+        },
+        {
+          "label": "by the setting",
+          "ref": "$ST3_light_overlay.motion.reason",
+          "match": {
+            "equals": "setting"
+          }
+        },
+        {
+          "label": "still dot (6 x 240 ms)",
+          "ref": "$ST3_light_still",
+          "captured": true
+        },
+        {
+          "label": "no wash on a change",
+          "ref": "$ST3_light_settle",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST3-light-resume",
+          "do": "run",
+          "command": "session.resume",
+          "input": {}
+        },
+        {
+          "label": "ST3-light-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST8-light-connected",
+      "title": "CET line, connected, motion full (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST8-light-connected-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST8-light-connected-line",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": true
+          },
+          "bind": "ST8_light_connected_hud"
+        },
+        {
+          "label": "ST8-light-connected-overlay",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST8_light_connected_overlay"
+        },
+        {
+          "label": "ST8-light-connected-burst",
+          "do": "burst",
+          "name": "ST8-cetline-connected-light",
+          "frames": 12,
+          "interval_ms": 200,
+          "clear_overlay": false,
+          "bind": "ST8_light_connected_burst"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full in force",
+          "ref": "$ST8_light_connected_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the pulse burst",
+          "ref": "$ST8_light_connected_burst",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST8-light-connected-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST8-light-paused",
+      "title": "CET line, paused (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST8-light-paused-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST8-light-paused-line",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": true
+          }
+        },
+        {
+          "label": "ST8-light-paused-pause",
+          "do": "run",
+          "command": "session.handover",
+          "input": {
+            "note": "ST8-light-paused: the paused CET line",
+            "restore_ui": false
+          }
+        },
+        {
+          "label": "ST8-light-paused-wait",
+          "do": "wait",
+          "ms": 800
+        },
+        {
+          "label": "ST8-light-paused-shot",
+          "do": "capture",
+          "name": "ST8-cetline-paused-light",
+          "clear_overlay": false,
+          "bind": "ST8_light_paused_shot"
+        }
+      ],
+      "pass": [
+        {
+          "label": "the paused line",
+          "ref": "$ST8_light_paused_shot",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST8-light-paused-resume",
+          "do": "run",
+          "command": "session.resume",
+          "input": {}
+        },
+        {
+          "label": "ST8-light-paused-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST8-light-stopped",
+      "title": "CET line, stopped (light; the bridge is switched off, then the game restarts)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "false"
+        },
+        {
+          "config": "overlay.theme",
+          "equals": "light"
+        },
+        {
+          "config": "overlay.motion",
+          "equals": "full"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "after": "restart",
+      "steps": [
+        {
+          "label": "ST8-light-stopped-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST8-light-stopped-line",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": true
+          }
+        },
+        {
+          "label": "ST8-light-stopped-kill",
+          "do": "run",
+          "command": "bridge.kill",
+          "input": {}
+        },
+        {
+          "label": "ST8-light-stopped-wait",
+          "do": "wait",
+          "ms": 800
+        },
+        {
+          "label": "ST8-light-stopped-shot",
+          "do": "capture",
+          "name": "ST8-cetline-stopped-light",
+          "clear_overlay": false,
+          "bind": "ST8_light_stopped_shot"
+        }
+      ],
+      "pass": [
+        {
+          "label": "the stopped line",
+          "ref": "$ST8_light_stopped_shot",
+          "captured": true
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    {
+      "label": "cet",
+      "do": "host.key",
+      "keys": "$fixture.cet_overlay_key",
+      "when": {
+        "match": {
+          "ref": "$cetOpen",
+          "equals": true
+        }
+      }
+    }
+  ]
+}

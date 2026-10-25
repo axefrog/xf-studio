@@ -1,0 +1,1167 @@
+{
+  "schema": "xfb/session-script-3",
+  "name": "borg4-smoke",
+  "title": "Borg 4 regression smoke: B318-1, B318-3, B318-4, CS8181, DI2, DI3, CRS",
+  "card": "research/runtime/runtime-bridge-test-card.md#borg-3-regressions-0818",
+  "requires": [
+    "The XF test profile with the -writes build; V in an open, quiet street with crowd walkers about; a throwaway save.",
+    "A private fixtures file (--fixtures) as for st-styling (mo2, game_dir, staged_mod, save)."
+  ],
+  "setup": [
+    {
+      "label": "commit",
+      "do": "host.commit",
+      "on_fail": "stop"
+    }
+  ],
+  "rows": [
+    {
+      "id": "B318-1",
+      "title": "No invalid heartbeats: the recorder on all channels for 2 minutes",
+      "requires": [
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        }
+      ],
+      "steps": [
+        {
+          "label": "B318-1-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "B318-1-start",
+          "do": "run",
+          "command": "test.record.start",
+          "input": {
+            "channels": [
+              "v",
+              "actors",
+              "subtitles",
+              "voice",
+              "face",
+              "ui",
+              "contacts",
+              "supervisor"
+            ],
+            "duration_s": 300
+          },
+          "bind": "B318_1_rec",
+          "outcomes": [
+            {
+              "name": "already_recording",
+              "match": {
+                "code": "recording_active"
+              },
+              "run": [
+                {
+                  "do": "run",
+                  "command": "test.record.stop",
+                  "input": {}
+                },
+                {
+                  "do": "run",
+                  "command": "test.record.start",
+                  "input": {
+                    "channels": [
+                      "v",
+                      "actors",
+                      "subtitles",
+                      "voice",
+                      "face",
+                      "ui",
+                      "contacts",
+                      "supervisor"
+                    ],
+                    "duration_s": 300
+                  },
+                  "bind": "B318_1_rec"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "B318-1-two-minutes",
+          "do": "wait",
+          "ms": 120000,
+          "deadline_ms": 125000
+        },
+        {
+          "label": "B318-1-catchup",
+          "do": "run",
+          "command": "game.catchup",
+          "input": {
+            "run": "$B318_1_rec.run"
+          },
+          "bind": "B318_1_catch",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 2000
+          }
+        }
+      ],
+      "pass": [
+        {
+          "label": "no gaps",
+          "ref": "$B318_1_catch.gaps",
+          "match": {
+            "equals": []
+          }
+        },
+        {
+          "label": "subtitles: no invalid samples",
+          "ref": "$B318_1_catch",
+          "match": {
+            "any": [
+              {
+                "path": "count_detail.subtitles.invalid",
+                "equals": 0
+              },
+              {
+                "path": "count_detail.subtitles",
+                "exists": false
+              }
+            ]
+          }
+        },
+        {
+          "label": "voice: no invalid samples",
+          "ref": "$B318_1_catch",
+          "match": {
+            "any": [
+              {
+                "path": "count_detail.voice.invalid",
+                "equals": 0
+              },
+              {
+                "path": "count_detail.voice",
+                "exists": false
+              }
+            ]
+          }
+        },
+        {
+          "label": "face: no invalid samples",
+          "ref": "$B318_1_catch",
+          "match": {
+            "any": [
+              {
+                "path": "count_detail.face.invalid",
+                "equals": 0
+              },
+              {
+                "path": "count_detail.face",
+                "exists": false
+              }
+            ]
+          }
+        },
+        {
+          "label": "ui: no invalid samples",
+          "ref": "$B318_1_catch",
+          "match": {
+            "any": [
+              {
+                "path": "count_detail.ui.invalid",
+                "equals": 0
+              },
+              {
+                "path": "count_detail.ui",
+                "exists": false
+              }
+            ]
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "B318-1-stop",
+          "do": "run",
+          "command": "test.record.stop",
+          "input": {}
+        }
+      ]
+    },
+    {
+      "id": "B318-3",
+      "title": "phone.call auto_answer: answered with no key press, the call ends by itself",
+      "requires": [
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        }
+      ],
+      "steps": [
+        {
+          "label": "B318-3-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "B318-3-cursor",
+          "do": "cursor",
+          "bind": "B318_3_cursor"
+        },
+        {
+          "label": "B318-3-call",
+          "do": "run",
+          "command": "phone.call",
+          "input": {
+            "contact": "coach",
+            "auto_answer": true,
+            "ring_s": 30,
+            "lines": [
+              {
+                "text": "Smoke check: this call answers itself."
+              }
+            ],
+            "when": {
+              "phase": "gameplay",
+              "combat": false,
+              "vehicle": false
+            }
+          },
+          "bind": "B318_3_call",
+          "retry": {
+            "times": 3,
+            "backoff_ms": 5000,
+            "on": {
+              "code": "precondition_failed"
+            }
+          }
+        },
+        {
+          "label": "B318-3-answered",
+          "do": "await",
+          "cursor": "$B318_3_cursor",
+          "kind": "dm.phone",
+          "timeout_s": 20,
+          "bind": "B318_3_answered",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "B318-3-state",
+          "do": "run",
+          "command": "phone.state",
+          "input": {},
+          "bind": "B318_3_state"
+        }
+      ],
+      "pass": [
+        {
+          "label": "a dm.phone event came",
+          "ref": "$B318_3_answered.complete",
+          "match": {
+            "equals": true
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "B318-3-end",
+          "do": "run",
+          "command": "phone.end",
+          "input": {}
+        }
+      ]
+    },
+    {
+      "id": "B318-4",
+      "title": "The XF panel hides while the call widget is up",
+      "requires": [
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        }
+      ],
+      "steps": [
+        {
+          "label": "B318-4-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "B318-4-panel",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": true
+          }
+        },
+        {
+          "label": "B318-4-call",
+          "do": "run",
+          "command": "phone.call",
+          "input": {
+            "contact": "coach",
+            "auto_answer": false,
+            "ring_s": 20,
+            "lines": [
+              {
+                "text": "Smoke check: ringing."
+              }
+            ],
+            "when": {
+              "phase": "gameplay",
+              "combat": false,
+              "vehicle": false
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 5000,
+            "on": {
+              "code": "precondition_failed"
+            }
+          }
+        },
+        {
+          "label": "B318-4-ringing",
+          "do": "run",
+          "command": "ui.state",
+          "input": {},
+          "until": {
+            "path": "phone_open",
+            "equals": true
+          },
+          "interval_ms": 500,
+          "deadline_ms": 10000,
+          "bind": "B318_4_ui",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "B318-4-shot",
+          "do": "capture",
+          "name": "B318-4-ringing",
+          "clear_overlay": false,
+          "bind": "B318_4_shot"
+        }
+      ],
+      "pass": [
+        {
+          "label": "phone_open while ringing",
+          "ref": "$B318_4_ui.phone_open",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "the ringing widget, uncovered",
+          "ref": "$B318_4_shot",
+          "captured": true
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "B318-4-end",
+          "do": "run",
+          "command": "phone.end",
+          "input": {}
+        },
+        {
+          "label": "B318-4-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "CS8181",
+      "title": "A hostile melee fighter engages by itself",
+      "requires": [
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        }
+      ],
+      "steps": [
+        {
+          "label": "CS8181-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "CS8181-health",
+          "do": "run",
+          "command": "player.status",
+          "input": {},
+          "bind": "CS8181_before"
+        },
+        {
+          "label": "CS8181-cursor",
+          "do": "cursor",
+          "bind": "CS8181_cursor"
+        },
+        {
+          "label": "CS8181-spawn",
+          "do": "run",
+          "command": "npc.spawn",
+          "input": {
+            "cast": "fighter_melee",
+            "ahead_m": 8,
+            "attitude": "hostile",
+            "reactions": "game"
+          },
+          "bind": "CS8181_fighter",
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "npc.spawn",
+                "input": {
+                  "cast": "fighter_melee",
+                  "ahead_m": 6,
+                  "attitude": "hostile",
+                  "reactions": "game"
+                },
+                "bind": "CS8181_fighter"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "CS8181-engaged",
+          "do": "await",
+          "cursor": "$CS8181_cursor",
+          "kind": "npc.handed_back",
+          "subject": "$CS8181_fighter.who",
+          "timeout_s": 30,
+          "bind": "CS8181_engaged",
+          "on_fail": "fail_row"
+        }
+      ],
+      "pass": [
+        {
+          "label": "handed back to the game's combat",
+          "ref": "$CS8181_engaged.complete",
+          "match": {
+            "equals": true
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "CS8181-release",
+          "do": "run",
+          "command": "npc.release",
+          "input": {
+            "who": "$CS8181_fighter.who",
+            "how": "despawn"
+          },
+          "when": {
+            "match": {
+              "ref": "$CS8181_fighter",
+              "exists": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "DI2",
+      "title": "A declared pickpocketing, seen: one witness.report",
+      "requires": [
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        }
+      ],
+      "steps": [
+        {
+          "label": "DI2-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "DI2-mark",
+          "do": "run",
+          "command": "npc.spawn",
+          "input": {
+            "cast": "woman_corpo",
+            "ahead_m": 7,
+            "side_m": -1.5,
+            "label": "Mark"
+          },
+          "bind": "DI2_mark"
+        },
+        {
+          "label": "DI2-thief",
+          "do": "run",
+          "command": "npc.spawn",
+          "input": {
+            "cast": "man_lowlife",
+            "ahead_m": 7,
+            "side_m": 2.5,
+            "label": "Thief"
+          },
+          "bind": "DI2_thief"
+        },
+        {
+          "label": "DI2-declare",
+          "do": "run",
+          "command": "incidents.declare",
+          "input": {
+            "id": "pp-smoke-2",
+            "kind": "pickpocket",
+            "roles": {
+              "$DI2_thief.who": "thief",
+              "$DI2_mark.who": "mark"
+            },
+            "ttl_s": 45
+          },
+          "bind": "DI2_declared",
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "incidents.declare",
+                "input": {
+                  "id": "pp-smoke-2b",
+                  "kind": "pickpocket",
+                  "roles": {
+                    "$DI2_thief.who": "thief",
+                    "$DI2_mark.who": "mark"
+                  },
+                  "ttl_s": 45
+                },
+                "bind": "DI2_declared"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "DI2-cursor",
+          "do": "cursor",
+          "bind": "DI2_cursor"
+        },
+        {
+          "label": "DI2-take",
+          "do": "run",
+          "command": "npc.move",
+          "input": {
+            "who": "$DI2_thief.who",
+            "to": "$DI2_mark.who",
+            "stop_m": 0.8
+          }
+        },
+        {
+          "label": "DI2-arrived",
+          "do": "await",
+          "cursor": "$DI2_cursor",
+          "kind": "npc.arrived",
+          "subject": "$DI2_thief.who",
+          "timeout_s": 30,
+          "bind": "DI2_arrived"
+        },
+        {
+          "label": "DI2-line",
+          "do": "run",
+          "command": "npc.say",
+          "input": {
+            "who": "$DI2_thief.who",
+            "text": "(lifts the wallet)",
+            "style": "overhead",
+            "seconds": 3
+          }
+        },
+        {
+          "label": "DI2-turn",
+          "do": "run",
+          "command": "npc.turn",
+          "input": {
+            "who": "$DI2_thief.who",
+            "to": "v"
+          },
+          "on_fail": "continue"
+        },
+        {
+          "label": "DI2-beat",
+          "do": "wait",
+          "ms": 4000
+        },
+        {
+          "label": "DI2-close",
+          "do": "run",
+          "command": "incidents.close",
+          "input": {
+            "id": "$DI2_declared.id"
+          },
+          "bind": "DI2_closed"
+        },
+        {
+          "label": "DI2-list",
+          "do": "run",
+          "command": "incidents.list",
+          "input": {
+            "declared": true,
+            "limit": 8
+          },
+          "bind": "DI2_list"
+        }
+      ],
+      "pass": [
+        {
+          "label": "closed with a report",
+          "ref": "$DI2_closed.outcome",
+          "match": {
+            "one_of": [
+              "report",
+              "report_queued"
+            ]
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "DI2-release-thief",
+          "do": "run",
+          "command": "npc.release",
+          "input": {
+            "who": "$DI2_thief.who",
+            "how": "despawn"
+          },
+          "when": {
+            "match": {
+              "ref": "$DI2_thief",
+              "exists": true
+            }
+          }
+        },
+        {
+          "label": "DI2-release-mark",
+          "do": "run",
+          "command": "npc.release",
+          "input": {
+            "who": "$DI2_mark.who",
+            "how": "despawn"
+          },
+          "when": {
+            "match": {
+              "ref": "$DI2_mark",
+              "exists": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "DI3",
+      "title": "V turned away: witness.unwitnessed (not_in_view), no report",
+      "requires": [
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        }
+      ],
+      "steps": [
+        {
+          "label": "DI3-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "DI3-away",
+          "do": "run",
+          "command": "player.look",
+          "input": {
+            "yaw": 180,
+            "relative": true,
+            "when": {
+              "phase": "gameplay",
+              "combat": false,
+              "vehicle": false
+            }
+          },
+          "retry": {
+            "times": 2,
+            "backoff_ms": 3000,
+            "on": {
+              "code": "precondition_failed"
+            }
+          }
+        },
+        {
+          "label": "DI3-settle",
+          "do": "wait",
+          "ms": 1500
+        },
+        {
+          "label": "DI3-mark",
+          "do": "run",
+          "command": "npc.spawn",
+          "input": {
+            "cast": "woman_corpo",
+            "ahead_m": 7,
+            "side_m": -1.5,
+            "label": "Mark"
+          },
+          "bind": "DI3_mark"
+        },
+        {
+          "label": "DI3-thief",
+          "do": "run",
+          "command": "npc.spawn",
+          "input": {
+            "cast": "man_lowlife",
+            "ahead_m": 7,
+            "side_m": 2.5,
+            "label": "Thief"
+          },
+          "bind": "DI3_thief"
+        },
+        {
+          "label": "DI3-declare",
+          "do": "run",
+          "command": "incidents.declare",
+          "input": {
+            "id": "pp-smoke-3",
+            "kind": "pickpocket",
+            "roles": {
+              "$DI3_thief.who": "thief",
+              "$DI3_mark.who": "mark"
+            },
+            "ttl_s": 45
+          },
+          "bind": "DI3_declared",
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "incidents.declare",
+                "input": {
+                  "id": "pp-smoke-3b",
+                  "kind": "pickpocket",
+                  "roles": {
+                    "$DI3_thief.who": "thief",
+                    "$DI3_mark.who": "mark"
+                  },
+                  "ttl_s": 45
+                },
+                "bind": "DI3_declared"
+              }
+            ]
+          ]
+        },
+        {
+          "label": "DI3-cursor",
+          "do": "cursor",
+          "bind": "DI3_cursor"
+        },
+        {
+          "label": "DI3-take",
+          "do": "run",
+          "command": "npc.move",
+          "input": {
+            "who": "$DI3_thief.who",
+            "to": "$DI3_mark.who",
+            "stop_m": 0.8
+          }
+        },
+        {
+          "label": "DI3-arrived",
+          "do": "await",
+          "cursor": "$DI3_cursor",
+          "kind": "npc.arrived",
+          "subject": "$DI3_thief.who",
+          "timeout_s": 30,
+          "bind": "DI3_arrived"
+        },
+        {
+          "label": "DI3-line",
+          "do": "run",
+          "command": "npc.say",
+          "input": {
+            "who": "$DI3_thief.who",
+            "text": "(lifts the wallet)",
+            "style": "overhead",
+            "seconds": 3
+          }
+        },
+        {
+          "label": "DI3-turn",
+          "do": "run",
+          "command": "npc.turn",
+          "input": {
+            "who": "$DI3_thief.who",
+            "to": "v"
+          },
+          "on_fail": "continue"
+        },
+        {
+          "label": "DI3-beat",
+          "do": "wait",
+          "ms": 4000
+        },
+        {
+          "label": "DI3-close",
+          "do": "run",
+          "command": "incidents.close",
+          "input": {
+            "id": "$DI3_declared.id"
+          },
+          "bind": "DI3_closed"
+        }
+      ],
+      "pass": [
+        {
+          "label": "unwitnessed",
+          "ref": "$DI3_closed.outcome",
+          "match": {
+            "equals": "unwitnessed"
+          }
+        },
+        {
+          "label": "because V wasn't looking",
+          "ref": "$DI3_closed.unwitnessed_reason",
+          "match": {
+            "equals": "not_in_view"
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "DI3-release-thief",
+          "do": "run",
+          "command": "npc.release",
+          "input": {
+            "who": "$DI3_thief.who",
+            "how": "despawn"
+          },
+          "when": {
+            "match": {
+              "ref": "$DI3_thief",
+              "exists": true
+            }
+          }
+        },
+        {
+          "label": "DI3-release-mark",
+          "do": "run",
+          "command": "npc.release",
+          "input": {
+            "who": "$DI3_mark.who",
+            "how": "despawn"
+          },
+          "when": {
+            "match": {
+              "ref": "$DI3_mark",
+              "exists": true
+            }
+          }
+        },
+        {
+          "label": "DI3-look-stop",
+          "do": "run",
+          "command": "player.look.stop",
+          "input": {}
+        }
+      ]
+    },
+    {
+      "id": "CRS",
+      "title": "Crowd substitution out of view, then released with restore",
+      "requires": [
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        }
+      ],
+      "steps": [
+        {
+          "label": "CRS-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "CRS-list",
+          "do": "run",
+          "command": "npc.list",
+          "input": {
+            "radius_m": 30
+          },
+          "bind": "CRS_crowd"
+        },
+        {
+          "label": "CRS-cursor",
+          "do": "cursor",
+          "bind": "CRS_cursor"
+        },
+        {
+          "label": "CRS-swap",
+          "do": "run",
+          "command": "npc.substitute",
+          "input": {
+            "look_at": true
+          },
+          "bind": "CRS_swap",
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "player.look",
+                "input": {
+                  "yaw": 90,
+                  "relative": true,
+                  "when": {
+                    "phase": "gameplay",
+                    "combat": false,
+                    "vehicle": false
+                  }
+                }
+              },
+              {
+                "do": "wait",
+                "ms": 1500
+              },
+              {
+                "do": "run",
+                "command": "npc.substitute",
+                "input": {
+                  "look_at": true
+                },
+                "bind": "CRS_swap"
+              }
+            ]
+          ],
+          "outcomes": [
+            {
+              "name": "nobody_suitable",
+              "match": {
+                "code": [
+                  "no_target",
+                  "not_found",
+                  "too_far",
+                  "npc_busy",
+                  "npc_protected"
+                ]
+              },
+              "result": "fail"
+            }
+          ]
+        },
+        {
+          "label": "CRS-swapped",
+          "do": "await",
+          "cursor": "$CRS_cursor",
+          "kind": "npc.substituted",
+          "subject": "$CRS_swap.who",
+          "timeout_s": 20,
+          "bind": "CRS_swapped",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "CRS-release",
+          "do": "run",
+          "command": "npc.release",
+          "input": {
+            "who": "$CRS_swap.who",
+            "how": "despawn",
+            "restore": true
+          },
+          "bind": "CRS_released"
+        }
+      ],
+      "pass": [
+        {
+          "label": "swapped",
+          "ref": "$CRS_swapped.complete",
+          "match": {
+            "equals": true
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "CRS-cleanup",
+          "do": "run",
+          "command": "npc.release",
+          "input": {
+            "who": "$CRS_swap.who",
+            "how": "despawn"
+          },
+          "when": {
+            "match": {
+              "all": [
+                {
+                  "ref": "$CRS_swap",
+                  "exists": true
+                },
+                {
+                  "ref": "$CRS_released",
+                  "exists": false
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "teardown": []
+}
