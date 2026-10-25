@@ -1,0 +1,459 @@
+{
+  "id": "xf.composite:family.shapes",
+  "type": "pattern-family",
+  "family": "shape",
+  "version": 1,
+  "status": "v0, 25 October 2026. Larger shapes: compositions of smaller patterns, recognised as their junctures fill and never sown as units (pattern-language.md §7.3). `story` junctures are filled by child instances; `links.refines` names the patterns that may fill each juncture.",
+  "patterns": [
+    {
+      "id": "xf.composite:heist",
+      "type": "pattern",
+      "version": 1,
+      "family": "shape",
+      "scale": "goal",
+      "summary": "A crew is hired to take something from someone who holds it; the run goes some way wrong; there is a split and an aftermath.",
+      "roles": {
+        "?cl": {"kind": "actor", "note": "the client"},
+        "?mk": {"kind": "actor", "note": "the mark, who holds the target"},
+        "?x": {"kind": ["item", "place", "person"], "note": "the target"},
+        "?crew": {"kind": "group", "note": "the crew; the protagonist may belong to it only through an accepted offer"}
+      },
+      "junctures": {
+        "job": {
+          "fn": "ask",
+          "args": {"by": "?cl", "of": "?crew", "what": "?x"},
+          "requires": [{"rel": "distinct", "args": ["?cl", "?mk"]}]
+        },
+        "held": {"fn": "hold", "args": {"who": "?mk", "what": "?x"}},
+        "crewed": {"fn": "obligate", "args": {"debtor": "?crew", "creditor": "?cl"}},
+        "legwork": {"fn": "learn", "args": {"who": "?crew", "what": "?x"}},
+        "run": {
+          "fn": "transfer",
+          "args": {"what": "?x", "from": "?mk", "to": "?crew"},
+          "changes": [
+            {"ends": "hold", "args": {"who": "?mk", "what": "?x"}},
+            {"begins": "hold", "args": {"who": "?crew", "what": "?x"}}
+          ]
+        },
+        "crossed": {
+          "fn": "story",
+          "args": {"pattern": "xf.composite:betrayal", "outcome": "any"},
+          "optional": true,
+          "binds": {"?bt": "?crew"},
+          "changes": [{"tie": {"a": "?crew", "b": "?cl"}, "move": "down"}]
+        },
+        "split": {
+          "fn": "repay",
+          "args": {"debtor": "?cl", "creditor": "?crew"},
+          "optional": true,
+          "changes": [{"ends": "obligate", "args": {"debtor": "?crew", "creditor": "?cl"}}]
+        },
+        "heat": {
+          "fn": "story",
+          "args": {"pattern": "xf.composite:reckoning", "outcome": "any"},
+          "optional": true,
+          "park": true,
+          "binds": {"?doer": "?crew", "?t": "?mk"},
+          "changes": [{"standing": {"audience": "?mk", "of": "?crew"}, "move": "down"}]
+        }
+      },
+      "edges": [
+        {"from": "job", "to": "crewed", "link": "answers"},
+        {"from": "crewed", "to": "legwork", "link": "enables"},
+        {"from": "held", "to": "run", "link": "enables"},
+        {"from": "legwork", "to": "run", "link": "enables", "shown": "should"},
+        {"from": "run", "to": "crossed", "link": "enables"},
+        {"from": "run", "to": "split", "link": "because", "shown": "must"},
+        {"from": "run", "to": "heat", "link": "because"},
+        {"from": "crossed", "to": "split", "link": "forecloses"}
+      ],
+      "entry": ["job"],
+      "outcomes": {
+        "crossed": {
+          "reached": ["crossed"],
+          "kind": "failed",
+          "next": ["xf.composite:grievance", "xf.composite:hunted", "xf.composite:feud"],
+          "aftermath": {"junctures": ["heat"], "days": 7}
+        },
+        "paid": {
+          "reached": ["split"],
+          "kind": "resolved",
+          "next": ["xf.composite:reckoning"],
+          "aftermath": {"junctures": ["heat"], "days": 7}
+        }
+      },
+      "within": {"clock": "game", "days": 14},
+      "show": {"junctures": ["job", "run"], "edges": 2},
+      "escalation": ["run"],
+      "links": {
+        "chains": ["xf.composite:reckoning", "xf.composite:hunted"],
+        "layers": ["xf.composite:rivalry", "xf.composite:feud"],
+        "refines": {
+          "job": ["xf.composite:coveted"],
+          "crewed": ["xf.composite:protection", "xf.composite:divided-loyalty"],
+          "legwork": ["xf.composite:revelation"],
+          "run": ["xf.composite:complication", "xf.composite:interception"],
+          "crossed": ["xf.composite:betrayal"],
+          "split": ["xf.composite:payoff", "xf.composite:debt"],
+          "heat": ["xf.composite:reckoning"]
+        }
+      },
+      "traces": [
+        "d04.QST-26",
+        "d04.QST-27",
+        "d04.QST-28",
+        "d04.QST-29",
+        "d04.QST-31",
+        "d04.QST-32",
+        "d04.QST-33",
+        "d04.QST-34",
+        "d04.QST-35",
+        "d04.QST-36",
+        "d04.QST-37",
+        "d04.QST-19",
+        "DS-14"
+      ],
+      "risks": [
+        {
+          "failure": "fail:template-in-disguise",
+          "note": "The job, crew, legwork, run and split sequence is a whole plot if run in order. Shapes are recognisers in v0: none of the heist's junctures is realised directly, and the director works only on its child instances (coveted, complication, interception, betrayal, payoff, reckoning)."
+        },
+        {
+          "failure": "fail:cliche",
+          "note": "Every patron betrays you (QST-36). `crossed` is optional, budgeted and caused, never the default."
+        },
+        {
+          "failure": "fail:learned-grammar",
+          "note": "A twist that wipes out the plan (QST-29): a stage failure changes the next stage's preconditions and never ends the job."
+        },
+        {
+          "failure": "fail:presumed-protagonist",
+          "note": "The protagonist's plan is the player's. The engine settles only the crew's own preparation late, never the protagonist's (QST-33)."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:feud",
+      "type": "pattern",
+      "version": 1,
+      "family": "shape",
+      "scale": "concern",
+      "summary": "A wrong is avenged, the vengeance is answered, and people with ties to both sides are caught between.",
+      "roles": {
+        "?g1": {"kind": "actor", "note": "the side first wronged"},
+        "?g2": {"kind": "actor", "note": "the side that wronged first"}
+      },
+      "junctures": {
+        "opened": {
+          "fn": "wrong",
+          "args": {"by": "?g2", "to": "?g1"},
+          "changes": [{"tie": {"a": "?g1", "b": "?g2"}, "move": "down"}]
+        },
+        "answered": {
+          "fn": "story",
+          "args": {"pattern": "xf.composite:grievance", "outcome": "avenged"},
+          "binds": {"?wr": "?g1", "?by": "?g2"}
+        },
+        "countered": {
+          "fn": "story",
+          "args": {"pattern": "xf.composite:grievance", "outcome": "avenged"},
+          "binds": {"?wr": "?g2", "?by": "?g1"}
+        },
+        "torn": {
+          "fn": "story",
+          "args": {"pattern": "xf.composite:divided-loyalty", "outcome": "any"},
+          "optional": true,
+          "binds": {"?g1": "?g1"}
+        },
+        "spread": {
+          "fn": "story",
+          "args": {"pattern": "xf.composite:escalation", "outcome": "escalated"},
+          "optional": true,
+          "binds": {"?a": "?g1", "?b": "?g2"}
+        },
+        "settled": {
+          "fn": "story",
+          "args": {"pattern": "xf.composite:settlement", "outcome": "settled"},
+          "optional": true,
+          "binds": {"?a": "?g1", "?b": "?g2"},
+          "changes": [{"tie": {"a": "?g1", "b": "?g2"}, "move": "up"}]
+        },
+        "bled": {
+          "fn": "story",
+          "args": {"pattern": "xf.composite:loss", "outcome": "lost"},
+          "optional": true,
+          "binds": {"?l": "?g1", "?by": "?g2"},
+          "changes": [{"standing": {"audience": "?g2", "of": "?g1"}, "move": "down"}]
+        }
+      },
+      "edges": [
+        {"from": "opened", "to": "answered", "link": "motive", "shown": "must"},
+        {"from": "answered", "to": "countered", "link": "motive", "shown": "must"},
+        {"from": "answered", "to": "torn", "link": "enables"},
+        {"from": "countered", "to": "spread", "link": "motive"},
+        {"from": "countered", "to": "settled", "link": "enables"},
+        {"from": "countered", "to": "bled", "link": "because"}
+      ],
+      "entry": ["opened"],
+      "outcomes": {
+        "settled": {"reached": ["settled"], "kind": "resolved", "next": ["xf.composite:payoff"]},
+        "bled": {"reached": ["bled"], "kind": "failed", "next": ["xf.composite:reckoning"]},
+        "burning": {"reached": ["countered"], "after": {"clock": "game", "days": 30}, "kind": "parked"}
+      },
+      "within": {"clock": "game", "days": 60},
+      "show": {"junctures": ["answered", "countered"], "edges": 2},
+      "escalation": ["spread"],
+      "links": {
+        "chains": ["xf.composite:hunted", "xf.composite:reckoning"],
+        "layers": ["xf.composite:protection", "xf.composite:squeeze", "xf.composite:rivalry"],
+        "refines": {
+          "opened": ["xf.composite:misattribution", "xf.composite:rivalry"],
+          "answered": ["xf.composite:grievance"],
+          "countered": ["xf.composite:grievance"],
+          "torn": ["xf.composite:divided-loyalty"],
+          "spread": ["xf.composite:escalation"],
+          "settled": ["xf.composite:settlement"],
+          "bled": ["xf.composite:loss"]
+        }
+      },
+      "traces": ["d01.DRV-18", "d01.DRV-42", "d02.BND-35", "d15.DEF-01", "d15.MND-03", "d08.THR-05", "d07.DIR-52", "d09.AGY-30"],
+      "risks": [
+        {
+          "failure": "fail:runaway-escalation",
+          "note": "Endless tit-for-tat. Most feuds don't end in violence (DRV-18): fading, settling and parking should be common outcomes."
+        },
+        {
+          "failure": "fail:dangling-thread",
+          "note": "A feud the protagonist followed parks with a closing trace, never by silence."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:hunted",
+      "type": "pattern",
+      "version": 2,
+      "family": "shape",
+      "scale": "concern",
+      "summary": "A group decides someone must pay, warns and puts the word out, and the hunted look for shelter or a way to lift it.",
+      "roles": {
+        "?q": {"kind": "actor", "v": "may", "note": "the quarry"},
+        "?h": {"kind": "group", "note": "the hunters"},
+        "?j": {"kind": "event", "note": "what the hunters blame the quarry for"},
+        "?sh": {"kind": "actor", "note": "who shelters the quarry"},
+        "?cl": {"kind": "actor", "v": "may", "note": "who clears the quarry's name"},
+        "?w": {"kind": "person", "note": "who carries the warning: a member of the hunters"},
+        "?m": {"kind": "person", "note": "who finds the quarry: a member of the hunters"},
+        "?pr": {"kind": "person", "note": "who named the price: a member of the hunters"}
+      },
+      "junctures": {
+        "grudge": {
+          "fn": "blame",
+          "args": {"who": "?h", "of": "?q", "for": "?j"},
+          "requires": [{"rel": "observed-act", "args": ["?j", "?q"]}]
+        },
+        "decided": {
+          "fn": "decide",
+          "args": {"group": "?h", "what": "?q"},
+          "changes": [{"frame": {"of": "?h", "toward": "?q", "status": "opens"}}],
+          "note": "D-30: a group's own decision, as a simulation process (S1-10 when the quarry is the protagonist); never the director's"
+        },
+        "warned": {
+          "fn": "threaten",
+          "args": {"by": "?w", "to": "?q"},
+          "requires": [{"rel": "member", "args": ["?w", "?h"]}],
+          "note": "D-30's perceivable warning: word put out, a message, a demand, carried by a member (S1 v0.6 `warning`, `price`). No encounter before it reached the quarry",
+          "changes": [
+            {"frame": {"of": "?q", "toward": "decided", "status": "opens"}, "when": {"npc": "?q"}},
+            {"exposure": {"to": "?q", "of": "decided"}, "when": {"protagonist": "?q"}}
+          ]
+        },
+        "hunting": {"fn": "pursue", "args": {"who": "?h", "target": "?q"}},
+        "sheltered": {
+          "fn": "protect",
+          "args": {"guard": "?sh", "ward": "?q"},
+          "optional": true,
+          "changes": [{"tie": {"a": "?q", "b": "?sh"}, "move": "up"}]
+        },
+        "caught": {
+          "fn": "threaten",
+          "args": {"by": "?m", "to": "?q"},
+          "optional": true,
+          "fill": {"fixed": [{"kinds": ["confront"]}]},
+          "requires": [{"rel": "member", "args": ["?m", "?h"]}],
+          "note": "An encounter: members of the hunters find the quarry (S1 v0.6 `confront`). It asserts no harm; whatever harm follows is the game's own record, read back by the mirror, which a `loss` or `grievance` instance reads"
+        },
+        "paidOff": {
+          "fn": "comply",
+          "args": {"who": "?q", "to": "?pr"},
+          "requires": [{"rel": "member", "args": ["?pr", "?h"]}],
+          "optional": true,
+          "changes": [{"frame": {"of": "?h", "toward": "?q", "status": "satisfied"}}]
+        },
+        "cleared": {
+          "fn": "expose",
+          "args": {"by": "?cl", "what": "?j", "to": "?h"},
+          "optional": true,
+          "changes": [
+            {"belief": {"who": "?h", "about": "?j"}, "move": "revised"},
+            {"frame": {"of": "?h", "toward": "?q", "status": "abandoned"}}
+          ]
+        }
+      },
+      "edges": [
+        {"from": "grudge", "to": "decided", "link": "motive"},
+        {"from": "decided", "to": "warned", "link": "because", "shown": "must"},
+        {"from": "warned", "to": "hunting", "link": "enables"},
+        {"from": "warned", "to": "caught", "link": "enables", "shown": "must"},
+        {"from": "hunting", "to": "caught", "link": "enables", "shown": "must"},
+        {"from": "sheltered", "to": "caught", "link": "but"},
+        {"from": "paidOff", "to": "caught", "link": "forecloses"},
+        {"from": "cleared", "to": "caught", "link": "forecloses"}
+      ],
+      "entry": ["grudge"],
+      "outcomes": {
+        "paid-off": {"reached": ["paidOff"], "kind": "resolved", "next": ["xf.composite:settlement"]},
+        "cleared": {"reached": ["cleared"], "kind": "resolved", "next": ["xf.composite:grievance"]},
+        "caught": {"reached": ["caught"], "kind": "failed", "next": ["xf.composite:loss", "xf.composite:grievance"]},
+        "cooled": {"reached": ["hunting"], "after": {"clock": "game", "days": 21}, "kind": "parked"}
+      },
+      "within": {"clock": "game", "days": 30},
+      "once": ["?q", "?h"],
+      "show": {"junctures": ["hunting"], "edges": 2},
+      "escalation": ["decided", "caught"],
+      "links": {
+        "chains": ["xf.composite:settlement", "xf.composite:feud"],
+        "layers": ["xf.composite:protection", "xf.composite:feud", "xf.composite:misattribution", "xf.composite:betrayal"],
+        "refines": {
+          "grudge": ["xf.composite:grievance", "xf.composite:misattribution"],
+          "decided": ["xf.composite:escalation"],
+          "sheltered": ["xf.composite:protection", "xf.composite:sacrifice"],
+          "caught": ["xf.composite:loss"],
+          "paidOff": ["xf.composite:settlement"],
+          "cleared": ["xf.composite:misattribution", "xf.composite:revelation"]
+        }
+      },
+      "traces": [
+        "d09.AGY-23",
+        "d09.AGY-30",
+        "d09.R5-07",
+        "d09.R5-11",
+        "d07.DIR-41",
+        "d07.DIR-45",
+        "d07.DIR-48",
+        "d07.DIR-50",
+        "d07.DIR-51",
+        "d15.MND-03"
+      ],
+      "risks": [
+        {
+          "failure": "fail:unbounded-doom",
+          "note": "A hunt on the protagonist is a group's own process under D-30: it starts only from what the group believes the protagonist did (an observed act, or a telling of one), warns before the first harmful act, and reaches only as far as the proactivity setting allows (S1-10). Three routes lift it: pay, clear, shelter."
+        },
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "An unseen hunter is dread with no source: a hostile thread runs a visible clock (DIR-48), and a threat may sit at the edge of contact only so long (DIR-50)."
+        },
+        {
+          "failure": "fail:puppet",
+          "note": "The decision is the group leadership's, by its drive weights and hazard draw (D-08), never the director's."
+        },
+        {
+          "failure": "fail:presumed-protagonist",
+          "note": "The group's belief is the group's (D-10); the engine still never states why the protagonist acted, and the protagonist can correct the belief (cleared)."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:uprising",
+      "type": "pattern",
+      "version": 1,
+      "family": "shape",
+      "scale": "standing",
+      "summary": "People squeezed alike refuse in public, others follow, and the power answers or gives way.",
+      "roles": {
+        "?pw": {"kind": "group", "note": "the power"},
+        "?first": {"kind": "person", "note": "who refuses first, in public"},
+        "?second": {"kind": "person", "note": "who follows"},
+        "?mk": {"kind": "place", "note": "where they are squeezed: a market, a block"}
+      },
+      "junctures": {
+        "squeezed": {
+          "fn": "story",
+          "args": {"pattern": "xf.composite:squeeze", "outcome": "endured"},
+          "requires": [{"rel": "norm-gap", "args": ["any", "?mk", "wide"]}],
+          "binds": {"?pw": "?pw"}
+        },
+        "firstNo": {
+          "fn": "refuse",
+          "args": {"who": "?first", "to": "?pw"},
+          "requires": [{"rel": "public", "args": ["firstNo"]}, {"rel": "at", "args": ["firstNo", "?mk"]}],
+          "changes": [{"belief": {"who": "?second", "about": "firstNo"}, "move": "forms"}]
+        },
+        "followed": {
+          "fn": "refuse",
+          "args": {"who": "?second", "to": "?pw"},
+          "requires": [{"rel": "distinct", "args": ["?second", "?first"]}, {"rel": "at", "args": ["followed", "?mk"]}],
+          "changes": [{"standing": {"audience": "?first", "of": "?pw"}, "move": "down"}]
+        },
+        "answer": {
+          "fn": "decide",
+          "args": {"group": "?pw", "what": "?mk"},
+          "optional": true,
+          "changes": [{"frame": {"of": "?pw", "toward": "?mk", "status": "opens"}}]
+        },
+        "crushed": {
+          "fn": "story",
+          "args": {"pattern": "xf.composite:squeeze", "outcome": "crushed"},
+          "optional": true,
+          "binds": {"?pw": "?pw", "?wk": "?first"}
+        },
+        "relented": {
+          "fn": "decide",
+          "args": {"group": "?pw", "what": "?mk"},
+          "optional": true,
+          "fill": {"fixed": [{"kinds": ["group.decide intent-end of collect-fee"]}]},
+          "changes": [{"frame": {"of": "?pw", "toward": "?mk", "status": "abandoned"}}]
+        }
+      },
+      "edges": [
+        {"from": "squeezed", "to": "firstNo", "link": "motive"},
+        {"from": "firstNo", "to": "followed", "link": "motive", "shown": "must"},
+        {"from": "followed", "to": "answer", "link": "motive"},
+        {"from": "answer", "to": "crushed", "link": "because", "shown": "must"},
+        {"from": "followed", "to": "relented", "link": "because", "shown": "must"},
+        {"from": "relented", "to": "crushed", "link": "forecloses"}
+      ],
+      "entry": ["squeezed", "firstNo"],
+      "outcomes": {
+        "won": {"reached": ["followed", "relented"], "kind": "resolved", "next": ["xf.composite:reckoning"]},
+        "crushed": {"reached": ["crushed"], "kind": "failed", "next": ["xf.composite:grievance", "xf.composite:loss"]},
+        "simmering": {"reached": ["firstNo"], "after": {"clock": "game", "days": 14}, "kind": "parked"}
+      },
+      "within": {"clock": "game", "days": 45},
+      "show": {"junctures": ["firstNo", "followed"], "edges": 1},
+      "escalation": ["answer"],
+      "links": {
+        "chains": ["xf.composite:reckoning", "xf.composite:feud"],
+        "layers": ["xf.composite:protection", "xf.composite:rivalry"],
+        "refines": {
+          "squeezed": ["xf.composite:squeeze"],
+          "firstNo": ["xf.composite:test-of-creed"],
+          "answer": ["xf.composite:escalation"],
+          "crushed": ["xf.composite:squeeze", "xf.composite:loss"],
+          "relented": ["xf.composite:settlement"]
+        }
+      },
+      "traces": ["d01.DRV-55", "d01.DRV-36", "d01.DRV-43", "d15.NRM-03", "d15.NRM-04", "d15.NRM-05", "d15.DEF-03", "d15.ORD-03"],
+      "risks": [
+        {
+          "failure": "fail:presumed-protagonist",
+          "note": "The protagonist as saviour. The cascade belongs to the people squeezed; the protagonist's part comes only through offers."
+        },
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "A public act changes common knowledge only when many saw it and know others saw it (NRM-04): the first refusal needs witnesses the protagonist can see."
+        }
+      ]
+    }
+  ]
+}

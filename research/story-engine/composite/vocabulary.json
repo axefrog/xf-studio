@@ -1,0 +1,506 @@
+{
+  "id": "xf.composite:vocabulary",
+  "type": "vocabulary",
+  "version": 2,
+  "status": "v0, 25 October 2026. The function vocabulary of the pattern language (pattern-language.md §3.3). Pack data; S4 owns its final format. Version 2 aligns with S1 v0.6 and S2 v1.11: `tell` names its subject event in the `told` role, `leads` reads an `xf:leads` edge, relations declare what they can be searched from (S3 v0.6 §2.2a), the offer and response roles are S2's, and the kinds S1 v0.6 adds for goals and group intentions are listed. Where `kindFills` and S1 v0.6 §5.2a differ (S1 now conditions several city kinds' fills on their outcome), S1 wins: the kinds' own registry entries are the source; this file mirrors them for fixtures.",
+  "kinds": {
+    "person": ["core:person"],
+    "group": ["core:group"],
+    "actor": ["core:person", "core:group"],
+    "place": ["core:place"],
+    "item": ["xf:item"],
+    "fact": ["a slot path on a node: what a belief can be about"],
+    "event": ["core:event"]
+  },
+  "functions": [
+    {
+      "id": "hold",
+      "form": "state",
+      "args": {"who": "actor", "what": ["item", "place", "person"]},
+      "meaning": "`who` has or controls `what`: an item in hand, a place under a group's presence, a person in custody.",
+      "states": [
+        {"edge": "xf:held-by", "map": {"what": "from", "who": "to"}},
+        {"read": "city.presence", "note": "a group holds a leaf area where its presence band is high"}
+      ],
+      "searchFrom": ["who", "what"]
+    },
+    {
+      "id": "want",
+      "form": "state",
+      "args": {"who": "actor", "what": "any"},
+      "meaning": "`who` has a live goal or concern frame aimed at `what` (status active or blocked).",
+      "states": [
+        {
+          "frame": ["goal", "concern"],
+          "status": ["active", "blocked"],
+          "map": {"who": "actor", "what": "a node named by the frame's wants or goal effects"}
+        },
+        {"intent": "any", "note": "a group's active intention wants its target"},
+        {
+          "norm-noncomplier": true,
+          "note": "a resident the norm marks as a non-complier (S1 order.norms) wants relief from it",
+          "map": {"who": "the resident", "what": "the norm's obligation"}
+        }
+      ],
+      "searchFrom": ["who"]
+    },
+    {
+      "id": "transfer",
+      "form": "event",
+      "args": {"what": ["item", "place", "person"], "from": "actor", "to": "actor"},
+      "meaning": "`what` passes from one actor to another, by taking or by giving.",
+      "states": [{"edge-change": "xf:held-by", "note": "the holder edge moves from `from` to `to`"}]
+    },
+    {
+      "id": "wrong",
+      "form": "event",
+      "args": {"by": "actor", "to": "actor"},
+      "meaning": "`by` acts against an interest of `to`: harm, take, expose, kill, betray, break a promise. About interests, not morals: an arrest wrongs the arrested.",
+      "states": [{"read": "social.contract", "is": ["broken"], "map": {"by": "the party in breach", "to": "the other party"}}],
+      "searchFrom": ["by", "to"]
+    },
+    {
+      "id": "befall",
+      "form": "event",
+      "args": {"who": ["actor", "place"]},
+      "meaning": "Misfortune with no agent: an accident, an illness, an outage.",
+      "states": [{"read": "s1.spell", "track": "health", "state": "ill"}],
+      "searchFrom": ["who"]
+    },
+    {
+      "id": "help",
+      "form": "event",
+      "args": {"by": "actor", "to": "actor"},
+      "meaning": "`by` acts for an interest of `to`: help, rescue, give, a favour."
+    },
+    {
+      "id": "sacrifice",
+      "form": "event",
+      "args": {"who": "actor", "for": "actor"},
+      "meaning": "`who` bears a cost to its own interest (a take, a harm or a severed tie on itself) in an act that serves a frame of `for`."
+    },
+    {
+      "id": "obligate",
+      "form": "state",
+      "args": {"debtor": "actor", "creditor": "actor"},
+      "meaning": "`debtor` owes `creditor`: money, a favour returned, a promise kept, a member's duty.",
+      "states": [
+        {"read": "social.contract", "is": ["due", "at-risk"]},
+        {"edge": "core:member-of", "note": "membership obligations, debtor the member, creditor the group"},
+        {
+          "norm": "any",
+          "note": "a norm of S1's order.norms whose sector includes the debtor and whose enforcer is the creditor's group, such as the Friday fee"
+        },
+        {
+          "event-pending": "favour",
+          "note": "a favour received and not yet returned, within the reciprocity window (DRV-19)"
+        }
+      ],
+      "status": "In M3, `social.contract` is phase 2 and answers maybe: `obligate` is filled by favours, promises, memberships and norms.",
+      "searchFrom": ["debtor", "creditor"]
+    },
+    {
+      "id": "repay",
+      "form": "event",
+      "args": {"debtor": "actor", "creditor": "actor"},
+      "meaning": "An obligation is discharged: a payment, a returned favour, a promise kept, a repair."
+    },
+    {
+      "id": "ask",
+      "form": "event",
+      "args": {"by": "actor", "of": "actor", "what": "any"},
+      "meaning": "A request with no threat behind it. An offer to the protagonist is an ask."
+    },
+    {
+      "id": "demand",
+      "form": "event",
+      "args": {"by": "actor", "of": "actor", "what": "any"},
+      "meaning": "A request backed by a threat or by authority: a shakedown, a warning, a group's order to a member."
+    },
+    {
+      "id": "comply",
+      "form": "event",
+      "args": {"who": "actor", "to": "actor"},
+      "meaning": "`who` does what was demanded or asked of it."
+    },
+    {
+      "id": "refuse",
+      "form": "event",
+      "args": {"who": "actor", "to": "actor"},
+      "meaning": "`who` declines a demand, an offer or a norm's expectation."
+    },
+    {
+      "id": "learn",
+      "form": "event",
+      "args": {"who": "actor", "what": ["fact", "event"]},
+      "meaning": "`who` comes to believe something, by seeing it or being told.",
+      "states": [{"belief-formed": true, "source": ["observed", "told"]}],
+      "protagonist": "For the protagonist, `learn` is filled by exposure, never by a belief (D-09): a delivery stating the fact reaches `presented` or better."
+    },
+    {
+      "id": "conceal",
+      "form": "state",
+      "args": {"who": "actor", "what": ["fact", "event"], "from": "actor"},
+      "meaning": "`who` knows `what`, `from` does not, and `who` keeps it so (a secret or deniable membership, a lie, a hidden act).",
+      "states": [
+        {"read": "social.divergence", "note": "`from`'s belief differs from the truth that `who` knows"},
+        {"edge": "core:member-of", "visibility": ["secret", "deniable"]}
+      ],
+      "searchFrom": ["who", "from"]
+    },
+    {
+      "id": "expose",
+      "form": "event",
+      "args": {"by": "actor", "what": ["fact", "event"], "to": "actor"},
+      "meaning": "A concealed thing becomes known to `to` because of `by`.",
+      "protagonist": "When `to` is the protagonist, `expose` is filled by a delivery naming the concealed thing that reaches `presented` or better (an offer's `withheld` fact, S2 §2.9)."
+    },
+    {
+      "id": "blame",
+      "form": "state",
+      "args": {"who": "actor", "of": "actor", "for": "event"},
+      "meaning": "`who` believes `of` caused `for`, true or not. A divergent blame is a misattribution.",
+      "states": [{"belief": "cause-of", "note": "a belief whose subject is the event and whose value names the believed actor"}],
+      "searchFrom": ["who"]
+    },
+    {
+      "id": "protect",
+      "form": "state",
+      "args": {"guard": "actor", "ward": ["actor", "place"]},
+      "meaning": "`guard` stands between `ward` and harm: a frame with a protects interest, a membership with protective terms, a paid arrangement.",
+      "states": [
+        {"frame-interest": "protects"},
+        {"read": "city.protected"},
+        {"intent": "protect-members", "map": {"guard": "the group", "ward": "its members"}}
+      ],
+      "status": "In M3, `city.protected` is phase 2 and answers maybe: `protect` is filled by frames, memberships and group intentions only.",
+      "searchFrom": ["guard", "ward"]
+    },
+    {
+      "id": "threaten",
+      "form": "event",
+      "args": {"by": "actor", "to": "actor"},
+      "meaning": "`by` signals an intent to wrong `to`: a threat, a warning shot, a word from an enforcer.",
+      "states": [
+        {
+          "frame-goal-effects": ["harm", "kill", "take", "expose"],
+          "note": "a hostile goal aimed at `to` held as a state"
+        }
+      ],
+      "searchFrom": ["by", "to"]
+    },
+    {
+      "id": "pursue",
+      "form": "state",
+      "args": {"who": "actor", "target": "any"},
+      "meaning": "`who` is actively working towards an effect on `target`: a goal frame in progress, a group's active intention.",
+      "states": [
+        {"frame": ["goal"], "status": ["active"]},
+        {
+          "intent": ["collect-fee", "retaliate", "protect-members"],
+          "map": {"who": "the group", "target": "the intention's target or rival"}
+        }
+      ],
+      "searchFrom": ["who", "target"]
+    },
+    {
+      "id": "decide",
+      "form": "event",
+      "args": {"group": "group", "what": "any"},
+      "meaning": "A group's leadership commits it to a course: an intention starts (D-08).",
+      "states": [{"transition": "group.decide intent-start"}]
+    },
+    {
+      "id": "bind",
+      "form": "event",
+      "args": {"a": "actor", "b": "actor"},
+      "meaning": "A tie or a membership forms or tightens: a favour, a promise, a disclosure, joining a crew, a tie's status rising.",
+      "states": [{"edge-change": "xf:tie", "status": ["friendly", "close"]}, {"edge-change": "core:member-of", "move": "joins"}]
+    },
+    {
+      "id": "sever",
+      "form": "event",
+      "args": {"a": "actor", "b": "actor"},
+      "meaning": "A tie falls or a membership ends: strain, estrangement, an exit, an expulsion.",
+      "states": [
+        {"edge-change": "xf:tie", "status": ["strained", "estranged", "ended"]},
+        {"edge-change": "core:member-of", "move": "exits"}
+      ]
+    },
+    {
+      "id": "compete",
+      "form": "event",
+      "args": {"a": "actor", "b": "actor", "prize": "any"},
+      "meaning": "One gains a prize (standing with an audience, a place, a customer, a person's regard) at the other's expense.",
+      "states": [
+        {
+          "read": "social.label",
+          "note": "a standing band rising for one and falling for the other in the same audience within a window"
+        }
+      ],
+      "searchFrom": ["a", "b"]
+    },
+    {
+      "id": "turn",
+      "form": "event",
+      "args": {"who": "person"},
+      "meaning": "A person's belief, concern or membership changes under pressure: a `turning` event (S2 §2.13)."
+    },
+    {
+      "id": "choose",
+      "form": "event",
+      "args": {"who": "actor"},
+      "meaning": "An actor commits to one of several open junctures, foreclosing the others. For the protagonist, only a response to an offer."
+    },
+    {
+      "id": "story",
+      "form": "event",
+      "args": {"pattern": "pattern id", "outcome": "outcome name"},
+      "meaning": "An instance of the named pattern reached the named outcome: a `meta:story` event (S0-1).",
+      "states": [{"event-kind": "meta:story"}]
+    }
+  ],
+  "links": [
+    {
+      "id": "because",
+      "test": "The later filler's causes reach the earlier filler within 3 hops, or it served a frame whose cause chain reaches it within 3."
+    },
+    {
+      "id": "motive",
+      "test": "The later's actor holds, or held at the time, a frame or belief whose cause or evidence is the earlier filler."
+    },
+    {
+      "id": "enables",
+      "test": "The earlier is a state whose interval contains the later's time, or an event that created a relationship the later requires."
+    },
+    {
+      "id": "but",
+      "test": "The later's effect violates an interest of the frame the earlier served, under the conflict table (S0 §10.8)."
+    },
+    {"id": "reveals", "test": "The later's actor holds a belief whose evidence includes the earlier filler."},
+    {"id": "answers", "test": "The later is a response, refusal or compliance whose cause is the earlier."},
+    {"id": "forecloses", "test": "When the earlier matches, the later becomes foreclosed."}
+  ],
+  "relations": [
+    {
+      "id": "tied",
+      "args": ["a", "b", "kind?"],
+      "read": "social.tied (S1 tie function, any layer, or a materialised xf:tie)",
+      "searchFrom": ["a", "b"]
+    },
+    {"id": "member", "args": ["who", "group", "role?"], "read": "membership: S1 groupOf, or a core:member-of edge for a mirrored member (S1 v0.6 §4.8)", "searchFrom": ["who", "group"]},
+    {"id": "leads", "args": ["who", "group"], "read": "an xf:leads edge from the person to the group (S1 v0.6 §4.8, §7.8)", "searchFrom": ["who", "group"]},
+    {
+      "id": "hostile",
+      "args": ["g1", "g2"],
+      "read": "the game's attitude between the groups' records, or S1's pair hostility",
+      "searchFrom": ["g1", "g2"]
+    },
+    {"id": "knows", "args": ["who", "x"], "read": "S0 knows: a belief about x with confidence above 0", "searchFrom": ["who"]},
+    {"id": "unaware", "args": ["who", "x"], "read": "S0 knows answers unknown"},
+    {"id": "witnessed", "args": ["who", "juncture"], "read": "the filler event's witnesses include who"},
+    {
+      "id": "public",
+      "args": ["juncture"],
+      "read": "S1's public tag: a public place and at least publicMinWitnesses witnesses"
+    },
+    {"id": "trusts", "args": ["a", "b", "band"], "read": "regard(a to b) trust, banded low, mid, high"},
+    {"id": "standing", "args": ["audience", "subject", "band"], "read": "social.label"},
+    {"id": "values", "args": ["who", "drive", "band"], "read": "drive importance (persons) or ethos (groups), banded"},
+    {"id": "at", "args": ["x", "place"], "read": "the filler's place, or a person's whereabouts at the time", "searchFrom": ["x"]},
+    {"id": "alive", "args": ["who"], "read": "S1 alive(r, t)"},
+    {"id": "distinct", "args": ["a", "b"], "read": "the bound nodes differ"},
+    {"id": "known-to-protagonist", "args": ["x"], "read": "S2 exposedNode(x, presented)"},
+    {
+      "id": "concerns",
+      "args": ["x", "who"],
+      "read": "x matches an interest (wants, reactsTo, protects, threatenedBy) of an active frame of who: the kernel's interest index"
+    },
+    {
+      "id": "graver",
+      "args": ["j1", "j2"],
+      "read": "j1's effect class is above j2's (take < harm < kill; expose and sever by stake), or its stake scale is (person < crew < block < district)"
+    },
+    {
+      "id": "irreversible",
+      "args": ["juncture"],
+      "read": "the filler's effect is in S3's irreversible set (kill, expose), or ends a tie or membership, or takes something with no recorded route back"
+    },
+    {
+      "id": "outcome-kind",
+      "args": ["juncture", "kind"],
+      "read": "the story event filling the juncture records an outcome of this kind (resolved, failed, parked)"
+    },
+    {
+      "id": "norm-gap",
+      "args": ["norm", "place", "band"],
+      "read": "S2's social normGap read (S1 order.norms): aligned, gap, wide"
+    },
+    {
+      "id": "violates",
+      "args": ["juncture", "target"],
+      "read": "the juncture's effect breaks an interest of the target frame or role under the conflict table"
+    },
+    {
+      "id": "observed-act",
+      "args": ["event", "actor"],
+      "read": "the event is an act of the actor's that someone witnessed, or the belief that names it rests on a telling of such a witness (D-30's ground for a group acting against the protagonist)"
+    }
+  ],
+  "kindFills": {
+    "status": "Proposed S1-1: what each registered event kind fills, with its participant roles mapped to the function's arguments. M3's kinds (S1 §5.2, §5.3) plus the social, tie, seeding and group kinds.",
+    "theft": [
+      {"fn": "wrong", "args": {"by": "aggressor", "to": "victim"}},
+      {"fn": "transfer", "args": {"from": "victim", "to": "aggressor"}}
+    ],
+    "assault": [{"fn": "wrong", "args": {"by": "aggressor", "to": "victim"}}],
+    "gang-clash": [
+      {"fn": "wrong", "args": {"by": "aggressor|aggressor-group", "to": "victim|victim-group"}},
+      {"fn": "compete", "args": {"a": "aggressor-group", "b": "victim-group", "prize": "the cell"}}
+    ],
+    "shakedown": [
+      {"fn": "demand", "args": {"by": "aggressor|aggressor-group", "of": "victim"}},
+      {"fn": "comply", "args": {"who": "victim", "to": "aggressor|aggressor-group"}},
+      {"fn": "transfer", "args": {"from": "victim", "to": "aggressor|aggressor-group"}},
+      {"fn": "wrong", "args": {"by": "aggressor|aggressor-group", "to": "victim"}}
+    ],
+    "police-action": [
+      {"fn": "protect", "args": {"guard": "responder", "ward": "victim"}},
+      {"fn": "wrong", "args": {"by": "responder", "to": "target"}}
+    ],
+    "psycho-break": [{"fn": "wrong", "args": {"by": "aggressor", "to": "victim"}}],
+    "disorder": [{"fn": "wrong", "args": {"by": "participant", "to": "victim"}}],
+    "accident": [{"fn": "befall", "args": {"who": "victim"}}],
+    "outage": [{"fn": "befall", "args": {"who": "place"}}],
+    "commerce": [{"fn": "transfer", "args": {"from": "giver", "to": "taker"}}],
+    "enf.<norm>.word": [
+      {"fn": "demand", "args": {"by": "enforcer", "of": "target"}},
+      {"fn": "threaten", "args": {"by": "enforcer", "to": "target"}}
+    ],
+    "enf.<norm>.shun": [{"fn": "wrong", "args": {"by": "enforcer", "to": "target"}}],
+    "enf.<norm>.fine": [
+      {"fn": "wrong", "args": {"by": "enforcer", "to": "target"}},
+      {"fn": "transfer", "args": {"from": "target", "to": "enforcer"}}
+    ],
+    "enf.<norm>.beating": [{"fn": "wrong", "args": {"by": "enforcer", "to": "target"}}],
+    "regime-start": [{"fn": "befall", "args": {"who": "place"}}],
+    "tell": [
+      {"fn": "learn", "args": {"who": "listener", "what": "told"}},
+      {
+        "fn": "expose",
+        "args": {"by": "teller", "what": "told", "to": "listener"},
+        "when": "the state conceal(what: told, from: listener) holds at the telling's time (S1 v0.6 §5.2a)"
+      }
+    ],
+    "promise": [
+      {"fn": "obligate", "args": {"debtor": "promiser", "creditor": "promisee"}},
+      {"fn": "bind", "args": {"a": "promiser", "b": "promisee"}}
+    ],
+    "threat": [{"fn": "threaten", "args": {"by": "threatener", "to": "threatened"}}],
+    "confess": [{"fn": "expose", "args": {"by": "confessor", "what": "subject", "to": "listener"}}],
+    "betrayal": [
+      {"fn": "wrong", "args": {"by": "betrayer", "to": "betrayed"}},
+      {"fn": "sever", "args": {"a": "betrayer", "b": "betrayed"}}
+    ],
+    "expose": [{"fn": "expose", "args": {"by": "exposer", "what": "subject", "to": "audience"}}],
+    "conceal": [{"fn": "conceal", "args": {"who": "concealer", "what": "subject", "from": "from"}}],
+    "favour": [
+      {"fn": "help", "args": {"by": "giver", "to": "receiver"}},
+      {"fn": "obligate", "args": {"debtor": "receiver", "creditor": "giver"}}
+    ],
+    "repair": [
+      {"fn": "repay", "args": {"debtor": "repairer", "creditor": "other"}},
+      {"fn": "bind", "args": {"a": "repairer", "b": "other"}}
+    ],
+    "conflict": [{"fn": "wrong", "args": {"by": "initiator", "to": "other"}}],
+    "disclosure": [
+      {"fn": "bind", "args": {"a": "discloser", "b": "listener"}},
+      {"fn": "learn", "args": {"who": "listener", "what": "subject"}}
+    ],
+    "joint-activity": [{"fn": "bind", "args": {"a": "participant", "b": "participant"}}],
+    "crisis": [{"fn": "befall", "args": {"who": "subject"}}],
+    "reply.accept": [{"fn": "comply", "args": {"who": "replier", "to": "bidder"}}],
+    "reply.decline": [{"fn": "refuse", "args": {"who": "replier", "to": "bidder"}}],
+    "warning": [{"fn": "threaten", "args": {"by": "warner", "to": "warned"}}],
+    "price": [
+      {"fn": "threaten", "args": {"by": "warner", "to": "warned"}},
+      {"fn": "demand", "args": {"by": "warner", "of": "warned"}}
+    ],
+    "search": [{"fn": "ask", "args": {"by": "searcher", "of": "asked", "what": "sought"}, "when": "has asked"}],
+    "confront": [{"fn": "threaten", "args": {"by": "confronter", "to": "confronted"}}],
+    "decide.<intent>": [{"fn": "decide", "args": {"group": "group", "what": "object|group"}}],
+    "presence": [
+      {"fn": "protect", "args": {"guard": "guard", "ward": "ward"}},
+      {"fn": "help", "args": {"by": "guard", "to": "ward"}}
+    ],
+    "call-in": [
+      {"fn": "demand", "args": {"by": "creditor", "of": "debtor"}},
+      {"fn": "repay", "args": {"debtor": "debtor", "creditor": "creditor"}, "when": "outcome done"},
+      {"fn": "comply", "args": {"who": "debtor", "to": "creditor"}, "when": "outcome done"},
+      {"fn": "refuse", "args": {"who": "debtor", "to": "creditor"}, "when": "outcome failed"},
+      {"fn": "wrong", "args": {"by": "debtor", "to": "creditor"}, "when": "outcome failed"}
+    ],
+    "succession": [
+      {"fn": "bind", "args": {"a": "successor", "b": "group"}},
+      {"fn": "sever", "args": {"a": "predecessor", "b": "group"}, "when": "has predecessor"}
+    ],
+    "retract": [{"fn": "refuse", "args": {"who": "protagonist", "to": "the thread's asker"}}],
+    "turning": [{"fn": "turn", "args": {"who": "who"}}],
+    "offer": [{"fn": "ask", "args": {"by": "asker", "of": "protagonist"}}],
+    "response": [
+      {
+        "fn": "comply",
+        "args": {"who": "protagonist", "to": "asker"},
+        "when": "action with stance help or bargain"
+      },
+      {
+        "fn": "refuse",
+        "args": {"who": "protagonist", "to": "asker"},
+        "when": "decline, or action with stance refuse or oppose"
+      },
+      {"fn": "choose", "args": {"who": "protagonist"}, "when": "any action"}
+    ],
+    "seed-outcome": [{"note": "fills what its seed's `realises` entries with `by: end` or `by: unattended` declare (S2 v1.11 §2.24, read through realisedBy; S3 v0.6 §6.3)"}],
+    "game.death": [{"note": "raw game kinds fill nothing: the mirror's derived event for the same occurrence fills for it (S1 v0.6 §5.2a)"}],
+    "meta:story": [{"fn": "story", "args": {"pattern": "the story's pattern", "outcome": "the story's outcome"}}],
+    "Dilemma (kernel emission, not an event kind)": [
+      {
+        "fn": "demand",
+        "args": {"by": "the actor whose order opened the goal frame (frameA's origin)", "of": "actor", "what": "target"},
+        "when": "one of the two frames is a goal assigned by a group or a person"
+      }
+    ]
+  },
+  "stateQueries": "A state juncture or `requires` term with unbound arguments is filled by a bounded state query (pattern-language.md §6.2a): only from an argument listed in the function's `searchFrom` (or, for a relation, its first bound argument), at most `stateCandidates` records [tunable 8] in record Id order, the first that passes every other requirement binding the rest.",
+  "tokenPrecedence": [
+    "sacrifice",
+    "expose",
+    "conceal",
+    "blame",
+    "decide",
+    "demand",
+    "ask",
+    "refuse",
+    "comply",
+    "repay",
+    "threaten",
+    "wrong",
+    "transfer",
+    "help",
+    "obligate",
+    "bind",
+    "sever",
+    "compete",
+    "protect",
+    "pursue",
+    "learn",
+    "befall",
+    "turn",
+    "choose",
+    "hold",
+    "want",
+    "story"
+  ],
+  "tokenPrecedenceNote": "A skeleton token names one function per perceived occurrence: the first in this order among all the functions the occurrence's kind or state rule fills, whichever instances used it (pattern-language.md §14.1).",
+  "changeGuards": "A change may carry `when: { npc: ?r }` or `when: { protagonist: ?r }`. A belief change whose believer's role allows the protagonist must be guarded `npc`; for the protagonist the same juncture records an `exposure` (D-09)."
+}

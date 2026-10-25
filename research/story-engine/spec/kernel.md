@@ -1,6 +1,7 @@
 # S0. Kernel specification
 
-**Status:** v4.16, 24 October 2026.
+**Status:** v4.17, 25 October 2026.
+- v4.17 takes the kernel's part of the composite's proposals ([pattern language §13](../composite/pattern-language.md#13-proposed-specification-changes), S0-1 to S0-3) and three needs of [S1](simulation.md) v0.6 (V4-50 to V4-55 in §20): a declared data record on `meta:` events; `fills` and `roles` in the event-kind registry; a `belief` change for memorable beliefs; a `frame` change when a frame opens; frames a process retains; and the `observedAt` read. None changes a result the reference model produces today with the new changes switched off, and each new kind of change has a switch of its own, so neither frozen digest changes (§20).
 - v4.16: the save chain is append-only truth; recovering a swept node replays its saved records; and a sweep drops only what recovery restores exactly (§14.1).
 - v4.15: an event a persisted record references keeps its facts, not only its header (§14.1). This changes what every save holds, in every configuration, so both frozen digests were re-frozen with it: v3 `d534e0dc…` → `f924d2c9…`, v4 `da48cabc…` → `42d5a84e…`. The old behaviour lost data, and no native core depended on the old values. A digest is re-frozen only for a deliberate, documented change like this one. v4.16 re-freezes them again, for the same kind of reason: a save now records non-regenerable changes to records it never held before (the digest script ends three never-saved `core:located-in` edges, before saves s75, s185 and s824; no resolution, query, event or frame output changes, only save records and the hashes that follow them). This takes v3 to `746601727380a3fd…` and v4 to `8fce55b19462a1e0…`; the reference model's SPEC-NOTES give the entry-by-entry difference.
 - v4.14 adds `classifiesAs`, a nominal kind compatibility that queries never widen to (§2.2).
@@ -600,6 +601,7 @@ Forgetting is mark and sweep, run between ticks as a worklist (§10.7).
 - canon events and the canon items of summaries;
 - live seeds;
 - active and blocked frames of demand roots and live seeds, and every ancestor frame of those;
+- active and blocked **retained** frames (v4.17, §9.4), and every ancestor frame of those;
 - the nodes in those frames' focus;
 - the mirrored nodes the game currently has streamed in.
 
@@ -679,8 +681,16 @@ Events are minted nodes of kind `core:event`:
 | `causes` | many: ref to events |
 | `outcome` | Optional enum: `done`, `failed`, `prevented` (v4) |
 | `served` | Optional data: the `Id` of the frame whose goal the act served (v4) |
+| `data` | Optional data, **only on `meta:` kinds**: a record of named values whose keys and value types the kind's registry entry declares (v4.17, below) |
 
 `outcome` and `served` are optional. An event without them means what it always meant. They let a reader tell an attempt from a success, and see which goal an act served ([dossier 6](../craft/d06-sifting-tellability.md) G-3).
+
+**Data on `meta:` events** (v4.17). An event has no free payload: an ordinary kind carries its meaning in its kind name and its participants (S1 puts a norm and a rung in the kind name for this reason). A `meta:` kind, which a layer mints about the story rather than the world, MAY carry a `data` record:
+- **Declared.** The kind's registry entry (§10.5) lists `dataFields: Record<string, ValueType>`, each of type `enum`, `int`, `text` or `ref` (§2.1). A mint whose `data` names an undeclared key, misses a declared one, or holds a value of the wrong type is refused and recorded as a defect. A mint that gives `data` to a kind not starting `meta:` is refused the same way.
+- **Read.** `data` is one of the event's minted fields: persisted with the event's facts (§14.1), carried on the `event` change (§10.5), and readable by a selector's `where` predicates as the paths `data.<key>` on the event binding.
+- **Encoded.** Canonically, as its keys in sorted order, each followed by its value's canonical encoding (§2.1).
+
+The first such kind is layer 3's `meta:story` (S3; [pattern language §7.1](../composite/pattern-language.md#71-chaining-ones-outcome-is-anothers-cause)). S3 declares its fields; S3 v0.6 declares `pattern` (text, the pattern id), `instance` (ref, the instance `Id`), `outcome` (text, the outcome's name), `kind` (enum `resolved`, `failed`, `parked`) and `depth` (int, the story's lineage depth), read as `data.pattern` and so on (`data.kind` is not the event's own `kind` slot). What an outcome produces is not stored: it is a pure function of the pattern, the outcome and the event's participants, which are the instance's bound roles.
 
 An event becomes **canon** when:
 - V observes it, which pins the observed fields `observed`;
@@ -759,6 +769,8 @@ Simulation processes are S1's. The kernel defines when they run and what they ma
     - belief set.
 
     They are applied with the batch, in its order, under the same rules as the other operations.
+  - **open a retained frame** (v4.17): a frame-open operation MAY set `retain: true`. A retained frame is a retention root while its status is `active` or `blocked` (§7.3) and is persisted like a demand root's frames (§14.1), so a reload restores it by replay and never re-opens it. Once satisfied or abandoned it is kept while a persisted record refers to it (§10.4). Its `focus.tier` MUST be 0, so that retaining a frame never creates demand. S1's goal frames are retained frames (S1 §7.10);
+  - **read `observedAt(node, t)`** (v4.17): the earliest `at` among the node's pins with reason `observed` that are valid at `t`, or `undefined` if there are none. It reads as of the snapshot, like every process read, and registered reads and hooks may call it too. S1 reads whether a warning it minted has been perceived through it (S1 §7.8).
 - **Partition independence (I-15).** Given the same timestamped external operations and the same demand history, a process's history doesn't depend on how ticks fell.
 - **Catch-up.** After an absence, tiers 0–2 run every missed boundary in order, each within the hard limits.
 - **Fine tiers (3–5)** run only where demand reaches them (§10.6). They never catch up: when V arrives, their state is generated from the coarse state, consistent with the pins.
@@ -815,6 +827,7 @@ Influence from one `origin` therefore counts once, through its strongest path.
 
 - **Demand roots** are V, the director and every live seed. Their frames are opened by S1 (V's, from the game's story state and the director's beliefs) and by S2.
 - **Other actors' frames** open when a root's frame, or a relevance event, focuses on them.
+- **Retained frames** (v4.17) are opened by a process with `retain: true` (§9.4). Their actor need not be a demand root. They create no demand (focus tier 0), and they persist while active or blocked.
 - **In the interest set:** `active` and `blocked` frames. Blocked frames keep listening for what would unblock them.
 - **Out of it:** `satisfied` and `abandoned` frames. They are kept while a persisted record refers to them.
 - **Status, weight and parent changes** recompute descendants' pull and eligibility through the frame worklist (§10.7). Relevance dispatch waits until that worklist is empty, so no consumer sees half-updated frames.
@@ -829,16 +842,26 @@ type Change =
   | { c: 'pin'; node: Id; slot: SlotPath; old?: Value | Region; new: Value | Region; reason: string }
   | { c: 'edge'; edge: Edge; ended: boolean }
   | { c: 'event'; event: Id; kind: string; place?: Id;
-      participants: Array<{ who: Id; role: string }>; effects: Array<{ on: Id; effect: Effect }> }
+      participants: Array<{ who: Id; role: string }>; effects: Array<{ on: Id; effect: Effect }>;
+      outcome?: 'done' | 'failed' | 'prevented'; served?: Id; data?: Record<string, Value> }   // outcome, served, data: v4.17, under `eventChangeFields`
   | { c: 'minted'; node: Id; kind: KindId }
   | { c: 'contribution'; contribution: Contribution; ended: boolean }
   | { c: 'reading'; node: Id; slot: SlotPath; old?: Value; new: Value }    // a game reading that changed a value
-  | { c: 'frame'; frame: Id; actor: Id; level: string; focus: Id[]; old: string; new: string };   // a frame status change (v4)
+  | { c: 'frame'; frame: Id; actor: Id; level: string; focus: Id[]; old: string; new: string }   // a frame status change (v4); an opening (v4.17)
+  | { c: 'belief'; belief: Id; believer: Id; subject: Id; path: SlotPath; at?: GameTime;
+      op: 'set' | 'revised' | 'dropped'; by: 'observed' | 'told' | 'inferred'; evidence: Id[] };     // a memorable belief (v4.17)
 ```
 
-A `frame` change is produced when a frame's `status` changes to a different value. Weight and parent changes produce none. It carries the frame's focus nodes, because its bindings are the actor and each focus node, and a matcher sees only the change.
+A `frame` change is produced when a frame's `status` changes to a different value, and (v4.17, under its own switch `openingChanges`, §20) when a frame is opened: then `old` is `'none'`, or the earlier status when a frame abandoned before is opened afresh under the same `Id`, and `new` is its opening status. Weight and parent changes produce none. It carries the frame's focus nodes, because its bindings are the actor and each focus node, and a matcher sees only the change.
 
-Cache fills, regeneration and save replay produce no changes.
+A `belief` change (v4.17, under the switch `beliefChanges`, §20) is produced only for **memorable** beliefs (§11.1):
+- `set` when a memorable belief is added, or an existing belief becomes memorable;
+- `revised` when a memorable belief's `value`, `region`, `confidence` or `evidence` changes (a refresh that changes only `refreshed`, because the newcomer's evidence is already held, produces none);
+- `dropped` when a memorable belief is dropped or replaced.
+
+Non-memorable beliefs produce no change. They are texture that a reload does not keep, so a change from one would let a run that saved and reloaded differ from one that did not. `by` is the belief's `source.by`; `evidence` is its originating events.
+
+Cache fills, regeneration and save replay produce no changes. A staged batch produces its changes only when it commits (§14.2a).
 
 **Matching.** A change has one or more **subject bindings**. Each binding is a subject node together with how it relates to the change:
 
@@ -848,7 +871,8 @@ Cache fills, regeneration and save replay produce no changes.
 | Edge | Each endpoint, with `role` = `from` or `to` and `edge` = the edge's type |
 | Event | The event node itself, its `place` (with `role` = `place`), each participant's `who` (with `role` = the participant's role), and each effect's `on` (with `role` = `target` and `effect` = the effect) |
 | Minted node | The node |
-| Frame status (v4) | The frame's actor, with `role` = `actor`, and each node in the frame's focus, with `role` = `focus` |
+| Frame status (v4) or opening (v4.17) | The frame's actor, with `role` = `actor`, and each node in the frame's focus, with `role` = `focus` |
+| Belief (v4.17) | The believer, with `role` = `believer`; the subject, with `role` = `subject`; each evidence event, with `role` = `evidence` |
 | Contribution | Each node its target selector names by scope. The reference model treats any other target as matching interests whose kind and scope overlap it, which may over-match |
 
 An interest selector `σ` matches change `x` if **one binding** satisfies all of the following:
@@ -881,6 +905,23 @@ An interest selector `σ` matches change `x` if **one binding** satisfies all of
 
 **Event kinds and envelopes** (v4.8):
 - **The registry.** An event's kind is the `kind` slot of `core:event` (§9.2). Packs register event kinds, with their tags and producers, in an **event-kind registry**. Selectors and patterns match kinds through `where` predicates on that slot, never through `KindId`s. The registry also holds the inert `meta:` kinds layer 3 mints.
+- **What a kind fills** (v4.17). A registry entry MAY also carry `roles` (the participant role names its events use), `fills` (the functions of the story vocabulary its events fill) and, for a `meta:` kind only, `dataFields` (§9.2):
+
+  ```ts
+  interface FillDecl {
+    fn: string;                            // a function of the loaded vocabulary (pack data; S4 owns the format)
+    args: Record<string, string>;          // argument → a participant role; 'a|b' takes the first role present;
+                                           // '@place' is the event's place, '@self' the event itself
+    when?: {
+      outcome?: Array<'done' | 'failed' | 'prevented'>;   // the event's outcome is one of these (absent counts as 'done')
+      has?: string[]; lacks?: string[];                    // roles that must be present, or absent
+      stance?: string[];                                   // a `response`'s stance class, or 'decline' (S2): evaluated by the reader
+      state?: { fn: string; args: Record<string, string> } // a state that must hold at the event's time: evaluated by the reader, never by the kernel
+    };
+  }
+  ```
+
+  The kernel stores `fills` and returns it with the entry, and no kernel decision reads it. At registration it checks the form: every role a fill or condition names is in `roles` (when `roles` is given) or is `@place` or `@self`, and every `outcome` value is one of §9.2's. Whether `fn` and the arguments name a function of the vocabulary is checked by the loader that holds the vocabulary (S4) and by layer 3 when it loads its patterns. This is how a new kind in a pack fills the story patterns it should without any pattern naming it ([pattern language §3.3](../composite/pattern-language.md#33-the-vocabulary-functions-links-and-relations)). The state fillers (an edge, a frame, a belief, a group intention) are not kinds: S1 registers them as state rules with declared dependencies and bounded searches (S1 §9.1a, in the form of S3 §2.2a), including the rules over kernel records, because which function a record fills is vocabulary, not mechanism.
 - **Envelopes.** Every delivered relevance emission and dilemma carries a stable **occurrence id** (the event's `Id`, or the change's own id) and the occurrence's **game time**.
 - **Soft exclusions** live in `SettingsSet.content.softExclusions` (V4-21).
 
@@ -961,6 +1002,7 @@ Beliefs are stored per believer and indexed by (subject, path, at). They never c
 - **One belief per question (I-9).** A believer holds at most one active belief per (subject, path, at). S1's policy decides whether a contradicting newcomer replaces it. The loser is kept as history only if memorable.
 - **Only independent evidence corroborates.** A merge raises confidence only for evidence not already held. If the newcomer's `evidence ⊆` the existing belief's, only `refreshed` changes.
 - **Telling passes the teller's `evidence` on unchanged,** so a rumour from one origin never corroborates itself.
+- **Memorable beliefs are heard** (v4.17). Setting, revising or dropping a memorable belief produces a `belief` change (§10.5), so a matcher or a policy can react to a belief forming without polling. Non-memorable beliefs stay silent.
 - **Policies are S1's.** Forming, telling, fading and reputation are S1 policies, called through these hooks:
   - `onWitness(event, observer)`;
   - `onSocial(event, teller, listener)`;
@@ -1046,7 +1088,7 @@ The trace is the complete account (I-8).
 - **Memorable beliefs.**
 - **Canon events:** their headers and pinned fields.
 - **Summaries,** with their `canon` sets.
-- **Frames:** those of demand roots and live seeds, and every ancestor frame they inherit from, whoever's it is.
+- **Frames:** those of demand roots and live seeds, retained frames (v4.17, §9.4), and every ancestor frame they inherit from, whoever's it is. A retained frame is written with `FrameState` when it opens and at each status change, so recovery replays it like any saved record.
 - **States:** seed states (S2), and process cursors and states (S1), including each process's outstanding output batches (§9.4). A seed state is a `SeedRecord { id, state, nodes, actor? }` whose `state` is the owning layer's plain data. Its `nodes` are retention roots, and its `actor`, if set, is a demand root. Any layer MAY keep its own records this way under an id it owns, such as S2's global record or S3's promoted sifting matches (v4, a clarification; [dossier 6](../craft/d06-sifting-tellability.md) G-8).
 - **Lineage:** the world seed, plus schema and function versions (§14.4).
 
@@ -1147,6 +1189,12 @@ Fully specified: outcomes that depend on hashes are checked as properties, not n
 | F-23 | **Implicit edges** (v4.3). An implicit tie type over a block's residents | Symmetric. Identical answers after a reload and under a changed tick partition |
 | F-24 | **Aggregate** (v4.3). A chain of three tellers from one origin; a 30-game-day absence; then `k` contrary independent items | The chain weighs as the origin. The absence changes no label. The `k` items flip it |
 | F-25 | **Norm slot** (v4.3). A norm updated by a public act and by a private act, over 12 windows as one tick and as 12 ticks | Identical results; only the public act moves perceived support |
+| F-26 | **Data on `meta:` events** (v4.17). Register `meta:story` with the five fields of §9.2. Mint one with all five; one missing `kind`; one with `depth` as text; an `assault` with a `data` record | The first is minted, its `event` change carries `data`, a selector `where data.outcome = "broken"` matches it, and after a save and load its `data` reads identically. The other three are refused, each with a defect, and nothing is minted |
+| F-27 | **Fills are stored, not read** (v4.17). Register `shakedown` with `roles [aggressor, aggressor-group, victim, guard]` and the fills of S1 §5.2a; then a kind whose fill names a role it does not list; then one with `when.outcome: ['lost']` | The first registers and `eventKind('shakedown').fills` returns the declarations in order. The second and third are refused at registration. Resolution, queries and relevance give identical results with and without the `fills` field |
+| F-28 | **Belief changes** (v4.17). Set a memorable belief; refresh it with evidence already held; revise its value; drop it. Set a non-memorable belief, then make it memorable. Do all of it inside a staged batch, then commit. Then save, load and replay | Changes: `set`, none, `revised`, `dropped`; none, then `set`. Inside the batch none until commit, then all in operation order. Replay emits none (I-13). Each change binds the believer, the subject and each evidence event |
+| F-29 | **Frame openings** (v4.17). Open a goal frame; set it blocked; abandon it; open it afresh under the same `Id` | Changes `none → active`, `active → blocked`, `blocked → abandoned`, `abandoned → active`, each binding the actor and the focus nodes. With `openingChanges` off and frame changes on (the v4 digest's configuration) the two openings produce nothing and the two status changes are produced exactly as in v4.16; with both off (v3's) none is produced |
+| F-30 | **Retained frames** (v4.17). A process opens a frame with `retain: true` and focus tier 0 on a node no root focuses; run a forgetting sweep; save; load into a fresh engine; satisfy the frame; sweep again. Also try a retained frame with focus tier 3 | The frame and its actor survive the first sweep and the load, identically and without a change on load. No node's demand tier rises. After it is satisfied it is no longer a root; it is kept while an event's `served` refers to it. The tier-3 retained frame is refused |
+| F-31 | **`observedAt`** (v4.17). An event with no pins; then an `observed` pin on its `kind` slot at 5,000 valid from 5,000; then a second at 4,000 | Before the second pin, `observedAt(e, 4,999)` is `undefined` and `observedAt(e, 6,000)` is 5,000; after it, both are 4,000. A `committed` pin changes neither |
 
 ### 16.2 Calibration fixtures
 
@@ -1259,6 +1307,22 @@ Its "could be lighter" points were adopted: `Bound`s are optional, summary mater
 
 The review process is complete ([D-17](../decisions.md)). This vertical's coordinator has decided ([D-19](../decisions.md)) that the first implementation, the TypeScript reference model, implements this specification as v3 states it: everything except the items deferred in §0.2. Every deferred item returns only with a recorded contract that agrees with the reference model. Changes to this scope come only through a new decision.
 
+### Specification passes after the reviews
+
+Later versions add contracts that other layers need; none reopens the reviewed core. Each addition is listed in §20 with its fixture.
+
+**v4.17 (25 October 2026): the composite's kernel proposals.** The pattern language proposed three kernel changes ([§13](../composite/pattern-language.md#13-proposed-specification-changes)). Each was checked against this page before it was adopted:
+
+| Proposal | What this page said | Disposition |
+|---|---|---|
+| S0-1: a `meta:story` event carries its pattern, instance and outcome in a data slot allowed only on `meta:` kinds | Confirmed: events have no free payload (§9.2) | **Adopted, generalised:** any `meta:` kind may declare a typed `data` record (V4-50), and S3 declares `meta:story`'s: the three proposed fields, with the outcome's `kind` and the lineage `depth` that S3 v0.6 asks for. What the outcome produces is not stored, because it follows from the pattern and the participants |
+| S0-2: the registry gains `fills`; state fillers are registered reads with declared dependencies | Confirmed: the registry held tags and producers only (§10.5) | **Adopted, split:** `fills` (with outcome, role, stance and state conditions) and `roles` are registry data the kernel stores and checks for form but never reads (V4-51). The state fillers are state rules S1 registers (S1 §9.1a, in S3's form), those over kernel edges, frames and beliefs included; the kernel needs nothing for them |
+| S0-3: forming or revising a belief emits a change, or S1 always mints the forming event | Confirmed: beliefs emitted nothing (S1's `divergence` read is re-evaluated at every boundary for this reason) | **Adopted as a kernel change, for memorable beliefs only** (V4-52). Minting an event for every belief would put events in the record that are not occurrences; a change from a non-memorable belief would break reload equality |
+| (found) A frame's opening is heard | The composite's matcher relies on it, and S0 produced a `frame` change only on a status change | **Added** (V4-53) |
+| (S1 v0.6) Goal frames of people who are not demand roots persist; a process reads whether something was observed | Not provided: only demand roots' and live seeds' frames persisted | **Added:** retained frames (V4-54) and `observedAt` (V4-55) |
+
+**Review of v4.17** (GPT-6.1 Sol, extra-high effort, with S1 v0.6): one kernel finding. The opening change first shared the frame-change switch, which the v4 digest's configuration turns on, so the v4 digest would have gained emissions, and turning the switch off would have removed its status changes. Fixed by giving openings, belief changes and the `event` change's new fields a switch each, off in both digest configurations (§20): **neither frozen digest changes.**
+
 ## 19. Decisions adopted from the reference model
 
 The [reference model](../../../projects/xf-story-engine/README.md) is on `main`: 261 tests, and three independent code-review rounds with no findings left open. Building it took 57 decisions where this specification was silent or ambiguous. All 57 were accepted. They are recorded, numbered, in [SPEC-NOTES.md](../../../projects/xf-story-engine/reference/SPEC-NOTES.md), which is **normative alongside this page**: a later implementation follows them exactly as it follows the text above. The ones that change results:
@@ -1276,7 +1340,7 @@ The [reference model](../../../projects/xf-story-engine/README.md) is on `main`:
 
 ## 20. Version 4 additions
 
-v4 adds what the seeding layer and sifting need. Two additions change the frozen determinism digest's results if they are switched on: the v4 core schema names one more function (`derive:age-class@1`), which changes every saved record's `meta.versions`, and the `frame` change (V4-4) adds changes wherever the digest's script changes frame status. So the digest is defined on the **v3 schema with frame changes off**. An implementation reproduces it in that configuration, and the v4 behaviour separately, through the v4 fixtures (§16.1, F-16 onward). Each is marked "v4" where it appears.
+v4 adds what the seeding layer and sifting need. Two additions change the frozen determinism digest's results if they are switched on: the v4 core schema names one more function (`derive:age-class@1`), which changes every saved record's `meta.versions`, and the `frame` change (V4-4) adds changes wherever the digest's script changes frame status. So the digest is defined on the **v3 schema with frame changes off**. **v4.17 changes neither frozen digest.** The v3 digest runs with frame changes off and the v4 digest with them on, as before. Each v4.17 addition to the change stream has a switch of its own, off in both digest configurations: `openingChanges` (V4-53: the `frame` change when a frame opens, kept apart from the status-change switch, so that turning it off takes nothing away from what the v4 digest has), `beliefChanges` (V4-52) and `eventChangeFields` (V4-51: `outcome`, `served` and `data` on the `event` change). The other v4.17 additions produce nothing unless used, and the digest scripts mint no `meta:` event, register no `fills`, open no retained frame and call no `observedAt`. The v4.17 behaviour is checked separately, with the switches on, by F-26 to F-31. An implementation reproduces it in that configuration, and the v4 behaviour separately, through the v4 fixtures (§16.1, F-16 onward). Each is marked "v4" where it appears.
 
 | # | Addition | Section | Needed by | Reference model |
 |---|---|---|---|---|
@@ -1329,6 +1393,12 @@ v4 adds what the seeding layer and sifting need. Two additions change the frozen
 | V4-47 | `publish-item`: a process operation that publishes a summary item once, as one `event` change. Later regeneration of the item stays silent (I-13) | §9.3, §9.4 | [S1](simulation.md) v0.2 §16.1 N-1 | To implement with V4-38 |
 | V4-48 | Restating a contribution identical to one already in effect is a silent no-op: no new id, no change, no revision | §4.1 | N-2 | A clarification |
 | V4-49 | A process's last published digest is persisted with its `ProcessState`, so digest reads are identical after a load | §9.4, §14.1 | N-3 | A clarification |
+| V4-50 | **Data on `meta:` events:** a `data` record whose fields the kind's registry entry declares; refused on any other kind; carried on the `event` change, readable by `where` as `data.<key>`, persisted with the event's facts. `meta:story`'s five fields, as S3 declares them (`pattern`, `instance`, `outcome`, `kind`, `depth`) | §9.2, §10.5 | The composite's S0-1: chaining and growth by story event ([pattern language §7.1](../composite/pattern-language.md#71-chaining-ones-outcome-is-anothers-cause)) | To implement; no `meta:` kind exists in the digest script |
+| V4-51 | **`roles`, `fills` and `dataFields` in the event-kind registry,** stored and returned, checked for form, never read by a kernel decision. The `event` change also carries `outcome` and `served`, so a reader can apply an outcome-conditioned fill from the change alone | §10.5 | S0-2; S1 v0.6 §5.1 | To implement (registry fields; the change's new fields behind `eventChangeFields`, off in both digest configurations) |
+| V4-52 | **A `belief` change** for memorable beliefs set, revised or dropped, with its bindings; none for non-memorable ones, none on replay, at commit for a staged batch | §10.5, §11.2 | S0-3: `learn`, `conceal` and `blame` match without polling; S1 v0.6 §8.9 hears a group member's beliefs about V | To implement, behind `beliefChanges` (off in both digest configurations) |
+| V4-53 | **Opening a frame produces a `frame` change** (`old: 'none'`, or the earlier status when reopened afresh) | §10.5 | Found in this pass: the composite's matcher assumes a frame's opening is heard ([pattern language §6.2](../composite/pattern-language.md#62-handling-a-change), step 3), and S0 produced the change only for status changes | To implement, behind `openingChanges`, its own switch (off in both digest configurations; the status-change switch is untouched) |
+| V4-54 | **Retained frames:** a process may open a frame with `retain: true` and focus tier 0; it is a retention root while active or blocked, and persisted | §9.4, §10.4, §7.3, §14.1 | S1 v0.6 §7.10: goal frames of people who are not demand roots must survive a save and a sweep without being re-opened (which would be heard again) | To implement |
+| V4-55 | **`observedAt(node, t)`,** a read of the earliest valid `observed` pin | §9.4 | S1 v0.6 §7.8: a warning counts as perceived once it is observed ([D-30](../decisions.md)) | A small read |
 
 **Dossier 11's other kernel requirements:**
 - **S1 policies:**

@@ -1,6 +1,6 @@
 # P4. The seeding layer and the seed language
 
-**Status:** design v0, 22 October 2026. This is second-level plan P4 of the [first-level plan](plan.md#5-second-level-plans), the design stage for layer 2. The normative specification, S2, follows from it. It builds on:
+**Status:** design v0.1, 25 October 2026. v0.1 records what [S2 v1.11](spec/seeding.md) changed in the design: patterns generate seeds (§2), nudges, the promise an accepted offer leaves, unvoiced lines for the protagonist ([D-29](decisions.md)) and the two sources of harm ([D-30](decisions.md)) (§3.7), the job and heist shape (§3.8), and layering (§4.5). Design v0, 22 October 2026. This is second-level plan P4 of the [first-level plan](plan.md#5-second-level-plans), the design stage for layer 2. The normative specification, S2, follows from it. It builds on:
 - the [foundation](foundation.md);
 - the kernel specification [S0 v3.1](spec/kernel.md);
 - the requirement lists of dossiers [2](craft/d02-relationships.md#10-requirements-for-the-seed-language-p4), [3](craft/d03-fitting-casting.md#9-requirements-for-the-seed-language-p4), [4](craft/d04-quest-structure.md#10-requirements-for-the-seed-language-p4), [5](craft/d05-units-variety.md#9-requirements-for-the-seed-language-p4), [7](craft/d07-direction-pacing.md#9-requirements-for-the-procedural-engine-p5) and [9](craft/d09-agency-consequence.md#11-requirements-for-the-procedural-engine-p5-and-authored-content-p6), each traced in §9.
@@ -35,6 +35,8 @@ The foundation says a quest is a bundle and a seed is a partly resolved one ([fo
 | A commitment ("this happened") | A pin, reason `committed` (precedence 300) |
 
 A seed is also **an actor**: its context frame is "what this seed needs in order to happen" ([foundation §5](foundation.md#5-context-and-relevance)). So its windows, roles and needs are ordinary interests. The kernel's matching (§10.5) tells the seed when the world moves towards or away from it. There's no separate polling.
+
+**Patterns generate seeds** ([D-27](decisions.md), [D-28](decisions.md); [S2 §2.24](spec/seeding.md#224-patterns-in-seeds)). The composite's [pattern language](composite/pattern-language.md) adds a level above the seed. A **story pattern** is a partial causal graph of junctures, which layer 3 matches against the record; a live instance of it is the story, and a seed is one scene of it that V plays or sees. Junctures the world fills need no seed. A juncture that must reach V is realised by a seed layer 3 sows; one that needs only an off-screen reason or opportunity, by a **nudge**, a seed that never reaches V ([S2 §2.25](spec/seeding.md#225-nudges-seeds-that-never-reach-the-protagonist)). A seed may declare the junctures it realises, and every seed has an implicit pattern derived from its beat graph, so even a fully authored story shares junctures with procedural ones, through the world events its beats leave. The two documents stay distinct: a seed's graph is about V's offers, stances and exits, and a pattern's about the world's causes.
 
 **One representation at every scale** ([DS-28](design-seeds.md)): a passing encounter, a gig and an arc are all seeds made of fragments. They differ in level, cast depth and the distance between setup and payoff.
 
@@ -136,6 +138,11 @@ Every player-facing fragment is an **offer** with these parts ([dossier 9](craft
 - callbacks name V's **acts**, never V's reasons;
 - a static check rejects text that evaluates V in the second person, reproaches, or claims V's feelings.
 
+**Since S2 v1.11:**
+- an offer names its **asker**, and accepting it with a stance that helps or bargains leaves a `promise` in the world, so an accepted plan is a fact others can learn of;
+- an option shows **the exact words V says**: a recorded line, a splice of recorded lines, or new words left unvoiced, as text ([D-29](decisions.md)). Only a line the player picks is said;
+- **harm or loss to V has two sources only:** a stake V accepted when an offer named it, faced as an obstacle with affordances; or a group's own decision to act against V under [D-30](decisions.md), which a seed may carry, and stage only as an encounter S1 authorised and still authorises whenever it plays, writing no harm itself: the game records any harm ([S2 §2.16a](spec/seeding.md#216a-groups-acting-against-the-protagonist)).
+
 ### 3.8 Profiles: shapes as data
 
 Common shapes are **profiles**: data templates whose slots carry the same bindings as any seed. Profiles are data, not code.
@@ -143,7 +150,7 @@ Common shapes are **profiles**: data templates whose slots carry the same bindin
 | Profile | Shape | Source |
 |---|---|---|
 | **Gig** | Its eight parts (id and pin, unlock, brief and debrief, objectives, encounter, finish and fail facts, reward by route, retaliation) are produced, not hand-written | [Dossier 4](craft/d04-quest-structure.md); the game's gig wiring |
-| **Job and heist** | Ordered stages, each with `requires`, an interference attachment and a failure modifier for the next stage. Crew roles combine capability and membership. The plan is a **belief** held by its planners, and a **reveal** pins the truth. Preparation is state, with a **flashback** operation that settles the crew's preparation late, at a cost. It is never used for V without the player's acceptance | Dossier 4; kernel §11 |
+| **Job and heist** | **No longer a profile** (S2 v1.11): it is the composite's `heist` shape, a recogniser over smaller pattern instances that layer 3 never runs as a whole plot ([D-28](decisions.md)). What follows is the design those child patterns and authored heists draw on. Ordered stages, each with `requires`, an interference attachment and a failure modifier for the next stage. Crew roles combine capability and membership. The plan is a **belief** held by its planners, and a **reveal** pins the truth. Preparation is state, with a **flashback** operation that settles the crew's preparation late, at a cost. It is never used for V without the player's acceptance | Dossier 4; kernel §11 |
 | **Con** | Long escalation around one mark, with an optional cooler role | Dossier 4 |
 | **Four-beat** | Introduce, develop, twist, conclude | Dossier 4 |
 | **Relationship ladder** | Named rungs as states of a closeness fact; at least **three exits** of distinct kind (decline, stay as now, lapse), each with authored content and equal status; offers and not-now paths at each rung; pacing counted from V's acts, never the clock; bids by kind; `on-long-absence` (reunion by default); boundaries as persistent pins only an authored event revises; an `intimate` scene class that only a human-authored pack scene can fill, with a content tag, a fade or veil alternative and no choices inside | [Dossier 2](craft/d02-relationships.md) |
@@ -225,7 +232,9 @@ Two live seeds **intersect** in any of three ways:
 Layer 2 detects intersections at cast and on every relevant change, through the seeds' own interests. It records each one. How it's resolved:
 1. **Authored before procedural.** A procedural seed yields or re-casts.
 2. **Two authored seeds:** the earlier-committed one keeps its binding, and the other runs its `on-unfilled` ladder. Unless both declared sharing, in which case they share.
-3. **Cross-pressure** is never resolved away. It becomes story material for layer 3 to sift ([DS-11](design-seeds.md)).
+3. **Cross-pressure** is never resolved away. It becomes story material for layer 3 to sift, and, since S2 v1.11, the entry of the composite's divided-loyalty pattern ([DS-11](design-seeds.md)).
+
+**Layering is layer 3's.** Two pattern instances that share a filler (one theft that is both a loss for a courier and a strike for a rival crew) are layered. Layer 3 records it where it finds it ([S3 §6.6](spec/procedural.md#66-composition-story-events-chains-layers-and-shapes)); layer 2 has no intersection kind for it, because it reads no instance and has nothing to settle. Contests between seeds over a node stay claims, settled as above.
 
 ### 4.6 The record and the exposure ledger
 

@@ -108,7 +108,8 @@ A claim that is contested between sources is marked **contested**, with both sid
 - **Concepts** (role, stakes, clue, thread, beat);
 - **Mechanisms**: how a layer realises a principle;
 - **Failure modes**;
-- **Measures**: how evaluation detects a principle being met or a failure happening.
+- **Measures**: how evaluation detects a principle being met or a failure happening;
+- **Patterns**: composable story patterns, partial causal graphs over the simulation, at every scale. They are the composite's multi-scale core ([pattern language](composite/pattern-language.md)).
 
 **Edge types:**
 - `requires`, `supports` and `conflicts-with` between principles;
@@ -116,7 +117,9 @@ A claim that is contested between sources is marked **contested**, with both sid
 - `instance-of`;
 - `realised-by`, from principle to mechanism;
 - `detects`, from measure to failure;
-- `prevents`, from mechanism to failure.
+- `prevents`, from mechanism to failure;
+- `chains-to` and `layers-with`, between patterns that typically compose by a shared outcome or a shared juncture;
+- `risks`, from a pattern to a failure mode it is prone to.
 
 **What the composite must pass:**
 1. Every principle traces back to dossiers.

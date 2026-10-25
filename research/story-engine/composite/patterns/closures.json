@@ -1,0 +1,367 @@
+{
+  "id": "xf.composite:family.closures",
+  "type": "pattern-family",
+  "family": "closure",
+  "version": 1,
+  "status": "v0, 25 October 2026. Closures: the forms that end or park a thread. They match on what other instances left (shared fillers and story events), so they close threads without being sown as units. Form: pattern-language.md §3.7.",
+  "patterns": [
+    {
+      "id": "xf.composite:payoff",
+      "type": "pattern",
+      "version": 1,
+      "family": "closure",
+      "scale": "goal",
+      "summary": "Something set up earlier comes back and is paid, at the size it was set up.",
+      "roles": {
+        "?a": {"kind": "actor", "v": "may", "note": "who set it up: did the favour, made the promise, planted the thing"},
+        "?b": {"kind": "actor", "note": "who returns it"}
+      },
+      "junctures": {
+        "planted": {"fn": "obligate", "args": {"debtor": "?b", "creditor": "?a"}},
+        "returned": {
+          "fn": "repay",
+          "args": {"debtor": "?b", "creditor": "?a"},
+          "optional": true,
+          "realise": [{"wait": true}, {"nudge": {}}],
+          "changes": [
+            {"ends": "obligate", "args": {"debtor": "?b", "creditor": "?a"}},
+            {"tie": {"a": "?a", "b": "?b"}, "move": "up"}
+          ]
+        },
+        "repaid-in-kind": {
+          "fn": "help",
+          "args": {"by": "?b", "to": "?a"},
+          "optional": true,
+          "realise": [{"wait": true}, {"nudge": {}}],
+          "changes": [{"tie": {"a": "?a", "b": "?b"}, "move": "up"}]
+        }
+      },
+      "edges": [
+        {"from": "planted", "to": "returned", "link": "because", "shown": "must"},
+        {"from": "planted", "to": "repaid-in-kind", "link": "because", "shown": "must"},
+        {"from": "returned", "to": "repaid-in-kind", "link": "forecloses"}
+      ],
+      "entry": ["planted"],
+      "outcomes": {
+        "paid": {"reached": ["returned"], "kind": "resolved"},
+        "paid-in-kind": {"reached": ["repaid-in-kind"], "kind": "resolved"}
+      },
+      "within": {"clock": "game", "days": 60},
+      "once": ["?a", "?b"],
+      "show": {"junctures": ["planted"], "edges": 1},
+      "links": {
+        "chains": [],
+        "layers": ["xf.composite:debt", "xf.composite:sacrifice", "xf.composite:protection"],
+        "refines": {}
+      },
+      "traces": [
+        "DS-10",
+        "d10.PAY-11",
+        "d10.PAY-06",
+        "d10.PAY-12",
+        "d04.QST-03",
+        "d13.CUR-04",
+        "d09.AGY-38",
+        "d09.AGY-40",
+        "d13.RMB-01",
+        "d08.SES-03"
+      ],
+      "risks": [
+        {
+          "failure": "fail:unpaid-promise",
+          "note": "A promise neither paid nor retired teaches the player to ignore promises (CUR-04). An open plant gets a closing trace when it is retired (S2 §2.15)."
+        },
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "A payoff the protagonist never perceived ended nothing (RMB-02); the return names the earlier act, once (AGY-34)."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:loss",
+      "type": "pattern",
+      "version": 1,
+      "family": "closure",
+      "scale": "goal",
+      "summary": "Something that mattered is lost for good, and the loss leaves a mark.",
+      "roles": {
+        "?l": {"kind": "actor", "note": "who loses"},
+        "?x": {"kind": ["person", "place", "item"], "note": "what is lost"},
+        "?by": {"kind": "actor", "note": "who took it, if anyone"}
+      },
+      "junctures": {
+        "stake": {"fn": "hold", "args": {"who": "?l", "what": "?x"}},
+        "lost": {
+          "fn": "wrong",
+          "args": {"by": "?by", "to": "?l"},
+          "requires": [{"rel": "irreversible", "args": ["lost"]}],
+          "changes": [{"ends": "hold", "args": {"who": "?l", "what": "?x"}}]
+        },
+        "changed": {"fn": "turn", "args": {"who": "?l"}, "optional": true}
+      },
+      "edges": [{"from": "stake", "to": "lost", "link": "enables"}, {"from": "lost", "to": "changed", "link": "because"}],
+      "entry": ["lost"],
+      "outcomes": {
+        "lost": {
+          "reached": ["lost"],
+          "kind": "failed",
+          "next": ["xf.composite:grievance", "xf.composite:reckoning", "xf.composite:test-of-creed"],
+          "aftermath": {"junctures": ["changed"], "days": 7}
+        }
+      },
+      "within": {"clock": "game", "days": 7},
+      "show": {"junctures": ["lost"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:grievance", "xf.composite:reckoning"],
+        "layers": ["xf.composite:protection", "xf.composite:feud"],
+        "refines": {}
+      },
+      "traces": ["d04.QST-15", "d06.TEL-08", "d09.AGY-26", "d09.AGY-27", "d09.AGY-30", "d20.STG-06", "d20.ENC-02", "d02.BND-36"],
+      "risks": [
+        {
+          "failure": "fail:punished-decline",
+          "note": "A loss after the protagonist declined is the client's own frame resolving (AGY-26), told as news in the third person, never as reproach (AGY-27)."
+        },
+        {
+          "failure": "fail:unbounded-doom",
+          "note": "A loss never ends the protagonist's access to the world or takes someone the protagonist depends on without a portent (AGY-30)."
+        },
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "A loss with no trace in the world is forgotten at once: its mark persists for its declared duration (STG-06)."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:settlement",
+      "type": "pattern",
+      "version": 1,
+      "family": "closure",
+      "scale": "goal",
+      "summary": "A dispute is settled on terms: redress is made, the tie is partly mended, and the terms bind.",
+      "roles": {
+        "?a": {"kind": "actor", "note": "who was wronged, or is owed"},
+        "?b": {"kind": "actor", "note": "who makes redress"},
+        "?j": {"kind": "event", "note": "what the dispute is about"}
+      },
+      "junctures": {
+        "dispute": {"fn": "blame", "args": {"who": "?a", "of": "?b", "for": "?j"}},
+        "terms": {
+          "fn": "repay",
+          "args": {"debtor": "?b", "creditor": "?a"},
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"tie": {"a": "?a", "b": "?b"}, "move": "up"}, {"belief": {"who": "?a", "about": "?b"}, "move": "revised"}]
+        },
+        "renewed": {"fn": "bind", "args": {"a": "?a", "b": "?b"}, "optional": true},
+        "newDuty": {"fn": "obligate", "args": {"debtor": "?b", "creditor": "?a"}, "optional": true}
+      },
+      "edges": [
+        {"from": "dispute", "to": "terms", "link": "motive", "shown": "must"},
+        {"from": "terms", "to": "renewed", "link": "because"},
+        {"from": "terms", "to": "newDuty", "link": "because"}
+      ],
+      "entry": ["dispute"],
+      "outcomes": {
+        "settled": {
+          "reached": ["terms"],
+          "kind": "resolved",
+          "next": ["xf.composite:debt", "xf.composite:payoff"],
+          "aftermath": {"junctures": ["renewed", "newDuty"], "days": 7}
+        }
+      },
+      "within": {"clock": "game", "days": 21},
+      "once": ["?a", "?b"],
+      "show": {"junctures": ["terms"], "edges": 1},
+      "links": {
+        "chains": ["xf.composite:debt", "xf.composite:payoff"],
+        "layers": ["xf.composite:grievance", "xf.composite:feud", "xf.composite:hunted"],
+        "refines": {}
+      },
+      "traces": ["d02.BND-04", "d01.DRV-19", "d09.AGY-28", "d15.ORD-05"],
+      "risks": [
+        {
+          "failure": "fail:learned-grammar",
+          "note": "Every feud ending in a handshake. Repair restores only part of lost trust (S1 §4.7), and terms often leave a new obligation."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:loose-end",
+      "type": "pattern",
+      "version": 1,
+      "family": "closure",
+      "scale": "situation",
+      "summary": "A thread stops unresolved and is set down where it can be picked up again.",
+      "roles": {"?x": {"kind": "actor", "note": "who is left holding the open end"}},
+      "junctures": {
+        "parked": {
+          "fn": "story",
+          "args": {"pattern": "any", "outcome": "any"},
+          "requires": [{"rel": "outcome-kind", "args": ["parked", "parked"]}],
+          "binds": {"anyParticipant": "?x"},
+          "changes": [{"frame": {"of": "?x", "toward": "parked", "status": "blocked"}}]
+        },
+        "regrown": {
+          "fn": "story",
+          "args": {"pattern": "any", "outcome": "any"},
+          "optional": true,
+          "binds": {"anyParticipant": "?x"}
+        }
+      },
+      "edges": [{"from": "parked", "to": "regrown", "link": "because", "shown": "must"}],
+      "entry": ["parked"],
+      "outcomes": {
+        "grew": {"reached": ["regrown"], "kind": "resolved"},
+        "rested": {"reached": ["parked"], "after": {"clock": "game", "days": 30}, "kind": "parked"}
+      },
+      "within": {"clock": "game", "days": 30},
+      "show": {"junctures": ["parked"], "edges": 0},
+      "links": {"chains": [], "layers": [], "refines": {}},
+      "traces": ["d08.GRW-07", "d08.GRW-08", "d08.UNT-08", "d08.THR-07", "d08.THR-12", "d08.SES-04", "d07.DIR-47"],
+      "risks": [
+        {
+          "failure": "fail:dangling-thread",
+          "note": "A thread the protagonist saw and that never closed is a debt (THR-07): it steps down with a closing trace (THR-12)."
+        },
+        {
+          "failure": "fail:unpaid-promise",
+          "note": "Parking is not a cliffhanger: the director never parks a thread to hold the player (SES-04)."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:settled-without-you",
+      "type": "pattern",
+      "version": 1,
+      "family": "closure",
+      "scale": "goal",
+      "summary": "The protagonist said no, or never answered, and the world settled the matter on its own.",
+      "roles": {
+        "?cl": {"kind": "actor", "note": "who asked"},
+        "?p": {"kind": "person", "identity": {"fixed": "v"}, "v": "may", "note": "the protagonist"},
+        "?o": {"kind": "actor", "note": "whoever helped instead"}
+      },
+      "junctures": {
+        "asked": {"fn": "ask", "args": {"by": "?cl", "of": "?p", "what": "any"}},
+        "declined": {
+          "fn": "refuse",
+          "args": {"who": "?p", "to": "?cl"},
+          "changes": [{"belief": {"who": "?cl", "about": "?p"}, "move": "forms"}]
+        },
+        "helped": {
+          "fn": "help",
+          "args": {"by": "?o", "to": "?cl"},
+          "optional": true,
+          "changes": [
+            {"tie": {"a": "?cl", "b": "?o"}, "move": "up"},
+            {"frame": {"of": "?cl", "toward": "asked", "status": "satisfied"}}
+          ]
+        },
+        "hurt": {
+          "fn": "befall",
+          "args": {"who": "?cl"},
+          "optional": true,
+          "changes": [{"frame": {"of": "?cl", "toward": "asked", "status": "abandoned"}}]
+        },
+        "movedOn": {
+          "fn": "choose",
+          "args": {"who": "?cl"},
+          "optional": true,
+          "changes": [{"frame": {"of": "?cl", "toward": "asked", "status": "abandoned"}}]
+        }
+      },
+      "edges": [
+        {"from": "asked", "to": "declined", "link": "answers"},
+        {"from": "declined", "to": "helped", "link": "because"},
+        {"from": "declined", "to": "hurt", "link": "because"},
+        {"from": "declined", "to": "movedOn", "link": "because"}
+      ],
+      "entry": ["declined"],
+      "outcomes": {
+        "helped": {"reached": ["helped"], "kind": "resolved"},
+        "hurt": {"reached": ["hurt"], "kind": "resolved"},
+        "moved-on": {"reached": ["movedOn"], "kind": "resolved"},
+        "quiet": {"reached": ["declined"], "after": {"clock": "game", "days": 3}, "kind": "resolved"}
+      },
+      "within": {"clock": "game", "days": 7},
+      "show": {"junctures": ["declined"], "edges": 1},
+      "links": {
+        "chains": [],
+        "layers": ["xf.composite:closing-choice", "xf.composite:coveted", "xf.composite:squeeze"],
+        "refines": {}
+      },
+      "traces": ["d09.AGY-16", "d09.AGY-26", "d09.AGY-27", "d09.AGY-28", "d09.R5-05", "d07.DIR-38", "d08.UNT-11"],
+      "risks": [
+        {
+          "failure": "fail:punished-decline",
+          "note": "The consequence of a decline is the stake resolving without the protagonist, by the client's own frame (AGY-26). It never reproaches, and it closes no door unrelated to the offer (AGY-28)."
+        },
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "Only a perceived offer can be declined (AGY-16), and news that never reached the protagonist closes nothing."
+        }
+      ]
+    },
+    {
+      "id": "xf.composite:reckoning",
+      "type": "pattern",
+      "version": 2,
+      "family": "closure",
+      "scale": "goal",
+      "summary": "An act comes back on the one who did it, later, from someone who learned of it.",
+      "roles": {
+        "?doer": {"kind": "actor", "v": "may", "note": "who acted"},
+        "?t": {"kind": "actor", "note": "who the act touched"},
+        "?by": {"kind": "actor", "note": "who brings the consequence"}
+      },
+      "junctures": {
+        "acted": {"fn": "wrong", "args": {"by": "?doer", "to": "?t"}},
+        "cued": {"fn": "learn", "args": {"who": "?by", "what": "acted"}},
+        "billed": {
+          "fn": "demand",
+          "args": {"by": "?by", "of": "?doer", "what": "acted"},
+          "optional": true,
+          "realise": [{"wait": true}, {"offer": {}}],
+          "changes": [{"begins": "obligate", "args": {"debtor": "?doer", "creditor": "?by"}}]
+        },
+        "struck": {
+          "fn": "wrong",
+          "args": {"by": "?by", "to": "?doer"},
+          "optional": true,
+          "realise": [{"wait": true}],
+          "changes": [{"standing": {"audience": "?by", "of": "?doer"}, "move": "down"}]
+        }
+      },
+      "edges": [
+        {"from": "acted", "to": "cued", "link": "reveals"},
+        {"from": "cued", "to": "billed", "link": "motive", "shown": "must"},
+        {"from": "cued", "to": "struck", "link": "motive", "shown": "must"}
+      ],
+      "entry": ["acted"],
+      "outcomes": {
+        "reckoned": {"reached": ["billed"], "kind": "resolved", "next": ["xf.composite:debt", "xf.composite:settlement"]},
+        "struck": {"reached": ["struck"], "kind": "resolved", "next": ["xf.composite:grievance", "xf.composite:feud"]}
+      },
+      "within": {"clock": "game", "days": 21},
+      "once": ["?doer", "?t"],
+      "show": {"junctures": ["acted"], "edges": 1},
+      "escalation": ["struck"],
+      "links": {
+        "chains": ["xf.composite:debt", "xf.composite:grievance"],
+        "layers": ["xf.composite:heist", "xf.composite:squeeze"],
+        "refines": {}
+      },
+      "traces": ["d04.QST-16", "d04.QST-37", "d09.AGY-33", "d09.AGY-34", "d09.AGY-40", "d09.AGY-43", "d09.R5-16", "d10.PAY-12"],
+      "risks": [
+        {
+          "failure": "fail:invisible-cascade",
+          "note": "Credit must be true (AGY-43): an attribution check before the act is named, an expectation planted when the act was done (AGY-34)."
+        },
+        {
+          "failure": "fail:unbounded-doom",
+          "note": "A reckoning on the protagonist comes as an offer with stances and a portent, within the bounds of the dial."
+        }
+      ]
+    }
+  ]
+}

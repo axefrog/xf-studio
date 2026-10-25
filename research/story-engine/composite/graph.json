@@ -1,0 +1,2090 @@
+{
+  "id": "xf.composite:graph",
+  "type": "composite-graph",
+  "version": 1,
+  "status": "v0, 25 October 2026. The composite's nodes other than patterns, and the edges no node carries (P1 §5). Principle nodes are references: the statement lives in the dossier named in `source`; the label is a short quotation of it. Pattern nodes live in patterns/*.json and carry their own `links`, `traces` and `risks` edges.",
+  "nodeTypes": ["principle", "concept", "mechanism", "failure", "measure", "pattern"],
+  "edgeTypes": [
+    "requires",
+    "supports",
+    "conflicts-with",
+    "refines",
+    "instance-of",
+    "realised-by",
+    "detects",
+    "prevents",
+    "chains-to",
+    "layers-with",
+    "risks"
+  ],
+  "nodes": [
+    {"id": "DS-01", "type": "principle", "label": "Selection over generation.", "source": "design-seeds.md"},
+    {"id": "DS-02", "type": "principle", "label": "Seeding is casting.", "source": "design-seeds.md"},
+    {
+      "id": "DS-05",
+      "type": "principle",
+      "label": "The director steers only through the unobserved.",
+      "source": "design-seeds.md"
+    },
+    {"id": "DS-07", "type": "principle", "label": "People hold beliefs, not just truth.", "source": "design-seeds.md"},
+    {"id": "DS-09", "type": "principle", "label": "Big stories grow from small ones.", "source": "design-seeds.md"},
+    {"id": "DS-10", "type": "principle", "label": "Reincorporation.", "source": "design-seeds.md"},
+    {"id": "DS-11", "type": "principle", "label": "Collisions are material.", "source": "design-seeds.md"},
+    {"id": "DS-14", "type": "principle", "label": "Flashbacks fill in the past lazily.", "source": "design-seeds.md"},
+    {
+      "id": "DS-15",
+      "type": "principle",
+      "label": "Spend detail where it can be perceived.",
+      "source": "design-seeds.md"
+    },
+    {"id": "DS-24", "type": "principle", "label": "\"Surprising yet inevitable.\"", "source": "design-seeds.md"},
+    {"id": "DS-25", "type": "principle", "label": "Fresh eyes.", "source": "design-seeds.md"},
+    {
+      "id": "DS-35",
+      "type": "principle",
+      "label": "The authoring spectrum is the binding spectrum.",
+      "source": "design-seeds.md"
+    },
+    {"id": "DS-56", "type": "principle", "label": "Hooks from blocked contexts.", "source": "design-seeds.md"},
+    {"id": "DS-61", "type": "principle", "label": "Cross-pressure generates stories.", "source": "design-seeds.md"},
+    {"id": "DS-62", "type": "principle", "label": "Principals and agents diverge.", "source": "design-seeds.md"},
+    {"id": "DS-63", "type": "principle", "label": "V is observed, never owned.", "source": "design-seeds.md"},
+    {"id": "DS-64", "type": "principle", "label": "Everyone has their own model.", "source": "design-seeds.md"},
+    {
+      "id": "DS-70",
+      "type": "principle",
+      "label": "A story is a cascade of causes; a pattern is a partial causal graph.",
+      "source": "design-seeds.md"
+    },
+    {
+      "id": "d01.DRV-03",
+      "type": "principle",
+      "label": "\"Bonds\" is several drives. Kin care, romantic partnership, friendship and group belonging differ in function, in development and in what they obligate.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-04",
+      "type": "principle",
+      "label": "Active thwarting is a different signal from lack. Being controlled, humiliated or excluded hits harder than merely not getting something.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-05",
+      "type": "principle",
+      "label": "Respect and standing are fundamental; money and popularity as ends are weak. In a poor, indebted city money is mostly a means.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-09",
+      "type": "principle",
+      "label": "A shorter sense of future time reweights goals. Harsh, unpredictable conditions favour present-oriented behaviour.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-12",
+      "type": "principle",
+      "label": "Derive urgency from timestamped facts. Do not tick a counter.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-15",
+      "type": "principle",
+      "label": "Effort and attention rise as a due point nears. Overdue needs an escalation ladder, not a flag.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-18",
+      "type": "principle",
+      "label": "Grievance latches, decays with the relationship's value, and is sharpened in honour cultures. Violence is the rare outcome of a feud.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-19",
+      "type": "principle",
+      "label": "Favours come back after a plausible delay that grows with their size and with social distance. Immediate repayment reads as refusing the relationship.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-20",
+      "type": "principle",
+      "label": "Debt is a relationship with a ladder, and it correlates with worse mental health.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-22",
+      "type": "principle",
+      "label": "A concern is a drive bound to particular things. Motives that are concrete produce action, and abstract ones produce mood.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-25",
+      "type": "principle",
+      "label": "Goals conflict, and conflict is resolved by importance, by alternatives, by modifying a goal, or by dropping one.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-30",
+      "type": "principle",
+      "label": "Goals that are the actor's own persist. Imposed goals erode unless identification or fear holds them.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-33",
+      "type": "principle",
+      "label": "Wishes are real. A concern with no feasible means stays alive, and it shapes talk and hooks.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-34",
+      "type": "principle",
+      "label": "Means come from what is open. When prized goals meet closed legitimate routes, people adapt.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-36",
+      "type": "principle",
+      "label": "Group urgency is performance against an adaptive aspiration. Falling short triggers search and risk. Doing well breeds slack.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-37",
+      "type": "principle",
+      "label": "A gang is a firm with a budget and a skewed wage bill. Violence costs money.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-38",
+      "type": "principle",
+      "label": "Members' strength of commitment depends on satisfaction, investment and alternatives. Their response to decline is voice, exit or loyalty.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-41",
+      "type": "principle",
+      "label": "Family drives are not only money. Families protect identity, influence and continuity, and kin help scales with relatedness most when the stakes are high.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-42",
+      "type": "principle",
+      "label": "A group's intent to retaliate is not an act. Conversion is rare per window and needs a situation.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-43",
+      "type": "principle",
+      "label": "Status changes become real when they are witnessed. Stage them.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-47",
+      "type": "principle",
+      "label": "People explain intentional action by reasons (what the person wanted and believed) and unintentional events by causes. The old actor-observer asymmetry does not hold up.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-48",
+      "type": "principle",
+      "label": "Observers lean towards dispositional explanations and correct for the situation incompletely. Group membership tilts the lean.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d01.DRV-55",
+      "type": "principle",
+      "label": "Collective anger follows breaches of a customary standard of fairness, and starts small and deniable.",
+      "source": "craft/d01-motivation-drives.md"
+    },
+    {
+      "id": "d02.BND-04",
+      "type": "principle",
+      "label": "Trust has parts, and a breach has a kind that decides what repairs it.",
+      "source": "craft/d02-relationships.md"
+    },
+    {
+      "id": "d02.BND-13",
+      "type": "principle",
+      "label": "Friction and rivalry are content, not a penalty.",
+      "source": "craft/d02-relationships.md"
+    },
+    {
+      "id": "d02.BND-33",
+      "type": "principle",
+      "label": "Rivalry is relational. It grows from similarity, proximity and a history of contests, and it can be one-sided.",
+      "source": "craft/d02-relationships.md"
+    },
+    {
+      "id": "d02.BND-35",
+      "type": "principle",
+      "label": "Family and crew are memberships first. Their ties inherit the group's concerns, and the same person can sit in ties that pull against each other. That cross-pressure is …",
+      "source": "craft/d02-relationships.md"
+    },
+    {
+      "id": "d02.BND-36",
+      "type": "principle",
+      "label": "Loss and departure are events with tie consequences, and a lost bond can weigh more than a lost thing.",
+      "source": "craft/d02-relationships.md"
+    },
+    {
+      "id": "d03.FIT-01",
+      "type": "principle",
+      "label": "A unit declares what it needs and what it changes, in one shared, named vocabulary.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d03.FIT-02",
+      "type": "principle",
+      "label": "Keep the vocabulary of requirements small, shared and reused.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d03.FIT-03",
+      "type": "principle",
+      "label": "Needs should name kinds of thing with constraints, and bind the instance at cast time.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d03.FIT-06",
+      "type": "principle",
+      "label": "Salience needs an arc check above it.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d03.FIT-07",
+      "type": "principle",
+      "label": "A selection system needs a big pool, and a small pool starves it. Plan for starvation.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d03.FIT-10",
+      "type": "principle",
+      "label": "Write the unit with roles, and keep the role separate from the character who plays it.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d03.FIT-19",
+      "type": "principle",
+      "label": "Cast against commitments: a character or place cannot be in two scenes at once, but may belong to several threads.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d03.FIT-23",
+      "type": "principle",
+      "label": "Every conclusion the story needs has at least three independent routes.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d03.FIT-37",
+      "type": "principle",
+      "label": "A seed has the shape of a good pattern: context, forces, a solution, and an instance left open, linked up and down in scale.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d03.FIT-41",
+      "type": "principle",
+      "label": "Causal bookkeeping is kept only as deep as the library can bridge. Do not plan from scratch.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d03.FIT-43",
+      "type": "principle",
+      "label": "Keep the authored spine authored. The fitter works at the joints.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d03.FIT-49",
+      "type": "principle",
+      "label": "Offers, never impositions: V may decline, and V's feelings are never stated for V.",
+      "source": "craft/d03-fitting-casting.md"
+    },
+    {
+      "id": "d04.QST-01",
+      "type": "principle",
+      "label": "Every beat after the first is linked to its predecessor by a recorded cause (*therefore*) or a recorded obstacle (*but*). A link that reads only as *then* is a defect, …",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-03",
+      "type": "principle",
+      "label": "Every promise (a hint, a named object, a stated stake) is typed (tone, story, character, structure), shown to progress by visible steps, and either paid or explicitly …",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-05",
+      "type": "principle",
+      "label": "An offer is a blocked goal of a world entity, plus something at stake. A motive alone yields a template",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-07",
+      "type": "principle",
+      "label": "Do not let a type drive behaviour. Derive the objective from the situation",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-15",
+      "type": "principle",
+      "label": "A failed job leaves something behind: a loss, a changed standing, a changed offer, a retaliation. Never a bare terminal",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-16",
+      "type": "principle",
+      "label": "Consequences are delayed, signposted and cancellable, and the player can name their cause",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-19",
+      "type": "principle",
+      "label": "For each conclusion the player must reach, offer at least three independent routes; at any time keep at least three leads to places not yet visited. The rule is about …",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-21",
+      "type": "principle",
+      "label": "A gig that people single out for story turns on a decision about a named person who has something to lose",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-26",
+      "type": "principle",
+      "label": "A job is a script whose stages each need actors, props, places and information. A generated job is valid only if the world can satisfy every stage",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-27",
+      "type": "principle",
+      "label": "A job seed is a protoscript with swappable scenes. Its tracks are the combinations of scene variants that satisfy the stage requirements",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-28",
+      "type": "principle",
+      "label": "A complication or an interference attaches to a stage, not to the job as a whole",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-29",
+      "type": "principle",
+      "label": "Failure at a stage changes the next stage's preconditions (injury, alarm, lost time) and does not end the job. No twist should wipe out the whole plan",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-31",
+      "type": "principle",
+      "label": "Suspense needs the audience to know what the thieves do not. The plan is held as a belief by the crew; the truth lives in the world; the reveal revises the belief",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-32",
+      "type": "principle",
+      "label": "Fold preparation into one legible state variable that sets the opening position of the run",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-33",
+      "type": "principle",
+      "label": "Let preparation be settled at the moment it matters, for a cost, and never against what has already been established. Limit under D-09: the engine may do this for the …",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-34",
+      "type": "principle",
+      "label": "Control the planning phase: deadlines that cost in-game time, costly failed research, rulings that let a result stand, a clear end to each phase, and a forgiving run",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-35",
+      "type": "principle",
+      "label": "A crew is a set of capabilities and memberships. Each capability should be the answer to at least one obstacle. Each member holds a membership with visibility, strength …",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-36",
+      "type": "principle",
+      "label": "A complication should reveal something hidden about the patron or a crew member, not only add enemies. The reveal must come from a divergence that is already in the …",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-37",
+      "type": "principle",
+      "label": "The aftermath is a stage. Payoff varies with how loud the job was; a ledger of exposure sets consequences that land before the player can prevent them",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-39",
+      "type": "principle",
+      "label": "Use story grammars and arc catalogues as recognisers and checklists on finished arcs, not as generators",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d04.QST-40",
+      "type": "principle",
+      "label": "A four-beat shape (introduce, develop, twist, conclude) gives a shape that needs no antagonist: the tension comes from a turn that recontextualises the first beats",
+      "source": "craft/d04-quest-structure.md"
+    },
+    {
+      "id": "d05.VAR-02",
+      "type": "principle",
+      "label": "Put freshness at the small grain and story at the large grain. Keep several same-function wordings for each exchange, and let a theme stretch or shrink to V's attention …",
+      "source": "craft/d05-units-variety.md"
+    },
+    {
+      "id": "d05.VAR-09",
+      "type": "principle",
+      "label": "Players learn what follows what long before they can say why. Expect the skeleton to be learned first; the label arrives later and spreads through the community",
+      "source": "craft/d05-units-variety.md"
+    },
+    {
+      "id": "d05.VAR-10",
+      "type": "principle",
+      "label": "Hide a skeleton by varying the structure (who initiates, what is at stake, the order of reveals, how it ends), not only the skin (names, places, faces)",
+      "source": "craft/d05-units-variety.md"
+    },
+    {
+      "id": "d05.VAR-21",
+      "type": "principle",
+      "label": "Rules about order buy perceived randomness at the price of a predictable skeleton. Separate only what players sort by, and keep a floor on the conditional entropy of …",
+      "source": "craft/d05-units-variety.md"
+    },
+    {
+      "id": "d05.VAR-28",
+      "type": "principle",
+      "label": "The text layer can bring back the templates the structure layer removed. Test rendered text for repeated syntactic templates and for homogeneity across units, especially …",
+      "source": "craft/d05-units-variety.md"
+    },
+    {
+      "id": "d05.VAR-29",
+      "type": "principle",
+      "label": "Measure the generator's expressive range on features that people judge, and treat every metric as a tripwire, not a target. Calibrate each metric against sorting data …",
+      "source": "craft/d05-units-variety.md"
+    },
+    {
+      "id": "d05.VAR-30",
+      "type": "principle",
+      "label": "Uniqueness per player is not enough. A template is visible across players once they compare notes, so evaluate the pooled population of streams, not only one player's",
+      "source": "craft/d05-units-variety.md"
+    },
+    {
+      "id": "d06.GEN-02",
+      "type": "principle",
+      "label": "Do not search online over stories. Compute orderings or policies offline and keep run-time search inside a fixed allowance",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.GEN-03",
+      "type": "principle",
+      "label": "Use grammars to recognise and to shape, not to originate",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.GEN-05",
+      "type": "principle",
+      "label": "Use planning for short chains: to check causal soundness, to say why an act was taken, and to find bridging beats from the present state to what an authored seed assumes",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.GEN-06",
+      "type": "principle",
+      "label": "Generate-then-justify is allowed only as write-once: a constructed cause must agree with everything observed or committed, and is pinned once observed. It must be marked …",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.MAP-08",
+      "type": "principle",
+      "label": "The sifter obeys determinism and the work budget like any other subsystem",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.SFT-02",
+      "type": "principle",
+      "label": "The record is mostly banal. Offers should be a small share of event volume, with a stated target and cap",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.SFT-04",
+      "type": "principle",
+      "label": "Match incrementally, with partial matches that can be read, narrated or steered before completion",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.SFT-05",
+      "type": "principle",
+      "label": "The value of a partial match is the window it opens. Use it to prepare (foreshadow, hold resources, choose V's involvement), not to force the ending",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.SFT-06",
+      "type": "principle",
+      "label": "The pool of partial matches must be bounded: per-pattern caps, expiry, duplicate suppression, and tombstones against repeats",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.SFT-07",
+      "type": "principle",
+      "label": "A completed pattern is itself an event that other patterns can match, so large stories are built from small ones",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.SFT-10",
+      "type": "principle",
+      "label": "Sifted chains are appreciated by people who know the world and the people in the chain. Surface chains whose entities V has met, or that touch V's record",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.SFT-13",
+      "type": "principle",
+      "label": "A named situation will always be found, and one over-prevalent event kind will dominate. Diversify across patterns and kinds, and let local detail do the freshening",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.SFT-14",
+      "type": "principle",
+      "label": "A sifter can only find what the record holds. The record needs people with names, intents, outcomes and ties. The game's own event feed is thin, so the richness has to …",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.TEL-05",
+      "type": "principle",
+      "label": "Stakes: a chain is more worth telling when something a person cares about is at risk, and the offer says what",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.TEL-06",
+      "type": "principle",
+      "label": "A person at the centre: events about people the audience can name are remembered better and told more than the same content about things",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.TEL-07",
+      "type": "principle",
+      "label": "Closeness to V's own history and places raises worth. A callback at a distance needs a cue, and the cue grows with elapsed time",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.TEL-08",
+      "type": "principle",
+      "label": "Lasting, hard-to-reverse and non-repeated changes are more eventful than reversible or repeated ones",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.TEL-09",
+      "type": "principle",
+      "label": "A live gap: something the audience knows part of and wants closed (a secret, a divergence between belief and truth, an outcome not yet decided). Prefer partial matches …",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d06.TEL-10",
+      "type": "principle",
+      "label": "The more extraordinary the offer, the more its causes must be visible. A surprising step needs a showable cause",
+      "source": "craft/d06-sifting-tellability.md"
+    },
+    {
+      "id": "d07.DIR-38",
+      "type": "principle",
+      "label": "Every offer V never takes must be complete without V, and declining must not feel like losing the main thing",
+      "source": "craft/d07-direction-pacing.md"
+    },
+    {
+      "id": "d07.DIR-39",
+      "type": "principle",
+      "label": "Treat signs of voluntary approach as better triggers for personal or intense content than proximity",
+      "source": "craft/d07-direction-pacing.md"
+    },
+    {
+      "id": "d07.DIR-41",
+      "type": "principle",
+      "label": "Announce a threat before it acts. Tension comes from anticipation; surprise comes after the event",
+      "source": "craft/d07-direction-pacing.md"
+    },
+    {
+      "id": "d07.DIR-42",
+      "type": "principle",
+      "label": "Each trace should shrink V's ways out or raise the stakes. A trace that changes nothing is texture",
+      "source": "craft/d07-direction-pacing.md"
+    },
+    {
+      "id": "d07.DIR-45",
+      "type": "principle",
+      "label": "Stage a threat's approach in steps of imminence",
+      "source": "craft/d07-direction-pacing.md"
+    },
+    {
+      "id": "d07.DIR-46",
+      "type": "principle",
+      "label": "Use at least two independent traces from one thread record",
+      "source": "craft/d07-direction-pacing.md"
+    },
+    {
+      "id": "d07.DIR-47",
+      "type": "principle",
+      "label": "Traces must be true to the record. An unpaid plant gets a closing trace",
+      "source": "craft/d07-direction-pacing.md"
+    },
+    {
+      "id": "d07.DIR-48",
+      "type": "principle",
+      "label": "Run a visible clock on every hostile thread",
+      "source": "craft/d07-direction-pacing.md"
+    },
+    {
+      "id": "d07.DIR-50",
+      "type": "principle",
+      "label": "Cap how long a threat may sit at the edge of contact",
+      "source": "craft/d07-direction-pacing.md"
+    },
+    {
+      "id": "d07.DIR-51",
+      "type": "principle",
+      "label": "Let V shorten the wait",
+      "source": "craft/d07-direction-pacing.md"
+    },
+    {
+      "id": "d07.DIR-52",
+      "type": "principle",
+      "label": "Vary the threat and limit exposure to any one",
+      "source": "craft/d07-direction-pacing.md"
+    },
+    {
+      "id": "d08.GRW-01",
+      "type": "principle",
+      "label": "Promote on V's observed returns and outcomes, not on authoring order or the engine's guess",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.GRW-03",
+      "type": "principle",
+      "label": "Gate a rung by a notable outcome, not by time spent: an act of V's that changed something between V and the subject",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.GRW-04",
+      "type": "principle",
+      "label": "Refuse a rung the engine cannot furnish. Promotion needs depth ready",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.GRW-05",
+      "type": "principle",
+      "label": "Keep few anchors. The rungs near V and in each district are capped, and a few well-surfaced persistent figures beat many thin ones",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.GRW-06",
+      "type": "principle",
+      "label": "A promoted thread must not displace V's own focus",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.GRW-07",
+      "type": "principle",
+      "label": "A small thing grows by its loose ends. A finished gig leaves a register of unconsumed consequences and changed people, and the next scale is built from them",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.GRW-08",
+      "type": "principle",
+      "label": "Growth reverses. A thread V stops returning to steps down, with a closing trace, and its pins stay",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.GRW-10",
+      "type": "principle",
+      "label": "Promotions differ in shape. The thread a promoted figure carries comes from its own drives, not from one template",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.SES-03",
+      "type": "principle",
+      "label": "Make the rest after a climax end-worthy. Evaluations of an episode tilt to its peak and its end, so the likeliest place to stop should close, not hang",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.SES-04",
+      "type": "principle",
+      "label": "No cliffhanger engineering. The director never times a push to land before a likely quit and never withholds a payoff to hold an open loop. A thread's own open end is …",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.THR-05",
+      "type": "principle",
+      "label": "The attended set has a composition as well as a size: at most one climactic thread, at most one hostile thread at imminent or contact stage, and a mix of tempos and tones",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.THR-07",
+      "type": "principle",
+      "label": "Every attended or simmering thread gets a beat or a re-findable cue within a bounded interval, or it is retired. A dangling thread is an asset while enough others are …",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.THR-09",
+      "type": "principle",
+      "label": "Prefer intersections the record already holds. Threads that share a role, a place or a consequence are booked together, and a thread that touches no other is flagged",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.THR-12",
+      "type": "principle",
+      "label": "Retire in steps: attended, simmering, dormant (pins kept, nothing shown), closed with a closing trace. Closure is a stated status (resolved, abandoned or transformed), …",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.UNT-08",
+      "type": "principle",
+      "label": "A gig is complete when its decision beat has been taken or has lapsed, its outcome facts are written, and its aftermath has been read from the exposure ledger. It leaves …",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d08.UNT-11",
+      "type": "principle",
+      "label": "Every unit has two completion modes, witnessed and settled, and both write the same outcome record",
+      "source": "craft/d08-scale-threads-time.md"
+    },
+    {
+      "id": "d09.AGY-02",
+      "type": "principle",
+      "label": "Options should lead to situations that differ, and V should be able to foresee that they differ.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-05",
+      "type": "principle",
+      "label": "Name the fake choices and test for them: false choice, blind choice, and the quantum ogre.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-16",
+      "type": "principle",
+      "label": "Only an offer V perceived can be declined. An offer that was not perceived has not yet been made.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-18",
+      "type": "principle",
+      "label": "Offer a span of stances. Do not trim the number of options for fear of overload.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-20",
+      "type": "principle",
+      "label": "The engine's levers are constraints and affordances in the world, not instructions to V. Every steer is traced.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-22",
+      "type": "principle",
+      "label": "The world does not wait for V. Threats and plans advance on their own, whether or not V is there to see.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-23",
+      "type": "principle",
+      "label": "Move in two steps: a portent V can perceive, then the hard step. A hard step that lands on something V cares about waits for the portent to have been seen and for V to …",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-26",
+      "type": "principle",
+      "label": "When V declines, ignores or abandons an offer, its stake resolves without V, by the client's own frame. That is a consequence. It is not a punishment, and the engine …",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-27",
+      "type": "principle",
+      "label": "Deliver a consequence as news, in the third person, about the world. Do not reproach.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-28",
+      "type": "principle",
+      "label": "A decline is a fact the world remembers. It shapes the client's later behaviour. It closes no door unrelated to the offer.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-30",
+      "type": "principle",
+      "label": "An unanswered front's worst outcome is bounded: it changes the setting and costs people and places. It does not end V's access to the world, and it does not take away …",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-33",
+      "type": "principle",
+      "label": "V credits an event to V's own act when the act came first, the effect fits what the act meant, and no rival cause is more conspicuous. The engine checks all three before …",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-34",
+      "type": "principle",
+      "label": "Plant the expectation of a delay when the act is made, and restate the act when the consequence lands.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-35",
+      "type": "principle",
+      "label": "Name what V did, plainly. Never name why, and never name how V felt.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-37",
+      "type": "principle",
+      "label": "Show first, and name when the cause is not otherwise visible. Name at most one act per scene, in proportion to the stakes.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-38",
+      "type": "principle",
+      "label": "Announce nothing you do not intend to pay. Every announced consequence is a debt entry.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-40",
+      "type": "principle",
+      "label": "Far consequences are the strongest. Give them a cue that grows with time, and use them sparingly.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-42",
+      "type": "principle",
+      "label": "Consequences are named. Adaptations stay silent. Never present an adaptation as a consequence.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.AGY-43",
+      "type": "principle",
+      "label": "The credit must be true. Name V as the cause only when V was, and name bad outcomes as readily as good ones.",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.R5-01",
+      "type": "principle",
+      "label": "Sow situations, not plots: a client's blocked goal, the people and resources involved, and an `unattended` plan. Precompute nothing contingent on a choice V has not made",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.R5-05",
+      "type": "principle",
+      "label": "Decline handling for each form (explicit, silence, walking away, counter-offer, partial, reinterpretation, delay, acceptance-and-turning): a typed event; the client's …",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.R5-06",
+      "type": "principle",
+      "label": "The decline audit as a gate: decline-triggered effects fall inside the offer's stake set, carry no blame text, cite other actors' frames and not V's absence, have an …",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.R5-07",
+      "type": "principle",
+      "label": "Portent before hard step. A step that lands on V's interests or on people V deals with needs an exposed portent and an elapsed response window. If the portent was not …",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.R5-11",
+      "type": "principle",
+      "label": "Bounded dooms. Severity classes with a cap shared with the tension budget (dossier 7, DIR-30 to DIR-34); a front above the cap needs an authored exception with its …",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.R5-16",
+      "type": "principle",
+      "label": "Delay cues. A planned delayed consequence puts an `expect` cue with a timeframe class on the act's event; without one the callback carries a stronger anchor",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.R5-23",
+      "type": "principle",
+      "label": "Two record types. `consequence` (a cause path from a V act) and `adaptation` (a cause that is a director belief). Adaptations have no player-facing naming and never …",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d09.R5-28",
+      "type": "principle",
+      "label": "Choice structure. Engine-sown decision beats declare stance classes (at least three, one a refusal); each consequential option writes a distinct persisted record; …",
+      "source": "craft/d09-agency-consequence.md"
+    },
+    {
+      "id": "d10.CHG-02",
+      "type": "principle",
+      "label": "Keep two meanings of \"flat\" apart. A flat character is built round one idea. A flat arc is a character who holds a conviction under pressure and changes others. Most …",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.CHG-05",
+      "type": "principle",
+      "label": "No change without pressure. A turn cites at least one recorded event or dilemma that bears on the held view or on the competing concerns.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.CHG-07",
+      "type": "principle",
+      "label": "Revision follows independent evidence, and a stable NPC discounts it. Keep few NPCs in motion.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.CHG-08",
+      "type": "principle",
+      "label": "Negative change is gradual. Escalation comes in steps, each easier because of the last, and the number of observable steps is set by the largest step allowed.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.CHG-09",
+      "type": "principle",
+      "label": "One act can reveal. It takes a run of acts to change. The engine knows which it is; V can tell only by earlier signs.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.CHG-10",
+      "type": "principle",
+      "label": "Show a change as a changed choice under pressure. Do not announce it, and do not show it as a number.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.CHG-11",
+      "type": "principle",
+      "label": "A change needs a witnessed before. Stage it as a difference between two sightings, or tell the before.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.CHG-14",
+      "type": "principle",
+      "label": "Every change must have a reader. A turn nothing reads is wasted, and a turn something reads must be able to show it.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.CHG-15",
+      "type": "principle",
+      "label": "Change must not make characters alike. Watch the distance between NPCs' patterns over a season.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.PAY-02",
+      "type": "principle",
+      "label": "Three arrangements of cause and effect give three feelings. Show the cause and keep the outcome pending: suspense. Show the outcome with its causes visibly missing: …",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.PAY-04",
+      "type": "principle",
+      "label": "Three sources of a trace, in order of preference: found in the record; found, then chosen for display; constructed within the author's latitude and labelled.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.PAY-05",
+      "type": "principle",
+      "label": "A constructed cause must agree with every pin and with the exposure ledger, and it becomes a pin when first shown. V never sees the past contradict itself, and never has …",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.PAY-06",
+      "type": "principle",
+      "label": "Match the interval between plant and payoff to the unit's scale, and refresh a plant the player may have forgotten.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.PAY-11",
+      "type": "principle",
+      "label": "Every plant is a debt entry with a type, a size and a payer. Pay it at the size it was planted, with the thing that was planted, or retire it with a closing trace. …",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.PAY-12",
+      "type": "principle",
+      "label": "The best plant is V's own act. A trace that cites something V did lets V claim the cause and the foresight.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.PAY-15",
+      "type": "principle",
+      "label": "Establish a creed, then test it. A character plant is a visible stance. Its payoff is a decision under pressure.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.PAY-16",
+      "type": "principle",
+      "label": "A cause can be withheld unnoticed only if nothing V has seen depends on it.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.THM-05",
+      "type": "principle",
+      "label": "A choice with no cost carries no theme. Give at least two options costs of different kinds.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.THM-06",
+      "type": "principle",
+      "label": "Show cost through traces and through who pays, not through labels or meters.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d10.THM-13",
+      "type": "principle",
+      "label": "Say the premise rarely, and never in the system's voice.",
+      "source": "craft/d10-change-theme-payoff.md"
+    },
+    {
+      "id": "d13.CUR-01",
+      "type": "principle",
+      "label": "A gap needs something V already knows. A hook with no anchor does nothing, because there is nothing to be missing",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.CUR-02",
+      "type": "principle",
+      "label": "A precise question beats a vague mystery. The best hook can be said as a question in the words V has already met",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.CUR-03",
+      "type": "principle",
+      "label": "Show enough to know what is missing, and not the missing thing. The pull is greatest one fact short of closure",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.CUR-04",
+      "type": "principle",
+      "label": "A payoff thinner than the gap it implied costs the next hook. A promise of consequence that never returns teaches V to ignore promises",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.CUR-05",
+      "type": "principle",
+      "label": "Type each staged event by what V has already perceived, and ration surprise. Curiosity is a gap about the past, suspense a gap about the future, surprise a gap not felt …",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.DSP-11",
+      "type": "principle",
+      "label": "Anything V needs in order to take an option must have a route that can reach `confirmed`, and a lapse counts as a decline only after confirmed exposure",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.HAB-06",
+      "type": "principle",
+      "label": "A twist lands only against an expectation V had time to form, and only if it is seen as a break",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.HAB-07",
+      "type": "principle",
+      "label": "Players learn what follows what, and anti-streak rules make that easier. After a few exposures a player can predict the next beat of a generated chain better than …",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.NTC-11",
+      "type": "principle",
+      "label": "One sign is a single chance. Use several independent signs of different kinds. If one sign is noticed with probability p, n independent signs give at least 1 minus (1 …",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.RMB-01",
+      "type": "principle",
+      "label": "Spend authored craft on the high point and the ending, and cut the flat middle first. Remembered ratings follow the peak and the end, and duration counts for almost …",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.RMB-02",
+      "type": "principle",
+      "label": "An ending nobody perceived does not count. Most generated content ends by despawning, which is the worst end. A closing trace that was never `presented` ended nothing",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.SRC-01",
+      "type": "principle",
+      "label": "Every dramatic-irony beat names the channel by which V learned the fact, and a channel V did not perceive does not exist for V. V's range of knowledge can exceed V's …",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.SRC-02",
+      "type": "principle",
+      "label": "An unreliable source needs a perceivable counter-cue, or its unreliability is just an error. The cue can be a second source in another channel, a tell in the outlet's …",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.SRC-04",
+      "type": "principle",
+      "label": "Repetition raises belief, even in people who know better. An outlet's divergent account repeated across channels will be believed more than intended",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d13.SRC-05",
+      "type": "principle",
+      "label": "A retraction does not remove a claim. A correction works better when it brings a replacement cause",
+      "source": "craft/d13-perception-curiosity.md"
+    },
+    {
+      "id": "d15.AGT-02",
+      "type": "principle",
+      "label": "Betrayal is a hazard on the gain from deviating minus what deviating costs, and it is largest where the shadow of the future is shortest.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.AGT-05",
+      "type": "principle",
+      "label": "Strangers stabilise exchange with mutual hostages. A secret that harms its subject if told is a bond in the hands of whoever holds it.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.AGT-06",
+      "type": "principle",
+      "label": "Betrayal costs the betrayed more than the same loss from chance. Treat an intentional break by a trusted tie as heavier, within a modest range.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.AGT-08",
+      "type": "principle",
+      "label": "Deniable delegation widens the range of betrayal: a contractor whose membership is deniable is monitored less and is more exposed.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.DEF-01",
+      "type": "principle",
+      "label": "Cross-pressure is a structural condition, and most of it is lived without a break: delay, avoidance, fake compliance, a warning, a quiet favour.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.DEF-03",
+      "type": "principle",
+      "label": "Group-wide defection is a threshold cascade. It waits on what members can see of each other's discontent, and a visible failure of the leadership can flip it in one step.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.DEF-05",
+      "type": "principle",
+      "label": "A defection must carry its recorded causes, or it reads as a twist.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.DEF-06",
+      "type": "principle",
+      "label": "Allies are honest by default, and turns are budgeted.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.MND-01",
+      "type": "principle",
+      "label": "A belief that differs from the world on something that touches the believer's frames is the unit of narrative potential. Use it as a cross-check on scheduled beats.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.MND-02",
+      "type": "principle",
+      "label": "A scene should not need more than about four nested attributions.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.MND-03",
+      "type": "principle",
+      "label": "Players attribute one intent to a group. Show a group's intent as one, and its splits as individuals.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.NRM-02",
+      "type": "principle",
+      "label": "The stored state of a norm is a gap: private support, behaviour, and perceived support. Beliefs about others can be wrong in a stable way, and the gap is the story.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.NRM-03",
+      "type": "principle",
+      "label": "An unpopular norm can enforce itself only where people see mostly their neighbours, and clustered enforcers ignite it where far more dispersed ones cannot. Bridge ties …",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.NRM-04",
+      "type": "principle",
+      "label": "A public act changes what is common knowledge in a step; the same act done privately leaves the gap. Public means many saw it and know others saw it.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.NRM-05",
+      "type": "principle",
+      "label": "Enforcement of an unpopular norm is partly done by people who complied under pressure and enforce to prove their sincerity. Punishing those who fail to punish stabilises …",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.NRM-06",
+      "type": "principle",
+      "label": "Sanctions graduate, from talk to exclusion to force. Procedure and record-keeping let mild sanctions work.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.ORD-01",
+      "type": "principle",
+      "label": "Protection is a market. Demand comes from distrust where state enforcement is weak; supply comes from whoever can credibly threaten. State and gang rule can be …",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.ORD-02",
+      "type": "principle",
+      "label": "Sought protection and imposed tribute are different relationships with different consequences.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.ORD-03",
+      "type": "principle",
+      "label": "Criminal order has a regime: stance to the state (collude or confront), to the community (cooperate or abuse), and to rivals (monopoly or contest). Policing outcomes …",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.ORD-05",
+      "type": "principle",
+      "label": "A gang that wants legitimacy governs with procedure: written records, graduated and mostly mild sanctions, and rules members can invoke. A crew can limit its leader with …",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d15.REP-04",
+      "type": "principle",
+      "label": "Count independent evidence once. Hearsay is discounted by the teller's own reputation, and a retold rumour adds no weight.",
+      "source": "craft/d15-people-networks-order.md"
+    },
+    {
+      "id": "d20.AGT-01",
+      "type": "principle",
+      "label": "Intention is read from persistence by other means. An agent that is blocked and tries another way reads as wanting something; a mechanism does not",
+      "source": "craft/d20-staging-legibility.md"
+    },
+    {
+      "id": "d20.AGT-11",
+      "type": "principle",
+      "label": "An agent that acts on its own, possibly wrong, belief reads as cleverer than one that knows everything.",
+      "source": "craft/d20-staging-legibility.md"
+    },
+    {
+      "id": "d20.ARV-04",
+      "type": "principle",
+      "label": "The record's clock starts the event; V's arrival never does. Detail may be prepared ahead, and the director may choose which recorded events to stage, never when they …",
+      "source": "craft/d20-staging-legibility.md"
+    },
+    {
+      "id": "d20.ENC-02",
+      "type": "principle",
+      "label": "Aftermath is evidence and must match what happened and how V did it.",
+      "source": "craft/d20-staging-legibility.md"
+    },
+    {
+      "id": "d20.STG-03",
+      "type": "principle",
+      "label": "Give one cause at least two kinds of sign: an object, a person's behaviour, a text, a sound, an absence. Signs in one sightline count once",
+      "source": "craft/d20-staging-legibility.md"
+    },
+    {
+      "id": "d20.STG-06",
+      "type": "principle",
+      "label": "Mark the past persistently, from systems, and reward the return. Traces of what the city and V did stay until their declared decay, and a revisited place shows elapsed …",
+      "source": "craft/d20-staging-legibility.md"
+    },
+    {
+      "id": "d20.XPL-03",
+      "type": "principle",
+      "label": "Give one or two causes. The chain is for those who ask for more.",
+      "source": "craft/d20-staging-legibility.md"
+    },
+    {
+      "id": "d20.XPL-09",
+      "type": "principle",
+      "label": "The settings voice cites exposed events only, and says when the chain runs off-stage.",
+      "source": "craft/d20-staging-legibility.md"
+    },
+    {
+      "id": "d20.XPL-13",
+      "type": "principle",
+      "label": "Do not explain a live mystery away.",
+      "source": "craft/d20-staging-legibility.md"
+    },
+    {
+      "id": "concept:pattern",
+      "type": "concept",
+      "label": "A partial causal graph of junctures over shared roles, at any point between abstract and fully authored",
+      "where": "pattern-language.md §3"
+    },
+    {
+      "id": "concept:role",
+      "type": "concept",
+      "label": "A variable a pattern's junctures share; where instances touch",
+      "where": "pattern-language.md §3.1"
+    },
+    {
+      "id": "concept:juncture",
+      "type": "concept",
+      "label": "One step of a cascade: a function applied to roles, an event or a state",
+      "where": "pattern-language.md §3.2"
+    },
+    {
+      "id": "concept:function",
+      "type": "concept",
+      "label": "An entry of the closed vocabulary (wrong, owe, learn ...); filled by whatever the world's own records declare",
+      "where": "pattern-language.md §3.3, vocabulary.json"
+    },
+    {
+      "id": "concept:causal-edge",
+      "type": "concept",
+      "label": "A typed link between junctures that the record must bear out: because, motive, enables, but, reveals, answers, forecloses",
+      "where": "pattern-language.md §3.4"
+    },
+    {
+      "id": "concept:outcome",
+      "type": "concept",
+      "label": "A named end state of a pattern; resolved, failed or parked",
+      "where": "pattern-language.md §3.6"
+    },
+    {
+      "id": "concept:instance",
+      "type": "concept",
+      "label": "One reading of a pattern against the world: matched junctures are its past, ready ones its future",
+      "where": "pattern-language.md §5"
+    },
+    {
+      "id": "concept:realisation",
+      "type": "concept",
+      "label": "How an open juncture may come about: wait, offer, nudge, construct, refine",
+      "where": "pattern-language.md §8.1"
+    },
+    {
+      "id": "concept:chain",
+      "type": "concept",
+      "label": "One instance's outcome is another's cause: a shared filler or a story event",
+      "where": "pattern-language.md §7.1"
+    },
+    {
+      "id": "concept:layer",
+      "type": "concept",
+      "label": "Two instances share a juncture's filler; cross-causal when one changes what happens in the other",
+      "where": "pattern-language.md §7.2"
+    },
+    {
+      "id": "concept:growth",
+      "type": "concept",
+      "label": "Small instances fill the junctures of a larger shape",
+      "where": "pattern-language.md §7.3"
+    },
+    {
+      "id": "concept:refinement",
+      "type": "concept",
+      "label": "A juncture filled by a child instance, opened only at a fine tier for the protagonist",
+      "where": "pattern-language.md §7.4"
+    },
+    {
+      "id": "concept:story-event",
+      "type": "concept",
+      "label": "A meta:story event minted when an instance resolves or parks; fills the function `story`",
+      "where": "pattern-language.md §7.1"
+    },
+    {
+      "id": "concept:loose-end",
+      "type": "concept",
+      "label": "A parked juncture left open at closing, from which a later instance may grow",
+      "where": "pattern-language.md §3.6"
+    },
+    {
+      "id": "concept:escalation-rung",
+      "type": "concept",
+      "label": "A juncture that raises the stake scale or the class of harm; passes the escalation gate",
+      "where": "pattern-language.md §8.5"
+    },
+    {
+      "id": "concept:seed",
+      "type": "concept",
+      "label": "S2's unit of delivery: a bounded piece of play that reaches the protagonist. Realises junctures",
+      "where": "pattern-language.md §11.1, S2"
+    },
+    {
+      "id": "concept:thread",
+      "type": "concept",
+      "label": "A view: instances and seeds linked by realisation, chains, cross-causal layers and anchor casts",
+      "where": "pattern-language.md §11.2"
+    },
+    {
+      "id": "concept:skeleton",
+      "type": "concept",
+      "label": "A thread's perceived junctures as masked tokens with link types: what repeats when a story is recast",
+      "where": "pattern-language.md §14.1"
+    },
+    {
+      "id": "mech:juncture-graph-matcher",
+      "type": "mechanism",
+      "label": "Incremental matching over juncture graphs: partial instances advanced as Changes arrive, states probed once their roles are bound",
+      "where": "S3-1, pattern-language.md §6"
+    },
+    {
+      "id": "mech:function-vocabulary",
+      "type": "mechanism",
+      "label": "Junctures name functions; event kinds, edges, beliefs, frames and group intentions declare which functions they fill",
+      "where": "S0-2, S1-1, vocabulary.json"
+    },
+    {
+      "id": "mech:realisation-ladder",
+      "type": "mechanism",
+      "label": "Fill a juncture from the record first, then wait, offer, nudge, construct or refine; nudged and constructed fills are logged as adaptations",
+      "where": "S3-4, pattern-language.md §8.1"
+    },
+    {
+      "id": "mech:unobserved-nudge",
+      "type": "mechanism",
+      "label": "Nudge only unobserved state; give actors reasons or opportunities, and mint an act only when an actor's own frame wants it",
+      "where": "S2-4, S3-4, pattern-language.md §8.2"
+    },
+    {
+      "id": "mech:protagonist-by-offer",
+      "type": "mechanism",
+      "label": "Junctures the protagonist fills are filled only by the protagonist's own acts; every stance has a continuation; harm to the protagonist only on an accepted stake",
+      "where": "pattern-language.md §8.3, S4-1"
+    },
+    {
+      "id": "mech:escalation-gate",
+      "type": "mechanism",
+      "label": "A rung needs the protagonist's pull, a shown cause, an actor who wants it, a portent and room within the bounds",
+      "where": "S3-4, pattern-language.md §8.5"
+    },
+    {
+      "id": "mech:legibility-ledger",
+      "type": "mechanism",
+      "label": "Per-instance record of what the protagonist perceived; threads count only when they show; a legibility debt of one; two signs per must-show edge",
+      "where": "S3-6, pattern-language.md §9"
+    },
+    {
+      "id": "mech:cross-causal-layering",
+      "type": "mechanism",
+      "label": "Layers recorded on both instances; only cross-causal layers through recorded relations count for the director",
+      "where": "S2-5, S3-5, pattern-language.md §7.2"
+    },
+    {
+      "id": "mech:refine-by-relevance",
+      "type": "mechanism",
+      "label": "A juncture opens into a child instance only at a fine tier for the protagonist; elsewhere it is one event",
+      "where": "pattern-language.md §7.4"
+    },
+    {
+      "id": "mech:story-event-chaining",
+      "type": "mechanism",
+      "label": "Resolved and parked instances mint story events that other patterns match, acyclic and depth-bounded",
+      "where": "S0-1, S3-3, pattern-language.md §7.1"
+    },
+    {
+      "id": "mech:growth-on-pull",
+      "type": "mechanism",
+      "label": "Shapes become live only when the protagonist perceived two of their junctures and pulled one; engine-grown arcs need two found ancestors",
+      "where": "pattern-language.md §7.3"
+    },
+    {
+      "id": "mech:skeleton-diversity",
+      "type": "mechanism",
+      "label": "The sower penalises candidates whose thread would continue a recently seen skeleton, read from a persisted ring in the layer-3 record",
+      "where": "S3-5, pattern-language.md §8.4"
+    },
+    {
+      "id": "mech:pool-bounds",
+      "type": "mechanism",
+      "label": "Pool caps, no forking, depth caps for refinement and chains, work counted in the tick budget",
+      "where": "S3-1, pattern-language.md §10.1"
+    },
+    {
+      "id": "mech:relevance-gate",
+      "type": "mechanism",
+      "label": "An instance starts only near the protagonist, at a fine tier, at group level, or from a perceived story",
+      "where": "pattern-language.md §10.2"
+    },
+    {
+      "id": "mech:implicit-seed-pattern",
+      "type": "mechanism",
+      "label": "Every seed is readable as a pattern from its beat graph, and may declare which junctures it realises",
+      "where": "S2-1, S2-2, pattern-language.md §11.1"
+    },
+    {
+      "id": "mech:abstraction-lint",
+      "type": "mechanism",
+      "label": "The pattern lint reports how much of a pattern is open; procedural patterns keep their roles open",
+      "where": "S4-1, pattern-language.md §4.3"
+    },
+    {
+      "id": "mech:known-people-feature",
+      "type": "mechanism",
+      "label": "Ranking feature F-14: people the protagonist has met who bear a stake in the instance",
+      "where": "S3-5, pattern-language.md §8.4"
+    },
+    {
+      "id": "mech:closing-trace",
+      "type": "mechanism",
+      "label": "A perceived thread always ends with a closing trace, also when it lapses or parks (S2 §6.4)",
+      "where": "S2 §6.4, pattern-language.md §5.2"
+    },
+    {
+      "id": "mech:promise-ledger",
+      "type": "mechanism",
+      "label": "Promises and plants are debts that are paid or openly retired (S2 §2.8, §2.15)",
+      "where": "S2 §2.8"
+    },
+    {
+      "id": "mech:betrayal-budget",
+      "type": "mechanism",
+      "label": "Turns against allies are declared seeds with recorded causes, counted against S1's betrayal budget (S2 §2.17)",
+      "where": "S2 §2.17"
+    },
+    {
+      "id": "mech:unattended-plan",
+      "type": "mechanism",
+      "label": "A declined or ignored offer's stake resolves by the client's own frame, told as news (S2 §2.9)",
+      "where": "S2 §2.9"
+    },
+    {
+      "id": "mech:claims-and-yield",
+      "type": "mechanism",
+      "label": "Claim priority and the fitter's yield term keep one person out of too many live seeds (S2 §9.2, S3 §4.3)",
+      "where": "S2 §9.2, S3 §4.3"
+    },
+    {
+      "id": "mech:kits-per-function",
+      "type": "mechanism",
+      "label": "Several kits and phrasings per function, chosen against the world, so the wording varies with the structure (S2-9)",
+      "where": "S2-9"
+    },
+    {
+      "id": "mech:premise-unsaid",
+      "type": "mechanism",
+      "label": "Theme lives in what options cost; the premise is never rendered in the system's voice (S2 §2.3)",
+      "where": "S2 §2.3"
+    },
+    {
+      "id": "fail:recast-package",
+      "type": "failure",
+      "label": "A long run reads as the same package of stories recast with new people",
+      "source": "D-28; d05.VAR-09, d05.VAR-10"
+    },
+    {
+      "id": "fail:invisible-cascade",
+      "type": "failure",
+      "label": "The record holds a chain of causes the player never perceives",
+      "source": "d13; d20"
+    },
+    {
+      "id": "fail:puppet",
+      "type": "failure",
+      "label": "Someone acts with no reason of their own, because the story needed it",
+      "source": "d15.DEF-05; d06.TEL-10"
+    },
+    {
+      "id": "fail:quantum-ogre",
+      "type": "failure",
+      "label": "The director steers what the player could have based a choice on",
+      "source": "DS-05; d09.AGY-05"
+    },
+    {
+      "id": "fail:coincidence",
+      "type": "failure",
+      "label": "Links the record doesn't hold: an all-knowing interceptor, the cousin of a cousin",
+      "source": "d06.TEL-10; d06.GEN-06"
+    },
+    {
+      "id": "fail:runaway-escalation",
+      "type": "failure",
+      "label": "Every thread climbs to the same top",
+      "source": "d01.DRV-18; d01.DRV-42"
+    },
+    {
+      "id": "fail:unbounded-doom",
+      "type": "failure",
+      "label": "A consequence with no bound: lost access, or someone depended on taken without a portent",
+      "source": "d09.AGY-30; d09.R5-11"
+    },
+    {
+      "id": "fail:decorative-layer",
+      "type": "failure",
+      "label": "Two stories share a moment and never affect each other",
+      "source": "pattern-language.md §7.2"
+    },
+    {
+      "id": "fail:starvation",
+      "type": "failure",
+      "label": "Patterns rarely fill, and the engine falls back to errands",
+      "source": "d03.FIT-07"
+    },
+    {
+      "id": "fail:template-in-disguise",
+      "type": "failure",
+      "label": "Patterns that fix everything are whole plots again",
+      "source": "D-28"
+    },
+    {
+      "id": "fail:pool-blowup",
+      "type": "failure",
+      "label": "Matching cost grows without bound",
+      "source": "d06.SFT-06"
+    },
+    {
+      "id": "fail:cast-concentration",
+      "type": "failure",
+      "label": "The same few people in every thread",
+      "source": "d08.GRW-05"
+    },
+    {
+      "id": "fail:learned-grammar",
+      "type": "failure",
+      "label": "The player predicts the next turn of a thread",
+      "source": "d13.HAB-07; d05.VAR-09"
+    },
+    {
+      "id": "fail:text-template",
+      "type": "failure",
+      "label": "The wording brings back the template the structure removed",
+      "source": "d05.VAR-28"
+    },
+    {
+      "id": "fail:presumed-protagonist",
+      "type": "failure",
+      "label": "The engine fills the protagonist's choice, want or feeling, or takes from the protagonist without an accepted stake",
+      "source": "D-09; DS-63"
+    },
+    {"id": "fail:errand-dominance", "type": "failure", "label": "Most threads are fetch errands", "source": "D-27"},
+    {
+      "id": "fail:punished-decline",
+      "type": "failure",
+      "label": "Declining is punished rather than answered by the world moving on",
+      "source": "d09.AGY-26"
+    },
+    {
+      "id": "fail:flat-stakes",
+      "type": "failure",
+      "label": "Every rule met and nothing at stake for anyone the player knows",
+      "source": "d04.QST-21; d06.TEL-05"
+    },
+    {
+      "id": "fail:unpaid-promise",
+      "type": "failure",
+      "label": "A promise or plant neither paid nor retired",
+      "source": "d10.PAY-11; d13.CUR-04"
+    },
+    {
+      "id": "fail:cliche",
+      "type": "failure",
+      "label": "A worn turn at a rate that makes it predictable: every patron betrays",
+      "source": "d04.QST-36"
+    },
+    {
+      "id": "fail:twist-without-anchor",
+      "type": "failure",
+      "label": "A twist or reveal against no expectation the player had formed",
+      "source": "d13.HAB-06; d13.CUR-01"
+    },
+    {
+      "id": "fail:dangling-thread",
+      "type": "failure",
+      "label": "A thread the player perceived left open with no closing trace",
+      "source": "d08.THR-07; d13.RMB-02"
+    },
+    {
+      "id": "fail:preachy",
+      "type": "failure",
+      "label": "The system states the theme, or rewards one reading of it",
+      "source": "d10.THM-13"
+    },
+    {
+      "id": "measure:recast-rate",
+      "type": "measure",
+      "label": "R1: share of threads whose canonical cascade skeleton is a near twin of an earlier one",
+      "where": "pattern-language.md §14.2"
+    },
+    {
+      "id": "measure:package-size",
+      "type": "measure",
+      "label": "R2: fewest skeleton clusters covering 80 % of threads, and its growth with play hours",
+      "where": "pattern-language.md §14.2"
+    },
+    {
+      "id": "measure:effective-kinds",
+      "type": "measure",
+      "label": "R3: Hill number of order 2 over shape and cascade skeletons per 10 play hours",
+      "where": "pattern-language.md §14.2; d05 M-4"
+    },
+    {
+      "id": "measure:template-rate",
+      "type": "measure",
+      "label": "R4: share of threads containing a mined template of the cascade token stream",
+      "where": "pattern-language.md §14.2; d05 M-14"
+    },
+    {
+      "id": "measure:next-juncture-bits",
+      "type": "measure",
+      "label": "R5: predictability of the next juncture token within threads, against a shuffled copy",
+      "where": "pattern-language.md §14.2; d05 M-16"
+    },
+    {
+      "id": "measure:pooled-templates",
+      "type": "measure",
+      "label": "R6: share of world seeds whose runs contain each mined template",
+      "where": "pattern-language.md §14.2; d05 M-19"
+    },
+    {
+      "id": "measure:errand-share",
+      "type": "measure",
+      "label": "R7: share of threads that are errands, classified by the protagonist's requested act and the perceived development, whichever patterns recognised them",
+      "where": "pattern-language.md §14.2"
+    },
+    {
+      "id": "measure:seen-before",
+      "type": "measure",
+      "label": "Raters' \"have you seen this story before?\" over one run's threads in play order",
+      "where": "pattern-language.md §14.3"
+    },
+    {
+      "id": "measure:thread-sorting",
+      "type": "measure",
+      "label": "Free sorting of thread summaries into piles",
+      "where": "d05 M-1"
+    },
+    {
+      "id": "measure:legible-edge-ratio",
+      "type": "measure",
+      "label": "Shown edges over edges between perceived junctures, per thread",
+      "where": "pattern-language.md §14.4; d20 M20-14"
+    },
+    {
+      "id": "measure:thread-ratings",
+      "type": "measure",
+      "label": "Raters per thread: caused, legible, people with reasons, escalation fit, closure, pull",
+      "where": "pattern-language.md §14.4"
+    },
+    {
+      "id": "measure:nudge-share",
+      "type": "measure",
+      "label": "Adaptations over all fills among perceived junctures, per thread",
+      "where": "pattern-language.md §14.4"
+    },
+    {
+      "id": "measure:ogre-audit",
+      "type": "measure",
+      "label": "Replay with other protagonist acts; compare which junctures still fill",
+      "where": "d09.AGY-05; pattern-language.md §15"
+    },
+    {
+      "id": "measure:contrivance-rating",
+      "type": "measure",
+      "label": "Raters' judgement of contrivance, and shared roles per thread against the base rate of ties",
+      "where": "pattern-language.md §15"
+    },
+    {
+      "id": "measure:cast-gini",
+      "type": "measure",
+      "label": "Concentration of people across threads",
+      "where": "pattern-language.md §15"
+    },
+    {
+      "id": "measure:pool-stats",
+      "type": "measure",
+      "label": "Pool size, fill rate per pattern, work per Change, lapse rate of open junctures",
+      "where": "pattern-language.md §10, §15"
+    },
+    {
+      "id": "measure:abstraction-index",
+      "type": "measure",
+      "label": "Share of a pattern's roles, fillers and realisations left open",
+      "where": "pattern-language.md §4.3"
+    },
+    {
+      "id": "measure:rung-distribution",
+      "type": "measure",
+      "label": "Distribution of escalation rungs reached and of closure kinds per run",
+      "where": "pattern-language.md §14.4, §15"
+    },
+    {
+      "id": "measure:doom-audit",
+      "type": "measure",
+      "label": "Severity of consequences landing on the protagonist against the dial's cap",
+      "where": "d09.R5-11"
+    },
+    {
+      "id": "measure:cross-causal-share",
+      "type": "measure",
+      "label": "Layered threads in which one instance's later juncture is filled by the other's effect",
+      "where": "pattern-language.md §14.4"
+    },
+    {
+      "id": "measure:closure-perceived",
+      "type": "measure",
+      "label": "Share of perceived threads whose closing trace reached `presented`",
+      "where": "d13 M13-14"
+    },
+    {
+      "id": "measure:text-homogeneity",
+      "type": "measure",
+      "label": "Repetition of syntactic templates in rendered text per function",
+      "where": "d05 M-18"
+    },
+    {
+      "id": "measure:plant-ledger",
+      "type": "measure",
+      "label": "Plants alive, paid, retired and lapsed; unpaid ratio",
+      "where": "d10 M10-11"
+    },
+    {
+      "id": "measure:betrayal-rate",
+      "type": "measure",
+      "label": "Betrayals per thread and per play hour against the budget",
+      "where": "d15.DEF-06"
+    },
+    {
+      "id": "measure:decline-audit",
+      "type": "measure",
+      "label": "Decline-triggered effects stay inside the offer's stake set and carry no blame",
+      "where": "d09.R5-06"
+    },
+    {
+      "id": "measure:honesty-lint",
+      "type": "measure",
+      "label": "S2's honesty checks: no claim about the protagonist's feelings or reasons; attribution lines valid (L-19, L-52)",
+      "where": "S2 §2.9"
+    },
+    {
+      "id": "measure:preachiness",
+      "type": "measure",
+      "label": "Premise renders per seed, and raters' preachiness",
+      "where": "d10 M10-10"
+    },
+    {
+      "id": "measure:hook-anchor",
+      "type": "measure",
+      "label": "Hooks and twists with no anchor in what the protagonist was shown (S2 L-67)",
+      "where": "S2 §2.8"
+    },
+    {
+      "id": "mech:bounded-state-query",
+      "type": "mechanism",
+      "label": "State junctures and requirements bind unbound roles by bounded queries along declared indexes, first passing candidate in record order",
+      "where": "S3-1, pattern-language.md §6.2a"
+    },
+    {
+      "id": "mech:aftermath-phase",
+      "type": "mechanism",
+      "label": "An outcome fixes the instance's result; its declared aftermath junctures can still match for a bounded window before it closes",
+      "where": "pattern-language.md §3.6, §6.4"
+    },
+    {
+      "id": "mech:refinement-contract",
+      "type": "mechanism",
+      "label": "A refinement names a child outcome that produces the parent juncture's function through an explicit role map; the lint rejects any other",
+      "where": "S3-4, S4-1, pattern-language.md §7.4"
+    },
+    {
+      "id": "mech:shapes-as-recognisers",
+      "type": "mechanism",
+      "label": "Shapes' junctures carry no realisations: the director works only on their child instances, so no shape runs as a whole plot",
+      "where": "pattern-language.md §7.3"
+    },
+    {
+      "id": "mech:skeleton-ring",
+      "type": "mechanism",
+      "label": "A bounded ring of recent thread skeletons in the layer-3 record, updated with its position in the same batch as the decisions that read it",
+      "where": "S3-8, pattern-language.md §8.4"
+    },
+    {
+      "id": "mech:canonical-tokens",
+      "type": "mechanism",
+      "label": "One skeleton token per perceived occurrence, from the occurrence alone, so recogniser coverage never moves the repetition measures",
+      "where": "pattern-language.md §14.1"
+    },
+    {
+      "id": "mech:protagonist-exposure",
+      "type": "mechanism",
+      "label": "Junctures whose actor may be the protagonist record exposure, never a belief; the lint rejects unguarded belief writes",
+      "where": "S4-1, pattern-language.md §3.5"
+    },
+    {
+      "id": "mech:group-intent-against-protagonist",
+      "type": "mechanism",
+      "label": "D-30: a group may act against the protagonist as a simulation process, from its belief about an observed act, warned first, bounded by the proactivity setting",
+      "where": "S1-10, pattern-language.md §8.3"
+    }
+  ],
+  "edges": [
+    {"from": "DS-70", "to": "mech:juncture-graph-matcher", "type": "realised-by"},
+    {"from": "d06.SFT-04", "to": "mech:juncture-graph-matcher", "type": "realised-by"},
+    {"from": "d06.SFT-05", "to": "mech:juncture-graph-matcher", "type": "realised-by"},
+    {"from": "d06.SFT-14", "to": "mech:juncture-graph-matcher", "type": "realised-by"},
+    {"from": "mech:juncture-graph-matcher", "to": "fail:invisible-cascade", "type": "prevents"},
+    {"from": "d03.FIT-01", "to": "mech:function-vocabulary", "type": "realised-by"},
+    {"from": "d03.FIT-02", "to": "mech:function-vocabulary", "type": "realised-by"},
+    {"from": "d03.FIT-03", "to": "mech:function-vocabulary", "type": "realised-by"},
+    {"from": "mech:function-vocabulary", "to": "fail:starvation", "type": "prevents"},
+    {"from": "mech:function-vocabulary", "to": "fail:recast-package", "type": "prevents"},
+    {"from": "DS-01", "to": "mech:realisation-ladder", "type": "realised-by"},
+    {"from": "d06.GEN-06", "to": "mech:realisation-ladder", "type": "realised-by"},
+    {"from": "d10.PAY-04", "to": "mech:realisation-ladder", "type": "realised-by"},
+    {"from": "d09.R5-23", "to": "mech:realisation-ladder", "type": "realised-by"},
+    {"from": "d09.AGY-42", "to": "mech:realisation-ladder", "type": "realised-by"},
+    {"from": "mech:realisation-ladder", "to": "fail:puppet", "type": "prevents"},
+    {"from": "DS-05", "to": "mech:unobserved-nudge", "type": "realised-by"},
+    {"from": "d09.AGY-20", "to": "mech:unobserved-nudge", "type": "realised-by"},
+    {"from": "d15.DEF-05", "to": "mech:unobserved-nudge", "type": "realised-by"},
+    {"from": "mech:unobserved-nudge", "to": "fail:quantum-ogre", "type": "prevents"},
+    {"from": "mech:unobserved-nudge", "to": "fail:puppet", "type": "prevents"},
+    {"from": "DS-63", "to": "mech:protagonist-by-offer", "type": "realised-by"},
+    {"from": "d09.AGY-18", "to": "mech:protagonist-by-offer", "type": "realised-by"},
+    {"from": "d03.FIT-49", "to": "mech:protagonist-by-offer", "type": "realised-by"},
+    {"from": "mech:protagonist-by-offer", "to": "fail:presumed-protagonist", "type": "prevents"},
+    {"from": "d08.GRW-01", "to": "mech:escalation-gate", "type": "realised-by"},
+    {"from": "d08.GRW-03", "to": "mech:escalation-gate", "type": "realised-by"},
+    {"from": "d07.DIR-39", "to": "mech:escalation-gate", "type": "realised-by"},
+    {"from": "d09.AGY-23", "to": "mech:escalation-gate", "type": "realised-by"},
+    {"from": "d09.AGY-30", "to": "mech:escalation-gate", "type": "realised-by"},
+    {"from": "d01.DRV-42", "to": "mech:escalation-gate", "type": "realised-by"},
+    {"from": "mech:escalation-gate", "to": "fail:runaway-escalation", "type": "prevents"},
+    {"from": "mech:escalation-gate", "to": "fail:unbounded-doom", "type": "prevents"},
+    {"from": "d13.NTC-11", "to": "mech:legibility-ledger", "type": "realised-by"},
+    {"from": "d20.STG-03", "to": "mech:legibility-ledger", "type": "realised-by"},
+    {"from": "d07.DIR-46", "to": "mech:legibility-ledger", "type": "realised-by"},
+    {"from": "d13.DSP-11", "to": "mech:legibility-ledger", "type": "realised-by"},
+    {"from": "DS-24", "to": "mech:legibility-ledger", "type": "realised-by"},
+    {"from": "d06.TEL-10", "to": "mech:legibility-ledger", "type": "realised-by"},
+    {"from": "mech:legibility-ledger", "to": "fail:invisible-cascade", "type": "prevents"},
+    {"from": "mech:legibility-ledger", "to": "fail:twist-without-anchor", "type": "prevents"},
+    {"from": "DS-11", "to": "mech:cross-causal-layering", "type": "realised-by"},
+    {"from": "d08.THR-09", "to": "mech:cross-causal-layering", "type": "realised-by"},
+    {"from": "mech:cross-causal-layering", "to": "fail:decorative-layer", "type": "prevents"},
+    {"from": "mech:cross-causal-layering", "to": "fail:coincidence", "type": "prevents"},
+    {"from": "DS-70", "to": "mech:refine-by-relevance", "type": "realised-by"},
+    {"from": "DS-15", "to": "mech:refine-by-relevance", "type": "realised-by"},
+    {"from": "d03.FIT-37", "to": "mech:refine-by-relevance", "type": "realised-by"},
+    {"from": "mech:refine-by-relevance", "to": "fail:pool-blowup", "type": "prevents"},
+    {"from": "d06.SFT-07", "to": "mech:story-event-chaining", "type": "realised-by"},
+    {"from": "d08.GRW-07", "to": "mech:story-event-chaining", "type": "realised-by"},
+    {"from": "mech:story-event-chaining", "to": "fail:errand-dominance", "type": "prevents"},
+    {"from": "DS-09", "to": "mech:growth-on-pull", "type": "realised-by"},
+    {"from": "d08.GRW-01", "to": "mech:growth-on-pull", "type": "realised-by"},
+    {"from": "d08.GRW-04", "to": "mech:growth-on-pull", "type": "realised-by"},
+    {"from": "d08.GRW-06", "to": "mech:growth-on-pull", "type": "realised-by"},
+    {"from": "mech:growth-on-pull", "to": "fail:template-in-disguise", "type": "prevents"},
+    {"from": "d05.VAR-10", "to": "mech:skeleton-diversity", "type": "realised-by"},
+    {"from": "d05.VAR-21", "to": "mech:skeleton-diversity", "type": "realised-by"},
+    {"from": "d06.SFT-13", "to": "mech:skeleton-diversity", "type": "realised-by"},
+    {"from": "mech:skeleton-diversity", "to": "fail:recast-package", "type": "prevents"},
+    {"from": "mech:skeleton-diversity", "to": "fail:learned-grammar", "type": "prevents"},
+    {"from": "d06.SFT-06", "to": "mech:pool-bounds", "type": "realised-by"},
+    {"from": "d06.GEN-02", "to": "mech:pool-bounds", "type": "realised-by"},
+    {"from": "d06.MAP-08", "to": "mech:pool-bounds", "type": "realised-by"},
+    {"from": "mech:pool-bounds", "to": "fail:pool-blowup", "type": "prevents"},
+    {"from": "d06.SFT-10", "to": "mech:relevance-gate", "type": "realised-by"},
+    {"from": "DS-15", "to": "mech:relevance-gate", "type": "realised-by"},
+    {"from": "mech:relevance-gate", "to": "fail:pool-blowup", "type": "prevents"},
+    {"from": "DS-35", "to": "mech:implicit-seed-pattern", "type": "realised-by"},
+    {"from": "d03.FIT-43", "to": "mech:implicit-seed-pattern", "type": "realised-by"},
+    {"from": "d03.FIT-37", "to": "mech:abstraction-lint", "type": "realised-by"},
+    {"from": "d04.QST-07", "to": "mech:abstraction-lint", "type": "realised-by"},
+    {"from": "mech:abstraction-lint", "to": "fail:template-in-disguise", "type": "prevents"},
+    {"from": "d06.TEL-07", "to": "mech:known-people-feature", "type": "realised-by"},
+    {"from": "d06.SFT-10", "to": "mech:known-people-feature", "type": "realised-by"},
+    {"from": "d04.QST-21", "to": "mech:known-people-feature", "type": "realised-by"},
+    {"from": "mech:known-people-feature", "to": "fail:flat-stakes", "type": "prevents"},
+    {"from": "d08.THR-12", "to": "mech:closing-trace", "type": "realised-by"},
+    {"from": "d13.RMB-02", "to": "mech:closing-trace", "type": "realised-by"},
+    {"from": "d07.DIR-47", "to": "mech:closing-trace", "type": "realised-by"},
+    {"from": "mech:closing-trace", "to": "fail:dangling-thread", "type": "prevents"},
+    {"from": "mech:closing-trace", "to": "fail:unpaid-promise", "type": "prevents"},
+    {"from": "d10.PAY-11", "to": "mech:promise-ledger", "type": "realised-by"},
+    {"from": "d04.QST-03", "to": "mech:promise-ledger", "type": "realised-by"},
+    {"from": "d09.AGY-38", "to": "mech:promise-ledger", "type": "realised-by"},
+    {"from": "mech:promise-ledger", "to": "fail:unpaid-promise", "type": "prevents"},
+    {"from": "d15.DEF-06", "to": "mech:betrayal-budget", "type": "realised-by"},
+    {"from": "d15.DEF-05", "to": "mech:betrayal-budget", "type": "realised-by"},
+    {"from": "d04.QST-36", "to": "mech:betrayal-budget", "type": "realised-by"},
+    {"from": "mech:betrayal-budget", "to": "fail:cliche", "type": "prevents"},
+    {"from": "d09.AGY-26", "to": "mech:unattended-plan", "type": "realised-by"},
+    {"from": "d09.R5-01", "to": "mech:unattended-plan", "type": "realised-by"},
+    {"from": "d07.DIR-38", "to": "mech:unattended-plan", "type": "realised-by"},
+    {"from": "mech:unattended-plan", "to": "fail:punished-decline", "type": "prevents"},
+    {"from": "d03.FIT-19", "to": "mech:claims-and-yield", "type": "realised-by"},
+    {"from": "d08.GRW-05", "to": "mech:claims-and-yield", "type": "realised-by"},
+    {"from": "mech:claims-and-yield", "to": "fail:cast-concentration", "type": "prevents"},
+    {"from": "d05.VAR-02", "to": "mech:kits-per-function", "type": "realised-by"},
+    {"from": "d05.VAR-28", "to": "mech:kits-per-function", "type": "realised-by"},
+    {"from": "mech:kits-per-function", "to": "fail:text-template", "type": "prevents"},
+    {"from": "d10.THM-13", "to": "mech:premise-unsaid", "type": "realised-by"},
+    {"from": "d10.THM-05", "to": "mech:premise-unsaid", "type": "realised-by"},
+    {"from": "mech:premise-unsaid", "to": "fail:preachy", "type": "prevents"},
+    {"from": "measure:recast-rate", "to": "fail:recast-package", "type": "detects"},
+    {"from": "measure:package-size", "to": "fail:recast-package", "type": "detects"},
+    {"from": "measure:effective-kinds", "to": "fail:recast-package", "type": "detects"},
+    {"from": "measure:effective-kinds", "to": "fail:starvation", "type": "detects"},
+    {"from": "measure:template-rate", "to": "fail:recast-package", "type": "detects"},
+    {"from": "measure:next-juncture-bits", "to": "fail:learned-grammar", "type": "detects"},
+    {"from": "measure:pooled-templates", "to": "fail:recast-package", "type": "detects"},
+    {"from": "measure:errand-share", "to": "fail:errand-dominance", "type": "detects"},
+    {"from": "measure:seen-before", "to": "fail:recast-package", "type": "detects"},
+    {"from": "measure:seen-before", "to": "fail:learned-grammar", "type": "detects"},
+    {"from": "measure:thread-sorting", "to": "fail:recast-package", "type": "detects"},
+    {"from": "measure:legible-edge-ratio", "to": "fail:invisible-cascade", "type": "detects"},
+    {"from": "measure:thread-ratings", "to": "fail:invisible-cascade", "type": "detects"},
+    {"from": "measure:thread-ratings", "to": "fail:flat-stakes", "type": "detects"},
+    {"from": "measure:nudge-share", "to": "fail:puppet", "type": "detects"},
+    {"from": "measure:nudge-share", "to": "fail:quantum-ogre", "type": "detects"},
+    {"from": "measure:ogre-audit", "to": "fail:quantum-ogre", "type": "detects"},
+    {"from": "measure:ogre-audit", "to": "fail:puppet", "type": "detects"},
+    {"from": "measure:contrivance-rating", "to": "fail:coincidence", "type": "detects"},
+    {"from": "measure:cast-gini", "to": "fail:cast-concentration", "type": "detects"},
+    {"from": "measure:pool-stats", "to": "fail:pool-blowup", "type": "detects"},
+    {"from": "measure:pool-stats", "to": "fail:starvation", "type": "detects"},
+    {"from": "measure:abstraction-index", "to": "fail:template-in-disguise", "type": "detects"},
+    {"from": "measure:rung-distribution", "to": "fail:runaway-escalation", "type": "detects"},
+    {"from": "measure:rung-distribution", "to": "fail:learned-grammar", "type": "detects"},
+    {"from": "measure:doom-audit", "to": "fail:unbounded-doom", "type": "detects"},
+    {"from": "measure:cross-causal-share", "to": "fail:decorative-layer", "type": "detects"},
+    {"from": "measure:closure-perceived", "to": "fail:dangling-thread", "type": "detects"},
+    {"from": "measure:text-homogeneity", "to": "fail:text-template", "type": "detects"},
+    {"from": "measure:plant-ledger", "to": "fail:unpaid-promise", "type": "detects"},
+    {"from": "measure:betrayal-rate", "to": "fail:cliche", "type": "detects"},
+    {"from": "measure:decline-audit", "to": "fail:punished-decline", "type": "detects"},
+    {"from": "measure:honesty-lint", "to": "fail:presumed-protagonist", "type": "detects"},
+    {"from": "measure:preachiness", "to": "fail:preachy", "type": "detects"},
+    {"from": "measure:hook-anchor", "to": "fail:twist-without-anchor", "type": "detects"},
+    {"from": "d03.FIT-37", "to": "DS-70", "type": "supports"},
+    {"from": "d06.SFT-07", "to": "d08.GRW-07", "type": "supports"},
+    {"from": "d04.QST-39", "to": "d06.GEN-03", "type": "supports"},
+    {"from": "d07.DIR-41", "to": "d09.AGY-23", "type": "supports"},
+    {"from": "d06.TEL-10", "to": "d04.QST-01", "type": "supports"},
+    {
+      "from": "d04.QST-36",
+      "to": "d15.DEF-06",
+      "type": "conflicts-with",
+      "note": "Settled by a budgeted, caused base rate of betrayal (mech:betrayal-budget)"
+    },
+    {
+      "from": "d09.AGY-22",
+      "to": "DS-05",
+      "type": "requires",
+      "note": "The world moves on its own; the director may steer only the unobserved part of it"
+    },
+    {
+      "from": "d06.TEL-07",
+      "to": "d08.GRW-05",
+      "type": "conflicts-with",
+      "note": "Favouring people the protagonist knows concentrates the cast; settled by claims, yield and promotion caps"
+    },
+    {"from": "d06.MAP-08", "to": "mech:bounded-state-query", "type": "realised-by"},
+    {"from": "d06.GEN-02", "to": "mech:bounded-state-query", "type": "realised-by"},
+    {"from": "mech:bounded-state-query", "to": "fail:pool-blowup", "type": "prevents"},
+    {"from": "mech:bounded-state-query", "to": "fail:starvation", "type": "prevents"},
+    {"from": "d04.QST-37", "to": "mech:aftermath-phase", "type": "realised-by"},
+    {"from": "d10.CHG-14", "to": "mech:aftermath-phase", "type": "realised-by"},
+    {"from": "d08.UNT-08", "to": "mech:aftermath-phase", "type": "realised-by"},
+    {"from": "mech:aftermath-phase", "to": "fail:dangling-thread", "type": "prevents"},
+    {"from": "d03.FIT-37", "to": "mech:refinement-contract", "type": "realised-by"},
+    {"from": "d03.FIT-41", "to": "mech:refinement-contract", "type": "realised-by"},
+    {"from": "mech:refinement-contract", "to": "fail:template-in-disguise", "type": "prevents"},
+    {"from": "d04.QST-39", "to": "mech:shapes-as-recognisers", "type": "realised-by"},
+    {"from": "d06.GEN-03", "to": "mech:shapes-as-recognisers", "type": "realised-by"},
+    {"from": "mech:shapes-as-recognisers", "to": "fail:template-in-disguise", "type": "prevents"},
+    {"from": "d05.VAR-10", "to": "mech:skeleton-ring", "type": "realised-by"},
+    {"from": "d05.VAR-21", "to": "mech:skeleton-ring", "type": "realised-by"},
+    {"from": "mech:skeleton-ring", "to": "fail:recast-package", "type": "prevents"},
+    {"from": "d05.VAR-29", "to": "mech:canonical-tokens", "type": "realised-by"},
+    {"from": "d05.VAR-09", "to": "mech:canonical-tokens", "type": "realised-by"},
+    {"from": "mech:canonical-tokens", "to": "fail:recast-package", "type": "prevents"},
+    {"from": "DS-63", "to": "mech:protagonist-exposure", "type": "realised-by"},
+    {"from": "d13.SRC-01", "to": "mech:protagonist-exposure", "type": "realised-by"},
+    {"from": "mech:protagonist-exposure", "to": "fail:presumed-protagonist", "type": "prevents"},
+    {"from": "d09.AGY-23", "to": "mech:group-intent-against-protagonist", "type": "realised-by"},
+    {"from": "d09.AGY-30", "to": "mech:group-intent-against-protagonist", "type": "realised-by"},
+    {"from": "d07.DIR-41", "to": "mech:group-intent-against-protagonist", "type": "realised-by"},
+    {"from": "d09.AGY-22", "to": "mech:group-intent-against-protagonist", "type": "realised-by"},
+    {"from": "mech:group-intent-against-protagonist", "to": "fail:unbounded-doom", "type": "prevents"},
+    {"from": "mech:group-intent-against-protagonist", "to": "fail:punished-decline", "type": "prevents"}
+  ]
+}
