@@ -75,8 +75,8 @@ export interface OfferKit {
   /** The template's local name; the template id is `${OFFER_PACK}:${id}`. */
   id: string;
   tags: string[];
-  /** The person roles the pattern binds: `subject` and `other` always; `extra` roles are cast by layer 2. */
-  roles: { subject: Role; other: Role; [extra: string]: Role };
+  /** The person roles the pattern binds: `other` always, `subject` where the incident has a second person (an accident and a scuffle have none); extra roles are cast by layer 2. */
+  roles: { other: Role; [extra: string]: Role };
   /** The role that speaks the offer (the message comes from them). */
   sender: string;
   /** The stake of the offer, as the overview of S2 2.9 names it. */

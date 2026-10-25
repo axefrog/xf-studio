@@ -46,9 +46,15 @@ describe('R2 fitted with sowing off and on', () => {
       expect(playDifference(sem[0], sem[2])).toEqual([]);
       expect(sem[1]).toEqual(sem[0]);
       expect(sem[2]).toEqual(sem[0]);
-      expect(JSON.stringify(sem[0])).toContain('ff-ask');
-      // the pacing hold is real: with layer 3 attached the first delivery is released later
-      expect(releaseTimesOfR2(runs[2]!)[0]).toBeGreaterThan(releaseTimesOfR2(runs[0]!)[0]!);
+      if (keys[0]!.verdict === 'fits') {
+        expect(JSON.stringify(sem[0])).toContain('ff-ask');
+        // the pacing hold is real: with layer 3 attached the first delivery is released later
+        expect(releaseTimesOfR2(runs[2]!)[0]).toBeGreaterThan(releaseTimesOfR2(runs[0]!)[0]!);
+      } else {
+        // a state in which the seed does not fit (it waits for the story, or the window has closed) never asks, with sowing off or on: there is no
+        // first delivery to hold, and the arms agree on that (the equalities above)
+        expect(JSON.stringify(sem[0])).not.toContain('ff-ask');
+      }
     });
   }
 
