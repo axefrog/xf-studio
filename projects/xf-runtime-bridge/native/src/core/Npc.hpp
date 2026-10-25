@@ -411,7 +411,7 @@ struct ActorView
 // The link is the plugin's (and the self-test host's) incident service; without one the parameter is refused (test_hooks_off).
 struct IncidentLink
 {
-    // Throws MethodError (incident_unknown, limit, bad_params); answers {incident, id, kind, role, who}.
+    // Throws MethodError (incident_unknown, incident_limit, bad_params); answers {incident, id, kind, role, who}.
     std::function<json(const std::string& aIncident, const std::string& aWho, const std::string& aRole, const ActorView& aActor)> join;
     std::function<void(const std::string& aIncident, const std::string& aWho)> leave;
 };

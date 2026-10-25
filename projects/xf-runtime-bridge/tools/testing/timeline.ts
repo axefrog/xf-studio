@@ -54,6 +54,7 @@ export function witnessedIncidents(records: Json[], events: Json[], recording: b
     row.district_v = d.district_v ?? d.place?.district_v ?? row.district_v;
     row.when = d.when ?? row.when;
     row.closed = d.closed ?? row.closed;
+    row.declared = d.declared ?? row.declared; // 0.8.21: the engine's own id, kind and roles for a staged incident
     if (Number.isFinite(at)) row.source_s = at;
     if (!row.sources.includes(source)) row.sources.push(source);
     found.set(d.incident, row);
@@ -61,6 +62,15 @@ export function witnessedIncidents(records: Json[], events: Json[], recording: b
   for (const row of records) if (row.channel === "incidents" && row.valid && row.data?.event === "witness.report") add(row.data, "recorder", row.source_s);
   for (const e of events) if (e.kind === "witness.report") add(e.data, "session_events", e.source_s);
   const reports = [...found.values()];
+  // 0.8.21: a declared incident V neither saw nor heard is said so explicitly (witness.unwitnessed), with the reason; each once.
+  const silent = new Map<string, Json>();
+  const noteSilent = (d: Json, source: string) => {
+    if (!d || typeof d.incident !== "string" || silent.has(d.incident)) return;
+    silent.set(d.incident, { incident: d.incident, declared: d.declared ? { id: d.declared.id, kind: d.declared.kind } : undefined, reason: d.reason, closed: d.closed, source });
+  };
+  for (const row of records) if (row.channel === "incidents" && row.valid && row.data?.event === "witness.unwitnessed") noteSilent(row.data, "recorder");
+  for (const e of events) if (e.kind === "witness.unwitnessed") noteSilent(e.data, "session_events");
+  const unwitnessed = [...silent.values()];
   const byKind: Record<string, number> = {};
   let saw = 0, heard = 0, involved = 0;
   for (const r of reports) {
@@ -71,8 +81,10 @@ export function witnessedIncidents(records: Json[], events: Json[], recording: b
   }
   const kinds = Object.entries(byKind).map(([k, n]) => `${n} ${k}`).join(", ");
   const shown = detail ? reports : reports.slice(-24);
-  return { message: reports.length ? `while you were away: V witnessed ${reports.length} incident${reports.length === 1 ? "" : "s"} (${kinds})` : "while you were away: no witnessed incident reported",
-    count: reports.length, by_kind: byKind, by_mode: { saw, heard, told: 0 }, v_involved: involved, reports: shown, omitted: reports.length - shown.length,
+  const declaredCount = reports.filter(r => r.declared).length;
+  return { message: (reports.length ? `while you were away: V witnessed ${reports.length} incident${reports.length === 1 ? "" : "s"} (${kinds})` : "while you were away: no witnessed incident reported") +
+      (unwitnessed.length ? `; ${unwitnessed.length} declared incident${unwitnessed.length === 1 ? " went" : "s went"} unwitnessed` : ""),
+    count: reports.length, declared: declaredCount, unwitnessed, by_kind: byKind, by_mode: { saw, heard, told: 0 }, v_involved: involved, reports: shown, omitted: reports.length - shown.length,
     recorder_channel: recording, history_complete: complete, ...(coverage ? { coverage } : {}),
     note: "Passive. Saw means a person other than V was in V's view, unoccluded by static geometry; heard means V was inside the stimulus' audible radius; was told is not sensed. Sampled when the game raised each event." };
 }

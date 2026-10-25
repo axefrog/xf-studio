@@ -380,7 +380,7 @@ Declaration ParseDeclaration(const json& aParams, const ActorLookup& aLookup, co
     {
         if (roles->size() > aConfig.maxRoles)
         {
-            throw MethodError("limit", "a declared incident holds at most " + std::to_string(aConfig.maxRoles) + " actors");
+            throw MethodError("incident_limit", "a declared incident holds at most " + std::to_string(aConfig.maxRoles) + " actors");
         }
         for (const auto& [handle, role] : roles->items())
         {
@@ -1557,7 +1557,7 @@ DeclareOutcome Service::Declare(const Declaration& aDeclaration, double aWallS)
     }
     if (aDeclaration.roles.size() > m_config.maxRoles)
     {
-        throw MethodError("limit", "a declared incident holds at most " + std::to_string(m_config.maxRoles) + " actors");
+        throw MethodError("incident_limit", "a declared incident holds at most " + std::to_string(m_config.maxRoles) + " actors");
     }
     size_t declaredOpen = 0;
     for (const auto& incident : m_open)
@@ -1566,11 +1566,11 @@ DeclareOutcome Service::Declare(const Declaration& aDeclaration, double aWallS)
     }
     if (declaredOpen >= m_config.maxDeclared)
     {
-        throw MethodError("limit", std::to_string(m_config.maxDeclared) + " declared incidents are open already (the sight sampler's bound); close one first");
+        throw MethodError("incident_limit", std::to_string(m_config.maxDeclared) + " declared incidents are open already (the sight sampler's bound); close one first");
     }
     if (m_open.size() >= m_config.maxOpen && !EvictOne(out.reports))
     {
-        throw MethodError("limit", "no room for another open incident");
+        throw MethodError("incident_limit", "no room for another open incident");
     }
     Incident fresh;
     fresh.number = m_next++;
@@ -1689,7 +1689,7 @@ json Service::JoinDeclared(const std::string& aId, const std::string& aWho, cons
     }
     if (d.roles.size() >= m_config.maxRoles)
     {
-        throw MethodError("limit", "a declared incident holds at most " + std::to_string(m_config.maxRoles) + " actors");
+        throw MethodError("incident_limit", "a declared incident holds at most " + std::to_string(m_config.maxRoles) + " actors");
     }
     d.roles.emplace_back(aWho, aRole);
     Participant p;

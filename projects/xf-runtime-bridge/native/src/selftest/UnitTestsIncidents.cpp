@@ -610,7 +610,7 @@ int IncidentUnitTests()
         Check(bad({{"roles", {{"x1", "thief"}}}}) == "bad_params" && bad({{"roles", {{"a1b", "thief"}}}}) == "bad_params" && bad({{"roles", json::array({"a1"})}}) == "bad_params", "declare parse: anything that is not an actor handle is refused");
         Check(bad({{"roles", {{"a1", "th\"ief"}}}}) == "bad_params" && bad({{"roles", {{"a1", 7}}}}) == "bad_params" && bad({{"roles", {{"a1", ""}}}}) == "bad_params", "declare parse: an unsafe or empty role is refused");
         Check(bad({{"roles", {{"a9", "thief"}}}}) == "npc_not_found", "declare parse: a handle that is not one of the bridge's actors is refused (npc_not_found)");
-        Check(bad({{"roles", {{"a1", "r"}, {"a2", "r"}, {"a3", "r"}, {"a4", "r"}, {"a5", "r"}, {"a6", "r"}}}}) == "limit", "declare parse: more than five actors is refused (limit)");
+        Check(bad({{"roles", {{"a1", "r"}, {"a2", "r"}, {"a3", "r"}, {"a4", "r"}, {"a5", "r"}, {"a6", "r"}}}}) == "incident_limit", "declare parse: more than five actors is refused (incident_limit)");
         Check(bad({{"ttl_s", 0.5}}) == "bad_params" && bad({{"ttl_s", 301}}) == "bad_params" && bad({{"ttl_s", "soon"}}) == "bad_params" && bad({{"ttl_s", 1}}) == "" && bad({{"ttl_s", 300}}) == "", "declare parse: ttl_s is 1 to 300 seconds");
         Check(bad({{"at", {1, 2}}}) == "bad_params" && bad({{"at", "here"}}) == "bad_params" && bad({{"colour", "red"}}) == "bad_params", "declare parse: a bad place and an unknown parameter are refused");
         Check(code({{"id", "x"}, {"kind", "k"}}) == "bad_params", "declare parse: neither roles nor a place is refused");
@@ -675,7 +675,7 @@ int IncidentUnitTests()
         try { stage(s, "a"); } catch (const xfb::MethodError& e) { dupClosed = std::string(e.code) == "duplicate_id"; }
         Check(dupClosed, "declare: an id the bridge still remembers as closed is refused too");
         for (const char* id : {"b", "c", "d", "e"}) stage(s, id);
-        try { stage(s, "f"); } catch (const xfb::MethodError& e) { cap = std::string(e.code) == "limit"; }
+        try { stage(s, "f"); } catch (const xfb::MethodError& e) { cap = std::string(e.code) == "incident_limit"; }
         Check(cap && s.DeclaredOpen() == 4, "declare: a fifth declared incident is refused (limit): four is the sight sampler's bound");
         Check(s.SightPlan() == std::vector<std::string>({"a1", "a2"}), "declare: the sight plan lists each actor once, however many incidents hold it");
     }
@@ -874,7 +874,7 @@ int IncidentUnitTests()
         const auto dropped = t.Observe(Obs("gunshot", 102, 900, {Person("B", kAggressor, 900, 20)}, 50, 20), 1.0);
         Check(!dropped.accepted && dropped.reason == "full" && t.DeclaredOpen() == 1, "evict: with only declared incidents open, an ordinary observation is dropped (full), never the declared one");
         bool limit = false;
-        try { stage(t, "another"); } catch (const xfb::MethodError& e) { limit = std::string(e.code) == "limit"; }
+        try { stage(t, "another"); } catch (const xfb::MethodError& e) { limit = std::string(e.code) == "incident_limit"; }
         Check(limit, "evict: and a declaration with no room is refused (limit)");
     }
     {
@@ -895,7 +895,7 @@ int IncidentUnitTests()
             return std::string();
         };
         Check(code("nobody", "a4", "r") == "incident_unknown" && code("steal-1", "a4", "bad\"role") == "bad_params" && code("steal-1", "a3", "again") == "bad_params", "join link: an unknown incident, an unsafe role and a repeat are refused");
-        Check(code("steal-1", "a4", "r") == "" && code("steal-1", "a5", "r") == "" && code("steal-1", "a6", "r") == "limit", "join link: five actors at most (limit)");
+        Check(code("steal-1", "a4", "r") == "" && code("steal-1", "a5", "r") == "" && code("steal-1", "a6", "r") == "incident_limit", "join link: five actors at most (incident_limit)");
         s.LeaveDeclared("steal-1", "a6");
         s.LeaveDeclared("steal-1", "a5");
         s.LeaveDeclared("steal-1", "a4");

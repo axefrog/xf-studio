@@ -295,7 +295,7 @@ public:
 
     // --- 0.8.21: declared incidents -------------------------------------------------------------------------------------------
     // Opens the incident at once (the least recently active ordinary incident is closed to make room) and returns our inc-N beside the
-    // engine's id. Throws MethodError: duplicate_id (open, or still among the kept closed ones), limit (too many open, too many roles).
+    // engine's id. Throws MethodError: duplicate_id (open, or still among the kept closed ones), incident_limit (too many open, too many roles).
     DeclareOutcome Declare(const Declaration& aDeclaration, double aWallS);
     // Closes the incident declared under aId (found false when none is open); the report, the gap or the unwitnessed event is in
     // reports, and also in the outcome's name.
@@ -303,7 +303,7 @@ public:
     // Closes every open declared incident with a reason (kill, load, handover); the others carry on.
     std::vector<json> CloseAllDeclared(const std::string& aReason);
     // The spawn link: adds an actor (a handle) to an open declared incident under a role. Throws MethodError: incident_unknown (none
-    // open under that id), limit (the incident holds maxRoles), bad_params (an unsafe role). LeaveDeclared undoes it (a spawn that failed).
+    // open under that id), incident_limit (the incident holds maxRoles), bad_params (an unsafe role). LeaveDeclared undoes it (a spawn that failed).
     json JoinDeclared(const std::string& aId, const std::string& aWho, const std::string& aRole, const ActorInfo& aActor);
     void LeaveDeclared(const std::string& aId, const std::string& aWho);
     size_t DeclaredOpen() const;

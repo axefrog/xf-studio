@@ -5,7 +5,8 @@
 // Supported: type (object, number, integer, string, boolean, array), properties, required,
 // additionalProperties: false, enum, minimum, maximum, minLength, maxLength, pattern, items,
 // minItems, maxItems, description, default (documentation only); 0.8.2: anyOf (a value matching any one of its schemas,
-// for an input that takes one value or a list of them), whose schema carries no type of its own.
+// for an input that takes one value or a list of them), whose schema carries no type of its own; 0.8.21: a typed map, an object
+// with additionalProperties as a schema (every value matches it) and propertyNames (every key matches the pattern).
 
 export type JsonSchema = {
   type?: "object" | "number" | "integer" | "string" | "boolean" | "array";
@@ -13,7 +14,8 @@ export type JsonSchema = {
   description?: string;
   properties?: Record<string, JsonSchema>;
   required?: string[];
-  additionalProperties?: false;
+  additionalProperties?: false | JsonSchema;
+  propertyNames?: { pattern: string };
   enum?: readonly (string | number)[];
   minimum?: number;
   maximum?: number;
@@ -59,6 +61,11 @@ export function validate(schema: JsonSchema, value: unknown, path = "input"): st
         const childSchema = schema.properties && Object.hasOwn(schema.properties, key) ? schema.properties[key] : undefined;
         if (!childSchema) {
           if (schema.additionalProperties === false) problems.push(`"${key}" is not a known option.`);
+          else if (schema.additionalProperties) {
+            // A typed map: the key must fit propertyNames, the value the schema.
+            if (schema.propertyNames && !new RegExp(schema.propertyNames.pattern).test(key)) problems.push(`${where} has a name that isn't allowed: "${key.slice(0, 32)}".`);
+            if (child !== undefined) problems.push(...validate(schema.additionalProperties, child, `${path}.${key}`));
+          }
           continue;
         }
         if (child === undefined) continue;

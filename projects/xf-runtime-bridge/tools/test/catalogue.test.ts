@@ -83,7 +83,8 @@ describe("catalogue", () => {
     for (const command of CATALOGUE) {
       expect(command.input.type).toBe("object");
       walk(command.input, (schema, path) => {
-        if (schema.type === "object") expect(schema.additionalProperties, `${command.name} ${path}`).toBe(false);
+        // Closed: no unknown keys, or (0.8.21) a typed map whose every value is a schema of its own.
+        if (schema.type === "object") expect(schema.additionalProperties === false || (typeof schema.additionalProperties === "object" && !!schema.additionalProperties.type), `${command.name} ${path}`).toBe(true);
         if (path !== "input") expect(schema.description, `${command.name} ${path}`).toBeTruthy();
       });
       expect(validate(command.input, { not_an_option: 1 }).length, command.name).toBeGreaterThan(0);

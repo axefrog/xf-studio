@@ -42,10 +42,10 @@ describe("0.8.20 the command and the recorder channel", () => {
     // never a default channel: the default run is unchanged
     expect(recording).toContain('json::array({"v", "actors", "camera", "contacts", "supervisor"})');
   });
-  test("the version is 0.8.20 in the build and the tools", () => {
-    expect(read("native", "CMakeLists.txt")).toMatch(/VERSION 0\.8\.20/);
-    expect(JSON.parse(read("package.json")).version).toBe("0.8.20");
-    expect(natives).toContain("natives=35");
+  test("the build and the tools carry the 0.8.20 incident work (0.8.21 added to it)", () => {
+    expect(read("native", "CMakeLists.txt")).toMatch(/VERSION 0\.8\.21/);
+    expect(JSON.parse(read("package.json")).version).toBe("0.8.21");
+    expect(natives).toContain("natives=36");
   });
 });
 
@@ -112,7 +112,7 @@ describe("0.8.20 the taps: autonomous only, wired to a registered native, passiv
     // the one thing it does register is a delay callback that sends the simulation clock
     expect(code.match(/DelayCallback\(/g)!.length).toBe(2);
     // the only native it calls with data is the incident one, and reads are gated and bounded
-    expect(code.match(/XFBridge_\w+\(/g)!.filter(n => !["XFBridge_ProbeFlags(", "XFBridge_Live(", "XFBridge_IncidentSeen(", "XFBridge_IncidentAdmit("].includes(n))).toEqual([]);
+    expect(code.match(/XFBridge_\w+\(/g)!.filter(n => !["XFBridge_ProbeFlags(", "XFBridge_Live(", "XFBridge_IncidentSeen(", "XFBridge_IncidentAdmit(", "XFBridge_IncidentSightPlan("].includes(n))).toEqual([]);
   });
   test("the world-object rule holds in the taps: every native's answer in a local before text is built", () => {
     expect(inlineNativeResults(taps, "XFRuntimeBridgeIncidents.reds")).toEqual([]);

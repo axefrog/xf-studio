@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 154 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 156 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -25,7 +25,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (3)
-- [Other tools](#other-tools) (11)
+- [Other tools](#other-tools) (13)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -34,7 +34,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 55 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 57 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -2254,7 +2254,7 @@ Spawn XF actors (never saved), pick NPCs near V, and direct them: walk, follow, 
 - **Permission:** Look (`read`)
 - **Changes the game:** No
 - **Undo:** nothing to undo
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), [`codeware_missing`](#refusal-codeware-missing), `npc_protected`, `npc_busy`, `npc_not_found`, [`too_far`](#refusal-too-far), `limit`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), [`codeware_missing`](#refusal-codeware-missing), `npc_protected`, `npc_busy`, [`npc_not_found`](#refusal-npc-not-found), [`too_far`](#refusal-too-far), `limit`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -2279,7 +2279,7 @@ No parameters.
 - **Permission:** Direct NPCs (`write-npc`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo releases the actor (npc_release with how despawn); the kill switch and loading a save remove it too.
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `cast_unknown`, [`codeware_missing`](#refusal-codeware-missing), `record_missing`, [`not_ready`](#refusal-not-ready), [`not_streamed`](#refusal-not-streamed), `not_walkable`, [`spawn_refused`](#refusal-spawn-refused), [`too_far`](#refusal-too-far), `limit`, `no_hidden_spot`
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), `cast_unknown`, [`codeware_missing`](#refusal-codeware-missing), `record_missing`, [`not_ready`](#refusal-not-ready), [`not_streamed`](#refusal-not-streamed), `not_walkable`, [`spawn_refused`](#refusal-spawn-refused), [`too_far`](#refusal-too-far), `limit`, `no_hidden_spot`, [`incident_unknown`](#refusal-incident-unknown), [`incident_limit`](#refusal-incident-limit), [`test_hooks_off`](#refusal-test-hooks-off)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -2300,6 +2300,8 @@ No parameters.
 | `reactions` | string | `quiet`, `game` | quiet (the default: no crime or panic reactions) or game (an ordinary passer-by's own reactions). The combat casts always have their gang's own reactions (game); quiet is refused for them. |
 | `engage` | boolean | `true`, `false` | With attitude hostile: also put V in the actor's own threat list at its first moment (the game's own route), in case the attitude alone doesn't start the fight. Default false. Never touches V. |
 | `label` | string | 1 to 40 characters | The name its lines and dialogue choices show (default Stranger). |
+| `incident` | string | 1 to 64 characters | Test build only: the id of a declared incident (incidents_declare) the new actor joins, so what it does counts in that incident and V's report carries it. Refused before anything is spawned when no such incident is open or it already holds five actors. |
+| `incident_role` | string | 1 to 32 characters | With incident: the engine's own role name for the actor (default participant). |
 
 ### `npc_move`
 
@@ -2504,7 +2506,7 @@ No parameters.
 - **Permission:** Direct NPCs (`write-npc`)
 - **Changes the game:** Yes
 - **Undo:** The result's undo releases the actor; before the swap is done that cancels it and gives the original back, afterwards the original cannot be brought back (it was hidden for good).
-- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), [`codeware_missing`](#refusal-codeware-missing), `npc_protected`, `npc_busy`, `npc_not_found`, [`too_far`](#refusal-too-far), `limit`, `look_unmatched`, `community_npc`, `cast_unknown`, `already_substituting`, `record_missing`, [`not_ready`](#refusal-not-ready), [`not_streamed`](#refusal-not-streamed), `not_walkable`, [`spawn_refused`](#refusal-spawn-refused)
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), [`codeware_missing`](#refusal-codeware-missing), `npc_protected`, `npc_busy`, [`npc_not_found`](#refusal-npc-not-found), [`too_far`](#refusal-too-far), `limit`, `look_unmatched`, `community_npc`, `cast_unknown`, `already_substituting`, `record_missing`, [`not_ready`](#refusal-not-ready), [`not_streamed`](#refusal-not-streamed), `not_walkable`, [`spawn_refused`](#refusal-spawn-refused), [`incident_unknown`](#refusal-incident-unknown), [`incident_limit`](#refusal-incident-limit), [`test_hooks_off`](#refusal-test-hooks-off)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -2518,6 +2520,8 @@ No parameters.
 | `in_view` | boolean | `true`, `false` | Swap at once even if V can see the original (to observe the pop). Default false: wait for a moment she cannot. |
 | `max_wait_s` | number | 1 to 120 | How long to wait for the original to leave V's sight, 1 to 120 s. Default 30. |
 | `dry_run` | boolean | `true`, `false` | Read the person, match the look and report the resident key and respawn parameters; hold nothing, spawn nothing. |
+| `incident` | string | 1 to 64 characters | Test build only: the id of a declared incident (incidents_declare) the actor joins, by the handle it is given, as soon as the request is made. Not with dry_run. |
+| `incident_role` | string | 1 to 32 characters | With incident: the engine's own role name for the actor (default participant). |
 
 ### `npc_scenario`
 
@@ -3067,8 +3071,42 @@ Tools not yet sorted into an area above.
 | `state` | string | `open`, `closed`, `any` | open, closed or any (default). |
 | `witnessed` | boolean | `true`, `false` | Only incidents V did (true) or did not (false) perceive. |
 | `v_involved` | boolean | `true`, `false` | Only incidents V took part in (true) or watched from outside (false). |
+| `declared` | boolean | `true`, `false` | Only the engine's declared incidents (true) or only the game's own (false). |
+| `id` | string | 1 to 64 characters | Only the incident declared under this id (incidents_declare's id). |
 | `limit` | integer | 1 to 64 | At most this many, newest first (1 to 64, default 20). |
 | `tap` | boolean | `true`, `false` | false switches the incident taps off (the open incidents are closed and reported first), true on again (default: unchanged). |
+
+### `incidents_declare`
+
+**Declare a staged incident.** Autonomous -writes test build and allow_test_hooks only. Read only towards the game, passive: nothing here, and nothing in the sampler behind it, changes the game or anyone's ties or beliefs. The game raises almost none of the Story Engine's incident kinds (no NPC theft, no stall collection), so the engine stages its own with XF actors and declares them, and V's report carries the engine's own id and kind. id and kind are the engine's own text, kept exactly as given (ASCII letters, digits and _ - . : / +; kind also single spaces; id up to 64 characters, kind up to 48). roles maps XF actor handles (a1, a2, ..., at most five, each one of the bridge's own actors, spawning or out) to the engine's own role names (up to 32 characters); V and picked passers-by (p1, ...) are refused. at is the place, [x, y, z]; without it the middle of the actors' known places. ttl_s is how long it may stay open, 1 to 300 simulation seconds (default 60; a paused game ages nothing). It opens at once and answers our id (inc-N) beside the engine's. While it is open: any stimulus or observation that names one of its actors joins it instead of opening an 'other' (an ordinary incident that shares people with it merges into it and the declared id and kind stay; strangers near it do not join); and the plugin samples V's sight of its actors twice a second, over at most four declared incidents, with the same view cone and static-geometry ray as the taps, so a silent staging can still be seen. Gunshot or shout stimuli near V still give heard. It ends on incidents_close, when the TTL runs out, or with a reason on a kill, a load, a handover or the taps going off; the result is exactly one witness.report that carries declared {id, kind, roles, at, ttl_s} beside the usual fields (kind there is the bridge's own reading of the evidence, usually other; declared.kind is the engine's), a witness.gap if the report queue overflowed, or, if V neither saw nor heard it, one witness.unwitnessed event with the reason (no_samples, actors_missing, no_view, out_of_range, not_in_view, occluded, unchecked). A declared incident is reported whatever its evidence score. Bounds: four declared incidents open, five actors each, an id is not reused while the bridge remembers it (the 64 most recent closed). npc_spawn and npc_substitute take incident (this id) and incident_role so a new actor joins it.
+
+- **Command:** `incidents.declare`, the bridge method `incidents.declare`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** incidents_close with the same id ends it (a report, or an unwitnessed event, as ever).
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`tap_off`](#refusal-tap-off), [`handed_over`](#refusal-handed-over), [`duplicate_id`](#refusal-duplicate-id), [`incident_limit`](#refusal-incident-limit), [`npc_not_found`](#refusal-npc-not-found), [`no_place`](#refusal-no-place)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` (required) | string | 1 to 64 characters; matches `^[A-Za-z0-9_.:/+-]+$` | Your own id for the incident, kept exactly: 1 to 64 letters, digits and _ - . : / +. |
+| `kind` (required) | string | 1 to 48 characters; matches `^[A-Za-z0-9_.:/+-]+( [A-Za-z0-9_.:/+-]+)*$` | Your own name for what happened, kept exactly: 1 to 48 letters, digits, single spaces and _ - . : / +. |
+| `roles` | object | any | XF actor handles to role names, e.g. {"a1": "thief", "a2": "mark"}: at most five actors, each role 1 to 32 letters, digits, single spaces and _ - . : / +. Required unless at is given (actors can then join with npc_spawn's incident). |
+| `at` | array of number | exactly 3 items | Where it happens, [x, y, z] in world metres. Default: the middle of the actors' known places. |
+| `ttl_s` | number | 1 to 300 | How long it may stay open, 1 to 300 simulation seconds. Default 60. |
+
+### `incidents_close`
+
+**Close a declared incident.** Autonomous -writes test build and allow_test_hooks only. Closes the incident declared under id and answers how it ended: outcome report (the witness.report, also in the answer's report), report_queued (witnessed, and the report waits for the minute's allowance), gap (a witness.gap names it) or unwitnessed (V never perceived it; unwitnessed_reason says why). Exactly one of them is also delivered to test.events, session.events and the recorder's incidents channel. Passive. An id that is not open (it closed already: incidents_list with id shows how) is refused.
+
+- **Command:** `incidents.close`, the bridge method `incidents.close`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** Nothing to undo; declare a new incident (with a new id) if wanted.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`incident_unknown`](#refusal-incident-unknown)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` (required) | string | 1 to 64 characters | The id the incident was declared under. |
 
 ### `game_catchup`
 
@@ -3155,6 +3193,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-creator-open-timeout"></a>`creator_open_timeout` | The game was asked to open the appearance screen but didn't within the wait, so the request was withdrawn and the appearance screen won't open (the pause menu may open instead: close it with Esc). Saving stays locked until a save is loaded. Close any menu and try again, or ask the player to open it (a mirror, or F12 with Character Customization Anywhere). |
 | <a id="refusal-creator-open-uncertain"></a>`creator_open_uncertain` | The game took the request to open the appearance screen but it hadn't opened by the end of the wait, so it may still open. Check game_status: if the phase is character_menu, use cc_back to close it. Saving stays locked until a save is loaded. |
 | <a id="refusal-disconnected"></a>`disconnected` | The connection to the game closed. Is the game still running? |
+| <a id="refusal-duplicate-id"></a>`duplicate_id` | That incident id is open already, or the bridge still remembers a closed incident under it. Close the open one (incidents_close) or declare this one under a new id. |
 | <a id="refusal-expectation-failed"></a>`expectation_failed` | The pre-capture check failed, so no screenshot was taken. The answer lists which check failed and why; fix the framing or light and try again, or pass on_fail: warn to capture anyway. |
 | <a id="refusal-face-table-unreadable"></a>`face_table_unreadable` | Photo mode's expression records couldn't be read, so the bridge can't check which face table index an expression has; nothing was applied. Pass unlisted: true to apply the index anyway (photo_state with options shows face_table). |
 | <a id="refusal-failed"></a>`failed` | Something went wrong inside the game bridge. The plugin log has the details. |
@@ -3165,6 +3204,8 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-in-combat"></a>`in_combat` | V is in combat, so the bridge won't move or act for her now. Nothing was changed. Try again once the fight is over. |
 | <a id="refusal-in-scene"></a>`in_scene` | A scene is playing (or V is in a dialogue), where the bridge doesn't move or act for V. Nothing was changed. Wait for the scene to end. |
 | <a id="refusal-in-vehicle"></a>`in_vehicle` | V is in a vehicle, so the bridge won't move her or act for her now. Nothing was changed. Get out first. |
+| <a id="refusal-incident-limit"></a>`incident_limit` | A declared incident holds at most five actors, and at most four are open at once. Close one with incidents_close first. |
+| <a id="refusal-incident-unknown"></a>`incident_unknown` | No declared incident is open under that id (it may have closed already: incidents_list with id shows how). Declare it first with incidents_declare. |
 | <a id="refusal-input-busy"></a>`input_busy` | An input test is already pending. Wait for its receipt before starting another. |
 | <a id="refusal-input-overlap"></a>`input_overlap` | A real held control overlaps this test. Release it before preparing another pulse. |
 | <a id="refusal-input-unavailable"></a>`input_unavailable` | The native input adapter has not been commissioned for this game build. No input was sent. |
@@ -3180,6 +3221,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-no-free-slot"></a>`no_free_slot` | The game has no free manual save slot. Nothing was saved. Delete an old manual save in the game's Load menu, then try again. |
 | <a id="refusal-no-ground"></a>`no_ground` | There is no walkable ground near that point, so V wasn't moved there. Pick a point on the floor (or pass ground: exact at your own risk). |
 | <a id="refusal-no-path"></a>`no_path` | The game found no walkable path to that point, so V didn't move. Pick a point on the same floor and within reach. |
+| <a id="refusal-no-place"></a>`no_place` | None of those actors has a known place yet (one that is still appearing has none). Give at, or wait for npc.spawned and declare again. |
 | <a id="refusal-no-safe-position"></a>`no_safe_position` | The supervisor has no recorded quiet position yet. Let V stand quietly for the configured interval before testing a return. |
 | <a id="refusal-no-such-behaviour"></a>`no_such_behaviour` | No behaviour with that id is running. behave_list shows the ones that are. |
 | <a id="refusal-no-such-piece"></a>`no_such_piece` | The showroom has no head with that index. showroom_state lists the heads it has. |
@@ -3196,6 +3238,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-not-spawned-yet"></a>`not_spawned_yet` | That head isn't in the world yet (the game spawns them over a few frames). Try again in a moment; showroom_state shows when it is in. |
 | <a id="refusal-not-streamed"></a>`not_streamed` | The world around that point isn't loaded yet, so V wasn't moved there (with ground: exact too). Move V closer first, then try again. |
 | <a id="refusal-not-v"></a>`not_v` | The player isn't V right now (a Johnny section, or someone else the story puts in V's place), so the appearance screen wasn't opened. Try again once V is back. |
+| <a id="refusal-npc-not-found"></a>`npc_not_found` | That handle isn't one of the bridge's XF actors (npc_status lists them), and a declared incident names XF actors only, never V or a picked passer-by. |
 | <a id="refusal-outfit-managed-elsewhere"></a>`outfit_managed_elsewhere` | V's outfit is managed by a script mod's outfit system (such as EquipmentEx), which replaces the wardrobe's own requests, so this change would do nothing. Nothing was changed. wardrobe_equip with suspend: true takes that outfit off for now (the story's own request) so equipped clothing draws; resume: true puts it back. |
 | <a id="refusal-permission-denied"></a>`permission_denied` | The caller did not allow every capability this policy needs. Grant the required classes explicitly or choose a narrower policy; nothing was started. |
 | <a id="refusal-photo-key-needed"></a>`photo_key_needed` | The game offers no way to open the full photo mode from inside. Use photo_open, which presses the photo mode key in the game window, or ask the player to press it; game_wait with phase photo_mode notices when it opens. |
@@ -3227,6 +3270,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-supervisor-busy"></a>`supervisor_busy` | The bounded supervisor action queue is full. Read its receipts and clear or replace the entry before trying again. |
 | <a id="refusal-supervisor-limit"></a>`supervisor_limit` | The supervisor already holds five entries (V plus four XF actors, or five actors). Clear one with supervisor_clear and its actor before arming another. |
 | <a id="refusal-supervisor-unavailable"></a>`supervisor_unavailable` | Supervision needs an observed, living actor (V, with an available input listener, or an XF actor that has appeared) in unpaused gameplay. Read the game state before arming again. |
+| <a id="refusal-tap-off"></a>`tap_off` | The incident taps are off, and a declared incident needs them for the clock and for the sight samples. incidents_list with tap true switches them on. |
 | <a id="refusal-test-build-required"></a>`test_build_required` | This action needs the separate autonomous test candidate. Stage that candidate in the dedicated test profile. |
 | <a id="refusal-test-hooks-off"></a>`test_hooks_off` | Test hooks are off in this build. Only the -writes package for the dedicated XF test profile has them ([bridge] allow_test_hooks in its config.ini). |
 | <a id="refusal-test-run-required"></a>`test_run_required` | Arm a bounded test fixture before submitting this input. |
@@ -3250,4 +3294,4 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 
 Codes the tools above name that have no shared wording yet; the answer's own message (from the tools) or its `detail` (from the game) explains each in context:
 
-`already_substituting`, `capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `carrier_missing`, `cast_unknown`, `choice_too_long`, `choices_busy`, `community_npc`, `contact_unknown`, `expression_unknown`, `framing_bound`, `gesture_unknown`, `hud_missing`, `interrupted`, `key_unsupported`, `limit`, `line_too_long`, `look_unmatched`, `no_ai`, `no_capture`, `no_hidden_spot`, `no_light_component`, `no_projection`, `no_radio`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_a_door`, `not_a_vehicle`, `not_an_npc`, `not_found`, `not_ours`, `not_walkable`, `npc_busy`, `npc_dead`, `npc_handed_back`, `npc_lost`, `npc_moving`, `npc_not_found`, `npc_not_spawned`, `npc_protected`, `npc_releasing`, `npc_unknown`, `one_hub_at_a_time`, `phone_blocked`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `record_missing`, `rig_unsupported`, `scenario_invalid`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `target_missing`, `target_unknown`, `template_missing`, `too_many`, `too_many_pins`, `trigger_unknown`, `tweakxl_missing`, `use_light_remove`, `wait_timeout`.
+`already_substituting`, `capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `carrier_missing`, `cast_unknown`, `choice_too_long`, `choices_busy`, `community_npc`, `contact_unknown`, `expression_unknown`, `framing_bound`, `gesture_unknown`, `hud_missing`, `interrupted`, `key_unsupported`, `limit`, `line_too_long`, `look_unmatched`, `no_ai`, `no_capture`, `no_hidden_spot`, `no_light_component`, `no_projection`, `no_radio`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_a_door`, `not_a_vehicle`, `not_an_npc`, `not_found`, `not_ours`, `not_walkable`, `npc_busy`, `npc_dead`, `npc_handed_back`, `npc_lost`, `npc_moving`, `npc_not_spawned`, `npc_protected`, `npc_releasing`, `npc_unknown`, `one_hub_at_a_time`, `phone_blocked`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `record_missing`, `rig_unsupported`, `scenario_invalid`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `target_missing`, `target_unknown`, `template_missing`, `too_many`, `too_many_pins`, `trigger_unknown`, `tweakxl_missing`, `use_light_remove`, `wait_timeout`.
