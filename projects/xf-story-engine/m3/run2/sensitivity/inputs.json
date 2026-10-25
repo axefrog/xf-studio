@@ -6,6 +6,7 @@
  "a3Rule": "rated-v1",
  "names": "wide",
  "tier": "offers",
+ "sides": "balanced",
  "a4States": [
   "S-early-quiet",
   "S-mid-squeezed",

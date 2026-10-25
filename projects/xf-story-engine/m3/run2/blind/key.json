@@ -777,100 +777,100 @@
  },
  "pairKey": {
   "P-001": {
-   "leftArm": "A3",
-   "rightArm": "E"
+   "leftArm": "E",
+   "rightArm": "A3"
   },
   "P-002": {
    "leftArm": "A3",
    "rightArm": "E"
   },
   "P-003": {
-   "leftArm": "E",
-   "rightArm": "A3"
-  },
-  "P-004": {
    "leftArm": "A3",
    "rightArm": "E"
+  },
+  "P-004": {
+   "leftArm": "E",
+   "rightArm": "A3"
   },
   "P-005": {
    "leftArm": "E",
    "rightArm": "A3"
   },
   "P-006": {
-   "leftArm": "A3",
-   "rightArm": "E"
+   "leftArm": "E",
+   "rightArm": "A3"
   },
   "P-007": {
-   "leftArm": "A3",
-   "rightArm": "E"
+   "leftArm": "E",
+   "rightArm": "A3"
   },
   "P-008": {
-   "leftArm": "A3",
-   "rightArm": "E"
+   "leftArm": "E",
+   "rightArm": "A3"
   },
   "P-009": {
    "leftArm": "E",
    "rightArm": "A3"
   },
   "P-010": {
-   "leftArm": "A3",
-   "rightArm": "E"
-  },
-  "P-011": {
    "leftArm": "E",
    "rightArm": "A3"
+  },
+  "P-011": {
+   "leftArm": "A3",
+   "rightArm": "E"
   },
   "P-012": {
    "leftArm": "E",
    "rightArm": "A3"
   },
   "P-013": {
-   "leftArm": "E",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "E"
   },
   "P-014": {
-   "leftArm": "E",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "E"
   },
   "P-015": {
-   "leftArm": "E",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "E"
   },
   "P-016": {
    "leftArm": "A3",
    "rightArm": "E"
   },
   "P-017": {
-   "leftArm": "A3",
-   "rightArm": "E"
+   "leftArm": "E",
+   "rightArm": "A3"
   },
   "P-018": {
    "leftArm": "A3",
    "rightArm": "E"
   },
   "P-019": {
-   "leftArm": "E",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "E"
   },
   "P-020": {
    "leftArm": "E",
    "rightArm": "A3"
   },
   "P-021": {
-   "leftArm": "E",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "E"
   },
   "P-022": {
    "leftArm": "A3",
    "rightArm": "E"
   },
   "P-023": {
-   "leftArm": "A3",
-   "rightArm": "E"
-  },
-  "P-024": {
    "leftArm": "E",
    "rightArm": "A3"
+  },
+  "P-024": {
+   "leftArm": "A3",
+   "rightArm": "E"
   },
   "P-025": {
    "leftArm": "E",
@@ -881,16 +881,16 @@
    "rightArm": "A1"
   },
   "P-027": {
-   "leftArm": "E",
-   "rightArm": "A1"
+   "leftArm": "A1",
+   "rightArm": "E"
   },
   "P-028": {
    "leftArm": "A1",
    "rightArm": "E"
   },
   "P-029": {
-   "leftArm": "A1",
-   "rightArm": "E"
+   "leftArm": "E",
+   "rightArm": "A1"
   },
   "P-030": {
    "leftArm": "E",
@@ -921,12 +921,12 @@
    "rightArm": "E"
   },
   "P-037": {
-   "leftArm": "A1",
-   "rightArm": "E"
-  },
-  "P-038": {
    "leftArm": "E",
    "rightArm": "A1"
+  },
+  "P-038": {
+   "leftArm": "A1",
+   "rightArm": "E"
   },
   "P-039": {
    "leftArm": "A1",
@@ -937,12 +937,12 @@
    "rightArm": "E"
   },
   "P-041": {
-   "leftArm": "A1",
-   "rightArm": "E"
-  },
-  "P-042": {
    "leftArm": "E",
    "rightArm": "A1"
+  },
+  "P-042": {
+   "leftArm": "A1",
+   "rightArm": "E"
   },
   "P-043": {
    "leftArm": "A1",
@@ -965,20 +965,20 @@
    "rightArm": "E"
   },
   "P-048": {
-   "leftArm": "A1",
-   "rightArm": "E"
+   "leftArm": "E",
+   "rightArm": "A1"
   },
   "P-049": {
-   "leftArm": "A3",
-   "rightArm": "A1"
+   "leftArm": "A1",
+   "rightArm": "A3"
   },
   "P-050": {
    "leftArm": "A1",
    "rightArm": "A3"
   },
   "P-051": {
-   "leftArm": "A3",
-   "rightArm": "A1"
+   "leftArm": "A1",
+   "rightArm": "A3"
   },
   "P-052": {
    "leftArm": "A1",
@@ -989,24 +989,24 @@
    "rightArm": "A3"
   },
   "P-054": {
-   "leftArm": "A1",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "A1"
   },
   "P-055": {
    "leftArm": "A3",
    "rightArm": "A1"
   },
   "P-056": {
-   "leftArm": "A1",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "A1"
   },
   "P-057": {
    "leftArm": "A3",
    "rightArm": "A1"
   },
   "P-058": {
-   "leftArm": "A3",
-   "rightArm": "A1"
+   "leftArm": "A1",
+   "rightArm": "A3"
   },
   "P-059": {
    "leftArm": "A1",
@@ -1025,16 +1025,16 @@
    "rightArm": "A1"
   },
   "P-063": {
-   "leftArm": "A1",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "A1"
   },
   "P-064": {
    "leftArm": "A3",
    "rightArm": "A1"
   },
   "P-065": {
-   "leftArm": "A1",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "A1"
   },
   "P-066": {
    "leftArm": "A1",
@@ -1049,20 +1049,20 @@
    "rightArm": "A3"
   },
   "P-069": {
-   "leftArm": "A1",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "A1"
   },
   "P-070": {
-   "leftArm": "A1",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "A1"
   },
   "P-071": {
-   "leftArm": "A1",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "A1"
   },
   "P-072": {
-   "leftArm": "A1",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "A1"
   },
   "P-073": {
    "leftArm": "A3",
@@ -1073,24 +1073,24 @@
    "rightArm": "A3"
   },
   "P-075": {
-   "leftArm": "A3",
-   "rightArm": "A4"
+   "leftArm": "A4",
+   "rightArm": "A3"
   },
   "P-076": {
    "leftArm": "A3",
    "rightArm": "A4"
   },
   "P-077": {
-   "leftArm": "A4",
-   "rightArm": "A3"
-  },
-  "P-078": {
    "leftArm": "A3",
    "rightArm": "A4"
   },
-  "P-079": {
+  "P-078": {
    "leftArm": "A4",
    "rightArm": "A3"
+  },
+  "P-079": {
+   "leftArm": "A3",
+   "rightArm": "A4"
   },
   "P-080": {
    "leftArm": "A4",
@@ -1101,66 +1101,1226 @@
    "rightArm": "A3"
   },
   "P-082": {
-   "leftArm": "A3",
-   "rightArm": "A4"
+   "leftArm": "A4",
+   "rightArm": "A3"
   },
   "P-083": {
    "leftArm": "A3",
    "rightArm": "A4"
   },
   "P-084": {
-   "leftArm": "A3",
-   "rightArm": "A4"
-  },
-  "P-085": {
-   "leftArm": "A3",
-   "rightArm": "A4"
-  },
-  "P-086": {
-   "leftArm": "A3",
-   "rightArm": "A4"
-  },
-  "P-087": {
    "leftArm": "A4",
    "rightArm": "A3"
+  },
+  "P-085": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-086": {
+   "leftArm": "A4",
+   "rightArm": "A3"
+  },
+  "P-087": {
+   "leftArm": "A3",
+   "rightArm": "A4"
   },
   "P-088": {
    "leftArm": "A4",
    "rightArm": "A3"
   },
   "P-089": {
-   "leftArm": "A4",
-   "rightArm": "A3"
-  },
-  "P-090": {
    "leftArm": "A3",
    "rightArm": "A4"
+  },
+  "P-090": {
+   "leftArm": "A4",
+   "rightArm": "A3"
   },
   "P-091": {
    "leftArm": "A3",
    "rightArm": "A4"
   },
   "P-092": {
-   "leftArm": "A4",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "A4"
   },
   "P-093": {
-   "leftArm": "A4",
-   "rightArm": "A3"
+   "leftArm": "A3",
+   "rightArm": "A4"
   },
   "P-094": {
    "leftArm": "A3",
    "rightArm": "A4"
   },
   "P-095": {
-   "leftArm": "A3",
-   "rightArm": "A4"
-  },
-  "P-096": {
    "leftArm": "A4",
    "rightArm": "A3"
+  },
+  "P-096": {
+   "leftArm": "A3",
+   "rightArm": "A4"
   }
  },
+ "pairKeys": [
+  {
+   "P-001": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-002": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-003": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-004": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-005": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-006": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-007": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-008": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-009": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-010": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-011": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-012": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-013": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-014": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-015": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-016": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-017": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-018": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-019": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-020": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-021": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-022": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-023": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-024": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-025": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-026": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-027": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-028": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-029": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-030": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-031": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-032": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-033": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-034": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-035": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-036": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-037": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-038": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-039": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-040": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-041": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-042": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-043": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-044": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-045": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-046": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-047": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-048": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-049": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-050": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-051": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-052": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-053": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-054": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-055": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-056": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-057": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-058": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-059": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-060": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-061": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-062": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-063": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-064": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-065": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-066": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-067": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-068": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-069": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-070": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-071": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-072": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-073": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-074": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-075": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-076": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-077": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-078": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-079": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-080": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-081": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-082": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-083": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-084": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-085": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-086": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-087": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-088": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-089": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-090": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-091": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-092": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-093": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-094": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-095": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-096": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   }
+  },
+  {
+   "P-001": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-002": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-003": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-004": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-005": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-006": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-007": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-008": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-009": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-010": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-011": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-012": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-013": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-014": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-015": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-016": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-017": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-018": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-019": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-020": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-021": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-022": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-023": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-024": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-025": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-026": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-027": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-028": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-029": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-030": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-031": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-032": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-033": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-034": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-035": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-036": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-037": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-038": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-039": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-040": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-041": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-042": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-043": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-044": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-045": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-046": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-047": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-048": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-049": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-050": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-051": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-052": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-053": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-054": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-055": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-056": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-057": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-058": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-059": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-060": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-061": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-062": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-063": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-064": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-065": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-066": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-067": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-068": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-069": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-070": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-071": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-072": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-073": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-074": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-075": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-076": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-077": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-078": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-079": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-080": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-081": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-082": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-083": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-084": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-085": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-086": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-087": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-088": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-089": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-090": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-091": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-092": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-093": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-094": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-095": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-096": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   }
+  },
+  {
+   "P-001": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-002": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-003": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-004": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-005": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-006": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-007": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-008": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-009": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-010": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-011": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-012": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-013": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-014": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-015": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-016": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-017": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-018": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-019": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-020": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-021": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-022": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-023": {
+    "leftArm": "A3",
+    "rightArm": "E"
+   },
+   "P-024": {
+    "leftArm": "E",
+    "rightArm": "A3"
+   },
+   "P-025": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-026": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-027": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-028": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-029": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-030": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-031": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-032": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-033": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-034": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-035": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-036": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-037": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-038": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-039": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-040": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-041": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-042": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-043": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-044": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-045": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-046": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-047": {
+    "leftArm": "E",
+    "rightArm": "A1"
+   },
+   "P-048": {
+    "leftArm": "A1",
+    "rightArm": "E"
+   },
+   "P-049": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-050": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-051": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-052": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-053": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-054": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-055": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-056": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-057": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-058": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-059": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-060": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-061": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-062": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-063": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-064": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-065": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-066": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-067": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-068": {
+    "leftArm": "A3",
+    "rightArm": "A1"
+   },
+   "P-069": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-070": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-071": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-072": {
+    "leftArm": "A1",
+    "rightArm": "A3"
+   },
+   "P-073": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-074": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-075": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-076": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-077": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-078": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-079": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-080": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-081": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-082": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-083": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-084": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-085": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-086": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-087": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-088": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-089": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-090": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-091": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-092": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-093": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-094": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   },
+   "P-095": {
+    "leftArm": "A3",
+    "rightArm": "A4"
+   },
+   "P-096": {
+    "leftArm": "A4",
+    "rightArm": "A3"
+   }
+  }
+ ],
  "available": {
   "E": 59,
   "A1": 39,

@@ -118,8 +118,8 @@ if (s2 && s1) {
 // ---- how the packet was built ----
 const inputsFile = `${packetDir}/inputs.json`;
 if (existsSync(inputsFile)) {
-  const m = JSON.parse(readFileSync(inputsFile, 'utf8')) as { a3Rule: string; runs: Array<{ file: string; hash: string }>; n: number; raters: number; names?: string; tier?: string };
-  lines.push('## How the packet was built', '', `The packet is rebuilt byte for byte from blind/inputs.json: ${m.runs.length} hook runs by file name and record hash (${m.runs.map((r) => r.file.replace('.json', '')).join(', ')}), ${m.n} hooks per arm (engine and A1 cards are the hooks with an ask: tier "${m.tier ?? 'all'}"), ${m.raters} raters, A3 under the \`${m.a3Rule}\` slot rule, the wide name registry for every arm (names "${m.names ?? 'legacy'}").`, '');
+  const m = JSON.parse(readFileSync(inputsFile, 'utf8')) as { a3Rule: string; runs: Array<{ file: string; hash: string }>; n: number; raters: number; names?: string; tier?: string; sides?: string };
+  lines.push('## How the packet was built', '', `The packet is rebuilt byte for byte from blind/inputs.json: ${m.runs.length} hook runs by file name and record hash (${m.runs.map((r) => r.file.replace('.json', '')).join(', ')}), ${m.n} hooks per arm (engine and A1 cards are the hooks with an ask: tier "${m.tier ?? 'all'}"), ${m.raters} raters, A3 under the \`${m.a3Rule}\` slot rule, the wide name registry for every arm (names "${m.names ?? 'legacy'}"), pair sides ${m.sides === 'balanced' ? 'balanced (equal left and right in each comparison on every sheet, the first and third sheet mirrored)' : 'drawn once for every rater'}.`, '');
 }
 writeFileSync(out, lines.join('\n') + '\n');
 console.log(`wrote ${out}`);

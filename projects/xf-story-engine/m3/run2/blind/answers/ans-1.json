@@ -4,10 +4,10 @@
   "H-038": {
    "caused": 4,
    "legible": 5,
-   "setting": 3,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Three options; vague crew identities"
+   "cue": "three-option menu, unspecified grievance"
   },
   "H-040": {
    "caused": 5,
@@ -15,39 +15,39 @@
    "setting": 3,
    "pull": 3,
    "made_by": "program",
-   "cue": "Repeated full names; fixed payout"
+   "cue": "target-location-reward formula"
   },
   "H-081": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-069": {
-   "caused": 5,
+   "caused": 4,
    "legible": 5,
-   "setting": 3,
+   "setting": 4,
    "pull": 5,
    "made_by": "program",
-   "cue": "Three options; unspecified crew connections"
+   "cue": "automatic retaliation, three-option menu"
   },
   "H-017": {
    "caused": 5,
    "legible": 6,
-   "setting": 4,
+   "setting": 5,
    "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; appended reputation explanation"
+   "cue": "option menu, appended reputation justification"
   },
   "H-044": {
    "caused": 4,
    "legible": 5,
-   "setting": 3,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Three options; vague crew identities"
+   "cue": "three-option menu, unspecified grievance"
   },
   "H-059": {
    "caused": 2,
@@ -55,47 +55,47 @@
    "setting": 3,
    "pull": 2,
    "made_by": "program",
-   "cue": "Generic gang member; unexplained removal"
+   "cue": "unexplained removal, fixed reward"
   },
   "H-010": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-092": {
    "caused": 6,
    "legible": 5,
-   "setting": 3,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Parcel-client-rota option list"
+   "cue": "interchangeable parcel-client-rota options"
   },
   "H-082": {
-   "caused": 3,
+   "caused": 4,
    "legible": 7,
    "setting": 3,
    "pull": 3,
    "made_by": "program",
-   "cue": "Occupation slot; generic sealed-case delivery"
+   "cue": "occupation-route-reward formula"
   },
   "H-022": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-007": {
-   "caused": 4,
+   "caused": 3,
    "legible": 4,
    "setting": 3,
-   "pull": 4,
+   "pull": 3,
    "made_by": "program",
-   "cue": "Pronoun shift; vague crew identities"
+   "cue": "pronoun shift, vague targeting"
   },
   "H-088": {
    "caused": 6,
@@ -103,7 +103,7 @@
    "setting": 4,
    "pull": 5,
    "made_by": "program",
-   "cue": "Pronoun shift; delivery-to-shift option jump"
+   "cue": "delivery abruptly becomes shift coverage"
   },
   "H-096": {
    "caused": 2,
@@ -111,31 +111,31 @@
    "setting": 3,
    "pull": 2,
    "made_by": "program",
-   "cue": "Generic gang member; unexplained removal"
+   "cue": "unexplained removal, fixed reward"
   },
   "H-090": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-039": {
    "caused": 4,
    "legible": 5,
-   "setting": 3,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Option trio; generic reputation ending"
+   "cue": "unearned instigator premise, option menu"
   },
   "H-051": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-076": {
    "caused": 5,
@@ -143,119 +143,119 @@
    "setting": 3,
    "pull": 3,
    "made_by": "program",
-   "cue": "Repeated full names; fixed payout"
+   "cue": "target-location-reward formula"
   },
   "H-050": {
-   "caused": 5,
+   "caused": 4,
    "legible": 6,
-   "setting": 3,
+   "setting": 4,
    "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; strained outsider justification"
+   "cue": "outsider rationale does not follow"
   },
   "H-053": {
    "caused": 5,
-   "legible": 5,
-   "setting": 3,
-   "pull": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
    "made_by": "program",
-   "cue": "Pronoun shift; interchangeable appeal ending"
+   "cue": "three-option menu, generic desperation"
   },
   "H-080": {
-   "caused": 3,
+   "caused": 4,
    "legible": 7,
    "setting": 3,
    "pull": 3,
    "made_by": "program",
-   "cue": "Occupation slot; generic sealed-case delivery"
+   "cue": "occupation-route-reward formula"
   },
   "H-025": {
    "caused": 5,
    "legible": 6,
-   "setting": 3,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Option trio; generic reputation ending"
+   "cue": "recovery-pressure-reimbursement menu"
   },
   "H-011": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-045": {
-   "caused": 4,
-   "legible": 4,
-   "setting": 3,
+   "caused": 3,
+   "legible": 5,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Assumed instigator; broad option trio"
+   "cue": "asserted conspiracy without evidence"
   },
   "H-018": {
    "caused": 5,
    "legible": 5,
    "setting": 3,
-   "pull": 3,
+   "pull": 4,
    "made_by": "program",
-   "cue": "Parcel-client-rota option list"
+   "cue": "interchangeable parcel-client-rota options"
   },
   "H-065": {
    "caused": 4,
-   "legible": 5,
+   "legible": 6,
    "setting": 3,
-   "pull": 4,
+   "pull": 5,
    "made_by": "program",
-   "cue": "Repeated full names; missing-person formula"
+   "cue": "bare disappearance-reward formula"
   },
   "H-024": {
    "caused": 6,
-   "legible": 6,
-   "setting": 3,
+   "legible": 5,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Pronoun shift; delivery-to-bar option jump"
+   "cue": "delivery and bar-shift alternatives"
   },
   "H-034": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-013": {
    "caused": 4,
-   "legible": 5,
+   "legible": 6,
    "setting": 3,
-   "pull": 4,
+   "pull": 5,
    "made_by": "program",
-   "cue": "Repeated full names; missing-person formula"
+   "cue": "bare disappearance-reward formula"
   },
   "H-085": {
    "caused": 4,
    "legible": 5,
-   "setting": 3,
-   "pull": 4,
+   "setting": 4,
+   "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; appended outsider explanation"
+   "cue": "instigator premise, three-option menu"
   },
   "H-047": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-030": {
-   "caused": 5,
+   "caused": 6,
    "legible": 5,
    "setting": 3,
-   "pull": 3,
+   "pull": 4,
    "made_by": "program",
-   "cue": "Parcel-client-rota option list"
+   "cue": "interchangeable parcel-client-rota options"
   },
   "H-004": {
    "caused": 6,
@@ -263,119 +263,119 @@
    "setting": 4,
    "pull": 5,
    "made_by": "program",
-   "cue": "Delivery-to-shift option jump; reputation ending"
+   "cue": "delivery abruptly becomes shift coverage"
   },
   "H-008": {
-   "caused": 3,
+   "caused": 4,
    "legible": 7,
    "setting": 3,
    "pull": 3,
    "made_by": "program",
-   "cue": "Occupation slot; generic sealed-case delivery"
+   "cue": "occupation-route-reward formula"
   },
   "H-068": {
    "caused": 4,
    "legible": 6,
-   "setting": 3,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Option trio; strained outsider justification"
+   "cue": "outsider rationale does not follow"
   },
   "H-006": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-084": {
-   "caused": 3,
+   "caused": 4,
    "legible": 7,
    "setting": 3,
    "pull": 3,
    "made_by": "program",
-   "cue": "Occupation slot; generic sealed-case delivery"
+   "cue": "occupation-route-reward formula"
   },
   "H-027": {
    "caused": 4,
    "legible": 5,
-   "setting": 3,
-   "pull": 4,
+   "setting": 4,
+   "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; appended outsider explanation"
+   "cue": "instigator premise, three-option menu"
   },
   "H-021": {
    "caused": 5,
    "legible": 6,
-   "setting": 4,
+   "setting": 5,
    "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; appended reputation explanation"
+   "cue": "option menu, appended reputation justification"
   },
   "H-037": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-033": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-073": {
    "caused": 7,
-   "legible": 6,
+   "legible": 7,
    "setting": 6,
    "pull": 7,
-   "made_by": "program",
-   "cue": "Three-option menu despite specific stakes"
+   "made_by": "person",
+   "cue": "deadline, retaliation, collective resistance connect"
   },
   "H-012": {
    "caused": 5,
    "legible": 6,
-   "setting": 3,
+   "setting": 4,
    "pull": 6,
    "made_by": "program",
-   "cue": "Pronoun shift; investigation-or-payment menu"
+   "cue": "investigate-confront-pay menu"
   },
   "H-001": {
-   "caused": 4,
+   "caused": 5,
    "legible": 6,
    "setting": 4,
-   "pull": 3,
+   "pull": 4,
    "made_by": "program",
-   "cue": "Repeated full name; retrieval-payout formula"
+   "cue": "repeated full name, fixed reward"
   },
   "H-058": {
    "caused": 6,
    "legible": 6,
-   "setting": 4,
+   "setting": 5,
    "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; generic reputation ending"
+   "cue": "three-option menu, reputation suffix"
   },
   "H-093": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-060": {
-   "caused": 3,
+   "caused": 4,
    "legible": 7,
    "setting": 3,
    "pull": 3,
    "made_by": "program",
-   "cue": "Occupation slot; generic sealed-case delivery"
+   "cue": "occupation-route-reward formula"
   },
   "H-063": {
    "caused": 5,
@@ -383,23 +383,23 @@
    "setting": 4,
    "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; interchangeable stranger appeal"
+   "cue": "three-option menu, generic desperation"
   },
   "H-066": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-056": {
-   "caused": 4,
+   "caused": 5,
    "legible": 5,
-   "setting": 4,
-   "pull": 4,
+   "setting": 5,
+   "pull": 5,
    "made_by": "program",
-   "cue": "Pronoun shift; loosely attached patrol rationale"
+   "cue": "patrol explanation feels appended"
   },
   "H-054": {
    "caused": 5,
@@ -407,31 +407,31 @@
    "setting": 4,
    "pull": 3,
    "made_by": "program",
-   "cue": "Repeated full name; fixed escort route"
+   "cue": "route-and-reward formula"
   },
   "H-079": {
    "caused": 4,
    "legible": 6,
-   "setting": 3,
+   "setting": 4,
    "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; unsupported conspiracy conclusion"
+   "cue": "stranger implies conspiracy without evidence"
   },
   "H-052": {
    "caused": 4,
    "legible": 5,
    "setting": 4,
-   "pull": 4,
+   "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; appended outsider explanation"
+   "cue": "three-option menu, outsider justification"
   },
   "H-091": {
    "caused": 4,
    "legible": 5,
    "setting": 4,
-   "pull": 4,
+   "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; appended outsider explanation"
+   "cue": "three-option menu, outsider justification"
   },
   "H-041": {
    "caused": 2,
@@ -439,15 +439,15 @@
    "setting": 3,
    "pull": 2,
    "made_by": "program",
-   "cue": "Generic gang member; unexplained removal"
+   "cue": "unexplained removal, fixed reward"
   },
   "H-020": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-095": {
    "caused": 5,
@@ -455,47 +455,47 @@
    "setting": 4,
    "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; interchangeable stranger appeal"
+   "cue": "three-option menu, generic desperation"
   },
   "H-094": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-070": {
-   "caused": 4,
+   "caused": 5,
    "legible": 6,
    "setting": 4,
-   "pull": 3,
+   "pull": 4,
    "made_by": "program",
-   "cue": "Repeated full name; retrieval-payout formula"
+   "cue": "repeated full name, fixed reward"
   },
   "H-005": {
    "caused": 5,
-   "legible": 5,
-   "setting": 3,
-   "pull": 4,
+   "legible": 6,
+   "setting": 4,
+   "pull": 5,
    "made_by": "program",
-   "cue": "Pronoun shift; interchangeable stranger appeal"
+   "cue": "three-option menu, stranger disclaimer"
   },
   "H-061": {
    "caused": 4,
-   "legible": 5,
-   "setting": 3,
+   "legible": 6,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Pronoun shift; unsupported conspiracy conclusion"
+   "cue": "stranger implies conspiracy without evidence"
   },
   "H-029": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-048": {
    "caused": 5,
@@ -503,15 +503,15 @@
    "setting": 4,
    "pull": 3,
    "made_by": "program",
-   "cue": "Repeated full name; fixed escort route"
+   "cue": "route-and-reward formula"
   },
   "H-031": {
    "caused": 6,
    "legible": 5,
-   "setting": 3,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Parcel-client-rota option list"
+   "cue": "interchangeable parcel-client-rota options"
   },
   "H-087": {
    "caused": 6,
@@ -519,47 +519,47 @@
    "setting": 5,
    "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; appended patrol explanation"
+   "cue": "recovery-pressure-reimbursement menu"
   },
   "H-078": {
    "caused": 2,
-   "legible": 6,
+   "legible": 7,
    "setting": 3,
-   "pull": 2,
+   "pull": 3,
    "made_by": "program",
-   "cue": "Unexplained surveillance; repeated full names"
+   "cue": "surveillance request lacks motive"
   },
   "H-035": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-015": {
    "caused": 5,
    "legible": 6,
-   "setting": 3,
-   "pull": 5,
+   "setting": 4,
+   "pull": 6,
    "made_by": "program",
-   "cue": "Three alternatives; generic stranger-fear ending"
+   "cue": "investigate-protect-clinic menu"
   },
   "H-042": {
    "caused": 4,
    "legible": 6,
-   "setting": 3,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Option trio; strained outsider justification"
+   "cue": "outsider rationale does not follow"
   },
   "H-075": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-043": {
    "caused": 5,
@@ -567,47 +567,47 @@
    "setting": 3,
    "pull": 3,
    "made_by": "program",
-   "cue": "Repeated full names; fixed payout"
+   "cue": "target-location-reward formula"
   },
   "H-086": {
    "caused": 4,
-   "legible": 5,
-   "setting": 3,
+   "legible": 6,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Pronoun shift; unsupported conspiracy conclusion"
+   "cue": "stranger implies conspiracy without evidence"
   },
   "H-083": {
    "caused": 4,
-   "legible": 5,
+   "legible": 6,
    "setting": 3,
-   "pull": 4,
+   "pull": 5,
    "made_by": "program",
-   "cue": "Repeated full names; missing-person formula"
+   "cue": "bare disappearance-reward formula"
   },
   "H-028": {
    "caused": 5,
    "legible": 6,
-   "setting": 3,
+   "setting": 4,
    "pull": 6,
    "made_by": "program",
-   "cue": "Pronoun shift; investigation-or-payment menu"
+   "cue": "investigate-confront-pay menu"
   },
   "H-064": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-019": {
    "caused": 4,
    "legible": 5,
-   "setting": 3,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Option trio; generic reputation ending"
+   "cue": "unearned instigator premise, option menu"
   },
   "H-077": {
    "caused": 2,
@@ -615,55 +615,55 @@
    "setting": 3,
    "pull": 2,
    "made_by": "program",
-   "cue": "Generic gang member; unexplained removal"
+   "cue": "unexplained removal, fixed reward"
   },
   "H-072": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-032": {
    "caused": 6,
-   "legible": 6,
-   "setting": 3,
+   "legible": 5,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Pronoun shift; delivery-to-bar option jump"
+   "cue": "delivery and bar-shift alternatives"
   },
   "H-026": {
    "caused": 5,
    "legible": 5,
    "setting": 3,
-   "pull": 3,
+   "pull": 4,
    "made_by": "program",
-   "cue": "Parcel-client-rota option list"
+   "cue": "interchangeable parcel-client-rota options"
   },
   "H-057": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-089": {
    "caused": 2,
-   "legible": 6,
+   "legible": 7,
    "setting": 3,
-   "pull": 2,
+   "pull": 3,
    "made_by": "program",
-   "cue": "Unexplained surveillance; repeated full names"
+   "cue": "surveillance request lacks motive"
   },
   "H-046": {
-   "caused": 5,
+   "caused": 4,
    "legible": 6,
-   "setting": 3,
+   "setting": 4,
    "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; strained outsider justification"
+   "cue": "outsider rationale does not follow"
   },
   "H-049": {
    "caused": 6,
@@ -671,47 +671,47 @@
    "setting": 4,
    "pull": 5,
    "made_by": "program",
-   "cue": "Delivery-to-shift option jump; reputation ending"
+   "cue": "delivery abruptly becomes shift coverage"
   },
   "H-067": {
-   "caused": 3,
+   "caused": 4,
    "legible": 7,
    "setting": 3,
    "pull": 3,
    "made_by": "program",
-   "cue": "Occupation slot; generic sealed-case delivery"
+   "cue": "occupation-route-reward formula"
   },
   "H-009": {
    "caused": 5,
    "legible": 6,
-   "setting": 3,
+   "setting": 4,
    "pull": 6,
    "made_by": "program",
-   "cue": "Pronoun shift; investigation-or-payment menu"
+   "cue": "investigate-confront-pay menu"
   },
   "H-071": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-014": {
    "caused": 6,
    "legible": 6,
-   "setting": 4,
+   "setting": 5,
    "pull": 5,
    "made_by": "program",
-   "cue": "Option trio; generic reputation ending"
+   "cue": "three-option menu, reputation suffix"
   },
   "H-062": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   },
   "H-016": {
    "caused": 4,
@@ -719,23 +719,23 @@
    "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Option trio; vague conflict grievance"
+   "cue": "fight participation, then unexplained grievance"
   },
   "H-074": {
    "caused": 4,
    "legible": 6,
-   "setting": 3,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Option trio; unsupported conspiracy conclusion"
+   "cue": "stranger implies conspiracy without evidence"
   },
   "H-003": {
    "caused": 4,
    "legible": 6,
    "setting": 3,
-   "pull": 2,
+   "pull": 3,
    "made_by": "program",
-   "cue": "Repeated full name; retrieval-payout formula"
+   "cue": "generic stolen-object reward formula"
   },
   "H-023": {
    "caused": 4,
@@ -743,31 +743,31 @@
    "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Option trio; vague conflict grievance"
+   "cue": "fight participation, then unexplained grievance"
   },
   "H-036": {
    "caused": 6,
    "legible": 7,
    "setting": 4,
    "pull": 4,
-   "made_by": "program",
-   "cue": "Location-deadline-reward task formula"
+   "made_by": "person",
+   "cue": "concrete trading deadline"
   },
   "H-002": {
    "caused": 4,
    "legible": 6,
-   "setting": 3,
+   "setting": 4,
    "pull": 4,
    "made_by": "program",
-   "cue": "Option trio; unsupported conspiracy conclusion"
+   "cue": "stranger implies conspiracy without evidence"
   },
   "H-055": {
    "caused": 6,
-   "legible": 5,
+   "legible": 6,
    "setting": 6,
    "pull": 5,
    "made_by": "program",
-   "cue": "Stock fee-and-shortfall request"
+   "cue": "generic collector-request formula"
   }
  },
  "pairs": {
@@ -784,24 +784,24 @@
    "caused": "right"
   },
   "P-058": {
-   "follow": "right",
-   "caused": "left"
+   "follow": "left",
+   "caused": "right"
   },
   "P-074": {
    "follow": "left",
    "caused": "left"
   },
   "P-051": {
-   "follow": "right",
-   "caused": "right"
+   "follow": "left",
+   "caused": "left"
   },
   "P-042": {
-   "follow": "right",
+   "follow": "left",
    "caused": "left"
   },
   "P-004": {
-   "follow": "right",
-   "caused": "right"
+   "follow": "left",
+   "caused": "left"
   },
   "P-088": {
    "follow": "left",
@@ -812,44 +812,44 @@
    "caused": "left"
   },
   "P-086": {
-   "follow": "right",
-   "caused": "right"
-  },
-  "P-093": {
    "follow": "left",
    "caused": "left"
   },
-  "P-001": {
+  "P-093": {
    "follow": "right",
    "caused": "right"
   },
-  "P-021": {
+  "P-001": {
    "follow": "left",
+   "caused": "left"
+  },
+  "P-021": {
+   "follow": "right",
    "caused": "left"
   },
   "P-025": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-019": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-092": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-065": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-030": {
    "follow": "right",
-   "caused": "right"
+   "caused": "left"
   },
   "P-090": {
    "follow": "right",
-   "caused": "right"
+   "caused": "left"
   },
   "P-060": {
    "follow": "left",
@@ -860,20 +860,20 @@
    "caused": "left"
   },
   "P-089": {
-   "follow": "left",
-   "caused": "left"
-  },
-  "P-010": {
    "follow": "right",
    "caused": "right"
   },
-  "P-029": {
-   "follow": "right",
-   "caused": "left"
-  },
-  "P-038": {
+  "P-010": {
    "follow": "left",
    "caused": "left"
+  },
+  "P-029": {
+   "follow": "left",
+   "caused": "right"
+  },
+  "P-038": {
+   "follow": "right",
+   "caused": "right"
   },
   "P-076": {
    "follow": "right",
@@ -885,7 +885,7 @@
   },
   "P-016": {
    "follow": "right",
-   "caused": "right"
+   "caused": "left"
   },
   "P-066": {
    "follow": "left",
@@ -896,8 +896,8 @@
    "caused": "right"
   },
   "P-037": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-039": {
    "follow": "right",
@@ -905,87 +905,87 @@
   },
   "P-045": {
    "follow": "left",
-   "caused": "left"
+   "caused": "right"
   },
   "P-071": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-073": {
-   "follow": "right",
+   "follow": "left",
    "caused": "right"
   },
   "P-082": {
-   "follow": "right",
-   "caused": "right"
-  },
-  "P-096": {
    "follow": "left",
    "caused": "left"
+  },
+  "P-096": {
+   "follow": "right",
+   "caused": "right"
   },
   "P-091": {
    "follow": "right",
    "caused": "right"
   },
   "P-063": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-023": {
    "follow": "left",
    "caused": "left"
   },
-  "P-023": {
-   "follow": "right",
-   "caused": "right"
-  },
   "P-049": {
-   "follow": "right",
-   "caused": "left"
+   "follow": "left",
+   "caused": "right"
   },
   "P-078": {
-   "follow": "right",
-   "caused": "right"
+   "follow": "left",
+   "caused": "left"
   },
   "P-028": {
    "follow": "right",
    "caused": "right"
   },
   "P-069": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-053": {
-   "follow": "left",
+   "follow": "right",
    "caused": "left"
   },
   "P-095": {
    "follow": "right",
-   "caused": "right"
+   "caused": "left"
   },
   "P-013": {
-   "follow": "left",
-   "caused": "right"
+   "follow": "right",
+   "caused": "left"
   },
   "P-033": {
    "follow": "left",
    "caused": "left"
   },
   "P-085": {
-   "follow": "right",
-   "caused": "right"
-  },
-  "P-014": {
    "follow": "left",
    "caused": "left"
   },
-  "P-041": {
+  "P-014": {
    "follow": "right",
    "caused": "right"
+  },
+  "P-041": {
+   "follow": "left",
+   "caused": "left"
   },
   "P-040": {
    "follow": "left",
    "caused": "left"
   },
   "P-017": {
-   "follow": "right",
-   "caused": "right"
+   "follow": "left",
+   "caused": "left"
   },
   "P-020": {
    "follow": "left",
@@ -996,7 +996,7 @@
    "caused": "right"
   },
   "P-008": {
-   "follow": "right",
+   "follow": "left",
    "caused": "right"
   },
   "P-055": {
@@ -1004,16 +1004,16 @@
    "caused": "right"
   },
   "P-075": {
-   "follow": "right",
-   "caused": "right"
+   "follow": "left",
+   "caused": "left"
   },
   "P-083": {
    "follow": "right",
    "caused": "right"
   },
   "P-024": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-022": {
    "follow": "right",
@@ -1024,8 +1024,8 @@
    "caused": "left"
   },
   "P-087": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-005": {
    "follow": "left",
@@ -1044,8 +1044,8 @@
    "caused": "left"
   },
   "P-084": {
-   "follow": "right",
-   "caused": "right"
+   "follow": "left",
+   "caused": "left"
   },
   "P-052": {
    "follow": "left",
@@ -1064,12 +1064,12 @@
    "caused": "left"
   },
   "P-056": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-079": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-032": {
    "follow": "right",
@@ -1080,32 +1080,32 @@
    "caused": "left"
   },
   "P-070": {
-   "follow": "left",
-   "caused": "left"
-  },
-  "P-072": {
-   "follow": "left",
-   "caused": "left"
-  },
-  "P-054": {
-   "follow": "left",
-   "caused": "left"
-  },
-  "P-015": {
-   "follow": "left",
-   "caused": "right"
-  },
-  "P-006": {
-   "follow": "left",
-   "caused": "right"
-  },
-  "P-027": {
    "follow": "right",
    "caused": "right"
   },
-  "P-003": {
+  "P-072": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-054": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-015": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-006": {
+   "follow": "right",
+   "caused": "left"
+  },
+  "P-027": {
    "follow": "left",
    "caused": "left"
+  },
+  "P-003": {
+   "follow": "right",
+   "caused": "right"
   },
   "P-081": {
    "follow": "left",
@@ -1116,8 +1116,8 @@
    "caused": "left"
   },
   "P-048": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-026": {
    "follow": "left",
@@ -1125,36 +1125,37 @@
   },
   "P-062": {
    "follow": "right",
-   "caused": "right"
+   "caused": "left"
   },
   "P-002": {
    "follow": "right",
-   "caused": "right"
+   "caused": "left"
   },
   "P-077": {
-   "follow": "left",
+   "follow": "right",
    "caused": "right"
   },
   "P-061": {
    "follow": "left",
-   "caused": "left"
+   "caused": "right"
   },
   "P-050": {
    "follow": "left",
    "caused": "left"
   },
   "P-011": {
-   "follow": "left",
-   "caused": "left"
-  },
-  "P-007": {
    "follow": "right",
    "caused": "right"
+  },
+  "P-007": {
+   "follow": "left",
+   "caused": "left"
   },
   "P-057": {
    "follow": "right",
    "caused": "left"
   }
  },
- "critic": "All read as plausibly assembled from parts: interchangeable names, repeated full names in short instructions, three-option menus in personal messages, and endings explaining why V was selected. Several switch abruptly from third-person reporting to first-person speech. The weakest causal links assume an organized plot because a thief was unfamiliar, or offer paying the victim as an alternative to investigating. The strongest hooks connect an existing pressure to a consequence: injury threatens work, protection money comes due, and refusing a collector risks escalation. H-073 adds collective resistance, giving the district something underway before V arrives."
+ "critic": "The strongest generated cues were interchangeable full names, fixed reward formulas, abrupt shifts from third-person summaries to first-person speech, and repeated menus of three solutions. Several explanations felt attached after the event: an unfamiliar thief supposedly proves sponsorship, or an outsider thief supposedly requires an outsider investigator. Injury preventing paid work and recurring protection fees supplied convincing causes even when the wording felt templated. Ivo's refusal, deadline, threatened escalation, and emerging stallholder resistance formed the clearest connected situation. The repeated clinic, stolen-bag, crew-fight, and Friday-fee structures often supplied actions more specifically than they supplied people or motives.",
+ "sheet": 1
 }

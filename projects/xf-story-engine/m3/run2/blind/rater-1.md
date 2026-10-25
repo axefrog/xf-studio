@@ -432,9 +432,9 @@ Right: Ren Mori messages you: Bao Tran and I ended up on opposite sides of a str
 
 ### P-058
 
-Left: The terminal at Emi Okada's stall near the metro entrance has died. Get it running before the evening crowd. 250 eddies.
+Left: Aiko Sato writes that the street went from busy to a brawl in a minute, and they still do not know who started it. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You are new enough here that nobody will think you are on a side.
 
-Right: Aiko Sato writes that the street went from busy to a brawl in a minute, and they still do not know who started it. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You are new enough here that nobody will think you are on a side.
+Right: The terminal at Emi Okada's stall near the metro entrance has died. Get it running before the evening crowd. 250 eddies.
 
 ### P-074
 
@@ -444,21 +444,21 @@ Right: Someone took Zara Nair's jacket near the metro entrance. Zara Nair wants 
 
 ### P-051
 
-Left: Amara Osei has to cross Kabuki after dark and does not want to go alone. Walk with Amara Osei from the metro entrance to the market stalls. 250 eddies.
+Left: Message from Quinn Nolan: the accident in Kabuki broke my leg, and the job I should be doing is going undone. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. You have a name for getting things done around here, and I am hoping that is true.
 
-Right: Message from Quinn Nolan: the accident in Kabuki broke my leg, and the job I should be doing is going undone. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. You have a name for getting things done around here, and I am hoping that is true.
+Right: Amara Osei has to cross Kabuki after dark and does not want to go alone. Walk with Amara Osei from the metro entrance to the market stalls. 250 eddies.
 
 ### P-042
 
-Left: Maricel Magsaysay writes that Tatsuya Inoue worked the crowd and took a bag, and the bag has not turned up anywhere. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. The thief is no one from this row, which makes it a job for someone with no ties here.
+Left: Message from Haruto Nakamura: someone shoved someone in the Kabuki crowd, and it turned into a fight that swallowed me. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You do not know me, and that may be why somebody will talk to you.
 
-Right: Message from Haruto Nakamura: someone shoved someone in the Kabuki crowd, and it turned into a fight that swallowed me. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You do not know me, and that may be why somebody will talk to you.
+Right: Maricel Magsaysay writes that Tatsuya Inoue worked the crowd and took a bag, and the bag has not turned up anywhere. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. The thief is no one from this row, which makes it a job for someone with no ties here.
 
 ### P-004
 
-Left: Rui Li owes Amara Osei money and has stopped answering. Collect it from Rui Li, who drinks near the metro entrance. You keep a cut: 500 eddies.
+Left: Bea Tolentino writes from the clinic that the accident in the street left them unable to walk, with a job waiting. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. You will not know me from anyone, but there is nobody else I can send.
 
-Right: Bea Tolentino writes from the clinic that the accident in the street left them unable to walk, with a job waiting. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. You will not know me from anyone, but there is nobody else I can send.
+Right: Rui Li owes Amara Osei money and has stopped answering. Collect it from Rui Li, who drinks near the metro entrance. You keep a cut: 500 eddies.
 
 ### P-088
 
@@ -474,27 +474,27 @@ Right: Someone took Walid Jaber's credstick near the metro entrance. Walid Jaber
 
 ### P-086
 
-Left: Yan Liu thinks Haruto Matsuda is meeting someone at the metro entrance. Follow Haruto Matsuda and report who it is. 500 eddies.
+Left: Rania Saleh messages you: Bao Nguyen was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
-Right: Rania Saleh messages you: Bao Nguyen was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Right: Yan Liu thinks Haruto Matsuda is meeting someone at the metro entrance. Follow Haruto Matsuda and report who it is. 500 eddies.
 
 ### P-093
 
-Left: Liza Roxas messages you: Yui Shimizu was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Left: Fang Liu, a labourer, has a sealed case that has to get from the metro entrance to Sanjay Rao before closing. 250 eddies on delivery, no questions.
 
-Right: Fang Liu, a labourer, has a sealed case that has to get from the metro entrance to Sanjay Rao before closing. 250 eddies on delivery, no questions.
+Right: Liza Roxas messages you: Yui Shimizu was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
 ### P-001
 
-Left: Katya Novak thinks Ryo Kobayashi is meeting someone at the metro entrance. Follow Ryo Kobayashi and report who it is. 500 eddies.
+Left: Xiu Zhou messages you: Tatsuya Mori swung at me in a fight between two crews near the market, and now I am a target. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. I do not know them at all, so I cannot guess what they think I did.
 
-Right: Xiu Zhou messages you: Tatsuya Mori swung at me in a fight between two crews near the market, and now I am a target. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. I do not know them at all, so I cannot guess what they think I did.
+Right: Katya Novak thinks Ryo Kobayashi is meeting someone at the metro entrance. Follow Ryo Kobayashi and report who it is. 500 eddies.
 
 ### P-021
 
-Left: Javier Romero on the line: Ryo Maeda robbed me in the crowd by the market, and I want what was in the bag more than I want an apology. Get the bag back to me, whatever shape it is in. Find who is holding it, lean on whoever put the thief up to it, or make good the loss yourself. The thief is no one from this row, which makes it a job for someone with no ties here.
+Left: Someone took Walid Jaber's credstick near the metro entrance. Walid Jaber wants it back and does not care how. 500 eddies when it is returned.
 
-Right: Someone took Walid Jaber's credstick near the metro entrance. Walid Jaber wants it back and does not care how. 500 eddies when it is returned.
+Right: Javier Romero on the line: Ryo Maeda robbed me in the crowd by the market, and I want what was in the bag more than I want an apology. Get the bag back to me, whatever shape it is in. Find who is holding it, lean on whoever put the thief up to it, or make good the loss yourself. The thief is no one from this row, which makes it a job for someone with no ties here.
 
 ### P-025
 
@@ -504,21 +504,21 @@ Right: Aiko Sato writes that the street went from busy to a brawl in a minute, a
 
 ### P-019
 
-Left: Jun Tang writes that the street went from busy to a brawl in a minute, and they still do not know who started it. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. Everyone says you keep your head when others lose theirs.
+Left: Yan Liu thinks Haruto Matsuda is meeting someone at the metro entrance. Follow Haruto Matsuda and report who it is. 500 eddies.
 
-Right: Yan Liu thinks Haruto Matsuda is meeting someone at the metro entrance. Follow Haruto Matsuda and report who it is. 500 eddies.
+Right: Jun Tang writes that the street went from busy to a brawl in a minute, and they still do not know who started it. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. Everyone says you keep your head when others lose theirs.
 
 ### P-092
 
-Left: Fang Xu messages you: Emi Kondo was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Left: Jing Xie wants Jiho Kim, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
 
-Right: Jing Xie wants Jiho Kim, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
+Right: Fang Xu messages you: Emi Kondo was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
 ### P-065
 
-Left: Yui Shimizu messages you: someone saw Jericho Magsaysay slip a hand into my bag at the market and walk off with it. I will take the goods or the value of them. Trace the bag, put pressure on the thief's crowd, or stand me the loss. The patrols are watching curfew, not pickpockets, so this is down to whoever will do it.
+Left: Thao Duong, a labourer, has a sealed case that has to get from the metro entrance to Ramon Lacson before closing. 250 eddies on delivery, no questions.
 
-Right: Thao Duong, a labourer, has a sealed case that has to get from the metro entrance to Ramon Lacson before closing. 250 eddies on delivery, no questions.
+Right: Yui Shimizu messages you: someone saw Jericho Magsaysay slip a hand into my bag at the market and walk off with it. I will take the goods or the value of them. Trace the bag, put pressure on the thief's crowd, or stand me the loss. The patrols are watching curfew, not pickpockets, so this is down to whoever will do it.
 
 ### P-030
 
@@ -528,9 +528,9 @@ Right: Itsuki Ishikawa writes that Nora Carter beat them bloody near the market,
 
 ### P-090
 
-Left: Xiu Liu has not heard from Rafael Romero in three days. Find out where Rafael Romero went. 500 eddies.
+Left: Mai Lam messages you: Hui Wu was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
-Right: Mai Lam messages you: Hui Wu was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Right: Xiu Liu has not heard from Rafael Romero in three days. Find out where Rafael Romero went. 500 eddies.
 
 ### P-060
 
@@ -546,27 +546,27 @@ Right: Itsuki Ogawa writes that the crews met on the street, Carlo Roxas went fo
 
 ### P-089
 
-Left: Itsuki Fujita messages you: Sora Kobayashi was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Left: Thao Duong, a labourer, has a sealed case that has to get from the metro entrance to Ramon Lacson before closing. 250 eddies on delivery, no questions.
 
-Right: Thao Duong, a labourer, has a sealed case that has to get from the metro entrance to Ramon Lacson before closing. 250 eddies on delivery, no questions.
+Right: Itsuki Fujita messages you: Sora Kobayashi was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
 ### P-010
 
-Left: Thao Duong, a labourer, has a sealed case that has to get from the metro entrance to Ramon Lacson before closing. 250 eddies on delivery, no questions.
+Left: Huong Duong messages you: Thao Trinh swung at me in a fight between two crews near the market, and now I am a target. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. People say the stalls look to you when there is trouble, which is why I am writing to you and not to the police.
 
-Right: Huong Duong messages you: Thao Trinh swung at me in a fight between two crews near the market, and now I am a target. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. People say the stalls look to you when there is trouble, which is why I am writing to you and not to the police.
+Right: Thao Duong, a labourer, has a sealed case that has to get from the metro entrance to Ramon Lacson before closing. 250 eddies on delivery, no questions.
 
 ### P-029
 
-Left: Jiro Ishikawa messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. You will not know me from anyone, but there is nobody else I can send.
+Left: Emi Mori writes that the crews met on the street, Hui Zhang went for them, and they have not slept since. I cannot go back to that corner while this is open. Take word to the other crew, see me home, or face them with me. You owe me nothing and I cannot promise much, but I am asking because I have no one else.
 
-Right: Emi Mori writes that the crews met on the street, Hui Zhang went for them, and they have not slept since. I cannot go back to that corner while this is open. Take word to the other crew, see me home, or face them with me. You owe me nothing and I cannot promise much, but I am asking because I have no one else.
+Right: Jiro Ishikawa messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. You will not know me from anyone, but there is nobody else I can send.
 
 ### P-038
 
-Left: Message from Haruto Nakamura: someone shoved someone in the Kabuki crowd, and it turned into a fight that swallowed me. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You do not know me, and that may be why somebody will talk to you.
+Left: Jun Tang writes that the street went from busy to a brawl in a minute, and they still do not know who started it. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. Everyone says you keep your head when others lose theirs.
 
-Right: Jun Tang writes that the street went from busy to a brawl in a minute, and they still do not know who started it. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. Everyone says you keep your head when others lose theirs.
+Right: Message from Haruto Nakamura: someone shoved someone in the Kabuki crowd, and it turned into a fight that swallowed me. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You do not know me, and that may be why somebody will talk to you.
 
 ### P-076
 
@@ -600,9 +600,9 @@ Right: Emil Lebedev owes Jericho Santos money and has stopped answering. Collect
 
 ### P-037
 
-Left: Yui Shimizu messages you: someone saw Jericho Magsaysay slip a hand into my bag at the market and walk off with it. I will take the goods or the value of them. Trace the bag, put pressure on the thief's crowd, or stand me the loss. The patrols are watching curfew, not pickpockets, so this is down to whoever will do it.
+Left: Misaki Aoki writes that the crews clashed on the street and Hyunwoo Choi picked them out of it. I cannot go back to that corner while this is open. Take word to the other crew, see me home, or face them with me. With patrols about, the crews are watching each other and nobody else, so a quiet word might still work.
 
-Right: Misaki Aoki writes that the crews clashed on the street and Hyunwoo Choi picked them out of it. I cannot go back to that corner while this is open. Take word to the other crew, see me home, or face them with me. With patrols about, the crews are watching each other and nobody else, so a quiet word might still work.
+Right: Yui Shimizu messages you: someone saw Jericho Magsaysay slip a hand into my bag at the market and walk off with it. I will take the goods or the value of them. Trace the bag, put pressure on the thief's crowd, or stand me the loss. The patrols are watching curfew, not pickpockets, so this is down to whoever will do it.
 
 ### P-039
 
@@ -618,9 +618,9 @@ Right: Message from Joon Han: Daichi Sakamoto went for me in the middle of a cre
 
 ### P-071
 
-Left: Tamara Jankowski messages you: someone saw Xiu Zhao slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.
+Left: Katya Novak thinks Ryo Kobayashi is meeting someone at the metro entrance. Follow Ryo Kobayashi and report who it is. 500 eddies.
 
-Right: Katya Novak thinks Ryo Kobayashi is meeting someone at the metro entrance. Follow Ryo Kobayashi and report who it is. 500 eddies.
+Right: Tamara Jankowski messages you: someone saw Xiu Zhao slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.
 
 ### P-073
 
@@ -630,15 +630,15 @@ Right: Khoa Tran messages you: Kaori Matsuda was at the stall again for the Frid
 
 ### P-082
 
-Left: Ryo Fujita has to cross Kabuki after dark and does not want to go alone. Walk with Ryo Fujita from the metro entrance to the market stalls. 250 eddies.
+Left: Malik Mitchell messages you: Mei Kobayashi was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
-Right: Malik Mitchell messages you: Mei Kobayashi was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Right: Ryo Fujita has to cross Kabuki after dark and does not want to go alone. Walk with Ryo Fujita from the metro entrance to the market stalls. 250 eddies.
 
 ### P-096
 
-Left: Yan Zhao messages you: Misaki Hashimoto was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Left: Jordan Dawson, a labourer, has a sealed case that has to get from the metro entrance to Rafael Reyes before closing. 250 eddies on delivery, no questions.
 
-Right: Jordan Dawson, a labourer, has a sealed case that has to get from the metro entrance to Rafael Reyes before closing. 250 eddies on delivery, no questions.
+Right: Yan Zhao messages you: Misaki Hashimoto was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
 ### P-091
 
@@ -648,27 +648,27 @@ Right: Bo Huang messages you: Samira Said was at the stall again for the Friday 
 
 ### P-063
 
-Left: Itsuki Ogawa writes that the crews met on the street, Carlo Roxas went for them, and they have not slept since. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You will not know me, and I know it is a lot to ask a stranger.
+Left: Katya Novak has not heard from Ryo Kobayashi in three days. Find out where Ryo Kobayashi went. 500 eddies.
 
-Right: Katya Novak has not heard from Ryo Kobayashi in three days. Find out where Ryo Kobayashi went. 500 eddies.
+Right: Itsuki Ogawa writes that the crews met on the street, Carlo Roxas went for them, and they have not slept since. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You will not know me, and I know it is a lot to ask a stranger.
 
 ### P-023
 
-Left: Quinn Fraser wants Tatsuya Watanabe, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
+Left: Sora Okada messages you: Ying Wu and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I had never seen them before the fight, so I do not know what I am supposed to have done.
 
-Right: Sora Okada messages you: Ying Wu and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I had never seen them before the fight, so I do not know what I am supposed to have done.
+Right: Quinn Fraser wants Tatsuya Watanabe, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
 
 ### P-049
 
-Left: Rui Li owes Amara Osei money and has stopped answering. Collect it from Rui Li, who drinks near the metro entrance. You keep a cut: 500 eddies.
+Left: Message from Joon Han: Daichi Sakamoto went for me in the middle of a crew fight near the market, and I am still shaking. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I had never seen them before the fight, so I do not know what I am supposed to have done.
 
-Right: Message from Joon Han: Daichi Sakamoto went for me in the middle of a crew fight near the market, and I am still shaking. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I had never seen them before the fight, so I do not know what I am supposed to have done.
+Right: Rui Li owes Amara Osei money and has stopped answering. Collect it from Rui Li, who drinks near the metro entrance. You keep a cut: 500 eddies.
 
 ### P-078
 
-Left: Noriko Sato wants Minh Dang, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
+Left: Takeshi Hayashi messages you: Yui Inoue was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
-Right: Takeshi Hayashi messages you: Yui Inoue was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Right: Noriko Sato wants Minh Dang, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
 
 ### P-028
 
@@ -678,9 +678,9 @@ Right: Bea Tolentino writes from the clinic that the accident in the street left
 
 ### P-069
 
-Left: Zara Reddy messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. People trust you with their things around here, so I am trusting you with mine.
+Left: Katya Novak wants Ines Herrera, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
 
-Right: Katya Novak wants Ines Herrera, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
+Right: Zara Reddy messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. People trust you with their things around here, so I am trusting you with mine.
 
 ### P-053
 
@@ -690,15 +690,15 @@ Right: Jisoo Choi has not heard from Tatsuya Shimizu in three days. Find out whe
 
 ### P-095
 
-Left: Jisoo Choi has not heard from Tatsuya Shimizu in three days. Find out where Tatsuya Shimizu went. 500 eddies.
+Left: Hana Watanabe messages you: Yui Hayashi was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
-Right: Hana Watanabe messages you: Yui Hayashi was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Right: Jisoo Choi has not heard from Tatsuya Shimizu in three days. Find out where Tatsuya Shimizu went. 500 eddies.
 
 ### P-013
 
-Left: Misaki Aoki writes that the crews clashed on the street and Hyunwoo Choi picked them out of it. I cannot go back to that corner while this is open. Take word to the other crew, see me home, or face them with me. With patrols about, the crews are watching each other and nobody else, so a quiet word might still work.
+Left: Someone took Walid Jaber's credstick near the metro entrance. Walid Jaber wants it back and does not care how. 500 eddies when it is returned.
 
-Right: Someone took Walid Jaber's credstick near the metro entrance. Walid Jaber wants it back and does not care how. 500 eddies when it is returned.
+Right: Misaki Aoki writes that the crews clashed on the street and Hyunwoo Choi picked them out of it. I cannot go back to that corner while this is open. Take word to the other crew, see me home, or face them with me. With patrols about, the crews are watching each other and nobody else, so a quiet word might still work.
 
 ### P-033
 
@@ -708,21 +708,21 @@ Right: Maricel Magsaysay writes that Tatsuya Inoue worked the crowd and took a b
 
 ### P-085
 
-Left: Amara Osei has to cross Kabuki after dark and does not want to go alone. Walk with Amara Osei from the metro entrance to the market stalls. 250 eddies.
+Left: Jordan Garrett messages you: Sora Sato was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
-Right: Jordan Garrett messages you: Sora Sato was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Right: Amara Osei has to cross Kabuki after dark and does not want to go alone. Walk with Amara Osei from the metro entrance to the market stalls. 250 eddies.
 
 ### P-014
 
-Left: Message from Haruto Nakamura: someone shoved someone in the Kabuki crowd, and it turned into a fight that swallowed me. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You do not know me, and that may be why somebody will talk to you.
+Left: Jing Xie wants Jiho Kim, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
 
-Right: Jing Xie wants Jiho Kim, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
+Right: Message from Haruto Nakamura: someone shoved someone in the Kabuki crowd, and it turned into a fight that swallowed me. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You do not know me, and that may be why somebody will talk to you.
 
 ### P-041
 
-Left: Tamara Jankowski messages you: someone saw Xiu Zhao slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.
+Left: Tatsuya Okada messages you from the clinic: Emi Mori put me on the pavement outside the market without a word of warning. Find out why they did it, or make sure they keep away from me, or just see me through the clinic. I had never seen them before today, and that is what frightens me.
 
-Right: Tatsuya Okada messages you from the clinic: Emi Mori put me on the pavement outside the market without a word of warning. Find out why they did it, or make sure they keep away from me, or just see me through the clinic. I had never seen them before today, and that is what frightens me.
+Right: Tamara Jankowski messages you: someone saw Xiu Zhao slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.
 
 ### P-040
 
@@ -732,9 +732,9 @@ Right: Marcus Osei writes that Dolores Romero bumped into them by the stalls and
 
 ### P-017
 
-Left: Someone took Zara Nair's jacket near the metro entrance. Zara Nair wants it back and does not care how. 500 eddies when it is returned.
+Left: Tatsuya Okada messages you from the clinic: Emi Mori put me on the pavement outside the market without a word of warning. Find out why they did it, or make sure they keep away from me, or just see me through the clinic. I had never seen them before today, and that is what frightens me.
 
-Right: Tatsuya Okada messages you from the clinic: Emi Mori put me on the pavement outside the market without a word of warning. Find out why they did it, or make sure they keep away from me, or just see me through the clinic. I had never seen them before today, and that is what frightens me.
+Right: Someone took Zara Nair's jacket near the metro entrance. Zara Nair wants it back and does not care how. 500 eddies when it is returned.
 
 ### P-020
 
@@ -750,9 +750,9 @@ Right: Message from Misaki Shimizu: the accident in Kabuki broke my leg, and the
 
 ### P-008
 
-Left: Yan Liu, a technician, has a sealed case that has to get from the metro entrance to Haruto Matsuda before closing. 250 eddies on delivery, no questions.
+Left: Aiko Sato writes that the street went from busy to a brawl in a minute, and they still do not know who started it. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You are new enough here that nobody will think you are on a side.
 
-Right: Aiko Sato writes that the street went from busy to a brawl in a minute, and they still do not know who started it. I want to know who stirred it up. Ask around the stalls, quiet the corner before it happens again, or walk me clear of it tonight. You are new enough here that nobody will think you are on a side.
+Right: Yan Liu, a technician, has a sealed case that has to get from the metro entrance to Haruto Matsuda before closing. 250 eddies on delivery, no questions.
 
 ### P-055
 
@@ -762,9 +762,9 @@ Right: Jiro Ishikawa messages you from the clinic: an accident in the street put
 
 ### P-075
 
-Left: Yan Liu, a technician, has a sealed case that has to get from the metro entrance to Haruto Matsuda before closing. 250 eddies on delivery, no questions.
+Left: Hui Sun messages you: Jiro Okada was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
-Right: Hui Sun messages you: Jiro Okada was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Right: Yan Liu, a technician, has a sealed case that has to get from the metro entrance to Haruto Matsuda before closing. 250 eddies on delivery, no questions.
 
 ### P-083
 
@@ -774,9 +774,9 @@ Right: Darnell Tucker messages you: Jiro Hayashi was at the stall again for the 
 
 ### P-024
 
-Left: Tamara Jankowski messages you: someone saw Xiu Zhao slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.
+Left: Noriko Sato wants Minh Dang, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
 
-Right: Noriko Sato wants Minh Dang, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
+Right: Tamara Jankowski messages you: someone saw Xiu Zhao slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.
 
 ### P-022
 
@@ -792,9 +792,9 @@ Right: Huong Duong messages you: Thao Trinh swung at me in a fight between two c
 
 ### P-087
 
-Left: Mei Hayashi messages you: Misaki Sato was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Left: Quinn Fraser wants Tatsuya Watanabe, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
 
-Right: Quinn Fraser wants Tatsuya Watanabe, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
+Right: Mei Hayashi messages you: Misaki Sato was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
 ### P-005
 
@@ -822,9 +822,9 @@ Right: Katya Novak has not heard from Ryo Kobayashi in three days. Find out wher
 
 ### P-084
 
-Left: Katya Novak wants Ines Herrera, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
+Left: Daeho Kang messages you: Nestor Bautista was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
-Right: Daeho Kang messages you: Nestor Bautista was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Right: Katya Novak wants Ines Herrera, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
 
 ### P-052
 
@@ -852,15 +852,15 @@ Right: Javier Romero on the line: Ryo Maeda robbed me in the crowd by the market
 
 ### P-056
 
-Left: Noriko Hashimoto messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. People trust you with their things around here, so I am trusting you with mine.
+Left: Thao Duong, a labourer, has a sealed case that has to get from the metro entrance to Ramon Lacson before closing. 250 eddies on delivery, no questions.
 
-Right: Thao Duong, a labourer, has a sealed case that has to get from the metro entrance to Ramon Lacson before closing. 250 eddies on delivery, no questions.
+Right: Noriko Hashimoto messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. People trust you with their things around here, so I am trusting you with mine.
 
 ### P-079
 
-Left: Tatsuya Yamaguchi messages you: Itsuki Yamaguchi was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Left: Someone took Walid Jaber's credstick near the metro entrance. Walid Jaber wants it back and does not care how. 500 eddies when it is returned.
 
-Right: Someone took Walid Jaber's credstick near the metro entrance. Walid Jaber wants it back and does not care how. 500 eddies when it is returned.
+Right: Tatsuya Yamaguchi messages you: Itsuki Yamaguchi was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
 ### P-032
 
@@ -876,45 +876,45 @@ Right: Jisoo Choi has not heard from Tatsuya Shimizu in three days. Find out whe
 
 ### P-070
 
-Left: Ren Mori messages you: Bao Tran and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. The stalls say you are not afraid of crews, and that is what I need.
+Left: Someone took Zara Nair's jacket near the metro entrance. Zara Nair wants it back and does not care how. 500 eddies when it is returned.
 
-Right: Someone took Zara Nair's jacket near the metro entrance. Zara Nair wants it back and does not care how. 500 eddies when it is returned.
+Right: Ren Mori messages you: Bao Tran and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. The stalls say you are not afraid of crews, and that is what I need.
 
 ### P-072
 
-Left: Tyler Pierce messages you: Itsuki Sakamoto and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I had never seen them before the fight, so I do not know what I am supposed to have done.
+Left: Ryo Watanabe, a service worker, has a sealed case that has to get from the metro entrance to Nia Bell before closing. 250 eddies on delivery, no questions.
 
-Right: Ryo Watanabe, a service worker, has a sealed case that has to get from the metro entrance to Nia Bell before closing. 250 eddies on delivery, no questions.
+Right: Tyler Pierce messages you: Itsuki Sakamoto and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I had never seen them before the fight, so I do not know what I am supposed to have done.
 
 ### P-054
 
-Left: Jiho Kang writes that the street went from busy to a brawl in a minute, and they still do not know who started it. Somebody wanted that crowd angry. Find out who, keep the corner calm, or see me through it. You do not know me, and that may be why somebody will talk to you.
+Left: Quinn Fraser wants Tatsuya Watanabe, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
 
-Right: Quinn Fraser wants Tatsuya Watanabe, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
+Right: Jiho Kang writes that the street went from busy to a brawl in a minute, and they still do not know who started it. Somebody wanted that crowd angry. Find out who, keep the corner calm, or see me through it. You do not know me, and that may be why somebody will talk to you.
 
 ### P-015
 
-Left: Takeshi Hashimoto messages you: Alejandro Campos and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You owe me nothing and I cannot promise much, but I am asking because I have no one else.
+Left: Emil Lebedev owes Jericho Santos money and has stopped answering. Collect it from Emil Lebedev, who drinks near the metro entrance. You keep a cut: 500 eddies.
 
-Right: Emil Lebedev owes Jericho Santos money and has stopped answering. Collect it from Emil Lebedev, who drinks near the metro entrance. You keep a cut: 500 eddies.
+Right: Takeshi Hashimoto messages you: Alejandro Campos and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You owe me nothing and I cannot promise much, but I am asking because I have no one else.
 
 ### P-006
 
-Left: Xiu Liu has not heard from Rafael Romero in three days. Find out where Rafael Romero went. 500 eddies.
+Left: Maricel Pangilinan writes that Zora Washington worked the crowd and took a bag, and the bag has not turned up anywhere. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Everyone on the row says you are the one to ask when something goes missing.
 
-Right: Maricel Pangilinan writes that Zora Washington worked the crowd and took a bag, and the bag has not turned up anywhere. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Everyone on the row says you are the one to ask when something goes missing.
+Right: Xiu Liu has not heard from Rafael Romero in three days. Find out where Rafael Romero went. 500 eddies.
 
 ### P-027
 
-Left: Sakura Mori writes that the crews clashed on the street and Woojin Kim picked them out of it. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I do not know them at all, so I cannot guess what they think I did.
+Left: Marcus Osei writes that Dolores Romero bumped into them by the stalls and left with a bag that was not theirs. Can you get it back for me? Track down whoever has it, make it worth the thief's while to say where it went, or pay what it was worth and wait for my thanks. Nobody on the row had seen the thief before, so somebody must have given the nod.
 
-Right: Marcus Osei writes that Dolores Romero bumped into them by the stalls and left with a bag that was not theirs. Can you get it back for me? Track down whoever has it, make it worth the thief's while to say where it went, or pay what it was worth and wait for my thanks. Nobody on the row had seen the thief before, so somebody must have given the nod.
+Right: Sakura Mori writes that the crews clashed on the street and Woojin Kim picked them out of it. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I do not know them at all, so I cannot guess what they think I did.
 
 ### P-003
 
-Left: Sakura Mori writes that the crews clashed on the street and Woojin Kim picked them out of it. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I do not know them at all, so I cannot guess what they think I did.
+Left: Katya Novak wants Ines Herrera, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
 
-Right: Katya Novak wants Ines Herrera, a gang member, out of the neighbourhood. Convince them. 1000 eddies.
+Right: Sakura Mori writes that the crews clashed on the street and Woojin Kim picked them out of it. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I do not know them at all, so I cannot guess what they think I did.
 
 ### P-081
 
@@ -930,9 +930,9 @@ Right: Jun Tang writes that the street went from busy to a brawl in a minute, an
 
 ### P-048
 
-Left: Linh Ngo writes from a clinic cot that Daichi Yamaguchi jumped them in the street, took nothing, and left. I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself. I had never seen them before today, and that is what frightens me.
+Left: Tamara Jankowski messages you: someone saw Xiu Zhao slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.
 
-Right: Tamara Jankowski messages you: someone saw Xiu Zhao slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.
+Right: Linh Ngo writes from a clinic cot that Daichi Yamaguchi jumped them in the street, took nothing, and left. I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself. I had never seen them before today, and that is what frightens me.
 
 ### P-026
 
@@ -954,9 +954,9 @@ Right: Message from Zora Rhodes: Daichi Inoue went for me in the middle of a cre
 
 ### P-077
 
-Left: Huong Ngo messages you: Dahye Han was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
+Left: The terminal at Emi Okada's stall near the metro entrance has died. Get it running before the evening crowd. 250 eddies.
 
-Right: The terminal at Emi Okada's stall near the metro entrance has died. Get it running before the evening crowd. 250 eddies.
+Right: Huong Ngo messages you: Dahye Han was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?
 
 ### P-061
 
@@ -972,15 +972,15 @@ Right: Noriko Sato wants Minh Dang, a gang member, out of the neighbourhood. Con
 
 ### P-011
 
-Left: Ivo Popov on the line, short of breath: the Claws collector Haneul Song was at the till, and I told them to come back Friday. Someone has to square this before Friday or they send someone less patient. Pay it, bargain it down, or face the next collector yourself. The stalls have started to say no among themselves, and a push from outside might tip it.
+Left: Ryo Watanabe, a service worker, has a sealed case that has to get from the metro entrance to Nia Bell before closing. 250 eddies on delivery, no questions.
 
-Right: Ryo Watanabe, a service worker, has a sealed case that has to get from the metro entrance to Nia Bell before closing. 250 eddies on delivery, no questions.
+Right: Ivo Popov on the line, short of breath: the Claws collector Haneul Song was at the till, and I told them to come back Friday. Someone has to square this before Friday or they send someone less patient. Pay it, bargain it down, or face the next collector yourself. The stalls have started to say no among themselves, and a push from outside might tip it.
 
 ### P-007
 
-Left: Ryo Fujita has to cross Kabuki after dark and does not want to go alone. Walk with Ryo Fujita from the metro entrance to the market stalls. 250 eddies.
+Left: Aiko Maeda writes from the clinic that the accident in the street left them unable to walk, with a job waiting. I cannot make my run. Take the delivery for me, ask the client for more time, or take my shift at the bar. People trust you with their things around here, so I am trusting you with mine.
 
-Right: Aiko Maeda writes from the clinic that the accident in the street left them unable to walk, with a job waiting. I cannot make my run. Take the delivery for me, ask the client for more time, or take my shift at the bar. People trust you with their things around here, so I am trusting you with mine.
+Right: Ryo Fujita has to cross Kabuki after dark and does not want to go alone. Walk with Ryo Fujita from the metro entrance to the market stalls. 250 eddies.
 
 ### P-057
 

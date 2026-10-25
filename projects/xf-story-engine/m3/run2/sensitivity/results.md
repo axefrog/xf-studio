@@ -32,9 +32,9 @@ Names are masked from the whole name registry, not only from the pattern of two 
 
 | Arm | Repeated skeleton | Most on one skeleton | Word-pair diversity | Cause or order word | Mean words | Priced | Names two people |
 |---|---|---|---|---|---|---|---|
-| A3 Radiant-style baseline | 0.71 | 4 | 0.47 | 0.38 | 23.79 | 1 | 1 |
-| E engine (ranked sowing) | 0 | 1 | 0.52 | 0.54 | 67.88 | 0 | 1 |
-| A1 random within gates | 0 | 1 | 0.48 | 0.54 | 68.29 | 0 | 1 |
+| A3 Radiant-style baseline | 0.71 | 4 | 0.47 | 0.38 | 23.79 | 1 | 0.75 |
+| E engine (ranked sowing) | 0 | 1 | 0.52 | 0.54 | 67.88 | 0 | 0.71 |
+| A1 random within gates | 0 | 1 | 0.48 | 0.54 | 68.29 | 0 | 0.58 |
 | A4 authored seed R2 | 1 | 24 | 0.19 | 0 | 28 | 0 | 1 |
 
 - A3: 71 % of cards share a masked skeleton with another (the most common is on 4 cards): a reader will see the template.
@@ -56,47 +56,47 @@ Means on a scale of 1 to 7 over each rater's ratings of the arm; run 1 in bracke
 
 | Arm | Cards rated | caused | legible | setting | pull | Called "program" |
 |---|---|---|---|---|---|---|
-| E engine (ranked sowing) | 72 | 4.97 (3.79) | 5.64 (3.84) | 4.11 (3.74) | 4.5 (2.98) | 70/72 (88/96) |
-| A1 random within gates | 72 | 4.96 (3.88) | 5.6 (3.94) | 4 (3.49) | 4.44 (2.83) | 72/72 (94/96) |
-| A3 Radiant-style baseline | 72 | 3.08 (3.98) | 6.35 (6.19) | 3.14 (4.02) | 3 (3.77) | 72/72 (96/96) |
-| A4 authored seed R2 | 72 | 5.33 (6) | 5 (5.75) | 5.67 (6) | 4.33 (5) | 72/72 (96/96) |
+| E engine (ranked sowing) | 72 | 4.82 (3.79) | 5.72 (3.84) | 4.1 (3.74) | 4.61 (2.98) | 70/72 (88/96) |
+| A1 random within gates | 72 | 4.82 (3.88) | 5.71 (3.94) | 4 (3.49) | 4.53 (2.83) | 71/72 (94/96) |
+| A3 Radiant-style baseline | 72 | 3.43 (3.98) | 5.99 (6.19) | 3.43 (4.02) | 3.13 (3.77) | 72/72 (96/96) |
+| A4 authored seed R2 | 72 | 5 (6) | 4.67 (5.75) | 5.67 (6) | 4 (5) | 72/72 (96/96) |
 
 Forced choices, per rater: wins of the first arm of the row, of the rater's own count. Run 1's per-rater counts follow the run 2 ones in each cell, in the order of that run's raters (codex-gpt-6.1-sol, codex-gpt-6-astra, claude-sonnet, claude-opus).
 
 | First | Second | Question | codex-gpt-6.1-sol-a | claude-sonnet | codex-gpt-6.1-sol-b | run 1 |
 |---|---|---|---|---|---|---|
-| A1 | A3 | caused | 17 of 24 | 24 of 24 | 20 of 24 | 10/24, 12/24, 11/24, 11/24 |
-| A1 | A3 | follow | 23 of 24 | 24 of 24 | 17 of 24 | 5/24, 1/24, 8/24, 1/24 |
-| A1 | E | caused | 13 of 24 | 10 of 24 | 14 of 24 | 14/24, 14/24, 12/24, 12/24 |
-| A1 | E | follow | 11 of 24 | 13 of 24 | 10 of 24 | 12/24, 11/24, 11/24, 10/24 |
-| A3 | A4 | caused | 1 of 24 | 0 of 24 | 1 of 24 | 0/24, 0/24, 2/24, 0/24 |
-| A3 | A4 | follow | 0 of 24 | 24 of 24 | 0 of 24 | 2/24, 2/24, 7/24, 0/24 |
-| A3 | E | caused | 5 of 24 | 0 of 24 | 3 of 24 | 14/24, 13/24, 13/24, 11/24 |
-| A3 | E | follow | 2 of 24 | 0 of 24 | 5 of 24 | 20/24, 21/24, 14/24, 20/24 |
+| A1 | A3 | caused | 17 of 24 | 20 of 24 | 17 of 24 | 10/24, 12/24, 11/24, 11/24 |
+| A1 | A3 | follow | 20 of 24 | 24 of 24 | 23 of 24 | 5/24, 1/24, 8/24, 1/24 |
+| A1 | E | caused | 13 of 24 | 17 of 24 | 13 of 24 | 14/24, 14/24, 12/24, 12/24 |
+| A1 | E | follow | 9 of 24 | 12 of 24 | 9 of 24 | 12/24, 11/24, 11/24, 10/24 |
+| A3 | A4 | caused | 0 of 24 | 11 of 24 | 1 of 24 | 0/24, 0/24, 2/24, 0/24 |
+| A3 | A4 | follow | 3 of 24 | 12 of 24 | 0 of 24 | 2/24, 2/24, 7/24, 0/24 |
+| A3 | E | caused | 8 of 24 | 6 of 24 | 4 of 24 | 14/24, 13/24, 13/24, 11/24 |
+| A3 | E | follow | 1 of 24 | 0 of 24 | 1 of 24 | 20/24, 21/24, 14/24, 20/24 |
 
-Disagreement (share of rater pairs differing by 2 or more points): {"caused":0.25,"legible":0.18,"setting":0.18,"pull":0.22} (run 1: {"caused":0.14,"legible":0.07,"setting":0.06,"pull":0.03}).
+Disagreement (share of rater pairs differing by 2 or more points): {"caused":0.24,"legible":0.17,"setting":0.22,"pull":0.1} (run 1: {"caused":0.14,"legible":0.07,"setting":0.06,"pull":0.03}).
 
 ### The decision rule, rater by rater (share of forced choices won, in the order codex-gpt-6.1-sol-a, claude-sonnet, codex-gpt-6.1-sol-b)
 
-- E against A3: follow 92 %, 100 %, 79 %; caused 79 %, 100 %, 88 %
-- E against A1: follow 54 %, 46 %, 58 %; caused 46 %, 58 %, 42 %
-- A4 against A3: follow 100 %, 0 %, 100 %; caused 96 %, 100 %, 96 %
+- E against A3: follow 96 %, 100 %, 96 %; caused 67 %, 75 %, 83 %
+- E against A1: follow 63 %, 50 %, 63 %; caused 46 %, 29 %, 46 %
+- A4 against A3: follow 88 %, 50 %, 100 %; caused 100 %, 54 %, 96 %
 
-Engine beats the baseline by the rule of the scoring sheet when its share against A3 is above one half on both questions in every rater alone, and its means on "caused" and "pull" are above A3's. Means: E caused 4.97, pull 4.5; A3 caused 3.08, pull 3.
+Engine beats the baseline by the rule of the scoring sheet when its share against A3 is above one half on both questions in every rater alone, and its means on "caused" and "pull" are above A3's. Means: E caused 4.82, pull 4.61; A3 caused 3.43, pull 3.13.
 
 ### Critic, codex-gpt-6.1-sol-a
 
-All cards struck me as probably assembled, though that is a guess about the text, not knowledge of its source. The shortest expose name, occupation, location, and reward slots; the longer ones repeatedly combine an incident, three remedies, and a final explanation for contacting V. Third-person introductions sliding into first person, delivery requests branching into bar shifts, and unfamiliar thieves supposedly proving a conspiracy made those joins conspicuous. Exact duplicates and the many identical Friday-fee appeals reinforced the pattern after rating. Causality worked best when a pressure produced a specific consequence: injury prevents work, or a postponed Claws payment invites escalation. Ivo's deadline and collective stall resistance gave me the strongest pull; generic eviction requests supplied the least reason to care.
+Most cards suggest templates through interchangeable full names, fixed rewards, generic locations, and three-option menus. Several switch from third-person reporting into first-person speech. Paying a stranger's loss or clinic bill repeatedly appears beside investigation as though the actions were equivalent. Reputation and outsider explanations often feel appended. The Claws fees have a credible recurring cause, while Ivo's refusal, threatened escalation, and collective resistance connect particularly well. Injury causing missed work also feels natural, though the work itself often stays vague. Repeated wording and exact duplicates reinforced the impression of assembled parts. Night City specificity usually comes from Claws, ripperdocs, credsticks, and eddies rather than distinctive voices.
 
 ### Critic, claude-sonnet
 
-Three families of cards read as generated. The Claws-fee cards are one identical sentence with only names swapped, and they end on a vague 'Can you do something about it?' that leaves the player with no clear action. The short bounty cards (lost item, tail, missing person, escort, courier, convince a gang member) are a bare task plus a round price, with no reason attached. The long messages follow one skeleton: an incident clause, a first-person plea, a three-option list ('X, Y, or Z'), then a stock line about the player's reputation or being a stranger. The incident clauses and closing lines are interchangeable parts. Several long cards also contradict themselves: 'I had never seen them before' sits beside a named assailant, and 'nobody on the row had seen the thief' sits beside a named thief. The Ivo Popov card stands out as written for its situation. It has a specific deadline, a named collector, a consequence ('someone less patient'), and local texture (the stalls starting to say no among themselves).
+Nearly every card read as assembled from a small set of templates with swapped names and locations. Repeated patterns: (1) a bare Friday-fee message ('was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?') with no stakes or specifics; (2) short fixed-price jobs ('500 eddies', '250 eddies on delivery, no questions', 'Convince them. 1000 eddies') with generic placeholders like 'a bar off the market' or 'the ripperdoc'; (3) longer cards built from the same three-option menu ('X, Y, or Z') plus an appended flattery or trust line ('People trust you...', 'You do not know me, and that may be why...') that often does not fit the request; (4) exact duplicate texts across cards, and repeated 'nobody on the row had seen the thief before, so somebody must have given the nod' and 'I had never seen them before'. Longer cards were more legible, more caused and more pulling, but still read as parts glued together. The Claws-collector card from Ivo Popov was the most situated and specific.
 
 ### Critic, codex-gpt-6.1-sol-b
 
-The strongest generated cues were interchangeable names, repeated full names, fixed rewards, and three-option menus that sometimes failed to address the same problem. Paying a theft victim or covering an unrelated shift felt like mechanically supplied alternatives. Several endings attached reputation or outsider status without making that relationship convincing. Exact duplicates and the repeated Friday-fee wording reinforced this impression. The fee requests still had clear economic causes and local pressure. Ivo's refusal, approaching deadline, threatened escalation, and neighbouring stalls resisting together made that card feel more specifically authored.
+Repeated three-option requests, detachable explanations of why V was contacted, third-to-first-person seams, and interchangeable names made many cards read as assembled. Paying a stranger's loss often felt inserted to supply another option, while unfamiliar thieves supposedly proving a conspiracy weakened causality. The recurring Friday collection still supplied a credible local pressure. Ivo's refusal, approaching deadline, and neighbouring stalls' resistance formed the strongest connected sequence of choices and consequences.
 
 ## How the packet was built
 
-The packet is rebuilt byte for byte from blind/inputs.json: 12 hook runs by file name and record hash (A1-w1, A1-w2, A1-w3, A1-w4, A1-w5, A1-w6, E-w1, E-w2, E-w3, E-w4, E-w5, E-w6), 24 hooks per arm (engine and A1 cards are the hooks with an ask: tier "offers"), 3 raters, A3 under the `rated-v1` slot rule, the wide name registry for every arm (names "wide").
+The packet is rebuilt byte for byte from blind/inputs.json: 12 hook runs by file name and record hash (A1-w1, A1-w2, A1-w3, A1-w4, A1-w5, A1-w6, E-w1, E-w2, E-w3, E-w4, E-w5, E-w6), 24 hooks per arm (engine and A1 cards are the hooks with an ask: tier "offers"), 3 raters, A3 under the `rated-v1` slot rule, the wide name registry for every arm (names "wide"), pair sides balanced (equal left and right in each comparison on every sheet, the first and third sheet mirrored).
 

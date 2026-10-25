@@ -75,17 +75,17 @@ Fri 12:30  (slot 14: slot-run.)
 Fri 12:30  (layer 3 sowed "theft" from theft (a=Kenji Hashimoto, v=Ivo Dvorak); features F3=1 F5=1 F6=0 F11=0.23; composite 0.4 among 43 candidates; cause: 1 recorded event.)
 Fri 23:00  [procedural beat tell] Zara Singh says Samira Aziz lifted a bag in the Kabuki crowd and was gone before anyone moved.
 Fri 23:00  (slot 15: slot-run.)
-Fri 23:00  (layer 3 sowed "theft" from theft (a=Samira Aziz, v=Zara Singh); features F3=1 F5=1 F6=0 F11=0.42; composite 0.5 among 54 candidates; cause: 1 recorded event.)
+Fri 23:00  (layer 3 sowed "theft" from theft (a=Samira Aziz, v=Zara Singh); features F3=1 F5=1 F6=0 F11=0.42; composite 0.5 among 53 candidates; cause: 1 recorded event.)
 Sat 01:50  [procedural offer ask] Message from Joon Han: Daichi Sakamoto went for me in the middle of a crew fight near the market, and I am still shaking. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I had never seen them before the fight, so I do not know what I am supposed to have done.  -> V: decline
 Sat 01:50  [procedural beat x-decline] You did not answer. Joon Han moved to a cousin's place across the district.
 Sat 01:50  [procedural closing] The street fight turned into a story, and the story into a rumour.
 Sat 01:50  (slot 16: slot-run.)
-Sat 01:50  (layer 3 sowed "clash-aftermath" from clash-aftermath (a=Daichi Sakamoto, v=Joon Han, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.63; composite 0.6 among 56 candidates; cause: 2 recorded events.)
+Sat 01:50  (layer 3 sowed "clash-aftermath" from clash-aftermath (a=Daichi Sakamoto, v=Joon Han, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.63; composite 0.6 among 55 candidates; cause: 2 recorded events.)
 Sat 10:10  [procedural offer ask] Message from Hao He: the accident in Kabuki broke my leg, and the job I should be doing is going undone. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. You will not know me from anyone, but there is nobody else I can send.  -> V: decline
 Sat 10:10  (slot 17: slot-run.)
-Sat 10:10  (layer 3 sowed "accident-errand" from accident-errand (s=Hao He, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.29; composite 0.5 among 53 candidates; cause: 2 recorded events.)
+Sat 10:10  (layer 3 sowed "accident-errand" from accident-errand (s=Hao He, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.29; composite 0.5 among 52 candidates; cause: 2 recorded events.)
 Sat 10:20  [procedural beat x-decline] Hao He thanked you for reading it. The parcel stayed on the locker.
 Sat 10:20  [procedural closing] The accident was forgotten by the end of the week.
 Sat 16:40  [procedural beat tell] Word at the stalls is that Bo Deng hit Cheska Aquino hard enough to need the clinic. The rest is guesswork.
 Sat 16:40  (slot 18: slot-run.)
-Sat 16:40  (layer 3 sowed "beating" from beating (a=Bo Deng, v=Cheska Aquino); features F3=1 F5=0 F6=0 F11=0.21; composite 0 among 48 candidates; cause: 1 recorded event.)
+Sat 16:40  (layer 3 sowed "beating" from beating (a=Bo Deng, v=Cheska Aquino); features F3=1 F5=0 F6=0 F11=0.21; composite 0 among 47 candidates; cause: 1 recorded event.)

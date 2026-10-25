@@ -1119,7 +1119,7 @@ Fri 23:00  [procedural closing] The street fight turned into a story, and the st
 Fri 23:00  1 assault incident at v2 in this ten minutes.
 Fri 23:00  1 theft incident at g7 in this ten minutes.
 Fri 23:00  (slot 15: slot-run.)
-Fri 23:00  (layer 3 sowed "clash-aftermath" from clash-aftermath (a=Woojin Kim, v=Sakura Mori, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.88; composite 1 among 53 candidates; cause: 2 recorded events.)
+Fri 23:00  (layer 3 sowed "clash-aftermath" from clash-aftermath (a=Woojin Kim, v=Sakura Mori, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.88; composite 1 among 52 candidates; cause: 2 recorded events.)
 Fri 23:08  assault (size 2) at g11 by Simone Mensah against Jordan Doyle, with no cause in the record.
 Fri 23:12  assault (size 2) at v4 by Misaki Sakamoto against Ying Huang, with no cause in the record.
 Fri 23:20  1 accident incident at v4 in this ten minutes.
@@ -1152,7 +1152,7 @@ Sat 01:50  1 accident incident at v4 in this ten minutes.
 Sat 01:50  1 assault incident at v8 in this ten minutes.
 Sat 01:50  1 theft incident at g11 in this ten minutes.
 Sat 01:50  (slot 16: slot-run.)
-Sat 01:50  (layer 3 sowed "assault-why" from assault-why (a=Alex Holt, v=Wade Sullivan, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.49; composite 1 among 55 candidates; cause: 2 recorded events.)
+Sat 01:50  (layer 3 sowed "assault-why" from assault-why (a=Alex Holt, v=Wade Sullivan, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.49; composite 1 among 54 candidates; cause: 2 recorded events.)
 Sat 01:55  seen up close: theft at g11 by Qing Liu against Joon Lim.
 Sat 02:10  1 accident incident at g4 in this ten minutes.
 Sat 02:30  1 gang-clash incident at g5 in this ten minutes.
@@ -1219,7 +1219,7 @@ Sat 10:00  1 assault incident at g7 in this ten minutes.
 Sat 10:00  1 commerce incident at g2 in this ten minutes.
 Sat 10:10  [procedural offer ask] Message from Hao He: the accident in Kabuki broke my leg, and the job I should be doing is going undone. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. You will not know me from anyone, but there is nobody else I can send.  -> V: decline
 Sat 10:10  (slot 17: slot-run.)
-Sat 10:10  (layer 3 sowed "accident-errand" from accident-errand (s=Hao He, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.29; composite 0.5 among 52 candidates; cause: 2 recorded events.)
+Sat 10:10  (layer 3 sowed "accident-errand" from accident-errand (s=Hao He, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.29; composite 0.5 among 51 candidates; cause: 2 recorded events.)
 Sat 10:20  [procedural beat x-decline] Hao He thanked you for reading it. The parcel stayed on the locker.
 Sat 10:20  [procedural closing] The accident was forgotten by the end of the week.
 Sat 10:20  1 assault incident at g5 in this ten minutes.
@@ -1271,7 +1271,7 @@ Sat 16:40  [procedural beat x-decline] Eunji Kang turned back to the stall. The 
 Sat 16:40  [procedural closing] The talk about the bag moved on.
 Sat 16:40  1 police-action incident at g3 in this ten minutes.
 Sat 16:40  (slot 18: slot-run.)
-Sat 16:40  (layer 3 sowed "goods-back" from goods-back (a=Rui Wang, v=Eunji Kang, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.46; composite 1 among 47 candidates; cause: 2 recorded events.)
+Sat 16:40  (layer 3 sowed "goods-back" from goods-back (a=Rui Wang, v=Eunji Kang, me=Dmitri Novak); features F3=1 F5=3 F6=0 F11=0.46; composite 1 among 46 candidates; cause: 2 recorded events.)
 Sat 16:50  1 gang-clash incident at g11 in this ten minutes.
 Sat 17:05  assault (size 2) at v8 by Anh Duong against Imran Rao, with no cause in the record.
 Sat 17:06  gang-clash (size 2) at g3 by Shun Ogawa against Kabir Khan, with no cause in the record.
