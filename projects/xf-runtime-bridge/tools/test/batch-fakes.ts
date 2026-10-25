@@ -64,7 +64,8 @@ export function fakeApi(clock: FakeClock, handlers: Record<string, Handler> = {}
       return answer.ok ? { ok: true, command: name, cid: "c", result: answer.result } : { ok: false, command: name, cid: "c", error: { code: answer.code, message: answer.message ?? answer.code } };
     },
     release() {},
-    close() {},
+    closed: false,
+    close() { api.closed = true; },
   };
   return api;
 }

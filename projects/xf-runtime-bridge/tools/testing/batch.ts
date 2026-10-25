@@ -704,6 +704,8 @@ export type BatchResult = {
   attempt: number;
   remaining: string[];
   rows: RowRecord[];
+  /** Cleanup that failed (the report, the teardown, config.ini's restore): the batch is not ok when any did. */
+  cleanupErrors: string[];
   manifestPath: string;
   reportPath: string;
   resumePath: string;
@@ -766,12 +768,26 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       return rerun.has(id) || !record || /^(not reached|interrupted)/.test(record.reason ?? "");
     });
   };
-  const write = (setup?: PlanResult, teardown?: PlanResult, finished = false) =>
-    writeReports(script, options, { startedAt, finished, halt, setup, teardown, rows: records, executor, config, interrupted: signal.aborted, attempt, previous, remaining: remaining() });
+  // Writing the report must never stop the run or its cleanup: a failure is recorded and the run goes on.
+  const cleanupErrors: string[] = [];
+  const fallbackPaths = { manifestPath: join(options.outDir, "manifest.json"), reportPath: join(options.outDir, "report.md") };
+  const write = (setup?: PlanResult, teardown?: PlanResult, finished = false) => {
+    try {
+      return writeReports(script, options, { startedAt, finished, halt, setup, teardown, rows: records, executor, config, interrupted: signal.aborted, attempt, previous, remaining: remaining(), cleanupErrors });
+    } catch (error) {
+      const text = `the report couldn't be written: ${String((error as Error)?.message ?? error)}`;
+      if (!cleanupErrors.includes(text)) cleanupErrors.push(text);
+      return fallbackPaths;
+    }
+  };
+  let setup: PlanResult | undefined;
 
+  // Everything that can change the game runs inside this try; the finally below always tears down, restores
+  // config.ini and closes the connection, whatever was thrown.
+  try {
   log(`${script.title ?? script.name}: ${planned.rows.length} rows (attempt ${attempt})`);
   await executor.run({ do: "note", text: `XF session: ${script.title ?? script.name} (${planned.rows.length} rows)` }, { signal, deadline: clock.now() + 10_000, plan: "start", step: "start", attempt: 1, raw: { do: "note" } }).catch(() => undefined);
-  const setup = await plan(planned.setup);
+  setup = await plan(planned.setup);
   if (setup.status === "stopped") stopWith(kindOfStop(setup.reason), setup.reason ?? "setup stopped");
   const setupFailed = setup.status !== "done" ? `setup didn't finish: ${setup.reason}` : undefined;
   // The recorder from the start when the game already runs; otherwise from the first row's launch.
@@ -865,24 +881,33 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
     if (stopped) log(`HALT (${stopped.kind}): ${stopped.reason}`);
     write(setup);
   }
+  } catch (error) {
+    stopWith("runner_error", `the runner failed: ${String((error as Error)?.message ?? error)}`, undefined, [String((error as Error)?.stack ?? error)]);
+  }
   // The teardown: the script's own steps, then the built-in ones; always, each best effort. A halt (handed_over,
   // the tripwire) must not stop the teardown itself: each step is tried and its refusal recorded.
-  await telemetry.finish().catch(() => undefined);
+  const attemptCleanup = async (what: string, work: () => Promise<unknown>) => {
+    try { await work(); } catch (error) { cleanupErrors.push(`${what}: ${String((error as Error)?.message ?? error)}`); }
+  };
+  await attemptCleanup("telemetry", () => telemetry.finish());
   const teardownPlan: Plan = { id: "teardown", steps: [...planned.teardown.steps.map((s) => ({ ...s, on_fail: "continue" as const })), ...builtinTeardown()] };
   executor.stopReason = undefined;
   const teardownExecutor: Executor = { run: async (action, context) => ({ ...(await executor.run(action, context)), halt: undefined }) };
-  const teardown = await runPlan(teardownPlan, { executor: teardownExecutor, clock, bindings });
-  await executor.run({ do: "note", text: `XF session ${halt ? "stopped" : "complete"}: ${script.title ?? script.name}` }, { signal: new AbortController().signal, deadline: clock.now() + 10_000, plan: "end", step: "end", attempt: 1, raw: { do: "note" } }).catch(() => undefined);
+  let teardown: PlanResult | undefined;
+  await attemptCleanup("teardown", async () => { teardown = await runPlan(teardownPlan, { executor: teardownExecutor, clock, bindings }); });
+  await attemptCleanup("closing note", () => executor.run({ do: "note", text: `XF session ${halt ? "stopped" : "complete"}: ${script.title ?? script.name}` }, { signal: new AbortController().signal, deadline: clock.now() + 10_000, plan: "end", step: "end", attempt: 1, raw: { do: "note" } }));
   // A fast exit: close the game cleanly, so the fix can go in and the next attempt starts fresh.
-  if (halt && halt.kind !== "handed_over" && options.closeOnHalt !== false && (await options.host.gameProcess())) {
-    log("Closing the game after the halt.");
-    const closed = await runPlan({ id: "halt-close", steps: closeSteps() }, { executor: teardownExecutor, clock });
-    teardown.reports.push(...closed.reports);
-  }
+  await attemptCleanup("closing the game", async () => {
+    if (halt && halt.kind !== "handed_over" && options.closeOnHalt !== false && (await options.host.gameProcess())) {
+      log("Closing the game after the halt.");
+      const closed = await runPlan({ id: "halt-close", steps: closeSteps() }, { executor: teardownExecutor, clock });
+      teardown?.reports.push(...closed.reports);
+    }
+  });
   const paths = write(setup, teardown, true);
   const left = remaining();
   const resumePath = join(options.outDir, "resume.json");
-  writeFileSync(resumePath, JSON.stringify({
+  await attemptCleanup("resume.json", async () => writeFileSync(resumePath, JSON.stringify({
     schema: "xfb/session-resume-1",
     script: { name: script.name, path: options.scriptPath },
     attempt,
@@ -892,17 +917,18 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
     rows_done: records.filter((r) => r.reason !== "not selected" && !left.includes(r.id)).map((r) => ({ id: r.id, verdict: r.verdict, ...(r.reason ? { reason: r.reason } : {}) })),
     rows_remaining: left,
     command: left.length ? (options.resumeCommand?.(left) ?? `bun tools/session.ts ${options.scriptPath ?? "<script.json>"} --fixtures <private.json> --out "${options.outDir}" --rows ${left.join(",")}`) : null,
-  }, null, 2) + "\n");
-  options.api.close();
+    ...(cleanupErrors.length ? { cleanup_errors: cleanupErrors } : {}),
+  }, null, 2) + "\n"));
+  await attemptCleanup("closing the connection", async () => options.api.close());
   const outcome = signal.aborted ? "interrupted" : halt ? "stopped" : "complete";
-  return { ok: !halt && !signal.aborted && records.every((r) => r.verdict === "PASS" || r.reason === "not selected"), outcome, halt: halt?.reason, haltInfo: halt, attempt, remaining: left, rows: records, ...paths, resumePath };
+  return { ok: !halt && !signal.aborted && !cleanupErrors.length && records.every((r) => r.verdict === "PASS" || r.reason === "not selected"), outcome, halt: halt?.reason, haltInfo: halt, attempt, remaining: left, rows: records, cleanupErrors, ...paths, resumePath };
 }
 
 // ---- Reports ---------------------------------------------------------------------------------------------
 
 type ReportState = {
   startedAt: string; finished: boolean; halt?: Halt; setup?: PlanResult; teardown?: PlanResult; rows: RowRecord[]; executor: SessionExecutor; config?: ConfigEditor;
-  interrupted: boolean; attempt: number; previous: PreviousRun; remaining: string[];
+  interrupted: boolean; attempt: number; previous: PreviousRun; remaining: string[]; cleanupErrors: string[];
 };
 
 /** The detours a run took (retries, other routes, branches, fallbacks): the session's friction, found automatically. */
@@ -954,7 +980,7 @@ function writeReports(script: BatchScript, options: BatchRunOptions, s: ReportSt
   const manifest = {
     schema: REPORT_SCHEMA_3,
     script: { name: script.name, title: script.title, card: script.card, path: options.scriptPath, requires: script.requires ?? [] },
-    run: { attempts: attempts.length, outcome, counts, ...(s.halt ? { halt: s.halt } : {}) },
+    run: { attempts: attempts.length, outcome, counts, ...(s.halt ? { halt: s.halt } : {}), ...(s.cleanupErrors.length ? { cleanup_errors: s.cleanupErrors } : {}) },
     attempts,
     rows: merged,
     notes: [
@@ -969,6 +995,7 @@ function writeReports(script: BatchScript, options: BatchRunOptions, s: ReportSt
     `# ${script.title ?? script.name}`,
     "",
     `${attempts.length} attempt${attempts.length > 1 ? "s" : ""}, the latest ${s.startedAt}${s.finished ? ` to ${new Date().toISOString()}` : " (in progress)"}: ${outcome}. PASS ${counts.PASS}, FAIL ${counts.FAIL}, PARTIAL ${counts.PARTIAL}, SKIP ${counts.SKIP}.${script.card ? ` Card: ${script.card}.` : ""}`,
+    ...(s.cleanupErrors.length ? ["", `**Cleanup failed:** ${s.cleanupErrors.join("; ")}`] : []),
     ...(s.halt ? ["", `**Halted (${s.halt.kind}):** ${s.halt.reason}`, ...s.halt.evidence.slice(0, 8).map((e) => `- ${e}`), "", s.remaining.length ? `Still to run: ${s.remaining.join(", ")} (resume.json has the command).` : ""] : []),
     "",
     "| Row | Title | Verdict | Why | Evidence | Telemetry |",

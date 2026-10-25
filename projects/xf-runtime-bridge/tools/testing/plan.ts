@@ -154,6 +154,8 @@ export type PlanResult = {
   decision?: string;
   bindings: Record<string, unknown>;
   reports: ReportEntry[];
+  /** Report callbacks that threw (isolated: the plan, its release and its close went on). */
+  report_errors?: string[];
 };
 export type DecisionRequest = { plan: string; step?: string; reason?: string; question: string; choices: string[] };
 export type RunPlanOptions = {
@@ -423,6 +425,7 @@ type Run = {
   lastStep?: string;
   continued: number;
   halt?: string;
+  reportErrors: string[];
 };
 
 /**
@@ -447,7 +450,12 @@ function emit(run: Run, entry: Omit<ReportEntry, "key" | "plan" | "at_ms"> & { k
   run.keys.add(key);
   const full = { ...entry, key, plan: run.plan.id, at_ms: Math.round(run.clock.now()) } as ReportEntry;
   run.reports.push(full);
-  run.options.report?.(full);
+  // A consumer's report callback that throws must never stop the plan, its release or its close.
+  try {
+    run.options.report?.(full);
+  } catch (error) {
+    run.reportErrors.push(`${key}: ${String((error as Error)?.message ?? error)}`);
+  }
 }
 
 /** One call to the executor, bounded by its deadline and the plan's. */
@@ -633,7 +641,7 @@ export async function runPlan(plan: Plan, options: RunPlanOptions): Promise<Plan
   const bindings = options.bindings ?? Object.create(null);
   if (options.cast) bindings.cast = structuredClone(options.cast);
   const startedAt = options.start?.at_ms ?? clock.now();
-  const run: Run = { plan, options, clock, signal, bindings, reports: [], keys: new Set(), visits: new Map(), steps: 0, continued: 0,
+  const run: Run = { plan, options, clock, signal, bindings, reports: [], keys: new Set(), visits: new Map(), steps: 0, continued: 0, reportErrors: [],
     deadline: plan.deadline_ms ? startedAt + plan.deadline_ms : Infinity };
   let index = 0;
   if (options.start) {
@@ -642,6 +650,10 @@ export async function runPlan(plan: Plan, options: RunPlanOptions): Promise<Plan
   }
   let status: PlanStatus = "done";
   let reason: string | undefined;
+  let decision: string | undefined;
+  let lastStep: string | undefined;
+  // Whatever happens in the steps (an exception included), the release runs and the one close is reported.
+  try {
   while (index < plan.steps.length) {
     if (signal.aborted) { status = "cancelled"; reason = "cancelled"; break; }
     if (clock.now() >= run.deadline) { status = "failed"; reason = "The plan's deadline passed."; break; }
@@ -653,9 +665,8 @@ export async function runPlan(plan: Plan, options: RunPlanOptions): Promise<Plan
     index++;
   }
   if (run.halt) { status = "stopped"; reason = run.halt; }
-  const lastStep = run.lastStep;
+  lastStep = run.lastStep;
   // Rungs 3 and 4: report and ask (the default only when nobody answers in time), then dissolve.
-  let decision: string | undefined;
   if (status !== "done" && plan.on_abandon && !run.halt) {
     const ask = plan.on_abandon.ask;
     if (ask) {
@@ -671,14 +682,22 @@ export async function runPlan(plan: Plan, options: RunPlanOptions): Promise<Plan
     }
     if (plan.on_abandon.dissolve && (decision === undefined || decision === "dissolve") && !signal.aborted) await runList(run, plan.on_abandon.dissolve, "dissolve", undefined);
   }
-  // Rung 5, release: always, bounded by its own deadline even after a cancel.
-  if (plan.finally?.length) {
-    const own = new AbortController();
-    const releaseRun: Run = { ...run, signal: own.signal, halt: undefined, deadline: clock.now() + (options.finallyDeadlineMs ?? 30_000) };
-    for (const [i, step] of plan.finally.entries()) await runStep(releaseRun, { ...step, on_fail: "continue" }, `finally/${i + 1}`, null);
-    run.steps = releaseRun.steps;
+  } catch (error) {
+    status = "failed";
+    reason = `the plan failed: ${String((error as Error)?.message ?? error)}`;
+    lastStep ??= run.lastStep;
+  } finally {
+    // Rung 5, release: always, bounded by its own deadline even after a cancel or an exception.
+    if (plan.finally?.length) {
+      const own = new AbortController();
+      const releaseRun: Run = { ...run, signal: own.signal, halt: undefined, deadline: clock.now() + (options.finallyDeadlineMs ?? 30_000) };
+      for (const [i, step] of plan.finally.entries()) {
+        try { await runStep(releaseRun, { ...step, on_fail: "continue" }, `finally/${i + 1}`, null); } catch (error) { run.reportErrors.push(`finally/${i + 1}: ${String((error as Error)?.message ?? error)}`); }
+      }
+      run.steps = releaseRun.steps;
+    }
   }
   const outcome: Closing = status === "done" ? (run.continued ? "partial" : "completed") : decision !== undefined && decision !== "dissolve" && decision !== "abandon" ? "partial" : "abandoned";
-  emit(run, { kind: "close", step: "close", attempt: 1, outcome, status, reason, last_step: lastStep, decision });
-  return { plan: plan.id, status, outcome, reason, last_step: lastStep, decision, bindings, reports: run.reports };
+  emit(run, { kind: "close", step: "close", attempt: 1, outcome, status, reason, last_step: lastStep, decision, ...(run.reportErrors.length ? { report_errors: run.reportErrors.length } : {}) });
+  return { plan: plan.id, status, outcome, reason, last_step: lastStep, decision, bindings, reports: run.reports, ...(run.reportErrors.length ? { report_errors: run.reportErrors } : {}) };
 }
