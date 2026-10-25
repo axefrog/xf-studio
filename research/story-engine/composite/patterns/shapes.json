@@ -231,7 +231,7 @@
     {
       "id": "xf.composite:hunted",
       "type": "pattern",
-      "version": 1,
+      "version": 2,
       "family": "shape",
       "scale": "concern",
       "summary": "A group decides someone must pay, warns and puts the word out, and the hunted look for shelter or a way to lift it.",
@@ -240,7 +240,10 @@
         "?h": {"kind": "group", "note": "the hunters"},
         "?j": {"kind": "event", "note": "what the hunters blame the quarry for"},
         "?sh": {"kind": "actor", "note": "who shelters the quarry"},
-        "?cl": {"kind": "actor", "v": "may", "note": "who clears the quarry's name or pays the price"}
+        "?cl": {"kind": "actor", "v": "may", "note": "who clears the quarry's name"},
+        "?w": {"kind": "person", "note": "who carries the warning: a member of the hunters"},
+        "?m": {"kind": "person", "note": "who finds the quarry: a member of the hunters"},
+        "?pr": {"kind": "person", "note": "who named the price: a member of the hunters"}
       },
       "junctures": {
         "grudge": {
@@ -256,8 +259,9 @@
         },
         "warned": {
           "fn": "threaten",
-          "args": {"by": "?h", "to": "?q"},
-          "note": "D-30's perceivable warning: word put out, a message, a demand. No harmful act before it reached the quarry",
+          "args": {"by": "?w", "to": "?q"},
+          "requires": [{"rel": "member", "args": ["?w", "?h"]}],
+          "note": "D-30's perceivable warning: word put out, a message, a demand, carried by a member (S1 v0.6 `warning`, `price`). No encounter before it reached the quarry",
           "changes": [
             {"frame": {"of": "?q", "toward": "decided", "status": "opens"}, "when": {"npc": "?q"}},
             {"exposure": {"to": "?q", "of": "decided"}, "when": {"protagonist": "?q"}}
@@ -270,10 +274,18 @@
           "optional": true,
           "changes": [{"tie": {"a": "?q", "b": "?sh"}, "move": "up"}]
         },
-        "caught": {"fn": "wrong", "args": {"by": "?h", "to": "?q"}, "optional": true},
+        "caught": {
+          "fn": "threaten",
+          "args": {"by": "?m", "to": "?q"},
+          "optional": true,
+          "fill": {"fixed": [{"kinds": ["confront"]}]},
+          "requires": [{"rel": "member", "args": ["?m", "?h"]}],
+          "note": "An encounter: members of the hunters find the quarry (S1 v0.6 `confront`). It asserts no harm; whatever harm follows is the game's own record, read back by the mirror, which a `loss` or `grievance` instance reads"
+        },
         "paidOff": {
-          "fn": "repay",
-          "args": {"debtor": "?q", "creditor": "?h"},
+          "fn": "comply",
+          "args": {"who": "?q", "to": "?pr"},
+          "requires": [{"rel": "member", "args": ["?pr", "?h"]}],
           "optional": true,
           "changes": [{"frame": {"of": "?h", "toward": "?q", "status": "satisfied"}}]
         },

@@ -141,7 +141,7 @@ Every player-facing fragment is an **offer** with these parts ([dossier 9](craft
 **Since S2 v1.11:**
 - an offer names its **asker**, and accepting it with a stance that helps or bargains leaves a `promise` in the world, so an accepted plan is a fact others can learn of;
 - an option shows **the exact words V says**: a recorded line, a splice of recorded lines, or new words left unvoiced, as text ([D-29](decisions.md)). Only a line the player picks is said;
-- **harm or loss to V has two sources only:** a stake V accepted when an offer named it, faced as an obstacle with affordances; or a group's own decision to act against V under [D-30](decisions.md), which a seed may carry and stage only behind the group's warning ([S2 §2.16a](spec/seeding.md#216a-groups-acting-against-the-protagonist)).
+- **harm or loss to V has two sources only:** a stake V accepted when an offer named it, faced as an obstacle with affordances; or a group's own decision to act against V under [D-30](decisions.md), which a seed may carry, and stage only as an encounter S1 authorised and still authorises whenever it plays, writing no harm itself: the game records any harm ([S2 §2.16a](spec/seeding.md#216a-groups-acting-against-the-protagonist)).
 
 ### 3.8 Profiles: shapes as data
 

@@ -8,7 +8,7 @@
     {
       "id": "xf.composite:complication",
       "type": "pattern",
-      "version": 1,
+      "version": 2,
       "family": "turn",
       "scale": "step",
       "summary": "Something gets in the way of a goal under way: a third party's act, or plain bad luck.",
@@ -49,7 +49,11 @@
         {"from": "mishap", "to": "adjust", "link": "motive"}
       ],
       "entry": ["going"],
-      "outcomes": {"overcome": {"reached": ["adjust"], "kind": "resolved", "next": ["xf.composite:payoff"]}},
+      "outcomes": {
+        "overcome": {"reached": ["adjust"], "kind": "resolved", "next": ["xf.composite:payoff"]},
+        "stalled": {"reached": ["snag"], "after": {"clock": "game", "days": 1}, "kind": "parked", "next": ["xf.composite:grievance"]},
+        "unlucky": {"reached": ["mishap"], "after": {"clock": "game", "days": 1}, "kind": "parked", "next": ["xf.composite:loose-end"]}
+      },
       "within": {"clock": "game", "days": 3},
       "show": {"junctures": ["going"], "edges": 1},
       "links": {
@@ -295,7 +299,7 @@
     {
       "id": "xf.composite:betrayal",
       "type": "pattern",
-      "version": 1,
+      "version": 2,
       "family": "turn",
       "scale": "goal",
       "summary": "Someone trusted acts against the one who trusted them, for a reason the record holds.",
@@ -340,7 +344,7 @@
         {"from": "act", "to": "found", "link": "reveals", "shown": "must"},
         {"from": "found", "to": "broken", "link": "motive"}
       ],
-      "entry": ["offered", "threatened", "torn", "act"],
+      "entry": ["offered", "threatened", "act"],
       "outcomes": {
         "discovered": {
           "reached": ["found"],
@@ -502,7 +506,7 @@
     {
       "id": "xf.composite:interception",
       "type": "pattern",
-      "version": 1,
+      "version": 2,
       "family": "turn",
       "scale": "goal",
       "summary": "Someone learns that a thing is on the move and goes after it.",
@@ -574,7 +578,6 @@
         }
       },
       "within": {"clock": "game", "days": 3},
-      "once": ["?i", "?x"],
       "show": {"junctures": ["shadow"], "edges": 1},
       "escalation": ["taken"],
       "links": {
@@ -601,7 +604,7 @@
     {
       "id": "xf.composite:misattribution",
       "type": "pattern",
-      "version": 1,
+      "version": 2,
       "family": "turn",
       "scale": "goal",
       "summary": "Someone is blamed for a wrong another did.",
@@ -630,6 +633,7 @@
           "args": {"by": "?cl", "what": "wronged", "to": "?bl"},
           "optional": true,
           "park": true,
+          "v": "offer",
           "realise": [{"wait": true}, {"offer": {}}],
           "changes": [{"belief": {"who": "?bl", "about": "wronged"}, "move": "revised"}]
         }

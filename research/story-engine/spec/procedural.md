@@ -1,11 +1,11 @@
 # S3. Procedural engine specification
 
-**Status:** v0.6, 25 October 2026. v0.6 makes layer 3 run the composite's [pattern language](../composite/pattern-language.md) ([D-27](../decisions.md), [D-28](../decisions.md), [DS-70](../design-seeds.md)). Patterns become graphs of junctures, events and states alike, matched by **one matcher** (the sifter, renamed) whose live instances are candidates before they complete (§6). The director realises a ready juncture by an **offer** or a **nudge** behind new gates: legibility debt, the **escalation gate**, and nudge legality, which nudges only the unobserved ([DS-05](../design-seeds.md)) (§7). Instances compose by chaining through `meta:story` events, by layering on shared fillers, and by growing into shapes, which only recognise (§6.6). A legibility ledger (§6.7) and a persisted ring of recent thread skeletons with a diversity term (§6.8, §7.4) serve M3's iteration 3. A group may act against the protagonist under [D-30](../decisions.md); the director waits for it and never nudges it (§7.10). Back-fill (constructed causes) and open (refinement) are specified and stay later capabilities (§7.11). §15 records what was adopted, changed and rejected; §13 the interfaces assumed from the parallel S0 v4.17 and S1 v0.6 pass. v0.5 says what SF3-36's sowing-off identity covers in general (the fit report), from the M3 run. v0.4, 24 October 2026. v0.4 says a pattern's kinds match by nominal compatibility (S0 v4.14 §2.2), so a resident counts as a person in a pattern without widening any query. v0.3, v0.3 adds a chronological buffer before the sifter, after GPT-6 Astra's review of S1 (E-07). v0.2: v0.2 answers GPT-6 Astra's review of v0.1. It narrows the core (no online player-model estimator, completed event patterns only, no loose-end growth, no automatic overflow withdrawal) and tightens identity, deadlines, reloads and saving.
+**Status:** v0.6, 25 October 2026, with its review fix round. The fix round (after GPT-6.1 Sol's review; §15) lets a pending juncture be filled, keeps state fillers' evidence, retires instances at the boundary step so the sweep decides nothing, waits for the publication horizon before ending, tests only the edges a join needs, binds the protagonist as a target from the world but as an actor only from its own acts, adds relation search and dynamic `seed-outcome` fills, adds explain candidates, counts unclassified beats against whole plots, enforces fixed identities, and aligns with S0 v4.17 and S1 v0.6 as that pass settled them. v0.6 makes layer 3 run the composite's [pattern language](../composite/pattern-language.md) ([D-27](../decisions.md), [D-28](../decisions.md), [DS-70](../design-seeds.md)). Patterns become graphs of junctures, events and states alike, matched by **one matcher** (the sifter, renamed) whose live instances are candidates before they complete (§6). The director realises a ready juncture by an **offer** or a **nudge** behind new gates: legibility debt, the **escalation gate**, and nudge legality, which nudges only the unobserved ([DS-05](../design-seeds.md)) (§7). Instances compose by chaining through `meta:story` events, by layering on shared fillers, and by growing into shapes, which only recognise (§6.6). A legibility ledger (§6.7) and a persisted ring of recent thread skeletons with a diversity term (§6.8, §7.4) serve M3's iteration 3. A group may act against the protagonist under [D-30](../decisions.md); the director waits for it and never nudges it (§7.10). Back-fill (constructed causes) and open (refinement) are specified and stay later capabilities (§7.11). §15 records what was adopted, changed and rejected; §13 the interfaces assumed from the parallel S0 v4.17 and S1 v0.6 pass. v0.5 says what SF3-36's sowing-off identity covers in general (the fit report), from the M3 run. v0.4, 24 October 2026. v0.4 says a pattern's kinds match by nominal compatibility (S0 v4.14 §2.2), so a resident counts as a person in a pattern without widening any query. v0.3, v0.3 adds a chronological buffer before the sifter, after GPT-6 Astra's review of S1 (E-07). v0.2: v0.2 answers GPT-6 Astra's review of v0.1. It narrows the core (no online player-model estimator, completed event patterns only, no loose-end growth, no automatic overflow withdrawal) and tightens identity, deadlines, reloads and saving.
 - **Reviews.** Round 1, GPT-6 Astra, on v0.1: 18 findings and four cuts, all adopted (§15).
 - **The core.** This version specifies the **core**: the layer-3 parts that the first implementation builds, narrowed to [S2's core](seeding.md#03-the-core-what-the-first-implementation-builds) (§0.2). Everything else in [P5](../p5-procedural-engine.md) is a **later capability** (§0.3). The first implementation rejects it plainly rather than half-doing it.
-- **The additions to S2 and S0.** Layer 3 needed a few additions. S2 v1.1, v1.2 and v1.11 and S0 v4.7 and v4.8 have taken them; v0.6 also assumes interfaces from the parallel S0 v4.17 and S1 v0.6 pass. §13 lists both.
+- **The additions to S2 and S0.** Layer 3 needed a few additions. S2 v1.1, v1.2 and v1.11 and S0 v4.7 and v4.8 have taken them; v0.6 also follows the parallel S0 v4.17 and S1 v0.6 pass as it settled them. §13 lists both.
 
-This is the specification stage of [P5](../p5-procedural-engine.md) (work package [WP-13](../plan.md#82-work-packages)). It is exact enough to build layer 3 in the TypeScript reference model from this page, [S2](seeding.md) (v1.11) and the kernel specification [S0](kernel.md) (v4.16), with the interfaces of §13.3 assumed from S0 v4.17 and S1 v0.6. The pattern language explains the design; this page says exactly what is built.
+This is the specification stage of [P5](../p5-procedural-engine.md) (work package [WP-13](../plan.md#82-work-packages)). It is exact enough to build layer 3 in the TypeScript reference model from this page, [S2](seeding.md) (v1.11) and the kernel specification [S0](kernel.md) (v4.16), and the forms S0 v4.17 and S1 v0.6 settle (§13.3). The pattern language explains the design; this page says exactly what is built.
 
 Where this page and P5 differ, this page wins. P5 explains why; this page says exactly what. §14 lists the departures from P5, and the points where P5 disagrees with itself.
 
@@ -40,7 +40,7 @@ The core is the least that tests the idea: an authored seed fitted and paced wit
 | Fitting (§4) | The **fit hook**: world-only weights on layer 2's draws (casting, variants, modes, alternates), from the seed's aesthetic intent, variety and yielding to live seeds. The **lead aim** for timing. Fit-report additions. **No `fits` record** (§4.1 says why) |
 | Director (§5) | The sense feed; the pacing state `A`, `N`, `T`; the five phases with rest lengths; the **hold hook** (phase, headroom, climax rests, lead aim); the **joint hook**; the thread view over seeds and instances, and the opening budgets; the nested opportunity schedule for the `open` stream |
 | Matcher (§6) | **Patterns as graphs of junctures** (v0.6): event and state junctures over the function vocabulary; fills from the event-kind registry and registered state rules; bounded state queries; multi-function advancement; link tests; `unless`, `within`, `once`; outcomes, `after` and aftermath; the relevance gate; the bounded saved pool of instances, whose filler events stay alive; deadlines checked at every use and endings applied at the boundary step; tombstones. **Composition:** `meta:story` events at outcomes and parking, chaining, layering with cross-causal marks, shapes as recognisers. The **legibility ledger** and **thread skeletons** with their persisted ring. The v0.5 stage form, read as a chain |
-| Sower (§7) | The `open` stream; three kinds of candidate: **told** (an instance at its outcome), **surface** (a matched juncture the protagonist hasn't perceived) and **realise** (a ready juncture, by **offer** or **nudge**); gates 1 to 13, the escalation gate among them; banding over eight features, the skeleton diversity term, scores frozen once per slot, and the keyed draw; kits chosen by the function they fill; instantiation by a sowing request with an overlay; refusal and cooldown; idempotent sowing; one sow and its bookkeeping saved together; a **finite pending lifetime**, a nudge lifetime, and closings for instances that counted as threads |
+| Sower (§7) | The `open` stream; four kinds of candidate: **told** (an instance at its outcome), **surface** (a matched juncture the protagonist hasn't perceived), **explain** (an edge whose ends are perceived but which isn't shown) and **realise** (a ready juncture, by **offer** or **nudge**); gates 1 to 13, the escalation gate among them; banding over eight features, the skeleton diversity term, scores frozen once per slot, and the keyed draw; kits chosen by the function they fill; instantiation by a sowing request with an overlay; refusal and cooldown; idempotent sowing; one sow and its bookkeeping saved together; a **finite pending lifetime**, a nudge lifetime, and closings for instances that counted as threads |
 | Evidence (§8) | Canon offers and responses, with play timestamps, written to the decision log. **No estimator** |
 | Persistence (§9) | One `SeedRecord` under its own id: the instance pool, tombstones, the schedule position, the arc lock, the pending and nudge lists, the recent-sown ring and the skeleton ring |
 | Determinism, log, audits (§3, §10, §11) | Keyed draws with exact keys; the decision log; static audits |
@@ -120,11 +120,13 @@ interface KernelView {
   isSpine(node: Id): boolean;               // registry read: the node is a canon character of the main story
   aesthetic(node: Id, feature: AestheticFeature): number | undefined;   // registry read, −1..1
   eventKind(name: string): { tags: string[]; producers: string[] } | undefined;   // the event-kind registry (S0 §10.5); producers are the layers that can produce the kind (S1, S5)
-  // v0.6, for the matcher (§2.2a; the interfaces assumed in §13.3)
+  // v0.6, for the matcher (§2.2a; S0 v4.17 and S1 v0.6, §13.3)
   fills(kind: string): KindFill[];          // what an event kind fills (S0-2, S1-1)
   stateRules(fn: FnId): StateRule[];        // the registered state rules of a state function (S0-2)
-  relation(rel: RelId, args: Id[], t: GameTime): 'yes' | 'no' | 'maybe';   // a relation of the vocabulary, as a registered read
-  causesOf(f: FillerRef): Id[];             // an event's causes and its served frame's cause; a frame's, edge's or intention's cause; a belief's evidence
+  relation(rel: RelId, args: Id[], t: GameTime): 'yes' | 'no' | 'maybe';   // a relation of the vocabulary, as a registered read, all arguments bound
+  relationSearch(rel: RelId, bound: Record<string, Id>, t: GameTime, limit: number):   // v0.6 (fix round): bind a relation's unbound arguments
+    { tuples: Array<Record<string, Id>>; truncated: boolean };   // only from an argument in the relation's searchFrom; in its records' Id order; at most `limit`
+  causesOf(event: Id): Id[];                // an event's causes and its served frame's cause. A state filler's causes are the copy taken at its match (§6.2)
   vocabulary(): Vocabulary;                 // pack data (§2.2a)
 }
 interface EventView {
@@ -301,7 +303,7 @@ interface Layer3Data {
     maxEdges: number;        // 12
     maxFills: number;        // 8: the most fills one kind may declare
     defaultWithin: number;   // 518400 game seconds (6 game days)
-    maxWithin: number;       // 2592000 (30 game days)
+    maxWithin: number;       // 7776000 (90 game days; v0.6 raises it from 30 for the library's feuds and payoffs)
     candidateTtl: number;    // 259200 game seconds (3 game days) after an outcome
     tombstoneSpans: number;  // 2: a tombstone lasts two `within` periods
     stateCandidates: number; // 8: records a bounded state query lists (§6.4)
@@ -311,7 +313,7 @@ interface Layer3Data {
     aftermathDays: number;   // 7: an outcome's default aftermath window, in game days
     maxLiveShapes: number;   // 8
     maxLayers: number;       // 8: layer entries kept per instance
-    maxSurface: number;      // 2: surface candidates per instance (§7.1)
+    maxSurface: number;      // 2: surface candidates, and explain candidates, per instance (§7.1)
     relevanceGate: boolean;  // true; fixtures of v0.5's stage form may switch it off (§6.3)
   };
   sower: {
@@ -383,7 +385,7 @@ interface Pattern {
 
 interface PatternRole {
   kind: RoleKind | RoleKind[];
-  identity?: Part<Id | GameKey>;               // S2 §2.2; default open
+  identity?: Part<Id | GameKey | 'v'>;         // S2 §2.2; default open. Fixed: the only node the role binds (§6.3). Preferred: steers only realisation
   must?: RelReq[];
   prefer?: Array<{ r: RelReq; strength: 1 | 2 | 3 }>;   // steers only what the director realises, never matching
   v?: 'never' | 'may';                         // may the protagonist fill it? default never
@@ -391,7 +393,7 @@ interface PatternRole {
 
 interface Juncture {
   fn: FnId;
-  args: Record<string, Var | JunctureKey>;     // the function's arguments; a juncture key stands for that juncture's filler
+  args: Record<string, Var | JunctureKey | 'any' | string>;   // a variable; a juncture key (that juncture's filler); 'any'; a story juncture's pattern id and outcome name (§2.2a)
   form?: 'event' | 'state';                    // default the function's form
   requires?: RelReq[];
   changes?: Change[];                          // what filling it changes: expectations the world bears out (§6.3)
@@ -441,7 +443,7 @@ interface Telling {                            // v0.5's single telling, now tol
 ```
 
 **Meaning, briefly** (the pattern language §3 has the full account):
-- **Roles** are variables that junctures share. Kinds match by S0's nominal compatibility (v0.4: a resident counts as a person). The protagonist (`v`) may fill a role only where it says `v: 'may'`, and only through an act of the protagonist's (§2.2a), never by assumption ([D-09](../decisions.md)).
+- **Roles** are variables that junctures share. Kinds match by S0's nominal compatibility (v0.4: a resident counts as a person). A fixed identity is the only node a role binds; a preferred one only steers realisation. The protagonist (`v`) may fill a role only where it says `v: 'may'`, and only from a record the world holds about the protagonist, never by assumption: as a target or subject from any evidenced record, as an actor only from its own recorded act (§2.2a; [D-09](../decisions.md)).
 - **Junctures** name a function and its arguments. One of form `event` is filled by an occurrence. One of form `state` is filled by a record that holds over an interval (an edge, a frame, a group intention, a norm's mark, a belief), or by an event that begins the state.
 - **Edges** carry the cascade. Each link must be borne out in the record before the later juncture counts as matched (§6.4). `forecloses` is an effect only: when its source matches, its target is foreclosed.
 - **Outcomes** are named end states. `aftermath` names the consequences that can match only after the outcome.
@@ -465,45 +467,60 @@ The **vocabulary** is pack data. S4 owns its format; the M3 vocabulary is [`comp
 ```ts
 interface Vocabulary {
   functions: Record<FnId, { form: 'event' | 'state'; args: Record<string, RoleKind | RoleKind[]>; searchFrom?: string[] }>;   // args in declared order
-  relations: Record<RelId, { args: string[] }>;   // each answered by a registered read (KernelView.relation)
+  relations: Record<RelId, { args: string[]; searchFrom?: string[] }>;   // a registered read each; searchFrom: the arguments it can be searched from (§6.4)
   tokenPrecedence: FnId[];                        // every function once: the order that names a token (§6.8)
 }
 ```
 
-The seven links are this page's (§6.4), not the vocabulary's.
+The seven links are this page's (§6.4), not the vocabulary's. An argument's value in a juncture is a variable, a juncture key (that juncture's filler), or `'any'` (unconstrained, never bound); a `story` juncture's `pattern` and `outcome` are a pattern id and an outcome name, or `'any'`.
 
-**What fills a function is declared by the world, not by the patterns.** Two registries say it (the assumed interfaces S0-2 and S1-1, §13.3), so a new event kind in a pack fills the patterns it should the moment it declares its fills, and no pattern names it.
+**What fills a function is declared by the world, not by the patterns.** Two registries say it ([S0 §10.5](kernel.md#105-changes-and-matching), v4.17 V4-51, and S1 v0.6 §5.2a and §9.1a, as §13.3 records), so a new event kind in a pack fills the patterns it should the moment it declares its fills, and no pattern names it.
 
 ```ts
-interface KindFill {                              // on each event-kind registry entry, as `fills`
+interface KindFill {                              // S0's FillDecl, on each event-kind registry entry, as `fills`
   fn: FnId;
-  args: Record<string, string>;                   // the function's argument → a participant role of the kind, or 'place'
-  when?: { outcome?: Array<'done' | 'failed' | 'prevented'>;   // the event's outcome; an absent outcome reads as 'done'
-           stance?: Array<Stance | 'decline'> };  // S2's `response` only, read through Layer2View.responseOf
+  args: Record<string, string>;                   // argument → a participant role; 'a|b' takes the first role present;
+                                                  // '@place' is the event's place, '@self' the event itself
+  when?: {
+    outcome?: Array<'done' | 'failed' | 'prevented'>;   // the event's outcome; an absent outcome reads as 'done'
+    has?: string[]; lacks?: string[];                    // roles that must be present, or absent
+    stance?: Array<Stance | 'decline'>;                  // S2's `response`: read through Layer2View.responseOf
+    state?: { fn: FnId; args: Record<string, string> };  // a state that must hold at the event's time: tested by holdsAt or a bounded search (§6.4)
+  };
 }
 
 type FillerRef =
   | { event: Id } | { edge: Id } | { frame: Id } | { belief: Id }
-  | { intent: { group: Id; id: string; since: GameTime } }      // an S1 group intention
-  | { norm: { norm: Id; who: Id } }                               // a norm's mark on a resident (S1 order.norms)
-  | { dilemma: Id };                                              // a kernel Dilemma, by its occurrence id
+  | { intent: { group: Id; id: Id } }             // an S1 group intention, by its decision event
+  | { norm: { norm: Id; who: Id } }               // a norm's mark on a resident (S1 order.norms)
+  | { dilemma: Id };                              // a kernel Dilemma, by its occurrence id
 
-interface StateFill { filler: FillerRef; args: Record<string, Id>; at: GameTime }   // `at`: when the state began
+interface StateFill {
+  filler: FillerRef; args: Record<string, Id>;
+  at: GameTime;                                   // when the state began
+  causes: Id[];                                   // what the record rests on: its cause event, a belief's evidence, an intention's decision and grounding act; at most 8
+}
 
-interface StateRule {                             // registered per state function: by S0 for edges, frames and beliefs; by S1 for intentions, norms and reads
+interface StateRule {                             // registered by S1 per state function, those over kernel records included (S1 v0.6 §9.1a)
   fn: FnId; id: string;                           // e.g. 'obligate.member-of'
-  changes: Selector[];                            // the Changes that can make the state true: interests for the pattern frames (§6.1)
+  durable: true;                                  // its records are persisted or regenerable, so every method answers the same after a load (below)
+  changes: Selector[];                            // the Changes that can make the state true, or end it: interests for the pattern frames (§6.1)
   fromChange(c: Change, view: KernelView): StateFill[];        // the states this Change makes true, in record Id order
-  search(arg: string, node: Id, t: GameTime, view: KernelView): StateFill[];   // only from an argument in the function's searchFrom; record Id order
+  endsBy(c: Change, f: FillerRef, view: KernelView): boolean;  // this Change ends that state
+  search(arg: string, node: Id, t: GameTime, view: KernelView, limit: number): { fills: StateFill[]; truncated: boolean };   // only from an argument in searchFrom; record Id order
   holdsAt(f: FillerRef, t: GameTime, view: KernelView): 'yes' | 'no' | 'maybe';
 }
 ```
 
 - **A filler's identity.** `fillerId(f)` is the event's `Id` for an event, and otherwise `H("filler", <the form's name>, <its fields in declared order>)`. Instances key on it (§3.2).
-- **Events.** An event fills each `KindFill` of its kind whose `when` holds, its participants mapped to the function's arguments. A kind declares at most `maxFills` (8). An argument whose participant role is absent from the event stays unbound.
-- **States in the core:** membership, tie and holder edges (`core:member-of`, `xf:tie`, `xf:held-by` of S1-4); context frames by level, status and interests (`want`, `pursue`, `protect`, and `threaten` from a frame's goal effects); S1's group intentions (`want`, `pursue`, `protect`, `decide`, the intention against the protagonist of S1-10 included); norms' marks (`obligate`, `want`); a `Dilemma` (`demand`, as the vocabulary maps it); and beliefs (`blame`, `conceal` by belief, `learn` by observation), through S0-3's belief Change. **Until S0-3 is built, the belief rules fill nothing:** those junctures wait, and `learn` is filled only by `tell` events and by an event's `witnesses`. A read that S1 marks phase 2 (`city.protected`, `social.contract`) answers `maybe`, so it fills nothing.
-- **`story`** is filled by a `meta:story` event (§6.6). Its S0-1 slot gives the pattern and the outcome; the juncture's `binds` maps the story's participants onto this pattern's roles.
-- **The protagonist's acts.** An event in which `v` takes part as `actor` (a response, an act the game reports) fills like any other, and binds `v` only to a role with `v: 'may'`. Every link into a juncture it fills is tested as `answers` (§6.4): the engine never reads the protagonist's reasons.
+- **Event fills.** An event fills each `KindFill` of its kind whose `when` holds, its participants mapped to the function's arguments. A kind declares at most `maxFills` (8). An argument whose participant role is absent stays unbound. Two kinds of S2's are filled dynamically, because what they fill is in layer 2's record, not in the kind: a `response` through `responseOf` (its stance), and a **`seed-outcome` through `Layer2View.realisedBy(event)`**, which gives, for each `realises` entry with `by: 'end'` (after T12) or `by: 'unattended'` (after T13), the juncture's function with the casts its `binds` name ([S2 §2.24](seeding.md#224-patterns-in-seeds)). Those fills enter `F(c)` (§6.3) like any other.
+- **Durable state rules only** (S0 v4.16's persistence principles, §9.1). A state rule is loaded only if every record it reads is persisted or regenerable: retained goal frames (S0 v4.17 V4-54) and seeds' role frames; **memorable** beliefs, the only ones that produce a `belief` change (V4-52); edges with persisted causes, and implicit memberships and ties, which are pure functions of base data; and S1's process digests (group intentions, norm marks), persisted with their process state (V4-49). A rule over anything else (a non-memorable belief, a cache) is refused with a load finding, so no juncture can be filled by a record that a reload might not restore.
+- **States in the core:** membership, tie and holder edges (`member`, `xf:tie`, `xf:held-by`); goal frames by status and effects (`want`, `pursue`, `protect`, and `threaten` from a goal's effects); S1's group intentions (`want`, `pursue`, `protect`, `decide`, the intention against the protagonist included); norms' marks (`obligate`, `want`); a `Dilemma` (`demand`, as the vocabulary maps it); and memorable beliefs (`blame`, `conceal`), through S0's `belief` change. `learn` is filled by `tell` events (the listener learns the `told` event) and by an event's `witnesses`. A read that S1 marks phase 2 (`city.protected`, `social.contract`) answers `maybe`, so it fills nothing.
+- **`story`** is filled by a `meta:story` event (§6.6). Its `data` record (S0 v4.17 V4-50) gives the pattern and the outcome as `data.pattern` and `data.outcome`; the juncture's `binds` maps the story's participants onto this pattern's roles.
+- **The protagonist** (v0.6). Binding the protagonist as **an observed target** and **assigning the protagonist an act or an inner state** are different things, and only the first comes from the world:
+  - **As a target or subject:** `v` may bind a role with `v: 'may'` from any evidenced world record that names it in a role other than an agent's: a participant of an event (the warned, the confronted, the addressee of an offer), the object of a group's decision or intention (`decide`, `pursue`), the subject of another actor's belief (`blame(who: group, of: v)`), or the holder side of an edge (`hold`).
+  - **As an actor:** `v` binds an agent argument (the acting argument of §6.3) only from an event in which it takes part in one of its kind's agent roles: its own act, as the game reported it or as it answered a seed (S2's `response` and `promise`). Every link into a juncture it fills this way is tested as `answers` (§6.4): the engine never reads the protagonist's reasons.
+  - **Never** a frame, a belief, a want or an intention whose actor or believer is `v`: the engine holds none, and the director's model is unreachable ([S2 §8.8](seeding.md#88-the-player-models-boundary)). A state rule never returns one.
 
 ### 2.2b The v0.5 stage form
 
@@ -567,11 +584,12 @@ interface Sowable {
   tags?: string[];
   fills?: Array<{ fn: FnId; args: Record<string, RoleKey | 'v'>; cause?: RoleKey }>;   // v0.6: the functions it can realise (§7.5)
   tells?: RoleKey;                       // v0.6: the role, of kind core:event, that a surfaced filler binds (§7.5)
+  explains?: RoleKey;                    // v0.6 fix round: the role, of kind core:event, that binds the cause an explain cites beside `tells`
 }
 ```
 
 - **`fills`** (v0.6, the composite's S2-9, changed). Each entry is a function the kit can realise for a juncture, with the kit role that takes each of the function's arguments (`'v'` for an argument the protagonist fills) and, optionally, the role of kind `core:event` that takes the cause: the filler the juncture continues (§7.6). A list of function ids alone could not tell the sower which kit role takes which person.
-- **`tells`** names the event role a **surface** telling binds to the filler it shows (§7.1).
+- **`tells`** names the event role a **surface** or **explain** telling binds to the filler it shows (§7.1); **`explains`** the role that binds the earlier filler, the cause, so that one delivery cites both ends of an edge.
 
 **Sowable load checks.** A template that fails is not sowable by layer 3. It may still be sown by its pack.
 
@@ -582,9 +600,9 @@ interface Sowable {
 | S3-K-3 | A template that serves any form other than `rumour`, `recap` or `sighting` has `closing`, so that withdrawing it just as a delivery is shown always leaves a closing trace |
 | S3-K-4 | `firstClass` equals the class of the first delivery that the template's start beats produce, by S2's registry |
 | S3-K-5 | No role of the template has an `identity` that `isSpine` |
-| S3-K-6 | (v0.6) **No whole plots.** The template's implicit pattern ([S2 §2.24](seeding.md#224-patterns-in-seeds)) has at most `kitJunctures` **[tunable 2]** junctures whose functions are other than `ask`, `comply`, `refuse` and `choose`. A template that lays out more is a plot in miniature, which D-28 rules out as procedural material; its pack may still sow it |
+| S3-K-6 | (v0.6; counting fixed in the fix round) **No whole plots.** Along every path of the template's beat graph from a start beat (its `because` and `then` links), at most `kitJunctures` **[tunable 2]** beats count. Every beat counts except a `texture` beat, an `exit` beat, an offer beat, and a beat whose implicit-pattern function ([S2 §2.24](seeding.md#224-patterns-in-seeds)) is `ask`, `comply`, `refuse` or `choose`. **A beat with no function counts**, so a fixed run of objectives, obstacles and fact writes can't pass by leaving its beats unclassified. A template that lays out more is a plot in miniature, which D-28 rules out as procedural material; its pack may still sow it |
 | S3-K-7 | (v0.6) A template serves `nudge` if and only if it is a nudge (S2 §2.25), and then serves nothing else. A nudge is exempt from S3-K-3 and S3-K-4 |
-| S3-K-8 | (v0.6) Each `fills` entry names a function of the vocabulary; each of its `args` keys is an argument of that function, mapped to a role of the template whose kind accepts the argument's kind and whose template gives it no fixed identity, or to `'v'`; a `cause` or `tells` role has kind `core:event`. A nudge maps no acting argument to `'v'` |
+| S3-K-8 | (v0.6) Each `fills` entry names a function of the vocabulary; each of its `args` keys is an argument of that function, mapped to a role of the template whose kind accepts the argument's kind and whose template gives it no fixed identity, or to `'v'`; a `cause`, `tells` or `explains` role has kind `core:event`. A nudge maps no acting argument to `'v'`. For an offer kit, the entry maps the juncture's acting argument either to `'v'` or to the role its first offer's `asker` names (§7.5) |
 
 ### 2.4 Settings read
 
@@ -638,6 +656,7 @@ Identity hashes (no salt, no `rand`). An **occurrence** is one incident: the eve
 | Instance id (the match id) | `H("match", worldSeed, pattern.id, bindingKey, occurrence)`: the binding key and the occurrence id. Two incidents among the same people have different ids, however far apart. The pattern's version is not in it: an instance of another version is dropped at load (§9.3) |
 | Candidate key, **told** | `H("cand", worldSeed, "match", instanceId, n − 1)`, with `n` the pattern's number of junctures (for the stage form, v0.5's key: the last stage) |
 | Candidate key, **surface** | `H("cand", worldSeed, "surface", instanceId, juncture)` |
+| Candidate key, **explain** | `H("cand", worldSeed, "explain", instanceId, edgeIndex, n)`, with `edgeIndex` the edge's index in the pattern and `n` the number of told signs the edge already has (§6.7) |
 | Candidate key, **realise** | `H("cand", worldSeed, "juncture", instanceId, juncture)` |
 | Decision id | `H("sow3", worldSeed, cand.key)` |
 | Closing decision | `H("close3", worldSeed, instanceId)` (§7.7) |
@@ -890,7 +909,7 @@ There is no score hook and no form hook in the core. Layer 2 adds 0 to every sco
 
 A **thread** is a view over layer 2's records ([S2 §2.13](seeding.md#213-scale-turns-threads-and-forms)) and, from v0.6, layer 3's pattern instances: the unit the director budgets and the unit evaluation judges ([pattern language §11.2](../composite/pattern-language.md#112-threads)). It is derived, never persisted. It is rebuilt at a refresh (once a second, and after any seed state change or instance match) from `Layer2View.instances()` and the pool.
 
-**Members.** Every seed instance that is live, or terminal with `closingPending`, except a nudge; and every pattern instance in the pool that is not `lapsed`. Nudges join no thread, so they never make one aware, live or unseen.
+**Members.** Every seed instance that is live, or terminal with `closingPending`, except a nudge; and every pattern instance in the pool that is neither `lapsed` nor retired (§6.5). Nudges join no thread, so they never make one aware, live or unseen.
 
 **Links.** Two members are in the same thread when any of these holds:
 - **seed and seed:** one names the other in `growsFrom` (`looseEnd.seed` or `parent`), or they share a committed cast node in roles that are `anchor` in **both**;
@@ -973,6 +992,8 @@ own.reactsTo: one selector per distinct filler of every juncture of the pattern 
                 fills give the juncture's function, or each kind or tag a fixed `fill` names;
               - for a state juncture: the `changes` selectors of the function's state rules (§2.2a);
               - for a `story` juncture: kind `meta:story`;
+              - for a pattern with a juncture whose function a loaded template's `realises` names (S2 §2.24): kind
+                `seed-outcome`, recomputed as packs load, so a seed's end reaches the patterns it can fill;
               - for a pattern with a role in an acting argument: the kinds that carry a `kill` effect, and `game.death` (§6.5)
 ```
 
@@ -1011,13 +1032,15 @@ interface Instance {
   depth: number;                            // 1 + the deepest story event among its fillers (§6.6)
   layers: Array<{ with: Id; juncture: JunctureKey; filler: Id; cross?: { juncture: JunctureKey; at: GameTime } }>;   // at most maxLayers (§6.6)
   closing?: 'needed' | 'sown' | 'none';     // §7.7
+  retired: boolean;                         // v0.6 fix round: logically gone (§6.5); no consumer reads a retired instance
   seeds: Array<{ seed: Id; for: 'told' | 'closing' | JunctureKey }>;   // the seeds sown from it (§7.6), at most maxJunctures + 2
-  refusals: Record<string, { n: number; until: number }>;   // per candidate: 'told', 'surface:<juncture>', 'realise:<juncture>'; `until` in playTotal (§7.6)
+  refusals: Record<string, { n: number; until: number }>;   // per candidate: 'told', 'surface:<juncture>', 'explain:<edge>:<n>', 'realise:<juncture>'; `until` in playTotal (§7.6)
 }
 interface JState {
   state: 'open' | 'ready' | 'pending' | 'matched' | 'refined' | 'foreclosed' | 'skipped';
   filler?: { ref: FillerRef; id: Id; fn: FnId; at: GameTime; args: Record<string, Id | 'v'>;
-             source: 'found' | 'offered' | 'nudged' | 'constructed' | 'refined'; by?: Id };   // `by`: the seed behind an offered or nudged fill
+             source: 'found' | 'offered' | 'nudged' | 'constructed' | 'refined'; by?: Id;   // `by`: the seed behind an offered or nudged fill
+             causes?: Id[]; until?: GameTime };      // a state filler: its copied causes, and when its end was heard (below)
   pending?: Id;                             // the seed working towards it (§7.6)
   readySince?: GameTime;                    // set when it becomes ready (gate 13)
   perceived?: { at: GameTime; play: number };   // the legibility ledger (§6.7)
@@ -1030,7 +1053,7 @@ interface JState {
 |---|---|
 | `open` | Not filled, and its join over incoming edges (not counting `forecloses`) isn't satisfied |
 | `ready` | Not filled; its join is satisfied (a juncture with no such incoming edge is ready from the start), so it may be filled next |
-| `pending` | A seed the director sowed, or a live seed that realises it (§5.7), is working towards it |
+| `pending` | A seed the director sowed, or a live seed that realises it (§5.7), is working towards it. It can still be filled, by that seed's occurrence or any other that passes (§6.3); a match clears it |
 | `matched` | Filled by a recorded event or state, with its incoming links borne out |
 | `refined` | Filled by a child instance's outcome (§7.11; a later capability) |
 | `foreclosed` | Can no longer be filled: a `forecloses` edge fired, a bound acting person died, or an `unless` struck |
@@ -1047,7 +1070,7 @@ interface JState {
 | `parked` | Ended with `park` junctures still open, by a parked outcome or by ending without an outcome after it was perceived (§6.5) | Terminal; its parked junctures are loose ends (later growth, §0.3) |
 | `lapsed` | Ended before the protagonist perceived any of it | Terminal; leaves nothing but a tombstone if `once` |
 
-The matched junctures are the instance's **past**, what sifting finds; the ready and pending ones are its **future**, what the director can wait for, offer or nudge towards (§7). "Open" below means `forming` or `live`.
+The matched junctures are the instance's **past**, what sifting finds; the ready and pending ones are its **future**, what the director can wait for, offer or nudge towards (§7). "Open" below means `forming` or `live`. A terminal instance later **retires**, at the boundary step, once nothing needs it (§6.5); from then on nothing reads it, and the sweep may drop it.
 
 **Bounds:**
 
@@ -1060,17 +1083,19 @@ The matched junctures are the instance's **past**, what sifting finds; the ready
 | Live shapes | `maxLiveShapes` (8) (§6.6) |
 | Tombstones | One per `once` binding set, kept as §6.5 says |
 
-**When a bound is hit,** a new instance is not started unless a slot can be freed. To free one the matcher evicts, in the same pattern (for the per-pattern bound) or overall (for the total), the `forming` instance with the earliest `firstTime`, then the lower `seq`; failing that, a `live` instance with no perceived juncture and no pending seed, by the same order. It never evicts an instance with a perceived juncture or a pending seed. If none can go, the new instance is refused. Either way the event logs `pool-full`. An evicted instance writes no tombstone and mints no story event, and its events are released.
+**State fillers keep what their tests need** (v0.6 fix round). A state filler's record may change or end after it matched, and a non-event record is not a retention root. So at the match the instance copies, into the filler, everything a later test reads: the arguments and `at`, and `causes`, the record's cause events (a frame's `cause`, an edge's cause, a belief's evidence, an intention's decision event and grounding act; at most 8). Those that are events join `nodes`, so the kernel keeps them. When a Change that the pattern's frame hears ends the state (`endsBy`, §2.2a), `until` is set to its time. Cause walks and `enables` tests read the copy, never the live record, so they answer the same after a save and a load. The rules that fill states are durable (§2.2a), so a state that hasn't ended reads the same after a load too.
+
+**Bounds count the instances that are not retired** (§6.5). **When a bound is hit,** a new instance is not started unless a slot can be freed. To free one the matcher evicts, in the same pattern (for the per-pattern bound) or overall (for the total), the `forming` instance with the earliest `firstTime`, then the lower `seq`; failing that, a `live` instance with no perceived juncture and no pending seed, by the same order. It never evicts an instance with a perceived juncture or a pending seed. If none can go, the new instance is refused. Either way the event logs `pool-full`. An evicted instance writes no tombstone and mints no story event, and its events are released.
 
 ### 6.3 Handling a Change
 
-`onChange(emission)` runs once per emission, for the pattern that owns its frame (and once per pattern for a `Dilemma`, §6.1). `now` is the occurrence's game time. Let `F(c)` be the **fills of the occurrence**: for an event, each `KindFill` of its kind whose `when` holds (§2.2a), with its arguments mapped, in registry order; for a state Change, every `StateFill` that a state rule of this pattern's functions returns from `fromChange`, in rule then record order; for a `Dilemma`, its `demand`; for a `meta:story` event, its `story` fill. Each fill is a function with an argument map.
+`onChange(emission)` runs once per emission, for the pattern that owns its frame (and once per pattern for a `Dilemma`, §6.1). `now` is the occurrence's game time. Let `F(c)` be the **fills of the occurrence**: for an event, each `KindFill` of its kind whose `when` holds (§2.2a), with its arguments mapped, in registry order, and, for a `seed-outcome`, the fills `realisedBy(event)` gives, in its order; for a state Change, every `StateFill` that a state rule of this pattern's functions returns from `fromChange`, in rule then record order; for a `Dilemma`, its `demand`; for a `meta:story` event, its `story` fill. Each fill is a function with an argument map. A Change that ends a matched state filler (`endsBy`) sets that filler's `until` before anything else. A function's **acting argument** is its first argument whose kind is `actor`, `person` or `group`.
 
 1. **Open and `aftermath` instances first**, in `seq` order, from a snapshot taken before this Change (an instance this Change starts is not in it). In `aftermath`, only the fixed outcome's aftermath junctures are tried:
    1. **Deadline at use.** If `now > firstTime + within` (for an instance in `aftermath`, `now > aftermathUntil`), nothing is tried for it. Its ending is applied at the boundary step (§6.5).
    2. **Duplicate.** If the instance has a `used` entry for this occurrence and no fill in `F(c)` has a function that entry doesn't hold, skip it. A redelivered Change can never advance an instance.
    3. **Unless.** For each `unless` entry with `between: [a, b]`, while `a` is matched and `b` is not: if the fill test (below) succeeds for the `unless` juncture, the instance **dies** (§6.5, `match-killed`). Nothing else is tried for it.
-   4. **Advance (multi-function).** Repeat: for each `ready` juncture `j`, in key order, and each fill in `F(c)` whose function is `j.fn` and is not yet in this occurrence's `used` entry, in `F(c)` order: if the fill test succeeds and every incoming link of `j` tests yes (§6.4), `j` is `matched` with that filler; its new bindings join the instance's; the function is added to the `used` entry; `forecloses` edges fire; the ready set is recomputed; bounded state queries run for the new bindings (§6.4); layers are recorded (§6.6); the outcomes are checked (§6.5); and the loop restarts. It stops when no juncture matches. **A Change fills at most one juncture of an instance through each function its record fills**, so an occurrence that fills several functions (a paid shakedown is a demand, a compliance, a transfer and a wrong) may fill several junctures, one per function, in the order they become ready. Links between junctures that one occurrence fills hold by construction. The loop runs at most `maxFills` times.
+   4. **Advance (multi-function).** Repeat: for each `ready` or `pending` juncture `j`, in key order, and each fill in `F(c)` whose function is `j.fn` and is not yet in this occurrence's `used` entry, in `F(c)` order: if the fill test succeeds and `j`'s join is borne out (§6.4), `j` is `matched` with that filler (a `pending` juncture's `pending` is cleared; the seed stays in `seeds`); its new bindings join the instance's; the function is added to the `used` entry; `forecloses` edges fire; the ready set is recomputed; bounded state queries run for the new bindings (§6.4); layers are recorded (§6.6); the outcomes are checked (§6.5); and the loop restarts. It stops when no juncture matches. **A Change fills at most one juncture of an instance through each function its record fills**, so an occurrence that fills several functions (a paid shakedown is a demand, a compliance, a transfer and a wrong) may fill several junctures, one per function, in the order they become ready. Links between junctures that one occurrence fills hold by construction. The loop runs at most `maxFills` times.
 2. **Start.** For each entry juncture, in key order, until one starts an instance: for each fill in `F(c)` whose function is the juncture's, in order, try the fill test with no bindings. On the first success:
    1. **The relevance gate** (if `relevanceGate`). The instance starts only if the entry filler: (a) involves the protagonist, or a node with `exposedNode(·, 'presented')`, among its arguments, participants or place; or (b) has as its place a cell whose `depth` read is `open` (S1 §9.1); or (c) belongs to a group-level pattern, one whose `scale` is `concern`, `drive` or `standing` and whose entry juncture binds only groups; or (d) is a `meta:story` event at least one of whose cause events has `exposure` at `presented` or above. Everything else is world texture the matcher ignores ([pattern language §10.2](../composite/pattern-language.md#102-the-relevance-gate)). Off-screen stories cost only what group-level events cost.
    2. Compute the binding key and the instance id (§3.2). If an instance with that id exists, stop: it is the same occurrence. If an **open** instance with that binding key exists, stop: one is already forming among these people.
@@ -1081,7 +1106,7 @@ The matched junctures are the instance's **past**, what sifting finds; the ready
 
 **The fill test** for juncture `j`, a fill `f` and the instance's bindings:
 1. `f.fn` is `j.fn`, and the filler's form is accepted: an event for an `event` juncture; for a `state` juncture, a state record or an event whose kind fills the function (the event begins the state).
-2. Every argument of `j` already bound equals the mapped value. Every unbound argument binds if the value's kind fits the role and the role's `must` terms are yes. The protagonist binds only to a role with `v: 'may'`, and only from an event in which it takes part as `actor`, or from an S2 fill (an offer's `participant`, a response's `actor`, a promise's `promiser`).
+2. Every argument of `j` already bound equals the mapped value. Every unbound argument binds if the value's kind fits the role, the role's `must` terms are yes, and, for a role with a **fixed identity**, the value is that node (a game key resolves to its mirrored node as S2 §5.2 resolves a role's identity; `'v'` is the protagonist); a preferred identity doesn't restrict matching. An argument whose value is `'any'` matches anything and binds nothing. The protagonist binds only to a role with `v: 'may'`, and only as §2.2a allows: as a target or subject from any evidenced record, as the acting argument only from its own recorded act.
 3. Every `requires` term is yes; a term with unbound variables binds them by a bounded state query (§6.4). A `maybe` counts as no.
 4. If `j.fill` is fixed, the filler is one it names: of a named kind or tag; minted by the named seed's beat or its end (`mintedBy`); or a story event of the named pattern and outcome. A preferred `fill` doesn't restrict matching: the world may fill a juncture in a way nobody preferred. Preferences steer only what the director realises.
 5. For a `story` juncture: the story event's pattern is the one named, it is not the instance's own and not in its lineage, and its depth is below `lineageDepth` (§6.6).
@@ -1093,7 +1118,7 @@ The matched junctures are the instance's **past**, what sifting finds; the ready
 
 `found` and `offered` fills are **consequences**; `nudged` and `constructed` fills are **adaptations**, logged as such and never presented as consequences ([dossier 9](../craft/d09-agency-consequence.md) R5-23, AGY-42).
 
-**Death.** When an event reports a death (a `kill` effect, or `game.death`) of a person bound in the acting argument (the first argument of kind `actor` or `person`) of an unfilled juncture of an open instance, that juncture is foreclosed.
+**Death.** When an event reports a death (a `kill` effect, or `game.death`) of a person bound in the acting argument of an unfilled juncture of an open instance, that juncture is foreclosed.
 
 The matcher **does not fork**. A juncture takes the first filler that passes, in the orders of §3.1, and alternatives a forking matcher would keep are lost ([pattern language §12](../composite/pattern-language.md#12-alternatives-considered); C-S3-16).
 
@@ -1101,29 +1126,31 @@ The matcher **does not fork**. A juncture takes the first filler that passes, in
 
 **Bounded state queries** ([pattern language §6.2a](../composite/pattern-language.md#62a-bounded-state-queries)). A state juncture, or a `requires` term, may name variables nothing has bound yet: `squeeze.rule` requires `member(?col, ?pw)` when only the collector is in the event. A bounded state query binds them.
 1. **When.** At instance start, after the advancement; and again whenever a match binds a new variable. It covers every unfilled state juncture, and every `requires` term, with at least one bound argument.
-2. **Where it may look.** Only along an index the kernel or S1 keeps from a bound argument: a state rule's `search` from an argument in the function's `searchFrom`; a relation from its first bound argument, where its read keeps an index (membership, ties, holders, a frame's actor, a group's intention). A term with no searchable bound argument is `maybe`, so no: its variables must come from an entry or an earlier juncture.
-3. **Candidates and choice.** The query lists at most `stateCandidates` records **[tunable 8]**, in record `Id` order. The first for which every other requirement of the juncture or term holds binds the variables (and, for a state juncture, fills it, with its incoming links tested). The order is total, so the choice is deterministic and needs no draw. If none passes, the juncture stays as it was, or the term is no.
+2. **Where it may look.** Only along an index the kernel or S1 keeps from a bound argument: for a state juncture, a state rule's `search` from an argument in the function's `searchFrom`; for a relation term, `KernelView.relationSearch(rel, bound, t, stateCandidates)` (§1.2) from an argument in the relation's `searchFrom` (`member` and `leads` from either side, `tied` from either, `knows` from the knower, `at` from the thing). A variable with a fixed identity counts as bound from the instance's start. The bound arguments are passed by name, so the call's mask is the set of bound names; the first bound name in the relation's declared argument order that is in `searchFrom` is the one searched from. A term with no searchable bound argument is `maybe`, so no: its variables must come from an entry or an earlier juncture.
+3. **Candidates and choice.** The query lists at most `stateCandidates` records **[tunable 8]** (for a relation, tuples of the unbound arguments' values), in its records' `Id` order. The first for which every other requirement of the juncture or term holds binds the variables (and, for a state juncture, fills it, with its join tested). The order is total, so the choice is deterministic and needs no draw. If none passes, the juncture stays as it was, or the term is no; a `truncated` answer changes nothing but is logged (`query-truncated`), so a pattern that keeps hitting the bound shows up.
 4. **Cost.** One bounded read per term per binding event, counted in the tick budget.
 
 A debt that existed before its demand is a legitimate past, and the query finds it from the debtor; the guard of a struck ward is found along the ward's membership.
 
-**Link tests.** Each link other than `forecloses` is tested when its later juncture is tried, against the recorded filler of the earlier one. `walk(f)` is the breadth-first walk over `causesOf` (§1.2) from filler `f`, at most `causeHops` steps **[tunable 3]** and `causeWalkMax` records.
+**Which edges must hold** (v0.6 fix round). A juncture's join (§2.2) decides which of its incoming edges, not counting `forecloses`, must be borne out when it is tried: with `all`, every one; with `any`, at least one whose source is matched; with `{ all, any }`, every edge from an `all` source and at least one from a matched `any` source. Only those are tested as requirements. An edge from a matched source that the join doesn't need, and that fails, is logged as unborne and blocks nothing: `protection.answer` (`{ all: [covers], any: [approach, struck] }`) matches on a strike with no approach.
+
+**Link tests.** Each link other than `forecloses` is tested against the recorded filler of the earlier juncture. `walk(f)` is the breadth-first walk from filler `f` over causes, at most `causeHops` steps **[tunable 3]** and `causeWalkMax` records: an event's `causesOf` (§1.2), and a state filler's copied `causes` (§6.2).
 
 | Link | Holds when |
 |---|---|
 | `because` | `walk(later)` reaches the earlier filler |
-| `motive` | The later filler's acting argument held a frame or belief whose `cause` or `evidence` is the earlier filler, or reaches it within `causeHops`: the later event's `served` frame, the later state filler's frame, or one of the actor's beliefs (at most `stateCandidates`, by its believer index) |
-| `enables` | The earlier filler is a state and `holdsAt(earlier, later.at)` is yes; or it is an event no later than the later filler, and `walk(later)` reaches it, or a record that a `requires` term of the later juncture read has the earlier event as its cause |
+| `motive` | The later filler's acting argument held a frame or belief whose `cause` or `evidence` is the earlier filler, or reaches it within `causeHops`. Only durable sources are read: the later event's `served` frame (kept while the event refers to it, S0 §10.4), the later state filler's copied `causes`, and the actor's memorable beliefs (at most `stateCandidates`, by its believer index) |
+| `enables` | The earlier filler is a state that held at the later's time: `at ≤ later.at < until` by its copy when its end was heard, else `holdsAt(earlier, later.at)`; or it is an event no later than the later filler, and `walk(later)` reaches it, or a record that a `requires` term of the later juncture read has the earlier event among its causes |
 | `but` | The earlier filler served a frame (an event's `served` frame, or a frame filler itself), and an effect of the later filler violates an interest of that frame under the conflict table ([S0 §10.8](kernel.md#108-effects-and-cross-pressure)) |
-| `reveals` | The later filler's acting argument witnessed the earlier event, or the later filler is a `tell` or `expose` whose subject is the earlier filler, or (through S0-3) the actor holds a belief whose evidence includes it |
+| `reveals` | The later filler's acting argument witnessed the earlier event, or the later filler is a `tell` or `expose` whose `told` event is the earlier filler, or the actor holds a memorable belief whose evidence includes it |
 | `answers` | The later filler is a response, a refusal or a compliance whose direct `causes` include the earlier filler; or the protagonist's response to an offer whose delivery cites the earlier filler (S2 §10.2) |
 | `order` | The stage form only (§2.2b): the later filler's time is not earlier than the earlier's |
 
 **The protagonist's acts.** Where the later juncture is filled by an act of the protagonist's, every link into it is tested as `answers`: the act responds to an offer or a delivery that cites the earlier filler. The engine never reads the protagonist's reasons ([D-09](../decisions.md)).
 
-**Links into a juncture matched early.** An entry juncture, or one filled by a state query, may be matched before the junctures with edges into it: a demand can start a debt instance before the debt itself is found. Those edges are tested when their sources match, against the juncture already matched, and a source whose link fails does not match.
+**Links into a juncture matched early.** An entry juncture, or one filled by a state query, may be matched before the junctures with edges into it: a demand can start a debt instance before the debt itself is found. Those edges are tested when their sources match, against the juncture already matched. A source whose edge fails does not match only if the target's join requires that edge; otherwise the edge is logged as unborne.
 
-**Near misses.** When the fill test succeeds but a link fails, the juncture stays `ready`, and the miss is logged (`near-miss`, with the failing link). In the core a near miss is only logged; back-fill, which would construct the missing step, is a later capability (§7.11). The director never asserts a link without a recorded step that bears it out.
+**Near misses.** When the fill test succeeds but the juncture's join isn't borne out, the juncture stays as it was (`ready` or `pending`), and the miss is logged (`near-miss`, with the failing link). In the core a near miss is only logged; back-fill, which would construct the missing step, is a later capability (§7.11). The director never asserts a link without a recorded step that bears it out.
 
 ### 6.5 Outcomes, ending, the boundary step and tombstones
 
@@ -1137,7 +1164,9 @@ In `aftermath`, only the outcome's aftermath junctures can match; the instance c
 
 **Ending without an outcome** (the deadline passed, an `unless` struck, nothing reachable): `parked` if the protagonist perceived any of its junctures (§6.7), with a story event minted as if a parked outcome named `@parked` had been fixed; otherwise `lapsed`, silently.
 
-**The boundary step.** At each simulation window boundary ([S0 §9.4](kernel.md#94-evolution)), at every tempo, `off` included, in `seq` order, the matcher applies what time decides: open instances past `firstTime + within` end; armed outcomes that are due are fixed; aftermath windows that are due close; forming instances whose bound people have become known go live. **Deadlines are checked where they are used** as well (§6.3, §7.3): an instance past its deadline is never advanced, ranked or realised, whether or not its boundary step has run. Its ending, and anything that ending mints, happens at the boundary step, so that it falls at the same point however ticks fell. A deadline has passed when `now > deadline`; at equality it has not.
+**The boundary step.** At each simulation window boundary ([S0 §9.4](kernel.md#94-evolution)), at every tempo, `off` included, in `seq` order, the matcher applies what time decides: open instances past `firstTime + within` end; armed outcomes that are due are fixed; aftermath windows that are due close; forming instances whose bound people have become known go live; and terminal instances retire (below). **It waits for the horizon** (v0.6 fix round): an ending or an armed outcome due at time `T` applies only at the first boundary step whose chronological-buffer horizon (§6.1) is at or past `T`, after the buffer has released, and the matcher handled, every occurrence up to that horizon. So a filler that occurred before the deadline but was published late, inside the producers' declared lag, still counts. **Deadlines are checked where they are used** as well (§6.3, §7.3): an instance past its deadline is never advanced by an occurrence after it, ranked or realised, whether or not its boundary step has run. Its ending, and anything that ending mints, happens at the boundary step, so that it falls at the same point however ticks fell. A deadline has passed when `now > deadline`; at equality it has not.
+
+**Retirement** (v0.6 fix round). A terminal instance stays in the pool for as long as something may still need it, and then **retires**: logically gone, at a deterministic point. The boundary step retires a terminal instance when its closing is not `needed`, no live seed realises one of its junctures (`realising`, §1.2), and it has no told candidate left (its pattern has no `tell`, the candidate was sown or dropped, or `now > outcome.at + candidateTtl`). A lapsed instance retires at the first boundary step after it lapsed. **Every consumer reads only instances that are not retired:** the thread view (§5.7) and so the budgets, statuses and closings; layer counts and F-13; the skeletons (§6.8); candidate collection; and the pool's bounds. The matcher never matches into a retired instance.
 
 **A tombstone is written on every path that ends an instance of a pattern with `once`:**
 
@@ -1150,7 +1179,7 @@ In `aftermath`, only the outcome's aftermath junctures can match; the instance c
 
 A tombstone is **in force** while `now ≤ until`. An instance that is evicted, or dropped because its pattern changed, writes none. A pattern without `once` writes none.
 
-**The sweep** runs after the boundary step, and only reclaims storage. It removes terminal instances once `now > outcome.at + candidateTtl` (or their end time, if they had no outcome), or once their told candidate was sown, provided no closing is `needed` and no live seed realises one of their junctures; and it prunes tombstones past `until`. No decision depends on it having run.
+**The sweep** runs after the boundary step, and only reclaims storage: it removes retired instances (releasing their events from `nodes`) and prunes tombstones past `until`. Because nothing reads a retired instance, skipping a sweep, or running it at any other boundary, changes no decision, no count and no skeleton (S3-I-19).
 
 **Tempo `off`.** The pattern frames are closed, so no instance starts or advances. The boundary step and the sweep still run, so instances end by their deadlines as usual. What would have matched while `off` is lost.
 
@@ -1163,7 +1192,7 @@ Every composition is found by the matcher alone. There is no catalogue of which 
 - participants the bound variables, `role` the variable's name without `?` (the protagonist included, where bound);
 - `causes` the filler events of its matched junctures, and the cause events of its state fillers (`causesOf`), at most `maxJunctures`;
 - no effects; no witnesses;
-- the S0-1 data slot (assumed, §13.3): `story: { pattern, instance, outcome, kind, depth }`, with `outcome` the outcome's name (or `@parked`), `kind` its kind, and `depth` the instance's.
+- the `data` record S0 v4.17 allows on `meta:` kinds (V4-50), with the fields S3 declares for `meta:story`: `pattern` (text), `instance` (ref), `outcome` (text: the outcome's name, or `@parked`), `kind` (enum `resolved`, `failed`, `parked`) and `depth` (int). Readers read them as `data.pattern` and so on; `data.kind` is not the event's own `kind` slot. What the outcome produces is not stored: it follows from the pattern, the outcome and the participants.
 
 It fills the function `story(pattern, outcome)`. It is kept alive as the instance's other events are (§9.2). A lapsed instance mints none. v0.5's completion event is the stage form's case of this.
 
@@ -1175,7 +1204,7 @@ It fills the function `story(pattern, outcome)`. It is kept alive as the instanc
 
 Chained instances belong to one thread (§5.7).
 
-**Layering.** When one filler fills junctures of two or more pooled instances, they are **layered** on it. At each match, the matcher looks up, in an index from filler id to instances, the other instances that used the filler, and records a `layer` entry on each side (at most `maxLayers` per instance, the first ones kept). A layer becomes **cross-causal** when a later juncture of one instance is filled by something the other produced: when `walk` from the later filler reaches a filler of the other instance (`cross` records the juncture and the time). Only cross-causal layers join threads (§5.7) and count in F-13 (§7.4). Layers form only through what the record holds, never through a coincidence the director invents.
+**Layering.** When one filler fills junctures of two or more pooled instances, they are **layered** on it. At each match, the matcher looks up, in an index from filler id to instances, the other instances that are not retired and used the filler, and records a `layer` entry on each side (at most `maxLayers` per instance, the first ones kept). A layer becomes **cross-causal** when a later juncture of one instance is filled by something the other produced: when `walk` from the later filler reaches a filler of the other instance (`cross` records the juncture and the time). Only cross-causal layers join threads (§5.7) and count in F-13 (§7.4). Layers form only through what the record holds, never through a coincidence the director invents.
 
 **Shapes** are patterns whose junctures include `story` junctures (`heist`, `feud`, `hunted`, `uprising` in the v0 library). They **only recognise** (S3-I-26):
 - none of their junctures has a `realise` list (S2 L-151), so the director never offers, nudges or constructs a shape's own juncture, and a shape can never run as a whole plot. It works only on the smaller instances that fill a shape, each under its own gates;
@@ -1189,7 +1218,7 @@ Growth therefore follows the protagonist's attention, not the engine's ambition 
 
 An invisible cascade is no story ([pattern language §9](../composite/pattern-language.md#9-legibility); [dossier 20](../craft/d20-staging-legibility.md)). The **legibility ledger** says what of an instance the protagonist could see. It keeps one thing per juncture, and derives the rest.
 
-**Perception** (kept). A juncture is **perceived** when its filler reached `presented` or above: for an event filler, `Layer2View.exposure(event)` (S2 §10.1a: V took part, V observed it, or a delivery citing it was shown); for a state filler, the exposure of its cause event, if it has one, else never; for a `story` juncture, when its child instance counts as a thread. At each refresh, every matched juncture of a pooled instance that is not yet perceived is checked, and a newly perceived one is stamped `perceived = { at: exposure.at, play: playNow }`. The stamp is saved with the instance (§9.2); everything else here is derived from the record and the receipts, so it is the same after a load.
+**Perception** (kept). A juncture is **perceived** when its filler reached `presented` or above: for an event filler, `Layer2View.exposure(event)` (S2 §10.1a: V took part, V observed it, or a delivery citing it was shown); for a state filler, the exposure of its cause event, if it has one, else never; for a `story` juncture, when its child instance counts as a thread. At each refresh, every matched juncture of a pooled instance that isn't retired and isn't yet perceived is checked, and a newly perceived one is stamped `perceived = { at: exposure.at, play: playNow }`. The stamp is saved with the instance (§9.2); everything else here is derived from the record and the receipts, so it is the same after a load.
 
 **Edges** (derived). An edge, not counting `forecloses`, is **shown** when both its ends are perceived and a **link sign** of it reached the protagonist:
 - **told:** a delivery at `presented` or above whose `cites` include both fillers' events; or an offer whose delivery cites the earlier filler, answered by the protagonist's act that fills the later juncture;
@@ -1200,7 +1229,7 @@ An edge marked `shown: 'must'` needs at least two signs of different kinds: told
 
 **An instance counts as a thread** for the protagonist when all its `show.junctures` are perceived and at least `show.edges` of its edges are shown. Until then it is world texture, which may still be told as a rumour.
 
-**Legibility debt** is the number of edges whose two ends are matched, whose source is perceived, and which are not shown. The director never realises a juncture of an instance whose debt is above 1 (gate 11, §7.3): it surfaces a cause first (a surface candidate, §7.1), or waits. The causes really exist; the director chooses only what to reveal and when ([DS-24](../design-seeds.md)).
+**Legibility debt** is the number of edges whose two ends are matched, whose source is perceived, and which are not shown. The director never realises a juncture of an instance whose debt is above 1 (gate 11, §7.3): it shows a cause first, or waits. Every case of debt has a way out (v0.6 fix round): an edge whose target isn't perceived is cleared by a **surface** candidate, which shows the target and, where its kit can, cites the source too; an edge whose two ends are both perceived but which isn't shown is cleared by an **explain** candidate, a telling that cites both fillers, and, for an edge marked `shown: 'must'`, a second explain on a channel of another modality supplies the second sign (§7.1). The causes really exist; the director chooses only what to reveal and when ([DS-24](../design-seeds.md)).
 
 **The other rules of the pattern language's §9.2** are carried by S2's existing constructs: a juncture the protagonist needs in order to choose rides a `mustReach` beat (S2 L-63); "name the act, once" is S2's callback rule; three routes to a needed conclusion are S2's `conclusion` beats (L-26); anchored hooks are L-67; why answers follow S2 §2.21.
 
@@ -1226,7 +1255,7 @@ token = fn(mask, mask, …) [<link] [/stance]
 
 When every member of the thread is terminal, the skeleton ends with `end:<kind>/<pattern>`: the outcome kind and pattern name (without its namespace) of the instance that ended last, or of a seed's implicit pattern (`seed:<template>`). The thread's **shape** (its L1 level) is the list of its instances' patterns, and seeds' `seed:<template>`, in order of first perception.
 
-**The skeleton ring** (persisted, §9.2). At most `skeletonRing` entries **[tunable 32]**, one per recent thread: `{ thread: Id; tokens: Id[]; play: number; seq: number }`. `tokens` are `H("tok", t)` for the first `skeletonTokens` (8) tokens `t` written **without** their `/stance`, so that a prediction, which can't know the stance, compares with them. At each refresh, after the thread view, every thread whose stance-free token list differs from its ring entry gets its entry written or replaced, with `play = playNow` and `seq` the next value of the persisted counter `skeletonSeq`; then entries beyond the cap go, lowest `seq` first. Entries outlive their thread's instances in the pool. A merged thread keeps its lowest member's `Id`, and the entry of the absorbed thread stays as a record of what was seen. The ring is updated in the refresh that precedes the slot procedure of the same tick, and saves are taken only at tick boundaries (§9.4), so a decision never ranks against a ring that a reload would not reproduce.
+**The skeleton ring** (persisted, §9.2). At most `skeletonRing` entries **[tunable 32]**, one per recent thread: `{ thread: Id; tokens: Id[]; play: number; seq: number }`. `tokens` are `H("tok", t)` for the first `skeletonTokens` (8) tokens `t` written **without** their `/stance`, so that a prediction, which can't know the stance, compares with them. At each refresh, after the thread view, a thread's entry is written or replaced **only when the thread gained a token at that refresh**: a member juncture was stamped perceived, or a member seed's display newly reached `presented`, and the thread's stance-free token list now differs from its entry. The entry gets `play = playNow` and `seq` the next value of the persisted counter `skeletonSeq`; then entries beyond the cap go, lowest `seq` first. Retirement (§6.5) never rewrites an entry, so neither does sweeping. Entries outlive their thread's instances in the pool. A merged thread keeps its lowest member's `Id`, and the entry of the absorbed thread stays as a record of what was seen. The ring is updated in the refresh that precedes the slot procedure of the same tick, and saves are taken only at tick boundaries (§9.4), so a decision never ranks against a ring that a reload would not reproduce.
 
 **For evaluation only**, the decision log records each thread's full tokens, stances included, whenever they change (§10). Ranking never reads the log.
 
@@ -1236,12 +1265,13 @@ Sowing turns what the world already holds into seeds, at a rate the player sets.
 
 ### 7.1 Candidates
 
-A candidate is one thing the sower could do with one instance (§6.2). There are three kinds (v0.6; v0.5 had only the first):
+A candidate is one thing the sower could do with one instance (§6.2). There are four kinds (v0.6; v0.5 had only the first):
 
 | Kind | What it is | Realised by |
 |---|---|---|
 | **told** | An instance whose outcome is fixed, whose pattern has a `tell`, within `candidateTtl` of the outcome | A seed of a kit serving the telling's form, as v0.5 told a completed match |
-| **surface** | A matched juncture of a `live` or `aftermath` instance whose filler is an event the protagonist hasn't perceived (§6.7): at most `maxSurface` (2) per instance, the earliest by filler time | A telling kit (`rumour`, `sighting` or `recap`) whose `tells` role binds the filler: a cause shown before the story goes on |
+| **surface** | A matched juncture of a `live` or `aftermath` instance whose filler is an event the protagonist hasn't perceived (§6.7): at most `maxSurface` (2) per instance, the earliest by filler time | A telling kit (`rumour`, `sighting` or `recap`) whose `tells` role binds the filler, and whose `explains` role, if it has one, binds the filler of the perceived source of the juncture's strongest incoming edge: a cause shown before the story goes on |
+| **explain** (fix round) | An edge of a `live` or `aftermath` instance whose two ends are matched and perceived but which isn't shown (§6.7); for an edge marked `shown: 'must'` that has one told sign, a second explain. At most `maxSurface` per instance, earliest edge first | A telling kit that declares both `tells` and `explains`, binding the later and the earlier filler, so its delivery cites both; a second explain needs a kit whose first channel's modality differs from the first sign's |
 | **realise** | A `ready` juncture of a `live` instance of a pattern that isn't a shape, whose realisation is legal (§7.5): an **offer**, or a **nudge** | A seed of a kit whose `fills` include the juncture's function |
 
 A juncture that is `pending` (a director-sown seed works towards it, or a live seed realises it, §5.7) is no candidate. Other sources (loose ends, promotion subjects, fronts, ambient texture, pulls) are later capabilities (§0.3).
@@ -1249,11 +1279,12 @@ A juncture that is `pending` (a director-sown seed works towards it, or a live s
 ```ts
 interface Candidate {
   key: Id;                                // §3.2, by kind
-  kind: 'told' | 'surface' | 'realise';
+  kind: 'told' | 'surface' | 'explain' | 'realise';
   instance: Id; pattern: string;
-  juncture?: JunctureKey;                 // surface and realise
+  juncture?: JunctureKey;                 // surface and realise; for explain, the edge's later juncture
+  edge?: number;                          // explain: the edge's index in the pattern
   realisation?: 'offer' | 'nudge';        // realise only (§7.5)
-  form: Form | 'nudge';                   // the form its kit must serve: the telling's form; 'rumour' for a surface; 'offer' or 'nudge'
+  form: Form | 'nudge';                   // the form its kit must serve: the telling's form; 'rumour' for a surface or explain; 'offer' or 'nudge'
   thread?: Id;                            // the thread it would join (§5.7)
   opens: boolean;                         // its thread is not aware: it would open one (§5.8)
   features: Record<FeatureId, number>;    // §7.4
@@ -1300,7 +1331,7 @@ A slot that finds nothing is spent: there are no owed pushes in the core.
 | 2 | The candidate has at least one eligible kit (§7.5) | all | Nothing to sow otherwise. Content ceilings and floors are layer 2's, applied by the sowing request itself (§7.6) |
 | 3 | **F-1, a reportable change:** some filler event has at least one effect. **F-12, a showable cause:** for forms other than `rumour` and `sighting`, the latest filler event has non-empty `causes` | told | Causality |
 | 4 | **F-4, a human at the centre:** some bound value is a person or a group, and the kernel still has it | all | Tellability |
-| 5 | **V-link.** The protagonist took part in a filler event, or some value in `bound` is `exposedNode(·, 'presented')`. Without it, a told or surface candidate is eligible only in the forms `rumour`, `recap` and `sighting`, and a realise candidate only as a nudge | all | A chain about people V has never met stays world texture |
+| 5 | **V-link.** The protagonist took part in a filler event, or some value in `bound` is `exposedNode(·, 'presented')`. Without it, a told, surface or explain candidate is eligible only in the forms `rumour`, `recap` and `sighting`, and a realise candidate only as a nudge | all | A chain about people V has never met stays world texture |
 | 6 | **Stake, level and a gentle start.** The kit's `stakeScale` is at most `block`, its level at most `maxLevel`, and `firstClass` passes the first-hour rule: not `≥ 1` before `playTotal ≥ gentleFirst`, not `> 1` before `gentleHour` | all but nudges | Bounded dooms; a gentle start |
 | 7 | **Exclusions.** No `exclusions` or `softExclusions` entry matches the kit's tags, its skeleton `verb`, a content class its envelope names, or any node the overlay binds | all | A stated setting overrides everything |
 | 8 | **Budgets.** If the candidate `opens` a thread, the counts of §5.8 are within the budgets. If the kit is `climactic`, `C < maxClimactic` | all but nudges | Pacing |
@@ -1328,8 +1359,8 @@ At a live slot the sower ranks the candidates that passed, then draws. **All sco
 | F-11 | Timeliness | `H / (H + max(0, now − lastTime))` |
 | F-13 | Cross-causal layering | The number of the instance's cross-causal layers (§6.6) with instances whose thread is aware |
 | F-14 | Known people at stake | The persons in `bound` that the protagonist has met (`exposedNode(·, 'presented')`) and that are the `on` of a harmful effect of a filler event, or are bound in an argument of the candidate's juncture other than its acting one ([D-27](../decisions.md): what matters to the people the protagonist knows) |
-| F-15 | Open leverage | For a realise or surface candidate: the number of the pattern's outcomes still reachable (none of their reached junctures foreclosed), plus one for each live shape instance in the same thread with a ready `story` juncture that names this candidate's pattern. For a told candidate: 0 ([TEL-09](../craft/d06-sifting-tellability.md)) |
-| F-16 | Legibility | For a realise or told candidate: the share of shown edges among the instance's edges whose ends are both matched (1 if there are none). For a surface candidate: one minus that share, so that surfacing ranks highest where the instance is least legible |
+| F-15 | Open leverage | For a realise, surface or explain candidate: the number of the pattern's outcomes still reachable (none of their reached junctures foreclosed), plus one for each live shape instance in the same thread with a ready `story` juncture that names this candidate's pattern. For a told candidate: 0 ([TEL-09](../craft/d06-sifting-tellability.md)) |
+| F-16 | Legibility | For a realise or told candidate: the share of shown edges among the instance's edges whose ends are both matched (1 if there are none). For a surface or explain candidate: one minus that share, so that showing ranks highest where the instance is least legible |
 
 **1. Features to bands.** For each feature `F` above: if every candidate has the same value, the feature is **skipped**. Otherwise rank the candidates by value, descending, ties by `key` ascending: rank `r` = 0 for the best, `n−1` for the worst. The band is `band = 2 − floor(3·r / n)`, in {0, 1, 2}. The raw values stay in the log.
 
@@ -1339,7 +1370,7 @@ composite(c) = ( Σ_F w_F · band_F(c) ) / ( 2 · Σ_F w_F )          over the f
 
 with `w_F = sower.featureWeights[F]`: 1 for each, except F-14 at 2 **[tunable]**, after D-27's direction that the ranking favour what matters to the people the protagonist knows. The composite lies in [0, 1].
 
-**2. Diversity.** `dup(c)` is the number of entries in `recent` whose `pattern` equals `c.pattern` plus the number whose `place` equals `c.place`. **Skeleton diversity** (v0.6): let `p(c)` be the stance-free token list the candidate's thread would have if it went ahead: the thread's tokens so far (§6.8), or none for a thread it opens, followed by the candidate's **predicted token**. For a realise candidate that is the juncture's function over its bound arguments, masked as §6.8 masks them (an unbound argument as `?`), with the strongest link among the edges into it from perceived junctures. For a surface candidate it is the surfaced filler's token, and for a told candidate the thread's end token. `skel(c)` is the number of ring entries, other than the thread's own, whose first `len(p(c))` hashes equal those of `p(c)` (with `p(c)` cut at `skeletonTokens`).
+**2. Diversity.** `dup(c)` is the number of entries in `recent` whose `pattern` equals `c.pattern` plus the number whose `place` equals `c.place`. **Skeleton diversity** (v0.6): let `p(c)` be the stance-free token list the candidate's thread would have if it went ahead: the thread's tokens so far (§6.8), or none for a thread it opens, followed by the candidate's **predicted token**. For a realise candidate that is the juncture's function over its bound arguments, masked as §6.8 masks them (an unbound argument as `?`), with the strongest link among the edges into it from perceived junctures. For a surface candidate it is the surfaced filler's token, for an explain candidate the later filler's token (already in the thread, so the prefix is the thread's own), and for a told candidate the thread's end token. `skel(c)` is the number of ring entries, other than the thread's own, whose first `len(p(c))` hashes equal those of `p(c)` (with `p(c)` cut at `skeletonTokens`).
 
 ```
 score(c) = sower.lambda · composite(c) − sower.diversity · dup(c) − sower.skeleton · min(skel(c), sower.skeletonCap)
@@ -1356,7 +1387,11 @@ So a candidate whose thread would go on as a thread the protagonist recently saw
 ### 7.5 Realisation and kit
 
 **Which realisation** (realise candidates). A juncture's `realise` list, or, absent one, the default `[{ wait }, { offer }, { nudge }]`, is read in order, past `wait`; skipped entries (`construct`, `refine`, §7.11) are passed over. The candidate takes the **first legal entry**:
-- **offer** is legal when the juncture is `v: 'offer'`, or is an `ask` whose `of` argument may be the protagonist; the V-link holds (gate 5); and the tempo isn't `off`. The protagonist's own act fills such a juncture: a response, or a decline, a null path or a lapse, which fill the refusing side or the world's settling. Nothing is filled by assumption;
+- **offer** is legal in one of two forms, when the V-link holds (gate 5) and the tempo isn't `off`:
+  - **the protagonist acts:** the juncture is `v: 'offer'`, or is an `ask` whose `of` argument may be the protagonist. The protagonist's own act fills it: a response, or a decline, a null path or a lapse, which fill the refusing side or the world's settling;
+  - **the actor asks the protagonist's help** (fix round): the juncture's acting argument is a role that doesn't allow the protagonist, and the kit's offer is made by that actor (its `fills` entry maps the acting argument to the offer's `asker`, S3-K-8). The juncture is filled by the occurrence the seed leaves when the protagonist's accepted action plays out (an event its beat mints, or its end through `realises`), whose acting participant is the asker: the asker's own requested outcome, never a third party's act. A settlement brokered, an amends carried, a truce proposed, a betrayed person helped to find out are this form.
+
+  Nothing is filled by assumption;
 - **nudge** is legal when gate 13's static conditions hold.
 
 If no entry is legal, the juncture is no candidate: the director waits.
@@ -1364,6 +1399,7 @@ If no entry is legal, the juncture is no candidate: the director waits.
 **Eligible kits:**
 - **told:** the telling's `kit`, if named; otherwise every sowable template whose `serves` includes the telling's form and whose roles include every key of `binds`;
 - **surface:** every sowable template serving `rumour`, `sighting` or `recap` that declares `tells`, the form being the first of those it serves in that order;
+- **explain:** the same, among those that also declare `explains`; for a second sign, only kits whose first channel's modality (S2 §2.12) differs from that of the delivery that gave the first;
 - **realise:** the realisation's `kit`, if named; otherwise every sowable template that serves the realisation's form (`offer` or `nudge`) and has a `fills` entry for the juncture's function. An argument of the juncture bound to the protagonist must be mapped to `'v'` by that entry; an argument bound to a node must be mapped to a role;
 
 each filtered by the template's sowable load checks and by gates 6, 7 and 8.
@@ -1384,12 +1420,13 @@ Scores are frozen with the kit set. If the request for that kit is refused (§7.
 ```ts
 interface SeedOverlay {
   roles: Record<RoleKey, { identity: Id }>;     // each is a fixed identity (S2 §2.2)
-  growsFrom?: { instance: Id; juncture: JunctureKey };   // v0.6: surface and realise candidates (S2 §2.13)
+  growsFrom?: { instance: Id; juncture: JunctureKey };   // v0.6: surface, explain and realise candidates (S2 §2.13)
 }
 ```
 
    - **told:** for each `binds` entry, `roles[kitRole] = { identity: bindings[variable] }`, with `?story` the instance's `meta:story` event and `?end` its latest filler event by time;
-   - **surface:** the `tells` role takes the surfaced filler event, and, if the kit has a `fills` entry for the filler's function, each argument's role takes the filler's argument (the protagonist left out); `growsFrom` names the instance and juncture;
+   - **surface:** the `tells` role takes the surfaced filler event; the `explains` role, if the kit has one, takes the filler of the perceived source of the juncture's strongest incoming edge; and, if the kit has a `fills` entry for the filler's function, each argument's role takes the filler's argument (the protagonist left out); `growsFrom` names the instance and juncture;
+   - **explain:** the `tells` role takes the edge's later filler and the `explains` role its earlier one; `growsFrom` names the instance and the later juncture;
    - **realise:** for the kit's `fills` entry for the juncture's function, each argument bound to a node gives `roles[args[a]] = { identity: node }`; an unbound argument is left for the kit's own casting; the entry's `cause` role, if any, takes the filler event of the source of the juncture's strongest incoming edge (in the link order of §6.8, ties by edge order), if that filler is an event; `growsFrom` names the instance and juncture.
 
    **The overlay can change nothing else:** no durations, `must` terms, persistence flags, timing or `stakeScale`. S2's defaults for persistence ([§2.5](seeding.md#25-facts-world-requirements-effects-and-dependencies)) and timing ([§2.12](seeding.md#212-timing-requests): `onExpire: 'unattended'` for procedural seeds) already do what P5 wanted. S2 refuses an overlay that replaces a fixed identity or a profile's fixed part with a different node (S2 §1.3). Binding an event to a kit role makes every delivery that binds it **cite** it (S2 §10.2), which is how a seed shows the filler and the link it continues (§6.7).
@@ -1416,7 +1453,7 @@ Layer 2 applies the overlay ([S2 §1.3](seeding.md#13-sowing-authored-templates)
 3. on `ok`: record the seed on the instance (`seeds`, §9.2); for a realise candidate set the juncture `pending` on it; add `{ instance, sownAt: playTotal }` to `nudges` for a nudge, and to `pending` for every other seed; push `{ pattern, kit, place, at: playTotal }` onto `recent`, keeping the last `recentSown`; set `slots.open.next = k + 1`; then **commit** the batch;
 4. on refusal: **discard** the batch, so nothing remains but this step's own log. When no kit is left (§7.5), the candidate gets its one refusal: its `refusals` entry on the instance gains 1 and its cooldown runs to `playTotal + cooldown`.
 
-At `maxRefusals` a told candidate is dropped for good, with a tombstone (§6.5), and a surface or realise candidate is never collected again. A save is never taken inside the step (§9.4). If S2 cannot run its side inside a batch, the repair of §9.3 gives the same guarantee afterwards.
+At `maxRefusals` a told candidate is dropped for good, with a tombstone (§6.5), and a surface, explain or realise candidate is never collected again. A save is never taken inside the step (§9.4). If S2 cannot run its side inside a batch, the repair of §9.3 gives the same guarantee afterwards.
 
 **A decline stays a decline.** The decision id names the instance and the juncture, and `sownBy(decision)` stays non-empty (gate 10), so a juncture the protagonist declined is never offered again, though the world may still fill it. When a seed sown for a juncture ends with the juncture unfilled, the juncture goes back from `pending` to `ready` (checked at each refresh).
 
@@ -1443,7 +1480,7 @@ Layer 2 treats a withdrawal as a **source withdrawal**: T1, `withdrawn` ([S2 §1
 | Part | `off` | `calm`, `steady`, `restless` |
 |---|---|---|
 | Matcher | Frames closed: no instance starts or advances. The boundary step and the sweep run | Runs |
-| Sower: told, surface and realise candidates; offers and nudges | Stops. Slots are never live | Runs at the rate of §5.9 |
+| Sower: told, surface, explain and realise candidates; offers and nudges | Stops. Slots are never live | Runs at the rate of §5.9 |
 | Closings | Not sown | Sown at each refresh |
 | Pending and nudge lifetimes | Run (they only withdraw seeds the engine sowed and V never saw) | Run |
 | Fitter, hooks, thread view, pacing state | Run | Run |
@@ -1467,12 +1504,13 @@ If any fails, the candidate is removed and the failing condition logged. The ins
 
 ### 7.10 Groups acting against the protagonist
 
-Under [D-30](../decisions.md) a group may decide, as an S1 process, to act against the protagonist (S1-10, assumed in §13.3; [S2 §2.16a](seeding.md#216a-groups-acting-against-the-protagonist)).
+Under [D-30](../decisions.md) a group may decide, as an S1 process, to act against the protagonist (S1 v0.6 §7.8.1, as §13.3 records; [S2 §2.16a](seeding.md#216a-groups-acting-against-the-protagonist)).
 
-- **What the matcher sees.** The intention fills `decide(group: G, what: v)` when it starts, `pursue(who: G, target: v)` while it is active, `threaten(by: G, to: v)` through its warning act, and `wrong(by: …, to: v)` through its harmful acts. These are ordinary fillers. The `hunted` shape recognises the whole; its children (a grievance, a misattribution, a protection, a settlement) read the same records, and the protagonist binds their roles that allow it.
+- **What the matcher sees.** A group's grievance, a memorable belief about the protagonist, fills `blame(who: G, of: v, for: act)`; the decision event `decide.punish` fills `decide(group: G, what: v)`; the intention, while active, fills `pursue(who: G, target: v)`; a member's `warning` or `price` fills `threaten(by: member, to: v)` (and a price `demand`); and a `confront`, the encounter in which members find the protagonist, fills `threaten(by: confronter, to: v)`. S1 asserts no harm to the protagonist: any harm in an encounter is the game's own record, read back by the mirror. The `hunted` shape (version 2) recognises the whole, with `caught` filled only by a `confront`; its children (a grievance, a misattribution, a protection, a settlement) read the same records, and the protagonist binds their roles as a target or subject (§2.2a).
 - **What the director never does.** It never nudges any part of it: a nudge never makes the protagonist act, never aims harm at them, and never carries word of their acts (gate 13, S2 §2.25), so no nudge can feed the group's belief about the protagonist, open a goal against them, or put them in the group's way. It never realises a shape's juncture (§6.6). It never starts, raises, holds, extends or ends the group's intention: the group's rungs are S1's, bounded by S1-10's conditions (an observed act, a warning before harm) and the proactivity setting, down to none at `off`. The escalation gate (§7.9) doesn't apply to them.
-- **What it may do.** Make the cause legible: surface candidates for the thread's unperceived junctures (the act the group blames the protagonist for, the telling that carried it to them) rank high on F-16 (§7.4). And offer ways out: offers that realise junctures of the child instances (a settlement on terms, a protection with the protagonist as ward, a misattribution cleared) are ordinary realise candidates, under every gate.
-- **Delivery.** The warning is carried by an authored pack template (S2 §2.16a), so the hold hook treats it as any authored delivery: it may hold it for pacing, and relaxes at 70 per cent of `maxWaitPlay` (§5.4, rule 2). Holding the warning only delays the group's harm, because S1 holds every harmful act until the warning is `presented`.
+- **What it may do.** Make the cause legible: surface and explain candidates for the thread's unperceived junctures and unshown edges (the act the group blames the protagonist for, the telling that carried it to them) rank high on F-16 (§7.4). And offer ways out: offers that realise junctures of the child instances (a settlement on terms, a protection with the protagonist as ward, a misattribution cleared) are ordinary realise candidates, under every gate.
+- **Delivery.** The warning is carried by an authored pack template (S2 §2.16a), so the hold hook treats it as any authored delivery: it may hold it for pacing, and relaxes at 70 per cent of `maxWaitPlay` (§5.4, rule 2). Holding the warning only delays the group's climb, because S1 climbs no rung and mints no encounter until layer 2 has pinned the warning `observed` (S2 §2.16a).
+- **No director-sown seed carries word of the protagonist's acts** (S2 §2.16a): a kit that would mint a `tell`, `expose` or `confess` whose `told` event is an act of the protagonist's is refused by layer 2 for a seed the director sowed. S1 grounds a told grievance on a seed's telling (S1 §8.9), so this keeps the director from starting a group's intention by the back door.
 
 ### 7.11 Later realisations: back-fill and open
 
@@ -1514,7 +1552,7 @@ These are the canon offer and response events with the play timestamps that S2's
 | Pacing state (`A`, `N`, phase, episode, release locks) | No (session) | Restarts in `settling` at a load |
 | The schedule position `slots.open.next`, and the arc lock | Yes, in the layer-3 record | Without them: `floor(playTotal / I)` and no lock |
 | Thread view and statuses | No (derived) | Layer 2's records and the pool, stamped with `playTotal` |
-| The instance pool, with each juncture's perception stamp (§6.7), tombstones, the chronological buffer, the pending and nudge lists, the recent-sown ring | Yes | A cache: a save without them loads with an empty pool |
+| The instance pool, with each juncture's perception stamp (§6.7), each state filler's copy (`at`, `causes`, `until`; §6.2) and each instance's `retired` flag, tombstones, the chronological buffer, the pending and nudge lists, the recent-sown ring | Yes | A cache: a save without them loads with an empty pool |
 | The skeleton ring and its counter (§6.8) | Yes | A cache, like the pool: without it, diversity starts with no history |
 | Edge legibility, legibility debt, thread-hood (§6.7) | No (derived) | The stamps, the receipts and the exposure ledger |
 | The evidence log | No | S2's records |
@@ -1525,8 +1563,8 @@ These are the canon offer and response events with the play timestamps that S2's
 
 **Under S0's three persistence principles** (v4.16, [S0 §14.1](kernel.md#141-what-is-persisted)):
 - **The save chain is append-only truth.** The layer-3 record is a `SeedRecord`, written whole as a `SeedState` op whenever it changed since the parent save, so every version a save held is in the chain. Nothing layer 3 keeps is a kernel record that a later save could silently rewrite.
-- **Recovery is replay.** Every filler event and story event of a pooled instance is in `nodes`, a retention root, so the kernel keeps it, with its facts (v4.15), for as long as the instance needs it. A state filler is kept only as a copied descriptor (`FillerRef`, `args`, `at`); a later `holdsAt` reads the record anew, and if the record was swept, the read is what recovery restores. Bound people and places are bare `Id`s, which regenerate or recover by the kernel's own path when read.
-- **A sweep drops only what recovery restores exactly.** Layer 3 sweeps only its own record (§6.5); the kernel never sweeps a root, and it releases an instance's events only when the instance leaves the pool.
+- **Recovery is replay.** Every filler event and story event of a pooled instance, and every cause event a state filler's copy names, is in `nodes`, a retention root, so the kernel keeps it, with its facts (v4.15), for as long as the instance needs it. A state filler is kept as a copied descriptor with what its tests need (`args`, `at`, `causes`, `until`; §6.2), and only durable state rules fill states (§2.2a): retained goal frames and seeds' frames, memorable beliefs, persisted edges and process digests, and pure functions of base data. So a link test after a load reads exactly what it read before. Bound people and places are bare `Id`s, which regenerate or recover by the kernel's own path when read.
+- **A sweep drops only what recovery restores exactly.** Layer 3's sweep removes only retired instances, which nothing reads (§6.5), so it changes no result; the kernel never sweeps a root, and it releases an instance's events only when the instance leaves the pool.
 
 ### 9.2 The layer-3 record
 
@@ -1590,7 +1628,7 @@ interface LogEntry {
   kind: 'slot' | 'sow' | 'withdraw' | 'hold' | 'phase' | 'fit' | 'match' | 'budget' | 'evidence' | 'thread' | 'gate';
   at: { game: GameTime; playTotal: number; playClock: number };
   purpose: 'schedule' | 'rest' | 'protect-peak' | 'lead-aim' | 'headroom' | 'pending' | 'match' | 'fit' | 'evidence'
-         | 'tell' | 'surface' | 'offer' | 'nudge' | 'close' | 'escalation' | 'skeleton';   // v0.6 adds the second line
+         | 'tell' | 'surface' | 'explain' | 'offer' | 'nudge' | 'close' | 'escalation' | 'skeleton';   // v0.6 adds the second line
   class: 0 | 1 | 2 | 3;                      // the manipulativity class; class 4 does not exist
   rule: string;                              // the gate, hold rule, band or budget that fired
   inputs: Record<string, unknown>;           // only from the closed lists
@@ -1639,7 +1677,7 @@ interface LogEntry {
 | S3-I-16 | **No spine, no doom.** A sown seed binds no spine node and casts none (S2 §5.2 step 4), has stake scale at most `block`, and level at most `gig` |
 | S3-I-17 | **A decline stays a decline.** A candidate whose seed V declined, retracted or let lapse is never sown again: the decision id names the occurrence and `sownBy` stays non-empty. The dial never changes how a decline is handled |
 | S3-I-18 | **Occurrences are distinct.** An instance id names one occurrence: two incidents among the same people differ in instance id, candidate keys, decision ids and `meta:story` id, however far apart. A redelivered Change never advances an instance, and a Change fills at most one juncture of an instance through each function its record fills |
-| S3-I-19 | **Deadlines first.** No instance advances, is ranked, is realised or starts past its deadline, whether or not a boundary step or a sweep has run. Endings and armed outcomes are applied at the boundary step; sweeps reclaim storage only. Equality is not past |
+| S3-I-19 | **Deadlines first; the sweep decides nothing.** No instance advances on an occurrence after its deadline, is ranked, is realised or starts past it, whether or not a boundary step or a sweep has run. Endings and armed outcomes are applied at the boundary step, once the buffer's horizon covers them. Terminal instances retire there, and no consumer reads a retired one, so sweeps reclaim storage only. Equality is not past |
 | S3-I-20 | **One sow, one commit.** A sowing step's seed and bookkeeping are saved together or not at all. Saves are taken at tick boundaries, so none holds a half-handled emission |
 | S3-I-21 | **Pending is finite.** Every director-sown instance leaves `pending` within `pendingLifetime` play seconds: shown, ended, or quietly withdrawn. A seed V has seen is never withdrawn |
 | S3-I-22 | **Saved evidence is kept.** Every filler event and story event of every saved instance is in `nodes` until the instance leaves the pool |
@@ -1649,6 +1687,9 @@ interface LogEntry {
 | S3-I-26 | **Shapes only recognise** (v0.6). No candidate realises a juncture of a shape; a shape becomes live only on two perceived junctures and a pull |
 | S3-I-27 | **The escalation gate binds the director, not the world** (v0.6). No escalation juncture is realised without the five conditions of §7.9; nothing in layer 3 starts, raises, holds or ends a group's intention against the protagonist (§7.10) |
 | S3-I-28 | **Matching draws nothing** (v0.6). Every matching choice (which filler, which state-query candidate, which instance a Change starts) follows the orders of §3.1, with no draw |
+| S3-I-29 | **A juncture worked towards can still be filled** (fix round). A `pending` juncture is tested like a `ready` one; whichever occurrence passes first fills it |
+| S3-I-30 | **Tests read only what survives** (fix round). Link tests and cause walks read copied state fillers, durable rules and retained events, so a save and a load never change a match |
+| S3-I-31 | **Fixed identities bind** (fix round). A role with a fixed identity binds only that node, in matching and in state queries |
 
 ## 12. Fixtures
 
@@ -1698,10 +1739,10 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, the fixture pack `xf.fixtur
 | SF3-38 | **Chronological buffer.** A two-stage pattern: stage 0 a simulated event at window 0, published at its batch; stage 1 a mirrored event at window 1, published at once | The emissions are released in occurrence order, and the match completes. With the buffer off, it would miss |
 | SF3-39 | **A graph pattern.** `debt` over two people D and C. (a) A `favour` from C to D (fills `help` and `obligate`), then a demand by C of D, then D's payment. (b) The demand first, with the membership or norm behind it found by a state query from D. (c) After the payment, a `wrong` by D to C | (a) One instance at `owed`; `due` by the frame C opens; `called` with its `motive` link borne out; `settled` fixed; the story event minted once. (b) The instance starts at `called`; `owed` is filled by the query, and the edges into `called` are tested when their sources match. (c) `defaulted` is foreclosed: nothing changes |
 | SF3-40 | **Multi-function advancement.** Worked example 2 ([composite worked examples §2](../composite/worked-examples.md#2-two-patterns-layered-over-kabuki)): one `shakedown` (Jun against Aiko, outcome `done`) with `squeeze` and `protection` loaded | `squeeze` starts at `rule` and fills `paid` through `comply` in the same Change; `protection` starts at `struck` through `wrong`. The shakedown fills at most one juncture per function in each instance. Both instances record a layer on it |
-| SF3-41 | **Bounded state queries.** `squeeze.rule` requires `member(?col, ?pw)`: Jun has one membership; then a variant with ten candidate records; then a term whose only bound argument isn't in `searchFrom` | The Claws are bound from Jun's membership. With ten, the first passing record in `Id` order binds and two runs agree. The unsearchable term is `maybe`, so no, and the juncture stays open |
+| SF3-41 | **Bounded state queries and relation search.** `squeeze.rule` requires `member(?col, ?pw)`: Jun has one membership; then a variant with ten candidate records; then a term whose only bound argument isn't in `searchFrom` | `relationSearch('member', { who: Jun })` returns the Claws, which bind `?pw`. With ten, it returns eight in `Id` order with `truncated` set; the first passing binds, `query-truncated` is logged, and two runs agree. The unsearchable term is `maybe`, so no, and the juncture stays open |
 | SF3-42 | **Link tests.** A `because` edge whose later event cites the earlier at 1, 3 and 4 hops; a `but` edge whose later effect violates the earlier's served frame, and one that doesn't; a `motive` edge through the actor's `served` frame | Holds at 1 and 3 hops; at 4 the juncture stays `ready` and a `near-miss` is logged. `but` holds only for the violating effect. `motive` holds through the frame's cause |
 | SF3-43 | **Story events and chaining.** `debt` ends `broken` by a `wrong`, which starts `grievance` (a shared filler); `grievance` ends; a closure matching `story(grievance, *)` is loaded; then a pattern that would match its own story event, and a chain five deep | One `meta:story` per fixed outcome, with the S0-1 slot, the bound roles as participants and the fillers as causes. The grievance shares the debt's `wrong`; the closure matches the grievance's story event with its `binds`. The self-match and the fifth link are refused. Both chained instances are in one thread |
-| SF3-44 | **Outcomes in time.** An outcome with `after: 2 days`; another outcome reached on day 1 in a twin; an outcome with aftermath junctures and `days: 3`; a deadline at `firstTime + within`; then the same runs with the sweep skipped | The armed outcome is fixed at the first boundary at or after day 2; in the twin it is disarmed. In `aftermath` only the aftermath junctures match, and the instance closes at the first boundary past day 3. The deadline ends the instance at the boundary after it (equality is not past); a Change at the deadline still advances it. Decisions are identical with the sweep skipped |
+| SF3-44 | **Outcomes in time.** An outcome with `after: 2 days`; another outcome reached on day 1 in a twin; an outcome with aftermath junctures and `days: 3`; a deadline at `firstTime + within`; then the same runs with the sweep skipped, and with it run at every boundary | The armed outcome is fixed at the first boundary at or after day 2; in the twin it is disarmed. In `aftermath` only the aftermath junctures match, and the instance closes at the first boundary past day 3. The deadline ends the instance at the boundary after it (equality is not past); a Change at the deadline still advances it. Each instance retires at the boundary §6.5 names. **Decisions, budgets (the four counts at every refresh), pool admissions and refusals, layer counts, the skeleton ring and the closings are identical** with the sweep skipped and with it run at every boundary |
 | SF3-45 | **The relevance gate.** Three `theft` events: one between strangers in a cell at the coarse tier; one whose victim V has met; one in a fine-tier cell. A group-level pattern started by a `gang-clash` between two groups at the coarse tier | Only the second and third start instances; the first is ignored. The group-level pattern starts |
 | SF3-46 | **Juncture candidates.** A live `debt` instance whose `paid` is ready (`v: 'offer'`, realise `[wait, offer]`); V has met D; then a twin where V has met nobody; then `called` ready with realise `[wait, nudge]`, at `nudgeAfter − 1` and `nudgeAfter` | The first gives a realise candidate by offer; its overlay binds D and C through the kit's `fills`, the cause role to the demand, and `growsFrom` the instance and `paid`. In the twin there is no offer candidate (gate 5). The nudge is a candidate only from `nudgeAfter` |
 | SF3-47 | **Legibility debt.** A live instance whose two matched edges out of a perceived juncture are unshown; a surface kit is loaded. Then the surface seed's delivery, citing both fillers, reaches `presented` | The realise candidate fails gate 11, and the surface candidate is sown (F-16 favours it). Afterwards both edges are shown, the debt is 0, and the realise candidate passes. A `shown: 'must'` edge with one told sign is not shown; with a second sign on a channel of another modality, it is |
@@ -1710,13 +1751,23 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, the fixture pack `xf.fixtur
 | SF3-50 | **Features.** The state after SF3-40 with V having met Aiko, and The Mox's answer filling `protection.answer` and causing the next failed shakedown | F-13 counts the cross-causal layer; F-14 counts Aiko; F-15 the reachable outcomes; F-16 the shown share. Bands follow §7.4 with F-14 weighted 2 |
 | SF3-51 | **Skeletons and the ring.** The package thread's path of [composite worked examples §1.6](../composite/worked-examples.md#16-the-threads-skeleton-on-one-path), scripted; save and load mid-thread; then 40 short threads | One token per perceived occurrence; the theft gives one token though three instances read it; masks, links and stances as §6.8 gives them (the worked example's tokens are a hand-built illustration, not a fixture value). The ring entry is written and survives the load; its tokens are stance-free. After 40 threads the ring holds 32, the lowest `seq` gone. A candidate whose predicted prefix matches three ring entries scores `−1.5` on the skeleton term |
 | SF3-52 | **The thread view.** A seed sown for a juncture; an authored seed whose `realises` names a juncture of the same instance with agreeing casts; a second instance chained by story event; a third layered on a shared filler but not cross-causally; then cross-causally | The seeds and the first two instances form one thread; the third joins only once the layer is cross-causal. An instance-only thread is aware only once it counts as a thread (§6.7). A nudge joins no thread |
-| SF3-53 | **D-30.** A stub S1-10 intention of a group against V, with its warning and a harmful act; `hunted` and its children loaded; a nudge kit and an offer kit for the children's junctures | `decided`, `warned`, `hunting` and `caught` fill from the group's records; `hunted` is a shape and gives no candidate. No nudge aims harm at V or carries word of V's acts. An offer realising `settlement` (a way out) is a candidate under every gate. Surface candidates for the act the group blames V for rank first on F-16. Nothing in layer 3 changes the intention |
+| SF3-53 | **D-30.** A stub S1 v0.6 `punish` of a group against V: a grievance belief, a `decide.punish`, a `warning` by one member, a `price` by another, then a `confront`; `hunted` (version 2) and its children loaded; a nudge kit and an offer kit for the children's junctures | `grudge`, `decided`, `warned` (the warning, not the price), `hunting` and `caught` (the confront only) fill from the group's records, with V bound as the target and subject; `hunted` is a shape and gives no candidate. No nudge aims harm at V or carries word of V's acts. An offer realising `settlement` (a way out) is a candidate under every gate. Surface candidates for the act the group blames V for rank first on F-16. Nothing in layer 3 changes the intention |
 | SF3-54 | **Closings.** An instance that counted as a thread parks at `within`; another resolves with every reached juncture perceived; a third lapses unperceived; tempo `off` for a fourth | The first gets one closing seed (idempotent across a reload), not counted in budgets; the second and third get none; the fourth's closing isn't sown at `off`, and becomes `none` after `candidateTtl` |
 | SF3-55 | **Shapes.** A `feud` fed by two grievance instances' story events; first neither perceived; then both counted as threads, with an answered offer in one | The feud stays `forming` until two of its junctures are perceived and a pull holds; then it goes `live`. It is never a realise candidate; its live instance adds to F-15 of the candidates that would advance it |
 | SF3-56 | **One occurrence, one start.** An event that fills two entry junctures of one pattern, with different bindings; then the same event redelivered | One instance starts, by the first entry in key order. The redelivery changes nothing |
 | SF3-57 | **The stage form.** SF3-15 to SF3-17 run through §6 with the stage form | Results, ids and logs as v0.5 specified |
 | SF3-58 | **Persistence.** Save mid-instance (two junctures matched, one perceived, a nudge live, ring entries, a buffered emission); load in a fresh process; run on. A hand-made schema 1 record | The run continues exactly as uninterrupted: stamps, ring and buffer intact; `nodes` equals the union of filler and story events. The schema 1 record loads its slots, lock, tombstones, pending list and recent ring, with an empty pool |
 | SF3-59 | **Perturbation, extended.** SF3-33's perturbations over SF3-40, SF3-46 and SF3-51 | Byte-identical instances, candidates, decisions, stamps and ring |
+| SF3-61 | **A pending juncture filled while its seed is live** (fix round 1). A realise candidate sows an offer kit for `debt.paid`; V accepts, and the delivery event the kit leaves arrives while the seed is still `running`; a twin where a world event fills `paid` before V answers | Both fill `paid` at once: it is `matched`, its `pending` cleared, the seed kept in `seeds`, and the outcome checked in the same Change. Nothing waits for the seed to end, and nothing is replayed |
+| SF3-62 | **State fillers survive a load** (fix round 4). `want` filled by a retained goal frame, and `blame` by a memorable belief; save; load into a fresh engine; then the frame is satisfied and the belief revised; then a later juncture whose `enables` and `motive` links read those fillers | The fillers' copies (`at`, `causes`, `until` once the frame's end is heard) are in the record, their cause events in `nodes`. The link tests give the same answers in the loaded run as in the uninterrupted one. A state rule over non-memorable beliefs is refused at load |
+| SF3-63 | **Endings wait for the horizon** (fix round 6). An instance whose deadline falls inside window `w`; its last juncture's filler occurs inside `w`, before the deadline, from a producer with lag 1, so it is published at the boundary that ends `w + 1` | The boundary ending `w` doesn't end the instance: its horizon is short of the deadline. The filler is released and matched, the outcome is fixed, and the instance never ends at its deadline. A twin with no such filler ends at the boundary whose horizon passes the deadline. Both give the same result however ticks fell |
+| SF3-64 | **Joins** (fix round 7). `protection` with a strike and no approach; then an approach whose `motive` link into `answer` fails, beside a strike whose link holds; then an `all` join with one source's link failing | `answer` matches on the strike: its `any` alternative `approach` is absent and isn't tested. With both present it matches through the strike, and the approach's failed edge is logged unborne. The `all` join doesn't match |
+| SF3-65 | **The protagonist bound from the world** (fix round 8). A group's grievance belief about V; a `decide.punish` with V as object; a `warning` to V; a `response` by V; then a frame and a belief whose actor or believer is V | `blame(G, v, act)`, `decide(G, v)` and `threaten(member, v)` bind V as target and subject; the response binds V as the acting argument of `comply`. The frame and the belief held by V fill nothing |
+| SF3-66 | **A seed's end reaches the matcher** (fix round 10). S2's SF-76 seed, `realises: { pattern: debt, juncture: paid, by: 'end' }`, with a live `debt` instance whose `?d` and `?c` are its casts | The debt pattern's frame hears the `seed-outcome` (it subscribes because a loaded template realises `repay`); `realisedBy` gives `repay(?d, ?c)`; `paid` is matched with source `found`, and `settled` is fixed. A seed whose casts differ fills nothing |
+| SF3-67 | **Explaining an edge** (fix round 11). An instance with two edges whose ends are all perceived and neither shown (debt 2), and one marked `shown: 'must'`; explain kits on two channels of different modality | Gate 11 refuses realising. An explain candidate is collected for each edge, its seed citing both fillers; once shown, the debt falls to 0 and realising passes. The `must` edge needs a second explain, on the other modality, before it counts as shown |
+| SF3-68 | **No whole plots** (fix round 12). A kit whose start leads through an objective beat, an obstacle, a beat that only writes facts and a conclusion, with no function on any; a courier kit (offer, a delivery beat that realises `repay`, an exit, an aftermath) | The first is not sowable (four counted beats on one path, S3-K-6); its pack may still sow it. The courier kit counts two and is sowable |
+| SF3-69 | **Fixed identities** (fix round 13). An authored pattern whose `?boss` is fixed to node B; an event naming another person in that role; one naming B; a `requires` term searched from `?boss` before any juncture binds it | Only the second matches. The search runs from B. A preferred identity on a twin lets the first match too |
+| SF3-70 | **The library** (fix round 15). Load the composite's v0 library (version 2 of `betrayal`, `complication`, `interception`, `misattribution`, `secret`, `reckoning` and `hunted`) with the vocabulary of version 2 | All 29 patterns pass the pattern lint (S2 L-144 to L-159) and load, with the six generic-entry warnings of L-145 |
 
 ### 12.2 End-to-end fixtures
 
@@ -1796,23 +1847,24 @@ Layer 3 needed additions to S2 and S0. They are now in S2 v1.1, v1.2 and v1.11 a
 
 **Other specifications owe layer 3** (as P5 §10): S1 events for the matcher, entries in the event-kind registry with their `producers` and `fills`, the state rules, the `isSpine` and `aesthetic` reads, and policies that ignore `meta:` kinds; S4 the pattern, vocabulary and sowable formats, the tempo settings, the closed vocabularies and the starter pack (with kits that declare `fills` for the library's functions, a surface kit, a closing kit and the warning template of S2 §2.16a); S5 the `SenseFrame` of §5.1, the `jump` report and the quest-completion report; P6 the settings surface; P7 where the sower and matcher run, and the pool's cost; P9 and P10 the arms, measures and inspectors that read the decision log.
 
-### 13.3 What v0.6 assumes from S0 v4.17 and S1 v0.6
+### 13.3 What v0.6 takes from S0 v4.17 and S1 v0.6
 
-A parallel pass revises the kernel and the simulation layer for the composite. Where v0.6 depends on it, it names the composite's proposal ([pattern language §13](../composite/pattern-language.md#13-proposed-specification-changes)) and the interface it assumes. Where that pass settles an interface differently, its form wins and this page is aligned to it.
+A parallel pass revised the kernel and the simulation layer for the composite (S0 v4.17, S1 v0.6, on their own branch and under their own review). This page first assumed their interfaces, then, in its fix round, aligned to the forms that pass settled. Where the two still differ after both reviews, the kernel's and the simulation layer's form wins and this page follows.
 
-| Proposal | Interface assumed here | Used in |
+| Proposal | As S0 v4.17 and S1 v0.6 settle it | Used in |
 |---|---|---|
-| S0-1 | A `meta:` event carries a registered data slot `story: { pattern, instance, outcome, kind, depth }`. v0.6 asks for `kind` (resolved, failed or parked) and `depth` (the lineage depth, so a chain's depth needs no walk) beside the proposal's three fields | §6.6 |
-| S0-2 | The event-kind registry entry gains `fills: KindFill[]`; state fillers are registered `StateRule`s with declared `changes` selectors, a bounded `search` from the arguments a function lists in `searchFrom`, and `holdsAt` (§2.2a) | §2.2a, §6.1, §6.3, §6.4 |
-| S0-3 | Forming or revising a belief emits a Change (or S1 always mints the forming event), so belief state rules (`blame`, `conceal`, `learn`) can fill without polling. Until it is built, those rules fill nothing | §2.2a |
-| S1-1 | Every kind of M3 declares its fills, as [`vocabulary.json`](../composite/vocabulary.json) lists them | §2.2a |
-| S1-2, S1-7, S1-8 | Harm to a member pulses its group whatever kind filled it; every group intention has a visible act; an unsanctioned public refusal is a norm signal. They change what the world produces, so more junctures fill by `wait` and fewer by nudge; this page reads nothing new from them | §7.5 (the nudge share) |
-| S1-3 | A goal frame a seed opens on a cast person raises that person's rate for the matching kinds, and the act carries `served` = that frame | §6.3 (sources), §7.6 |
-| S1-4 | A kind `xf:item` and a time-varying `xf:held-by` edge, with a state rule for `hold` | §2.2a |
-| S1-5 | A `tell` may have a `promise` event as its subject, and a `tell` of a concealed subject also fills `expose` | §2.2a |
-| S1-6 | The relation `leads(who, group)` is a registered read over membership role `leader` | §2.2a (relations) |
-| S1-9 | Occurrences carry `outcome` `failed` or `prevented`, and a kind's fills may depend on it (`KindFill.when.outcome`) | §2.2a |
-| S1-10 | A group intention against the protagonist, with its warning act and harmful acts as events, its transitions in S1's feed, state rules for `decide` and `pursue` that accept it, and S1's gate on S2's `exposure(warning)`; its reach scales with `SettingsSet.tempo`, with none at `off` | §7.10 |
+| S0-1 | A `meta:` kind may declare a typed `data` record (V4-50). `meta:story` declares `pattern`, `instance`, `outcome`, `kind` and `depth`, read as `data.pattern` and so on | §6.6 |
+| S0-2 | The registry entry carries `roles` and `fills` (`FillDecl`: `a\|b`, `@place`, `@self`; `when` with `outcome`, `has`, `lacks`, `stance` and a reader-evaluated `state`), stored but never read by the kernel (V4-51). The `event` change carries `outcome`, `served` and `data`. The state fillers are state rules S1 registers in §2.2a's form (S1 §9.1a), those over kernel edges, frames and beliefs included | §2.2a, §6.1, §6.3, §6.4 |
+| S0-3 | A `belief` change for **memorable** beliefs only, set, revised or dropped (V4-52). Non-memorable beliefs fill nothing | §2.2a |
+| (S0, found) | Opening a frame produces a `frame` change (V4-53); goal frames of people who are not demand roots are **retained** and persisted (V4-54) | §2.2a (durable rules), §6.2 |
+| S1-1 | Every kind declares its fills (S1 §5.2a), several conditioned on the outcome; S2 registers its own kinds' roles and fills. [`vocabulary.json`](../composite/vocabulary.json) mirrors them for fixtures | §2.2a |
+| S1-2, S1-7, S1-8 | Harm to a member pulses its group whatever kind filled it; intentions put members to work where they can be seen (`presence`); an unanswered public refusal weakens its norm. More junctures fill by `wait` and fewer by nudge; this page reads nothing new from them | §7.5 (the nudge share) |
+| S1-3 | A seed's role goal becomes a role goal S1 acts on (`seedGoals`, S1 §8.10), and the act carries `served` = the seed's frame | §6.3 (sources), §7.6 |
+| S1-4 | `xf:item` and the `xf:held-by` edge (S1 §4.9), with a state rule for `hold` | §2.2a |
+| S1-5 | A `tell` names the event it is about in a new `told` role (S1 §5.3): `learn(who: listener, what: told)`, and `expose` when `conceal(what: told, from: listener)` held | §2.2a |
+| S1-6 | `leads(who, group)` reads an `xf:leads` edge (S1 §4.8, §7.8); `member` reads `groupOf`. Both are searchable from either side | §2.2a, §6.4 |
+| S1-9 | Occurrences carry `outcome` `failed` or `prevented`, and fills may depend on it (`when.outcome`) | §2.2a |
+| S1-10 | `punish` (S1 §7.8.1): a group's grievance (a memorable belief) grounds it; `decide.punish`, `warning`, `price`, `search` and `confront` are events; it climbs and mints an encounter only once layer 2 has pinned a warning `observed`; its reach scales with `SettingsSet.tempo`, with none at `off`. **S1 asserts no harm to the protagonist**: a `confront` is an encounter, and any harm is the game's record | §7.10 |
 | `depth` | S1's registered read `depth(node)` (S1 §9.1, built) | §6.3, §7.11 |
 
 ## 14. Compromises and open items
@@ -1860,9 +1912,33 @@ Departures from the model, for the [ledger](../foundation.md#9-the-reference-mod
 13. **The nudge share** (v0.6). Too many nudges is the quantum ogre; too few starves the world. Until S1-3, S1-7 and S1-9 land, most open junctures can only be nudged ([composite worked examples §1.7](../composite/worked-examples.md#17-what-worked-and-what-didnt)). P9 sets `nudgeAfter` and `maxNudges` from the ogre audit and the raters' sense of what was caused.
 14. **Kits per function** (v0.6). The library needs at least one offer or nudge kit for every function a realisable juncture names, a surface kit and a closing kit, or candidates starve; and several phrasings per function, or the words bring the template back ([pattern language §15](../composite/pattern-language.md#15-break-it-yourself), attack 13). S4's starter pack, and a coverage report per pattern.
 15. **Skeleton calibration** (v0.6). The masks, the `skeletonTokens` prefix and the penalty are first guesses; P9 calibrates them against raters' "same story" answers ([pattern language §14.3](../composite/pattern-language.md#143-have-you-seen-this-story-before)).
-16. **The proposals' interfaces** (§13.3), once the parallel pass lands.
+16. **The parallel pass's forms** (§13.3). This page follows S0 v4.17 and S1 v0.6 as their review settles them; a small second round may follow once both are in.
 
 ## 15. Review record
+
+### v0.6 fix round: GPT-6.1 Sol, extra-high effort
+
+GPT-6.1 Sol reviewed S2 v1.11 and S3 v0.6 together. It judged the compositional direction sound and D-29's relaxation correct, and asked for 15 fixes before the pass is held done, each with a regression vector. All 15 are fixed; S2 records findings 2, 3, 14 and 15 too ([S2 §16](seeding.md#16-review-record)). The pass also aligned with S0 v4.17 and S1 v0.6 as that pass settled them (§13.3).
+
+| # | Finding | What changed | Vector |
+|---|---|---|---|
+| 1 | High: a `pending` juncture could never receive its filler | Advancement tests `ready` and `pending` junctures alike; a match clears `pending` (§6.3) | SF3-61 |
+| 2 | High: a warning authorised staged harm without limit | S2 §2.16a: a staged act is an S1 `confront`, re-authorised at every preparation and before every write; the seed writes no harm on the protagonist | S2 SF-72, SF-73 |
+| 3 | High: nudge legality lapsed after the silent start | S2 §2.25: the five rules run before every world-changing write, at its own time | S2 SF-80 |
+| 4 | High: state fillers had no persistence guarantee | Durable state rules only; each state filler copies `at`, `causes` and `until`, its cause events retained; link tests read the copy (§2.2a, §6.2, §6.4, §9.1) | SF3-62 |
+| 5 | High: sweeping changed decisions | Terminal instances retire at the boundary step; every consumer reads only unretired ones; the sweep removes only retired instances; the ring is rewritten only when a thread gains a token (§6.5, §5.7, §6.8) | SF3-44 extended |
+| 6 | Medium: boundary endings could outrun the buffer | Endings and armed outcomes wait for the horizon to cover them (§6.5) | SF3-63 |
+| 7 | Medium: "every incoming link" contradicted alternative joins | Only the edges a join needs are tested; others are logged unborne (§6.4) | SF3-64 |
+| 8 | Medium: the protagonist-binding rule excluded D-30's records | The protagonist binds as a target or subject from any evidenced record, as an actor only from its own act, never as a holder of a frame or belief (§2.2a) | SF3-65 |
+| 9 | Medium: relation terms couldn't bind | `relationSearch` with argument masks, `searchFrom`, `Id` order and truncation (§1.2, §2.2a, §6.4) | SF3-41 extended |
+| 10 | Medium: dynamic `seed-outcome` fills never reached matching | `realisedBy` folded into `F(c)`; patterns subscribe to `seed-outcome` when a loaded template realises one of their functions (§6.1, §6.3) | SF3-66 |
+| 11 | Medium: legibility debt had an unrecoverable case | Explain candidates cite both ends of an unshown edge, with a second sign on another modality for `shown: 'must'` (§6.7, §7.1, §7.5) | SF3-67 |
+| 12 | Medium: the whole-plot check ignored unclassified beats | S3-K-6 counts every beat on a path but texture, exit, offer and protagonist-response beats | SF3-68 |
+| 13 | Medium: fixed role identities weren't enforced | Enforced in the fill test and in state queries (§6.3, §6.4) | SF3-69 |
+| 14 | Medium: minted event names collided | S2 §2.5 names each minted event by its full declaration path | S2 SF-79 |
+| 15 | Medium: L-159 rejected nine library offers | The offer rule gains its second form, the actor asking the protagonist's help (§7.5, S2 L-159); `secret.out` and `misattribution.cleared` are `v: 'offer'`; the library was validated against every check, and four more patterns fixed (`betrayal`, `complication`, `interception`, `reckoning`) | SF3-70, S2 SF-77 |
+
+**Aligned with S0 v4.17 and S1 v0.6:** `KindFill` is S0's `FillDecl`; the story record is read as `data.pattern`; belief Changes exist for memorable beliefs only; tellings name their event in a `told` role; `leads` reads an `xf:leads` edge; a group's harmful acts are `confront` encounters that assert no harm; `hunted.caught` is filled by a `confront` (`threaten`), with harm left to the game's record; and `vocabulary.json` (version 2) carries `told`, `xf:leads`, relation `searchFrom` lists and S1 v0.6's new kinds.
 
 ### v0.6: the composite's proposals, D-30
 
@@ -1871,7 +1947,7 @@ A spec pass, not a review. It takes the S3 proposals of [the pattern language §
 | Proposal | Decision | What this page does, and why |
 |---|---|---|
 | S3-1 patterns as graphs | Adopted | §2.2, §2.2a, §6: event and state junctures, fills declared by the world, bounded state queries, multi-function advancement, `forecloses` as an effect only, aftermath and armed outcomes; dilemma, edge, frame and belief junctures are in. **Changed:** the junctures' `changes` are expectations, not match conditions (C-S3-17); armed outcomes, aftermath windows and deadline endings are applied at a deterministic **boundary step**, because applying them "at the sweep", as proposed, would make a decision depend on storage reclaim, which v0.5's S3-I-19 forbids. **Added:** the v0.5 stage form stays loadable as a chain with an internal `order` link (§2.2b), so the built core's fixtures keep their meaning under one matcher; the relevance gate has a fixture switch for them |
-| S3-2 instances as candidates | Adopted, extended | §7.1: told, **surface** and realise candidates. The single telling stays, now at an outcome. **Added:** surface candidates, because gate 11 (legibility debt) needs a way to show a cause before the story goes on, and the proposal gave the director none |
+| S3-2 instances as candidates | Adopted, extended | §7.1: told, **surface**, explain (from the fix round) and realise candidates. The single telling stays, now at an outcome. **Added:** surface candidates, because gate 11 (legibility debt) needs a way to show a cause before the story goes on, and the proposal gave the director none |
 | S3-3 composed patterns | Adopted | §6.6: `meta:story` at outcomes and at parking, acyclic and at most four deep. The proposed S0-1 slot gains `kind` and `depth` (§13.3) |
 | S3-4 the director's realisations and gates 11 to 13 | Adopted for offer and nudge; back-fill and open specified as later capabilities | §7.3, §7.5, §7.9, §7.11. Offer and nudge are what M3's iteration 3 needs: the nudge share and the whole-plot arm both depend on nudges. Back-fill and open are fixed as contracts but wait (S3-L-11): one library refinement doesn't justify child lifetimes in the core, and back-fill needs the cause hook and the ogre audit. **Changed:** an offer realises only a `v: 'offer'` juncture or an ask of the protagonist; a nudge waits `nudgeAfter` so the world fills first; nudges are capped and class 2 |
 | S3-5 F-13 to F-16 and skeleton diversity | Adopted | §7.4. F-14 weighted 2 after D-27. F-16 reads the other way for surface candidates, so surfacing ranks where an instance is least legible |

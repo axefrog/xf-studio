@@ -1,8 +1,8 @@
 {
   "id": "xf.composite:vocabulary",
   "type": "vocabulary",
-  "version": 1,
-  "status": "v0, 25 October 2026. The function vocabulary of the pattern language (pattern-language.md §3.3). Pack data; S4 owns its final format.",
+  "version": 2,
+  "status": "v0, 25 October 2026. The function vocabulary of the pattern language (pattern-language.md §3.3). Pack data; S4 owns its final format. Version 2 aligns with S1 v0.6 and S2 v1.11: `tell` names its subject event in the `told` role, `leads` reads an `xf:leads` edge, relations declare what they can be searched from (S3 v0.6 §2.2a), the offer and response roles are S2's, and the kinds S1 v0.6 adds for goals and group intentions are listed. Where `kindFills` and S1 v0.6 §5.2a differ (S1 now conditions several city kinds' fills on their outcome), S1 wins: the kinds' own registry entries are the source; this file mirrors them for fixtures.",
   "kinds": {
     "person": ["core:person"],
     "group": ["core:group"],
@@ -285,16 +285,18 @@
     {
       "id": "tied",
       "args": ["a", "b", "kind?"],
-      "read": "social.tied (S1 tie function, any layer, or a materialised xf:tie)"
+      "read": "social.tied (S1 tie function, any layer, or a materialised xf:tie)",
+      "searchFrom": ["a", "b"]
     },
-    {"id": "member", "args": ["who", "group", "role?"], "read": "core:member-of edge"},
-    {"id": "leads", "args": ["who", "group"], "read": "membership role leader"},
+    {"id": "member", "args": ["who", "group", "role?"], "read": "membership: S1 groupOf, or a core:member-of edge for a mirrored member (S1 v0.6 §4.8)", "searchFrom": ["who", "group"]},
+    {"id": "leads", "args": ["who", "group"], "read": "an xf:leads edge from the person to the group (S1 v0.6 §4.8, §7.8)", "searchFrom": ["who", "group"]},
     {
       "id": "hostile",
       "args": ["g1", "g2"],
-      "read": "the game's attitude between the groups' records, or S1's pair hostility"
+      "read": "the game's attitude between the groups' records, or S1's pair hostility",
+      "searchFrom": ["g1", "g2"]
     },
-    {"id": "knows", "args": ["who", "x"], "read": "S0 knows: a belief about x with confidence above 0"},
+    {"id": "knows", "args": ["who", "x"], "read": "S0 knows: a belief about x with confidence above 0", "searchFrom": ["who"]},
     {"id": "unaware", "args": ["who", "x"], "read": "S0 knows answers unknown"},
     {"id": "witnessed", "args": ["who", "juncture"], "read": "the filler event's witnesses include who"},
     {
@@ -305,7 +307,7 @@
     {"id": "trusts", "args": ["a", "b", "band"], "read": "regard(a to b) trust, banded low, mid, high"},
     {"id": "standing", "args": ["audience", "subject", "band"], "read": "social.label"},
     {"id": "values", "args": ["who", "drive", "band"], "read": "drive importance (persons) or ethos (groups), banded"},
-    {"id": "at", "args": ["x", "place"], "read": "the filler's place, or a person's whereabouts at the time"},
+    {"id": "at", "args": ["x", "place"], "read": "the filler's place, or a person's whereabouts at the time", "searchFrom": ["x"]},
     {"id": "alive", "args": ["who"], "read": "S1 alive(r, t)"},
     {"id": "distinct", "args": ["a", "b"], "read": "the bound nodes differ"},
     {"id": "known-to-protagonist", "args": ["x"], "read": "S2 exposedNode(x, presented)"},
@@ -383,11 +385,11 @@
     "enf.<norm>.beating": [{"fn": "wrong", "args": {"by": "enforcer", "to": "target"}}],
     "regime-start": [{"fn": "befall", "args": {"who": "place"}}],
     "tell": [
-      {"fn": "learn", "args": {"who": "listener", "what": "subject"}},
+      {"fn": "learn", "args": {"who": "listener", "what": "told"}},
       {
         "fn": "expose",
-        "args": {"by": "teller", "what": "subject", "to": "listener"},
-        "when": "a conceal state over the subject holds against the listener"
+        "args": {"by": "teller", "what": "told", "to": "listener"},
+        "when": "the state conceal(what: told, from: listener) holds at the telling's time (S1 v0.6 §5.2a)"
       }
     ],
     "promise": [
@@ -417,31 +419,49 @@
     ],
     "joint-activity": [{"fn": "bind", "args": {"a": "participant", "b": "participant"}}],
     "crisis": [{"fn": "befall", "args": {"who": "subject"}}],
-    "reply": [
-      {"fn": "comply", "args": {"who": "replier", "to": "bidder"}, "when": "accept"},
-      {"fn": "refuse", "args": {"who": "replier", "to": "bidder"}, "when": "decline"}
+    "reply.accept": [{"fn": "comply", "args": {"who": "replier", "to": "bidder"}}],
+    "reply.decline": [{"fn": "refuse", "args": {"who": "replier", "to": "bidder"}}],
+    "warning": [{"fn": "threaten", "args": {"by": "warner", "to": "warned"}}],
+    "price": [
+      {"fn": "threaten", "args": {"by": "warner", "to": "warned"}},
+      {"fn": "demand", "args": {"by": "warner", "of": "warned"}}
+    ],
+    "search": [{"fn": "ask", "args": {"by": "searcher", "of": "asked", "what": "sought"}, "when": "has asked"}],
+    "confront": [{"fn": "threaten", "args": {"by": "confronter", "to": "confronted"}}],
+    "decide.<intent>": [{"fn": "decide", "args": {"group": "group", "what": "object|group"}}],
+    "presence": [
+      {"fn": "protect", "args": {"guard": "guard", "ward": "ward"}},
+      {"fn": "help", "args": {"by": "guard", "to": "ward"}}
+    ],
+    "call-in": [
+      {"fn": "demand", "args": {"by": "creditor", "of": "debtor"}},
+      {"fn": "repay", "args": {"debtor": "debtor", "creditor": "creditor"}, "when": "outcome done"},
+      {"fn": "comply", "args": {"who": "debtor", "to": "creditor"}, "when": "outcome done"},
+      {"fn": "refuse", "args": {"who": "debtor", "to": "creditor"}, "when": "outcome failed"},
+      {"fn": "wrong", "args": {"by": "debtor", "to": "creditor"}, "when": "outcome failed"}
+    ],
+    "succession": [
+      {"fn": "bind", "args": {"a": "successor", "b": "group"}},
+      {"fn": "sever", "args": {"a": "predecessor", "b": "group"}, "when": "has predecessor"}
     ],
     "retract": [{"fn": "refuse", "args": {"who": "protagonist", "to": "the thread's asker"}}],
     "turning": [{"fn": "turn", "args": {"who": "who"}}],
-    "offer": [{"fn": "ask", "args": {"by": "the seed's sender role", "of": "protagonist"}}],
+    "offer": [{"fn": "ask", "args": {"by": "asker", "of": "protagonist"}}],
     "response": [
       {
         "fn": "comply",
-        "args": {"who": "protagonist", "to": "the asker"},
+        "args": {"who": "protagonist", "to": "asker"},
         "when": "action with stance help or bargain"
       },
       {
         "fn": "refuse",
-        "args": {"who": "protagonist", "to": "the asker"},
+        "args": {"who": "protagonist", "to": "asker"},
         "when": "decline, or action with stance refuse or oppose"
       },
       {"fn": "choose", "args": {"who": "protagonist"}, "when": "any action"}
     ],
-    "seed-outcome": [{"note": "fills whatever its seed declares under `realises` (S2-1), or its implicit pattern (S2-2)"}],
-    "game.death": [
-      {"fn": "befall", "args": {"who": "the dead"}, "when": "no killer recorded"},
-      {"fn": "wrong", "args": {"by": "killer", "to": "the dead"}, "when": "a killer recorded"}
-    ],
+    "seed-outcome": [{"note": "fills what its seed's `realises` entries with `by: end` or `by: unattended` declare (S2 v1.11 §2.24, read through realisedBy; S3 v0.6 §6.3)"}],
+    "game.death": [{"note": "raw game kinds fill nothing: the mirror's derived event for the same occurrence fills for it (S1 v0.6 §5.2a)"}],
     "meta:story": [{"fn": "story", "args": {"pattern": "the story's pattern", "outcome": "the story's outcome"}}],
     "Dilemma (kernel emission, not an event kind)": [
       {

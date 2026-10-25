@@ -305,7 +305,7 @@
     {
       "id": "xf.composite:reckoning",
       "type": "pattern",
-      "version": 1,
+      "version": 2,
       "family": "closure",
       "scale": "goal",
       "summary": "An act comes back on the one who did it, later, from someone who learned of it.",
@@ -343,7 +343,7 @@
         "struck": {"reached": ["struck"], "kind": "resolved", "next": ["xf.composite:grievance", "xf.composite:feud"]}
       },
       "within": {"clock": "game", "days": 21},
-      "once": ["?doer", "?by"],
+      "once": ["?doer", "?t"],
       "show": {"junctures": ["acted"], "edges": 1},
       "escalation": ["struck"],
       "links": {

@@ -49,9 +49,9 @@ Told like that, it is one plot. In the pattern language it is seven instances of
 | | | `cleared` | `expose(·, wronged, Sato)` | The protagonist brings Sato the truth: Danny's account, Rhee seen with the case, the market talk | Offer |
 | I5 | [hunted](patterns/shapes.json) | `grudge` | `blame(Claws, protagonist, loss)` | Sato's belief, carried to his group (members report up, foundation §5.2); its `observed-act` requirement holds | Found from I4 |
 | | | `decided` | `decide(Claws, protagonist)` | **The Claws' own intention against the protagonist, under [D-30](../decisions.md)** (§13 S1-10): it can start only from this belief about the protagonist's acts, and only if the group's retribution and reputation drives carry it over the threshold | Wait: the world's move |
-| | | `warned` | `threaten(Claws, protagonist)` | The intention's first visible act: word put out at the market, a message, a demand to pay for the case. No harmful act may follow until it reached `presented` | Wait |
+| | | `warned` | `threaten(a Claw, protagonist)` | The intention's first visible act, carried by a member: word put out at the market, a message, a demand to pay for the case. No encounter may follow until it reached `presented` | Wait |
 | | | `hunting` | `pursue(Claws, protagonist)` | The intention while active: members asking after the protagonist, watching the places the protagonist is known at | Wait |
-| | | `caught` | `wrong(Claws, protagonist)` | When members find the protagonist: an encounter realised in the game (P8), with ways out | Wait |
+| | | `caught` | `threaten(a Claw, protagonist)` | When members find the protagonist: an encounter (S1 v0.6's `confront`) realised in the game (P8), with ways out. It asserts no harm: any harm is the game's own record, read back by the mirror | Wait |
 | | | `paidOff`, `cleared`, `sheltered` | | Three routes to lift it: pay for the case, clear the name (I4), find shelter (The Mox, ironically, or Okoro) | Offer, or the world |
 | I6 | [feud](patterns/shapes.json) | `opened` | `wrong(Mox, Claws)` | The same theft, read at group level (a layer with I2 and I4) | Found |
 | | | `answered` | `story(grievance, avenged)` | The Claws' retribution aimed at The Mox | Wait (S1 `group.decide`) |
