@@ -94,8 +94,8 @@ The review regressions include six A2 checks for same-second tie reopening and a
 The legacy 26-probe simulation runner stops at obsolete R3-01: saved kernel event facts already mask
 that counterfactual at HEAD, as confirmed in SPEC-NOTES 195; its migration is deferred. All 64 dedicated
 S3/kernel probes and the default sweep property's 28 historical plus three discovery probes pass.
-The default suite is below two minutes under the memory guard; SPEC-NOTES 196 records measured before
-and after timings. Run it under the repository memory guard with a 4 GB limit, using the full Python interpreter path as the repository rules require. From this directory on Windows:
+The default suite takes about three minutes (about 190 s, peak about 1.1 GB) under the memory guard; SPEC-NOTES 196 records
+earlier before and after timings. Run it under the repository memory guard with a 4 GB limit, using the full Python interpreter path as the repository rules require. From this directory on Windows:
 
 ```powershell
 & "$env:LOCALAPPDATA/Python/pythoncore-3.14-64/python.exe" ../../../tools/memory_guard.py --limit 4 -- bun test
@@ -160,4 +160,4 @@ integration. No game session is needed. All review fixes remain uncommitted for 
 | `reference/test/`, `reference/test/s2/`, `reference/test/sim/` | One test file per subject; `fixtures.test.ts` indexes the acceptance fixtures; `synthetic.ts` is the schema and operation script behind the invariant and digest tests; `test/sim/` holds the S1 fixtures (`helpers.ts`, `feed.ts`, `gen.ts` and `records.ts` are shared tooling, not tests). |
 | `reference/SPEC-NOTES.md` | Interpretations of the specification, for its owner to confirm. |
 
-- The **M3 offline prototype** ([`m3/`](m3/README.md)): the authored seed R2 over Kabuki, layer 3's hooks at three proactivity settings, the control arms and a blind pass. The harness is `reference/src/m3/`. Its result: the authored seed fits and plays the same with sowing off and on; the engine's hooks did not beat the Radiant-style baseline, judged blind.
+- The **M3 offline prototype** ([`m3/`](m3/README.md)): the authored seed R2 over Kabuki, layer 3's hooks at three proactivity settings, the control arms and a blind pass. The harness is `reference/src/m3/`. Its result: the authored seed is fitted the same way with sowing off and on (its play differs in timing, and in one comparison of 18 in the fragment selected); the engine's hooks did not beat the Radiant-style baseline, judged blind by four model raters, each of whom favoured the baseline on following a hook up.

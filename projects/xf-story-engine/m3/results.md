@@ -11,6 +11,14 @@
 | E-restless-mid | E | restless | S-mid-squeezed | 6.0 | 18 | 1 | 18 |
 | E-steady-early | E | steady | S-early-quiet | 6.0 | 9 | 1 | 9 |
 
+## R2 fitted and played with sowing off and on
+
+The second done-when is about the fit: R2 is fitted the same way with sowing off as with it on. That holds. The play is a separate matter and is not claimed identical: layer 3 holds the first delivery for its pacing, and a later world can select a different fragment. The table is in fit/fit-results.md.
+
+- Same fit with layer 3 absent, attached with tempo off, and sowing on: true.
+- Same selection, content and end state (release times left out), layer 3 attached with tempo off: 17 of 18; sowing on: 17 of 18.
+- First delivery released later than with layer 3 absent: 12 of 18 with tempo off and 12 of 18 with sowing on. The other 6 are the states where R2 waits (nothing is delivered in either run) or has closed (one line, released at the same moment in both). Layer 3 holds the first delivery of an open R2 whatever its tempo is set to, so the play differs in timing in every state where R2 is open.
+
 ## What would give a card away (automatic critic), 24 cards per arm
 
 | Arm | Repeated skeleton | Most on one skeleton | Word-pair diversity | Cause or order word | Mean words | Priced | Names two people |
@@ -41,18 +49,31 @@ Hooks available before sampling: {"E":36,"A1":36,"A3":44,"A4":44}.
 | A3 Radiant-style baseline | 96 | 3.98 | 6.19 | 4.02 | 3.77 | 96/96 |
 | E engine (ranked sowing) | 96 | 3.79 | 3.84 | 3.74 | 2.98 | 88/96 |
 
-Forced choices (the first arm of the row against the second; wins of the first, sign test two-sided):
+Forced choices (the first arm of the row against the second; wins of the first over all raters). These are counts, not tests: every rater judges the same items and the raters share a design, so the pooled n is not a sample of independent choices and no significance is attached to it. The evidence is the direction, rater by rater:
 
-| First | Second | Question | Wins | Of | p |
-|---|---|---|---|---|---|
-| A1 | A3 | caused | 44 | 96 | 0.4752 |
-| A1 | A3 | follow | 15 | 96 | 0 |
-| A1 | E | caused | 52 | 96 | 0.4752 |
-| A1 | E | follow | 44 | 96 | 0.4752 |
-| A3 | A4 | caused | 2 | 96 | 0 |
-| A3 | A4 | follow | 11 | 96 | 0 |
-| A3 | E | caused | 51 | 96 | 0.6101 |
-| A3 | E | follow | 75 | 96 | 0 |
+| First | Second | Question | Wins | Of |
+|---|---|---|---|---|
+| A1 | A3 | caused | 44 | 96 |
+| A1 | A3 | follow | 15 | 96 |
+| A1 | E | caused | 52 | 96 |
+| A1 | E | follow | 44 | 96 |
+| A3 | A4 | caused | 2 | 96 |
+| A3 | A4 | follow | 11 | 96 |
+| A3 | E | caused | 51 | 96 |
+| A3 | E | follow | 75 | 96 |
+
+Forced choices by rater (wins of the first arm of the row, of the count of each rater alone):
+
+| First | Second | Question | codex-gpt-6.1-sol | codex-gpt-6-astra | claude-sonnet | claude-opus |
+|---|---|---|---|---|---|---|
+| A1 | A3 | caused | 10 of 24 | 12 of 24 | 11 of 24 | 11 of 24 |
+| A1 | A3 | follow | 5 of 24 | 1 of 24 | 8 of 24 | 1 of 24 |
+| A1 | E | caused | 14 of 24 | 14 of 24 | 12 of 24 | 12 of 24 |
+| A1 | E | follow | 12 of 24 | 11 of 24 | 11 of 24 | 10 of 24 |
+| A3 | A4 | caused | 0 of 24 | 0 of 24 | 2 of 24 | 0 of 24 |
+| A3 | A4 | follow | 2 of 24 | 2 of 24 | 7 of 24 | 0 of 24 |
+| A3 | E | caused | 14 of 24 | 13 of 24 | 13 of 24 | 11 of 24 |
+| A3 | E | follow | 20 of 24 | 21 of 24 | 14 of 24 | 20 of 24 |
 
 Disagreement (share of rater pairs differing by 2 or more points): {"caused":0.14,"legible":0.07,"setting":0.06,"pull":0.03}.
 
@@ -71,4 +92,12 @@ The cards that read as generated were the ones built from a fixed sentence frame
 ### Critic, claude-opus
 
 Nearly every card reads as generated because the deck is built from roughly twenty fixed sentence frames filled from a tiny name pool (Alex/Jordan/Maria/Yui/Kenji/Haruto/Dmitri x Hale/Novak/Reyes/Sato/Tanaka/Mori). Over twenty cards share the single 'Friday fee the Claws collect' frame word for word, and several cards are exact duplicates. Further cues: full names are repeated where a person would use a pronoun ('Walk with Kenji Tanaka... Collect it from Maria Hale'); location slots draw from a short list ('near a bar off the market', 'the ripperdoc', 'the metro entrance'); a 'role' slot is bolted on ('a labourer', 'a club worker') and has no effect on the sentence; the same first name lands on both sides ('Kenji Mori... to Kenji Tanaka', 'Yui Tanaka... Yui Mori found out first'); the odd frame 'X found out first' doesn't quite parse; and bounties come in clean tiers of 250/500/1000. The 'Kabuki:' headline frames read like a news-feed register with no local voice. The fee card is the strongest frame: it gives a clear cause (Tyger Claws protection money), a clear ask, and it sounds like Kabuki. The rumour-style lines ('Word at the stalls', 'Heard it from three people', 'put Jordan Hale on the pavement') have the most voice and causality, though they still draw on the same name pool. Accident and NCPD-pickup cards give the least reason and the least to act on.
+
+## How the packet was built
+
+The packet is rebuilt byte for byte from blind/inputs.json: 4 hook runs by file name and record hash (A1-restless-early, A1-restless-mid, E-restless-early, E-restless-mid), 24 hooks per arm, 4 raters. The calm and steady runs of the table above are not in the rated packet.
+
+### Protocol deviation of the rated run
+
+The baseline A3 of the rated packet does not follow the slot rule that dossier 23 5.4.1 declares (each slot takes the nearest eligible resident or place, ties to the smaller identifier). It took a keyed draw among the first four residents of the nearest ring for each person slot, and drew places from a pool of every ring and then the whole district. Its jobs were therefore less local and more varied than the declared rule would give. The packet was not regenerated and was not re-rated, and the verdicts above stand for the baseline as it was. Runs from now on use the declared rule (`declared` in the manifest); the old rule is kept as `rated-v1` so that the rated packet can still be rebuilt.
 
