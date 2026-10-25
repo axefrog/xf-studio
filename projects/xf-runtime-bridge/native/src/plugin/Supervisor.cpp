@@ -1,4 +1,5 @@
 #include <Windows.h>
+#include <regex>
 #include <RED4ext/RED4ext.hpp>
 #include "core/Supervisor.hpp"
 #include "core/Recording.hpp"
@@ -35,12 +36,40 @@ supervisor::Observation Observe()
     sample.update(ScriptCall("XFSupervisor", "Read", {}, {}, "supervisor-read"));
     return supervisor::ReadObservation(sample);
 }
-void Gate()
+// 0.8.19: one XF actor's reading (XFSupervisorActors.Read), with the phase and world-freeze of V's reading.
+supervisor::Observation ObserveNpc(const std::string& ref, const supervisor::Observation& global)
+{
+    RED4ext::CString who(ref.c_str());
+    return supervisor::ReadNpcObservation(ScriptCall("XFSupervisor", "ReadActor", {"String"}, {&who}, "supervisor-read"), global);
+}
+supervisor::Observation ObserveKey(const std::string& key, const supervisor::Observation& global)
+{
+    if (key.rfind("npc:", 0) == 0) return ObserveNpc(key.substr(4), global);
+    return global;
+}
+// V's entry needs the player class; an XF actor's entries need the NPC class (the actions they take are npc writes).
+void Gate(Access cls = Access::WritePlayer)
 {
     auto& s = Get();
     if (!s.config.allowTestHooks || !s.bridge || !s.bridge->HasClient()) throw MethodError("test_hooks_off", "Supervisor needs autonomous hooks and a connected owner");
     s.scriptLayer.Require("supervisor");
-    auto& d = s.bridge->GetDispatcher(); d.RequireWritesOpen(); d.RequireWriteClass(Access::WritePlayer);
+    auto& d = s.bridge->GetDispatcher(); d.RequireWritesOpen(); d.RequireWriteClass(cls);
+}
+Access ClassOf(const std::string& key) { return key.rfind("npc:", 0) == 0 ? Access::WriteNpc : Access::WritePlayer; }
+// "all" or absent: every entry (nullopt); {kind, ref}: that one entry's key.
+std::optional<std::string> ActorKey(const json& params)
+{
+    if (!params.contains("actor") || (params["actor"].is_string() && params["actor"].get<std::string>() == "all")) return std::nullopt;
+    if (!params["actor"].is_object()) throw MethodError("bad_params", "actor must be \"all\" or {kind, ref}");
+    const auto& a = params["actor"];
+    for (const auto& [k, v] : a.items()) if (k != "kind" && k != "ref") throw MethodError("bad_params", "Unknown actor field: " + k);
+    if (!a.contains("kind") || !a.contains("ref") || !a["kind"].is_string() || !a["ref"].is_string()) throw MethodError("bad_params", "actor needs a kind and a ref");
+    auto kind = a["kind"].get<std::string>(), ref = a["ref"].get<std::string>();
+    if (kind == "player" && ref == "v") ref = "V";
+    if (kind == "npc" && ref.size() > 1 && (ref[0] == 'A' || ref[0] == 'P')) ref[0] = static_cast<char>(ref[0] + 32);
+    if (!((kind == "player" && ref == "V") || (kind == "npc" && std::regex_match(ref, std::regex("[ap][0-9]{1,15}")))))
+        throw MethodError("bad_params", "actor must be \"all\", V or a returned NPC handle");
+    return kind + ":" + ref;
 }
 bool Near(const json& item, const supervisor::Point& v)
 {
@@ -50,7 +79,7 @@ bool Near(const json& item, const supervisor::Point& v)
 // Internal envelopes never come from client data. The only methods are built below.
 json Pack(const Work& w, const json& params)
 {
-    return {{"generation", w.generation}, {"incident", w.incident}, {"contact", w.contact}, {"violation", w.violation}, {"action", w.action}, {"safe", w.safe}, {"caller_write_classes", w.callerWriteClasses}, {"params", params}};
+    return {{"actor", w.actor}, {"generation", w.generation}, {"incident", w.incident}, {"contact", w.contact}, {"violation", w.violation}, {"action", w.action}, {"safe", w.safe}, {"caller_write_classes", w.callerWriteClasses}, {"params", params}};
 }
 std::unique_ptr<dm::MicroRunner>& RunnerSlot() { static std::unique_ptr<dm::MicroRunner> runner; return runner; }
 dm::MicroRunner& Runner()
@@ -58,7 +87,7 @@ dm::MicroRunner& Runner()
     auto& runner = RunnerSlot();
     if (!runner) runner = std::make_unique<dm::MicroRunner>(
         [](const std::string& method, const json& p, const std::string& cid, const std::string& token) {
-            Work w{p.at("generation").get<uint64_t>(), p.at("incident").get<uint64_t>(), p.at("contact").get<uint64_t>(),
+            Work w{p.at("actor").get<std::string>(), p.at("generation").get<uint64_t>(), p.at("incident").get<uint64_t>(), p.at("contact").get<uint64_t>(),
                    p.at("violation").get<std::string>(), p.at("action").get<std::string>(), p.at("safe")};
             w.callerWriteClasses = p.at("caller_write_classes").get<uint32_t>();
             json response;
@@ -66,8 +95,9 @@ dm::MicroRunner& Runner()
                 auto& s = Get();
                 if (!s.bridge) throw MethodError("no_bridge", "Supervisor lost its dispatcher");
                 auto guard = [w, method, params = p.at("params")](bool changing) {
-                    Gate();
-                    const auto o = Observe(); Owner().Require(w, o, recording::Now(), World(), Connection(), changing);
+                    Gate(ClassOf(w.actor));
+                    const auto global = Observe();
+                    const auto o = ObserveKey(w.actor, global); Owner().Require(w, o, recording::Now(), World(), Connection(), changing);
                     // Despawn only bridge-owned actors/props still within 30 m on this frame.
                     if (w.action == "withdraw_nearby") {
                         const auto items = method == "npc.release" ? SupervisorNpcs() : SupervisorProps();
@@ -94,7 +124,15 @@ void Enqueue(const Work& w, const supervisor::Observation& o)
 {
     dm::MicroBatch batch; batch.watch = "supervisor"; batch.seq = w.incident; batch.sessionToken = Get().session.token;
     auto add = [&](const std::string& method, json p) { batch.actions.push_back({method, Pack(w, p), 0}); };
-    if (w.action == "stop_behaviours") add("behave.stop", {{"all", true}});
+    if (w.actor.rfind("npc:", 0) == 0) {
+        // An XF actor: release is a despawn (npc.release never refuses for an actor that is gone), return_last_safe an npc.place
+        // to the observed quiet point (the normal range and ground checks apply), handover and pause as for V.
+        const auto ref = w.actor.substr(4);
+        if (w.action == "release") add("npc.release", {{"who", ref}, {"how", "despawn"}});
+        else if (w.action == "handover") add("bridge.handover", {{"on", true}, {"note", "Supervisor: " + w.actor + " " + w.violation}});
+        else if (w.action == "pause_world") add("world.pause", {{"paused", true}});
+        else if (w.action == "return_last_safe" && !w.safe.is_null()) add("npc.place", {{"who", ref}, {"at", w.safe.at("at")}, {"yaw", w.safe.at("yaw")}});
+    } else if (w.action == "stop_behaviours") add("behave.stop", {{"all", true}});
     else if (w.action == "release_holds") add("player.stop", json::object());
     else if (w.action == "handover") add("bridge.handover", {{"on", true}, {"note", "Supervisor: " + w.violation}});
     else if (w.action == "pause_world") add("world.pause", {{"paused", true}});
@@ -117,36 +155,47 @@ void RegisterSupervisor(Dispatcher& d)
 {
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
     d.SetSafetyCancellation(CancelSupervisor);
-    d.Register({"supervisor.set", Access::WritePlayer, RunOn::BridgeThread, "Replace V's bounded safety supervisor.", [&d](const MethodContext& c) {
-        Gate();
+    d.Register({"supervisor.set", Access::WritePlayer, RunOn::BridgeThread, "Arm a bounded safety supervisor entry for V or an XF actor.", [&d](const MethodContext& c) {
         // Validate everything before replacing the current owner or its input watch.
+        if (!Get().config.allowTestHooks) throw MethodError("test_hooks_off", "Supervisor test gate closed");
         const auto entry = supervisor::Parse(c.params);
+        const auto key = entry.actor.Key();
+        Gate(ClassOf(key));
         const auto capabilities = supervisor::RequireCapabilities(entry, c.callerWriteClasses);
         const auto required = supervisor::RequiredWriteClasses(entry);
         for (auto access : {Access::WritePlayer, Access::WriteWorld, Access::WriteNpc, Access::WriteDm})
             if (required & WriteClassBit(access)) d.RequireWriteClass(access);
-        if (entry.actor.kind != "player") throw MethodError("actor_unavailable", "Only V's actor adapter is active in this slice");
-        const auto generation = Owner().State().at("generation").get<uint64_t>();
-        return d.RunWrite(GameTimeout(), [c, generation, capabilities] {
-            Gate();
-            auto observed = Observe();
-            if (!Owner().Active()) observed.input.clear(); // explicit re-arm starts a new watch
+        if (entry.actor.kind == "spawn") throw MethodError("actor_unavailable", "Spawned-object references are a reserved adapter, not commissioned yet");
+        if (entry.actor.kind == "npc" && entry.actor.ref[0] != 'a') throw MethodError("actor_unavailable", "Only XF actors (a1, a2, ...) can be supervised, never picked passers-by");
+        const auto generation = Owner().Generation(key);
+        return d.RunWrite(GameTimeout(), [c, key, generation, capabilities, ref = entry.actor.ref, player = entry.actor.kind == "player"] {
+            Gate(ClassOf(key));
+            auto global = Observe();
+            auto observed = player ? global : ObserveNpc(ref, global);
+            if (player && !Owner().Active(key)) observed.input.clear(); // explicit re-arm starts a new watch
             auto out = Owner().Set(c.params, observed, recording::Now(), World(), Connection(), generation, capabilities);
-            gWatchOwed = true;
-            try { bool on = true; ScriptCall("XFSupervisor", "Watch", {"Bool"}, {&on}, c.cid); }
-            catch (...) { CancelSupervisor("input_watch_failed"); throw; }
+            if (player) {
+                gWatchOwed = true;
+                try { bool on = true; ScriptCall("XFSupervisor", "Watch", {"Bool"}, {&on}, c.cid); }
+                catch (...) { Owner().Clear("input_watch_failed", key); throw; }
+            }
             Owner().Flush(); return out;
         }, "supervisor.set");
     }});
-    d.Register({"supervisor.state", Access::Read, RunOn::BridgeThread, "Read the supervisor entry and quiet-position evidence.", [](const MethodContext& c) {
-        params::RequireOnly(c.params, {});
+    d.Register({"supervisor.state", Access::Read, RunOn::BridgeThread, "Read the supervisor entries and quiet-position evidence.", [](const MethodContext& c) {
+        params::RequireOnly(c.params, {"actor"});
         if (!Get().config.allowTestHooks) throw MethodError("test_hooks_off", "Supervisor test gate closed");
-        return Owner().State();
+        const auto key = ActorKey(c.params);
+        return key ? Owner().State(*key) : Owner().StateAll();
     }});
-    d.Register({"supervisor.clear", Access::Control, RunOn::BridgeThread, "Cancel supervisor ownership without touching game objects.", [](const MethodContext& c) {
-        params::RequireOnly(c.params, {});
+    d.Register({"supervisor.clear", Access::Control, RunOn::BridgeThread, "Cancel supervisor ownership (one actor, or all) without touching game objects.", [](const MethodContext& c) {
+        params::RequireOnly(c.params, {"actor"});
         if (!Get().config.allowTestHooks) throw MethodError("test_hooks_off", "Supervisor test gate closed");
-        auto out = Owner().Clear("cleared"); Owner().Flush(); return out;
+        const auto key = ActorKey(c.params);
+        if (key) Owner().Clear("cleared", *key); else Owner().Clear("cleared");
+        auto out = Owner().StateAll(); // the answer is about every entry: "active" says whether any remains
+        out["cleared"] = key ? json(*key) : json("all");
+        Owner().Flush(); return out;
     }});
 #else
     (void)d;
@@ -184,18 +233,21 @@ void TickSupervisor(bool ready)
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
     if (!ready) { if (Owner().Active()) CancelSupervisor("game_loading"); gWatchOwed = false; Owner().Flush(); return; }
     try {
-        if (Owner().Active()) {
-            Gate();
-            if (Owner().Due(recording::Now())) {
-                const auto o = Observe();
+        std::optional<supervisor::Observation> global; // V's reading, taken once per tick for every entry that needs it
+        for (const auto& key : Owner().ActiveKeys()) {
+            if (!Owner().Due(key, recording::Now())) continue;
+            try {
+                Gate(ClassOf(key));
+                if (!global) global = Observe();
+                const auto o = ObserveKey(key, *global);
                 for (const auto& w : Owner().Tick(o, recording::Now(), World(), Connection())) {
                     try { Enqueue(w, o); }
                     catch (const std::exception& e) { Owner().Result(w, "plan", {{"ok", false}, {"error", {{"code", "plan_unavailable"}, {"message", e.what()}}}}); }
                 }
-            }
+            } catch (const std::exception&) { Owner().Clear("gate_or_read_unavailable", key); }
         }
     } catch (const std::exception&) { CancelSupervisor("gate_or_read_unavailable"); }
-    if (!Owner().Active() && gWatchOwed.exchange(false)) {
+    if (!Owner().Active("player:V") && gWatchOwed.exchange(false)) {
         try { bool on = false; ScriptCall("XFSupervisor", "Watch", {"Bool"}, {&on}, "supervisor-clear"); } catch (...) {}
     }
     Owner().Flush();

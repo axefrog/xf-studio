@@ -11,8 +11,9 @@ export type PlainError = { code: string; message: string; detail?: string; cause
 /** The shared plain wording per refusal code (also published in docs/mcp-reference.md). */
 export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
   permission_denied: "The caller did not allow every capability this policy needs. Grant the required classes explicitly or choose a narrower policy; nothing was started.",
-  actor_unavailable: "This supervisor candidate supports V only. NPC and vehicle supervision need their own validated actor adapter.",
-  supervisor_unavailable: "Supervision needs an observed, living V in unpaused gameplay with an available input listener. Read the game state before arming again.",
+  actor_unavailable: "This supervisor supports V and the bridge's own XF actors (a1, a2, ...). Picked passers-by and spawned objects need their own validated actor adapter.",
+  supervisor_unavailable: "Supervision needs an observed, living actor (V, with an available input listener, or an XF actor that has appeared) in unpaused gameplay. Read the game state before arming again.",
+  supervisor_limit: "The supervisor already holds five entries (V plus four XF actors, or five actors). Clear one with supervisor_clear and its actor before arming another.",
   no_safe_position: "The supervisor has no recorded quiet position yet. Let V stand quietly for the configured interval before testing a return.",
   supervisor_busy: "The bounded supervisor action queue is full. Read its receipts and clear or replace the entry before trying again.",
   plan_unavailable: "The supervisor could not safely resolve its action targets. Read the action result and current actor state before replacing the entry.",

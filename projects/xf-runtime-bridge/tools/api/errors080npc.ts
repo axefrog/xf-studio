@@ -13,7 +13,7 @@ export const NPC_MESSAGES: Record<string, string> = {
   not_streamed: "The world around that place isn't loaded right now. Pick a spot nearer V. Nothing was changed.",
   not_ready: "The game can't spawn NPCs yet. Try again in a moment.",
   spawn_refused: "The game refused to spawn the actor. Try another spot or cast.",
-  limit: "The bridge already has as many NPCs out as it allows (3 actors, 4 picked NPCs). Release one with npc_release first.",
+  limit: "The bridge already has as many NPCs out as it allows (5 actors, 4 picked NPCs). Release one with npc_release first.",
   not_in_world: "NPCs are directed in normal play only (not in menus, photo mode or the character creator). Nothing was changed.",
   in_combat: "V is in combat, so the bridge leaves NPCs alone. Try again when the fight is over.",
   in_vehicle: "V is in a vehicle, so the bridge leaves NPCs alone. Get out first.",
@@ -44,5 +44,8 @@ export const NPC_MESSAGES: Record<string, string> = {
     "The bridge found no walkable spot out of V's sight in that range. Turn V towards a wall or more open ground, widen min_m and max_m, or give a place with ahead_m or at_point. Nothing was spawned.",
   npc_handed_back: "That actor was handed back to its own AI when the fight began, so the bridge no longer directs it. Release it with npc_release (despawn, or dissolve once V can't see it).",
   npc_dead: "That actor is dead; its body stays until it is released. Release it with npc_release (despawn, or dissolve once V can't see it).",
+  look_unmatched:
+    "The game didn't say whether that person is a woman or a man, so no XF actor can stand in. Name one with cast (npc_spawn's casts list them), or pick someone else. Nothing was changed.",
+  already_substituting: "That person is being replaced already. Wait for npc.substituted, or release the actor (npc_release) to cancel it.",
   scenario_invalid: "The scene file isn't valid, so nothing ran. The message names each problem; fix the file and run it again (dry_run checks it without touching the game).",
 };

@@ -489,7 +489,8 @@ void RequireKnown(const std::string& aMethod, const json& aParams)
         {"npc.face", {"who", "expression", "off"}},
         {"npc.act", {"who", "gesture", "off", "seconds"}},
         {"npc.choices", {"who", "title", "choices", "max_s", "withdraw"}},
-        {"npc.release", {"who", "how", "walk", "distance_m"}},
+        {"npc.release", {"who", "how", "walk", "distance_m", "restore"}},
+        {"npc.substitute", {"id", "who", "look_at", "cast", "label", "reactions", "restore", "in_view", "max_wait_s", "dry_run"}},
     };
     const auto it = known.find(aMethod);
     if (it == known.end())
@@ -561,6 +562,10 @@ Service::Npc& Service::Ours(const std::string& aWho, bool aActorOnly)
     const auto it = m_npcs.find(aWho);
     if (it == m_npcs.end())
     {
+        if (std::any_of(m_swaps.begin(), m_swaps.end(), [&](const Swap& w) { return w.who == aWho; }))
+        {
+            throw MethodError("npc_not_spawned", aWho + " is a substitution still waiting for the original to leave V's sight (npc_status shows it; npc_release cancels it)");
+        }
         throw MethodError("npc_unknown", "no NPC has the handle " + aWho + " in this session (npc_status lists them; a load forgets them)");
     }
     if (aActorOnly && it->second.kind != "actor")
@@ -880,6 +885,14 @@ json Service::NpcJson(const Npc& aNpc) const
         out["handed_back"] = aNpc.handedBack;
         out["dead"] = aNpc.deadKept;
     }
+    if (!aNpc.substituteOf.empty())
+    {
+        out["substitute_of"] = aNpc.substituteOf;
+        out["resident"] = aNpc.resident;
+        out["look_match"] = aNpc.lookMatch;
+        out["respawn"] = aNpc.respawn;
+        out["restore"] = aNpc.restore;
+    }
     if (aNpc.known)
     {
         out["position"] = json::array({aNpc.position[0], aNpc.position[1], aNpc.position[2]});
@@ -929,7 +942,12 @@ json Service::Status(const json& aParams) const
     {
         casts.push_back({{"cast", cast.name}, {"rig", cast.rig}, {"masked", cast.masked}, {"research", cast.research}, {"combat", cast.combat}, {"appearances", cast.appearances}});
     }
-    return json{{"npcs", npcs}, {"hub", hub}, {"voice_lines", voices}, {"actors", ActorCount()}, {"casts", casts},
+    json swaps = json::array();
+    for (const auto& swap : m_swaps)
+    {
+        swaps.push_back(SwapJson(swap));
+    }
+    return json{{"npcs", npcs}, {"hub", hub}, {"voice_lines", voices}, {"actors", ActorCount()}, {"casts", casts}, {"swaps", swaps}, {"restoring", m_restores.size()},
                 {"limits", {{"actors", kMaxActors}, {"picks", kMaxPicks}, {"range_m", kMaxRangeM}}}};
 }
 
@@ -1037,7 +1055,7 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     const auto v = RequireV(aOps);
     {
         std::scoped_lock _(m_mutex);
-        if (ActorCount() >= kMaxActors)
+        if (ActorCount() + static_cast<size_t>(std::count_if(m_swaps.begin(), m_swaps.end(), [](const Swap& w) { return !w.spawning; })) >= kMaxActors)
         {
             throw MethodError("limit", "the bridge has " + std::to_string(kMaxActors) + " actors out already; npc_release one first");
         }
@@ -1990,6 +2008,21 @@ void Service::ReleaseOne(const std::string& aWho, const std::string& aHow, const
     {
     }
     json data{{"who", aWho}, {"how", aHow}};
+    // 0.8.19: restore: an explicit release (no automatic reason: a fight, a handover, the kill switch, a load leave no one behind)
+    // leaves a fresh crowd person where the actor stood, to be handed to the game's own crowd logic.
+    if (npc.restore && aReason.empty() && npc.known && !npc.originalRecord.empty() && aOps.restore)
+    {
+        try
+        {
+            const auto fresh = aOps.restore(npc.originalRecord, npc.originalAppearance, npc.position, npc.yaw);
+            m_restores.push_back(Restoring{fresh.value("entity", std::string())});
+            data["restored"] = fresh.value("entity", std::string());
+        }
+        catch (const std::exception& e)
+        {
+            data["restore_failed"] = e.what();
+        }
+    }
     if (!aReason.empty())
     {
         data["reason"] = aReason;
@@ -2012,15 +2045,27 @@ json Service::Release(const json& aParams, const Ops& aOps)
     {
         Bad("walk and distance_m go with how: dissolve");
     }
+    const auto restoreAsked = params::CheckBoolean(aParams, "restore");
     if (who == "all")
     {
-        std::vector<std::string> whos;
+        std::vector<std::string> whos, waiting;
         {
             std::scoped_lock _(m_mutex);
             for (const auto& [handle, _npc] : m_npcs)
             {
                 whos.push_back(handle);
             }
+            for (const auto& swap : m_swaps)
+            {
+                if (!swap.spawning)
+                {
+                    waiting.push_back(swap.who);
+                }
+            }
+        }
+        for (const auto& handle : waiting)
+        {
+            FailSwap(handle, "cancelled", "npc_release all", aOps);
         }
         for (const auto& handle : whos)
         {
@@ -2044,10 +2089,37 @@ json Service::Release(const json& aParams, const Ops& aOps)
         HideVoices(aOps);
         return json{{"released", whos}, {"undo", nullptr}, {"undo_note", "nothing to undo"}};
     }
+    {
+        // A substitution still waiting for the original to leave V's sight has no actor yet: releasing it cancels it.
+        bool waiting = false;
+        {
+            std::scoped_lock _(m_mutex);
+            waiting = m_npcs.find(who) == m_npcs.end() &&
+                      std::any_of(m_swaps.begin(), m_swaps.end(), [&](const Swap& w) { return w.who == who && !w.spawning; });
+        }
+        if (waiting)
+        {
+            FailSwap(who, "cancelled", "npc_release", aOps);
+            return json{{"who", who}, {"how", "cancelled"}, {"undo", nullptr}, {"undo_note", "the substitution was cancelled; the original was never touched"}};
+        }
+    }
     std::string kind;
     {
         std::scoped_lock _(m_mutex);
-        kind = Ours(who, false).kind;
+        auto& held = Ours(who, false);
+        kind = held.kind;
+        if (restoreAsked && kind == "actor")
+        {
+            if (*restoreAsked && held.originalRecord.empty())
+            {
+                Bad("restore goes with a substituted actor (npc_substitute): only it knows the crowd person to leave behind");
+            }
+            held.restore = *restoreAsked;
+        }
+        else if (restoreAsked)
+        {
+            Bad("restore goes with a substituted actor, not " + who);
+        }
     }
     const auto chosen = how.value_or(kind == "pick" ? "leave" : "despawn");
     if (kind == "pick" && chosen != "leave")
@@ -2221,6 +2293,25 @@ void Service::ReleaseEverything(const std::string& aReason, const Ops& aOps)
     {
         HideVoices(aOps);
     }
+    {
+        std::vector<std::string> swaps;
+        {
+            std::scoped_lock _(m_mutex);
+            for (const auto& swap : m_swaps)
+            {
+                swaps.push_back(swap.who);
+            }
+        }
+        for (const auto& handle : swaps)
+        {
+            FailSwap(handle, aReason, "released with everything else", aOps);
+        }
+    }
+    {
+        // A restored crowd person still on its way to the crowd is the game's by now, except under the kill switch's own path.
+        std::scoped_lock _(m_mutex);
+        m_restores.clear();
+    }
     std::vector<std::string> whos;
     {
         std::scoped_lock _(m_mutex);
@@ -2312,7 +2403,7 @@ json Service::ReleaseAllNow(const std::string& aReason, const Ops& aOps)
 bool Service::Active() const
 {
     std::scoped_lock _(m_mutex);
-    return !m_npcs.empty() || m_hub.has_value() || !m_voice.empty();
+    return !m_npcs.empty() || m_hub.has_value() || !m_voice.empty() || !m_swaps.empty() || !m_restores.empty();
 }
 
 json Service::Holds() const
@@ -2340,6 +2431,16 @@ void Service::DropAll(const std::string& aReason)
         m_hub.reset();
         m_voice.clear();
         m_sincePoll = 0.0;
+        // 0.8.19: a load drops the world: no game call (the crowd person the swap held is gone with it).
+        for (const auto& swap : m_swaps)
+        {
+            if (!swap.spawning)
+            {
+                whos.push_back(swap.who);
+            }
+        }
+        m_swaps.clear();
+        m_restores.clear();
     }
     for (const auto& who : whos)
     {
@@ -2361,6 +2462,16 @@ json Service::RestoreAfterKill(const Ops& aOps)
     json out = aOps.releaseAll("kill");
     {
         std::scoped_lock _(m_mutex);
+        // 0.8.19: the script's registry gave every held original back to the crowd in the same step (releaseAll).
+        for (const auto& swap : m_swaps)
+        {
+            if (!swap.spawning)
+            {
+                whos.push_back(swap.who);
+            }
+        }
+        m_swaps.clear();
+        m_restores.clear();
         m_npcs.clear();
         m_hub.reset();
         m_voice.clear(); // the script hides its voice lines in the same step
@@ -2591,6 +2702,9 @@ void Service::Tick(double aDt, const TickInput& aInput, const Ops& aOps)
         }
     }
     ExpireHub(aOps);
+    // 0.8.19: substitutions waiting for a hidden moment, or for their actor to appear, and restored crowd people on their way.
+    StepSwaps(aDt, aOps);
+    StepRestores(aDt, aOps);
 }
 
 void Service::ExpireHub(const Ops& aOps)
@@ -2658,6 +2772,11 @@ void Service::OnPoll(const json& aReading, const Ops& aOps, const TickInput& aIn
             {
                 npc.yaw = entry["yaw"].get<double>();
                 npc.yawKnown = true;
+            }
+            if (exists && entry.contains("appearance") && entry["appearance"].is_string())
+            {
+                npc.appearanceNow = entry["appearance"].get<std::string>();
+                npc.variantNow = entry.value("variant", std::string());
             }
             if (npc.kind == "actor" && !npc.spawned)
             {
@@ -3296,6 +3415,7 @@ void RegisterMethods(Dispatcher& aDispatcher, Service& aService, std::function<O
         {"npc.act", Access::WriteNpc, "Plays or ends a body gesture on an actor.", &Service::Act},
         {"npc.choices", Access::WriteNpc, "Offers V dialogue choices in the game's own widget.", &Service::Choices},
         {"npc.release", Access::WriteNpc, "Ends an actor or a pick.", &Service::Release},
+        {"npc.substitute", Access::WriteNpc, "An XF actor with a crowd person's look takes their place, unseen.", &Service::Substitute},
     };
     for (const auto& [name, access, summary, fn] : writes)
     {

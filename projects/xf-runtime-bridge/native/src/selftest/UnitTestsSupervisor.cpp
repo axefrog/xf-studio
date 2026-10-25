@@ -18,6 +18,7 @@ json EntryData()
 }
 Observation V() { Observation o; o.valid = true; o.entity = "V-entity"; o.phase = "gameplay"; return o; }
 }
+int SupervisorNpcUnitTests();
 int SupervisorUnitTests()
 {
     auto p = EntryData(); auto o = V();
@@ -27,7 +28,7 @@ int SupervisorUnitTests()
     bad = p; bad["policy"].erase("alive"); Refuses([&] { Parse(bad); }, "bad_params");
     bad = p; bad["actor"]["ref"] = "anyone"; Refuses([&] { Parse(bad); }, "bad_params");
     bad = p; bad["actor"]["ref"] = "v"; Check(Parse(bad).actor.ref == "V", "0.8.17: the V reference is case-insensitive and canonical");
-    bad = p; bad["actor"] = {{"kind", "npc"}, {"ref", "A12"}}; Check(Parse(bad).actor.ref == "a12", "0.8.17: NPC handles accept upper case");
+    bad = p; bad["actor"] = {{"kind", "npc"}, {"ref", "A12"}}; bad["invariants"] = {"alive"}; bad["policy"] = {{"goal", "return_last_safe"}, {"alive", "handover"}}; Check(Parse(bad).actor.ref == "a12", "0.8.17: NPC handles accept upper case");
     bad = p; bad["actor"]["ref"] = "Vv"; Refuses([&] { Parse(bad); }, "bad_params");
     bad = p; bad["goal"]["at"] = {0, 0}; Refuses([&] { Parse(bad); }, "bad_params");
     bad = p; bad["tick_hz"] = 60; Refuses([&] { Parse(bad); }, "bad_params");
@@ -35,8 +36,8 @@ int SupervisorUnitTests()
     bad = p; bad["schema"] = 1; Refuses([&] { Parse(bad); }, "bad_params");
     bad = p; bad["invariants"] = {"alive", "alive"}; Refuses([&] { Parse(bad); }, "bad_params");
     bad = p; bad["goal"] = {{"kind", "idle_safe"}}; bad["policy"].erase("goal"); Check(Parse(bad).goal.kind == "idle_safe", "idle_safe plain goal");
-    bad["actor"] = {{"kind", "npc"}, {"ref", "a2"}}; Check(Parse(bad).actor.kind == "npc", "NPC identity model supported");
-    Service s; Refuses([&] { s.Set(bad, o, 0, 1, 1); }, "actor_unavailable");
+    bad["actor"] = {{"kind", "npc"}, {"ref", "a2"}}; Refuses([&] { Parse(bad); }, "bad_params"); // 0.8.19: V's invariants and policies are not an actor's
+    Service s;
     bad["actor"] = {{"kind", "spawn"}, {"ref", "12"}}; Check(Parse(bad).actor.kind == "spawn", "vehicle identity model supported");
     Refuses([&] { s.Set(bad, o, 0, 1, 1); }, "actor_unavailable");
     std::vector<json> receipts;
@@ -178,5 +179,6 @@ int SupervisorUnitTests()
         capabilityObservation.combat = true; const auto action = owner.Tick(capabilityObservation, 0, 1, 1).at(0);
         Check(action.callerWriteClasses == (player | world), "queued work snapshots arming capabilities");
     }
-    std::printf("SUPERVISOR UNIT: %d checks, %d failures\n", checks, failures); return failures;
+    std::printf("SUPERVISOR UNIT: %d checks, %d failures\n", checks, failures);
+    return failures + SupervisorNpcUnitTests();
 }

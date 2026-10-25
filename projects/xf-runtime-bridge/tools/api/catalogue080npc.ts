@@ -37,6 +37,12 @@ export const NPC_WAIT_KINDS = [
   "npc.auto_released",
 ] as const;
 
+/**
+ * 0.8.19: the substitution's events, waitable too. Kept apart from NPC_WAIT_KINDS: the scenario runner reads all of that list in
+ * one session.events call, which the bridge limits to 16 kinds.
+ */
+export const NPC_SUBSTITUTE_KINDS = ["npc.substitute_started", "npc.substituted", "npc.substitute_failed", "npc.restored"] as const;
+
 const HANDLE = "^[ap][0-9]{1,5}$";
 const TARGET = "^(v|[ap][0-9]{1,5})$";
 const who = (description = "The NPC: its handle from npc_spawn (a1, a2, ...) or npc_pick (p1, ...).") => str(description, { pattern: HANDLE });
@@ -92,7 +98,24 @@ export const NPC_REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "npc.face": [...V_STATE, "npc_unknown", "npc_lost", "npc_handed_back", "npc_dead", "expression_unknown"],
   "npc.act": [...V_STATE, ...OURS, "npc_moving", "gesture_unknown", "rig_unsupported", "carrier_missing"],
   "npc.choices": [...V_STATE, "npc_unknown", "npc_lost", "npc_handed_back", "npc_dead", "choices_busy", "one_hub_at_a_time", "too_far", "choice_too_long"],
-  "npc.release": ["npc_unknown"],
+  "npc.release": ["npc_unknown", "bad_params"],
+  "npc.substitute": [
+    ...V_STATE,
+    "codeware_missing",
+    "npc_protected",
+    "npc_busy",
+    "npc_not_found",
+    "too_far",
+    "limit",
+    "look_unmatched",
+    "cast_unknown",
+    "already_substituting",
+    "record_missing",
+    "not_ready",
+    "not_streamed",
+    "not_walkable",
+    "spawn_refused",
+  ],
   "npc.scenario": ["scenario_invalid"],
 };
 
@@ -103,7 +126,7 @@ const DEFINITIONS: CommandDef[] = [
     name: "npc.list",
     title: "List the NPCs near V",
     description:
-      "The NPCs within radius_m of V (default 15, at most 40): each one's id (for npc_pick), record, distance and place, whether it is part of the street crowd, whether it is protected (a quest character, a companion, a vendor, police, a child, a boss, or in a story scene) with the reasons, whether it is busy (sitting or leaning somewhere, fighting, hostile to V), whether npc_pick would take it (pickable: a plain passer-by of the street crowd, not busy), and which are the session's own. Changes nothing.",
+      "The NPCs within radius_m of V (default 15, at most 40): each one's id (for npc_pick), record, distance and place, whether it is part of the street crowd, the look that defines it (appearance, colour variant) and which way it faces (yaw), whether it is protected (a quest character, a companion, a vendor, police, a child, a boss, or in a story scene) with the reasons, whether it is busy (sitting or leaning somewhere, fighting, hostile to V), whether npc_pick would take it (pickable: a plain passer-by of the street crowd, not busy), and which are the session's own. Changes nothing.",
     permission: "read",
     input: obj({ radius_m: num("How far from V to look, 1 to 40 metres. Default 15.", 1, 40), max: int("At most this many, 1 to 40. Default 20.", 1, 40) }),
     bridge: { method: "npc.list" },
@@ -121,7 +144,7 @@ const DEFINITIONS: CommandDef[] = [
     name: "npc.status",
     title: "Read the NPCs the bridge directs",
     description:
-      "The session's actors and picked NPCs: each one's handle, cast or record, whether it has appeared, where it is, what it is doing (walking, following, turning), its lines still showing, its gaze, face and gesture; the dialogue choices showing, if any; and the limits (3 actors, 4 picks, 30 m). Changes nothing.",
+      "The session's actors and picked NPCs: each one's handle, cast or record, whether it has appeared, where it is, what it is doing (walking, following, turning), its lines still showing, its gaze, face and gesture; the dialogue choices showing, if any; and the substitutions still waiting for their moment (swaps), and the limits (5 actors, 4 picks, 30 m). Changes nothing.",
     permission: "read",
     input: obj({}),
     bridge: { method: "npc.status" },
@@ -130,7 +153,7 @@ const DEFINITIONS: CommandDef[] = [
     name: "npc.spawn",
     title: "Bring in an XF actor",
     description:
-      "Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_sight lets the bridge choose a walkable spot V can't see (outside her view or behind a wall, min_m to max_m from her, 12 to 25 by default), so the actor walks in from somewhere rather than appearing; out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. By default the actor is friendly to V, can't be killed and has calm reactions; attitude neutral or hostile, immortal false and reactions game make a stand-in that can be shot (when a fight begins the bridge stops directing it and its own AI takes over, npc.handed_back; if it dies its body stays until released). The combat casts fighter_melee (bare fists, the safest first fixture) and fighter_pistol (a handgun) are copies of the base game's street-gang grunts instead of civilians: with attitude hostile (and immortal false if V may kill it) one fights V with its own AI, which a civilian never does; they keep their gang's own reactions, and by default they can't be killed so a test can't end by accident. engage true (with attitude hostile) also puts V in its own threat list at its first moment, the game's own route, in case the attitude alone doesn't start the fight; it never touches V. It is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Returns traffic_check at the final snapped point: lane containment and nearest pavement are INCONCLUSIVE. Needs Codeware and the -writes package's actor records.",
+      "Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_sight lets the bridge choose a walkable spot V can't see (outside her view or behind a wall, min_m to max_m from her, 12 to 25 by default), so the actor walks in from somewhere rather than appearing; out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. By default the actor is friendly to V, can't be killed and has calm reactions; attitude neutral or hostile, immortal false and reactions game make a stand-in that can be shot (when a fight begins the bridge stops directing it and its own AI takes over, npc.handed_back; if it dies its body stays until released). The combat casts fighter_melee (bare fists, the safest first fixture) and fighter_pistol (a handgun) are copies of the base game's street-gang grunts instead of civilians: with attitude hostile (and immortal false if V may kill it) one fights V with its own AI, which a civilian never does; they keep their gang's own reactions, and by default they can't be killed so a test can't end by accident. engage true (with attitude hostile) also puts V in its own threat list at its first moment, the game's own route, in case the attitude alone doesn't start the fight; it never touches V. It is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 5 at once. Answers its handle (a1, a2, a3, ...) at once; npc.spawned follows in the event stream when it appears. Returns traffic_check at the final snapped point: lane containment and nearest pavement are INCONCLUSIVE. Needs Codeware and the -writes package's actor records.",
     permission: "write-npc",
     input: obj(
       {
@@ -307,7 +330,7 @@ const DEFINITIONS: CommandDef[] = [
     name: "npc.release",
     title: "Release an NPC",
     description:
-      "Ends what the bridge does with an NPC: its lines, gaze, face, gesture, walk and dialogue choices are taken back, then an actor is removed (how despawn, the default), walks 15 m away from V first and is removed there (walk_away), or walks off and is removed only once V can't see it and it is at least distance_m from her (dissolve; with walk false it stays where it is until V walks away; no time limit, and despawn removes it at once), and a picked NPC goes back to its own business (leave). who all releases everyone. npc.released follows (and npc.dissolved for a dissolve).",
+      "Ends what the bridge does with an NPC: its lines, gaze, face, gesture, walk and dialogue choices are taken back, then an actor is removed (how despawn, the default), walks 15 m away from V first and is removed there (walk_away), or walks off and is removed only once V can't see it and it is at least distance_m from her (dissolve; with walk false it stays where it is until V walks away; no time limit, and despawn removes it at once), and a picked NPC goes back to its own business (leave). Releasing a substitution that is still waiting for the original to leave V's sight cancels it and touches nothing. who all releases everyone. npc.released follows (and npc.dissolved for a dissolve).",
     permission: "write-npc",
     input: obj(
       {
@@ -315,11 +338,33 @@ const DEFINITIONS: CommandDef[] = [
         how: oneOf("despawn (actors, default), walk_away (actors), dissolve (actors) or leave (picked NPCs).", ["despawn", "walk_away", "dissolve", "leave"]),
         walk: bool("With dissolve: walk off first (default true)."),
         distance_m: num("With dissolve: removed only this far from V, 5 to 30 m. Default 15.", 5, 30),
+        restore: bool("A substituted actor only: leave a fresh crowd person (the original record and look) where the actor stood once it is removed, for the game's own crowd to take over; false declines what npc_substitute asked for. Only an explicit release restores: a fight, a handover, the pause, the kill switch and a load leave no one behind."),
       },
       ["who"],
     ),
     undo: "Nothing to undo; spawn a new actor if wanted.",
     bridge: { method: "npc.release" },
+  },
+  {
+    name: "npc.substitute",
+    title: "Replace a crowd person with an XF actor",
+    description:
+      "Story Engine route (a), substitution: an XF actor with the look of a plain passer-by of the street crowd takes their place, standing where they stood and facing the way they faced, so the engine can run that person on its own routine. The person is chosen by id (from npc_list), by the handle of a picked NPC (who) or by what V is looking at (look_at); the same refusals as npc_pick apply (story characters, companions, vendors, police, children, bosses, anyone in a scene, anyone in combat or hostile, anyone not part of the street crowd, anyone further than 30 m). The bridge reads the person's record, appearance, colour variant, gender, place and heading, picks the closest XF cast (a base-game civilian clone, since a crowd record is a lane walker that would rejoin the crowd and ignore commands) and asks for the original's appearance by name. The swap waits for a moment V cannot see the original (outside her view or behind static geometry): then the original is held still, the actor is requested at its spot, and only when the actor stands there is the original removed (hidden for good and marked for the crowd system to recycle), so V never sees an empty spot; npc.substituted follows with the final look_match. An original that stays in view is waited for up to max_wait_s (30 by default), untouched, then given up on (npc.substitute_failed never_hidden); in_view true swaps at once even in V's sight, to see what she would see. A swap that cannot finish (the actor never appears, the removal is refused, V enters a fight or a scene, the pause, a handover, the kill switch) gives the original back to the crowd and removes the actor. Answers the new actor's handle (a1, a2, ...; it works like any npc_spawn actor: npc_move, npc_say, npc_release dissolve ...), look_match (what matched exactly and what is approximated, with the cast, the record relation and what is not attempted: props, body proportions, voice and colour variants; level and confirmed become final in npc.substituted, once the game reports the appearance the actor really wears), resident (a key the Story Engine can keep: for a community NPC the game's own spawner, entry and index (xfc1-...), for a lane-crowd pedestrian a hash of record, appearance and spawn spot (xfr1-...); the key is ours, not the game's, so a reload or a stream-out loses the actor until the engine brings it back with npc_spawn and the look in respawn) and respawn (npc_spawn's parameters for the same look at the same spot and heading). dry_run reads and matches without touching anything. restore true leaves a fresh crowd person where the actor stood when it is released (see npc_release). reactions game gives the actor the civilian's own reactions, so it flinches and flees as the crowd does. Counts among the 5 actors. Never saved. Needs Codeware and the -writes package's actor records.",
+    permission: "write-npc",
+    input: obj({
+      id: str("The person's id from npc_list.", { minLength: 1, maxLength: 64 }),
+      who: str("The handle of a picked NPC (p1, ...): the pick is let go once it is replaced.", { pattern: "^p[0-9]{1,5}$" }),
+      look_at: bool("The NPC V is looking at."),
+      cast: oneOf("Use this civilian cast instead of the closest one.", ["woman_corpo", "man_corpo", "woman_nightlife", "man_youngster", "woman_lowlife", "man_lowlife", "woman_masked", "man_masked"]),
+      label: str("The name its lines and dialogue choices show (default Stranger).", { minLength: 1, maxLength: 40 }),
+      reactions: oneOf("quiet (the default: no crime or panic reactions) or game (an ordinary passer-by's own reactions).", ["quiet", "game"]),
+      restore: bool("When the actor is released, leave a fresh crowd person (the original record and look) where it stood. Default false."),
+      in_view: bool("Swap at once even if V can see the original (to observe the pop). Default false: wait for a moment she cannot."),
+      max_wait_s: num("How long to wait for the original to leave V's sight, 1 to 120 s. Default 30.", 1, 120),
+      dry_run: bool("Read the person, match the look and report the resident key and respawn parameters; hold nothing, spawn nothing."),
+    }),
+    undo: "The result's undo releases the actor; before the swap is done that cancels it and gives the original back, afterwards the original cannot be brought back (it was hidden for good).",
+    bridge: bridgeNpc("npc.substitute"),
   },
   {
     name: "npc.scenario",

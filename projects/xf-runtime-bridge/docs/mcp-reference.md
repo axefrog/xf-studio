@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 152 tools, 88 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 153 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -21,7 +21,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [World](#world) (9)
 - [Wardrobe, clothing and cyberware](#wardrobe-clothing-and-cyberware) (8)
 - [XF Finish Showroom](#xf-finish-showroom) (5)
-- [NPC direction](#npc-direction) (16)
+- [NPC direction](#npc-direction) (17)
 - [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (3)
@@ -43,7 +43,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | `write-save` | Save and load the game | 6 | Yes | Makes a new manual save (never overwrites one) or loads a save, which discards everything since it. Saving is refused while the bridge's own changes are live unless explicitly overridden. | `allow_writes = true` and `save` listed by name (the test profile's build lists it). |
 | `write-showroom` | Set up the finish showroom | 5 | Yes | Spawns XF Finish Showroom's mannequin heads and their light rigs in front of V, turns them and removes them again. Nothing is saved: clearing, the kill switch or loading a save removes them. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `showroom` listed by name (the test profile's build lists it). |
 | `write-player` | Move V | 8 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
-| `write-npc` | Direct NPCs | 14 | Yes | Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL). |
+| `write-npc` | Direct NPCs | 15 | Yes | Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL). |
 | `write-dm` | Direct the scene | 21 | Yes | Brings props, vehicles and lights into the world near V and changes doors and vehicles; plays sounds and a vehicle's radio; shows message toasts and a real incoming call from a contact the player has, with subtitle lines; puts an XF quest in the HUD's tracker; shows the game's own banners and quest toasts; and arms watchers that run micro-actions inside the game without the agent. Nothing is saved: the answers' undos, the kill switch, the pause, a handover or loading a save take it all back, and saving waits until the spawned things and changed doors are gone. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `dm` listed by name (the test profile's build lists it); bringing things in and the subtitle lines also need Codeware, and the toolkit's scripts ship in the -writes package only. |
 | `act-player` | Act for V | 2 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
 | `control` | Stop the bridge | 7 | Only the bridge's own work: it stops or pauses it | Switches the game bridge off until it is reconnected from inside the game (test builds) or the game restarts. Always allowed. | Always allowed; every MCP configuration includes it. |
@@ -265,7 +265,7 @@ No parameters.
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `kinds` | array of string | 1 to 47 items; each `answer`, `comment`, `note`, `behaviour`, `kill`, `handover`, `resume`, `write`, `refused`, `save`, `input.submitted`, `input.result`, `input.photo.callback`, `input.photo.hide`, `input.photo.confirmation`, `input.ui.consumed`, `input.ui.queued`, `input.ui.dequeued`, `input.ui.native`, `choice.offer`, `choice.selection`, `choice.attempt`, `choice.result`, `npc.spawned`, `npc.arrived`, `npc.blocked`, `npc.move_failed`, `npc.follow_ended`, `npc.turned`, `npc.said`, `npc.act_done`, `npc.choice`, `npc.released`, `npc.dissolved`, `npc.handed_back`, `npc.lost`, `npc.died`, `npc.auto_released`, `dm.watch`, `dm.micro`, `dm.phone`, `dm.quest`, `dm.world`, `dm.audio`, `dm.light`, `dm.notify`, `dm.released` | Event kinds that end the wait (default answer and comment). |
+| `kinds` | array of string | 1 to 51 items; each `answer`, `comment`, `note`, `behaviour`, `kill`, `handover`, `resume`, `write`, `refused`, `save`, `input.submitted`, `input.result`, `input.photo.callback`, `input.photo.hide`, `input.photo.confirmation`, `input.ui.consumed`, `input.ui.queued`, `input.ui.dequeued`, `input.ui.native`, `choice.offer`, `choice.selection`, `choice.attempt`, `choice.result`, `npc.spawned`, `npc.arrived`, `npc.blocked`, `npc.move_failed`, `npc.follow_ended`, `npc.turned`, `npc.said`, `npc.act_done`, `npc.choice`, `npc.released`, `npc.dissolved`, `npc.handed_back`, `npc.lost`, `npc.died`, `npc.auto_released`, `npc.substitute_started`, `npc.substituted`, `npc.substitute_failed`, `npc.restored`, `dm.watch`, `dm.micro`, `dm.phone`, `dm.quest`, `dm.world`, `dm.audio`, `dm.light`, `dm.notify`, `dm.released` | Event kinds that end the wait (default answer and comment). |
 | `message_id` | integer | 1 to 1000000000 | Only the answer to this question (ui_message's id) ends the wait, even one given before the call; other kinds still count. |
 | `after` | integer | 0 to 1000000000000 | Wait for events after this sequence number (session_events' next); default: the newest when the call starts. |
 | `timeout_s` | number | 1 to 600 | Give up after this many seconds, 1 to 600. Default 120. |
@@ -2233,7 +2233,7 @@ Spawn XF actors (never saved), pick NPCs near V, and direct them: walk, follow, 
 
 ### `npc_list`
 
-**List the NPCs near V.** The NPCs within radius_m of V (default 15, at most 40): each one's id (for npc_pick), record, distance and place, whether it is part of the street crowd, whether it is protected (a quest character, a companion, a vendor, police, a child, a boss, or in a story scene) with the reasons, whether it is busy (sitting or leaning somewhere, fighting, hostile to V), whether npc_pick would take it (pickable: a plain passer-by of the street crowd, not busy), and which are the session's own. Changes nothing.
+**List the NPCs near V.** The NPCs within radius_m of V (default 15, at most 40): each one's id (for npc_pick), record, distance and place, whether it is part of the street crowd, the look that defines it (appearance, colour variant) and which way it faces (yaw), whether it is protected (a quest character, a companion, a vendor, police, a child, a boss, or in a story scene) with the reasons, whether it is busy (sitting or leaning somewhere, fighting, hostile to V), whether npc_pick would take it (pickable: a plain passer-by of the street crowd, not busy), and which are the session's own. Changes nothing.
 
 - **Command:** `npc.list`, the bridge method `npc.list`
 - **Permission:** Look (`read`)
@@ -2262,7 +2262,7 @@ Spawn XF actors (never saved), pick NPCs near V, and direct them: walk, follow, 
 
 ### `npc_status`
 
-**Read the NPCs the bridge directs.** The session's actors and picked NPCs: each one's handle, cast or record, whether it has appeared, where it is, what it is doing (walking, following, turning), its lines still showing, its gaze, face and gesture; the dialogue choices showing, if any; and the limits (3 actors, 4 picks, 30 m). Changes nothing.
+**Read the NPCs the bridge directs.** The session's actors and picked NPCs: each one's handle, cast or record, whether it has appeared, where it is, what it is doing (walking, following, turning), its lines still showing, its gaze, face and gesture; the dialogue choices showing, if any; and the substitutions still waiting for their moment (swaps), and the limits (5 actors, 4 picks, 30 m). Changes nothing.
 
 - **Command:** `npc.status`, the bridge method `npc.status`
 - **Permission:** Look (`read`)
@@ -2273,7 +2273,7 @@ No parameters.
 
 ### `npc_spawn`
 
-**Bring in an XF actor.** Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_sight lets the bridge choose a walkable spot V can't see (outside her view or behind a wall, min_m to max_m from her, 12 to 25 by default), so the actor walks in from somewhere rather than appearing; out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. By default the actor is friendly to V, can't be killed and has calm reactions; attitude neutral or hostile, immortal false and reactions game make a stand-in that can be shot (when a fight begins the bridge stops directing it and its own AI takes over, npc.handed_back; if it dies its body stays until released). The combat casts fighter_melee (bare fists, the safest first fixture) and fighter_pistol (a handgun) are copies of the base game's street-gang grunts instead of civilians: with attitude hostile (and immortal false if V may kill it) one fights V with its own AI, which a civilian never does; they keep their gang's own reactions, and by default they can't be killed so a test can't end by accident. engage true (with attitude hostile) also puts V in its own threat list at its first moment, the game's own route, in case the attitude alone doesn't start the fight; it never touches V. It is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Returns traffic_check at the final snapped point: lane containment and nearest pavement are INCONCLUSIVE. Needs Codeware and the -writes package's actor records.
+**Bring in an XF actor.** Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_sight lets the bridge choose a walkable spot V can't see (outside her view or behind a wall, min_m to max_m from her, 12 to 25 by default), so the actor walks in from somewhere rather than appearing; out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. By default the actor is friendly to V, can't be killed and has calm reactions; attitude neutral or hostile, immortal false and reactions game make a stand-in that can be shot (when a fight begins the bridge stops directing it and its own AI takes over, npc.handed_back; if it dies its body stays until released). The combat casts fighter_melee (bare fists, the safest first fixture) and fighter_pistol (a handgun) are copies of the base game's street-gang grunts instead of civilians: with attitude hostile (and immortal false if V may kill it) one fights V with its own AI, which a civilian never does; they keep their gang's own reactions, and by default they can't be killed so a test can't end by accident. engage true (with attitude hostile) also puts V in its own threat list at its first moment, the game's own route, in case the attitude alone doesn't start the fight; it never touches V. It is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 5 at once. Answers its handle (a1, a2, a3, ...) at once; npc.spawned follows in the event stream when it appears. Returns traffic_check at the final snapped point: lane containment and nearest pavement are INCONCLUSIVE. Needs Codeware and the -writes package's actor records.
 
 - **Command:** `npc.spawn`, the bridge method `npc.spawn`
 - **Permission:** Direct NPCs (`write-npc`)
@@ -2480,13 +2480,13 @@ No parameters.
 
 ### `npc_release`
 
-**Release an NPC.** Ends what the bridge does with an NPC: its lines, gaze, face, gesture, walk and dialogue choices are taken back, then an actor is removed (how despawn, the default), walks 15 m away from V first and is removed there (walk_away), or walks off and is removed only once V can't see it and it is at least distance_m from her (dissolve; with walk false it stays where it is until V walks away; no time limit, and despawn removes it at once), and a picked NPC goes back to its own business (leave). who all releases everyone. npc.released follows (and npc.dissolved for a dissolve).
+**Release an NPC.** Ends what the bridge does with an NPC: its lines, gaze, face, gesture, walk and dialogue choices are taken back, then an actor is removed (how despawn, the default), walks 15 m away from V first and is removed there (walk_away), or walks off and is removed only once V can't see it and it is at least distance_m from her (dissolve; with walk false it stays where it is until V walks away; no time limit, and despawn removes it at once), and a picked NPC goes back to its own business (leave). Releasing a substitution that is still waiting for the original to leave V's sight cancels it and touches nothing. who all releases everyone. npc.released follows (and npc.dissolved for a dissolve).
 
 - **Command:** `npc.release`, the bridge method `npc.release`
 - **Permission:** Direct NPCs (`write-npc`)
 - **Changes the game:** Yes
 - **Undo:** Nothing to undo; spawn a new actor if wanted.
-- **Refusals:** `npc_unknown`
+- **Refusals:** `npc_unknown`, [`bad_params`](#refusal-bad-params)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -2494,6 +2494,30 @@ No parameters.
 | `how` | string | `despawn`, `walk_away`, `dissolve`, `leave` | despawn (actors, default), walk_away (actors), dissolve (actors) or leave (picked NPCs). |
 | `walk` | boolean | `true`, `false` | With dissolve: walk off first (default true). |
 | `distance_m` | number | 5 to 30 | With dissolve: removed only this far from V, 5 to 30 m. Default 15. |
+| `restore` | boolean | `true`, `false` | A substituted actor only: leave a fresh crowd person (the original record and look) where the actor stood once it is removed, for the game's own crowd to take over; false declines what npc_substitute asked for. Only an explicit release restores: a fight, a handover, the pause, the kill switch and a load leave no one behind. |
+
+### `npc_substitute`
+
+**Replace a crowd person with an XF actor.** Story Engine route (a), substitution: an XF actor with the look of a plain passer-by of the street crowd takes their place, standing where they stood and facing the way they faced, so the engine can run that person on its own routine. The person is chosen by id (from npc_list), by the handle of a picked NPC (who) or by what V is looking at (look_at); the same refusals as npc_pick apply (story characters, companions, vendors, police, children, bosses, anyone in a scene, anyone in combat or hostile, anyone not part of the street crowd, anyone further than 30 m). The bridge reads the person's record, appearance, colour variant, gender, place and heading, picks the closest XF cast (a base-game civilian clone, since a crowd record is a lane walker that would rejoin the crowd and ignore commands) and asks for the original's appearance by name. The swap waits for a moment V cannot see the original (outside her view or behind static geometry): then the original is held still, the actor is requested at its spot, and only when the actor stands there is the original removed (hidden for good and marked for the crowd system to recycle), so V never sees an empty spot; npc.substituted follows with the final look_match. An original that stays in view is waited for up to max_wait_s (30 by default), untouched, then given up on (npc.substitute_failed never_hidden); in_view true swaps at once even in V's sight, to see what she would see. A swap that cannot finish (the actor never appears, the removal is refused, V enters a fight or a scene, the pause, a handover, the kill switch) gives the original back to the crowd and removes the actor. Answers the new actor's handle (a1, a2, ...; it works like any npc_spawn actor: npc_move, npc_say, npc_release dissolve ...), look_match (what matched exactly and what is approximated, with the cast, the record relation and what is not attempted: props, body proportions, voice and colour variants; level and confirmed become final in npc.substituted, once the game reports the appearance the actor really wears), resident (a key the Story Engine can keep: for a community NPC the game's own spawner, entry and index (xfc1-...), for a lane-crowd pedestrian a hash of record, appearance and spawn spot (xfr1-...); the key is ours, not the game's, so a reload or a stream-out loses the actor until the engine brings it back with npc_spawn and the look in respawn) and respawn (npc_spawn's parameters for the same look at the same spot and heading). dry_run reads and matches without touching anything. restore true leaves a fresh crowd person where the actor stood when it is released (see npc_release). reactions game gives the actor the civilian's own reactions, so it flinches and flees as the crowd does. Counts among the 5 actors. Never saved. Needs Codeware and the -writes package's actor records.
+
+- **Command:** `npc.substitute`, the bridge method `npc.substitute`
+- **Permission:** Direct NPCs (`write-npc`)
+- **Changes the game:** Yes
+- **Undo:** The result's undo releases the actor; before the swap is done that cancels it and gives the original back, afterwards the original cannot be brought back (it was hidden for good).
+- **Refusals:** [`not_in_world`](#refusal-not-in-world), [`in_combat`](#refusal-in-combat), [`in_vehicle`](#refusal-in-vehicle), [`in_scene`](#refusal-in-scene), [`not_v`](#refusal-not-v), [`codeware_missing`](#refusal-codeware-missing), `npc_protected`, `npc_busy`, `npc_not_found`, [`too_far`](#refusal-too-far), `limit`, `look_unmatched`, `cast_unknown`, `already_substituting`, `record_missing`, [`not_ready`](#refusal-not-ready), [`not_streamed`](#refusal-not-streamed), `not_walkable`, [`spawn_refused`](#refusal-spawn-refused)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `id` | string | 1 to 64 characters | The person's id from npc_list. |
+| `who` | string | matches `^p[0-9]{1,5}$` | The handle of a picked NPC (p1, ...): the pick is let go once it is replaced. |
+| `look_at` | boolean | `true`, `false` | The NPC V is looking at. |
+| `cast` | string | `woman_corpo`, `man_corpo`, `woman_nightlife`, `man_youngster`, `woman_lowlife`, `man_lowlife`, `woman_masked`, `man_masked` | Use this civilian cast instead of the closest one. |
+| `label` | string | 1 to 40 characters | The name its lines and dialogue choices show (default Stranger). |
+| `reactions` | string | `quiet`, `game` | quiet (the default: no crime or panic reactions) or game (an ordinary passer-by's own reactions). |
+| `restore` | boolean | `true`, `false` | When the actor is released, leave a fresh crowd person (the original record and look) where it stood. Default false. |
+| `in_view` | boolean | `true`, `false` | Swap at once even if V can see the original (to observe the pop). Default false: wait for a moment she cannot. |
+| `max_wait_s` | number | 1 to 120 | How long to wait for the original to leave V's sight, 1 to 120 s. Default 30. |
+| `dry_run` | boolean | `true`, `false` | Read the person, match the look and report the resident key and respawn parameters; hold nothing, spawn nothing. |
 
 ### `npc_scenario`
 
@@ -2946,32 +2970,33 @@ Tools not yet sorted into an area above.
 
 ### `supervisor_set`
 
-**Supervise an actor.** Autonomous test build and allow_test_hooks only. Replaces V's supervisor at 3 Hz by default. Observes a hold-position goal (including optional facing within 15 degrees) or idle safety, then applies the selected fixed policy on a violation edge. No walking or movement hold is implied. Last safe means a stationary quiet interval under partial contact coverage; traffic risk stays unknown. Unknown road classification causes a note only. Player input, kill, handover, pause, load or owner disconnect cancels it. NPC and spawned-object actor references reserve future adapters and are currently refused. Arming requires every selected policy capability: world for pause, both NPC and DM for withdrawal, and control for stop/return/handover alongside player. Each native action retains the arming caller grant and also obeys config; nearby withdrawal removes only our spawned NPCs, props and vehicles still within 30 m, never adopted passers-by. Return first releases our holds then uses the last observed quiet point through the normal teleport checks; missing evidence or combat refuses it. Start recording with the supervisor channel to retain interventions, or read the session events. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
+**Supervise an actor.** Autonomous test build and allow_test_hooks only. Arms one entry of the supervisor: for V or (0.8.19) for an XF actor, at 3 Hz by default. Up to 5 entries are held at once (V plus four actors, or five actors); setting an actor again replaces only that actor's entry. An actor's entry takes hold_position (the observer detects departures from its radius; it never moves the actor itself) or idle_safe, the invariants alive, not_in_combat and not_lost (the actor still exists and is streamed in), and the policies release (npc.release, despawn), return_last_safe (npc.place to its observed quiet point, within 30 m of V as npc.place requires), pause_world and handover; only XF actors from npc_spawn or npc_substitute (a1, a2, ...) can be supervised, never picked passers-by. An actor's entry is cancelled by the kill switch, a handover, the pause and a load, like V's, and ends by itself when the actor is lost (unless not_lost selects a policy). Replaces V's entry at 3 Hz by default. Observes a hold-position goal (including optional facing within 15 degrees) or idle safety, then applies the selected fixed policy on a violation edge. No walking or movement hold is implied. Last safe means a stationary quiet interval under partial contact coverage; traffic risk stays unknown. Unknown road classification causes a note only. Player input, kill, handover, pause, load or owner disconnect cancels it. Spawned-object references are a reserved adapter and are refused. Arming requires every selected policy capability: world for pause, both NPC and DM for withdrawal, and control for stop/return/handover alongside player. Each native action retains the arming caller grant and also obeys config; nearby withdrawal removes only our spawned NPCs, props and vehicles still within 30 m, never adopted passers-by. Return first releases our holds then uses the last observed quiet point through the normal teleport checks; missing evidence or combat refuses it. Start recording with the supervisor channel to retain interventions, or read the session events. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
 
 - **Command:** `supervisor.set`, the bridge method `supervisor.set`
 - **Permission:** Move V (`write-player`)
 - **Changes the game:** Yes
 - **Undo:** supervisor.clear cancels the entry and queued actions. Actions already performed keep their ordinary command undo.
-- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`actor_unavailable`](#refusal-actor-unavailable), [`supervisor_unavailable`](#refusal-supervisor-unavailable), `interrupted`, [`permission_denied`](#refusal-permission-denied), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`actor_unavailable`](#refusal-actor-unavailable), [`supervisor_unavailable`](#refusal-supervisor-unavailable), `interrupted`, [`permission_denied`](#refusal-permission-denied), [`supervisor_limit`](#refusal-supervisor-limit), [`precondition_failed`](#refusal-precondition-failed), [`precondition_unavailable`](#refusal-precondition-unavailable)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `schema` (required) | string | `xfb/supervisor-entry-1` | Versioned entry schema. |
 | `actor` (required) | object | the fields below | Actor identity, resolved afresh by its adapter. |
 | `actor.kind` (required) | string | `player`, `npc`, `spawn` | Actor adapter. |
-| `actor.ref` (required) | string | 1 to 16 characters | V (v is accepted too), a returned NPC handle, or a spawned-object numeric handle. |
+| `actor.ref` (required) | string | 1 to 16 characters | V (v is accepted too), an XF actor's handle (a1, a2, ...; a picked passer-by's p1 is refused), or a spawned-object numeric handle (refused: reserved). |
 | `goal` (required) | object | the fields below | hold_position requires at and a goal policy; idle_safe takes only kind. |
 | `goal.kind` (required) | string | `hold_position`, `idle_safe` | Goal to observe. |
 | `goal.at` | array of number | exactly 3 items; each -100000 to 100000 | World point [x, y, z]. |
 | `goal.radius_m` | number | 0.2 to 10 | Hold-position radius, default 1 m. |
 | `goal.facing` | number | -360 to 360 | Optional hold-position yaw, with 15 degree tolerance. |
-| `invariants` (required) | array of string | at most 4 items; each `not_in_combat`, `no_contact`, `not_on_road`, `alive` | Safety invariants; every selected invariant requires a policy. |
+| `invariants` (required) | array of string | at most 4 items; each `not_in_combat`, `no_contact`, `not_on_road`, `alive`, `not_lost` | Safety invariants; every selected invariant requires a policy. V: not_in_combat, no_contact, not_on_road, alive. An XF actor: not_in_combat, alive, not_lost. |
 | `policy` (required) | object | the fields below | One fixed action per enabled invariant and hold-position goal deviation. |
-| `policy.goal` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. |
-| `policy.not_in_combat` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. |
-| `policy.no_contact` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. |
-| `policy.not_on_road` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. |
-| `policy.alive` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. |
+| `policy.goal` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover`, `release` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. For V: stop_behaviours, release_holds, withdraw_nearby, return_last_safe, pause_world, handover. For an XF actor: release (npc.release, despawn), return_last_safe (npc.place to its observed quiet point), pause_world, handover. |
+| `policy.not_in_combat` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover`, `release` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. For V: stop_behaviours, release_holds, withdraw_nearby, return_last_safe, pause_world, handover. For an XF actor: release (npc.release, despawn), return_last_safe (npc.place to its observed quiet point), pause_world, handover. |
+| `policy.no_contact` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover`, `release` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. For V: stop_behaviours, release_holds, withdraw_nearby, return_last_safe, pause_world, handover. For an XF actor: release (npc.release, despawn), return_last_safe (npc.place to its observed quiet point), pause_world, handover. |
+| `policy.not_on_road` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover`, `release` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. For V: stop_behaviours, release_holds, withdraw_nearby, return_last_safe, pause_world, handover. For an XF actor: release (npc.release, despawn), return_last_safe (npc.place to its observed quiet point), pause_world, handover. |
+| `policy.alive` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover`, `release` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. For V: stop_behaviours, release_holds, withdraw_nearby, return_last_safe, pause_world, handover. For an XF actor: release (npc.release, despawn), return_last_safe (npc.place to its observed quiet point), pause_world, handover. |
+| `policy.not_lost` | string | `stop_behaviours`, `release_holds`, `withdraw_nearby`, `return_last_safe`, `pause_world`, `handover`, `release` | Fixed policy action, applied once per violation edge; refusal is logged, never retried in a loop. For V: stop_behaviours, release_holds, withdraw_nearby, return_last_safe, pause_world, handover. For an XF actor: release (npc.release, despawn), return_last_safe (npc.place to its observed quiet point), pause_world, handover. |
 | `tick_hz` | number | 1 to 5 | Bounded evaluation rate, default 3 Hz; no catch-up bursts. |
 | `safe_after_s` | number | 1 to 30 | Stationary time with no observed contact or combat before recording a last safe point, default 3 seconds. |
 | `when` | object | the fields below | Conditions compared on each executing game frame |
@@ -2983,7 +3008,7 @@ Tools not yet sorted into an area above.
 
 ### `supervisor_state`
 
-**Read actor supervision.** Autonomous test build and allow_test_hooks only. Reads the entry, cancellation generation, observed quiet-position evidence, current violation edges and explicit contact/input coverage limits. Changes nothing.
+**Read actor supervision.** Autonomous test build and allow_test_hooks only. Reads the supervisor: with no actor (or actor all) every armed entry (schema xfb/supervisor-state-2: count, limit 5 and the entries); with an actor, that entry's cancellation generation, observed quiet-position evidence, current violation edges and explicit contact/input coverage limits (an actor never armed reads as inactive). Changes nothing.
 
 - **Command:** `supervisor.state`, the bridge method `supervisor.state`
 - **Permission:** Look (`read`)
@@ -2991,11 +3016,15 @@ Tools not yet sorted into an area above.
 - **Undo:** nothing to undo
 - **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off)
 
-No parameters.
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `actor` | object | the fields below | One entry to read; leave out (or use all in the bridge's own form) for every entry. |
+| `actor.kind` (required) | string | `player`, `npc` | Actor adapter. |
+| `actor.ref` (required) | string | 1 to 16 characters | V, or an XF actor's handle (a1, a2, ...). |
 
 ### `supervisor_clear`
 
-**Clear actor supervision.** Autonomous test build and allow_test_hooks only. Immediately cancels the supervisor entry and invalidates actions awaiting an executing frame, including a set still waiting for admission. Available on the control route. Its independent input listener is removed on the next live game tick.
+**Clear actor supervision.** Autonomous test build and allow_test_hooks only. Immediately cancels supervisor entries and invalidates actions awaiting an executing frame, including a set still waiting for admission: every entry, or with actor just that one (the others keep running). Available on the control route. Its independent input listener is removed on the next live game tick once V's entry is gone. The answer lists what is still armed (schema xfb/supervisor-state-2) and names what was cleared.
 
 - **Command:** `supervisor.clear`, the bridge method `supervisor.clear`
 - **Permission:** Stop the bridge (`control`)
@@ -3003,7 +3032,11 @@ No parameters.
 - **Undo:** Set a new entry explicitly to resume supervision.
 - **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off)
 
-No parameters.
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `actor` | object | the fields below | Clear only this entry; leave out to clear every entry. |
+| `actor.kind` (required) | string | `player`, `npc` | Actor adapter. |
+| `actor.ref` (required) | string | 1 to 16 characters | V, or an XF actor's handle (a1, a2, ...). |
 
 ### `game_lifecycle_probe`
 
@@ -3075,7 +3108,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 |---|---|
 | <a id="refusal-access-denied"></a>`access_denied` | Windows refused access to the game bridge. Run the XF tools as the same Windows user as the game. |
 | <a id="refusal-activation-expired"></a>`activation_expired` | The test activation expired. Check the current screen before arming a fresh fixture. |
-| <a id="refusal-actor-unavailable"></a>`actor_unavailable` | This supervisor candidate supports V only. NPC and vehicle supervision need their own validated actor adapter. |
+| <a id="refusal-actor-unavailable"></a>`actor_unavailable` | This supervisor supports V and the bridge's own XF actors (a1, a2, ...). Picked passers-by and spawned objects need their own validated actor adapter. |
 | <a id="refusal-arms-drawn"></a>`arms_drawn` | V has her arm cyberware out, and the game doesn't swap arm cyberware while it is drawn. Nothing was changed. Holster it first (player_action with weapon.holster), or leave holster_first on so the tools do it. |
 | <a id="refusal-bad-input"></a>`bad_input` | A value doesn't fit the tool's input schema (the message lists each problem), or two options that exclude each other were both given. Nothing was sent to the game. |
 | <a id="refusal-bad-params"></a>`bad_params` | Some of the values given aren't valid for this action. |
@@ -3170,7 +3203,8 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-stale-match"></a>`stale_match` | The appearance screen changed between reading the option and applying the value (another row is in use, or the value at that position has another name), so nothing was applied. Try again; it reads the option afresh. |
 | <a id="refusal-superseded"></a>`superseded` | An emergency control (bridge_kill or session_handover) came after this command and cancelled it: a command still waiting never ran, and a running one stopped at its next step. Check the game's state, then send it again if it is still wanted. |
 | <a id="refusal-supervisor-busy"></a>`supervisor_busy` | The bounded supervisor action queue is full. Read its receipts and clear or replace the entry before trying again. |
-| <a id="refusal-supervisor-unavailable"></a>`supervisor_unavailable` | Supervision needs an observed, living V in unpaused gameplay with an available input listener. Read the game state before arming again. |
+| <a id="refusal-supervisor-limit"></a>`supervisor_limit` | The supervisor already holds five entries (V plus four XF actors, or five actors). Clear one with supervisor_clear and its actor before arming another. |
+| <a id="refusal-supervisor-unavailable"></a>`supervisor_unavailable` | Supervision needs an observed, living actor (V, with an available input listener, or an XF actor that has appeared) in unpaused gameplay. Read the game state before arming again. |
 | <a id="refusal-test-build-required"></a>`test_build_required` | This action needs the separate autonomous test candidate. Stage that candidate in the dedicated test profile. |
 | <a id="refusal-test-hooks-off"></a>`test_hooks_off` | Test hooks are off in this build. Only the -writes package for the dedicated XF test profile has them ([bridge] allow_test_hooks in its config.ini). |
 | <a id="refusal-test-run-required"></a>`test_run_required` | Arm a bounded test fixture before submitting this input. |
@@ -3194,4 +3228,4 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 
 Codes the tools above name that have no shared wording yet; the answer's own message (from the tools) or its `detail` (from the game) explains each in context:
 
-`capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `carrier_missing`, `cast_unknown`, `choice_too_long`, `choices_busy`, `contact_unknown`, `expression_unknown`, `framing_bound`, `gesture_unknown`, `hud_missing`, `interrupted`, `key_unsupported`, `limit`, `line_too_long`, `no_ai`, `no_capture`, `no_hidden_spot`, `no_light_component`, `no_projection`, `no_radio`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_a_door`, `not_a_vehicle`, `not_an_npc`, `not_found`, `not_ours`, `not_walkable`, `npc_busy`, `npc_dead`, `npc_handed_back`, `npc_lost`, `npc_moving`, `npc_not_found`, `npc_not_spawned`, `npc_protected`, `npc_releasing`, `npc_unknown`, `one_hub_at_a_time`, `phone_blocked`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `record_missing`, `rig_unsupported`, `scenario_invalid`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `target_missing`, `target_unknown`, `template_missing`, `too_many`, `too_many_pins`, `trigger_unknown`, `tweakxl_missing`, `use_light_remove`, `wait_timeout`.
+`already_substituting`, `capture_blank`, `capture_failed`, `capture_minimized`, `capture_no_window`, `capture_not_foreground`, `carrier_missing`, `cast_unknown`, `choice_too_long`, `choices_busy`, `contact_unknown`, `expression_unknown`, `framing_bound`, `gesture_unknown`, `hud_missing`, `interrupted`, `key_unsupported`, `limit`, `line_too_long`, `look_unmatched`, `no_ai`, `no_capture`, `no_hidden_spot`, `no_light_component`, `no_projection`, `no_radio`, `no_response`, `no_safe_route`, `no_showroom`, `no_such_pin`, `no_window`, `not_a_door`, `not_a_vehicle`, `not_an_npc`, `not_found`, `not_ours`, `not_walkable`, `npc_busy`, `npc_dead`, `npc_handed_back`, `npc_lost`, `npc_moving`, `npc_not_found`, `npc_not_spawned`, `npc_protected`, `npc_releasing`, `npc_unknown`, `one_hub_at_a_time`, `phone_blocked`, `photo_not_allowed`, `photo_open_timeout`, `pin_refused`, `question_gone`, `record_missing`, `rig_unsupported`, `scenario_invalid`, `showroom_manifest_bad`, `showroom_manifest_missing`, `showroom_not_staged`, `target_missing`, `target_unknown`, `template_missing`, `too_many`, `too_many_pins`, `trigger_unknown`, `tweakxl_missing`, `use_light_remove`, `wait_timeout`.

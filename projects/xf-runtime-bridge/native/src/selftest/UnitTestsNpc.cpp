@@ -224,7 +224,13 @@ void RefusalTests()
     service.Spawn(json{{"cast", "man_corpo"}, {"at", json{{"ahead_m", 4}}}}, ops);
     service.Spawn(json{{"cast", "man_lowlife"}, {"at", json{{"ahead_m", 5}}}}, ops);
     Check("spawn: handles a1..a3, the undo releases", a1["who"] == "a1" && a1["undo"] == json{{"method", "npc.release"}, {"params", {{"who", "a1"}, {"how", "despawn"}}}});
-    Check("spawn: a fourth actor is refused limit", CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}}, ops); }) == "limit");
+    // 0.8.19: five actors at most (a substituted street of five, and the supervisor's five entries).
+    Check("spawn: a fourth and a fifth actor are allowed", [&] {
+        service.Spawn(json{{"cast", "man_lowlife"}, {"at", json{{"ahead_m", 6}}}}, ops);
+        service.Spawn(json{{"cast", "woman_lowlife"}, {"at", json{{"ahead_m", 7}}}}, ops);
+        return service.ActorCount() == 5;
+    }());
+    Check("spawn: a sixth actor is refused limit", CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 3}}}}, ops); }) == "limit");
     Check("spawn: faces V (yaw towards the origin from 3 m ahead is 180)", Near(std::abs(a1["yaw"].get<double>()), 180.0, 1e-6));
     Check("an unknown handle is refused npc_unknown", CodeOf([&] { service.Move(json{{"who", "a9"}, {"to", "v"}}, ops); }) == "npc_unknown");
     Check("a target actor that hasn't appeared can't be walked to", CodeOf([&] { service.Move(json{{"who", "a1"}, {"to", "a2"}}, ops); }) == "npc_not_spawned");
@@ -246,7 +252,7 @@ void RefusalTests()
     const auto place = service.Place(json{{"who", "a1"}, {"at", json::array({1, 1, 0})}, {"yaw", 10}}, ops);
     Check("place: the undo puts the actor back where it stood", place["undo"]["method"] == "npc.place" && place["undo"]["params"]["at"] == json::array({1.0, 2.0, 0.0}) && place["undo"]["params"]["yaw"] == 45.0);
     Check("release: a pick can only leave", CodeOf([&] { service.Release(json{{"who", "p1"}, {"how", "despawn"}}, ops); }) == "bad_params");
-    Check("save holds name the actors", service.Holds().size() == 1 && service.Holds()[0].get<std::string>().find("3 XF actor") == 0);
+    Check("save holds name the actors", service.Holds().size() == 1 && service.Holds()[0].get<std::string>().find("5 XF actor") == 0);
 }
 
 void TickTests()

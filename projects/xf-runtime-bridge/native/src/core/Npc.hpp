@@ -16,6 +16,8 @@
 //   npc.look / face / act gaze, facial reaction, body gesture (the XF gesture carrier)
 //   npc.choices           a dialogue hub in the game's own widget; the pick arrives as an npc.choice event (session.wait)
 //   npc.release           ends an actor (despawn, walk_away, dissolve) or a pick (leave)
+//   npc.substitute        0.8.19 (Story Engine V17, route (a)): an XF actor with the look of a crowd person takes their place, the
+//                         original removed only when V can't see the swap (core/NpcSubstitute.cpp)
 // Every write is in the npc class (write-npc), listed only by the test profile's -writes build.
 //
 // The Story Engine's staging needs (research/story-engine/runtime-requirements.md): V15, an actor that can be killed and
@@ -57,7 +59,7 @@ namespace xfb::npc
 using json = nlohmann::json;
 using Vec3 = std::array<double, 3>;
 
-inline constexpr size_t kMaxActors = 3;
+inline constexpr size_t kMaxActors = 5;          // 0.8.19: five, so a substituted street (probe 10) and the supervisor's five entries fit
 inline constexpr size_t kMaxPicks = 4;
 inline constexpr double kMaxRangeM = 30.0;       // spawn, move and place targets: within this of V
 inline constexpr double kListDefaultM = 15.0;
@@ -101,6 +103,13 @@ inline constexpr double kSightEyeM = 1.6;
 inline constexpr double kSightChestM = 1.2;
 inline constexpr double kSightSearchM = 4.0; // how far from the asked spot the search for a visible one may go
 inline constexpr size_t kMaxSightProbes = 30; // ground probes that search may make
+// 0.8.19: npc.substitute. The original is removed only once the actor stands there (so V never sees an empty spot), and only
+// while V can't see the swap; an original that stays in view is waited for, up to max_wait_s.
+inline constexpr double kSwapWaitDefaultS = 30.0;
+inline constexpr double kSwapWaitMaxS = 120.0;
+inline constexpr double kSwapSpawnS = 12.0;    // the actor must have appeared this soon after its request, else the swap is undone
+inline constexpr double kRestoreMaxS = 15.0;   // a restored crowd person is watched this long for joining the crowd, then left to the game
+inline constexpr double kRestoreJoinS = 6.0;   // ... and counted as having joined (or not) this long after it appeared
 
 // --- the tables -------------------------------------------------------------------------------------
 
@@ -180,6 +189,44 @@ bool InView(const Camera& aCamera, const Vec3& aPoint, double aMarginDeg);
 // Spots to try for an out-of-sight spawn, best first: behind the camera, then round to the sides, never inside the view (with
 // the margin), at aMin, the middle and aMax metres from V.
 std::vector<Vec3> HiddenCandidates(const Vec3& aV, const Camera& aCamera, double aMin, double aMax);
+
+// --- npc.substitute (core/NpcSubstitute.cpp) ---------------------------------------------------------------
+
+// What the game says about the crowd person being replaced (XFNpc.ReadLook).
+struct OriginalLook
+{
+    std::string entity, record, className, appearance, variant, gender, bodyType;
+    Vec3 position{};
+    double yaw = 0.0;
+    bool crowd = false;
+    // A community NPC carries a persistent stub (spawner and entry name); the ordinal is its index in the community's fixed entity
+    // list. -1: not read. A pure lane-crowd pedestrian has no stub (knowledge/crowd-adoption-and-identity.md §4).
+    bool hasStub = false;
+    std::string spawner, entry;
+    int ordinal = -1;
+};
+OriginalLook LookFromJson(const json& aReading);
+
+// The closest XF cast for a look, its appearance, and the look_match report (what matched, what is approximated, what is not
+// attempted). aCastOverride names a civilian cast to use instead. Throws look_unmatched when the person's gender can't be
+// told, cast_unknown for an override that isn't a civilian cast.
+struct Match
+{
+    std::string cast;
+    std::string appearance;
+    json report;
+};
+Match MatchLook(const OriginalLook& aLook, const std::string& aCastOverride);
+// The report once the actor exists: the appearance, colour variant, place and heading it actually has. level becomes final.
+json ConfirmLook(const json& aReport, const OriginalLook& aLook, const std::string& aActualAppearance, const std::string& aActualVariant, const Vec3& aActualAt,
+                 double aActualYaw);
+// The Story Engine's key for the person: ours, not the game's. A community NPC with a readable ordinal keeps the game's own pair
+// (xfc1-<spawner>-<entry>-<ordinal>); everyone else a hash of record, appearance and spawn spot (xfr1-<16 hex>).
+json ResidentFor(const OriginalLook& aLook, const std::string& aAppearance, const Vec3& aSpot);
+// 64-bit FNV-1a of the text, as 16 lower-case hex digits.
+std::string Fnv64Hex(const std::string& aText);
+// npc.spawn's parameters that bring the same look back (after a reload, a stream-out, a release).
+json RespawnFor(const std::string& aCast, const std::string& aAppearance, const Vec3& aSpot, double aYaw, const std::string& aReactions);
 
 // --- targets -------------------------------------------------------------------------------------------
 
@@ -268,6 +315,25 @@ struct Ops
     std::function<json(const Vec3& aPoint)> ground;
     // V16: whether static geometry blocks the straight line between two points: {blocked}. Never refuses.
     std::function<json(const Vec3& aFrom, const Vec3& aTo)> ray;
+    // 0.8.19: the NPC V is looking at (the targeting system's look-at object): {id}; refuses npc_not_found when it isn't an NPC.
+    std::function<json()> lookedAt;
+    // 0.8.19: the crowd person with entity id aId, read afresh with npc.pick's eligibility (npc_protected, npc_busy, too_far,
+    // npc_not_found): {entity, record, class, appearance, variant, gender, body_type, crowd, position, yaw, stub?: {spawner,
+    // entry, ordinal}}. Changes nothing.
+    std::function<json(const std::string& aId)> readLook;
+    // 0.8.19: holds the original still while the actor appears (the game's own stop levers on the crowd member): {detached}.
+    std::function<json(const std::string& aId)> detachOriginal;
+    // 0.8.19: gives a detached original back to the crowd (a swap that did not happen): {reattached}.
+    std::function<json(const std::string& aId)> reattachOriginal;
+    // 0.8.19: removes the original (hidden for good and marked for the crowd system to recycle): {removed, method}. Refuses
+    // npc_not_found when it is gone already.
+    std::function<json(const std::string& aId)> removeOriginal;
+    // 0.8.19: restore: a fresh crowd person (the original record, the original look, the game's own crowd logic) where an actor
+    // stood: {entity}.
+    std::function<json(const std::string& aRecord, const std::string& aAppearance, const Vec3& aAt, double aYaw)> restore;
+    // 0.8.19: one look at a restored crowd person: {spawned, in_crowd}; aSend asks it to join the crowd now (once, when it first
+    // appears).
+    std::function<json(const std::string& aEntity, bool aSend)> restoreStep;
     // Sends (or, kind stop, cancels) an AI command on an actor: {sent, before: {position, yaw}} (place and stop report where
     // the actor was). Refuses npc_lost, not_walkable, no_ai.
     std::function<json(const std::string& aWho, const Command& aCommand)> command;
@@ -338,6 +404,7 @@ public:
     json Act(const json& aParams, const Ops& aOps);
     json Choices(const json& aParams, const Ops& aOps);
     json Release(const json& aParams, const Ops& aOps);
+    json Substitute(const json& aParams, const Ops& aOps);
 
     // Game thread, every tick: timers (lines, gestures, hub and command limits), a poll four times a second while anything is
     // held, the events it implies, and the automatic release on combat, a scene, a pause, a handover or a load.
@@ -435,8 +502,41 @@ private:
         // V16: dissolve.
         double dissolveM = kDissolveM;
         double dissolveAge = 0.0;
+        // 0.8.19: substitution. substituteOf is the original's entity id; resident, lookMatch and respawn describe the person;
+        // restore leaves a fresh crowd person (originalRecord with originalAppearance) where the actor stood when it is released.
+        std::string substituteOf;
+        json resident = nullptr, lookMatch = nullptr, respawn = nullptr;
+        bool restore = false;
+        std::string originalRecord, originalAppearance;
+        std::string appearanceNow, variantNow; // what the polled actor actually wears
+        double yawAsked = 0.0;
         // Stand-ins (V15) are handed back in a fight instead of being removed.
         bool StandsIn() const { return kind == "actor" && (!immortal || attitude != "friendly"); }
+    };
+    // 0.8.19: a substitution in progress. Waiting: the original is still in V's sight (or the swap has not started); Spawning: the
+    // actor was requested and the original is held, removed the moment the actor stands there.
+    struct Swap
+    {
+        std::string who;      // the actor's handle, reserved at once
+        std::string original; // the original's entity id
+        std::string pickWho;  // a pick the swap started from: released when the swap is done
+        OriginalLook look;
+        std::string cast, appearance, reactions, label;
+        bool restore = false;
+        bool inViewAllowed = false;
+        bool spawning = false;
+        bool detached = false;
+        double maxWait = kSwapWaitDefaultS;
+        double age = 0.0, sinceSpawn = 0.0, sincePoll = 0.0;
+        json report = nullptr;
+    };
+    struct Restoring
+    {
+        std::string entity;
+        double age = 0.0;
+        double sinceSpawned = -1.0; // -1: not seen yet
+        double sinceStep = 1.0;
+        bool sent = false;
     };
     struct HubHeld
     {
@@ -463,6 +563,12 @@ private:
     // walk itself. Throws what the game step throws. Called with the mutex held.
     void BeginWalk(Npc& aNpc, const Command& aWalk, const Vec3& aToward, Motion& aMotion, const Ops& aOps);
     void ReleaseEverything(const std::string& aReason, const Ops& aOps);
+    // 0.8.19: swaps and restores. Called with the mutex free.
+    void BeginSwap(Swap& aSwap, const json& aV, const Ops& aOps);       // mutex held by the caller
+    void FailSwap(const std::string& aWho, const std::string& aReason, const std::string& aDetail, const Ops& aOps);
+    void StepSwaps(double aDt, const Ops& aOps);
+    void StepRestores(double aDt, const Ops& aOps);
+    json SwapJson(const Swap& aSwap) const;
     json NpcJson(const Npc& aNpc) const;
     void OnPoll(const json& aReading, const Ops& aOps, const TickInput& aInput);
     // A hub past its max_s: withdrawn with npc.choice {timeout} (after the poll has read a pending answer).
@@ -486,6 +592,8 @@ private:
     std::map<std::string, Npc> m_npcs;
     std::optional<HubHeld> m_hub;
     std::vector<VoiceLine> m_voice; // lines from a voice with no body
+    std::vector<Swap> m_swaps;
+    std::vector<Restoring> m_restores;
     // What the current handover released (the tick's safety net or ReleaseAllNow), for bridge.handover's answer.
     json m_handoverDone;
     void NoteHandoverRelease();

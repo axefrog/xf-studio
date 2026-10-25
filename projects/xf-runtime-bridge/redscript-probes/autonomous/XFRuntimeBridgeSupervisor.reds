@@ -19,7 +19,39 @@ public class XFSupervisorSystem extends ScriptableSystem {
   private func OnDetach() -> Void { this.Stop(); }
 }
 
+// 0.8.19: the actor adapter. One XF actor, resolved afresh from the registry's handle on every read (no pointer is kept): where it
+// stands and faces, whether it is dead or in combat, and whether it is streamed in. Read-only; nothing here changes the game.
+@if(ModuleExists("Codeware"))
+public abstract class XFSupervisorActors {
+  public static func Read(who: String) -> String {
+    let lost = "{\"ok\":true,\"who\":" + XFJson.Str(who) + ",\"valid\":false,\"streamed\":false}";
+    let registry = XFNpcRegistry.Get();
+    let entry = IsDefined(registry) ? registry.Entry(who) : null;
+    if !IsDefined(entry) || !Equals(entry.kind, "actor") {
+      return lost;
+    }
+    let system = GameInstance.GetDynamicEntitySystem();
+    let streamed = IsDefined(system) && system.IsSpawned(entry.id);
+    let puppet = XFNpc.PuppetOf(entry);
+    if !streamed || !IsDefined(puppet) || !puppet.IsAttached() {
+      return lost;
+    }
+    return "{\"ok\":true,\"who\":" + XFJson.Str(who) + ",\"valid\":true,\"streamed\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(puppet.GetEntityID()))
+      + ",\"position\":" + XFScene.Arr(puppet.GetWorldPosition()) + ",\"yaw\":" + XFJson.Num(puppet.GetWorldYaw())
+      + ",\"dead\":" + XFJson.Flag(puppet.IsDead()) + ",\"in_combat\":" + XFJson.Flag(NPCPuppet.IsInCombat(puppet)) + "}";
+  }
+}
+@if(!ModuleExists("Codeware"))
+public abstract class XFSupervisorActors {
+  public static func Read(who: String) -> String {
+    return "{\"ok\":true,\"who\":" + XFJson.Str(who) + ",\"valid\":false,\"streamed\":false}";
+  }
+}
+
 public abstract class XFSupervisor {
+  public static func ReadActor(cid: String, who: String) -> String {
+    return XFSupervisorActors.Read(who);
+  }
   public static func SpawnPositions(cid: String, entities: String) -> String {
     let out = "";
     for pair in StrSplit(entities, ",") {

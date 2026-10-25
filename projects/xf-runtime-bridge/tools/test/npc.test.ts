@@ -67,7 +67,7 @@ describe("0.8 npc offline: the catalogue, the scenario checker, the actor record
   test("every npc command is in the catalogue with the npc class (reads stay read), and the class has plain text", () => {
     const npc = CATALOGUE.filter((c) => c.name.startsWith("npc."));
     expect(npc.map((c) => c.name).sort()).toEqual(
-      ["npc.act", "npc.choices", "npc.face", "npc.follow", "npc.list", "npc.look", "npc.move", "npc.pick", "npc.place", "npc.release", "npc.say", "npc.scenario", "npc.spawn", "npc.status", "npc.stop", "npc.turn"].sort(),
+      ["npc.act", "npc.choices", "npc.face", "npc.follow", "npc.list", "npc.look", "npc.move", "npc.pick", "npc.place", "npc.release", "npc.say", "npc.scenario", "npc.spawn", "npc.status", "npc.stop", "npc.substitute", "npc.turn"].sort(),
     );
     for (const c of npc) expect(c.permission).toBe(["npc.list", "npc.pick", "npc.status"].includes(c.name) ? "read" : "write-npc");
     expect(PERMISSIONS["write-npc"].label).toBe("Direct NPCs");
@@ -214,7 +214,7 @@ describe("0.8 npc against the self-test host's street", () => {
     expect((await ok(api, "npc.status")).npcs).toEqual([]);
   }, 30_000);
 
-  test("spawn: refusals in the design's order, the limit of three, npc.spawned, and its undo", async () => {
+  test("spawn: refusals in the design's order, the limit of five, npc.spawned, and its undo", async () => {
     expect(await refused(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 30, side_m: 30 })).toBe("too_far");
     await bridge(api, "selftest.player", { busy: "in_combat" });
     expect(await refused(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 5 })).toBe("in_combat");
@@ -235,7 +235,9 @@ describe("0.8 npc against the self-test host's street", () => {
     expect(spawned.data.cast).toBe("woman_corpo");
     await ok(api, "npc.spawn", { cast: "man_corpo", ahead_m: 6 });
     await ok(api, "npc.spawn", { cast: "woman_lowlife", ahead_m: 7 });
-    expect(await refused(api, "npc.spawn", { cast: "man_lowlife", ahead_m: 8 })).toBe("limit");
+    await ok(api, "npc.spawn", { cast: "man_lowlife", ahead_m: 8 }); // 0.8.19: five actors at most
+    await ok(api, "npc.spawn", { cast: "woman_nightlife", ahead_m: 9 });
+    expect(await refused(api, "npc.spawn", { cast: "man_lowlife", ahead_m: 10 })).toBe("limit");
     await releaseAll(api);
     expect((await ok(api, "npc.status")).actors).toBe(0);
   }, 30_000);
@@ -243,42 +245,42 @@ describe("0.8 npc against the self-test host's street", () => {
   test("move to V: npc.arrived near stop_m; a failed command; follow, turn, place and stop with their undos", async () => {
     let since = await latest(api);
     await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 10 });
-    await event(api, "npc.spawned", since, "a4");
-    const move = await ok(api, "npc.move", { who: "a4", to: "v", stop_m: 1.6 });
-    expect(move.undo).toEqual({ method: "npc.stop", params: { who: "a4" } });
-    const arrived = await event(api, "npc.arrived", since, "a4");
+    await event(api, "npc.spawned", since, "a6");
+    const move = await ok(api, "npc.move", { who: "a6", to: "v", stop_m: 1.6 });
+    expect(move.undo).toEqual({ method: "npc.stop", params: { who: "a6" } });
+    const arrived = await event(api, "npc.arrived", since, "a6");
     expect(arrived.data.distance_v).toBeLessThan(2.3);
     await bridge(api, "selftest.npc", { fail_next_command: "not_walkable" });
-    expect(await refused(api, "npc.move", { who: "a4", to_point: [100, 215, 10] })).toBe("not_walkable");
-    expect(await refused(api, "npc.move", { who: "a4", to_point: [100, 260, 10] })).toBe("too_far");
-    await ok(api, "npc.follow", { who: "a4", target: "v", distance_m: 2 });
+    expect(await refused(api, "npc.move", { who: "a6", to_point: [100, 215, 10] })).toBe("not_walkable");
+    expect(await refused(api, "npc.move", { who: "a6", to_point: [100, 260, 10] })).toBe("too_far");
+    await ok(api, "npc.follow", { who: "a6", target: "v", distance_m: 2 });
     expect((await ok(api, "npc.status")).npcs[0].motion.kind).toBe("follow");
-    const stop = await ok(api, "npc.stop", { who: "a4" });
+    const stop = await ok(api, "npc.stop", { who: "a6" });
     expect(stop).toMatchObject({ stopped: "follow", undo: null });
-    await ok(api, "npc.turn", { who: "a4", to: "v" });
-    const place = await ok(api, "npc.place", { who: "a4", at: [102, 203, 10], yaw: 90 });
+    await ok(api, "npc.turn", { who: "a6", to: "v" });
+    const place = await ok(api, "npc.place", { who: "a6", at: [102, 203, 10], yaw: 90 });
     expect(place.undo.method).toBe("npc.place");
-    expect(place.undo.params.who).toBe("a4");
+    expect(place.undo.params.who).toBe("a6");
     since = await latest(api);
     await releaseAll(api);
-    await event(api, "npc.released", since, "a4");
+    await event(api, "npc.released", since, "a6");
   }, 30_000);
 
   test("lines: length and trigger checks, npc.said when a line's time ends, and hide", async () => {
     const since = await latest(api);
     await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
-    await event(api, "npc.spawned", since, "a5");
-    const long = await api.callBridge("npc.say", { who: "a5", text: "é".repeat(201) }, "t-long");
+    await event(api, "npc.spawned", since, "a7");
+    const long = await api.callBridge("npc.say", { who: "a7", text: "é".repeat(201) }, "t-long");
     expect(long.ok ? "" : long.error.code).toBe("line_too_long");
-    const unknown = await api.callBridge("npc.say", { who: "a5", trigger: "start_combat" }, "t-trigger");
+    const unknown = await api.callBridge("npc.say", { who: "a7", trigger: "start_combat" }, "t-trigger");
     expect(unknown.ok ? "" : unknown.error.code).toBe("trigger_unknown");
-    expect(await refused(api, "npc.say", { who: "a5" })).toBe("bad_params");
-    const line = await ok(api, "npc.say", { who: "a5", text: "Is the market still open?", seconds: 1 });
+    expect(await refused(api, "npc.say", { who: "a7" })).toBe("bad_params");
+    const line = await ok(api, "npc.say", { who: "a7", text: "Is the market still open?", seconds: 1 });
     expect(line.style).toBe("subtitle");
-    const said = await event(api, "npc.said", since, "a5");
+    const said = await event(api, "npc.said", since, "a7");
     expect(said.data.line).toBe(line.line);
-    const second = await ok(api, "npc.say", { who: "a5", text: "Another line.", seconds: 15 });
-    await ok(api, "npc.say", { who: "a5", hide: second.line });
+    const second = await ok(api, "npc.say", { who: "a7", text: "Another line.", seconds: 15 });
+    await ok(api, "npc.say", { who: "a7", hide: second.line });
     expect((await ok(api, "npc.status")).npcs[0].lines).toEqual([]);
     await releaseAll(api);
   }, 30_000);
@@ -286,28 +288,28 @@ describe("0.8 npc against the self-test host's street", () => {
   test("gestures: npc.act_done after its time; carrier_missing without the carrier; not while walking", async () => {
     const since = await latest(api);
     await ok(api, "npc.spawn", { cast: "man_corpo", ahead_m: 3 });
-    await event(api, "npc.spawned", since, "a6");
-    const act = await ok(api, "npc.act", { who: "a6", gesture: "wave", seconds: 0.5 });
+    await event(api, "npc.spawned", since, "a8");
+    const act = await ok(api, "npc.act", { who: "a8", gesture: "wave", seconds: 0.5 });
     expect(act.clip).toBe("stand__2h_on_sides__01__crowd_wave__01");
-    expect(act.undo).toEqual({ method: "npc.act", params: { who: "a6", off: true } });
-    const done = await event(api, "npc.act_done", since, "a6");
+    expect(act.undo).toEqual({ method: "npc.act", params: { who: "a8", off: true } });
+    const done = await event(api, "npc.act_done", since, "a8");
     expect(done.data.gesture).toBe("wave");
     await bridge(api, "selftest.npc", { carrier: false });
-    expect(await refused(api, "npc.act", { who: "a6", gesture: "talk" })).toBe("carrier_missing");
+    expect(await refused(api, "npc.act", { who: "a8", gesture: "talk" })).toBe("carrier_missing");
     await bridge(api, "selftest.npc", { carrier: true, speed: 0.2 });
-    await ok(api, "npc.move", { who: "a6", to_point: [100, 215, 10] });
-    expect(await refused(api, "npc.act", { who: "a6", gesture: "talk" })).toBe("npc_moving");
+    await ok(api, "npc.move", { who: "a8", to_point: [100, 215, 10] });
+    expect(await refused(api, "npc.act", { who: "a8", gesture: "talk" })).toBe("npc_moving");
     await releaseAll(api);
   }, 30_000);
 
   test("dialogue choices: refused while the game shows its own, too far, one at a time; the pick comes back through session.wait", async () => {
     const since = await latest(api);
     await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 8 });
-    await event(api, "npc.spawned", since, "a7");
-    const choices = { who: "a7", choices: ["Two blocks down, still open.", "No idea. Ask someone else."], max_s: 30 };
+    await event(api, "npc.spawned", since, "a9");
+    const choices = { who: "a9", choices: ["Two blocks down, still open.", "No idea. Ask someone else."], max_s: 30 };
     expect(await refused(api, "npc.choices", choices)).toBe("too_far");
-    await ok(api, "npc.move", { who: "a7", to: "v" });
-    await event(api, "npc.arrived", since, "a7");
+    await ok(api, "npc.move", { who: "a9", to: "v" });
+    await event(api, "npc.arrived", since, "a9");
     await bridge(api, "selftest.npc", { hub_busy: true });
     expect(await refused(api, "npc.choices", choices)).toBe("choices_busy");
     await bridge(api, "selftest.npc", { hub_busy: false });
@@ -323,14 +325,14 @@ describe("0.8 npc against the self-test host's street", () => {
     const waited = (await waiting) as Any;
     expect(waited.ok).toBe(true);
     const picked = waited.result.events.find((e: Any) => e.kind === "npc.choice");
-    expect(picked.data).toMatchObject({ who: "a7", hub: shown.hub, index: 1, label: "No idea. Ask someone else." });
+    expect(picked.data).toMatchObject({ who: "a9", hub: shown.hub, index: 1, label: "No idea. Ask someone else." });
     expect((await ok(api, "npc.status")).hub).toBeNull();
     // Withdrawn by its undo, and timed out by max_s.
     const again = await ok(api, "npc.choices", choices);
     expect((await ok(api, "npc.choices", { withdraw: again.hub })).withdrawn).toBe(true);
     const since2 = await latest(api);
     await ok(api, "npc.choices", { ...choices, max_s: 5 });
-    const timeout = await event(api, "npc.choice", since2, "a7", 9000);
+    const timeout = await event(api, "npc.choice", since2, "a9", 9000);
     expect(timeout.data.timeout).toBe(true);
     await releaseAll(api);
   }, 30_000);
@@ -338,12 +340,12 @@ describe("0.8 npc against the self-test host's street", () => {
   test("release walk_away: the actor walks 15 m from V, then npc.released", async () => {
     const since = await latest(api);
     await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
-    await event(api, "npc.spawned", since, "a8");
-    await ok(api, "npc.look", { who: "a8", at: "v" });
-    const out = await ok(api, "npc.release", { who: "a8", how: "walk_away" });
+    await event(api, "npc.spawned", since, "a10");
+    await ok(api, "npc.look", { who: "a10", at: "v" });
+    const out = await ok(api, "npc.release", { who: "a10", how: "walk_away" });
     expect(out.to[1]).toBeGreaterThan(215);
     expect((await ok(api, "npc.status")).npcs[0]).toMatchObject({ releasing: "walk_away", look: null });
-    const released = await event(api, "npc.released", since, "a8", 12000);
+    const released = await event(api, "npc.released", since, "a10", 12000);
     expect(released.data.how).toBe("walk_away");
     expect((await ok(api, "npc.status")).npcs).toEqual([]);
   }, 30_000);
@@ -351,7 +353,7 @@ describe("0.8 npc against the self-test host's street", () => {
   test("saves wait for the actors: game.save refused bridge_effects_active even with override_lock, then saves once released", async () => {
     const since = await latest(api);
     await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
-    await event(api, "npc.spawned", since, "a9");
+    await event(api, "npc.spawned", since, "a11");
     const save = await api.run("game.save", { override_lock: true });
     expect(save.ok ? "" : `${save.error.code} ${save.error.message} ${(save.error as Any).detail ?? ""}`).toContain("bridge_effects_active");
     await releaseAll(api);
@@ -361,16 +363,16 @@ describe("0.8 npc against the self-test host's street", () => {
   test("automatic release: combat, a handover; the npc class gate", async () => {
     let since = await latest(api);
     await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
-    await event(api, "npc.spawned", since, "a10");
+    await event(api, "npc.spawned", since, "a12");
     await bridge(api, "selftest.player", { busy: "in_combat" });
-    const combat = await event(api, "npc.auto_released", since, "a10");
+    const combat = await event(api, "npc.auto_released", since, "a12");
     expect(combat.data.reason).toBe("combat");
     await bridge(api, "selftest.player", { busy: "" });
     since = await latest(api);
     await ok(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 });
-    await event(api, "npc.spawned", since, "a11");
+    await event(api, "npc.spawned", since, "a13");
     await ok(api, "session.handover", { note: "the player takes over" });
-    const handover = await event(api, "npc.auto_released", since, "a11");
+    const handover = await event(api, "npc.auto_released", since, "a13");
     expect(handover.data.reason).toBe("handover");
     expect(await refused(api, "npc.spawn", { cast: "woman_corpo", ahead_m: 3 })).toBe("handed_over");
     await ok(api, "session.resume", {});

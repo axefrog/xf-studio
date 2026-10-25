@@ -73,7 +73,7 @@ export function checkScenario(scenario: Scenario): string[] {
   if (typeof scenario.scenario !== "string" || !/^[a-z0-9_]{1,64}$/.test(scenario.scenario)) problems.push("scenario must be a short lowercase name");
   const actors = scenario.actors ?? {};
   if (typeof actors !== "object" || Object.keys(actors).length === 0) problems.push("actors must name at least one actor");
-  if (Object.keys(actors).length > 3) problems.push("at most 3 actors (the bridge's limit)");
+  if (Object.keys(actors).length > 3) problems.push("at most 3 actors in one scene");
   for (const [name, actor] of Object.entries(actors)) {
     if (!/^[a-z][a-z0-9_]{0,31}$/.test(name) || /^[ap][0-9]+$/.test(name) || name === "v" || name === "all") problems.push(`actor name "${name}" must be a plain lowercase word (not v, all or a handle)`);
     if (!NPC_CASTS.includes(actor?.cast as (typeof NPC_CASTS)[number])) problems.push(`actor "${name}" needs a cast: ${NPC_CASTS.join(", ")}`);

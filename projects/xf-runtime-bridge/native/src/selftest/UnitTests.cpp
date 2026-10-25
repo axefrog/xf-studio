@@ -5210,6 +5210,7 @@ int RunLayoutRepro()
 }
 // Bridge 0.8's NPC direction (selftest/UnitTestsNpc.cpp): answers its own failure count.
 int RunNpcUnitTests();
+int RunNpcSubstituteUnitTests();
 
 // 0.8.7: the test probes' ring (test.events) and the companion probe (test.companion.probe), run for real against the companion
 // built beside this self-test: its containment (in its job before it resumes, kill-on-close, one process, the memory cap) and
@@ -5585,6 +5586,7 @@ int RunUnitTests()
     Bridge087Tests();
     Bridge0811Tests();
     gFailures += RunNpcUnitTests();
+    gFailures += RunNpcSubstituteUnitTests();
     gFailures += SensesUnitTests();
     gFailures += DmUnitTests();
     gFailures += InputUnitTests();

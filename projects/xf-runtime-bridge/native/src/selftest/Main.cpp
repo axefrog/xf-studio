@@ -160,7 +160,18 @@ int wmain(int argc, wchar_t** argv)
     {
         const std::wstring arg = argv[i];
         if (arg == L"--unit-recording") return RecordingUnitTests();
-        if (arg == L"--unit-supervisor") return SupervisorUnitTests();
+        if (arg == L"--unit-supervisor")
+        {
+            try
+            {
+                return SupervisorUnitTests();
+            }
+            catch (const std::exception& e)
+            {
+                std::printf("SUPERVISOR UNIT EXCEPTION %s\n", e.what()); // a refusal the test did not expect
+                return 1;
+            }
+        }
         if (arg == L"--unit")
         {
             return RunUnitTests();

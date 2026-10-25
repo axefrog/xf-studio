@@ -31,14 +31,14 @@ SimInput::SimInput(Dispatcher& d, SimNpc& npc, EventLog& events, bool hooks, std
         throw MethodError("supervisor_unavailable", "Simulated host has no retail input/actor adapter; use supervisor core fixtures");
     }});
     d.Register({"supervisor.state", Access::Read, RunOn::BridgeThread, "Read inactive simulated supervisor.", [this](const MethodContext& c) {
-        params::RequireOnly(c.params, {});
+        params::RequireOnly(c.params, {"actor"});
         if (!m_hooks) throw MethodError("test_hooks_off", "Supervisor test gate closed");
-        auto state = m_supervisor.State(); state["simulated"] = true; return state;
+        auto state = m_supervisor.StateAll(); state["simulated"] = true; return state;
     }});
     d.Register({"supervisor.clear", Access::Control, RunOn::BridgeThread, "Clear inactive simulated supervisor.", [this](const MethodContext& c) {
-        params::RequireOnly(c.params, {});
+        params::RequireOnly(c.params, {"actor"});
         if (!m_hooks) throw MethodError("test_hooks_off", "Supervisor test gate closed");
-        auto state = m_supervisor.Clear("cleared"); state["simulated"] = true; return state;
+        m_supervisor.Clear("cleared"); auto state = m_supervisor.StateAll(); state["simulated"] = true; return state;
     }});
     input::RegisterMethods(d, m_service, hooks,
 #ifdef XFB_ENGINE_INPUT_TESTS

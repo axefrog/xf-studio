@@ -13,6 +13,14 @@
 // exists. The kill switch calls XFNpc.ReleaseAll; a load needs nothing (the registry is per session and Codeware drops
 // non-persistent entities with the world).
 //
+// 0.8.19 (Story Engine V17, route (a)): npc.substitute replaces a crowd person with an XF actor of the same look. The original is
+// held with the game's own stop levers on a crowd member (CrowdMemberComponent.TryStopTrafficMovement, AllowWorkspotsUsage),
+// removed only once the actor stands there with gamePuppet.HideIrreversibly (the call the game itself makes to take a puppet out
+// of the world, NPCPuppet.script:3795) plus ReactionSystem.MarkDespawnCandidate (the crowd system's own recycle mark), and given
+// back with ChangeMoveType and AllowWorkspotsUsage when the swap does not happen. Never the aggressive-crowd entry (that is
+// combat), never a density or settings write. A community NPC's identity is read from its persistent stub record
+// (gameEntityStubComponentPS) the way NPCPuppet.CheckStubData does (knowledge/crowd-adoption-and-identity.md).
+//
 // Sources [source] 2.31: AIComponent (core/components/aiComponent.script:1-34), the AI commands (orphans.script:25056, 28774,
 // 44519, 47141, 47171, 47349), AIPositionSpec (29704), quickhackEffectors.script:883-925 (build, send, stop or cancel),
 // scnDialogLineData (44905) on UIGameData.ShowDialogLine / HideDialogLine (baseSubtitlesControllers.script:120-252),
@@ -74,6 +82,8 @@ public class XFNpcRegistry extends ScriptableSystem {
   private let m_lastInputAt: Float;
   private let m_hubGeneration: Int32;
   private let m_voiceLines: array<Int32>; // lines from a voice with no body (npc.say without who)
+  private let m_detached: array<EntityID>;  // 0.8.19: crowd people held still for a substitution (given back by the kill switch)
+  private let m_restoring: array<EntityID>; // 0.8.19: fresh crowd people left by restore, until they are seen in the crowd
 
   public static func Get() -> ref<XFNpcRegistry> {
     let game = GetGameInstance();
@@ -116,6 +126,53 @@ public class XFNpcRegistry extends ScriptableSystem {
 
   public func ForgetAll() -> Void {
     ArrayClear(this.m_entries);
+  }
+
+  public func AddDetached(id: EntityID) -> Void {
+    for held in this.m_detached {
+      if Equals(EntityID.ToDebugString(held), EntityID.ToDebugString(id)) { return; }
+    }
+    ArrayPush(this.m_detached, id);
+  }
+
+  public func RemoveDetached(id: EntityID) -> Void {
+    let kept: array<EntityID>;
+    for held in this.m_detached {
+      if NotEquals(EntityID.ToDebugString(held), EntityID.ToDebugString(id)) { ArrayPush(kept, held); }
+    }
+    this.m_detached = kept;
+  }
+
+  public func TakeDetached() -> array<EntityID> {
+    let all = this.m_detached;
+    ArrayClear(this.m_detached);
+    return all;
+  }
+
+  public func AddRestoring(id: EntityID) -> Void {
+    ArrayPush(this.m_restoring, id);
+  }
+
+  public func Restoring(text: String) -> EntityID {
+    for held in this.m_restoring {
+      if Equals(EntityID.ToDebugString(held), text) { return held; }
+    }
+    let none: EntityID;
+    return none;
+  }
+
+  public func RemoveRestoring(id: EntityID) -> Void {
+    let kept: array<EntityID>;
+    for held in this.m_restoring {
+      if NotEquals(EntityID.ToDebugString(held), EntityID.ToDebugString(id)) { ArrayPush(kept, held); }
+    }
+    this.m_restoring = kept;
+  }
+
+  public func TakeRestoring() -> array<EntityID> {
+    let all = this.m_restoring;
+    ArrayClear(this.m_restoring);
+    return all;
   }
 
   public func Actors() -> Int32 {
@@ -784,6 +841,13 @@ public abstract class XFNpc {
       let pickable = StrLen(refusal) == 0 && StrLen(busy) == 0 && !dead;
       let ours = IsDefined(registry) ? registry.WhoIs(npc.GetEntityID()) : "";
       out += (written > 0 ? "," : "") + "{" + identity + ",\"position\":" + XFScene.Arr(position) + ",\"dead\":" + XFJson.Flag(dead);
+      // 0.8.19 (probe 1 of the crowd substitution checklist): what defines the look, and which way they face.
+      if IsDefined(puppet) {
+        let lookName = puppet.GetCurrentAppearanceName();
+        let lookVariant = puppet.GetCurrentColorVariantName();
+        let heading = puppet.GetWorldYaw();
+        out += ",\"appearance\":" + XFJson.Name(lookName) + ",\"variant\":" + XFJson.Name(lookVariant) + ",\"yaw\":" + XFJson.Num(heading);
+      }
       out += ",\"crowd\":" + XFJson.Flag(crowd) + ",\"protected\":" + XFJson.Flag(StrLen(reasons) > 0) + ",\"reasons\":[" + reasons + "]";
       out += ",\"busy\":" + (StrLen(busy) > 0 ? XFJson.Str(busy) : "null") + ",\"pickable\":" + XFJson.Flag(pickable) + (StrLen(ours) > 0 ? ",\"ours\":" + XFJson.Str(ours) : "") + "}";
       written += 1;
@@ -1448,6 +1512,258 @@ public abstract class XFNpc {
     entry.faced = false;
   }
 
+  // ---- 0.8.19: npc.substitute -----------------------------------------------------------------------------------------------
+
+  // The NPC V is looking at, by the world-object rule (the targeting system's look-at object, a typed check after the cast).
+  public static func LookedAt(cid: String) -> String {
+    let player = XFPlayer.Player();
+    if !IsDefined(player) {
+      return XFJson.Fail("not_in_world", "V isn't in the world");
+    }
+    let targeting = GameInstance.GetTargetingSystem(GetGameInstance());
+    if !IsDefined(targeting) {
+      return XFJson.Fail("npc_not_found", "the game's targeting isn't available");
+    }
+    let looked = targeting.GetLookAtObject(player, true, false);
+    let puppet = looked as ScriptedPuppet;
+    if !IsDefined(puppet) {
+      return XFJson.Fail("npc_not_found", "V isn't looking at an NPC");
+    }
+    let lookedId = puppet.GetEntityID();
+    return "{\"ok\":true,\"id\":" + XFJson.Str(EntityID.ToDebugString(lookedId)) + "}";
+  }
+
+  // The puppet with this entity id among the NPCs around V (within 50 m); null when it isn't there.
+  public static func Around(id: String) -> ref<ScriptedPuppet> {
+    let player = XFPlayer.Player();
+    if !IsDefined(player) {
+      return null;
+    }
+    let npcs = player.GetNPCsAroundObject(50.0);
+    for npc in npcs {
+      if IsDefined(npc) && Equals(EntityID.ToDebugString(npc.GetEntityID()), id) {
+        return npc;
+      }
+    }
+    return null;
+  }
+
+  // The persistent stub every community NPC carries, as the game's own CheckStubData reads it (NPCPuppet.script:766-775):
+  // {"spawner", "entry", "ordinal"} or "null". The ordinal is the puppet's index in the community's fixed entity list
+  // (GetFixedEntityIdsFromSpawnerEntityID); -1 when the list does not hold it. A lane-crowd pedestrian has no stub.
+  public static func StubOf(puppet: ref<ScriptedPuppet>) -> String {
+    let id = puppet.GetEntityID();
+    let persistent = CreatePersistentID(id, gameEntityStubComponentPS.GetPSComponentName());
+    let state = GameInstance.GetPersistencySystem(GetGameInstance()).GetConstAccessToPSObject(persistent, n"gameEntityStubComponentPS");
+    let stub = state as gameEntityStubComponentPS;
+    if !IsDefined(stub) {
+      return "null";
+    }
+    let spawner = stub.GetSpawnerID();
+    let entry = stub.GetOwnerCommunityEntryName();
+    if !EntityID.IsDefined(spawner) || !IsNameValid(entry) {
+      return "null";
+    }
+    let names: array<CName>;
+    ArrayPush(names, entry);
+    let ids: array<EntityID>;
+    GetFixedEntityIdsFromSpawnerEntityID(spawner, names, GetGameInstance(), ids);
+    let ordinal = -1;
+    let mine = EntityID.ToDebugString(id);
+    let i = 0;
+    while i < ArraySize(ids) {
+      if Equals(EntityID.ToDebugString(ids[i]), mine) {
+        ordinal = i;
+      }
+      i += 1;
+    }
+    return "{\"spawner\":" + XFJson.Str(EntityID.ToDebugString(spawner)) + ",\"entry\":" + XFJson.Name(entry) + ",\"ordinal\":" + IntToString(ordinal) + "}";
+  }
+
+  // The crowd person with this id, read afresh with npc.pick's eligibility (the same refusals, in the same words): what defines
+  // their look, where they stand and which way they face. Changes nothing.
+  public static func ReadLook(cid: String, id: String) -> String {
+    let player = XFPlayer.Player();
+    let registry = XFNpcRegistry.Get();
+    if !IsDefined(player) || !IsDefined(registry) {
+      return XFJson.Fail("not_in_world", "V isn't in the world");
+    }
+    let from = player.GetWorldPosition();
+    let puppet = XFNpc.Around(id);
+    if !IsDefined(puppet) {
+      return XFJson.Fail("npc_not_found", "no NPC with that id is near V now (npc_list again)");
+    }
+    if StrLen(registry.WhoIs(puppet.GetEntityID())) > 0 {
+      return XFJson.Fail("npc_protected", "that is one of the bridge's own NPCs, not a passer-by of the crowd");
+    }
+    if puppet.IsDead() {
+      return XFJson.Fail("npc_busy", "that NPC is dead");
+    }
+    let reasons = XFNpcCheck.PickRefusal(puppet);
+    if StrLen(reasons) > 0 {
+      return XFJson.Fail("npc_protected", "only plain passers-by are replaced; that NPC isn't one (" + StrReplaceAll(reasons, "\"", "") + "), so the bridge leaves it alone");
+    }
+    let busy = XFNpcCheck.Busy(puppet);
+    if StrLen(busy) > 0 {
+      return XFJson.Fail("npc_busy", "that NPC is busy (" + busy + ")");
+    }
+    let position = puppet.GetWorldPosition();
+    if Vector4.Distance(position, from) > 30.0 {
+      return XFJson.Fail("too_far", "that NPC is more than 30 m from V");
+    }
+    let recordId = puppet.GetRecordID();
+    let record = TDBID.ToStringDEBUG(recordId);
+    let className = puppet.GetClassName();
+    let lookName = puppet.GetCurrentAppearanceName();
+    let lookVariant = puppet.GetCurrentColorVariantName();
+    let gender = puppet.GetResolvedGenderName();
+    let bodyType = puppet.GetBodyType();
+    let crowd = puppet.IsCrowd();
+    let heading = puppet.GetWorldYaw();
+    let stub = XFNpc.StubOf(puppet);
+    return "{\"ok\":true,\"entity\":" + XFJson.Str(id) + ",\"record\":" + XFJson.Str(record) + ",\"class\":" + XFJson.Name(className)
+      + ",\"appearance\":" + XFJson.Name(lookName) + ",\"variant\":" + XFJson.Name(lookVariant)
+      + ",\"gender\":" + XFJson.Name(gender) + ",\"body_type\":" + XFJson.Name(bodyType)
+      + ",\"crowd\":" + XFJson.Flag(crowd) + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(heading)
+      + ",\"stub\":" + stub + "}";
+  }
+
+  // Holds the original still while the actor appears: the game's own stop levers on a crowd member (the response to a ragdoll or
+  // a hit, NPCPuppet.script:1990-2003). Not recycled while held (UnmarkDespawnCandidate, which the crowd system's own swap does).
+  public static func DetachOriginal(cid: String, id: String) -> String {
+    let registry = XFNpcRegistry.Get();
+    let puppet = XFNpc.Around(id);
+    if !IsDefined(puppet) || !IsDefined(registry) {
+      return XFJson.Fail("npc_not_found", "that NPC isn't near V any more");
+    }
+    let crowd = puppet.GetCrowdMemberComponent();
+    if !IsDefined(crowd) {
+      return "{\"ok\":true,\"detached\":false,\"why\":\"no crowd component\"}";
+    }
+    crowd.TryStopTrafficMovement();
+    crowd.AllowWorkspotsUsage(false);
+    let reactions = GameInstance.GetReactionSystem(GetGameInstance());
+    if IsDefined(reactions) {
+      reactions.UnmarkDespawnCandidate(puppet.GetEntityID());
+    }
+    registry.AddDetached(puppet.GetEntityID());
+    XFBridgeLog.Info(cid, "npc substitution holds the original " + id + " still");
+    return "{\"ok\":true,\"detached\":true,\"in_crowd_after\":" + XFJson.Flag(crowd.IsInCrowd()) + "}";
+  }
+
+  // Gives a held original back to the crowd: walk at the normal pace (what the release of a pick does) and use workspots again.
+  public static func ReattachOne(puppet: ref<ScriptedPuppet>) -> Void {
+    let crowd = puppet.GetCrowdMemberComponent();
+    if IsDefined(crowd) {
+      crowd.AllowWorkspotsUsage(true);
+      crowd.ChangeMoveType(n"normal");
+    }
+  }
+
+  public static func ReattachOriginal(cid: String, id: String) -> String {
+    let registry = XFNpcRegistry.Get();
+    let puppet = XFNpc.Around(id);
+    if IsDefined(puppet) {
+      XFNpc.ReattachOne(puppet);
+      if IsDefined(registry) { registry.RemoveDetached(puppet.GetEntityID()); }
+      XFBridgeLog.Info(cid, "npc substitution gave the original " + id + " back to the crowd");
+      return "{\"ok\":true,\"reattached\":true}";
+    }
+    return "{\"ok\":true,\"reattached\":false}";
+  }
+
+  // Removes the original: held still, hidden for good and marked for the crowd system to recycle. Re-checks the protections first
+  // (a person who became a quest participant meanwhile is left alone and the swap is undone).
+  public static func RemoveOriginal(cid: String, id: String) -> String {
+    let registry = XFNpcRegistry.Get();
+    let puppet = XFNpc.Around(id);
+    if !IsDefined(puppet) {
+      return XFJson.Fail("npc_not_found", "the original isn't near V any more");
+    }
+    let reasons = XFNpcCheck.Reasons(puppet);
+    if StrLen(reasons) > 0 {
+      return XFJson.Fail("npc_protected", "the original became protected (" + StrReplaceAll(reasons, "\"", "") + "), so it was left alone");
+    }
+    let crowd = puppet.GetCrowdMemberComponent();
+    if IsDefined(crowd) {
+      crowd.TryStopTrafficMovement();
+      crowd.AllowWorkspotsUsage(false);
+    }
+    puppet.HideIrreversibly();
+    let reactions = GameInstance.GetReactionSystem(GetGameInstance());
+    if IsDefined(reactions) {
+      reactions.MarkDespawnCandidate(puppet.GetEntityID());
+    }
+    if IsDefined(registry) { registry.RemoveDetached(puppet.GetEntityID()); }
+    XFBridgeLog.Info(cid, "npc substitution removed the original " + id + " (hidden, marked for the crowd system to recycle)");
+    return "{\"ok\":true,\"removed\":true,\"method\":\"hide_irreversibly+despawn_candidate\"}";
+  }
+
+  // restore: a fresh crowd person (the vanilla record itself, the original look) where an actor stood. The crowd record is a lane
+  // walker, so the game's own crowd logic takes it from here (RestoreStep asks it to join the crowd).
+  public static func Restore(cid: String, record: String, appearance: String, x: Float, y: Float, z: Float, yaw: Float) -> String {
+    let system = GameInstance.GetDynamicEntitySystem();
+    let registry = XFNpcRegistry.Get();
+    if !IsDefined(system) || !system.IsReady() || !IsDefined(registry) {
+      return XFJson.Fail("not_ready", "the game can't spawn NPCs yet");
+    }
+    let recordId = TDBID.Create(record);
+    if !IsDefined(TweakDBInterface.GetCharacterRecord(recordId)) {
+      return XFJson.Fail("record_missing", "the crowd record " + record + " isn't in the game's database");
+    }
+    let angles: EulerAngles;
+    angles.Yaw = yaw;
+    let spec = new DynamicEntitySpec();
+    spec.recordID = recordId;
+    if StrLen(appearance) > 0 {
+      spec.appearanceName = StringToName(appearance);
+    }
+    spec.position = new Vector4(x, y, z, 1.0);
+    spec.orientation = EulerAngles.ToQuat(angles);
+    spec.persistState = false;
+    spec.persistSpawn = false;
+    spec.alwaysSpawned = false;
+    spec.spawnInView = false;
+    spec.active = true;
+    ArrayPush(spec.tags, n"xfs_crowd_restore");
+    let id = system.CreateEntity(spec);
+    if !EntityID.IsDefined(id) {
+      return XFJson.Fail("spawn_refused", "the game's entity spawner refused the crowd person");
+    }
+    registry.AddRestoring(id);
+    XFBridgeLog.Info(cid, "npc restore left a fresh crowd person of " + record);
+    return "{\"ok\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + "}";
+  }
+
+  public static func RestoreStep(cid: String, entity: String, send: Bool) -> String {
+    let system = GameInstance.GetDynamicEntitySystem();
+    let registry = XFNpcRegistry.Get();
+    if !IsDefined(system) || !IsDefined(registry) {
+      return "{\"ok\":true,\"spawned\":false}";
+    }
+    let id = registry.Restoring(entity);
+    if !EntityID.IsDefined(id) || !system.IsSpawned(id) {
+      return "{\"ok\":true,\"spawned\":false}";
+    }
+    let puppet = system.GetEntity(id) as ScriptedPuppet;
+    if !IsDefined(puppet) {
+      return "{\"ok\":true,\"spawned\":false}";
+    }
+    if send {
+      let ai = puppet.GetAIControllerComponent();
+      if IsDefined(ai) {
+        let join = new AIJoinCrowdCommand();
+        ai.SendCommand(join);
+      }
+    }
+    let crowd = puppet.GetCrowdMemberComponent();
+    let inCrowd = IsDefined(crowd) && crowd.IsInCrowd();
+    if inCrowd {
+      registry.RemoveRestoring(id);
+    }
+    return "{\"ok\":true,\"spawned\":true,\"in_crowd\":" + XFJson.Flag(inCrowd) + "}";
+  }
+
   public static func Release(cid: String, who: String, how: String) -> String {
     let registry = XFNpcRegistry.Get();
     let entry = IsDefined(registry) ? registry.Entry(who) : null;
@@ -1511,6 +1827,28 @@ public abstract class XFNpc {
     if IsDefined(system) {
       system.DeleteTagged(n"xfs_npc");
     }
+    // 0.8.19: crowd people held for a substitution that did not finish go back to the crowd, and a restored crowd person that was
+    // not yet seen in the crowd is removed (one that joined is the game's now).
+    if IsDefined(registry) {
+      let held = registry.TakeDetached();
+      let player = XFPlayer.Player();
+      if IsDefined(player) {
+        let npcs = player.GetNPCsAroundObject(60.0);
+        for npc in npcs {
+          if IsDefined(npc) {
+            for id in held {
+              if Equals(EntityID.ToDebugString(npc.GetEntityID()), EntityID.ToDebugString(id)) {
+                XFNpc.ReattachOne(npc);
+              }
+            }
+          }
+        }
+      }
+      let restoring = registry.TakeRestoring();
+      if IsDefined(system) {
+        for id in restoring { system.DeleteEntity(id); }
+      }
+    }
     XFBridgeLog.Info(cid, "npc released all (" + reason + "): " + IntToString(released));
     return "{\"ok\":true,\"released\":" + IntToString(released) + ",\"reason\":" + XFJson.Str(reason) + "}";
   }
@@ -1552,6 +1890,10 @@ public abstract class XFNpc {
             if Equals(entry.kind, "actor") {
               let ready = XFNpc.GestureReady(entry);
               item += ",\"prepared\":" + XFJson.Flag(entry.prepared) + ",\"gesture_ready\":" + XFJson.Flag(ready);
+              // 0.8.19: the look the substitution reports against (appearance and colour variant as the game has them now).
+              let lookName = puppet.GetCurrentAppearanceName();
+              let lookVariant = puppet.GetCurrentColorVariantName();
+              item += ",\"appearance\":" + XFJson.Name(lookName) + ",\"variant\":" + XFJson.Name(lookVariant);
             } else {
               let pickBusy = XFNpcCheck.Busy(puppet);
               let pickRefusal = XFNpcCheck.PickRefusal(puppet);
@@ -1632,6 +1974,34 @@ public abstract class XFNpc {
   }
 
   // Nothing was spawned or picked without Codeware, so there is nothing to give back (the kill switch calls these).
+  public static func LookedAt(cid: String) -> String {
+    return XFNpc.Missing();
+  }
+
+  public static func ReadLook(cid: String, id: String) -> String {
+    return XFNpc.Missing();
+  }
+
+  public static func DetachOriginal(cid: String, id: String) -> String {
+    return XFNpc.Missing();
+  }
+
+  public static func ReattachOriginal(cid: String, id: String) -> String {
+    return "{\"ok\":true,\"reattached\":false}";
+  }
+
+  public static func RemoveOriginal(cid: String, id: String) -> String {
+    return XFNpc.Missing();
+  }
+
+  public static func Restore(cid: String, record: String, appearance: String, x: Float, y: Float, z: Float, yaw: Float) -> String {
+    return XFNpc.Missing();
+  }
+
+  public static func RestoreStep(cid: String, entity: String, send: Bool) -> String {
+    return "{\"ok\":true,\"spawned\":false}";
+  }
+
   public static func Release(cid: String, who: String, how: String) -> String {
     return "{\"ok\":true,\"released\":false}";
   }

@@ -137,6 +137,35 @@ npc::Ops OpsFor(const std::string& aCid)
         RED4ext::CString how(aHow.c_str());
         return ScriptCall("XFNpc", "Release", {"String", "String"}, {&who, &how}, aCid);
     };
+    // 0.8.19: npc.substitute's game steps (XFNpc: ReadLook, DetachOriginal, RemoveOriginal, Restore ...).
+    ops.lookedAt = [aCid] { return ScriptCall("XFNpc", "LookedAt", {}, {}, aCid); };
+    ops.readLook = [aCid](const std::string& aId) {
+        RED4ext::CString id(aId.c_str());
+        return ScriptCall("XFNpc", "ReadLook", {"String"}, {&id}, aCid);
+    };
+    ops.detachOriginal = [aCid](const std::string& aId) {
+        RED4ext::CString id(aId.c_str());
+        return ScriptCall("XFNpc", "DetachOriginal", {"String"}, {&id}, aCid);
+    };
+    ops.reattachOriginal = [aCid](const std::string& aId) {
+        RED4ext::CString id(aId.c_str());
+        return ScriptCall("XFNpc", "ReattachOriginal", {"String"}, {&id}, aCid);
+    };
+    ops.removeOriginal = [aCid](const std::string& aId) {
+        RED4ext::CString id(aId.c_str());
+        return ScriptCall("XFNpc", "RemoveOriginal", {"String"}, {&id}, aCid);
+    };
+    ops.restore = [aCid](const std::string& aRecord, const std::string& aAppearance, const npc::Vec3& aAt, double aYaw) {
+        RED4ext::CString record(aRecord.c_str());
+        RED4ext::CString appearance(aAppearance.c_str());
+        float x = static_cast<float>(aAt[0]), y = static_cast<float>(aAt[1]), z = static_cast<float>(aAt[2]), yaw = static_cast<float>(aYaw);
+        return ScriptCall("XFNpc", "Restore", {"String", "String", "Float", "Float", "Float", "Float"}, {&record, &appearance, &x, &y, &z, &yaw}, aCid);
+    };
+    ops.restoreStep = [aCid](const std::string& aEntity, bool aSend) {
+        RED4ext::CString entity(aEntity.c_str());
+        bool send = aSend;
+        return ScriptCall("XFNpc", "RestoreStep", {"String", "Bool"}, {&entity, &send}, aCid);
+    };
     ops.releaseAll = [aCid](const std::string& aReason) {
         RED4ext::CString reason(aReason.c_str());
         return ScriptCall("XFNpc", "ReleaseAll", {"String"}, {&reason}, aCid);

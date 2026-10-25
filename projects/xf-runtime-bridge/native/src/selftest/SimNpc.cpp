@@ -45,6 +45,17 @@ struct Street
     bool crowd = true;
     std::vector<std::string> reasons; // protection reasons
     std::string busy;                 // "workspot", ...
+    // 0.8.19 (npc.substitute): what defines the look, which way they face, and what was done to them.
+    std::string appearance = "citizen__corporat_wa_01";
+    std::string variant;
+    std::string gender = "Female";
+    double yaw = 180.0;
+    std::string stubSpawner, stubEntry;
+    int ordinal = -1;
+    bool detached = false;
+    bool removed = false;
+    bool fresh = false;      // left by restore
+    bool sentJoin = false;
 };
 
 struct Command
@@ -77,6 +88,7 @@ struct Actor
     std::string clip;
     std::set<int32_t> lines;
     std::string trigger; // the last voice trigger played
+    std::string appearance, variant; // 0.8.19: what the polled actor wears (npc.substitute's look match)
     bool stuck = false;  // selftest.npc {stuck: who}: its walk makes no progress (npc.blocked)
     int32_t attitude = 0; // V15: 0 friendly, 1 neutral, 2 hostile
     bool immortal = true;
@@ -95,7 +107,17 @@ struct SimNpc::State
         {"EntityID(9002)", "Character.CitizenVendorFood", "NPCPuppet", {96.0, 208.0, 10.0}, false, {"vendor"}, ""},
         {"EntityID(9003)", "Character.sts_quest_npc", "NPCPuppet", {100.0, 212.0, 10.0}, false, {"quest"}, ""},
         {"EntityID(9004)", "Character.LowlifeMale", "NPCPuppet", {103.0, 196.0, 10.0}, true, {}, "workspot"},
+        // 0.8.19: crowd people for npc.substitute. 9005 is a plain lane walker behind V (out of her sight at yaw 0), a man whose
+        // record has no matching clone; 9006 a community NPC with a stub, a woman of the corpo family, in front of V.
+        {"EntityID(9005)", "Character.Citizen_Street_Man_07", "NPCPuppet", {100.0, 192.0, 10.0}, true, {}, "", "street_ma_07_a", "", "Male", 0.0},
+        {"EntityID(9006)", "Character.CorpoWoman", "NPCPuppet", {98.0, 207.0, 10.0}, true, {}, "", "citizen__corporat_wa_01", "red", "Female", 90.0, "EntityID(777)", "bench_sitter", 2},
     };
+    std::string lookingAt;            // selftest.npc {looking_at: id}: the NPC V looks at (npc.substitute look_at)
+    int32_t detaches = 0, reattaches = 0, removals = 0, restores = 0;
+    std::string appearanceOverride;   // selftest.npc {appearance_override}: the engine falls back to this name for any spawn
+    std::string variantOverride;
+    bool removeRefuses = false;       // selftest.npc {remove_refuses}: removing the original is refused
+    bool spawnNever = false;          // selftest.npc {spawn_never}: an actor never appears
     std::map<std::string, Actor> actors;
     std::map<int32_t, std::string> voiceLines; // voice lines showing: number -> "speaker|style"
     struct HubState
@@ -177,7 +199,7 @@ npc::Ops MakeOps(SimNpc::State* aState)
         for (const auto& n : s->street)
         {
             const double d = npc::Distance(n.position, v);
-            if (d > aRadius)
+            if (d > aRadius || n.removed)
             {
                 continue;
             }
@@ -186,7 +208,7 @@ npc::Ops MakeOps(SimNpc::State* aState)
             {
                 continue;
             }
-            npcs.push_back({{"id", n.id}, {"record", n.record}, {"class", n.cls}, {"distance", d}, {"position", Arr(n.position)}, {"crowd", n.crowd},
+            npcs.push_back({{"id", n.id}, {"record", n.record}, {"class", n.cls}, {"distance", d}, {"position", Arr(n.position)}, {"appearance", n.appearance}, {"variant", n.variant}, {"yaw", n.yaw}, {"crowd", n.crowd},
                             {"protected", !n.reasons.empty()}, {"reasons", n.reasons}, {"busy", n.busy.empty() ? json(nullptr) : json(n.busy)}, {"dead", false},
                             {"pickable", n.crowd && n.reasons.empty() && n.busy.empty()}});
         }
@@ -215,7 +237,7 @@ npc::Ops MakeOps(SimNpc::State* aState)
         std::scoped_lock _(s->mutex);
         for (const auto& n : s->street)
         {
-            if (n.id != aId)
+            if (n.id != aId || n.removed)
             {
                 continue;
             }
@@ -253,7 +275,7 @@ npc::Ops MakeOps(SimNpc::State* aState)
         }
         throw MethodError("npc_not_found", "simulated: no NPC with that id near V (npc_list again)");
     };
-    ops.spawn = [s](const std::string& aWho, const std::string& aRecord, const Vec3& aAt, double aYaw, const std::string&, bool, int32_t aAttitude, bool aImmortal) -> json {
+    ops.spawn = [s](const std::string& aWho, const std::string& aRecord, const Vec3& aAt, double aYaw, const std::string& aAppearance, bool, int32_t aAttitude, bool aImmortal) -> json {
         std::scoped_lock _(s->mutex);
         if (!s->codeware)
         {
@@ -278,6 +300,12 @@ npc::Ops MakeOps(SimNpc::State* aState)
         a.yaw = aYaw;
         a.attitude = aAttitude;
         a.immortal = aImmortal;
+        a.appearance = s->appearanceOverride.empty() ? aAppearance : s->appearanceOverride;
+        a.variant = s->variantOverride;
+        if (s->spawnNever)
+        {
+            a.spawnIn = 1e9;
+        }
         s->actors[aWho] = a;
         return json{{"entity", a.id}, {"position", Arr(aAt)}, {"simulated", true}};
     };
@@ -442,9 +470,136 @@ npc::Ops MakeOps(SimNpc::State* aState)
         }
         return json{{"released", aWho}, {"how", aHow}};
     };
+    // 0.8.19: npc.substitute's game steps.
+    ops.lookedAt = [s]() -> json {
+        std::scoped_lock _(s->mutex);
+        if (s->lookingAt.empty())
+        {
+            throw MethodError("npc_not_found", "simulated: V isn't looking at an NPC");
+        }
+        return json{{"id", s->lookingAt}};
+    };
+    ops.readLook = [s](const std::string& aId) -> json {
+        const auto v = PlayerPos(*s);
+        std::scoped_lock _(s->mutex);
+        for (const auto& n : s->street)
+        {
+            if (n.id != aId || n.removed)
+            {
+                continue;
+            }
+            if (!n.reasons.empty() || !n.crowd)
+            {
+                std::string reasons;
+                for (const auto& r : n.reasons)
+                {
+                    reasons += (reasons.empty() ? "" : ", ") + r;
+                }
+                throw MethodError("npc_protected", "simulated: only plain passers-by are replaced; that NPC isn't one (" + (reasons.empty() ? std::string("not_crowd") : reasons) + ")");
+            }
+            if (!n.busy.empty())
+            {
+                throw MethodError("npc_busy", "simulated: that NPC is busy (" + n.busy + ")");
+            }
+            if (npc::Distance(n.position, v) > npc::kMaxRangeM)
+            {
+                throw MethodError("too_far", "simulated: that NPC is more than 30 m from V");
+            }
+            json out{{"entity", n.id}, {"record", n.record}, {"class", n.cls}, {"appearance", n.appearance}, {"variant", n.variant}, {"gender", n.gender},
+                     {"body_type", n.gender}, {"crowd", n.crowd}, {"position", Arr(n.position)}, {"yaw", n.yaw}};
+            if (!n.stubSpawner.empty())
+            {
+                out["stub"] = {{"spawner", n.stubSpawner}, {"entry", n.stubEntry}, {"ordinal", n.ordinal}};
+            }
+            return out;
+        }
+        throw MethodError("npc_not_found", "simulated: no NPC with that id near V (npc_list again)");
+    };
+    ops.detachOriginal = [s](const std::string& aId) -> json {
+        std::scoped_lock _(s->mutex);
+        for (auto& n : s->street)
+        {
+            if (n.id == aId && !n.removed)
+            {
+                n.detached = true;
+                ++s->detaches;
+                return json{{"detached", true}};
+            }
+        }
+        throw MethodError("npc_not_found", "simulated: that NPC isn't near V any more");
+    };
+    ops.reattachOriginal = [s](const std::string& aId) -> json {
+        std::scoped_lock _(s->mutex);
+        for (auto& n : s->street)
+        {
+            if (n.id == aId && n.detached)
+            {
+                n.detached = false;
+                ++s->reattaches;
+                return json{{"reattached", true}};
+            }
+        }
+        return json{{"reattached", false}};
+    };
+    ops.removeOriginal = [s](const std::string& aId) -> json {
+        std::scoped_lock _(s->mutex);
+        if (s->removeRefuses)
+        {
+            throw MethodError("npc_protected", "simulated: the original became protected, so it was left alone");
+        }
+        for (auto& n : s->street)
+        {
+            if (n.id == aId && !n.removed)
+            {
+                n.removed = true;
+                n.detached = false;
+                ++s->removals;
+                return json{{"removed", true}, {"method", "simulated"}};
+            }
+        }
+        throw MethodError("npc_not_found", "simulated: the original isn't near V any more");
+    };
+    ops.restore = [s](const std::string& aRecord, const std::string& aAppearance, const Vec3& aAt, double aYaw) -> json {
+        std::scoped_lock _(s->mutex);
+        Street n;
+        n.id = "EntityID(" + std::to_string(s->nextEntity++) + ")";
+        n.record = aRecord;
+        n.cls = "NPCPuppet";
+        n.position = aAt;
+        n.appearance = aAppearance;
+        n.yaw = aYaw;
+        n.fresh = true;
+        s->street.push_back(n);
+        ++s->restores;
+        return json{{"entity", n.id}};
+    };
+    ops.restoreStep = [s](const std::string& aEntity, bool aSend) -> json {
+        std::scoped_lock _(s->mutex);
+        for (auto& n : s->street)
+        {
+            if (n.id == aEntity && n.fresh)
+            {
+                if (aSend)
+                {
+                    n.sentJoin = true;
+                }
+                return json{{"spawned", true}, {"in_crowd", n.sentJoin}};
+            }
+        }
+        return json{{"spawned", false}};
+    };
     ops.releaseAll = [s](const std::string& aReason) {
         std::scoped_lock _(s->mutex);
         const auto count = s->actors.size();
+        for (auto& n : s->street)
+        {
+            if (n.detached)
+            {
+                n.detached = false;
+                ++s->reattaches;
+            }
+        }
+        s->street.erase(std::remove_if(s->street.begin(), s->street.end(), [](const Street& n) { return n.fresh && !n.sentJoin; }), s->street.end());
         s->actors.clear();
         s->voiceLines.clear();
         s->hub = SimNpc::State::HubState{};
@@ -474,6 +629,8 @@ npc::Ops MakeOps(SimNpc::State* aState)
                 {
                     entry["prepared"] = a.prepared;
                     entry["gesture_ready"] = false; // the simulated carrier plays at once
+                    entry["appearance"] = a.appearance;
+                    entry["variant"] = a.variant;
                 }
                 else
                 {
@@ -551,6 +708,37 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                                   s->hub.shown = false; // the plugin's OnInteractionData wrap: the game's prompt comes first
                                   s->hub.withdrawn = "busy";
                               }
+                              if (p.contains("reset_street"))
+                              {
+                                  // Every crowd person back as the street began: not removed, not held, restored people gone, counters at zero.
+                                  s->street.erase(std::remove_if(s->street.begin(), s->street.end(), [](const Street& n) { return n.fresh; }), s->street.end());
+                                  for (auto& n : s->street)
+                                  {
+                                      n.removed = false;
+                                      n.detached = false;
+                                  }
+                                  s->detaches = s->reattaches = s->removals = s->restores = 0;
+                              }
+                              if (p.contains("looking_at"))
+                              {
+                                  s->lookingAt = p["looking_at"].get<std::string>();
+                              }
+                              if (p.contains("appearance_override"))
+                              {
+                                  s->appearanceOverride = p["appearance_override"].get<std::string>();
+                              }
+                              if (p.contains("variant_override"))
+                              {
+                                  s->variantOverride = p["variant_override"].get<std::string>();
+                              }
+                              if (p.contains("remove_refuses"))
+                              {
+                                  s->removeRefuses = p["remove_refuses"].get<bool>();
+                              }
+                              if (p.contains("spawn_never"))
+                              {
+                                  s->spawnNever = p["spawn_never"].get<bool>();
+                              }
                               if (p.contains("street"))
                               {
                                   const auto id = p["street"].value("id", std::string());
@@ -558,6 +746,22 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                                   {
                                       if (n.id == id)
                                       {
+                                          if (p["street"].contains("position"))
+                                          {
+                                              n.position = VecOf(p["street"]["position"]);
+                                          }
+                                          if (p["street"].contains("yaw"))
+                                          {
+                                              n.yaw = p["street"]["yaw"].get<double>();
+                                          }
+                                          if (p["street"].contains("appearance"))
+                                          {
+                                              n.appearance = p["street"]["appearance"].get<std::string>();
+                                          }
+                                          if (p["street"].contains("gender"))
+                                          {
+                                              n.gender = p["street"]["gender"].get<std::string>();
+                                          }
                                           n.busy = p["street"].value("busy", n.busy);
                                           if (p["street"].contains("reasons"))
                                           {
@@ -662,7 +866,18 @@ SimNpc::SimNpc(Dispatcher& aDispatcher, SimNpcHooks aHooks)
                               {
                                   voices["l" + std::to_string(number)] = text;
                               }
+                              json street = json::array();
+                              for (const auto& n : s->street)
+                              {
+                                  street.push_back({{"id", n.id}, {"record", n.record}, {"removed", n.removed}, {"detached", n.detached}, {"fresh", n.fresh}, {"sent_join", n.sentJoin},
+                                                    {"position", Arr(n.position)}, {"yaw", n.yaw}});
+                              }
                               return json{{"actors", actors},
+                                          {"street", street},
+                                          {"detaches", s->detaches},
+                                          {"reattaches", s->reattaches},
+                                          {"removals", s->removals},
+                                          {"restores", s->restores},
                                           {"voice_lines", voices},
                                           {"hub", {{"shown", s->hub.shown}, {"id", s->hub.id}, {"title", s->hub.title}, {"choices", s->hub.choices}, {"answer", s->hub.answer}}},
                                           {"released_all", s->releasedAll},

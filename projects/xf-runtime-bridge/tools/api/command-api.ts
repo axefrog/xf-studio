@@ -260,7 +260,10 @@ export class CommandApi {
     // Process-only state: disarm must overtake a queued capture or a long game wait.
     if (name === "capture.disarm" || name === "capture.armed") return this.runNow(name, input ?? {}, options);
     if (name === "test.record.stop") { this.holdRecordingConnection(false); this.eventCaptures.cancel("recorder_stopped"); }
-    if (["supervisor.clear", "bridge.kill", "session.handover"].includes(name)) {
+    // 0.8.19: clearing one actor's entry leaves the others (and the lease that serves them); clearing all, the kill switch and a
+    // handover end the lot.
+    const clearsOne = name === "supervisor.clear" && (input as { actor?: unknown } | null)?.actor !== undefined && (input as { actor?: unknown }).actor !== "all";
+    if (["supervisor.clear", "bridge.kill", "session.handover"].includes(name) && !clearsOne) {
       this.holdSupervisorConnection(false);
       if (this.connection && this.inFlight === 0) this.touch();
     }
@@ -392,6 +395,11 @@ export class CommandApi {
           const claims = name === "supervisor.set" ? { caller_write_classes: (options.allow ?? Object.keys(PERMISSIONS)).flatMap(permission =>
             permission.startsWith("write-") ? [permission.slice(6)] : permission === "act-player" ? ["act"] : []) } : undefined;
           response = await this.callBridge(command.bridge!.method, bridgeParams, cid, command.bridge!.timeoutMs?.(params), options.signal, claims);
+        }
+        // 0.8.19: the control route answers a clear of one actor too; the lease goes when no entry is left.
+        if (control && response.ok && name === "supervisor.clear" && (response.result as { active?: boolean })?.active !== true) {
+          this.holdSupervisorConnection(false);
+          if (this.connection && this.inFlight === 0) this.touch();
         }
         if (!response.ok && command.name === "bridge.kill" && response.error.code === "bridge_busy") response = this.killByFile();
         if (!response.ok) {
@@ -574,8 +582,10 @@ export class CommandApi {
     if (response.ok) {
       if (method === "supervisor.set" && supervisorGeneration === this.supervisorGeneration && !signal?.aborted && this.connection === connection)
         this.holdSupervisorConnection((response.result as { active?: boolean })?.active === true);
-      if (method === "supervisor.clear" || method === "game.load" || (method === "world.pause" && params.paused === true) ||
-          (method === "supervisor.state" && (response.result as { active?: boolean })?.active === false)) this.holdSupervisorConnection(false);
+      // 0.8.19: the supervisor's answers read "active" for every entry (a clear of one actor answers for the rest); a state read of
+      // one actor says nothing about the others.
+      if ((method === "supervisor.clear" && (response.result as { active?: boolean })?.active !== true) || method === "game.load" || (method === "world.pause" && params.paused === true) ||
+          (method === "supervisor.state" && params.actor === undefined && (response.result as { active?: boolean })?.active === false)) this.holdSupervisorConnection(false);
       if (method === "test.record.start" && recordingGeneration === this.recordingGeneration && !signal?.aborted && this.connection === connection)
         this.holdRecordingConnection(true, Number(params.duration_s ?? 60));
       if (method === "test.record.stop" || method === "game.load" ||
