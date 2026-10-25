@@ -2486,7 +2486,7 @@ No parameters.
 - **Permission:** Direct NPCs (`write-npc`)
 - **Changes the game:** Yes
 - **Undo:** Nothing to undo; spawn a new actor if wanted.
-- **Refusals:** `npc_unknown`, [`bad_params`](#refusal-bad-params)
+- **Refusals:** `npc_unknown`
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|

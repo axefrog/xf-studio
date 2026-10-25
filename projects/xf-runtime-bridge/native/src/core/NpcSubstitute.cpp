@@ -402,14 +402,17 @@ void Service::BeginSwap(Swap& aSwap, const json& aV, const Ops& aOps)
     // Hold the original still while the actor appears: the game's own stop levers on a crowd member. Best effort; the swap goes
     // on without it (the original is then removed a moment after, wherever it walked to).
     bool detached = false;
+    aSwap.hold = nullptr;
     if (aOps.detachOriginal)
     {
         try
         {
-            detached = aOps.detachOriginal(aSwap.original).value("detached", true);
+            aSwap.hold = aOps.detachOriginal(aSwap.original);
+            detached = aSwap.hold.value("detached", true);
         }
-        catch (const std::exception&)
+        catch (const std::exception& e)
         {
+            aSwap.hold = json{{"detached", false}, {"error", e.what()}};
         }
     }
     json step;
@@ -631,6 +634,7 @@ json Service::Substitute(const json& aParams, const Ops& aOps)
         out["resident"] = npc.resident;
         out["respawn"] = npc.respawn;
         out["look_match"] = npc.lookMatch;
+        out["swap"]["hold"] = swap.hold;
         if (npc.position != look.position)
         {
             out["moved_to_walkable_m"] = std::round(Distance(npc.position, look.position) * 100.0) / 100.0;
@@ -853,6 +857,7 @@ void Service::StepSwaps(double aDt, const Ops& aOps)
               {"resident", npc.resident},
               {"respawn", npc.respawn},
               {"in_view_at_swap", seen},
+              {"hold", swap.hold},
               {"waited_s", std::round(swap.age * 10) / 10},
               {"removal", removal}});
         if (!swap.pickWho.empty())

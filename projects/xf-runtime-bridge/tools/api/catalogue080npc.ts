@@ -98,7 +98,7 @@ export const NPC_REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "npc.face": [...V_STATE, "npc_unknown", "npc_lost", "npc_handed_back", "npc_dead", "expression_unknown"],
   "npc.act": [...V_STATE, ...OURS, "npc_moving", "gesture_unknown", "rig_unsupported", "carrier_missing"],
   "npc.choices": [...V_STATE, "npc_unknown", "npc_lost", "npc_handed_back", "npc_dead", "choices_busy", "one_hub_at_a_time", "too_far", "choice_too_long"],
-  "npc.release": ["npc_unknown", "bad_params"],
+  "npc.release": ["npc_unknown"],
   "npc.substitute": [
     ...V_STATE,
     "codeware_missing",

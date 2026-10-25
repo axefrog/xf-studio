@@ -361,6 +361,7 @@ void SwapTests()
         const auto out = r.service.Substitute(json{{"id", "P-behind"}}, r.ops);
         Check("swap: an original behind V starts at once", out["state"] == "spawning" && out["who"] == "a1" && out["swap"]["mode"] == "now" && out["swap"]["original_out_of_sight"] == true);
         Check("swap: order is read, hold, spawn - and the original is still there", r.fake.Index("readLook") < r.fake.Index("detach") && r.fake.Index("detach") < r.fake.Index("spawn") && r.fake.Count("remove") == 0 && r.fake.held.count("P-behind") == 1);
+        Check("swap: what the game said when the original was held is in the answer (the crowd-adoption rows' evidence)", out["swap"]["hold"]["detached"] == true);
         Check("swap: the actor is the nearest cast, in the original's appearance, spawned out of view", r.fake.Index("spawn a1 Character.xfs_actor_woman_corpo citizen__corporat_wa_01 out_of_view") >= 0);
         Check("swap: the answer carries the resident, the respawn and the look report", out["resident"]["key"].get<std::string>().rfind("xfr1-", 0) == 0 && out["respawn"]["params"]["cast"] == "woman_corpo" &&
                                                                                          out["look_match"]["confirmed"] == false && out["original"]["appearance"] == "citizen__corporat_wa_01");
@@ -372,7 +373,7 @@ void SwapTests()
         Check("swap: the original is removed after the actor appears, once", r.fake.Index("remove P-behind") > r.fake.Index("spawn a1") && r.fake.Count("remove") == 1 && r.fake.removed.count("P-behind") == 1);
         const auto done = Events(r.log, "npc.substituted");
         Check("swap: npc.substituted carries the confirmed report, the resident, and that nobody saw it",
-              done.size() == 1 && done[0]["data"]["look_match"]["confirmed"] == true && done[0]["data"]["look_match"]["level"] == "exact" && done[0]["data"]["in_view_at_swap"] == false &&
+              done.size() == 1 && done[0]["data"]["look_match"]["confirmed"] == true && done[0]["data"]["look_match"]["level"] == "exact" && done[0]["data"]["in_view_at_swap"] == false && done[0]["data"]["hold"]["detached"] == true &&
                   done[0]["data"]["resident"]["key"] == out["resident"]["key"] && done[0]["data"]["removal"]["removed"] == true);
         const auto status = r.service.Status(json::object());
         Check("swap: status shows the actor's look and no swap left", status["swaps"].empty() && status["npcs"][0]["look_match"]["level"] == "exact" && status["npcs"][0]["substitute_of"] == "P-behind" && status["npcs"][0]["resident"]["ours"] == true);

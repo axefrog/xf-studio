@@ -616,7 +616,7 @@ World Objects Removed, Crunch Plaza Expanded, Japantown North Verticality Expand
 
 ### XUtils
 
-[XUtils](https://www.nexusmods.com/cyberpunk2077/mods/30296). Its notification script showed that the game's banner and subtitle lines are one blackboard value each, with fifteen banner types. The package names no author. Studied only.
+[XUtils](https://www.nexusmods.com/cyberpunk2077/mods/30296). Its notification script showed that the game's banner and subtitle lines are one blackboard value each, with fifteen banner types. Its entity manager despawns arbitrary entities through the engine's `WorldFunctionalTests.DespawnEntity`, which only CET's extender makes callable from a mod; that showed why the bridge's crowd substitution removes a person with the game's own script calls instead. The package names no author. Studied only.
 
 ## Story and game design
 

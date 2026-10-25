@@ -206,6 +206,7 @@ describe("0.8.19 npc.substitute against the self-test host's street", () => {
     expect(swap.look_match.record.match).toBe("gender_only");
     expect(swap.resident.key).toMatch(/^xfr1-[0-9a-f]{16}$/);
     expect(swap.resident.ours).toBe(true);
+    expect(swap.swap.hold).toMatchObject({ detached: true }); // the held original's evidence (the crowd-adoption rows CA2)
     expect(swap.undo).toEqual({ method: "npc.release", params: { who: "a1", how: "despawn" } });
     expect(swap.respawn.params).toMatchObject({ cast: "man_lowlife", appearance: "street_ma_07_a" });
     const done = await event(api, "npc.substituted", since, "a1");

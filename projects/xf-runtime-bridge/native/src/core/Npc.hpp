@@ -529,6 +529,7 @@ private:
         double maxWait = kSwapWaitDefaultS;
         double age = 0.0, sinceSpawn = 0.0, sincePoll = 0.0;
         json report = nullptr;
+        json hold = nullptr; // what the game said when the original was held (detached, in_crowd_after): the crowd-adoption rows' evidence
     };
     struct Restoring
     {

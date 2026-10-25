@@ -3,6 +3,18 @@ import { read, type Json, type TestApi } from "./windows.ts";
 import { replayRecording, type FileCursor } from "./recording-replay.ts";
 
 /** Source counters at the cursor: the baseline that makes coverage gaps describe the queried interval, not the whole run. */
+/** 0.8.19: the supervisor holds an entry per actor (V, XF actors), and every receipt names its actor: the counts, per actor. */
+function supervisionByActor(supervision: any[]): Record<string, { violations: number; actions: number; refused: number; cancellations: number }> {
+  const out: Record<string, { violations: number; actions: number; refused: number; cancellations: number }> = {};
+  for (const v of supervision) {
+    const key = v?.actor?.kind && v?.actor?.ref ? `${v.actor.kind}:${v.actor.ref}` : "player:V";
+    const row = (out[key] ??= { violations: 0, actions: 0, refused: 0, cancellations: 0 });
+    if (v.event === "supervisor.violation") row.violations++;
+    if (v.event === "supervisor.action") { row.actions++; if (v.response?.ok === false) row.refused++; }
+    if (v.event === "supervisor.cleared") row.cancellations++;
+  }
+  return out;
+}
 export type SourceCounters = { dropped: number; invalid: number; missed_deadlines: number; file_error: boolean };
 export type TimelineCursor = FileCursor & {
   schema: "xfb/timeline-cursor-1"; sid: string; run: number; world: number; record: number; event: number;
@@ -253,6 +265,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
       scope: { world_generation: cursor.world, start_s: status.start_s, end_s: status.end_s }, excluded_out_of_scope: outOfScope,
       counts: { violations: supervision.filter(v => v.event === "supervisor.violation").length, actions: supervision.filter(v => v.event === "supervisor.action").length,
         refused: supervision.filter(v => v.event === "supervisor.action" && v.response?.ok === false).length, cancellations: supervision.filter(v => v.event === "supervisor.cleared").length },
+      by_actor: supervisionByActor(supervision),
       receipts: compact(supervision), omitted: options.detail ? 0 : Math.max(0, supervision.length - 24), history_complete: !gaps.length && !recordMore && !eventMore },
     contact_summary: { message: contactObserved ? "contact observed" : `no contact observed (covered paths: ${coveredPaths.join(", ") || "explicit session receipts only"})`,
       observed_since_cursor: contactObserved, observed_in_run: cursor.contact_observed, vehicle_hit_observed_in_run: cursor.vehicle_hit_observed,

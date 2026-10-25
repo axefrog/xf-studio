@@ -177,3 +177,24 @@ test("disarm overtakes a busy command instead of allowing an earlier queued trig
   expect(cancelled?.ok).toBe(true); expect(api.eventCaptures.status().armed).toBe(false);
   release(); await busy; api.close();
 });
+
+test("0.8.19: catch-up names the supervised actor on every receipt and counts per actor", async () => {
+  const f = fixture();
+  const base = { world_generation: 2, source_s: 5, generation: 3 };
+  const a2 = { kind: "npc", ref: "a2" }, a3 = { kind: "npc", ref: "a3" };
+  const receipts = [
+    { event: "supervisor.violation", receipt_seq: 21, incident: 1, violation: "not_lost", actor: a2, ...base },
+    { event: "supervisor.action", receipt_seq: 22, incident: 1, method: "npc.release", actor: a2, response: { ok: true }, ...base },
+    { event: "supervisor.violation", receipt_seq: 23, incident: 2, violation: "alive", actor: a3, ...base },
+    { event: "supervisor.action", receipt_seq: 24, incident: 2, method: "npc.place", actor: a3, response: { ok: false, error: { code: "too_far" } }, ...base },
+    { event: "supervisor.cleared", receipt_seq: 25, actor: a3, reason: "actor_lost", ...base },
+  ];
+  for (const data of receipts) f.events.push({ seq: f.events.length + 1, kind: data.event, data });
+  const page = await catchUp(f.api, { run: 1, detail: true });
+  expect(page.supervisor_summary.by_actor).toEqual({
+    "npc:a2": { violations: 1, actions: 1, refused: 0, cancellations: 0 },
+    "npc:a3": { violations: 1, actions: 1, refused: 1, cancellations: 1 },
+  });
+  expect(page.supervisor_summary.counts).toEqual({ violations: 2, actions: 2, refused: 1, cancellations: 1 });
+  expect(page.supervisor_summary.receipts.every((r: Json) => r.actor.kind === "npc")).toBe(true);
+});
