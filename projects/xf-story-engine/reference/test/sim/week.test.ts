@@ -70,12 +70,12 @@ describe('the template-written week', () => {
     // the first run is the baseline and is not run again: one reload comparison is the whole of the check
     const b = week(FULL ? [100, 200] : [45, 75]);
     expect(b.lines).toEqual(a.lines);
-  }, 60_000); // a week run is well over bun's 5 s default on a loaded machine
+  }, FULL ? 1_800_000 : 60_000); // a week run is well over bun's 5 s default on a loaded machine, and a full week with two reloads is minutes
 
   if (FULL) test('an additional uninterrupted week independently reproduces every baseline line', () => {
     expect(N).toBe(1008);
     expect(week([]).lines).toEqual(a.lines);
-  }, 120_000);
+  }, 1_800_000);
 
   test('a window is written once its outputs have applied, and writing it does not change the world', () => {
     const sim = make();
