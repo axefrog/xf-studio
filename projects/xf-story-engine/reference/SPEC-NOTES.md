@@ -2069,3 +2069,17 @@ Additional audited operations (including exported function expressions and facad
 - `watchFrameId`: layer-owned data or gated kernel delegation.
 
 - `Events.eventsAtTime`: recoverIfSaved per budgeted candidate.
+
+## The M3 offline prototype (`src/m3/`, `tools/m3/`)
+
+Findings from building the M3 harness over S1, S2 and S3 as they stand. None changes a specification; each is a gap the harness had to step around.
+
+- **M3-01. Casting over S1's residents sees only residents S1 has realised.** A role of kind `xf:resident` searched `under` a cell finds nothing until something has touched that block. The harness realises every block of the simulated district once at the start (`buildWorld`), as a host would for the district V stands in. S2 5.2 or S1 9 should say who demands the residents of a role's scope.
+- **M3-02. Role searches over residents are costly, and the cost decides the seed.** `core:person` finds no resident (the kind is `xf:resident`). A search `under` the whole district hits the kernel's 5,000,000-unit allowance. `age-class` (derived from the age) over a block of 100 to 350 residents also exceeds it; `role`, `affc` and `aband` do not. R2 casts a market block first and searches under it, and takes adulthood from `aband` instead of `age-class`.
+- **M3-03. A seed cannot guarantee a generated resident's name (L-17, L-76).** `guarantees` accepts only a `must` term on the same path, and `name` is a node slot. R2 and the kits carry `{ path: 'name', op: 'in', arg: { r: 'all' } }`, which holds for every resident and satisfies the lint. A named guarantee ("has a name") would say what is meant.
+- **M3-04. Layer 3's per-second tick costs about 5 ms and grows with the number of instances.** A game week with layer 3 attached takes about seven minutes at one play second to six game seconds, against about a minute without it. The driver keeps the faithful per-second play clock; an optimisation of `refresh` and `logEvidence` (they walk every instance and delivery each second) would make long runs cheap.
+- **M3-05. `events.rateScale` is declared and read nowhere.** Incident density is scaled in the harness by multiplying `shape.rate`, and the transcript header names the factor.
+- **M3-06. V's acts reach S1 only as `game.death`, `game.combat.start`, `game.heat` and journal events.** A kindly act (help, give, rescue) can enter only as a port-minted event of a registered kind with V as `actor`. The harness uses `accident` with a `rescue` effect and `assault` with `harm`. S1 9 or the port's contract should list the raw kinds for acts of help.
+- **M3-07. The ledger's minimum mass (`m0 = 2`) needs about fifty salient public acts before a label leaves `unknown`.** Short runs lower `ledger.m0` in the named street changes of a story state; the transcript prints it.
+- **M3-08. S1's name pool is small.** Two residents can share a full name, so a card can name "Alex Reyes" twice. The packet builder drops any card that names two people by one name, in every arm.
+- **M3-09. The fit report's `fit` block and `settings.tempo` differ by construction with layer 3 attached.** S23-S2-10's key leaves them out (`src/m3/fit.ts`); the verdict, windows, cast, draws, exits, timing, decline preview and cost agree.

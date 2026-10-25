@@ -39,6 +39,8 @@ describe('R2 compiles, casts and plays', () => {
     const { r, inst } = run('decline', 'r2-offer', 6);
     expect(inst.st.roles.stallholder!.cast).toBeDefined();
     expect(inst.st.roles.collector!.cast).toBeDefined();
+    // the people are synthesised: generated residents of the district, not mirrored canon characters
+    for (const role of ['stallholder', 'collector'] as const) expect(r.w.sim.people.isResident(inst.st.roles[role]!.cast!)).toBe(true);
     const offer = r.deliveries.find((d) => d.what === 'offer')!;
     expect(offer).toBeDefined();
     // a generated resident, named by the world: the words carry real names and no unresolved placeholder
