@@ -80,7 +80,9 @@ describe("0.8.22 the theme generator reads the Studio's in-game table", () => {
     }
     expect(theme.types.find((t) => t.role === "body")!.scale).toBe(1);
     expect(theme.types.map((t) => [t.role, t.weight])).toEqual(IN_GAME_THEME.type.map((t) => [t.role, t.weight]));
-    expect(ruleDeclaration(css, ".btn:disabled", "opacity")).toBe(".45");
+    // UI-190 (main 6084c397): the Studio keeps the number on :root, no longer on .btn:disabled
+    expect(ruleDeclaration(css, ":root", "--disabled-alpha")).toBe(".45");
+    expect(value("DisabledAlpha")).toBe(0.45);
   });
 
   test("a number the Studio moves to a custom property of :root (--disabled-alpha) reads the same, and moving it does not change the tables' hash", () => {
