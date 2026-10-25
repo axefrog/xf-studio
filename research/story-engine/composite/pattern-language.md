@@ -151,7 +151,7 @@ A juncture filled by the world already has these changes in the record (they are
 - **Aftermath.** An outcome may list `aftermath` junctures: consequences that can only follow it, such as someone changed by watching a stand held, or a tie severed once a betrayal is found. Reaching the outcome fixes the result and mints the story event; the instance then stays in `aftermath` for at most `aftermath.days` (default 7 **[tunable]**), during which only those junctures can match, and then closes. Without this, a terminal outcome would make its own consequences unreachable.
 - **Joins.** A juncture with several incoming edges, not counting `forecloses`, needs all their sources matched before it is ready, unless it says `join: any`, as S2's beats do, or `join: { all: [...], any: [...] }`, which needs every source in `all` and at least one in `any`. Alternatives such as "a third party's act or plain bad luck" are two optional junctures joined with `any`; a protection is answered when the guard's cover holds (`all`) and either a threat or a strike came (`any`).
 - **Loose ends.** A juncture marked `park` that is still open when the instance closes becomes a loose end in the closure record ([S2 §6.4](../spec/seeding.md#64-closing-and-outcomes)), from which a later instance may grow ([GRW-07](../craft/d08-scale-threads-time.md)).
-- **Negation.** `unless` names a juncture that, if it matches between two given junctures, kills the instance, as S3's patterns already do ([S3 §6.3](../spec/procedural.md#63-handling-an-emission)).
+- **Negation.** `unless` names a juncture that, if it matches between two given junctures, kills the instance, as S3's patterns already do ([S3 §6.3](../spec/procedural.md#63-handling-a-change)).
 - **Time.** `within` bounds how long an instance may live between its first and last match, in game time.
 
 ### 3.7 The document
@@ -329,7 +329,7 @@ An instance that the protagonist never perceived ends silently. One the protagon
 
 ### 5.3 Identity, determinism and persistence
 
-These follow S3's pool exactly ([§6.2](../spec/procedural.md#62-the-pool), [§9](../spec/procedural.md#9-persistence)), with the stage list replaced by a juncture map:
+These follow S3's pool exactly ([§6.2](../spec/procedural.md#62-instances-and-the-pool), [§9](../spec/procedural.md#9-persistence)), with the stage list replaced by a juncture map:
 
 - **Identity.** An instance's `Id` is `H("inst", worldSeed, patternId, version, entryFiller)`, with `entryFiller` the `Id` of the event or state record that filled its first entry juncture. One occurrence starts at most one instance of a pattern.
 - **Descriptors, not references.** An instance holds bindings, juncture states, filler ids, times and its legibility ledger (§9.1). Its filler events are retention roots of the layer-3 record, so the past it rests on cannot be forgotten while it is live.
@@ -338,7 +338,7 @@ These follow S3's pool exactly ([§6.2](../spec/procedural.md#62-the-pool), [§9
 
 ## 6. Matching
 
-The matcher is S3's sifter ([§6](../spec/procedural.md#6-the-sifter)), generalised in three ways: junctures form a graph rather than a list of stages, a juncture may be a state as well as an event, and an instance is a candidate before it completes. Everything else (frames per pattern, the chronological buffer, the bounded pool, tombstones, the sweep, determinism) is kept as S3 specifies it.
+The matcher is S3's sifter ([§6](../spec/procedural.md#6-the-matcher)), generalised in three ways: junctures form a graph rather than a list of stages, a juncture may be a state as well as an event, and an instance is a candidate before it completes. Everything else (frames per pattern, the chronological buffer, the bounded pool, tombstones, the sweep, determinism) is kept as S3 specifies it.
 
 ### 6.1 Inputs and frames
 
@@ -398,7 +398,7 @@ Every composition is found by the matcher alone. There is no catalogue of which 
 
 Two ways, both already in the record:
 - **A shared outcome filler.** The juncture that ends one instance is the entry juncture of another. When a debt instance ends `broken`, its `defaulted` juncture was filled by a recorded `wrong`; that same record is what starts a [grievance](patterns/tensions.json) instance, whose entry is `wrong(by, to)`. No new mechanism is needed: it is the shared filler.
-- **A story event.** When an instance reaches an outcome or parks, it mints a `meta:story` event, as S3's sifter does at completion ([§6.6](../spec/procedural.md#66-completion-and-hand-over)): participants are the bound roles, `causes` are the fillers of its matched junctures, and it carries its pattern, its outcome and what the outcome `produces` (§13 S0-1). It fills the function `story(pattern, outcome)`. Closures and larger shapes match on these. This is the "composed patterns" capability S3 deferred, and the same idea as re-inserting a completed sifting pattern as a new event ([Lyu, Millard and Gibbins](../../../docs/community-credits.md#lyu-millard-and-gibbins-2025)).
+- **A story event.** When an instance reaches an outcome or parks, it mints a `meta:story` event, as S3's sifter does at completion ([§6.6](../spec/procedural.md#66-composition-story-events-chains-layers-and-shapes)): participants are the bound roles, `causes` are the fillers of its matched junctures, and it carries its pattern, its outcome and what the outcome `produces` (§13 S0-1). It fills the function `story(pattern, outcome)`. Closures and larger shapes match on these. This is the "composed patterns" capability S3 deferred, and the same idea as re-inserting a completed sifting pattern as a new event ([Lyu, Millard and Gibbins](../../../docs/community-credits.md#lyu-millard-and-gibbins-2025)).
 
 **Bounds.** An instance never matches a story event of itself or of any instance in its own lineage, so chains are acyclic, and a lineage is at most 4 story events deep **[tunable]**. Chained instances belong to one thread (§11).
 

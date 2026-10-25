@@ -1,6 +1,6 @@
 # S2. Seed language and seeding layer specification
 
-**Status:** v1.10, 24 October 2026. v1.10 defines `ord` as one sequence. v1.9 says how layer 2 reads S1's transitions in one order. v1.8 rules on five questions from the core's fix round: T12 from `unattended`, game-clock reads at window boundaries, play-clock restarts at a load, L-06's "differ", and the resituating hook. v1.7 says how in-scene offers meet the attempt bound and a scene's end. v1.6 settles what the first implementation of the core found silent or contradictory (found while building it in the reference model): closure status, guard links, unchained beats, casting before the window, the category gate, R1's exits and adult guarantee, and L-06. v1.5 adds in-scene offers and puts obstacles in the core, from [language check 1](../language-check-1.md). v1.4: v1.4 aligns the city and social reads with [S1](simulation.md): bands are registered strings, and regimes have two reads. v1.3: v1.3 closes what S3 v0.2 still needed: `sownBy` after compaction, and the claim-conflict read's sharing. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
+**Status:** v1.11, 25 October 2026. v1.11 makes the seed language carry the [pattern language](../composite/pattern-language.md) ([D-27](../decisions.md), [D-28](../decisions.md)): patterns generate seeds, and seeds declare the junctures they realise (§2.24); a seed's implicit pattern is derived from its beat graph; nudges are seeds that never reach the protagonist (§2.25); an accepted offer leaves a `promise` in the world; harm to the protagonist has two sources, an accepted stake or a group's own decision ([D-30](../decisions.md), §2.16a); the protagonist's new lines may stay unvoiced ([D-29](../decisions.md), §2.20, §2.22); and the pattern lint joins the lint table (L-144 to L-159). §16 records what was adopted, changed and rejected from the composite's proposals, and §0.5 the interfaces this version assumes from the parallel S0 v4.17 and S1 v0.6 pass. v1.10 defines `ord` as one sequence. v1.9 says how layer 2 reads S1's transitions in one order. v1.8 rules on five questions from the core's fix round: T12 from `unattended`, game-clock reads at window boundaries, play-clock restarts at a load, L-06's "differ", and the resituating hook. v1.7 says how in-scene offers meet the attempt bound and a scene's end. v1.6 settles what the first implementation of the core found silent or contradictory (found while building it in the reference model): closure status, guard links, unchained beats, casting before the window, the category gate, R1's exits and adult guarantee, and L-06. v1.5 adds in-scene offers and puts obstacles in the core, from [language check 1](../language-check-1.md). v1.4: v1.4 aligns the city and social reads with [S1](simulation.md): bands are registered strings, and regimes have two reads. v1.3: v1.3 closes what S3 v0.2 still needed: `sownBy` after compaction, and the claim-conflict read's sharing. v1.2 answers GPT-6 Astra's review of S3 where it touches S2: overlays can't erase fixed identities, director-sown casting filters, and a fuller read API. v1.1 added what layer 3's specification ([S3](procedural.md)) needs: sowing requests, source withdrawal, a read API, the core hooks typed, and corrections to the fit hook and hook inputs.
 - **Reviews.** Two reviews by GPT-6 Astra: of v0.1 (25 findings) and of v0.16 (23 findings), all adopted (§16).
 - **The core.** v1.0 defines the core: the subset the first implementation builds (§0.3). Everything else on this page is a **later capability**, which the first implementation rejects plainly rather than accepting with partial behaviour.
 - **The research.** Versions v0.1 to v0.16 folded in the requirements of dossiers 8 and 10 to 23. §15 traces each dossier's list; git history has the version steps.
@@ -22,9 +22,13 @@ Layer 2 is the only way content enters the simulation ([D-02](../decisions.md)).
 - makes **offers**, and runs the **arbiter**, through which everything that V perceives passes (§8);
 - detects and settles **intersections** between seeds (§9);
 - keeps the seed **record** and the **exposure ledger** (§10);
-- provides the **lint** and the **fit report** (§11).
+- provides the **lint** and the **fit report** (§11), the pattern lint included;
+- carries what seeds declare about **story patterns**, and what its own events fill (§2.24);
+- runs **nudges**, seeds that never reach the protagonist (§2.25).
 
 Authored packs (layer 4), the procedural engine (layer 3) and other plugins (`story.seed@1`) all submit seeds the same way.
+
+**Patterns generate seeds.** A story pattern ([the pattern language](../composite/pattern-language.md)) is a partial causal graph that layer 3 matches against the record ([S3 §6](procedural.md#6-the-matcher)). A live **instance** of a pattern is the story; a seed is one scene of it that the protagonist plays or sees. Junctures the world fills need no seed. Layer 2 matches no patterns: it delivers, records and closes seeds, as before.
 
 **Specified elsewhere:**
 
@@ -59,8 +63,11 @@ The first implementation proves one complete path: **pack → cast → offer →
 | Binding (§2.2, §2.4, §5) | Fixed, preferred and open parts; bounded role queries; identities; `must` and `prefer`; claim priority; ladders of `wait`, `relax` and `withdraw` |
 | Predicates (§2.6) | Kleene logic; guarded game facts; seed facts; `role`, `cast`; beat, response and seed states; `since`, `hour`; `count`; `exposed`; `setting`; registered reads (`fn`) with declared dependencies |
 | Execution (§6, §7) | One beat graph; links with their conditions always evaluated (§7.1); objectives and failures; **obstacle beats with their affordances**; one end predicate; the unattended plan |
-| Offers (§2.9, §7.4) | Actions, declines, null path, bounded reoffers, retract, foresight and writes; one response lifecycle for every offer; **in-scene offers** (§8.3) |
-| Effects (§2.5) | Seed-fact writes, declared kernel effects, reward-table references, capability-checked game writes, only for operations the game port supports |
+| Offers (§2.9, §7.4) | Actions, declines, null path, bounded reoffers, retract, foresight and writes; one response lifecycle for every offer; **in-scene offers** (§8.3); the asker, and the `promise` an accepted action leaves (v1.11); option lines that are recorded, spliced or unvoiced text (D-29) |
+| Effects (§2.5) | Seed-fact writes, declared kernel effects, minted world events (`event`, v1.11), reward-table references, capability-checked game writes, only for operations the game port supports |
+| Patterns in seeds (§2.24) | `realises`; the derived implicit pattern; the fills S2 declares for its own kinds; `growsFrom` a pattern instance; the exposure, response and realisation reads for layer 3 (§10.1a) |
+| Nudges (§2.25) | The nudge form: its silent start, its legality check (DS-05) and its silent close |
+| Harm to the protagonist (§2.16a) | Two sources only: an accepted stake, or a group's own decision under D-30. Carrying a group's warning; staging a group's act behind the warning gate |
 | Delivery (§8) | One arbiter, channel fallback, attention gates, spacing and caps, a total retry bound, three exposure grades, persistent answerable offers, receipts |
 | Content (§2.19, §2.20) | Registered classes, ceilings, the floors, one fallback chain, author-fill presentation slots, game content by reference, origin |
 | Text (§2.8, §2.22) | Authored text with typed placeholders, speaker and evidence metadata, correctable attribution lines (D-22), released words frozen |
@@ -77,7 +84,9 @@ The first implementation proves one complete path: **pack → cast → offer →
 | Staging: rungs, kits, approaches, interference (§2.21) | Needs the realiser and game-port contracts. The core uses one carrier with a report fallback |
 | Told-story assembly, humour blocks, subtext and voice-card analysis (§2.22) | Authoring patterns and audits, not runtime primitives. Told stories start as authored report templates |
 | City, norm, brokerage and reputation reads (§2.16, §2.17) | S1 produces them. The core reads them through registered reads |
-| Premises, scale ancestry, turn taxonomies, tension annotations (§2.3, §2.13) | Metadata and pack audits until a director uses them |
+| Premises, scale ancestry, turn taxonomies, tension annotations (§2.3, §2.13) | Metadata and pack audits until a director uses them. Scale ancestry now runs through pattern instances too (§2.13), but its gate (L-37) still waits for S3's arcs |
+| Wordless vocal cues beside unvoiced protagonist lines ([DS-71](../design-seeds.md)) | Needs a catalogue of the protagonist's wordless recordings by register, and the bridge playing a chosen recorded line for the player character (requirement V3). Until then an unvoiced line is silent text (§2.22) |
+| Choices composed from an act, a manner, a subject and a stake ([DS-72](../design-seeds.md)) | A design seed still waiting for its plan. The core keeps listed options, each with its own words (§2.22) |
 | Short and full forms, abstract settlement, stand-ins beyond the constructible subset (§2.13, §5.4) | They enlarge the state space. Authored alternatives and explicit paths suffice |
 | Clocks and projections (§2.14) | Clocks start as sugar over consumed counts, threshold predicates and sign deliveries |
 | Further profiles and extension slots (§2.10) | Pack data can show demand first |
@@ -97,7 +106,9 @@ The first implementation proves one complete path: **pack → cast → offer →
 | Evidence | L-49, L-58, L-62, L-63 |
 | Content and seams | L-93 to L-95, L-97 to L-101, L-109, L-111, L-116 |
 | Asset declarations | L-114, L-115; L-112 if flashing effects are supported |
-| Advice (warnings) | L-04, L-20, L-21, L-28, L-44 |
+| Patterns in seeds and nudges (v1.11) | L-138, L-139, L-140, L-142 |
+| The pattern lint (v1.11; S3 loads only patterns that pass it) | L-144 to L-159 |
+| Advice (warnings) | L-04, L-20, L-21, L-28, L-44, L-141, L-143 |
 
 Other checks wait for the construct they check. Craft patterns aren't correctness conditions in the core: three stances, three clue routes, a cost on every success, a hidden patron motive, a fact on every non-texture beat, and three wording frames are all advice.
 
@@ -124,6 +135,22 @@ Kernel rules that already cover the rest:
 - seeds are demand roots (§10.4);
 - `SeedRecord`s with their `nodes` and `actor` are retention roots (§7.3);
 - `SeedState` ops persist them (§14.2, the reference model's `SeedRecord`).
+
+### 0.5 What v1.11 assumes from S0 v4.17 and S1 v0.6
+
+A parallel pass revises the kernel and the simulation layer for the composite. Where v1.11 depends on that pass, it names the composite's proposal ([pattern language §13](../composite/pattern-language.md#13-proposed-specification-changes)) and the interface it assumes, so the two passes can be reconciled. Where the parallel pass settles an interface differently, its form wins and this page is aligned to it.
+
+| Proposal | Interface assumed here | Used in |
+|---|---|---|
+| S0-2, S1-1 | The event-kind registry entry gains `fills: KindFill[]` ([S3 §2.2a](procedural.md#22a-the-vocabulary-and-what-fills-it)): the pattern functions the kind fills, with a map from its participant roles to each function's arguments, and an optional `when` on the event's outcome. A producer declares the fills of its own kinds, so layer 2 declares those of `offer`, `response`, `promise` and `seed-outcome` (§2.24). A kind that seeds may mint lists `s2` among its producers | §2.5, §2.24, L-139 |
+| S0-1 | A `meta:` event carries a registered data slot `story: { pattern, instance, outcome, kind, depth }` (v1.11 adds `kind` and `depth` to the proposal's three fields; [S3 §6.6](procedural.md#66-composition-story-events-chains-layers-and-shapes)) | Layer 3 only; layer 2 never reads it |
+| S1-3 | A goal frame a seed opens on a cast person (a role `goal`, §5.3) raises that person's rate for the kinds whose effects match the goal's effects, through S1's offender term. An act so produced carries `served` = that frame, whose parent is the seed's role frame (§3.3) | §2.25 |
+| S1-4 | A kind `xf:item` and a time-varying edge `xf:held-by` from the item to its holder. A seed's stand-in item is an ordinary stand-in role (§5.4) with an authored `xf:held-by` edge | §2.25, kits |
+| S1-5 | A `tell` may have a recorded `promise` event as its subject, so an accepted plan spreads like other news | §2.9 |
+| S1-9 | An occurrence may carry `outcome` `failed` or `prevented`, and a kind's fills may depend on it (a failed shakedown fills `refuse`). A seed's minted event may set its `outcome` | §2.5 |
+| S1-10 | **A group intention against the protagonist** ([D-30](../decisions.md)): an intention record `{ id, group, target, rung: 'ranks' \| 'price' \| 'hunt', since, expires?, warning?: Id, cause: Id }`, where `target` may be `v`; a warning act event (with the group or a member as `by` and the protagonist as `to`) as its first visible act; harmful acts by members, each citing the intention's cause; transitions in S1's feed; a registered read `social.intentAgainst(group, subject)` answering `none`, `warned`, `ranks`, `price` or `hunt`, with transitions (§2.17's read table). S1 reads layer 2's `exposure(warning)` (§10.1a) and produces no harmful act until it is `presented`. Its rate, reach and highest rung scale with the proactivity setting (`SettingsSet.tempo`), with none at `off` | §2.16a |
+
+S0-3 (belief Changes) is used by layer 3 only ([S3 §2.2a](procedural.md#22a-the-vocabulary-and-what-fills-it)). S1-2, S1-6, S1-7 and S1-8 change what the world produces, not what layer 2 reads.
 
 ## 1. Packs, templates and instances
 
@@ -168,7 +195,7 @@ type SowResult = { ok: true; instance: Id; existing: boolean } | { ok: false; fi
 
 **How the overlay applies.**
 1. Layer 2 merges it over the expanded template, after profile expansion and the variant merge, and before the lint (§3.1).
-2. Each `roles[k].identity` replaces that role's identity with a fixed part. `growsFrom` and `stakeScale` replace the template's. Nothing else can be overlaid.
+2. Each `roles[k].identity` replaces that role's identity with a fixed part. `growsFrom` and `stakeScale` replace the template's. A `growsFrom` naming a pattern instance and juncture (§2.13) records the juncture layer 3 sowed the seed for; layer 2 keeps it in the document and never reads the instance. Nothing else can be overlaid.
 3. An overlay that names a role the template lacks, or a node the role's kind doesn't accept, is refused.
 4. **An overlay never erases an author's promise.** It is compared with the document before the overlay:
    - it may bind a role whose identity is absent, open or preferred;
@@ -230,6 +257,8 @@ interface Seed {
   timing?: TimingRequest;              // §2.12: defaults for this seed's requests
   migrate?: Migration[];               // §12.3
   sowable?: unknown;                   // layer 3's declaration, checked by S3's load checks; S4 owns its final shape
+  realises?: Realises[];               // §2.24 (v1.11): the pattern junctures this seed's beats produce
+  nudge?: true;                        // §2.25 (v1.11): a seed that never reaches the protagonist
 }
 
 type Duration = { clock: 'game' | 'play'; s: number };
@@ -344,6 +373,7 @@ type EffectDecl = (
   | { game: { fact: string; set?: number; add?: number }; capability: 'story.write-vanilla' }
   | { reward: { table: RewardTableRef; tier: string; byRoute?: FactKey } }
   | { kernel: { on: RoleKey; effect: Effect } }                        // S0 §10.8 effects, as events
+  | { event: EventSpec }                                               // a world event of a registered kind (v1.11)
 ) & {
   persist?: 'lasting' | 'resettable' | 'cosmetic';
   carrier?: { kind: 'place' | 'media' | 'person'; at: RoleKey | Id; durability: Duration | 'permanent' };  // required for cosmetic
@@ -351,7 +381,18 @@ type EffectDecl = (
 };
 
 interface Dependency { on: RoleKey | { fact: string }; hold: 'keep' | 'substitute' | 'notice' }
+
+interface EventSpec {                  // v1.11; also the unattended plan's `events` (§2.9)
+  kind: string;                        // a registered kind whose producers include `s2` (L-139)
+  place?: RoleKey;
+  participants?: Array<{ who: RoleKey | 'v'; role: string }>;
+  effects?: Array<{ on: RoleKey | 'v'; effect: Effect }>;
+  outcome?: 'done' | 'failed' | 'prevented';      // S1-9: what a failed or prevented act fills
+  causes?: RoleKey[];                  // roles of kind core:event: the events this one answers or continues
+}
 ```
+
+**Minted world events** (v1.11). An `event` effect mints a `core:event` of its kind when it is written: creator the seed, cause the seed, name `"event:" + <beat, action or "unattended"> + ":" + i` with `i` its index in its list, time the write's game time, place and participants the casts of the named roles, `causes` the casts of its `causes` roles. It is committed at once (canon), so it can't change on a reload. It is an ordinary world event: S1 consumes it, its witnesses come from the kernel's witness rule, and layer 3 matches it like any other (S3 §6). This is how a beat leaves the world fact a pattern juncture needs: a payment, a refusal, a delivery. The protagonist may be a participant only of an event the protagonist chose: one in the `writes` of an action or decline, or in the leaves of a beat whose every chain link reads a `response` atom (L-139). An effect on `v` falls under L-15 (§2.9).
 
 **Seed facts** are `core:seed-fact` nodes minted `H("mint", seedId, seedId, "fact:" + key)`. Layer 2 is their only writer.
 
@@ -609,15 +650,23 @@ interface Promise {
 
 ```ts
 interface OfferSpec {
+  asker?: RoleKey;                     // who asks: the `offer` event's asker and the promise's promisee (v1.11; L-141)
+  plan?: RoleKey[];                    // what an accepted plan concerns: the promise's subjects (v1.11)
   stakes: Array<{ bearer: RoleKey | 'client' | 'v'; what: StakeTag }>;
   withheld?: { what: string; discoverableBy: BeatKey };   // what the patron conceals, and one route to find out (L-86)
-  actions: Array<{ id: string; stance: Stance; foresight: ContentRef; writes?: EffectDecl[]; costs?: Cost[] }>;
-  nullPath: { id: string; content?: ContentRef; writes?: EffectDecl[] };   // the authored option of doing nothing
+  actions: Array<{ id: string; stance: Stance; say?: OptionLine; label?: ActLabel; foresight: ContentRef; writes?: EffectDecl[]; costs?: Cost[] }>;
+  nullPath: { id: string; say?: OptionLine; label?: ActLabel; content?: ContentRef; writes?: EffectDecl[] };   // the authored option of doing nothing
   lapse: { after: Duration; then: 'unattended' | 'reoffer' | 'withdraw'; content?: ContentRef };
-  decline: Array<{ id: string; response?: ContentRef; writes?: EffectDecl[] }>;   // omit `response` when an exit beat plays it
+  decline: Array<{ id: string; say?: OptionLine; label?: ActLabel; response?: ContentRef; writes?: EffectDecl[] }>;   // omit `response` when an exit beat plays it
   choice: 'flavour' | 'consequential' | 'unchoice';
   retractQuietly?: ContentRef;         // shown when V retracts with one input; default nothing
 }
+
+type OptionLine =                      // what the protagonist says on picking the option (§2.22, D-29)
+  | { recorded: GameRef }                                       // an existing recorded line, whole
+  | { splice: Array<{ line: GameRef; from: number; to: number }> }   // cuts of recorded lines, joined (§2.20)
+  | { text: ContentRef };                                       // new words, shown as text with no audio
+type ActLabel = string;                // from S4's closed list of acts: never an emotion (L-129)
 
 interface ResponseTemplate {
   to: ActPattern; because: ConcernRef; content: ContentRef; needs?: Pred; attribution?: boolean; reply?: ContentRef;
@@ -632,6 +681,8 @@ interface UnattendedPlan {
 ```
 
 - **A stake on `v`** (V's money, items, standing) is allowed only as a consequence of an action V accepts (L-15).
+- **Harm or loss to `v` has two sources, and no others** ([D-30](../decisions.md), L-15): a stake V accepted when an offer named it, faced as an obstacle with at least two affordances (§2.8); or a group's own decision to act against V, which a seed may only carry and stage behind its warning (§2.16a).
+- **The asker and the promise** (v1.11). `asker` names the role that asks. When V answers with an action whose stance is `help` or `bargain`, layer 2 also mints a **`promise`** event with the `response` event (§7.4): V's own act, committed, so an accepted plan is a world fact that others can learn of (S1-5). Its participants are V (`promiser`), the asker's cast (`promisee`) and the cast of each `plan` role (`subject`); its place is the asker's resolved place at the response time, if any; its cause is the response event; it has no effects and no `outcome`. An offer without `asker` mints none. **Assumed:** S1's ledger reads a V `promise` by its `outcome` (`done` or `failed`, S1 §8.6), so an acceptance, which carries none, moves no reputation by itself.
 - **A consequential choice:** every action MUST have a consequence that something reads: a write to a seed fact with a consumer, or a link whose `on` reads the response (`{ response: …, is: [action:<id>] }`). No two actions may have the same consequence: their writes, as sets of fact = value pairs, differ (on any fact), or a response link tells them apart (L-06).
 - **What a response template answers.** `to` matches V's acts. An answer to an offer is one of them, matched by response kind: `decline:<id>`, `action:<id>`, `action:*` or `any`.
 - **A decision beat's stances** need at least three, including `refuse` (L-14).
@@ -675,9 +726,10 @@ interface Profile { id: ProfileId; version: number; params: ParamSchema; expand:
 
 The **relationship ladder** is specified in full in [Appendix A](#appendix-a-the-relationship-ladder-profile). It is the first implementation's only profile.
 
+**Larger shapes are compositions, not profiles** (v1.11, [D-28](../decisions.md)). The job and heist shape that P4 planned as a profile is the composite's `heist` shape: a pattern whose junctures are filled by smaller instances (a crew, the legwork, the run going wrong, the split), which layer 3 only recognises and never runs as a plot ([S3 §6.6](procedural.md#66-composition-story-events-chains-layers-and-shapes)). The feud is a shape too. **Profiles are for authors.** A profile that lays out a whole plot (con, four-beat, testing arc, slide) may expand an authored seed, which may be as specific as its author wants; a template expanded from one is sowable by layer 3 only if it passes S3's kit size check ([S3-K-6](procedural.md#23-sowable-templates)), so the engine never replays a whole plot with new people. The front stays a profile: it is a clock and its projections (§2.14), not a sequence of story beats, and it composes with patterns through the world events its clock reads.
+
 Further profiles come from [P4 §3.8](../p4-seeding-layer.md#38-profiles-shapes-as-data) and [dossier 8](../craft/d08-scale-threads-time.md) (S8-P4-21). Each gets an appendix like A before it is implemented:
 - gig;
-- job and heist;
 - con;
 - four-beat;
 - front;
@@ -785,7 +837,8 @@ interface Turn {
   who?: RoleKey;                       // an NPC whose turn this is
   kind?: 'revision' | 'refusal' | 'exit' | 'tie' | 'standing';
 }
-type GrowsFrom = { looseEnd: { seed: Id; entry: number } } | { promotion: Id } | { parent: Id };
+type GrowsFrom = { looseEnd: { seed: Id; entry: number } } | { promotion: Id } | { parent: Id }
+               | { instance: Id; juncture: JunctureKey };   // v1.11: a juncture of a pattern instance (S3 §7.6)
 ```
 
 - **`turns`** lists the recorded changes that complete the seed. Each `what` reads a recorded value:
@@ -810,14 +863,15 @@ type GrowsFrom = { looseEnd: { seed: Id; entry: number } } | { promotion: Id } |
   - a seed above glance level with no `turns` is an error (L-33);
   - a parent whose highest turn sits below a child's highest turn is an error (L-33);
   - a `level` that disagrees with the highest turn is a warning.
-- **A thread is a view, not a type.** The language has no thread construct. Tools and S3 compute threads from `parent`, shared cast nodes or frames, and promises. A season is a seed whose children are arcs.
+- **A thread is a view, not a type.** The language has no thread construct. Tools and S3 compute threads from `parent`, shared cast nodes or frames, promises, and (v1.11) the pattern instances that seeds realise ([S3 §5.7](procedural.md#57-the-thread-view)). A season is a seed whose children are arcs.
 - **Attention** (attended, simmering, dormant) is derived by S3. It is not a lifecycle state.
 - **`growsFrom`** records what a procedural seed grew out of:
   - a loose end of an earlier seed (§6.4), by the record entry's stable number;
   - a promotion;
-  - or a parent.
+  - a parent;
+  - or (v1.11) a juncture of a pattern instance that layer 3 sowed the seed to realise.
 
-  A procedural arc needs at least two found ancestors in its `growsFrom` chain (L-37). An authored arc needs none.
+  A procedural arc needs at least two found ancestors in its `growsFrom` chain (L-37). An authored arc needs none. **Ancestors through instances** (v1.11): a chain that reaches an instance continues through the instance's lineage, the instances whose story events it matched ([S3 §6.6](procedural.md#66-composition-story-events-chains-layers-and-shapes)). An ancestor counts as **found** when it reached the protagonist at `presented` or above and at least one of its junctures was filled from the record, not by a nudge or a constructed cause. The gate itself is still a later capability (§0.3).
 
 **Scale forms.** A seed MAY offer shorter and fuller versions of itself:
 
@@ -921,12 +975,27 @@ S1 exposes these as pins and process state ([S1 §9](simulation.md)). **No atom 
 
 **What the city produces is not the director's to edit:**
 - **Occurrence.** The director (S3) chooses which events, pending or past, to realise, may delay realising them, and builds offers around them. It never removes an event that has happened.
-- **Grudges.** A group's belief about V may raise an offer through layer 2. No S1 process aims an act at V. Offers that put V at risk follow the choice rules of §2.9.
+- **Grudges, and groups that act.** A group's belief about V may raise an offer through layer 2. Under [D-30](../decisions.md) a group may also decide, as an S1 process, to act against V; that is the world's move, which layer 2 carries and bounds as §2.16a says. No other S1 process aims an act at V. Offers that put V at risk follow the choice rules of §2.9.
 - **The game's own incidents** (gigs, hustles, its combat events) are `game` facts for seeding, never sown. Fitting reads bands to site authored seeds near them.
 
 **One carrier schema.** City events that leave marks declare carriers and durations in the same schema as `cosmetic` effects (§2.5). A city trace and a seed trace are re-realised by the same rule after a load.
 
 **The return view for districts.** On first entering a district V knows after a long absence, the return view (§8.7) offers at most three changes there. They are drawn from the district's event ring and the beliefs held in it, and name events and acts, never feelings.
+
+### 2.16a Groups acting against the protagonist
+
+[D-30](../decisions.md) lets a group decide, as a simulation process, to act against the protagonist: close ranks, put a price on them, hunt them. S1 runs it (S1-10, assumed interface in §0.5). Layer 2 carries it to the protagonist and bounds what a seed may do with it.
+
+- **The two sources of harm.** Harm or loss to the protagonist reaches a seed from two places only (§2.9, L-15):
+  1. **an accepted stake:** a stake the protagonist accepted when an offer named it, faced as an obstacle with at least two affordances, one without combat (§2.8, L-27);
+  2. **a group's own decision:** S1's intention against the protagonist, which a seed may carry and stage only as below.
+
+  Nothing else in a seed harms the protagonist or takes from them. A nudge never names the protagonist at all (§2.25).
+- **Why a group acts.** S1 starts the intention only from the group's belief that the protagonist acted against it, resting on an observed act of the protagonist's or a telling of one ([D-10](../decisions.md)). D-09 holds: the record holds what the group believes the protagonist did, never what the protagonist felt or meant.
+- **Layer 2 carries the warning.** S1 can't reach the protagonist; only the arbiter can. A pack template whose `sow` reads `social.intentAgainst` (§2.17) delivers the warning. It binds the intention's warning event to a role of kind `core:event`, so its delivery cites it (§10.2), and its warning beat is `mustReach` (§2.8), so it has a persistent route that can reach `confirmed`. S4's starter pack ships one such template. S1 reads layer 2's `exposure(warning)` (§10.1a) and produces no harmful act until the warning is `presented`. **The bound fails safe:** if no pack carries the warning, or the player never sees it, the group never harms the protagonist.
+- **Staging a group's harmful act.** A seed may stage one of the group's harmful acts (members finding the protagonist) as an encounter. It binds the act's event, or the intention's warning event, to a role of kind `core:event`. Its harmful beat is an obstacle with at least two affordances, one without combat (L-27). Preparing its release checks that the intention's warning reached `presented` (§8.4; a runtime gate, so the delivery waits until then). With these, L-15 accepts the beat without an accepted stake.
+- **What layer 2 never does.** It never starts, raises, extends or ends a group's intention. Its reach is S1's, bounded by the proactivity setting (`SettingsSet.tempo`, [D-02](../decisions.md)), with none at `off`. Offers that give the protagonist a way out (pay what is asked, clear their name, find shelter) are ordinary offers under §2.9.
+- **Layer 3's part** is to wait for the group's acts like any of the world's, never to nudge them, and to make their cause legible ([S3 §7.10](procedural.md#710-groups-acting-against-the-protagonist)). Its escalation gate binds its own realisations, not the group's.
 
 ### 2.17 People, order and reputation as material
 
@@ -939,7 +1008,8 @@ type SocialRead =
   | { normGap: { norm: Id; scope: RoleKey | Id } }   // the gap between private and perceived support
   | { contract: { id: Id } }                        // due, at-risk or broken
   | { tied: { a: RoleKey | Id; b: RoleKey | Id; type: EdgeTypeId } }
-  | { divergence: { believer: RoleKey; subject: RoleKey | Id } };   // how far a belief is from the truth, banded
+  | { divergence: { believer: RoleKey; subject: RoleKey | Id } }    // how far a belief is from the truth, banded
+  | { intentAgainst: { group: RoleKey | Id; subject: RoleKey | Id | 'v' } };   // v1.11, S1-10: none, warned, ranks, price, hunt (§2.16a)
 ```
 
 A `social` atom is `maybe` until S1 has a reading for it.
@@ -962,7 +1032,7 @@ Street cred stays a mirrored game fact.
 - an offer or a threat;
 - a visible failure.
 
-It counts against S1's betrayal budget. It never targets a cast another live seed holds without that seed's consent (§9). No S1 process turns an ally against V; a group's grudge against V is a belief that may raise an offer (§2.16). Delay, fake compliance and quiet exit are the usual outcomes, so they are the defaults a turn seed's variants should cover.
+It counts against S1's betrayal budget. It never targets a cast another live seed holds without that seed's consent (§9). No S1 process turns an individual ally against V. A group's decision under D-30 (§2.16a) binds its members as members: a member tied to V then holds a cross-pressure (a `Dilemma`, §9), which is story material, not a foregone betrayal. Delay, fake compliance and quiet exit are the usual outcomes, so they are the defaults a turn seed's variants should cover.
 
 **Norms and public acts.** Windows may open on a norm's gap band, or on a change of regime. "Make it public" is a stage type: the same act done publicly can end a norm in one step, while done privately it changes nothing. Seeds may cast informer and witness roles. Every such offer has a decline path (§2.9) and honours the content floors (dossier 18).
 
@@ -1107,7 +1177,8 @@ Packs are free fan content, built on the publisher's modding terms ([dossier 19]
 
   **The plan for voice:**
   - new characters may be voiced, with pack recordings or synthetic voices that aren't clones of a real person;
-  - existing V lines, and other existing recordings, may be repurposed in new contexts: whole, or cut and spliced where a line needs it.
+  - existing V lines, and other existing recordings, may be repurposed in new contexts: whole, or cut and spliced where a line needs it;
+  - **the protagonist's new words may stay unvoiced** ([D-29](../decisions.md)): an option may show new words as text with no audio, beside recorded lines, whole or spliced, where one fits (§2.22). New words for the protagonist get no synthetic or pack voice, because the protagonist's voice is the recorded one the player chose (L-115). Unvoiced text also suits a later protagonist who isn't V ([D-25](../decisions.md)). A wordless vocal cue beside an unvoiced line is a later capability ([DS-71](../design-seeds.md), §0.3).
 
   Text stays the default everywhere else.
 - **Origin.** Each text unit declares `origin`:
@@ -1244,10 +1315,12 @@ V must have been shown at least two facts from which `means` can be recovered (L
 
 **Voices.** Each speaker class has a **voice card** in S4. A role's phrasings must match its voice card (L-126). V has no voice card: the engine never speaks for V.
 
-**V's options.**
-- An option shows the recorded line's own words, resolved at run time.
+**V's options** (relaxed in v1.11 by [D-29](../decisions.md)).
+- **An option shows the exact words V says if the player picks it:** its `say` line (§2.9). For a recorded line, that is the line's transcript, resolved at run time from the game's own text by `GameRef` (never stored inline, L-114). For a splice, it is the words of the cuts, joined. For a `text` line, it is the option's own new words, rendered once at release and frozen with the delivery (S2-I-16), and they stay **unvoiced**: shown, with no audio. One offer may mix all three. The words shown are the line: never a paraphrase or a summary of it. An option with no `say` is a wordless act ("leave", "pay"): it shows its act label only, and V says nothing.
 - Its **act label** comes from a closed list, never an emotion (L-129). Paraphrased labels that don't match the line are a known failure in shipped games.
 - It carries the `foresight` of §2.9.
+- **Only a chosen line is said.** V's line appears in the exchange, spoken for a recorded or spliced line and shown as V's text for an unvoiced one, only after the player picks its option. No other text unit is V's speech (L-142): the engine never speaks for V unprompted ([D-09](../decisions.md)).
+- **Voice must not mark the path.** Players notice which options are voiced. An offer whose voiced options all share one stance while another stance has only unvoiced ones is warned (L-143), because voice would then read as the expected answer.
 - System and narrator text never contains a second-person, present-tense clause about V.
 
 **Attribution lines** (D-22) use a fixed frame:
@@ -1369,6 +1442,77 @@ A model render is refused when the cast binds anyone who isn't an adult (L-133).
 - the qualification outcome per model;
 - counts of rendered, fallback and rejected lines, by cause.
 
+### 2.24 Patterns in seeds
+
+**Patterns generate seeds** (§0.1; [the pattern language §11.1](../composite/pattern-language.md#111-seeds-and-patterns-patterns-generate-seeds)). A pattern instance is the story, matched by layer 3 against the record; a seed is one scene of it. The two documents stay distinct: a seed's graph is about the protagonist (offers, stances, exits) and a pattern's about the world's causes, and the lint, exposure and closure rules of this page depend on that. They join in three ways: a seed's beats leave world events that fill junctures (§2.5); a seed may declare the junctures it realises (`realises`); and every seed has an implicit pattern, derived from its beat graph.
+
+**Realises.**
+
+```ts
+interface Realises {
+  pattern: PatternId;                  // a pattern of a loaded pack (S3 §2.2)
+  juncture: JunctureKey;
+  by: BeatKey | 'end' | 'unattended';
+  binds: Record<Var, RoleKey | 'v'>;   // the pattern's variable → this seed's role, for every argument of the juncture
+}
+```
+
+- **What it says.** The beat `by`, or the seed's end, or its settling without V, produces the juncture's function, with the juncture's arguments as the casts of the roles `binds` names. An authored story joins the composite this way without changing a fixed part ([D-28](../decisions.md); R2′ in [pattern language §4.2](../composite/pattern-language.md#42-three-points-on-the-range)).
+- **How the world sees it.** For `by: BeatKey`, through the world events that beat leaves: its `leaves` (or its fragment's) include an `event` whose kind fills the juncture's function with the mapped arguments, or the beat is an offer whose `offer` or `response` event fills it (L-138). For `by: 'end'` and `'unattended'`, through the seed's `seed-outcome` event, which fills the function after T12 (`end`) or T13 (`unattended`), as `realisedBy` answers (§10.1a). Layer 3 matches these events like any others, so a realised juncture may also fill junctures of other instances.
+- **What it doesn't do.** It never makes layer 2 read a pattern instance, and it never constrains casting. Its `binds` name roles, so the casts decide which instance's juncture the events can fill.
+- **Changes.** A juncture also declares what it changes (a tie moving, a frame opening). They are expectations that the world bears out, not conditions layer 2 checks. The fit report lists the juncture's declared changes beside the effects the beat writes, for the author.
+
+**The implicit pattern** (derived; never stored and never matched). The compiler derives from every seed's beat graph:
+- **junctures:** one per beat that isn't `texture` and has a function. The function is its `realises` entry's function, if it has one; else, for an offer beat, `ask(by: asker, of: v)`; else the first function, in the vocabulary's `tokenPrecedence` order ([S3 §2.2a](procedural.md#22a-the-vocabulary-and-what-fills-it)), among those its leaves' `event` effects fill, with their argument maps. A beat with none of these has no juncture;
+- **edges:** for each `because` link between two beats that have junctures, an edge with link `answers` when the link's `on` reads a `response` atom, else `because`. Guards and `then` links give none;
+- **outcomes:** one per `exit` beat and one for `end`, of kind `resolved`; and one for the unattended plan, of kind `parked`.
+
+It is a pure function of the document, recomputed when needed. Layer 3 uses it to name an authored seed in a thread's shape (`seed:<template>`) and to give a token to a delivery that cites no occurrence ([S3 §6.8](procedural.md#68-thread-skeletons-and-the-ring)). The fit report shows it with its **abstraction index** (the share of its roles and fillers left open), as information for the author, never enforced. Seeds share junctures with procedural instances only through the world events their beats leave: that is the one route the matcher sees.
+
+**What layer 2's own events fill.** Layer 2 produces these kinds, so it declares their fills in the event-kind registry (S0-2, assumed in §0.5):
+
+| Kind | Participants (role) | Fills |
+|---|---|---|
+| `offer` (§8.5) | the asker's cast (`asker`); V (`participant`) | `ask(by: asker, of: participant)` |
+| `response` (§7.4) | V (`actor`); the asker's cast (`asker`) | Through `responseOf` (§10.1a): an action of stance `help` or `bargain` fills `comply(who: actor, to: asker)`; a decline, or an action of stance `refuse` or `oppose`, fills `refuse(who: actor, to: asker)`; any action also fills `choose(who: actor)`. A null path fills nothing |
+| `promise` (§2.9) | V (`promiser`); the asker's cast (`promisee`); plan roles (`subject`) | `obligate(debtor: promiser, creditor: promisee)`; `bind(a: promiser, b: promisee)` |
+| `seed-outcome` (§6.4) | the seed | Through `realisedBy` (§10.1a): each `realises` entry with `by: 'end'` after T12, or with `by: 'unattended'` after T13, fills its juncture's function with the casts its `binds` name |
+| A minted `event` (§2.5) | as declared | The kind's own fills, from its registry entry |
+
+Without an `asker`, an offer's and a response's fills bind no asker, and the fills that need one don't apply.
+
+### 2.25 Nudges: seeds that never reach the protagonist
+
+A **nudge** is a seed with `nudge: true`. Layer 3 sows it to give a cast person a reason or an opportunity for a juncture it is waiting on, off-screen ([S3 §7.6](procedural.md#76-instantiation-and-the-sowing-request); [the pattern language §8.2](../composite/pattern-language.md#82-what-the-director-may-nudge-and-what-it-must-wait-for)). A nudge never reaches the protagonist: it has no delivery, no offer and no closing trace, and nothing in it names the protagonist. Under [DS-05](../design-seeds.md) the director steers only through the unobserved, so a nudge writes only what the protagonist hasn't observed and couldn't base a choice on.
+
+**What a nudge may hold:**
+- roles, cast as usual, under the source filters of §5.2 (no spine character, no excluded NPC);
+- a role `goal` (§2.4), the goal frame it opens on the cast person at commit. Under S1-3 (§0.5) the goal raises that person's rate for the kinds whose effects match it, so the act, if it comes, comes from the simulation;
+- `world` requirements (§2.5) at the procedural layer: an opportunity (a place, a time, an item within reach), which yields to every pin and to the simulation (§3.2);
+- beats with no channel, whose leaves are seed facts and `event` effects;
+- windows, `context`, `end` and `turns`, as any seed.
+
+**What it may not hold** (L-140):
+- an offer, a beat whose fragment has a channel, stakes, costs, promises, clocks, projections, forms or `closing`;
+- role `authored` beliefs or edges. A belief travels only through a minted `tell`, so that a "why" answer can walk it, and a debt or a tie only through an event that records it;
+- **the protagonist, anywhere:** no `v` in `binds` or a role's identity, no `tie.to: 'v'`, no event participant or effect on `v`, no goal effect on `v`.
+
+It needs no `unattended` plan.
+
+**No puppets.** An `event` effect whose kind fills a function whose acting argument is a cast person P is allowed only if P wants it: P holds an active or blocked goal frame whose goal effects include an effect of that event on the same target, or P is a member of a group whose active intention boosts that kind (S1 §7.8). A minted `tell` needs a teller that already knows its subject (S0 `knows` answers other than `unknown`) and is tied to its listener (`tied` is yes). Otherwise the act is the simulation's to produce, and the nudge may only open the goal.
+
+**The lifecycle.** A nudge is sown, waits and casts like any seed. Its **silent start** takes the place of a first release. When T4's conditions hold, layer 2 prepares it as §8.4 prepares a first release (windows, casts, claims, a staged batch holding the commit, the fixed-part watch) and adds the legality check below. On confirm, nothing is handed to the game port: T8n moves the nudge to `running`, and its start beats run. It ends by T12, or withers or is withdrawn, like any seed. It **closes silently**: its `seed-outcome` event is minted, so that layer 3 can see it, its closure has `witnessed: false`, and no closing delivery, coda or news is queued.
+
+**The legality check.** It runs at every preparation of the silent start, as a runtime gate, never an error. The start waits (the batch is discarded and the nudge stays `cast`) unless every minted event and every goal passes all four rules:
+1. **Off-screen.** No minted event names the protagonist, has as its place the protagonist's current cell or a cell whose `depth` read is `open` (S1 §9.1, fine tier for some root), or would have the protagonist among its witnesses.
+2. **No contradiction.** No cast person of a minted event has an `observed` pin on their whereabouts whose time lies within `nudgeGap` game seconds **[tunable 3600]** of the event's time and that places them elsewhere.
+3. **Nothing an open offer rests on.** No cast node of the nudge is a cast of a seed with a displayed, unanswered offer (§8.5).
+4. **A wanting actor and a caused telling,** as above, at the time of the check.
+
+A failed check writes a `nudge-held` record entry naming the rule. Layer 3 withdraws a nudge that hasn't started within its lifetime ([S3 §7.7](procedural.md#77-pending-lifetimes-nudges-and-closings)).
+
+**Accounting.** A nudge that turns someone counts against S1's betrayal budget (§2.17), once S1 defines one. Every fill that a nudge's events or goal produce is an **adaptation**, never a consequence ([S3 §6.3](procedural.md#63-handling-a-change); [dossier 9](../craft/d09-agency-consequence.md) AGY-42).
+
 ## 3. Compiling
 
 ### 3.1 The steps
@@ -1397,7 +1541,9 @@ An instance is compiled once, at sowing:
 | A seed-fact write | `committed` pin; the previous one withdrawn (§2.5) | 300 | The write | The next write, or the reset wake-up |
 | A game-fact write | A `story.write-vanilla` request to the game port (S5) | — | The write | — |
 | A `kernel` effect | A `core:event` with that effect, committed | — | The write | — |
-| A displayed offer, and V's response | `core:event` of kind `offer`, then `response`, with V as witness (observed) | Canon | The display confirmation (§8.5); V's answer | — |
+| An `event` effect (v1.11) | A `core:event` of its kind, committed (§2.5) | Canon | The write | — |
+| A displayed offer, and V's response | `core:event` of kind `offer`, then `response`, with V as witness (observed); participants as §2.24 gives them | Canon | The display confirmation (§8.5); V's answer | — |
+| An accepted action of stance `help` or `bargain` (v1.11) | `core:event` of kind `promise`, committed (§2.9) | Canon | V's answer | — |
 | Closing | `core:event` of kind `seed-outcome`, committed | Canon | Closing (§6.4) | — |
 
 **The seed's layer** comes from who sowed it:
@@ -1586,7 +1732,7 @@ Roles are cast in **topological order** of their role references. A cycle is a l
 
 ### 5.3 Committing
 
-A seed commits its roles when its first release is prepared (§8.4). A role that no beat uses before then commits when the first beat that uses it is prepared.
+A seed commits its roles when its first release is prepared (§8.4), or, for a nudge, its silent start (§2.25). A role that no beat uses before then commits when the first beat that uses it is prepared.
 
 Committing a role:
 1. adds the `core:cast` edge;
@@ -1661,11 +1807,12 @@ Each transition is recorded (§10.1). At each re-evaluation step, the first appl
 | T1 | any live | Source withdrawal; a rejection with `withdraw`; a ladder that reached `withdraw`; a role lost with `withdraw`; a lapse with `then: 'withdraw'`; an expiry with `onExpire: 'withdraw'`; a pack removed or migration refused (§12.3) | `withdrawn` | §6.1 |
 | T2 | `sown`, `waiting`, `cast` | The seed is closed (§2.7) | `withered` | The lowest-index window's close policy (§2.7) |
 | T3 | `offered`, `running` | The release window is closed, and it doesn't hold while running | `withered`, or `unattended` for `degrade` | The release window's close policy |
-| T4 | `sown`, `waiting` | The seed is open, `context` is yes, and every non-optional role is cast, tentatively or pending stand-in | `cast` | Submit the first request (§8.1) |
+| T4 | `sown`, `waiting` | The seed is open, `context` is yes, and every non-optional role is cast, tentatively or pending stand-in | `cast` | Submit the first request (§8.1); for a nudge, prepare its silent start (§2.25) |
 | T5 | `sown` | None of the above | `waiting` | — |
 | T6 | `cast` | The seed is no longer open, `context` is not yes, or a tentative cast was lost | `waiting` | Withdraw the pending request (a cancellation) |
 | T7 | `cast` | The first release was prepared and confirmed, for an offer | `offered` | Commit (§5.3) |
 | T8 | `cast` | The first release was prepared and confirmed, for a beat that isn't an offer | `running` | Commit; start the beat |
+| T8n | `cast` | A nudge's silent start was prepared and confirmed, its legality check included (§2.25) | `running` | Commit; start the start beats. Nothing is handed to the game port |
 | T9 | `offered` | V's response to the first offer is an action (§7.4) | `running` | Apply the action's writes; the offer beat is `done` |
 | T10 | `offered` | V's response to the first offer is a decline; the null path with no reoffers left; or an exposed lapse with `then: 'unattended'` | `unattended` | Its content and writes (§7.4) |
 | T10a | `offered`, `running` | V retracts an offer (§7.4) | `withdrawn` | Quietly: pending deliveries cancelled; no response effects; no unattended plan; a neutral `retracted` entry. History already committed stays |
@@ -1700,7 +1847,9 @@ A seed **closes** on every move to `resolved` or `withered`, and on a move to `w
      - `unreadTurn`: turning events the seed caused that no consumer read;
      - `changes`: every turning event the seed caused, each with a `witnessed` flag.
 
-   Witnessed and settled completions write the same record. Only the flag differs.
+     For a seed whose `growsFrom` names a pattern instance's juncture (v1.11), every entry also carries that `{ instance, juncture }`, so a later instance can grow from it ([S3 §0.3](procedural.md#03-later-capabilities)).
+
+   Witnessed and settled completions write the same record. Only the flag differs. A **nudge** (§2.25) always has `witnessed: false`, and step 3 queues nothing for it.
 2. **Retires open promises** on forced closures (withered, withdrawn, or T13). They go into `looseEnds`; this is not a defect.
 3. **Queues closing deliveries.** These outlive the seed (§8.6):
    - the closing trace, if the seed has `closing` and was released: class 0, purpose `close`. A seed at gig level or above needs one (L-35);
@@ -1796,14 +1945,14 @@ Every offer beat, first or later, follows the same **response lifecycle**:
 
 | Response | Recorded as | Writes | The beat |
 |---|---|---|---|
-| An action | `response` event, `kind = action:<id>` | The action's `writes`, once | `done` |
+| An action | `response` event, `kind = action:<id>`; for stance `help` or `bargain`, a `promise` event with it (§2.9) | The action's `writes`, once | `done` |
 | A decline | `response` event, `kind = decline:<id>` | The decline's `writes`, and its response content is delivered | `done` |
 | The null path ("not now") | `response` event, `kind = null` | The null path's `writes` | `deferred`, if it has `reoffer` and offers remain; else `done`. The first offer follows the same rule (T10, T11) |
 | A retract (one input) | A neutral `retracted` record entry; no `response` event, and nothing for the player model | None; `retractQuietly` is delivered; the class and level join `softExclusions` | The seed is withdrawn quietly (T10a). No reoffer and no unattended consequence follow from it |
 | A lapse, after the offer was exposed | No event; a `lapse` record entry | The lapse content is delivered | By `lapse.then`: `deferred` for `reoffer`, else `done` |
 | A lapse, never exposed | A `missed` record entry | None | Back to `available`, with `attempt` + 1 |
 
-A response is recorded once. A second answer to the same offer `Id` is ignored. The `response` atom (§2.6) reads these kinds.
+A response is recorded once. A second answer to the same offer `Id` is ignored. The `response` atom (§2.6) reads these kinds. The `response` event's participants are V (`actor`) and the offer's asker (`asker`), and its cause is the `offer` event; its kind of answer stays in the seed record, where `responseOf` reads it (§10.1a), because an event carries no free payload.
 
 **The first offer** also moves the seed (T9 to T11). For later offers, the graph decides what follows: links read the responses through `response` atoms. This is how ladders branch to their exits (Appendix A).
 
@@ -1945,8 +2094,9 @@ Releasing a delivery is two steps, so nothing invalid reaches V.
 1. re-evaluates its windows. A delivery with `windowClose` needs the release window, or for a first release some window, to be `open`;
 2. re-checks the casts the delivery binds: tentative casts against their effective `must`, committed ones by §5.5;
 3. re-checks claims (§9.2);
-4. for a first release: opens a **staged batch** (S0 §14.2a), records the release window and the form, and commits (§5.3) inside it;
-5. runs the fixed-part watch (§3.5) on everything in the batch.
+4. checks its beat's runtime gates (v1.11): a beat that stages a group's act against V needs the intention's warning at `presented` (§2.16a); a nudge's silent start needs its legality check (§2.25);
+5. for a first release, or a nudge's silent start: opens a **staged batch** (S0 §14.2a), records the release window and the form, and commits (§5.3) inside it;
+6. runs the fixed-part watch (§3.5) on everything in the batch.
 
 **Confirm.** If every step passed, the batch is committed: its cast edges, contributions, frames, beliefs and edges take effect together, and only then are their relevance and dilemmas dispatched. The delivery is `released` and handed to the game port.
 
@@ -1975,7 +2125,7 @@ Release is not exposure.
 - `confirmed`, for an offer;
 - `presented` or better, for a sign, projection, warning or closing delivery.
 
-- **The offer event.** Only once an offer is displayed is its `offer` event minted, with V as witness. This makes it canon and exposed (§10.2). It carries:
+- **The offer event.** Only once an offer is displayed is its `offer` event minted, with V as witness. This makes it canon and exposed (§10.2). Its participants are the asker's cast (`asker`), if the offer names one, and V (`participant`) (v1.11, §2.24). It carries:
   - the delivery's skeleton `features` (verb, stake, relationship, outcome, tone, channel);
   - `class`, `purpose`, `pull`, `authored` and `deliveryId`.
 
@@ -2137,6 +2287,10 @@ Two live seeds A and B **intersect** when any of the following holds. Detection 
 
 **Recording.** Each intersection writes a record entry on both seeds the first time it is found. An unchanged intersection is not recorded again; a change of outcome is.
 
+**Patterns and intersections** (v1.11).
+- **A `pressure` is also a pattern entry.** The same `Dilemma` reaches layer 3 directly from the kernel, where it fills the entry juncture of the divided-loyalty pattern ([S3 §6.1](procedural.md#61-frames-and-input)). Layer 2 still never settles it away.
+- **Layering is layer 3's.** Two pattern instances that share a filler are layered ([S3 §6.6](procedural.md#66-composition-story-events-chains-layers-and-shapes)). Layer 2 has no `juncture` intersection kind: it has no settling rule for one, and it reads no instance. A seed's part in a layer is in its own `growsFrom` and in layer 3's record. Contests over a node between seeds that realise junctures of different instances are ordinary `claim` intersections, settled by claim priority as above.
+
 ## 10. The record and the exposure ledger
 
 ### 10.1 The seed record
@@ -2162,7 +2316,8 @@ The kinds:
 - `expired`;
 - `closure`;
 - `stuck`;
-- `rung`.
+- `rung`;
+- `nudge-held` (v1.11): a nudge's silent start failed its legality check, with the rule (§2.25).
 
 **Two kinds of history.** The seed's state is split:
 - **Semantic state** must survive, and is compacted, never dropped: counters, entries something references by `n` (`growsFrom`, `looseEnds`), receipts, responses and released text.
@@ -2186,6 +2341,17 @@ Its views are projections of the instance state (§12.1) and the record. Each de
 
 A shared `claimConflict(node, span, share)` read answers whether a node is held under a claim that conflicts with one of that span and sharing, by the rules of §9.1.
 
+**Reads for patterns** (v1.11). Each is derived from the record, the receipts and the kernel's canon events, so it answers the same after a load:
+- `exposure(event) → { grade: ExposureGrade; at: GameTime; play?: number } | undefined`: the highest exposure grade of an event, and the game time at which it first reached `presented` or above. An event is exposed `confirmed` when V took part in it as an actor, `presented` when V observed it under the kernel's witness rule, and at a receipt's grade when a delivery that cites it reached that grade (§10.2). `play` is the receipt's `playTotal`, when the grade came from a delivery. S3's legibility ledger and S1-10's warning gate read it;
+- `exposedNodeAt(node, atLeast) → GameTime | undefined`: the earliest game time at which an exposure entry at `atLeast` or above named the node (as `exposedNode` does);
+- `responseOf(event) → { seed: Id; beat: BeatKey; kind: string; stance?: Stance } | undefined`: for a `response` event, the answer the record holds and, for an action, its stance;
+- `realisedBy(event) → Array<{ fn: FnId; args: Record<string, Id> }>`: for a `seed-outcome` event, the fills of §2.24;
+- `mintedBy(event) → { seed: Id; by: BeatKey | 'action' | 'decline' | 'unattended' } | undefined`: for an event a seed minted (§2.5), which seed and where;
+- `realising(pattern, juncture) → Array<{ seed: Id; binds: Record<Var, Id | 'v'> }>`: the live seeds whose `realises` names that juncture, with the casts their `binds` resolve to (unbound roles omitted);
+- `beatFunction(seed, beat) → { fn: FnId; args: Record<string, Id | 'v'> } | undefined`: the beat's juncture in the seed's implicit pattern (§2.24), with its arguments cast.
+
+Each instance view's `displays` entry also gives the delivery's game time `at`, its `beat`, its `channel` and its `cites` (§10.2), and the view gives `nudge` (the seed is a nudge).
+
 ### 10.2 The exposure ledger
 
 The exposure ledger answers "was V shown this, and how surely?". It is derived, not stored. Each entry has a grade (§8.5):
@@ -2204,7 +2370,9 @@ type ExposurePattern = { event?: EventPattern; fragment?: FragmentId; seed?: Tem
 
 `exposed(pattern)` is yes if any entry matches at `atLeast` or above, and no otherwise.
 
-**Receipts.** Every delivery that reaches `presented` or above leaves a compact **receipt** that outlives it: `{ delivery, grade, channels, cites, cue, at }`. Receipts are kept in the instance's state, and moved to the layer-2 global record when the instance is compacted. After a load, the ledger is rebuilt from the kernel's canon events and the receipts. The two-channel warning rule (§7.3) reads the receipts' `channels`.
+**Receipts.** Every delivery that reaches `presented` or above leaves a compact **receipt** that outlives it: `{ delivery, grade, channels, cites, cue, at, play }`, where `at` is the game time and `play` the `playTotal` at which it first reached `presented` (v1.11 names both). Receipts are kept in the instance's state, and moved to the layer-2 global record when the instance is compacted.
+
+**What a delivery cites** (v1.11). A delivery's `cites` are the events its content rests on: the casts of the delivery's roles of kind `core:event` (a story event, a matched filler, an intention's warning, bound by an overlay or a stand-in), the events its callbacks cite, and a trace's cause (§2.15). Binding an event to a role and showing a delivery that binds it is citing it. That is how a delivery makes a pattern juncture's filler, and a causal link between two fillers, perceivable ([S3 §6.7](procedural.md#67-legibility)). After a load, the ledger is rebuilt from the kernel's canon events and the receipts. The two-channel warning rule (§7.3) reads the receipts' `channels`.
 
 **Uses:**
 - a lapse counts as declined only if the offer was `confirmed` (§7.4);
@@ -2265,7 +2433,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-12 | A game-fact write without the `story.write-vanilla` capability, or marked `resettable` | error |
 | L-13 | A cycle among role references | error |
 | L-14 | A decision beat with fewer than three stances, or none that is `refuse` | warning |
-| L-15 | A stake on `v` not tied to an action V accepts | error |
+| L-15 | A stake on `v` not tied to an action V accepts; or (v1.11) a harm or loss to `v` (an effect `harm`, `kill`, `take` or `expose` on `v`, in a `kernel` or `event` effect) that is neither the consequence of an action V accepts, faced as an obstacle with affordances, nor a staged group act under D-30: a beat binding the intention's warning or act event and an obstacle with affordances (§2.16a) | error |
 | L-16 | A gate on a partner fact (a relationship rung that tests V's romance state elsewhere) | error |
 | L-17 | Text naming a role attribute not guaranteed by the role's `must` or identity | error |
 | L-18 | `standIn` on a role with a fixed identity, or with a `must` term outside the constructible subset (§5.4) | error |
@@ -2363,7 +2531,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-112 | An engine effect whose declared flash parameters exceed the general threshold | error |
 | L-113 | A `coerced` person with no `coercer` role or means, or such a seed with no route for V to act or decline (error); erotic framing in an exploitation seed (warning) | error, warning |
 | L-114 | Game text or audio held inline in a pack, instead of a `GameRef` | error |
-| L-115 | A synthetic voice imitating a real person without a recorded consent; or a `voice` that is none of a recorded line, a splice of recorded lines, or a pack asset | error |
+| L-115 | A synthetic voice imitating a real person without a recorded consent; or a `voice` that is none of a recorded line, a splice of recorded lines, or a pack asset; or (v1.11) new words for V given any voice: a `text` option line stays unvoiced (D-29) | error |
 | L-116 | A `generated` unit marked `authored: 'human'`, or filling an authored-source slot | error |
 | L-117 | A unit in a `realWorld: tagged` pack mentioning a flagged real-world entity | warning, to review |
 | L-118 | The stage lint (§2.21): implied events, sign kinds, premise cues, reads on approaches, explanation cues, anonymous elements, undeclared interaction, unlinked nearby scenes, free scatter, audio without a twin | error, warning by check |
@@ -2377,7 +2545,7 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-126 | A phrasing tagged for a different voice class from the role's voice card | warning |
 | L-127 | More than one unexplained specific in a line, or a specific with no `ask` within two steps | warning |
 | L-128 | A non-colour phrasing that reads nothing from the record | error |
-| L-129 | An option label that names an emotion, or isn't from the closed list | error |
+| L-129 | An option label that names an emotion, or isn't from the closed list; or (v1.11) an option whose displayed text isn't its `say` line's own words | error |
 | L-130 | A told story containing an event its teller neither witnessed nor was told | error |
 | L-131a | An `inScene` offer that doesn't link `because` a beat whose fragment has the same `scene` label | error |
 | L-131 | A `modelOk` unit without a model-free `says` that leaves the same facts | error |
@@ -2388,8 +2556,32 @@ The lint runs at compile time (§3.1), and on demand from authoring tools (S4, P
 | L-136 | A `setting` atom reading a model setting | error |
 | L-137 | A brief giving pack text to a model when the pack's `aiUse` is `none` | warning |
 | L-33 (extended) | A `turns[].what` reading anything of V's but beliefs held about V and V's recorded acts | error |
+| L-138 | A `realises` entry naming an unknown pattern or juncture, or a juncture of a shape; whose `binds` misses an argument of the juncture's function or names an undeclared role; or whose `by` beat leaves no `event`, and makes no `offer` or `response`, whose kind fills the juncture's function with the mapped arguments (§2.24) | error |
+| L-139 | An `event` effect whose kind isn't registered, or whose producers don't include `s2`; that names an undeclared role; or that names `v` outside the `writes` of an action or decline and the leaves of a beat whose every chain link reads a `response` atom (§2.5) | error |
+| L-140 | A nudge holding an offer, a beat whose fragment has a channel, stakes, costs, promises, clocks, projections, forms, `closing`, or a role's `authored` beliefs or edges; naming `v` anywhere; or minting a `tell` without a `teller`, a `listener` and a `subject` participant (§2.25). Whether the teller knows the subject is checked at run time (rule 4) | error |
+| L-141 | A consequential offer with no `asker` | warning |
+| L-142 | A text unit whose speaker is `v` that isn't an option's `say` line: the engine never speaks for V unprompted (§2.22) | error |
+| L-143 | An offer whose voiced options (recorded or spliced `say`) all share one stance while another stance's options are only unvoiced (§2.22) | warning |
+| L-144 | **Pattern lint** (L-144 to L-159). A pattern whose edges, not counting `forecloses`, form a cycle; with more than `maxJunctures` (8) junctures or 12 edges; or with an edge naming an unknown juncture | error |
+| L-145 | A pattern with no entry juncture, or an entry juncture that binds no person or group (error); an entry juncture that tests nothing but a function that many kinds fill: no `requires`, no fixed `fill` (warning) | error, warning |
+| L-146 | An unknown function, link, relation or role kind; an argument the juncture's function doesn't have; or a variable not declared in `roles` | error |
+| L-147 | A declared variable that no juncture's arguments or `requires` bind | error |
+| L-148 | A juncture the protagonist may fill (`v: 'offer'`) without a continuation for each stance: after it is filled by a compliance, by a refusal, and after it is left unanswered, some outcome is still reachable (an outcome with `after` counts for the last) | error |
+| L-149 | A `belief` change whose believer's role allows the protagonist (`v: 'may'`) and isn't guarded `when: { npc }` | error |
+| L-150 | A `refine` realisation that fails the refinement contract ([S3 §7.11](procedural.md#711-later-realisations-back-fill-and-open)): the named child outcome doesn't `produce` the juncture's function, `binds` doesn't cover every argument, or a change the juncture declares neither follows from the function nor is recorded by the child's reached junctures | error |
+| L-151 | A `realise` list on a juncture of a shape; or a `story` juncture without `binds` | error |
+| L-152 | A structured `join` naming a juncture with no edge into this one | error |
+| L-153 | A juncture reachable only after a terminal outcome that isn't in that outcome's `aftermath` | error |
+| L-154 | A library pattern (`use: 'library'`, the default) with a fixed role identity, or with fewer than half its junctures' fillers open (error). Every pattern's abstraction index is reported | error |
+| L-155 | An outcome naming an unknown juncture; `produces` naming an unknown function or an undeclared variable (error); `next` naming an unknown pattern (warning) | error, warning |
+| L-156 | An `escalation` entry that isn't a juncture of the pattern, or whose function has no acting argument | error |
+| L-157 | `show` naming an unknown juncture, or `show.edges` above the number of edges | error |
+| L-158 | A `once` variable that some entry juncture doesn't bind; or `within` above `maxWithin` (30 game days) | error |
+| L-159 | An `offer` realisation on a juncture that is neither `v: 'offer'` nor an `ask` whose `of` role allows the protagonist; or a `nudge` realisation on a juncture whose arguments include a role that allows the protagonist (DS-05, D-30) | error |
 
 L-25 and L-40 were removed in v0.2 (§16). Their numbers are not reused.
+
+**The pattern lint** (L-144 to L-159, v1.11; the composite's S4-1) checks pattern documents ([S3 §2.2](procedural.md#22-patterns)), which are pack data, not seeds. It is static. An error refuses the pattern when layer 3 loads it, and its other patterns load; a warning is reported. A pattern's **abstraction index** is the share of its roles, fillers and realisation lists left open, reported for every pattern: library patterns are held to it (L-154), and authored ones see it as information only, because a specific story is allowed to be specific ([D-28](../decisions.md)).
 
 ### 11.2 The fit report
 
@@ -2419,6 +2611,8 @@ interface FitReport {
   argues: Array<{ premise: PremiseId; stance: string; carriers: BeatKey[] }>;   // the seed's rows of the argument profile
   plants: Array<{ promise: string; cause: 'found' | 'would-construct' | 'none'; earliestExposure?: BeatKey }>;
   turns: Array<{ who: RoleKey; kind: string; pressure: string }>;    // who could turn, and how much pressure it takes
+  implicit: { junctures: Array<{ beat: BeatKey; fn?: FnId }>; abstraction: number };   // v1.11: the derived implicit pattern (§2.24)
+  realises: Array<{ pattern: PatternId; juncture: JunctureKey; fills: boolean; changes: string[] }>;   // v1.11: on this sample, does each entry's event fill its function, and the juncture's declared changes
 }
 ```
 
@@ -2564,6 +2758,9 @@ A **removed pack** withdraws its live instances (T1), because their content refe
 | S2-I-14 | **Closed hook inputs.** Hooks receive only the inputs listed in §8.8 |
 | S2-I-15 | **Words don't steer.** Given identical timestamped external inputs, rendering never changes a semantic payload or blocks structural scheduling. Nothing structural reads rendered text, whether a model ran, or the model settings. Display durations come from authored duration slots, not from text length; a slow render falls back at once (§2.23) |
 | S2-I-16 | **Released words are immutable.** A released delivery's text is never replaced (§2.23) |
+| S2-I-17 | **Nudges stay off-screen** (v1.11). A nudge never hands anything to the game port, never names V, and starts only past its legality check (§2.25) |
+| S2-I-18 | **Two sources of harm** (v1.11). No seed construct harms V or takes from V except as the consequence of an accepted action faced as an obstacle, or as a staged group act whose warning reached `presented` (§2.16a) |
+| S2-I-19 | **Only a chosen line is said** (v1.11). V's speech is only ever the `say` line of the option the player picked, shown in its own words (§2.22) |
 
 ## 14. Fixtures
 
@@ -2636,6 +2833,25 @@ Every fixture uses `worldSeed = H("fixture", <id>)`, a fixture pack `xf.fixture`
 | SF-64 | **First-rung "not now".** R1's first offer answered with the null path | The offer beat is deferred and offered again within its bounds; the seed doesn't go unattended |
 | SF-26 | **Constructed trace.** A trace with no found cause, `latitude` allowing `trace-cause`. S3's stub contributes a cause: an event at a stall. The trace is displayed; save; load | The `display` entry records `constructed`. The cause's fields are pinned `committed` at display, and resolve identically after the load |
 
+**v1.11 fixtures** (the composite's adoption). They use the composite's library and vocabulary ([`composite/patterns/`](../composite/patterns/), [`vocabulary.json`](../composite/vocabulary.json)) as fixture pack data, and a stub registry that declares the fills of §2.24 and of the kinds the fixture mints.
+
+| # | Setup | Expected |
+|---|---|---|
+| SF-65 | **Realises lint.** R2′ ([pattern language §4.2](../composite/pattern-language.md#42-three-points-on-the-range)): `asked` by its offer beat, `paid` by its `paid` exit leaving a `shakedown` event with outcome `done`, `refused` by its stand-up exit leaving one with outcome `failed`. Twins: a `realises` naming a shape's juncture; one whose `binds` misses `?col`; one whose exit leaves only seed facts | R2′ is lint-clean. The twins fail L-138, one finding each |
+| SF-66 | **Promise on acceptance.** An offer with `asker: stallholder` and `plan: [recipient]`; V accepts an action of stance `help`; then, in a second run, declines; then a third run accepts a `refuse` action | First run: one `promise` event, committed, cause the response, participants V (`promiser`), the stallholder (`promisee`), the recipient (`subject`), place the stallholder's place, no outcome. Second and third runs: none. A save and load gives the same event `Id` |
+| SF-67 | **What layer 2's events fill.** The offer and response events of SF-66, and a decline | `responseOf` gives each answer and stance. Under the stub registry the offer fills `ask(stallholder, V)`; the accepted response `comply(V, stallholder)` and `choose(V)`; the decline `refuse(V, stallholder)`; the null path nothing |
+| SF-68 | **Nudge lint.** A nudge with an offer beat; one with a role `v`; one with an `authored` belief; one minting a `tell` with no `subject` participant; a clean twin with a role goal and a minted `tell` | Four L-140 errors; the twin compiles |
+| SF-69 | **Nudge legality.** The clean twin of SF-68. (a) Its minted event's place is V's current cell. (b) V moves on and the cell's `depth` closes. (c) A variant mints a `theft` by a cast person with no goal frame and no group intention. (d) The same with a seed-opened goal frame whose effects include `take` on the target | (a) The silent start waits, with `nudge-held` (rule 1); nothing reaches V and no cast edge is in effect. (b) It starts by T8n. (c) Held (rule 4) until the window closes. (d) Starts |
+| SF-70 | **Nudge silence.** SF-69(b) runs to its end | No delivery is ever released; the `seed-outcome` is minted; the closure has `witnessed: false`; no closing delivery, coda or news is queued |
+| SF-71 | **Option lines (D-29).** An offer with three actions: a recorded line, a splice of two cuts, and a `text` line; and a wordless `leave` action. Twins: a `text` line given a pack voice; a `text` option shown with a paraphrase; an option labelled with an emotion; an offer whose only voiced options have stance `help` while its `refuse` option is text | Each option shows its own words: the transcript, the joined cuts, the text frozen at release (identical after a load); the text option plays no audio; `leave` shows its label only. After the player picks, only that line appears as V's speech. Twins: L-115, L-129, L-129, and an L-143 warning |
+| SF-72 | **Two sources of harm (D-30).** (a) An obstacle beat with a `harm` effect on V, reached with no accepted stake and binding no intention. (b) The same beat binding a group intention's warning event, with two affordances, while the warning is only `ambient`; then `presented` | (a) L-15 error. (b) The delivery waits at preparation; once the warning is `presented` it is released. No harmful effect on V is ever written before then |
+| SF-73 | **Warning carried.** A stub S1-10 intention against V with its warning event; a fixture template sown on `intentAgainst` that binds the warning; tempo `steady`; then the same with no such template | The warning delivery cites the warning event, and `exposure(warning)` reaches `presented` when it is shown. Without the template the warning is never exposed, and the stub's gate produces no harmful act |
+| SF-74 | **Exposure reads.** One event V observed, one V took part in, one only cited by a delivery shown at `presented`, and one never shown; save; load | `exposure` gives `presented`, `confirmed`, `presented` with the receipt's `play`, and nothing; `exposedNodeAt` gives the earliest game times. All identical after the load |
+| SF-75 | **Implicit pattern.** R1 (Appendix A.4) and R2′ | Deterministic derived junctures: R1's offer beats are `ask` junctures and its exits outcomes; R2′'s junctures carry their `realises` functions. `beatFunction` answers for each; the fit report shows both with their abstraction index |
+| SF-76 | **Realised by the end.** A seed with `realises: { pattern: debt, juncture: paid, by: 'end' }`; it resolves by T12; a twin settles unattended (T13) with an entry `by: 'unattended'` | `realisedBy` of the first seed's `seed-outcome` gives `repay` with its cast arguments; of the twin's, its unattended entry only |
+| SF-77 | **The pattern lint.** One failing pattern and one passing twin for each of L-144 to L-159; then the composite's whole v0 library | Each check fires on its trip and not on its twin. The library's 29 patterns pass; coveted's refinement by interception meets the contract (L-150); the abstraction index is reported for each |
+| SF-78 | **Growth from an instance.** A sowing request whose overlay's `growsFrom` names an instance and juncture; the seed resolves with a loose end | The overlay is accepted and kept in the document; layer 2 never reads the instance; every `looseEnds` entry carries `{ instance, juncture }` |
+
 ### 14.1 Property tests
 
 The fixtures are examples. With the layer-2 implementation, the reference model also checks these properties ([dossier 23](../craft/d23-evaluation-testing.md) §12, S23-S2-01 to S23-S2-16):
@@ -2652,6 +2868,9 @@ The fixtures are examples. With the layer-2 implementation, the reference model 
 - **Intersections:** order independence.
 - **Profiles:** one acceptance story per profile.
 - **Reports:** deterministic fit reports and surveys.
+- **Nudges (v1.11):** over random world states and V positions, no nudge's minted event is ever placed where V is or at a fine-tier cell, names V, or is witnessed by V; a nudge never hands anything to the game port.
+- **Harm (v1.11):** over random runs, no harmful effect on V is ever written except by an accepted action's obstacle or a staged group act after its warning was `presented`.
+- **Realises (v1.11):** every `realises` entry of a lint-clean seed fills its function on some sample state of its fit report.
 
 ## 15. Compromises and open items
 
@@ -2661,6 +2880,8 @@ The fixtures are examples. With the layer-2 implementation, the reference model 
 | C-S2-2 | Casting considers the whole city | Casting queries one scope with `limit: 'all'`; a query over the hard limits leaves the role unfilled (`too-broad`) | Large-scope roles become common |
 | C-S2-3 | An ending is unreachable when nothing could lead to it | A conservative stuck check (§7.5): anything that could still change counts as able to | A seed is kept alive long after it has no way forward |
 | C-S2-4 | Stand-ins satisfy any role | Only the constructible subset (§5.4) | Authors need stand-ins for richer roles |
+| C-S2-5 | One language spans authored stories and abstract patterns ([D-28](../decisions.md)) | Seeds and patterns stay two documents. A seed's implicit pattern is derived, not matched; seeds join instances through the world events they leave and their `realises` (§2.24) | Authors find themselves writing a seed and a pattern for one story |
+| C-S2-6 | A nudge gives an actor a reason or an opportunity in any unobserved form | Only goal frames, world requirements and minted events, never a belief or edge written directly (§2.25), so every cause it adds is an event a "why" answer can walk | A needed nudge can't be expressed as an event |
 
 **Open items:**
 1. **Dossier 8.** v0.1 adopted 20 of its 22 P4 requirements. Tempo's nested schedule thresholds and attention as a derived view are S3's, as are thread budgets and push rates.
@@ -2685,10 +2906,35 @@ The fixtures are examples. With the layer-2 implementation, the reference model 
 20. **Dossier 21.** v0.14 adopts its 16 S2 requirements (§2.22). Its S7 requirements (assembling and choosing text) go to S7, and its lexicons, voice cards and phrase tables to S4. Measuring the game's own text per channel, to replace the provisional budgets, is a research-queue brief (its §12.4), under D-24.
 21. **Dossier 22.** v0.15 adopts its 13 S2 requirements (§2.23). Its S7 requirements (the model adapter) go to S7 and its P7 requirements (local inference, budgets in the companion) to P7. Open: whether a player may let their own local model fill authored-source classes. The first cut excludes it; D-23 concerns the project's own tools, so this is a later decision.
 22. **Dossier 23.** v0.16 adds its fixtures and property tests (§14, §14.1). Its evaluation plan (four tiers: offline, transcript panels, 14 merged in-game sessions, early testers, all through one consented session ledger, with control arms and a per-feature off switch) is P9's; its tools are P10's.
+23. **The parallel pass's interfaces** (v1.11, §0.5). S0-1's data slot (with the `kind` and `depth` this page adds), S0-2's `fills`, and S1-3, S1-4, S1-5, S1-9 and S1-10 as assumed there. Once S0 v4.17 and S1 v0.6 land, this page is aligned to whatever form they settle.
+24. **The warning template.** S4's starter pack must ship a template that carries a group's warning (§2.16a); without one, a D-30 intention can never harm the protagonist, which is safe but leaves the hunt toothless.
+25. **Promise outcomes.** Whether keeping or breaking an accepted plan should later be recorded as a `promise` with `outcome` `done` or `failed`, so that the city's view of the protagonist's reliability follows (S1's ledger already reads it). It needs a rule for when a plan counts as kept, which is an NPC's belief, not a fact.
+26. **DS-71 and DS-72.** Wordless cues for unvoiced lines, and choices composed from an act and its parameters, wait for their plans (§0.3).
 
 ## 16. Review record
 
 v1.1's additions come from drafting S3 (§13 there). They will be reviewed with S3.
+
+### v1.11: the composite's proposals, D-29 and D-30
+
+A spec pass, not a review. It takes the S2 and S4 proposals of [the pattern language §13](../composite/pattern-language.md#13-proposed-specification-changes), checked against what this page said, and the maintainer's decisions D-29 and D-30. S3 v0.6 takes the S3 proposals ([S3 §15](procedural.md#15-review-record)). The interfaces assumed from the parallel S0 and S1 pass are in §0.5. An independent review of v1.11 with S3 v0.6 is still to run.
+
+| Proposal | Decision | What this page does, and why |
+|---|---|---|
+| S2-1 `realises` | Adopted, with one change | §2.24 and L-138. A beat realises a juncture through the world events it leaves (or its offer and response events); the end and the unattended settlement through the `seed-outcome` event and `realisedBy`. **Changed:** the juncture's declared changes are expectations the world bears out, listed in the fit report, not lint conditions. Most changes (a tie moving, a frame opening) are S1's response to the event, so a seed can't be held to writing them |
+| S2-2 implicit patterns | Adopted as a derived view | §2.24. Derived on demand and never matched: beats are layer-2 state, not world records, so matching an implicit pattern would need a second matcher. It names authored seeds in thread shapes and gives tokens to deliveries that cite no occurrence, which is what the skeleton measures need |
+| S2-3 `growsFrom` an instance | Adopted | §1.3, §2.13. The thread view is S3's (§5.7 there). Ancestry through instances is defined; its gate (L-37) stays a later capability |
+| S2-4 the nudge form | Adopted, with changes | §2.25, T8n, L-140. **Changed:** no role `authored` beliefs or edges, since a belief written directly has no event a "why" answer could walk; the pattern language's own rule (§8.2 there) is a caused telling, so beliefs travel by minted `tell`s. **Added:** a nudge never names the protagonist, so it can't steer a group's decision under D-30; and a four-rule legality check at preparation, the runtime form of DS-05 |
+| S2-5 `juncture` intersections | Partly adopted | §9. Adopted: a `pressure` is also a pattern entry, still never settled away. **Not adopted:** a `juncture` intersection kind. Layer 2 can't detect a shared filler without reading layer 3's pool, and it would have no settling rule; layering is recorded where it is found, in layer 3. Contests between seeds over a node are `claim` intersections already |
+| S2-6 promises | Adopted | §2.9, §7.4. Needs the new `asker`. The promise carries no `outcome`, so an acceptance alone moves no reputation in S1's ledger (open item 25) |
+| S2-7 loose ends name their juncture | Adopted | §6.4, through `growsFrom`. Growth from loose ends stays a later capability of S3 |
+| S2-8 job and heist, front and feud as shapes | Adopted for job and heist; not for the front | §2.10. The front stays a profile: it is a clock and projections, not a plot. The feud was never an S2 profile; it is a shape in the composite. Plot-shaped profiles serve authored seeds, and are sowable only past S3-K-6 |
+| S2-9 kits declare `fills` | Adopted, with one change | [S3 §2.3](procedural.md#23-sowable-templates). **Changed:** each entry maps the function's arguments to kit roles and names a cause role, because a list of function ids can't tell the sower which kit role takes which person |
+| S4-1 the pattern lint | Adopted | §11.1, L-144 to L-159, in this table as the brief asks; S3 loads only patterns that pass |
+| D-29 | Applied | §2.9 (`say`, `OptionLine`), §2.20, §2.22, L-115, L-129, L-142, L-143, S2-I-19. Every other option rule stands |
+| D-30 | Applied | §2.16a, §2.16, §2.17, §8.4 step 4, L-15, S2-I-18, the `intentAgainst` read |
+
+Also in v1.11, found while checking: `EventSpec` was named (for the unattended plan) but never defined (§2.5); the `offer` and `response` events had no stated participants (§2.24, §8.5); and receipts' `cites` and `at` were undefined (§10.2).
 
 ### Round 2: GPT-6 Astra, extra-high effort, on v0.16
 
