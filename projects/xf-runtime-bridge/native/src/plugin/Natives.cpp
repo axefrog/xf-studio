@@ -845,7 +845,7 @@ void PinDrawn(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aOut
 }
 
 // XFBridge_ProbeFlags() -> Int32   (0.8.7, test probes: 1 the hooks are on ([bridge] allow_test_hooks), 2 the stim tap, 4 the
-// save-identity probe's BeforeSave write armed; 0 without the test hooks).
+// save-identity probe's BeforeSave write armed, 8 the autonomous build, 16 the incident taps on; 0 without the test hooks).
 void ProbeFlags(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aOut, int64_t)
 {
     aFrame->code++; // skip ParamEnd
@@ -857,6 +857,11 @@ void ProbeFlags(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aO
             flags = 1 | (state.probeSwitches.load() & 6);
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
             flags |= 8;
+            // 0.8.20: 16 is the incident taps' switch (on unless incidents.list {tap: false} or the kill switch turned it off).
+            if (IncidentTapOn())
+            {
+                flags |= 16;
+            }
 #endif
         }
     });
@@ -893,6 +898,19 @@ void RecordIngress(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, bool* out
         // Consume ignored return values too; no unbounded copy before the core's length/nesting checks.
         const auto text = payload.Length() < recording::kPayload ? ToStd(payload) : std::string(recording::kPayload, ' ');
         const bool accepted = RecordingIngress(ToStd(channel), text);
+        if (out) *out = accepted;
+    });
+}
+
+// XFBridge_IncidentSeen(payload: String) -> Bool   (0.8.20, the autonomous test build): one observation or a one-second tick from the
+// incident taps (core/Incidents.hpp). Passive: the plugin groups and reports; nothing is called back into the game.
+void IncidentSeenNative(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, bool* out, int64_t)
+{
+    RED4ext::CString payload; RED4ext::GetParameter(frame, &payload); frame->code++;
+    if (out) *out = false;
+    Guarded("XFBridge_IncidentSeen", [&] {
+        if (payload.Length() >= 4096) return;
+        const bool accepted = IncidentSeen(ToStd(payload));
         if (out) *out = accepted;
     });
 }
@@ -1005,13 +1023,14 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_RecordEnabled", &RecordEnabled, "Bool", {"channel"});
         RegisterGlobal(rtti, "XFBridge_Record", &RecordIngress, "Bool", {"channel", "payload"});
         RegisterGlobal(rtti, "XFBridge_RecordIdentity", &RecordIdentity, "String", {"channel"});
+        RegisterGlobal(rtti, "XFBridge_IncidentSeen", &IncidentSeenNative, "Bool", {"payload"});
 #endif
         RegisterGlobal(rtti, "XFBridge_Event", &ProbeEvent, "Bool", {"kind", "data"});
         RegisterGlobal(rtti, "XFBridge_ProbeFlags", &ProbeFlags, "Int32", {});
         // 0.8.9: the pins' views, OR-ed natively (the Sol review's finding 3).
         RegisterGlobalTyped(rtti, "XFBridge_PinDrawn", &PinDrawn, "Int32", {{"Int32", "pin"}, {"Int32", "bits"}});
         #ifdef XFB_AUTONOMOUS_TEST_HOOKS
-        log::Info("rtti.register_types", "phase=post_register natives=33");
+        log::Info("rtti.register_types", "phase=post_register natives=34");
 #else
         log::Info("rtti.register_types", "phase=post_register natives=27");
 #endif

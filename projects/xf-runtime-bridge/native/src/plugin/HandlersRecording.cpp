@@ -84,6 +84,7 @@ void TickRecording(bool ready)
     ops.guard = Guard;
     ops.sample = [](const std::string& channel, const std::vector<std::string>& actors) {
         if (channel == "supervisor") return nlohmann::json{{"valid", true}, {"event", "supervisor.coverage"}, {"continuous_contact", false}, {"no_contact_proof", false}};
+        if (channel == "incidents") return IncidentCoverage(); // 0.8.20: native bookkeeping only, no game read
         RED4ext::CString name(channel.c_str());
         std::string joined;
         for (const auto& a : actors) joined += (joined.empty() ? "" : ",") + a;

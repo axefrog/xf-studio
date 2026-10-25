@@ -2180,6 +2180,7 @@ void RegisterMethods(Dispatcher& aDispatcher)
     RegisterMethodsNpc(aDispatcher);
     RegisterInputChoices(aDispatcher);
     RegisterRecording(aDispatcher);
+    RegisterIncidents(aDispatcher);
     RegisterSupervisor(aDispatcher);
     RegisterMethodsDm(aDispatcher);
     RegisterMethodsSenses(aDispatcher);

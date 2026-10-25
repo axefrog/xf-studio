@@ -3,7 +3,7 @@ import { catchUp, type TimelineCursor } from "./timeline.ts";
 import { clock as defaultClock, type Clock, type Json, type TestApi } from "./windows.ts";
 
 // Channels whose rows can carry a named event; a polled-state sample (v, actors, camera) cannot hide one.
-const EVENT_CHANNELS = new Set(["subtitles", "voice", "face", "ui", "contacts", "supervisor"]);
+const EVENT_CHANNELS = new Set(["subtitles", "voice", "face", "ui", "contacts", "supervisor", "incidents"]);
 export type CaptureArm = { run: number; event: string; channel?: string; match?: Json; capture: "screenshot" | "burst" | "recrop"; args?: Json; delay_ms?: number; count?: number; expires_s?: number };
 type Active = { id: number; input: CaptureArm; cursor: TimelineCursor; until: number; remaining: number; stop: AbortController };
 export class EventCaptures {

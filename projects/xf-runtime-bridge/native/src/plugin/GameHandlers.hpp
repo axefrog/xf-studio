@@ -13,6 +13,8 @@ namespace xfb::plugin
 // Bridge 0.6 (Handlers060.cpp): scene.read, the session event stream's handover, behaviours, player control phase 1 and
 // input.probe. Called by RegisterMethods.
 void RegisterRecording(Dispatcher&);
+// 0.8.20 (HandlersIncidents.cpp): incidents.list.
+void RegisterIncidents(Dispatcher&);
 void TickRecording(bool ready);
 void StopRecording(const std::string& reason);
 void RegisterMethods060(Dispatcher& aDispatcher);

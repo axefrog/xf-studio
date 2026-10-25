@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
   XFRuntimeBridge
-  VERSION 0.8.19
+  VERSION 0.8.20
   LANGUAGES CXX RC
 )
 
@@ -138,6 +138,7 @@ add_library(xfb_core STATIC
   src/core/Events.cpp
   src/core/GameThreadQueue.cpp
   src/core/Hooks070.cpp
+  src/core/Incidents.cpp
   src/core/overlay/Host.cpp
   src/core/overlay/Theme.cpp
   src/core/InkUi.cpp
@@ -193,6 +194,7 @@ add_library(XFRuntimeBridge SHARED
   src/plugin/Lifecycle.cpp
   src/plugin/Supervisor.cpp
   src/plugin/HandlersSenses.cpp
+  src/plugin/HandlersIncidents.cpp
   src/plugin/LivePoseMemory.cpp
   src/plugin/Overlay.cpp
   src/plugin/ScriptCall.cpp
@@ -219,7 +221,7 @@ target_compile_options(xfb_companion_probe PRIVATE ${XFB_OPTIONS} /WX)
 # -----------------------------------------------------------------------------
 # Offline self-test host: runs the same bridge core with a simulated game thread.
 # -----------------------------------------------------------------------------
-add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/Sim070.cpp src/selftest/SimDm080.cpp src/selftest/SimNpc.cpp src/selftest/SimInput.cpp src/selftest/SimSenses.cpp src/selftest/UnitTests.cpp src/selftest/UnitTestsDm.cpp src/selftest/UnitTestsInput.cpp src/selftest/UnitTestsRecording.cpp src/selftest/UnitTestsSupervisor.cpp src/selftest/UnitTestsSupervisorNpc.cpp src/selftest/UnitTestsNpc.cpp src/selftest/UnitTestsNpcSubstitute.cpp src/selftest/UnitTestsSenses.cpp)
+add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/Sim070.cpp src/selftest/SimDm080.cpp src/selftest/SimNpc.cpp src/selftest/SimInput.cpp src/selftest/SimSenses.cpp src/selftest/UnitTests.cpp src/selftest/UnitTestsDm.cpp src/selftest/UnitTestsInput.cpp src/selftest/UnitTestsIncidents.cpp src/selftest/UnitTestsRecording.cpp src/selftest/UnitTestsSupervisor.cpp src/selftest/UnitTestsSupervisorNpc.cpp src/selftest/UnitTestsNpc.cpp src/selftest/UnitTestsNpcSubstitute.cpp src/selftest/UnitTestsSenses.cpp)
 target_compile_options(xfb_selftest PRIVATE ${XFB_OPTIONS} /WX)
 target_link_libraries(xfb_selftest PRIVATE xfb_core)
 add_dependencies(xfb_selftest xfb_header_stamp xfb_companion_probe)

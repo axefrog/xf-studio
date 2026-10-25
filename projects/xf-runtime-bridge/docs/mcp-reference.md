@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 153 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 154 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -25,7 +25,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (3)
-- [Other tools](#other-tools) (10)
+- [Other tools](#other-tools) (11)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -34,7 +34,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 54 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 55 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 3 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -811,7 +811,7 @@ Explicit autonomous -writes candidate only. Bounded source sampling and private 
 
 ### `test_record_start`
 
-**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Default channels include supervisor interventions and contacts: V car-hit entry plus landing/wall controller reports (ground included, other identity unknown), with partial uncommissioned coverage; absence is never full no-contact proof. Optional face (F) submissions and ui (U) consumer snapshots observe intent and actual widget state, never evaluated facial output. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. Stop and drain before another start.
+**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Default channels include supervisor interventions and contacts: V car-hit entry plus landing/wall controller reports (ground included, other identity unknown), with partial uncommissioned coverage; absence is never full no-contact proof. Optional face (F) submissions and ui (U) consumer snapshots observe intent and actual widget state, never evaluated facial output. Optional incidents (0.8.20) records each witness.report (an incident V saw or heard, with its people, place, time and perception) as it closes, plus a one-second coverage heartbeat of the incident counters; passive, never a default channel. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. Stop and drain before another start.
 
 - **Command:** `test.record.start`, the bridge method `test.record.start`
 - **Permission:** Look (`read`)
@@ -821,7 +821,7 @@ Explicit autonomous -writes candidate only. Bounded source sampling and private 
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `channels` | array of string | 1 to 9 items; each `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts`, `supervisor` | Source channels to sample |
+| `channels` | array of string | 1 to 10 items; each `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts`, `supervisor`, `incidents` | Source channels to sample |
 | `actors` | array of string | at most 16 items; each matches `^[ap][0-9]{1,15}$` | Selected returned actor or pick handles |
 | `rate_hz` | integer | exactly 10 | Source target (10 only) |
 | `duration_s` | integer | 1 to 1800 | Maximum recording lifetime |
@@ -2735,7 +2735,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 |---|---|---|---|
 | `run` (required) | integer | 1 to 9007199254740991 | Recorder run |
 | `event` (required) | string | 1 to 64 characters | Exact event name |
-| `channel` | string | `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts` | Optional recorder channel |
+| `channel` | string | `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts`, `incidents` | Optional recorder channel |
 | `match` | object | the fields below | At most eight exact event-data fields to match |
 | `match.who` | string | at most 512 characters | Exact who |
 | `match.actor` | string | at most 512 characters | Exact actor |
@@ -3051,6 +3051,24 @@ Tools not yet sorted into an area above.
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `generation` | integer | 0 to 9007199254740991 | Optional expected detector generation |
+
+### `incidents_list`
+
+**What V witnessed.** Autonomous -writes test build and allow_test_hooks only. Read only, passive: nothing here, and nothing in the taps behind it, changes the game or anyone's ties or beliefs. The recent incidents (a theft, an assault, an accident, a street fight, a police stop, gunfire, or other) that the game's own producing systems raised near V, grouped from stimulus broadcasts (gunshots, explosions, blows, crime witnessed, vehicle collisions, screams), deaths and defeats, combat targets, the game's reprimands, vehicle thefts and combat or fear barks, newest first. Each carries a stable id (inc-N), its kind and what it was judged from, the people in it (entity, record, affiliation, roles, an XF actor's handle when it is one, V among them when V took part), where (the middle, first and last place, and V's district) and when (simulation and game seconds), and how V perceived it: saw (a person other than V was inside the camera's view, within 80 m, with no static geometry on the ray from the camera) and heard (V was inside the stimulus' own audible radius), each with its count and nearest distance, and was told, which is not sensed and is never reported. An incident is witnessed when V saw or heard any of it; one that closes witnessed with enough evidence (one shot, blow or death; four barks) becomes one witness.report in test.events, session.events and the recorder's incidents channel, with a confidence from the modes and the evidence. v_involved says V took part. Bounded: 32 open incidents, 64 kept, 40 observations and 20 reports a second and a minute. tap false switches the observation tap off (closing, and reporting, what is open), true on (default on). Sampled when the game raised each event, not continuously.
+
+- **Command:** `incidents.list`, the bridge method `incidents.list`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** tap: true switches the taps back on; reading changes nothing.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `state` | string | `open`, `closed`, `any` | open, closed or any (default). |
+| `witnessed` | boolean | `true`, `false` | Only incidents V did (true) or did not (false) perceive. |
+| `v_involved` | boolean | `true`, `false` | Only incidents V took part in (true) or watched from outside (false). |
+| `limit` | integer | 1 to 64 | At most this many, newest first (1 to 64, default 20). |
+| `tap` | boolean | `true`, `false` | false switches the incident taps off (the open incidents are closed and reported first), true on again (default: unchanged). |
 
 ### `game_catchup`
 

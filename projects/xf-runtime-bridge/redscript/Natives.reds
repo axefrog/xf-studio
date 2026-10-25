@@ -71,4 +71,7 @@ public static native func XFBridge_Record(channel: String, payload: String) -> B
 // Bridge 0.8.17: who is recording the channel ("r<run>.w<world>.c<connection>", or "" when nothing is); it changes on every
 // stop and restart, so the CET observer drops state that belonged to the old run.
 public static native func XFBridge_RecordIdentity(channel: String) -> String
+// Bridge 0.8.20: one observation, or a one-second tick, from the incident taps (core/Incidents.hpp): what V witnessed, as reports
+// tied to their incidents. Passive; answers whether the plugin took it.
+public static native func XFBridge_IncidentSeen(payload: String) -> Bool
 // END XFB_AUTONOMOUS_TEST_HOOKS

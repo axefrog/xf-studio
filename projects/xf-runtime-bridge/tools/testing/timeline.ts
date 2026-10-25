@@ -15,6 +15,47 @@ function supervisionByActor(supervision: any[]): Record<string, { violations: nu
   }
   return out;
 }
+/**
+ * 0.8.20: the incidents V witnessed in the interval (witness.report), from the recorder's incidents channel (the whole report) and from
+ * session.events (a short form, always on), each incident once. Passive: a report says what V perceived, nothing about anyone's ties.
+ */
+export function witnessedIncidents(records: Json[], events: Json[], recording: boolean, complete: boolean, detail: boolean): Json {
+  const found = new Map<string, Json>();
+  const add = (d: Json, source: string, at: unknown) => {
+    if (!d || typeof d.incident !== "string") return;
+    const row = found.get(d.incident) ?? { incident: d.incident, sources: [] as string[] };
+    row.kind = d.kind ?? row.kind;
+    row.modes = d.modes ?? d.perceived?.modes ?? row.modes ?? [];
+    row.confidence = d.confidence ?? row.confidence;
+    row.v_involved = d.v_involved ?? row.v_involved;
+    row.participants = Array.isArray(d.participants) ? d.participants.length : d.participants ?? row.participants;
+    row.place = d.place?.position ?? d.place ?? row.place;
+    row.district_v = d.district_v ?? d.place?.district_v ?? row.district_v;
+    row.when = d.when ?? row.when;
+    row.closed = d.closed ?? row.closed;
+    if (Number.isFinite(at)) row.source_s = at;
+    if (!row.sources.includes(source)) row.sources.push(source);
+    found.set(d.incident, row);
+  };
+  for (const row of records) if (row.channel === "incidents" && row.valid && row.data?.event === "witness.report") add(row.data, "recorder", row.source_s);
+  for (const e of events) if (e.kind === "witness.report") add(e.data, "session_events", e.source_s);
+  const reports = [...found.values()];
+  const byKind: Record<string, number> = {};
+  let saw = 0, heard = 0, involved = 0;
+  for (const r of reports) {
+    byKind[r.kind ?? "other"] = (byKind[r.kind ?? "other"] ?? 0) + 1;
+    if (r.modes?.includes("saw")) saw++;
+    if (r.modes?.includes("heard")) heard++;
+    if (r.v_involved === true) involved++;
+  }
+  const kinds = Object.entries(byKind).map(([k, n]) => `${n} ${k}`).join(", ");
+  const shown = detail ? reports : reports.slice(-24);
+  return { message: reports.length ? `while you were away: V witnessed ${reports.length} incident${reports.length === 1 ? "" : "s"} (${kinds})` : "while you were away: no witnessed incident reported",
+    count: reports.length, by_kind: byKind, by_mode: { saw, heard, told: 0 }, v_involved: involved, reports: shown, omitted: reports.length - shown.length,
+    recorder_channel: recording, history_complete: complete,
+    note: "Passive. Saw means a person other than V was in V's view, unoccluded by static geometry; heard means V was inside the stimulus' audible radius; was told is not sensed. Sampled when the game raised each event." };
+}
+
 export type SourceCounters = { dropped: number; invalid: number; missed_deadlines: number; file_error: boolean };
 export type TimelineCursor = FileCursor & {
   schema: "xfb/timeline-cursor-1"; sid: string; run: number; world: number; record: number; event: number;
@@ -271,6 +312,7 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
       observed_since_cursor: contactObserved, observed_in_run: cursor.contact_observed, vehicle_hit_observed_in_run: cursor.vehicle_hit_observed,
       covered_paths: coveredPaths, commissioned: false, continuous: false, no_contact_proof: false,
       vehicle_contact_without_hit: "INCONCLUSIVE", controller_other_identity: "unavailable", history_complete: !gaps.length && !recordMore && !eventMore },
+    incident_summary: witnessedIncidents(records, events, !!status.channels?.includes("incidents"), !gaps.length && !recordMore && !eventMore, !!options.detail),
     contact_coverage: "Partial uncommissioned car-hit-entry and landing/wall controller reports when contacts selected; supporting ground included; never full no-contact proof",
     calibration, ...(options.detail ? { records } : {}),
     ...(nowDigest === undefined ? {} : { now: nowDigest }) };

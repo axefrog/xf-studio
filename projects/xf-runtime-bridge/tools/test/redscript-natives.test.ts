@@ -16,7 +16,7 @@ test("exact launch regression: module prefixes XFBridge_TestUiTake and must fail
 });
 test("matching DLL flags: autonomous native cannot enter normal DLL set", () => {
   expect(checkNativeGlobals([{ path: "ui.reds", text: ui }], cpp, false).join("\n")).toContain("XFBridge_TestUiTake");
-  expect(registeredGlobals(cpp, true).size).toBe(33);
+  expect(registeredGlobals(cpp, true).size).toBe(34);
   expect(registeredGlobals(cpp, false).size).toBe(27);
 });
 test("unknown and wrong-case natives fail under exact names", () => {
@@ -35,7 +35,7 @@ test("conditional registrations fail closed for unmodelled build expressions", (
 test("every package source set passes; autonomous declarations and taps never ship in normal variants", () => {
   for (const [variant, hooks] of [["default", false], ["diagnostic", false], ["writes", false], ["writes", true]] as const) {
     const scripts = packageScripts(project, variant, hooks);
-    expect(assertNativeGlobals(scripts, cpp, hooks)).toBe(hooks ? 33 : 27);
+    expect(assertNativeGlobals(scripts, cpp, hooks)).toBe(hooks ? 34 : 27);
     expect(scripts.some(s => s.path.endsWith("XFRuntimeBridgeRecording.reds"))).toBe(hooks);
     expect(scripts.find(s => s.path.endsWith("Natives.reds"))?.text.includes("native func XFBridge_Record(")).toBe(hooks);
   }
@@ -46,8 +46,8 @@ test("autonomous staged set cross-checks natives, including probes; tampered sta
   const companion = join(root, "companion.exe"); writeFileSync(companion, "fixture");
   const stageDir = join(root, "stage");
   const manifest = stageVariant({ projectDir: project, variant: "writes", autonomousTests: true, dll, companion, stageDir, version: "test", commit: "0".repeat(40) });
-  expect(manifest.native_count).toBe(33);
-  expect(assertNativeGlobals(stagedScripts(stageDir), cpp, true)).toBe(33);
+  expect(manifest.native_count).toBe(34);
+  expect(assertNativeGlobals(stagedScripts(stageDir), cpp, true)).toBe(34);
   writeFileSync(join(stageDir, PLUGIN_DIR, "Scripts/XFRuntimeBridgeTestUi.reds"), `module XFRuntimeBridge\n${ui}`);
   expect(() => assertNativeGlobals(stagedScripts(stageDir), cpp, true)).toThrow(/XFRuntimeBridge.XFBridge_TestUiTake/);
 });
