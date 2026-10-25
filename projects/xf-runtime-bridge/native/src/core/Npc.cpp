@@ -472,13 +472,106 @@ size_t CountChars(const std::string& aText)
     return count;
 }
 
+IncidentAsk ParseIncidentAsk(const json& aParams)
+{
+    IncidentAsk ask;
+    const auto id = params::CheckText(aParams, "incident", 64);
+    const auto role = params::CheckText(aParams, "incident_role", 32);
+    if (id && id->empty())
+    {
+        Bad("'incident' is the id an incident was declared under (incidents.declare)");
+    }
+    if (role && !id)
+    {
+        Bad("'incident_role' goes with 'incident'");
+    }
+    if (id)
+    {
+        ask.id = *id;
+        if (role)
+        {
+            ask.role = *role;
+        }
+    }
+    return ask;
+}
+
+void Service::SetIncidentLink(IncidentLink aLink)
+{
+    std::scoped_lock _(m_mutex);
+    m_incidentLink = std::move(aLink);
+}
+
+json Service::JoinIncident(const IncidentAsk& aAsk, const std::string& aWho, const ActorView& aActor)
+{
+    if (aAsk.id.empty())
+    {
+        return nullptr;
+    }
+    IncidentLink link;
+    {
+        std::scoped_lock _(m_mutex);
+        link = m_incidentLink;
+    }
+    if (!link.join)
+    {
+        throw MethodError("test_hooks_off", "incident links need the autonomous -writes test build and allow_test_hooks (the incident taps are not in this build)");
+    }
+    return link.join(aAsk.id, aWho, aAsk.role, aActor);
+}
+
+void Service::LeaveIncident(const IncidentAsk& aAsk, const std::string& aWho)
+{
+    if (aAsk.id.empty())
+    {
+        return;
+    }
+    IncidentLink link;
+    {
+        std::scoped_lock _(m_mutex);
+        link = m_incidentLink;
+    }
+    if (link.leave)
+    {
+        link.leave(aAsk.id, aWho);
+    }
+}
+
+ActorView Service::ActorOf(const std::string& aWho) const
+{
+    std::scoped_lock _(m_mutex);
+    ActorView view;
+    const auto it = m_npcs.find(aWho);
+    if (it != m_npcs.end() && it->second.kind == "actor")
+    {
+        view.exists = true;
+        if (it->second.known || it->second.placed)
+        {
+            view.hasPos = true;
+            view.position = it->second.position;
+        }
+        return view;
+    }
+    for (const auto& swap : m_swaps)
+    {
+        if (swap.who == aWho)
+        {
+            view.exists = true;
+            view.hasPos = true;
+            view.position = swap.look.position;
+            break;
+        }
+    }
+    return view;
+}
+
 void RequireKnown(const std::string& aMethod, const json& aParams)
 {
     static const std::map<std::string, std::vector<const char*>> known{
         {"npc.list", {"radius_m", "max"}},
         {"npc.pick", {"id"}},
         {"npc.status", {}},
-        {"npc.spawn", {"cast", "at", "face", "appearance", "variant", "out_of_view", "label", "attitude", "immortal", "reactions", "engage", "min_m", "max_m"}},
+        {"npc.spawn", {"cast", "at", "face", "appearance", "variant", "out_of_view", "label", "attitude", "immortal", "reactions", "engage", "min_m", "max_m", "incident", "incident_role"}},
         {"npc.move", {"who", "to", "gait", "stop_m", "face_v", "max_s"}},
         {"npc.follow", {"who", "target", "distance_m", "gait", "max_s"}},
         {"npc.turn", {"who", "to", "away_from", "hold", "off"}},
@@ -490,7 +583,7 @@ void RequireKnown(const std::string& aMethod, const json& aParams)
         {"npc.act", {"who", "gesture", "off", "seconds"}},
         {"npc.choices", {"who", "title", "choices", "max_s", "withdraw"}},
         {"npc.release", {"who", "how", "walk", "distance_m", "restore"}},
-        {"npc.substitute", {"id", "who", "look_at", "cast", "label", "reactions", "restore", "in_view", "max_wait_s", "dry_run"}},
+        {"npc.substitute", {"id", "who", "look_at", "cast", "label", "reactions", "restore", "in_view", "max_wait_s", "dry_run", "incident", "incident_role"}},
     };
     const auto it = known.find(aMethod);
     if (it == known.end())
@@ -1052,6 +1145,7 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     }
     const bool outOfView = params::CheckBoolean(aParams, "out_of_view").value_or(hidden);
     const auto label = params::CheckText(aParams, "label", kMaxTitleChars).value_or(cast->label);
+    const auto incident = ParseIncidentAsk(aParams);
     const auto v = RequireV(aOps);
     {
         std::scoped_lock _(m_mutex);
@@ -1095,7 +1189,23 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     }
     // 3 is hostile with engage (the redscript layer's Spawn takes the stance as one number).
     const int32_t attitudeCode = attitude == "hostile" ? (engage ? 3 : 2) : attitude == "neutral" ? 1 : 0;
-    auto step = aOps.spawn(who, record, point, yaw, appearance, outOfView, attitudeCode, immortal);
+    // 0.8.21: joins the declared incident first (refused here, nothing spawned, when it is unknown, closed or full) and leaves it again if
+    // the game refuses the spawn.
+    ActorView planned;
+    planned.exists = true;
+    planned.hasPos = true;
+    planned.position = point;
+    const json incidentJoin = JoinIncident(incident, who, planned);
+    json step;
+    try
+    {
+        step = aOps.spawn(who, record, point, yaw, appearance, outOfView, attitudeCode, immortal);
+    }
+    catch (...)
+    {
+        LeaveIncident(incident, who);
+        throw;
+    }
     std::scoped_lock _(m_mutex);
     ++m_nextActor;
     Npc npc;
@@ -1113,6 +1223,7 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     if (step.contains("position"))
     {
         npc.position = ToVec(step["position"]); // where it will appear; known (a target, a distance) once it has
+        npc.placed = true;
     }
     m_npcs[who] = npc;
     json out{{"who", who},       {"cast", cast->name},   {"record", record},     {"appearance", appearance}, {"entity", npc.entity},
@@ -1121,6 +1232,10 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     if (!hiddenSpot.is_null())
     {
         out["out_of_sight"] = hiddenSpot;
+    }
+    if (!incidentJoin.is_null())
+    {
+        out["incident"] = incidentJoin;
     }
     if (!sightMove.is_null())
     {

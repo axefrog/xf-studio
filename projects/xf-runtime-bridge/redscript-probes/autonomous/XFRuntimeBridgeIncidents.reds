@@ -36,6 +36,13 @@
 // camera's view, and a static-geometry ray from the camera (as scene.read's occlusion). Bounded: the allow-list first, a distance gate,
 // the plugin's admission (at most 24 built a second, 12 of them weak kinds, 2 of one kind from one entity, every refusal counted),
 // at most four people each and one ray per person in view within 80 m.
+//
+// 0.8.21, the engine's declared incidents (incidents.declare): the game raises almost none of the Story Engine's incident kinds, so
+// the engine stages its own with XF actors. While one is open the poll (every half second; the clock tick still goes once a second)
+// asks the plugin which XF actors to look at (XFBridge_IncidentSightPlan: the actors of at most four open declared incidents, at most
+// five in all), finds each by its handle in the NPC registry, and sends one sight sample: the same Fact (distance, inside the camera's
+// view, the static ray from the camera) the taps build, so a silent staged incident can still be seen. Read only, like the rest: no
+// event, stimulus or command goes anywhere, and nothing is sampled when no declared incident is open.
 
 module XFRuntimeBridge
 
@@ -133,18 +140,37 @@ public abstract class XFIncidentWho {
     }
     return "";
   }
+
+  // The XF actor with this handle, or null: not in the registry, or not in the world (yet).
+  public static func Find(who: String) -> ref<GameObject> {
+    let registry = XFNpcRegistry.Get();
+    if !IsDefined(registry) {
+      return null;
+    }
+    for entry in registry.Entries() {
+      if Equals(entry.who, who) {
+        return GameInstance.FindEntityByID(GetGameInstance(), entry.id) as GameObject;
+      }
+    }
+    return null;
+  }
 }
 @if(!ModuleExists("Codeware"))
 public abstract class XFIncidentWho {
   public static func Of(obj: ref<GameObject>) -> String {
     return "";
   }
+
+  public static func Find(who: String) -> ref<GameObject> {
+    return null;
+  }
 }
 
-// The one-second poll: sends the simulation clock, which is what closes an incident that went quiet (so a paused game ages
-// nothing), and the window that bounds how many observations a second are built.
+// The half-second poll: every second it sends the simulation clock, which is what closes an incident that went quiet (so a paused
+// game ages nothing) and what runs a declared incident's TTL; every half second it takes the sight sample the plugin asks for.
 public class XFIncidentSystem extends ScriptableSystem {
   private let m_on: Bool;
+  private let m_half: Int32;
   private let m_poll: ref<XFIncidentPoll>;
 
   public static func Get() -> ref<XFIncidentSystem> {
@@ -159,7 +185,7 @@ public class XFIncidentSystem extends ScriptableSystem {
     this.m_on = true;
     this.m_poll = new XFIncidentPoll();
     this.m_poll.system = this;
-    GameInstance.GetDelaySystem(this.GetGameInstance()).DelayCallback(this.m_poll, 1.0, false);
+    GameInstance.GetDelaySystem(this.GetGameInstance()).DelayCallback(this.m_poll, 0.5, false);
   }
 
   private func OnDetach() -> Void {
@@ -176,11 +202,19 @@ public class XFIncidentSystem extends ScriptableSystem {
     }
     let game = this.GetGameInstance();
     if (XFBridge_ProbeFlags() & 16) != 0 && XFBridge_Live() {
-      let sim = EngineTime.ToFloat(GameInstance.GetSimTime(game));
-      XFBridge_IncidentSeen("{\"tick\":true,\"sim\":" + XFJson.Num(sim) + "}");
+      this.m_half += 1;
+      if this.m_half >= 2 {
+        this.m_half = 0;
+        let sim = EngineTime.ToFloat(GameInstance.GetSimTime(game));
+        XFBridge_IncidentSeen("{\"tick\":true,\"sim\":" + XFJson.Num(sim) + "}");
+      }
+      let plan = XFBridge_IncidentSightPlan();
+      if StrLen(plan) > 0 {
+        XFIncidentTap.Sight(plan);
+      }
     }
     if IsDefined(this.m_poll) {
-      GameInstance.GetDelaySystem(game).DelayCallback(this.m_poll, 1.0, false);
+      GameInstance.GetDelaySystem(game).DelayCallback(this.m_poll, 0.5, false);
     }
   }
 }
@@ -325,6 +359,44 @@ public abstract class XFIncidentTap {
     let text = "{\"ev\":" + XFJson.Str(evidence) + ",\"type\":" + XFJson.Str(type) + ",\"radius\":" + XFJson.Num(radius) + ",\"pos\":" + XFScene.Arr(at)
       + ",\"vd\":" + XFJson.Num(Vector4.Distance(view.vPos, at)) + ",\"sim\":" + XFJson.Num(sim) + ",\"game\":" + XFJson.Num(gameStamp)
       + ",\"dist\":" + XFJson.Str(district) + ",\"view\":" + XFJson.Str(view.photo ? "photo" : "gameplay") + ",\"who\":[" + who + "]}";
+    XFBridge_IncidentSeen(text);
+  }
+
+  // 0.8.21: V's sight of the declared incidents' actors, one sample. plan is the plugin's list of handles (a1,a2); an actor that is not
+  // in the world yet is left out (the plugin counts the sample as "actors missing" when none is found). The same Fact as an
+  // observation's, with no role.
+  public static func Sight(plan: String) -> Void {
+    let view = XFIncidentView.Make();
+    if !IsDefined(view) {
+      return;
+    }
+    let who = "";
+    let found = 0;
+    for handle in StrSplit(plan, ",") {
+      if found >= 8 {
+        break;
+      }
+      let actor = XFIncidentWho.Find(handle);
+      if IsDefined(actor) {
+        who = XFIncidentTap.Join(who, XFIncidentTap.Fact(view, actor, ""));
+        found += 1;
+      }
+    }
+    let game = GetGameInstance();
+    let clock = GameInstance.GetTimeSystem(game);
+    let gameStamp = IsDefined(clock) ? clock.GetGameTimeStamp() : -1.0;
+    let sim = EngineTime.ToFloat(GameInstance.GetSimTime(game));
+    let district = "";
+    let boards = GameInstance.GetBlackboardSystem(game);
+    if IsDefined(boards) {
+      let defs = GetAllBlackboardDefs().UI_Map;
+      let board = boards.Get(defs);
+      if IsDefined(board) {
+        district = board.GetString(defs.currentLocationEnumName);
+      }
+    }
+    let text = "{\"sight\":true,\"sim\":" + XFJson.Num(sim) + ",\"game\":" + XFJson.Num(gameStamp) + ",\"dist\":" + XFJson.Str(district)
+      + ",\"view\":" + XFJson.Str(view.photo ? "photo" : "gameplay") + ",\"who\":[" + who + "]}";
     XFBridge_IncidentSeen(text);
   }
 

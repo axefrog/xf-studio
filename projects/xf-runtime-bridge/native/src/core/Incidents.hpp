@@ -27,6 +27,19 @@
 // radius (the stimulus' own radius where the game gives one; 0 means not audible). An incident is witnessed when any of its
 // observations was seen or heard; only a witnessed incident whose evidence reaches minScore is reported.
 //
+// Declared incidents (0.8.21): the game raises almost none of the Story Engine's incident kinds (no NPC theft, no stall
+// collection), so the engine stages its own with XF actors and declares them (incidents.declare {id, kind, roles, at?, ttl_s}) so
+// that reports carry its kind and id. A declared incident opens at once and holds its actors by handle (a1, a2): any stimulus or
+// observation that names one of them joins it (declared membership takes precedence over the grouping above; an ordinary incident
+// that shares people with it merges into it, and a declared incident is never merged into another or joined by strangers near it).
+// It closes on incidents.close {id}, when its TTL (simulation seconds) runs out, or with a reason on a kill, a load, a handover or
+// the taps going off; not on quiet, and not at maxOpenS. While one is open the plugin samples V's sight of its actors at a low
+// bounded rate (2 Hz from the script, at most maxSightPerSecond accepted, over at most maxDeclared incidents) with the same view
+// cone and static-geometry ray as the taps, so a silent staged incident can still be "saw". Closing gives exactly one
+// witness.report carrying declared {id, kind, roles} (whatever its evidence score), or a witness.gap; an incident V never perceived
+// gives one explicit witness.unwitnessed event with the reason (no_samples, actors_missing, no_view, out_of_range, not_in_view,
+// occluded, unchecked). Still passive: nothing here changes the game.
+//
 // Bounds: at most maxOpen open incidents (the least recently active is closed to make room), maxClosed kept, maxParticipants a
 // head, maxObservationsPerSecond and maxReportsPerMinute accepted (the rest counted), strings and counts checked on the way in.
 
@@ -39,6 +52,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -99,6 +113,13 @@ struct Config
     int maxBuiltPerSecond = 24;         // observations the taps may build in a wall-clock second (Admit)
     int maxWeakBuiltPerSecond = 12;     // of those, the weak kinds (barks, screams, bodies): the rest is kept for direct acts
     int maxPerKeyPerSecond = 2;         // of one kind of evidence from one entity: a burst of V's shots cannot starve the rest
+    // 0.8.21: declared incidents.
+    size_t maxDeclared = 4;             // open at once; also the incidents the sight sampler looks at
+    size_t maxRoles = 5;                // actors in one (the bridge directs five at most)
+    double ttlMinS = 1.0;               // ttl_s, in simulation seconds
+    double ttlDefaultS = 60.0;
+    double ttlMaxS = 300.0;
+    int maxSightPerSecond = 3;          // sight samples accepted per wall-clock second (the script sends 2)
 };
 json ConfigJson(const Config& aConfig);
 
@@ -170,6 +191,8 @@ struct ListQuery
     std::string state = "any"; // open, closed or any
     std::optional<bool> witnessed;
     std::optional<bool> vInvolved;
+    std::optional<bool> declared; // 0.8.21: only the engine's declared incidents (true) or only the game's own (false)
+    std::string declaredId;       // 0.8.21: the incident declared under this id
     size_t limit = 20;
 };
 ListQuery ParseListQuery(const json& aParams); // throws xfb::MethodError bad_params
@@ -181,6 +204,74 @@ struct Stats
     uint64_t reports = 0, reportsQueued = 0, reportsDelayed = 0, reportGaps = 0, unwitnessed = 0, belowScore = 0, participantsDropped = 0;
     // The taps' admission (Admit): what was let through to be built, and what was not, by reason.
     uint64_t tapAdmitted = 0, tapDroppedCap = 0, tapDroppedWeak = 0, tapDroppedRepeat = 0;
+    // 0.8.21: declared incidents and the sight sampler.
+    uint64_t declared = 0, declaredClosed = 0, declaredUnwitnessed = 0, joinedBySpawn = 0;
+    uint64_t sightSamples = 0, sightDroppedRate = 0, sightDroppedInvalid = 0;
+};
+
+// --- declared incidents (0.8.21) -----------------------------------------------------------------------------------------------
+
+// The engine's own text (an id, a kind, a role) is carried verbatim, so it is checked as safe text: 1 to aMax characters of ASCII
+// letters, digits and _ - . : / + (and, when aAllowSpace, single inner spaces); nothing else, no control characters, no quotes.
+bool SafeText(const std::string& aText, size_t aMax, bool aAllowSpace);
+// An XF actor's handle: a, then digits (a1, a12). V, "v" and a picked passer-by's handle (p1) are not.
+bool IsActorHandle(const std::string& aHandle);
+
+struct ActorInfo
+{
+    bool exists = false; // one of the bridge's own actors now (or one whose spawn is under way)
+    bool hasPos = false;
+    double pos[3] = {0, 0, 0};
+};
+using ActorLookup = std::function<ActorInfo(const std::string& aHandle)>;
+
+struct Declaration
+{
+    std::string id;   // the engine's, verbatim
+    std::string kind; // the engine's, verbatim
+    std::vector<std::pair<std::string, std::string>> roles; // handle -> role, in the order given
+    bool hasAt = false;
+    double at[3] = {0, 0, 0};
+    double ttlS = 60.0;
+    bool atFromActors = false; // no 'at': the centroid of the actors' known places
+};
+// incidents.declare's parameters, checked. Throws xfb::MethodError: bad_params (a field that isn't what it should be, V or a pick
+// named, an overlong or unsafe text), npc_not_found (a handle that isn't one of the bridge's actors), no_place (no 'at' and no
+// actor with a known place).
+Declaration ParseDeclaration(const json& aParams, const ActorLookup& aLookup, const Config& aConfig);
+
+struct DeclareOutcome
+{
+    json declared;             // the answer: incident, id, kind, roles, at, ttl
+    std::vector<json> reports; // reports of the incidents this call closed (one evicted to make room)
+};
+struct CloseOutcome
+{
+    bool found = false;
+    std::string incident;
+    std::string outcome;       // report, report_queued, gap or unwitnessed
+    std::string unwitnessedReason;
+    std::vector<json> reports; // the report, the gap or the unwitnessed event
+};
+
+// One look at V's sight of the declared incidents' actors (the script's 2 Hz sampler): each actor as the taps' Fact (distance, in
+// the camera's view, the static ray), and whose camera it was.
+inline constexpr size_t kMaxSightFacts = 8;
+struct SightSample
+{
+    std::vector<Fact> who;
+    double simS = 0;
+    double gameS = -1;
+    std::string district;
+    std::string view; // "gameplay", or "photo" (no view of V's own: nothing can be seen)
+};
+// The wire form: {sight: true, sim, game?, dist?, view?, who: [Fact...]} with at most kMaxSightFacts people.
+std::optional<SightSample> ParseSight(const json& aWire, std::string& aWhy);
+struct SightOutcome
+{
+    bool accepted = false;
+    std::string reason;        // rate or invalid
+    std::vector<json> reports; // reports of incidents the clock closed
 };
 
 class Service
@@ -202,6 +293,25 @@ public:
     void SetWorld(uint64_t aWorld);
     uint64_t World() const;
 
+    // --- 0.8.21: declared incidents -------------------------------------------------------------------------------------------
+    // Opens the incident at once (the least recently active ordinary incident is closed to make room) and returns our inc-N beside the
+    // engine's id. Throws MethodError: duplicate_id (open, or still among the kept closed ones), limit (too many open, too many roles).
+    DeclareOutcome Declare(const Declaration& aDeclaration, double aWallS);
+    // Closes the incident declared under aId (found false when none is open); the report, the gap or the unwitnessed event is in
+    // reports, and also in the outcome's name.
+    CloseOutcome CloseDeclared(const std::string& aId, const std::string& aReason, double aWallS);
+    // Closes every open declared incident with a reason (kill, load, handover); the others carry on.
+    std::vector<json> CloseAllDeclared(const std::string& aReason);
+    // The spawn link: adds an actor (a handle) to an open declared incident under a role. Throws MethodError: incident_unknown (none
+    // open under that id), limit (the incident holds maxRoles), bad_params (an unsafe role). LeaveDeclared undoes it (a spawn that failed).
+    json JoinDeclared(const std::string& aId, const std::string& aWho, const std::string& aRole, const ActorInfo& aActor);
+    void LeaveDeclared(const std::string& aId, const std::string& aWho);
+    size_t DeclaredOpen() const;
+    // The actors the sampler should look at now: those of at most maxDeclared open declared incidents, each once.
+    std::vector<std::string> SightPlan() const;
+    // One sight sample; bounded to maxSightPerSecond a wall-clock second.
+    SightOutcome Sight(const SightSample& aSample, double aWallS);
+
     json List(const ListQuery& aQuery) const;
     // {open, kept, reports, ...} for the recorder's coverage heartbeat.
     json Coverage() const;
@@ -215,9 +325,22 @@ private:
         double nearest = -1;
         int seen = 0;
     };
+    // 0.8.21: what a declared incident adds. Sight counters are per sample taken (an actor missing from the sample counts once).
+    struct Declared
+    {
+        bool on = false;
+        std::string id, kind;
+        std::vector<std::pair<std::string, std::string>> roles; // handle -> role
+        bool hasAt = false;
+        double at[3] = {0, 0, 0};
+        double ttlS = 60.0;
+        bool anchored = false; // the TTL runs from startSim; set at once when the clock is known, else by the first clock that arrives
+        int samples = 0, inRange = 0, inView = 0, blocked = 0, unchecked = 0, noView = 0, missing = 0;
+    };
     struct Incident
     {
         uint64_t number = 0;
+        Declared declared;
         uint64_t world = 0;
         bool open = true;
         std::string closeReason;
@@ -241,6 +364,15 @@ private:
     };
 
     void AdvanceClock(double aSimS, std::vector<json>& aReports);
+    void CloseDeclaredExpired(std::vector<json>& aReports);
+    // Closes the least recently active ordinary incident; false when only declared ones are open.
+    bool EvictOne(std::vector<json>& aReports);
+    void AbsorbPeople(Incident& aIncident, const std::vector<Fact>& aWho);
+    void ApplyPerception(Incident& aIncident, const Perception& aPerception, const Observation& aObservation);
+    static json DeclaredJson(const Incident& aIncident);
+    static std::string UnwitnessedReason(const Incident& aIncident);
+    json UnwitnessedEvent(const Incident& aIncident) const;
+    Incident* FindDeclaredOpen(const std::string& aId);
     void CloseEverything(const std::string& aReason, std::vector<json>& aReports);
     void CloseExpired(double aSimS, std::vector<json>& aReports);
     void CloseOverlong(std::vector<json>& aReports);
@@ -272,6 +404,8 @@ private:
         json report;
     };
     std::deque<Pending> m_pending;    // witnessed incidents whose report waits for the allowance, oldest first
+    int64_t m_sightSecond = -1;
+    int m_sightCount = 0;
     int64_t m_admitSecond = -1;
     int m_admitTotal = 0, m_admitWeak = 0;
     std::vector<std::pair<std::string, int>> m_admitKeys;
@@ -283,6 +417,11 @@ private:
 // A read: nothing here changes the game. Refused (test_hooks_off) unless the build's config allows test hooks and the build carries
 // the taps. tap switches the observation tap off or on (default on); aSync runs first (the plugin closes the incidents of a world
 // that has gone, so a list never shows a past world's incident as open).
+//
+// 0.8.21, incidents.declare {id, kind, roles, at?, ttl_s} and incidents.close {id}: the engine's own staged incidents (see the top of
+// this file). The same gates as incidents.list, and refused while the taps are off (tap_off) or the session is handed over
+// (handed_over). Hooks: emit hands the reports and events a call produced to the plugin's delivery; actor looks up an XF actor by
+// handle; handedOver says whether the session is handed over.
 struct MethodHooks
 {
     bool allowTestHooks = false;
@@ -290,6 +429,10 @@ struct MethodHooks
     std::function<bool()> tapOn;
     std::function<void(bool)> setTap;
     std::function<void()> sync;
+    std::function<void(std::vector<json>)> emit;
+    ActorLookup actor;
+    std::function<bool()> handedOver;
+    std::function<double()> wall;
 };
 } // namespace xfb::incidents
 

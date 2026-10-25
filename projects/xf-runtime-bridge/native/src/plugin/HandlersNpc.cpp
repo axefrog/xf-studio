@@ -215,6 +215,12 @@ void RegisterMethodsNpc(Dispatcher& aDispatcher)
                          [](MethodSpec aSpec) { return MarkedWrite(aSpec.name, aSpec.access, aSpec.runOn, aSpec.summary, aSpec.fn); });
 }
 
+// 0.8.21: the incident service's reach into the actors (HandlersIncidents.cpp).
+npc::Service& NpcService()
+{
+    return Service();
+}
+
 void TickNpc(double aDt, bool aScriptsReady)
 {
     auto& state = Get();

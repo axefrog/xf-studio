@@ -928,6 +928,17 @@ void IncidentAdmitNative(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, boo
     });
 }
 
+// XFBridge_IncidentSightPlan() -> String   (0.8.21): the XF actors (a1,a2) the sight sampler should look at now, from the open declared
+// incidents (at most four of them), or "" when none is open, the taps are off or the scripts are not live. Read only.
+void IncidentSightPlanNative(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, RED4ext::CString* out, int64_t)
+{
+    frame->code++; // skip ParamEnd
+    if (out) *out = RED4ext::CString("");
+    Guarded("XFBridge_IncidentSightPlan", [&] {
+        if (out) *out = RED4ext::CString(IncidentSightPlan().c_str());
+    });
+}
+
 // Test-only ingress: arming/taking cannot invoke SaveAnyway or enqueue any CET action.
 void TestUiTake(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, RED4ext::CString* out, int64_t)
 {
@@ -1038,13 +1049,14 @@ void PostRegisterTypes()
         RegisterGlobal(rtti, "XFBridge_RecordIdentity", &RecordIdentity, "String", {"channel"});
         RegisterGlobal(rtti, "XFBridge_IncidentSeen", &IncidentSeenNative, "Bool", {"payload"});
         RegisterGlobal(rtti, "XFBridge_IncidentAdmit", &IncidentAdmitNative, "Bool", {"evidence", "key"});
+        RegisterGlobal(rtti, "XFBridge_IncidentSightPlan", &IncidentSightPlanNative, "String", {});
 #endif
         RegisterGlobal(rtti, "XFBridge_Event", &ProbeEvent, "Bool", {"kind", "data"});
         RegisterGlobal(rtti, "XFBridge_ProbeFlags", &ProbeFlags, "Int32", {});
         // 0.8.9: the pins' views, OR-ed natively (the Sol review's finding 3).
         RegisterGlobalTyped(rtti, "XFBridge_PinDrawn", &PinDrawn, "Int32", {{"Int32", "pin"}, {"Int32", "bits"}});
         #ifdef XFB_AUTONOMOUS_TEST_HOOKS
-        log::Info("rtti.register_types", "phase=post_register natives=35");
+        log::Info("rtti.register_types", "phase=post_register natives=36");
 #else
         log::Info("rtti.register_types", "phase=post_register natives=27");
 #endif

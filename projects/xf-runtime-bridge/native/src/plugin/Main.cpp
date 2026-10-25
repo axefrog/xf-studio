@@ -281,6 +281,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
             TickNpc(dt, scriptsReady); // 0.8: NPC direction's timers, poll and automatic release (plugin/HandlersNpc.cpp)
             TickInputChoices(scriptsReady);
             TickSupervisor(scriptsReady);
+            TickIncidents(); // 0.8.21: a declared incident does not outlive the kill switch or a handover
             TickRecording(scriptsReady);
             TickDm(dt, scriptsReady);  // 0.8.12: the live-direction toolkit's watchers, phone call, lines and light patterns (plugin/HandlersDm080.cpp)
         }

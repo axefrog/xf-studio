@@ -1022,6 +1022,55 @@ void RecheckTests()
         Check("recheck: an original that became protected is left alone, whatever V sees", failed.size() == 1 && failed[0]["data"]["reason"] == "npc_protected" && r.fake.Count("remove ") == 0 && r.fake.held.empty());
     }
 }
+// 0.8.21: npc.substitute's incident link: the actor's reserved handle joins the declared incident when the request is made, and leaves
+// when the swap is refused.
+void IncidentLinkTests()
+{
+    struct Joined
+    {
+        std::vector<std::string> joined, left;
+    } seen;
+    n::IncidentLink link;
+    link.join = [&](const std::string& aIncident, const std::string& aWho, const std::string& aRole, const n::ActorView& aView) -> json {
+        if (aIncident == "closed")
+        {
+            throw xfb::MethodError("incident_unknown", "no declared incident is open under that id");
+        }
+        seen.joined.push_back(aWho + ":" + aRole + (aView.hasPos ? ":placed" : ""));
+        return json{{"incident", "inc-1"}, {"id", aIncident}, {"role", aRole}, {"who", aWho}};
+    };
+    link.leave = [&](const std::string&, const std::string& aWho) { seen.left.push_back(aWho); };
+    {
+        Rig r;
+        r.service.SetIncidentLink(link);
+        const auto out = r.service.Substitute(json{{"id", "P-behind"}, {"incident", "pocket-1"}, {"incident_role", "mark"}}, r.ops);
+        Check("incident link: a substitute joins the incident under its role, by the handle it was given", out["who"] == "a1" && out["incident"]["role"] == "mark" && seen.joined == std::vector<std::string>({"a1:mark:placed"}));
+        const auto plain = r.service.Substitute(json{{"id", "P-front"}, {"in_view", true}, {"incident", "pocket-1"}}, r.ops);
+        Check("incident link: the role defaults to participant", plain["incident"]["role"] == "participant" && seen.joined.back() == "a2:participant:placed");
+    }
+    {
+        Rig r;
+        r.service.SetIncidentLink(link);
+        seen = Joined{};
+        Check("incident link: an incident that is not open is refused and nothing is held or spawned", CodeOf([&] { r.service.Substitute(json{{"id", "P-behind"}, {"incident", "closed"}}, r.ops); }) == "incident_unknown" &&
+                                                                                                          r.fake.Count("detach") == 0 && r.fake.Count("spawn") == 0);
+    }
+    {
+        Rig r;
+        r.service.SetIncidentLink(link);
+        seen = Joined{};
+        r.fake.spawnThrows = true;
+        const auto code = CodeOf([&] { r.service.Substitute(json{{"id", "P-front"}, {"in_view", true}, {"incident", "pocket-1"}}, r.ops); });
+        Check("incident link: a swap the game refuses leaves the incident", code == "spawn_refused" && seen.joined.size() == 1 && seen.left == std::vector<std::string>({"a1"}), code);
+    }
+    {
+        Rig r;
+        Check("incident link: without a link the parameter is refused (test_hooks_off)", CodeOf([&] { r.service.Substitute(json{{"id", "P-behind"}, {"incident", "pocket-1"}}, r.ops); }) == "test_hooks_off");
+        r.service.SetIncidentLink(link);
+        Check("incident link: a dry run changes nothing, so it can't join", CodeOf([&] { r.service.Substitute(json{{"id", "P-behind"}, {"dry_run", true}, {"incident", "pocket-1"}}, r.ops); }) == "bad_params");
+        Check("incident link: incident_role without incident is refused", CodeOf([&] { r.service.Substitute(json{{"id", "P-behind"}, {"incident_role", "x"}}, r.ops); }) == "bad_params");
+    }
+}
 } // namespace
 
 int RunNpcSubstituteUnitTests()
@@ -1037,5 +1086,6 @@ int RunNpcSubstituteUnitTests()
     RestoreCleanupTests();
     ObservationTests();
     RecheckTests();
+    IncidentLinkTests();
     return gFailures;
 }

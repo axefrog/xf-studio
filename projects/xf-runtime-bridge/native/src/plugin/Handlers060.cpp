@@ -166,6 +166,12 @@ json BridgeHandover(const MethodContext& aContext)
             dmReleased = json{{"released", false}, {"why", e.code}, {"message", e.what()}};
         }
     }
+    // 0.8.21: and the engine's declared incidents, each closed with the reason "handover" (a report, or an unwitnessed event, as ever).
+    json incidentsClosed = nullptr;
+    if (*on)
+    {
+        incidentsClosed = CloseDeclaredIncidents("handover");
+    }
     json lightsCleared = nullptr;
     if (lights == "clear")
     {
@@ -182,7 +188,7 @@ json BridgeHandover(const MethodContext& aContext)
             lightsCleared = json{{"error", e.code}, {"message", e.what()}};
         }
     }
-    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released}, {"npcs_released", npcsReleased}, {"dm_released", dmReleased}, {"lights_cleared", lightsCleared},
+    return json{{"handed_over", *on}, {"was", was}, {"behaviours_stopped", *on}, {"player_released", released}, {"npcs_released", npcsReleased}, {"dm_released", dmReleased}, {"incidents_closed", incidentsClosed}, {"lights_cleared", lightsCleared},
                 {"undo", {{"method", "bridge.handover"}, {"params", {{"on", !*on}}}}},
                 {"undo_note", *on ? "bridge.handover {on: false} (session.resume) gives the bridge its writes back; what the handover lifted from V stays lifted" : "bridge.handover {on: true} hands over again"}};
 }

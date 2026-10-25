@@ -8,13 +8,21 @@
 #include <initializer_list>
 #include <string>
 
+namespace xfb::npc
+{
+class Service;
+}
+
 namespace xfb::plugin
 {
 // Bridge 0.6 (Handlers060.cpp): scene.read, the session event stream's handover, behaviours, player control phase 1 and
 // input.probe. Called by RegisterMethods.
 void RegisterRecording(Dispatcher&);
-// 0.8.20 (HandlersIncidents.cpp): incidents.list.
+// 0.8.20 (HandlersIncidents.cpp): incidents.list. 0.8.21: incidents.declare and incidents.close, the declared incidents' closes on a
+// kill (TickIncidents) and a handover (CloseDeclaredIncidents, called by bridge.handover), and the spawn link into the NPC service.
 void RegisterIncidents(Dispatcher&);
+nlohmann::json CloseDeclaredIncidents(const std::string& aReason);
+void TickIncidents();
 void TickRecording(bool ready);
 void StopRecording(const std::string& reason);
 void RegisterMethods060(Dispatcher& aDispatcher);
@@ -33,6 +41,7 @@ void RestorePresetsAfterKill();
 // Bridge 0.8 (HandlersNpc.cpp): the npc.* methods, their game-thread tick (timers, a poll four times a second while anything
 // is held, the automatic release) and the kill switch's release of every NPC the bridge holds.
 void RegisterMethodsNpc(Dispatcher& aDispatcher);
+npc::Service& NpcService();
 void TickNpc(double aDt, bool aScriptsReady);
 void RestoreNpcAfterKill();
 // Bridge 0.8 (HandlersNpc.cpp): bridge.handover's release of every NPC the bridge directs, one game-thread step after the

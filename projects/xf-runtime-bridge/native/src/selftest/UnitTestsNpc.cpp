@@ -16,6 +16,7 @@
 
 #include "core/Dispatcher.hpp"
 #include "core/Events.hpp"
+#include "core/Incidents.hpp"
 #include "core/Npc.hpp"
 
 namespace
@@ -1072,6 +1073,68 @@ void SightTests()
     fake.walkable = false;
     Check("0.8.10 spawn: ground that is not walkable is the spawn's own refusal to give (the check steps aside)", CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json{{"ahead_m", 2}}}}, ops); }) != "no_visible_spot");
 }
+// 0.8.21: npc.spawn's incident link against the real incident service: the actor joins a declared incident under a role before anything is
+// sent to the game, and leaves again when the game refuses the spawn.
+void IncidentLinkTests()
+{
+    namespace inc = xfb::incidents;
+    inc::Service incidents;
+    n::Service service;
+    Fake fake;
+    const auto ops = fake.Ops();
+    n::IncidentLink link;
+    link.join = [&](const std::string& aIncident, const std::string& aWho, const std::string& aRole, const n::ActorView& aView) {
+        inc::ActorInfo info;
+        info.exists = aView.exists;
+        info.hasPos = aView.hasPos;
+        for (int i = 0; i < 3; ++i) info.pos[i] = aView.position[i];
+        return incidents.JoinDeclared(aIncident, aWho, aRole, info);
+    };
+    link.leave = [&](const std::string& aIncident, const std::string& aWho) { incidents.LeaveDeclared(aIncident, aWho); };
+    const json spawn = {{"cast", "woman_corpo"}, {"at", json::array({0, 5, 0})}, {"incident", "stall-1"}, {"incident_role", "collector"}};
+    Check("incident link: without a link the parameter is refused (test_hooks_off) and nothing is spawned", CodeOf([&] { service.Spawn(spawn, ops); }) == "test_hooks_off" && !fake.Called("spawn"));
+    service.SetIncidentLink(link);
+    Check("incident link: an incident that is not open is refused before anything is spawned", CodeOf([&] { service.Spawn(spawn, ops); }) == "incident_unknown" && !fake.Called("spawn") && service.ActorCount() == 0);
+    // Declare with a place and no actors: they join by npc.spawn.
+    incidents.Tick(100, 1.0);
+    inc::Declaration d;
+    d.id = "stall-1";
+    d.kind = "stall collection";
+    d.hasAt = true;
+    d.at[1] = 5;
+    incidents.Declare(d, 1.0);
+    const auto out = service.Spawn(spawn, ops);
+    Check("incident link: the new actor joins under the asked role, and the answer says so", out["who"] == "a1" && out["incident"]["role"] == "collector" && out["incident"]["incident"] == "inc-1" && out["incident"]["id"] == "stall-1" && out["incident"]["who"] == "a1");
+    const auto listed = incidents.List(inc::ParseListQuery(json{{"id", "stall-1"}}));
+    Check("incident link: the incident holds the handle with its role", listed["incidents"][0]["declared"]["roles"]["a1"] == "collector" && listed["incidents"][0]["participants"][0]["who"] == "a1");
+    const auto plain = service.Spawn(json{{"cast", "woman_corpo"}, {"at", json::array({1, 5, 0})}, {"incident", "stall-1"}}, ops);
+    Check("incident link: the role defaults to participant", plain["incident"]["role"] == "participant" && plain["who"] == "a2");
+    const auto view = service.ActorOf("a1");
+    Check("incident link: an actor is looked up by handle with the place it was asked to appear at", view.exists && view.hasPos && view.position[1] == 5.0 && !service.ActorOf("a9").exists && !service.ActorOf("p1").exists);
+    // A refused spawn leaves no role behind.
+    Fake failing;
+    auto failOps = failing.Ops();
+    failOps.spawn = [](const std::string&, const std::string&, const n::Vec3&, double, const std::string&, bool, int32_t, bool) -> json {
+        throw xfb::MethodError("not_walkable", "no ground there");
+    };
+    const auto failedCode = CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json::array({2, 5, 0})}, {"incident", "stall-1"}, {"incident_role", "ghost"}}, failOps); });
+    const auto after = incidents.List(inc::ParseListQuery(json{{"id", "stall-1"}}));
+    Check("incident link: a spawn the game refuses leaves the incident as it was", failedCode == "not_walkable" && after["incidents"][0]["declared"]["roles"].size() == 2 && !after["incidents"][0]["declared"]["roles"].contains("a3"));
+    Check("incident link: incident_role without incident is refused", CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json::array({3, 5, 0})}, {"incident_role", "x"}}, ops); }) == "bad_params");
+    Check("incident link: an unsafe role is refused before the game is asked", CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", json::array({3, 5, 0})}, {"incident", "stall-1"}, {"incident_role", "a\"b"}}, ops); }) == "bad_params");
+    // What the actor then does counts: an observation naming it joins the declared incident.
+    inc::Observation o;
+    o.evidence = "voice";
+    o.simS = 101;
+    o.hasPos = true;
+    o.pos[1] = 5;
+    inc::Fact f;
+    f.id = "E-a1";
+    f.who = "a1";
+    f.roles = inc::kSpeaker;
+    o.who.push_back(f);
+    Check("incident link: what the new actor does joins the declared incident", incidents.Observe(o, 2.0).incident == "inc-1");
+}
 } // namespace
 
 int RunNpcUnitTests()
@@ -1087,5 +1150,6 @@ int RunNpcUnitTests()
     TurnFirstTests();
     FacingAndFaceTests();
     SightTests();
+    IncidentLinkTests();
     return gNpcFailures;
 }

@@ -77,4 +77,7 @@ public static native func XFBridge_IncidentSeen(payload: String) -> Bool
 // Whether the taps may build one more observation of this evidence from this entity now (bounded per second, by evidence and by
 // entity; every refusal is counted in incidents.list's stats), asked before any work is done on it.
 public static native func XFBridge_IncidentAdmit(evidence: String, key: String) -> Bool
+// Bridge 0.8.21: the XF actors (a1,a2) the sight sampler should look at now, from the open declared incidents (at most four of them),
+// or "" when there is none. Read only; asked every half second.
+public static native func XFBridge_IncidentSightPlan() -> String
 // END XFB_AUTONOMOUS_TEST_HOOKS

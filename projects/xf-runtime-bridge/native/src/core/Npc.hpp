@@ -397,10 +397,38 @@ struct TickInput
 
 // --- the service -----------------------------------------------------------------------------------------
 
+// --- the Story Engine's declared incidents (0.8.21) --------------------------------------------------------------
+
+// An actor as the incidents see it: one of the bridge's own (or one whose spawn is under way), and where it is or will appear.
+struct ActorView
+{
+    bool exists = false;
+    bool hasPos = false;
+    Vec3 position{};
+};
+// npc.spawn and npc.substitute take incident (a declared incident's id, incidents.declare) and incident_role (default "participant"):
+// the new actor joins that incident under that role before anything is sent to the game, and leaves it again if the game step fails.
+// The link is the plugin's (and the self-test host's) incident service; without one the parameter is refused (test_hooks_off).
+struct IncidentLink
+{
+    // Throws MethodError (incident_unknown, limit, bad_params); answers {incident, id, kind, role, who}.
+    std::function<json(const std::string& aIncident, const std::string& aWho, const std::string& aRole, const ActorView& aActor)> join;
+    std::function<void(const std::string& aIncident, const std::string& aWho)> leave;
+};
+struct IncidentAsk
+{
+    std::string id;   // empty: none asked
+    std::string role = "participant";
+};
+IncidentAsk ParseIncidentAsk(const json& aParams);
+
 class Service
 {
 public:
     void SetEvents(EventLog* aEvents);
+    // 0.8.21: the declared incidents' link, and a look at one actor by handle (a read for the incident service, any thread).
+    void SetIncidentLink(IncidentLink aLink);
+    ActorView ActorOf(const std::string& aWho) const;
 
     json List(const json& aParams, const Ops& aOps);
     json Pick(const json& aParams, const Ops& aOps);
@@ -488,6 +516,7 @@ private:
         std::string label;
         std::string entity;
         bool spawned = false;
+        bool placed = false;      // 0.8.21: the game said where it will appear (position is set although it is not polled yet)
         bool announced = false;
         double sinceSpawn = 0.0;
         Vec3 position{};
@@ -621,6 +650,10 @@ private:
     std::optional<HubHeld> m_hub;
     std::vector<VoiceLine> m_voice; // lines from a voice with no body
     std::vector<Swap> m_swaps;
+    IncidentLink m_incidentLink;
+    // 0.8.21: joins aWho to the incident asked for (nothing when none), or refuses; undone by LeaveIncident.
+    json JoinIncident(const IncidentAsk& aAsk, const std::string& aWho, const ActorView& aActor);
+    void LeaveIncident(const IncidentAsk& aAsk, const std::string& aWho);
     std::vector<Restoring> m_restores;
     std::vector<Returning> m_returns;
     // What the current handover released (the tick's safety net or ReleaseAllNow), for bridge.handover's answer.

@@ -618,6 +618,11 @@ json Service::Substitute(const json& aParams, const Ops& aOps)
     const bool dryRun = params::CheckBoolean(aParams, "dry_run").value_or(false);
     const double maxWait = params::CheckNumber(aParams, "max_wait_s", 1.0, kSwapWaitMaxS).value_or(kSwapWaitDefaultS);
     const auto label = params::CheckText(aParams, "label", kMaxTitleChars).value_or(std::string());
+    const auto incident = ParseIncidentAsk(aParams);
+    if (dryRun && !incident.id.empty())
+    {
+        Bad("a dry run changes nothing, so it can't join an incident: leave 'incident' out");
+    }
     const auto v = RequireV(aOps);
 
     // Which person.
@@ -731,10 +736,29 @@ json Service::Substitute(const json& aParams, const Ops& aOps)
     swap.maxWait = maxWait;
     swap.report = match.report;
     out["who"] = swap.who;
+    // 0.8.21: the actor joins the declared incident now, by its reserved handle, so what it does while the swap waits already counts; it
+    // leaves again if the swap is refused. (A swap that later fails leaves the role behind; the incident only ever names handles.)
+    ActorView planned;
+    planned.exists = true;
+    planned.hasPos = true;
+    planned.position = look.position;
+    const json incidentJoin = JoinIncident(incident, swap.who, planned);
+    if (!incidentJoin.is_null())
+    {
+        out["incident"] = incidentJoin;
+    }
     if (swapNow)
     {
         std::scoped_lock _(m_mutex);
-        BeginSwap(swap, v, aOps); // refuses (and puts the original back) when the spawn is refused
+        try
+        {
+            BeginSwap(swap, v, aOps); // refuses (and puts the original back) when the spawn is refused
+        }
+        catch (...)
+        {
+            LeaveIncident(incident, swap.who);
+            throw;
+        }
         const auto& npc = m_npcs[swap.who];
         out["state"] = "spawning";
         out["resident"] = npc.resident;

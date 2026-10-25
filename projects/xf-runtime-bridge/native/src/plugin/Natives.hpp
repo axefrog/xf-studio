@@ -16,5 +16,7 @@ bool RecordingIngress(const std::string& channel, const std::string& payload);
 bool IncidentSeen(const std::string& payload);
 bool IncidentAdmit(const std::string& evidence, const std::string& key);
 bool IncidentTapOn();
+// 0.8.21: the actors (a1,a2) the sight sampler should look at now, or nothing.
+std::string IncidentSightPlan();
 nlohmann::json IncidentCoverage();
 } // namespace xfb::plugin
