@@ -118,9 +118,13 @@ struct Cast
     // lip sync (the live-DM casting data).
     std::vector<std::string> appearances;
     bool masked = false;
+    // 0.8.18: a combat stand-in, a clone of a street-gang grunt instead of a civilian (fighter_melee, fighter_pistol): its own
+    // reaction preset and AI are what make it fight a V it is hostile to, so it has one record and no _reactive twin.
+    bool combat = false;
 };
 // V15: the record with the game's own reactions for a cast (reactions "game"): Character.xfs_actor_<cast>_reactive, the same
-// clone with the base civilian's reaction preset (tweaks/test-profile/xf_npc_actors.yaml); "" for the research casts.
+// clone with the base civilian's reaction preset (tweaks/test-profile/xf_npc_actors.yaml); "" for the research casts. 0.8.18:
+// a combat cast's own record (its reactions are the game's already).
 std::string ReactiveRecord(const Cast& aCast);
 const std::vector<Cast>& Casts();
 const Cast* FindCast(const std::string& aName);
@@ -425,6 +429,7 @@ private:
         std::string attitude = "friendly";
         bool immortal = true;
         std::string reactions = "quiet";
+        bool engage = false;     // 0.8.18: hostile, and its own threat list was given V at spawn (npc.spawn engage)
         bool handedBack = false; // a fight began: its own AI has it now; the bridge only watches until it is released
         bool deadKept = false;   // a mortal actor that died: its body stays until it is released
         // V16: dissolve.

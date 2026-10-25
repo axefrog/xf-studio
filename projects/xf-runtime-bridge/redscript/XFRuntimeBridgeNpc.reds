@@ -34,6 +34,7 @@ public class XFNpcEntry {
   public let prepared: Bool; // an actor given its attitude (and god mode) once it exists
   public let attitude: Int32; // V15: 0 friendly (the default), 1 neutral, 2 hostile towards V
   public let immortal: Bool;  // V15: god mode (the default); false lets it be hurt and killed
+  public let engage: Bool;    // 0.8.18: hostile, and V is put in its own threat list at its first moment (the game's InjectThreat)
   public let command: ref<AICommand>;
   public let look: ref<LookAtAddEvent>;
   public let faced: Bool;
@@ -138,7 +139,9 @@ public class XFNpcRegistry extends ScriptableSystem {
   public func HoldsReactions(id: EntityID, what: String) -> Bool {
     for entry in this.m_entries {
       if entry.id == id {
-        let holds = (Equals(entry.kind, "actor") && !StrEndsWith(entry.record, "_reactive")) || entry.faced || IsDefined(entry.look) || ArraySize(entry.lines) > 0;
+        // 0.8.18: a combat stand-in (a street-gang grunt) always has its own reactions; only what the bridge directs is held.
+        let ownReactions = StrEndsWith(entry.record, "_reactive") || StrContains(entry.record, "xfs_actor_fighter_");
+        let holds = (Equals(entry.kind, "actor") && !ownReactions) || entry.faced || IsDefined(entry.look) || ArraySize(entry.lines) > 0;
         if holds {
           // 0.8.10 (session 16's N5: an actor barked on arrival and nothing said whether the game's reaction or our own greeting
           // did it): the first few holds per actor are logged, so the log shows whether the stand-down was at work and when.
@@ -891,6 +894,11 @@ public abstract class XFNpc {
     entry.record = record;
     entry.id = id;
     entry.attitude = attitude;
+    // 0.8.18: the stance arrives as one number: 3 is hostile with engage.
+    if attitude == 3 {
+      entry.attitude = 2;
+      entry.engage = true;
+    }
     entry.immortal = immortal;
     registry.Add(entry);
     XFNavigation.Note(found.point, who);
@@ -912,6 +920,18 @@ public abstract class XFNpc {
         stance = EAIAttitude.AIA_Hostile;
       }
       agent.SetAttitudeTowards(player.GetAttitudeAgent(), stance);
+    }
+    // 0.8.18: engage, for a hostile actor whose own AI doesn't start the fight from the attitude alone. The game's own
+    // threat route (what a quest's combat order and AIActionHelper.TryStartCombatWithTarget use): V goes into the actor's
+    // threat list. TryStartCombatWithTarget itself isn't used, because for a non-hostile pair it changes the whole
+    // attitude group's stance; here the actor's attitude towards V is checked first. Nothing is written to V.
+    if entry.engage && IsDefined(player) {
+      if Equals(GameObject.GetAttitudeBetween(puppet, player), EAIAttitude.AIA_Hostile) {
+        TargetTrackingExtension.InjectThreat(puppet, player);
+        XFBridgeLog.Info("npc-engage", entry.who + " was given V as a threat (hostile attitude confirmed)");
+      } else {
+        XFBridgeLog.Info("npc-engage", entry.who + " was not given V as a threat: its attitude towards V isn't hostile yet");
+      }
     }
     if entry.immortal {
       let gods = GameInstance.GetGodModeSystem(GetGameInstance());

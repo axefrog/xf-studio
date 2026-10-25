@@ -140,6 +140,11 @@ const std::vector<Cast>& Casts()
         {"woman_masked", "Character.xfs_actor_woman_masked", "woman_average", "Stranger", false, {"citizen__creole_wa_caribbean_29"}, true},
         {"man_masked", "Character.xfs_actor_man_masked", "man_average", "Stranger", false,
          {"king_of_the_stoop_ma_king_of_the_stoop_ma_012", "king_of_the_stoop_ma_king_of_the_stoop_ma_03", "king_of_the_stoop_ma_king_of_the_stoop_ma_014"}, true},
+        // 0.8.18: combat stand-ins (clones of the base game's street-gang grunts: bare fists, and a handgun), on the base-game
+        // Scavenger template; a hostile one fights V with its own AI, which the civilian casts above cannot (the yaml's header).
+        // Not for talking: no lip-sync appearance list, no mask.
+        {"fighter_melee", "Character.xfs_actor_fighter_melee", "man_average", "Fighter", false, {}, false, true},
+        {"fighter_pistol", "Character.xfs_actor_fighter_pistol", "man_average", "Fighter", false, {}, false, true},
         // Session 9's N4 comparison only: the vanilla crowd record itself (isCrowd true, unchanged), and our clone of the plain
         // NPC base (never a crowd record) with the same template.
         {"research_crowd_record", "Character.CorpoWoman", "woman_average", "Stranger", true},
@@ -150,7 +155,7 @@ const std::vector<Cast>& Casts()
 
 std::string ReactiveRecord(const Cast& aCast)
 {
-    return aCast.research ? std::string() : aCast.record + "_reactive";
+    return aCast.research ? std::string() : aCast.combat ? aCast.record : aCast.record + "_reactive";
 }
 
 const Cast* FindCast(const std::string& aName)
@@ -473,7 +478,7 @@ void RequireKnown(const std::string& aMethod, const json& aParams)
         {"npc.list", {"radius_m", "max"}},
         {"npc.pick", {"id"}},
         {"npc.status", {}},
-        {"npc.spawn", {"cast", "at", "face", "appearance", "variant", "out_of_view", "label", "attitude", "immortal", "reactions", "min_m", "max_m"}},
+        {"npc.spawn", {"cast", "at", "face", "appearance", "variant", "out_of_view", "label", "attitude", "immortal", "reactions", "engage", "min_m", "max_m"}},
         {"npc.move", {"who", "to", "gait", "stop_m", "face_v", "max_s"}},
         {"npc.follow", {"who", "target", "distance_m", "gait", "max_s"}},
         {"npc.turn", {"who", "to", "away_from", "hold", "off"}},
@@ -871,6 +876,7 @@ json Service::NpcJson(const Npc& aNpc) const
         out["attitude"] = aNpc.attitude;
         out["immortal"] = aNpc.immortal;
         out["reactions"] = aNpc.reactions;
+        out["engage"] = aNpc.engage;
         out["handed_back"] = aNpc.handedBack;
         out["dead"] = aNpc.deadKept;
     }
@@ -921,7 +927,7 @@ json Service::Status(const json& aParams) const
     json casts = json::array();
     for (const auto& cast : Casts())
     {
-        casts.push_back({{"cast", cast.name}, {"rig", cast.rig}, {"masked", cast.masked}, {"research", cast.research}, {"appearances", cast.appearances}});
+        casts.push_back({{"cast", cast.name}, {"rig", cast.rig}, {"masked", cast.masked}, {"research", cast.research}, {"combat", cast.combat}, {"appearances", cast.appearances}});
     }
     return json{{"npcs", npcs}, {"hub", hub}, {"voice_lines", voices}, {"actors", ActorCount()}, {"casts", casts},
                 {"limits", {{"actors", kMaxActors}, {"picks", kMaxPicks}, {"range_m", kMaxRangeM}}}};
@@ -979,10 +985,24 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
         Bad("'attitude' must be friendly (the default), neutral or hostile");
     }
     const bool immortal = params::CheckBoolean(aParams, "immortal").value_or(true);
-    const auto reactions = params::CheckText(aParams, "reactions", 16).value_or("quiet");
-    if (reactions != "quiet" && reactions != "game")
+    const auto reactionsAsked = params::CheckText(aParams, "reactions", 16);
+    if (reactionsAsked && *reactionsAsked != "quiet" && *reactionsAsked != "game")
     {
         Bad("'reactions' must be quiet (the default: no crime or panic reactions) or game (the civilian's own)");
+    }
+    // 0.8.18: a combat stand-in always has its gang's own reactions (they are what make it fight); asking for quiet ones is
+    // refused rather than ignored, and the default is reported as what it is.
+    if (cast->combat && reactionsAsked && *reactionsAsked == "quiet")
+    {
+        Bad("a combat cast (fighter_melee, fighter_pistol) keeps its gang's own reactions: leave 'reactions' out or use game");
+    }
+    const std::string reactions = cast->combat ? "game" : reactionsAsked.value_or("quiet");
+    // 0.8.18: engage gives a hostile actor V as a threat in its own threat list (the game's own route, what a quest's combat
+    // order does), in case a hostile attitude alone doesn't make it start the fight. It never touches V.
+    const bool engage = params::CheckBoolean(aParams, "engage").value_or(false);
+    if (engage && attitude != "hostile")
+    {
+        Bad("'engage' goes with attitude hostile");
     }
     const auto record = reactions == "game" ? ReactiveRecord(*cast) : cast->record;
     if (record.empty())
@@ -1055,7 +1075,8 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
         yaw = YawTowards(facing[0] - point[0], facing[1] - point[1]);
         who = "a" + std::to_string(m_nextActor);
     }
-    const int32_t attitudeCode = attitude == "hostile" ? 2 : attitude == "neutral" ? 1 : 0;
+    // 3 is hostile with engage (the redscript layer's Spawn takes the stance as one number).
+    const int32_t attitudeCode = attitude == "hostile" ? (engage ? 3 : 2) : attitude == "neutral" ? 1 : 0;
     auto step = aOps.spawn(who, record, point, yaw, appearance, outOfView, attitudeCode, immortal);
     std::scoped_lock _(m_mutex);
     ++m_nextActor;
@@ -1069,6 +1090,7 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     npc.attitude = attitude;
     npc.immortal = immortal;
     npc.reactions = reactions;
+    npc.engage = engage;
     npc.entity = step.value("entity", std::string());
     if (step.contains("position"))
     {
@@ -1077,7 +1099,7 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     m_npcs[who] = npc;
     json out{{"who", who},       {"cast", cast->name},   {"record", record},     {"appearance", appearance}, {"entity", npc.entity},
              {"asked_at", json::array({point[0], point[1], point[2]})}, {"yaw", yaw}, {"spawning", true}, {"attitude", attitude},
-             {"immortal", immortal}, {"reactions", reactions}};
+             {"immortal", immortal}, {"reactions", reactions}, {"engage", engage}};
     if (!hiddenSpot.is_null())
     {
         out["out_of_sight"] = hiddenSpot;
@@ -1086,6 +1108,10 @@ json Service::Spawn(const json& aParams, const Ops& aOps)
     {
         out["moved_for_sight"] = sightMove;
         out["note"] = "the asked place had no sight line to V's head, so the actor stands at the nearest walkable place she can see";
+    }
+    if (cast->combat && attitude != "hostile")
+    {
+        out["combat_note"] = "a fighter only fights a V it is hostile to: spawn it with attitude hostile (it stands without a fight as it is)";
     }
     if (npc.StandsIn())
     {

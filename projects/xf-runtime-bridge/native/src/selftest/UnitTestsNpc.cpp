@@ -513,6 +513,49 @@ void StagingTests()
     Check("reactions: a cast's game-reactions record, none for the research casts",
           n::ReactiveRecord(*n::FindCast("woman_corpo")) == "Character.xfs_actor_woman_corpo_reactive" && n::ReactiveRecord(*n::FindCast("research_npc_base")).empty());
 
+    // 0.8.18: the combat stand-ins.
+    {
+        Check("combat casts: fighter_melee and fighter_pistol are gang-grunt clones with their own reactions (no _reactive twin)",
+              n::FindCast("fighter_melee") && n::FindCast("fighter_pistol") && n::FindCast("fighter_melee")->combat && n::FindCast("fighter_pistol")->combat &&
+                  !n::FindCast("woman_corpo")->combat && !n::FindCast("research_npc_base")->combat &&
+                  n::ReactiveRecord(*n::FindCast("fighter_melee")) == "Character.xfs_actor_fighter_melee" &&
+                  n::ReactiveRecord(*n::FindCast("fighter_pistol")) == "Character.xfs_actor_fighter_pistol");
+        xfb::EventLog log;
+        n::Service service;
+        service.SetEvents(&log);
+        Fake fake;
+        const auto ops = fake.Ops();
+        const auto at = json{{"ahead_m", 4}};
+        const auto fighter = service.Spawn(json{{"cast", "fighter_melee"}, {"at", at}, {"attitude", "hostile"}, {"immortal", false}}, ops);
+        Check("combat casts: a hostile mortal fighter uses its own record, reports the game's reactions, is a stand-in, no engage",
+              fighter["record"] == "Character.xfs_actor_fighter_melee" && fighter["reactions"] == "game" && fighter["engage"] == false &&
+                  fighter.contains("stand_in_note") && !fighter.contains("combat_note") && fake.Called("spawn a1 Character.xfs_actor_fighter_melee attitude=2 mortal"));
+        const auto engaged = service.Spawn(json{{"cast", "fighter_pistol"}, {"at", at}, {"attitude", "hostile"}, {"engage", true}}, ops);
+        Check("combat casts: engage is sent as the hostile-and-engage stance (3), the default stays immortal, and the status shows it",
+              engaged["engage"] == true && engaged["immortal"] == true && fake.Called("spawn a2 Character.xfs_actor_fighter_pistol attitude=3 immortal") &&
+                  service.Status(json::object())["npcs"][1]["engage"] == true && service.Status(json::object())["npcs"][0]["engage"] == false);
+        Check("combat casts: engage needs a hostile attitude",
+              CodeOf([&] { service.Spawn(json{{"cast", "fighter_melee"}, {"at", at}, {"attitude", "neutral"}, {"engage", true}}, ops); }) == "bad_params" &&
+                  CodeOf([&] { service.Spawn(json{{"cast", "woman_corpo"}, {"at", at}, {"engage", true}}, ops); }) == "bad_params");
+        Check("combat casts: quiet reactions are refused for a fighter, game is fine",
+              CodeOf([&] { service.Spawn(json{{"cast", "fighter_melee"}, {"at", at}, {"attitude", "hostile"}, {"reactions", "quiet"}}, ops); }) == "bad_params" &&
+                  service.Spawn(json{{"cast", "fighter_melee"}, {"at", at}, {"attitude", "hostile"}, {"reactions", "game"}}, ops)["reactions"] == "game");
+        service.Release(json{{"who", "all"}}, ops);
+        const auto friendly = service.Spawn(json{{"cast", "fighter_melee"}, {"at", at}}, ops);
+        Check("combat casts: a friendly fighter is told it will not fight",
+              friendly["attitude"] == "friendly" && friendly.contains("combat_note"));
+        Check("combat casts: the status lists the casts with the combat flag",
+              [&] {
+                  int combat = 0;
+                  const auto status = service.Status(json::object());
+                  for (const auto& cast : status["casts"])
+                  {
+                      combat += cast["combat"].get<bool>() ? 1 : 0;
+                  }
+                  return combat == 2;
+              }());
+    }
+
     // V15: the spawn's stance.
     {
         xfb::EventLog log;

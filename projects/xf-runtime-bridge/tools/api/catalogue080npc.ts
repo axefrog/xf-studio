@@ -11,7 +11,7 @@ import { point3 } from "./catalogue060.ts";
 type Json = Record<string, any>;
 
 /** The XF actors npc.spawn offers (core/Npc.cpp Casts(); tweaks/test-profile/xf_npc_actors.yaml). */
-export const NPC_CASTS = ["woman_corpo", "man_corpo", "woman_nightlife", "man_youngster", "woman_lowlife", "man_lowlife", "woman_masked", "man_masked", "research_crowd_record", "research_npc_base"] as const;
+export const NPC_CASTS = ["woman_corpo", "man_corpo", "woman_nightlife", "man_youngster", "woman_lowlife", "man_lowlife", "woman_masked", "man_masked", "fighter_melee", "fighter_pistol", "research_crowd_record", "research_npc_base"] as const;
 /** Facial reactions (core/Npc.cpp Expressions()). */
 export const NPC_EXPRESSIONS = ["neutral", "joy", "smile", "sad", "surprise", "aggressive", "anger", "interested", "disinterested", "disappointed", "disgust", "nervous", "fear"] as const;
 /** Vanilla voice triggers npc.say may play (core/Npc.cpp VoiceTriggers()). */
@@ -130,12 +130,12 @@ const DEFINITIONS: CommandDef[] = [
     name: "npc.spawn",
     title: "Bring in an XF actor",
     description:
-      "Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_sight lets the bridge choose a walkable spot V can't see (outside her view or behind a wall, min_m to max_m from her, 12 to 25 by default), so the actor walks in from somewhere rather than appearing; out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. By default the actor is friendly to V, can't be killed and has calm reactions; attitude neutral or hostile, immortal false and reactions game make a stand-in that can be shot (when a fight begins the bridge stops directing it and its own AI takes over, npc.handed_back; if it dies its body stays until released). It is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Returns traffic_check at the final snapped point: lane containment and nearest pavement are INCONCLUSIVE. Needs Codeware and the -writes package's actor records.",
+      "Brings an XF actor into the world near V: cast is one of XF's own passers-by (a copy of an ordinary base-game civilian, never a story character), placed ahead_m metres along V's facing and side_m to her right (or at a world point), on walkable ground within 30 m of V, facing V (or face another NPC or face_point). out_of_sight lets the bridge choose a walkable spot V can't see (outside her view or behind a wall, min_m to max_m from her, 12 to 25 by default), so the actor walks in from somewhere rather than appearing; out_of_view waits until the spot isn't on screen. The masked casts cover the mouth with a mask or respirator, so lines without lip movement read naturally. By default the actor is friendly to V, can't be killed and has calm reactions; attitude neutral or hostile, immortal false and reactions game make a stand-in that can be shot (when a fight begins the bridge stops directing it and its own AI takes over, npc.handed_back; if it dies its body stays until released). The combat casts fighter_melee (bare fists, the safest first fixture) and fighter_pistol (a handgun) are copies of the base game's street-gang grunts instead of civilians: with attitude hostile (and immortal false if V may kill it) one fights V with its own AI, which a civilian never does; they keep their gang's own reactions, and by default they can't be killed so a test can't end by accident. engage true (with attitude hostile) also puts V in its own threat list at its first moment, the game's own route, in case the attitude alone doesn't start the fight; it never touches V. It is never saved: npc_release, the kill switch or loading a save removes it, and game_save refuses while one is out. At most 3 at once. Answers its handle (a1, a2, a3) at once; npc.spawned follows in the event stream when it appears. Returns traffic_check at the final snapped point: lane containment and nearest pavement are INCONCLUSIVE. Needs Codeware and the -writes package's actor records.",
     permission: "write-npc",
     input: obj(
       {
         cast: oneOf(
-          "Which actor: woman_corpo, man_corpo, woman_nightlife, man_youngster, woman_lowlife or man_lowlife; woman_masked or man_masked wear a mask or respirator over the mouth (for lines without lip movement); research_crowd_record and research_npc_base are for the session-9 comparison only.",
+          "Which actor: woman_corpo, man_corpo, woman_nightlife, man_youngster, woman_lowlife or man_lowlife; woman_masked or man_masked wear a mask or respirator over the mouth (for lines without lip movement); fighter_melee and fighter_pistol are combat stand-ins (street-gang grunts: fists, handgun) that fight V when hostile; research_crowd_record and research_npc_base are for the session-9 comparison only.",
           [...NPC_CASTS],
         ),
         ahead_m: num("Metres along V's facing (negative: behind her), -30 to 30.", -30, 30),
@@ -151,7 +151,8 @@ const DEFINITIONS: CommandDef[] = [
         max_m: num("With out_of_sight: at most this far from V, 3 to 30 m. Default 25.", 3, 30),
         attitude: oneOf("How it stands towards V: friendly (the default), neutral or hostile.", ["friendly", "neutral", "hostile"]),
         immortal: bool("Whether it can't be hurt or killed (default true); false makes a mortal stand-in."),
-        reactions: oneOf("quiet (the default: no crime or panic reactions) or game (an ordinary passer-by's own reactions).", ["quiet", "game"]),
+        reactions: oneOf("quiet (the default: no crime or panic reactions) or game (an ordinary passer-by's own reactions). The combat casts always have their gang's own reactions (game); quiet is refused for them.", ["quiet", "game"]),
+        engage: bool("With attitude hostile: also put V in the actor's own threat list at its first moment (the game's own route), in case the attitude alone doesn't start the fight. Default false. Never touches V."),
         label: str("The name its lines and dialogue choices show (default Stranger).", { minLength: 1, maxLength: 40 }),
       },
       ["cast"],

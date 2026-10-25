@@ -112,14 +112,19 @@ describe("0.8 npc offline: the catalogue, the scenario checker, the actor record
       const r = yaml[record];
       expect(r, record).toBeDefined();
       expect(r.$base).toMatch(/^Character\./);
-      expect(String(r.entityTemplatePath)).toMatch(/^base\\characters\\entities\\citizen\\citizen__[a-z]+_[wm]a\.ent$/);
+      // 0.8.18: the combat casts are street-gang grunts on the base game's gang template, the civilian casts are citizens.
+      const template = record.startsWith("Character.xfs_actor_fighter_")
+        ? /^base\\characters\\entities\\gang\\gang__[a-z]+_[wm]a\.ent$/
+        : /^base\\characters\\entities\\citizen\\citizen__[a-z]+_[wm]a\.ent$/;
+      expect(String(r.entityTemplatePath)).toMatch(template);
       expect(r.objectActions).toEqual([]);
       expect(r.savable).toBe(false);
       if (record !== "Character.xfs_actor_research_npc_base") expect(r.isCrowd).toBe(false);
     }
-    expect(yaml["XFRuntimeBridge.Npc.actorsVersion"]).toBe(2);
-    // V15: each cast (not the research ones) again with the game's own civilian reactions; nothing else differs.
-    for (const record of records.filter((r) => !r.includes("research"))) {
+    expect(yaml["XFRuntimeBridge.Npc.actorsVersion"]).toBe(3);
+    // V15: each cast (not the research ones, nor the 0.8.18 combat casts, whose own reactions are the game's already) again
+    // with the game's own civilian reactions; nothing else differs.
+    for (const record of records.filter((r) => !r.includes("research") && !r.includes("fighter"))) {
       const reactive = yaml[`${record}_reactive`];
       expect(reactive, `${record}_reactive`).toBeDefined();
       expect(reactive.reactionPreset).toBe("ReactionPresets.Civilian_Neutral");

@@ -18,7 +18,7 @@
 # characters/npcs/records/crowds/communities.tweak, personalities/base_values.tweak:372, factions/factions.tweak:323,
 # characters/spawnable_object_priority.tweak:10) [resource].
 
-XFRuntimeBridge.Npc.actorsVersion: 2
+XFRuntimeBridge.Npc.actorsVersion: 3
 
 Character.xfs_actor_woman_corpo:
   $base: Character.CorpoWoman
@@ -218,4 +218,53 @@ Character.xfs_actor_man_masked_reactive:
   priority: SpawnableObjectPriority.Regular
   objectActions: []
   items: []
+  savable: false
+
+# 0.8.18, the combat stand-ins (npc.spawn {cast: "fighter_melee" or "fighter_pistol", attitude: "hostile"}): clones of two of
+# the base game's own street-gang grunts, which the game spawns as combat-capable enemies. The civilians above only stood and
+# watched a hostile V [runtime: the 0.8.17 session]; their records are crowd records, which have no combat abilities
+# (Gameplay_NPC_Base is what adds Ability.CanCloseCombat, CanShootWhileMoving and the rest; AMM's own "hostile" toggle refuses
+# a record without CanCloseCombat), no archetype data in the base source (the gang records carry ArchetypeData.GenericMeleeT1
+# or GenericRangedT1 and actionMap Gang.Map) and the crowd's reaction preset (a gang's is Ganger_Aggressive, isAggressive).
+# Whether a hostile attitude alone makes them start the fight is [hypothesis] until the 0.8.18 card's rows; npc.spawn's
+# engage option is the fallback. Sources [resource]: REDmod characters/bases/base_records.tweak:42-68 and 735-755,
+# characters/npcs/records/gameplay/factions/scavengers.tweak:4-30, 108-136 and 657-692, ai/archetype_data/archetypedata.tweak:4-27,
+# personalities/base_values.tweak:25-31, attitude/attitudes.tweak:682-686, 1346-1351 and 1374-1379; AMM Modules/util.lua:1156-1168.
+#   $base                  scavenger_grunt1_melee1_fists_ma: the weakest melee archetype (tier 1, rarity Normal, bare fists,
+#                          Items.Npc_fists_ma), the slowest and safest first fixture; scavenger_grunt1_ranged1_slaughtomatic_ma:
+#                          the tier-1 handgun grunt of the same gang (it deals chemical damage). The Scavengers' attitude group
+#                          is Neutral towards V by default and Hostile only to the Maelstrom, so a spawn picks no fight with
+#                          anyone else, and npc.spawn sets its attitude towards V.
+#   isCrowd: false         a full AI puppet, as the civilian casts (a gang record is not a crowd one already)
+#   entityTemplatePath     the base game's own Scavenger template, as the base game's debug and quest records name it
+#                          (gameplay.tweak:989, street_stories/sts_wat_kab_101.tweak), so no clone needs Phantom Liberty: the
+#                          gang records themselves only name the expansion's variant in this source
+#   affiliation            Factions.Unaffiliated: no gang ties, as the civilian casts
+#   priority               Regular, as the civilian casts
+#   lootDrop, dropsWeaponOnDeath
+#                          nothing to loot and no dropped weapon, so a test never changes V's inventory
+#   objectActions: []      no interactions (talk, takedown, quickhacks), as the civilian casts
+#   savable: false         never saved
+# Not changed: the reaction preset (the gang's own is part of what makes it fight, so there is no _reactive twin); god mode is
+# set by npc.spawn at spawn, as for the civilians.
+Character.xfs_actor_fighter_melee:
+  $base: Character.scavenger_grunt1_melee1_fists_ma
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\gang\gang__scavenger_ma.ent'
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  lootDrop: LootTables.Empty
+  dropsWeaponOnDeath: false
+  objectActions: []
+  savable: false
+
+Character.xfs_actor_fighter_pistol:
+  $base: Character.scavenger_grunt1_ranged1_slaughtomatic_ma
+  isCrowd: false
+  entityTemplatePath: 'base\characters\entities\gang\gang__scavenger_ma.ent'
+  affiliation: Factions.Unaffiliated
+  priority: SpawnableObjectPriority.Regular
+  lootDrop: LootTables.Empty
+  dropsWeaponOnDeath: false
+  objectActions: []
   savable: false
