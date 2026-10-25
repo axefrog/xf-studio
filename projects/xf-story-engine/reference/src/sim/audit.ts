@@ -26,7 +26,7 @@ export interface SourceFile {
   text: string;
 }
 
-export { codeOf, lintSources, COARSE_FILES, MARK_OPEN, MARK_CLOSE, type StringMode } from './source-audit.ts';
+export { codeOf, lintSources, lintLayerWrites, COARSE_FILES, MARK_OPEN, MARK_CLOSE, type StringMode } from './source-audit.ts';
 
 // ---- the registry audits ----
 

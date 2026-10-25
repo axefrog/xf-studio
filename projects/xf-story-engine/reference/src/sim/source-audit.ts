@@ -32,7 +32,7 @@ export function codeOf(text: string, strings: boolean | StringMode = 'blank'): s
   });
 }
 
-export const COARSE_FILES = ['proc-events.ts', 'proc-stocks.ts', 'proc-mirror.ts', 'proc-norms.ts', 'proc-groups.ts', 'proc-goals.ts', 'ledger.ts'];
+export const COARSE_FILES = ['proc-events.ts', 'proc-stocks.ts', 'proc-mirror.ts', 'proc-norms.ts', 'proc-groups.ts', 'proc-goals.ts', 'grievance.ts', 'ledger.ts'];
 const EXEMPT: Record<string, string[]> = {
   'make-tables.ts': ['arithmetic', 'keys', 'no-load-reads'],
   'port.ts': ['no-load-reads'],
@@ -131,6 +131,33 @@ function guardsMeta(file: ts.SourceFile, method: string): boolean {
   return !!param && ts.isIdentifier(param) && !!first && ts.isIfStatement(first) && metaTruth(first.expression, param.text) === true && returns(first.thenStatement);
 }
 
+/** The files that may name a goal frame in an event's `served`, and the kinds of the acts goals produce (S1 5.3, 12): only `city.events` mints them, and the scene alone mints `confront`. */
+const SERVED_OWNERS = ['proc-events.ts', 'sim.ts'];
+const GOAL_ACT_KINDS = new Set(['warning', 'price', 'search', 'presence', 'call-in']);
+const READS_DIGESTS = new Set(['digest', 'digestPeek', 'digestOf']);
+
+/**
+ * The v0.6 audit over the writes of the layers above S1 (S1 12, D-30 grounds): no seed or director operation writes `punish` state. S2's and S3's sources name no
+ * `punish` intention, its last window, its grounding pulse or its lifecycle events: a lint over their write sets.
+ */
+export function lintLayerWrites(files: SourceFile[]): Finding[] {
+  const out: Finding[] = [];
+  return parsed(files, (trees) => {
+    for (const [index, f] of files.entries()) {
+      const file = trees[index]!;
+      const visit = (node: ts.Node): void => {
+        const at = (): string => `${f.path}:${file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1}`;
+        if (ts.isIdentifier(node) && (node.text === 'punish' || node.text === 'lastPunish')) out.push({ audit: 'd30-grounds', where: at(), detail: `${node.text}: the state of a group's intention against V is S1's alone` });
+        const lit = literal(node);
+        if (lit !== undefined && (lit === 'decide.punish' || lit === 'relent.punish' || lit === 'retribution-v')) out.push({ audit: 'd30-grounds', where: at(), detail: `${lit}: S1's alone` });
+        node.forEachChild(visit);
+      };
+      visit(file);
+    }
+    return out;
+  });
+}
+
 export function lintSources(files: SourceFile[]): Finding[] {
   const out: Finding[] = [];
   return parsed(files, (trees) => {
@@ -180,6 +207,19 @@ export function lintSources(files: SourceFile[]): Finding[] {
           }
         }
         if (coarse && ['cell', 'position'].includes(literal(node) ?? '')) add('coarse-independence', node, 'V\'s cell or position named by a coarse process');
+        // v0.6 (S1 12): goals act through production, and a coarse process reads only what is coarse-readable
+        if (ts.isPropertyAssignment(node) && node.name.getText(file) === 'served' && !SERVED_OWNERS.includes(f.path)) add('goals-through-production', node, 'an event given a served goal frame outside city.events');
+        if (ts.isPropertyAssignment(node) && node.name.getText(file) === 'kind') {
+          const k = literal(node.initializer);
+          if (k !== undefined && GOAL_ACT_KINDS.has(k) && f.path !== 'proc-events.ts') add('goals-through-production', node, `a ${k} minted outside city.events`);
+          if (k === 'confront' && !['proc-acts.ts', 'data.ts'].includes(f.path)) add('goals-through-production', node, 'a confront minted outside scene.acts');
+        }
+        if (coarse && ts.isImportDeclaration(node) && literal(node.moduleSpecifier)?.endsWith('proc-acts.ts')) add('coarse-readable', node, 'a coarse process imports the fine tier');
+        if (coarse && ts.isCallExpression(node)) {
+          const fn = unwrap(node.expression), prop = property(fn);
+          const callee = ts.isIdentifier(fn) ? fn.text : prop?.name;
+          if (callee !== undefined && READS_DIGESTS.has(callee) && literal(node.arguments[0]) === 'scene.acts') add('coarse-readable', node, 'a coarse process reads what scene.acts opened');
+        }
         node.forEachChild(visit);
       };
       const checkPin = (node: ts.ObjectLiteralExpression): void => {
@@ -187,6 +227,29 @@ export function lintSources(files: SourceFile[]): Finding[] {
         if (n && (identifier(n.initializer, 'v') || property(n.initializer)?.name === 'v')) add('v-exclusion', n, 'a write on V');
       };
       visit(file);
+      // v0.6 (S1 8.8, 12): `reconcile` leaves a retained goal frame to `people.goals`: every loop that ends frames skips one first
+      if (f.path === 'policies.ts') {
+        const reconcile: ts.MethodDeclaration[] = [];
+        const find = (n: ts.Node): void => {
+          if (ts.isMethodDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === 'reconcile') reconcile.push(n);
+          n.forEachChild(find);
+        };
+        find(file);
+        const guarded = (loop: ts.ForOfStatement): boolean => {
+          const body = ts.isBlock(loop.statement) ? loop.statement.statements : [loop.statement];
+          const first = body[0];
+          return first !== undefined && ts.isIfStatement(first) && contains(first.expression, (x) => ts.isIdentifier(x) && x.text === 'retain' || ts.isPropertyAccessExpression(x) && x.name.text === 'retain') && contains(first, (x) => x.kind === ts.SyntaxKind.ContinueStatement);
+        };
+        const climb = (n: ts.Node, loop: ts.ForOfStatement | undefined): void => {
+          if (ts.isForOfStatement(n)) loop = n;
+          if (ts.isCallExpression(n)) {
+            const p = property(unwrap(n.expression));
+            if (p?.name === 'setStatus' && !(loop !== undefined && guarded(loop))) out.push({ audit: 'goal-frames', where: `${f.path}:${file.getLineAndCharacterOfPosition(n.getStart(file)).line + 1}`, detail: 'reconcile sets the status of a frame without leaving a retained goal frame alone' });
+          }
+          n.forEachChild((c) => climb(c, loop));
+        };
+        for (const m of reconcile) climb(m, undefined);
+      }
       if (f.path === 'policies.ts') for (const method of ['heardEvent', 'absorb']) {
         if (!guardsMeta(file, method)) out.push({ audit: 'meta-inert', where: `policies.ts:${method}`, detail: `${method} must begin with a conditional that rejects every meta: event` });
       }
