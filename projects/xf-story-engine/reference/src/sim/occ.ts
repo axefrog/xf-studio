@@ -85,6 +85,8 @@ export interface EventFact {
   parties: Array<{ role: string; who: Id; group?: Id }>;
   /** v0.6: the goal frame a goal act served. */
   goal?: Id;
+  /** v0.6: the effects the occurrence put on its people (what the pulses weigh, S1 7.8). */
+  effects?: Array<{ on: Id; effect: string }>;
 }
 
 export type CastEntry = { role: string; who: Id; group?: undefined } | { role: string; group: Id; who?: undefined };

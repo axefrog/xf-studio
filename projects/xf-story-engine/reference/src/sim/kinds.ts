@@ -9,7 +9,7 @@ import type { Effect } from '../types.ts';
 import type { CityKindDef, ContentClass, S1Data } from './data.ts';
 import { type OutcomeRules, fillsOfEnforcement, fillsOfFixedKind, outcomeRulesOf } from './fills.ts';
 
-export type KindFamily = 'city' | 'order' | 'social' | 'mirror' | 'raw' | 'tie';
+export type KindFamily = 'city' | 'order' | 'social' | 'mirror' | 'raw' | 'tie' | 'group';
 
 export interface RoleSpec {
   role: string;
@@ -106,6 +106,7 @@ export function participantRoles(): string[] {
   for (const k of CITY_KIND_NAMES) for (const hp of [false, true]) for (const r of ROLE_SPECS(k, hp)) roles.add(r.role);
   for (const r of ['aggressor', 'victim', 'target', 'hostile', 'responder', 'enforcer', 'giver', 'taker', 'participant', 'teller', 'listener', 'subject', 'entry', 'actor',
     // v0.6 (S1 5.3, 5.4): the thing a theft moves, who prevented an act, what a telling is about, and the roles of the group and goal kinds
+    'promiser', 'promisee', 'receiver', 'repairer', 'exposer', 'confessor', 'audience', 'protagonist', 'asker', 'replier', 'bidder',
     'told', 'guard', 'item', 'group', 'decider', 'object', 'successor', 'predecessor', 'late', 'creditor', 'debtor', 'warner', 'warned', 'searcher', 'asked', 'sought', 'confronter', 'confronted']) roles.add(r);
   for (const r of [...roles]) roles.add(`${r}-group`);
   return [...roles].sort();
@@ -122,6 +123,8 @@ export function allEventKindNames(data: S1Data): string[] {
   return [
     ...data.kinds.map((k) => k.name), 'regime-start', 'regime-end', ...rungKinds(data).map((x) => `enf.${x.norm}.${x.rung}`), 'gig-outcome',
     ...RAW_KIND_NAMES, ...TIE_KIND_NAMES, ...SOCIAL_KIND_NAMES,
+    // v0.6 (S1 5.3): a group's decisions, the ends of its courses and its successions, generated from `data.groups.intents`
+    ...data.groups.intents.flatMap((i) => [`decide.${i.id}`, `relent.${i.id}`]), 'succession',
   ].filter((v, i, a) => a.indexOf(v) === i);
 }
 
@@ -174,6 +177,15 @@ export class KindRegistry {
         ...(outcomeRulesOf(`enf.${norm}.${rung}`, [], { rungEffect: r.effect }) ? { outcomes: outcomeRulesOf(`enf.${norm}.${rung}`, [], { rungEffect: r.effect })! } : {}),
       }));
     }
+    // v0.6 (S1 5.3): lifecycle notices of `group.decide`: no effects, class none, severity 0.3, pulse 0.2, carrier people 14 days; roles `group`, `decider` and the informational `object`
+    const groupKind = (name: string, roleNames: string[], fills: FillDecl[]): void => {
+      this.kinds.set(name, plain(name, 'group', ['group.decide'], { severity: 0.3, pulse: 0.2, carrier: { channels: ['people'], days: 14 }, roleNames, fills }));
+    };
+    for (const i of data.groups.intents) {
+      groupKind(`decide.${i.id}`, ['group', 'decider', 'object'], [{ fn: 'decide', args: { group: 'group', what: 'object|group' } }]);
+      groupKind(`relent.${i.id}`, ['group', 'decider', 'object'], []);
+    }
+    groupKind('succession', ['group', 'successor', 'predecessor', 'late'], [{ fn: 'bind', args: { a: 'successor', b: 'group' } }, { fn: 'sever', args: { a: 'predecessor', b: 'group' }, when: { has: ['predecessor'] } }]);
     this.kinds.set('gig-outcome', plain('gig-outcome', 'mirror', ['city.mirror']));
     for (const n of RAW_KIND_NAMES) this.kinds.set(n, plain(n, 'raw', ['port']));
     this.kinds.set('reply', plain('reply', 'tie', ['ties']));

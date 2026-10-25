@@ -25,6 +25,10 @@ export const KEY_REGISTRY: Record<string, { process?: string; args: string }> = 
   ecell: { process: 'order.norms', args: 'id s i' },
   et: { process: 'order.norms', args: 'id s i' },
   retal: { process: 'group.decide', args: 'id i' },
+  'decide-t': { process: 'group.decide', args: 'id' },
+  'seat-b': { args: 'id i i i' },
+  'seat-r': { args: 'id i i i' },
+  lean: { args: 'id id' },
   outcome: { args: 'id' },
   'cast-f': { args: 'id' },
   'cast-pair': { args: 'id' },
@@ -59,6 +63,9 @@ export function identityKeys(worldSeed: Id) {
   const ir = (tag: string, ...args: HArg[]): number => rand(hs(tag), hid(worldSeed), ...args);
   return {
     outcome: (occ: Id) => ir('outcome', hid(occ)),
+    seatB: (group: Id, seat: number, succ: number, a: number) => ir('seat-b', hid(group), hi(seat), hi(succ), hi(a)),
+    seatR: (group: Id, seat: number, succ: number, a: number) => ir('seat-r', hid(group), hi(seat), hi(succ), hi(a)),
+    lean: (holder: Id, group: Id) => ir('lean', hid(holder), hid(group)),
     castF: (occ: Id) => ir('cast-f', hid(occ)),
     castPair: (occ: Id) => ir('cast-pair', hid(occ)),
     castN: (occ: Id, role: string) => ir('cast-n', hid(occ), hs(role)),
@@ -105,6 +112,7 @@ export function processKeys(pr: ProcRand) {
     ecell: (w: number, d: Id, norm: string, i: number) => pr(w, hs('ecell'), hid(d), hs(norm), hi(i)),
     et: (w: number, d: Id, norm: string, i: number) => pr(w, hs('et'), hid(d), hs(norm), hi(i)),
     retal: (w: number, group: Id, rival: number) => pr(w, hs('retal'), hid(group), hi(rival)),
+    decideT: (w: number, group: Id) => pr(w, hs('decide-t'), hid(group)),
   };
 }
 export type ProcessKeys = ReturnType<typeof processKeys>;

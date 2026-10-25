@@ -281,7 +281,7 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
             st.ring.push({ id, w, time, cell, norm: norm.id, rung, qe: s.qe, qn: s.qn, ...(refuser !== undefined ? { refuser } : {}), outcome: oc.outcome, ...(oc.guard !== undefined ? { guard: oc.guard } : {}) });
             facts.push({
               id, kind: kindN, size: 1, w, time, cell, district: d.id, public: desc.public, witnesses: desc.witnesses, policeChild: false, creator: 'norms',
-              norm: norm.id, rung, enforcer: classIndexOfAff(norm.enforcer.aff), outcome: oc.outcome, parties: partiesOf(sim, occ.participants, time),
+              norm: norm.id, rung, enforcer: classIndexOfAff(norm.enforcer.aff), outcome: oc.outcome, parties: partiesOf(sim, occ.participants, time), effects: effs,
             });
             // an enforcement with outcome `done` on a pending refuser answers it (v0.6)
             if (oc.outcome === 'done') {

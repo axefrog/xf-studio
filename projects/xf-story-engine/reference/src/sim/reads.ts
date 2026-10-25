@@ -248,6 +248,36 @@ export class Reads {
     // depth(node)
     this.single('depth', { digests: [], interests: [{ slot: '*' }], time: false, roles: ['node'] }, (a) => (typeof a[0] === 'string' ? (sim.k.frames.demandTier(a[0]) >= 3 ? 'open' : 'closed') : MAYBE));
 
+    // leads(person, group) and holds(who, item) (S1 9.1, v0.6): whether an `xf:leads` or `xf:held-by` edge is valid at `t`, with the kernel's edge times as the transitions
+    const edgeRead = (name: string, type: string, ends: (a: unknown[]) => { from: Id; to: Id } | undefined): void => {
+      const intervals = (e: { from: Id; to: Id }): Array<{ from: GameTime; to?: GameTime }> => {
+        this.k.persistence.recoverIfSaved(e.from, e.to);
+        return this.k.store.edgesFrom(e.from).filter((x) => x.type === type && x.to === e.to).map((x) => ({ from: x.valid.from, ...(x.valid.to !== undefined ? { to: x.valid.to } : {}) }));
+      };
+      const at = (e: { from: Id; to: Id }, t: GameTime): string => (intervals(e).some((i) => i.from <= t && (i.to === undefined || t < i.to)) ? 'yes' : 'no');
+      this.add({
+        name, version: 1, deps: { digests: [], interests: [{ slot: '*' }], time: true, roles: ['a', 'b'] },
+        eval: (a, t) => { const e = ends(a); return e ? at(e, t) : MAYBE; },
+        transitions: (a, from, to) => {
+          const e = ends(a);
+          if (!e) return [{ t: from, value: MAYBE }];
+          const out: ReadTransition[] = [{ t: from, value: at(e, from) }];
+          const times = [...new Set(intervals(e).flatMap((i) => [i.from, ...(i.to !== undefined ? [i.to] : [])]))].filter((x) => x > from && x <= to).sort((x, y) => x - y);
+          for (const x of times) {
+            const v = at(e, x);
+            if (v !== out[out.length - 1]!.value) out.push({ t: x, value: v });
+          }
+          return out;
+        },
+      });
+    };
+    edgeRead('leads', 'xf:leads', (a) => (typeof a[0] === 'string' && typeof a[1] === 'string' ? { from: a[0], to: a[1] } : undefined));
+    edgeRead('holds', 'xf:held-by', (a) => (typeof a[1] === 'string' && typeof a[0] === 'string' ? { from: a[1], to: a[0] } : undefined));
+    // the reads of the goals and of an intention against the protagonist: registered, `maybe` until the processes that answer them are built
+    this.unbuilt('wants', ev('people.goals'));
+    this.unbuilt('guarded', ev('people.goals'));
+    this.unbuilt('intentAgainst', ev('group.decide'));
+
     // groupGap(group)
     this.fed('groupGap', { ...ev('group.decide'), interests: [{ kind: 'xf:group', slot: 'group-gap' }] }, 'group.decide',
       (a) => (typeof a[0] === 'string' ? `group-gap|${a[0]}` : undefined),

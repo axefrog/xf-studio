@@ -3,7 +3,7 @@
 import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { H, id as hid, i as hi, rand, s as hs } from '../../src/id.ts';
 import { aggregateItems, labelOf, residentSum, type LedgerItem } from '../../src/sim/ledger.ts';
-import { operative, pressures, pulseReplaces, pulseU, type G, type GroupDigest, type GroupState } from '../../src/sim/proc-groups.ts';
+import { leadShares, operative, pressures, pulseReplaces, pulseU, type G, type GroupDigest, type GroupState } from '../../src/sim/proc-groups.ts';
 import { ReplayPort } from '../../src/sim/port.ts';
 import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
@@ -212,19 +212,38 @@ describe('SF1-L-5, SF1-L-7 and SF1-L-8: the cap, retention and diagnosticity', (
 describe('SF1-G: the groups', () => {
   const claws = (): { def: ReturnType<typeof defaultData>['groups']['groups'][0]; U: Record<string, number> } => ({ def: defaultData().groups.groups[0]!, U: { treasury: 0.2, retribution: 0.2, reputation: 0.2, cohesion: 0.2 } });
 
-  test('SF1-G-1: operative weights, the sum is 1 and the divergence 0.0681818', () => {
+  test('SF1-G-1: operative weights with the leaders term: (a) every seat vacant, (b) three seats held leaning treasury, reputation and treasury', () => {
     const sim = Sim.create({ worldSeed: seedOf('SF1-G-1'), index: fx3Slice(), data: quietData(), only: ['group.decide'] });
     const { def, U } = claws();
-    const op = operative(sim, def.ethos, U);
-    expect(op.W.treasury).toBeCloseTo(0.306818, 6);
-    expect(Object.values(op.W).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12);
-    expect(op.D).toBeCloseTo(0.0681818, 6);
+    const vacant = [0, 1, 2].map((seat) => ({ seat, holder: null as string | null, lean: undefined as string | undefined }));
+    const a = operative(sim, def.ethos, U, leadShares(def.ethos, vacant));
+    expect(a.W.treasury).toBeCloseTo(0.318182, 6);
+    expect(a.W.retribution).toBeCloseTo(0.209091, 6);
+    expect(a.W.reputation).toBeCloseTo(0.263636, 6);
+    expect(a.W.cohesion).toBeCloseTo(0.209091, 6);
+    expect(Object.values(a.W).reduce((x, y) => x + y, 0)).toBeCloseTo(1, 12);
+    expect(a.D).toBeCloseTo(0.0545455, 6);
+    // with no lead term given, ethosN stands in for it
+    expect(operative(sim, def.ethos, U).W.treasury).toBeCloseTo(0.318182, 6);
+    const held = [{ seat: 0, holder: 'a', lean: 'treasury' }, { seat: 1, holder: 'b', lean: 'reputation' }, { seat: 2, holder: 'c', lean: 'treasury' }];
+    const lead = leadShares(def.ethos, held);
+    expect(lead.treasury).toBeCloseTo(0.8, 12);
+    expect(lead.retribution).toBe(0);
+    expect(lead.reputation).toBeCloseTo(0.2, 12);
+    expect(lead.cohesion).toBe(0);
+    const b = operative(sim, def.ethos, U, lead);
+    expect(b.W.treasury).toBeCloseTo(0.405455, 6);
+    expect(b.W.retribution).toBeCloseTo(0.172727, 6);
+    expect(b.W.reputation).toBeCloseTo(0.249091, 6);
+    expect(b.W.cohesion).toBeCloseTo(0.172727, 6);
+    expect(Object.values(b.W).reduce((x, y) => x + y, 0)).toBeCloseTo(1, 12);
+    expect(b.D).toBeCloseTo(0.0418182, 6);
   });
 
   test('SF1-G-2: books: runway 30 days at 330 income, treasury pressure 0; with no income, after 15 days cash 4,500, runway 15, pressure 0.5', () => {
     const sim = Sim.create({ worldSeed: seedOf('SF1-G-2'), index: fx3Slice(), data: quietData(), only: ['group.decide'] });
     const def = sim.data.groups.groups[0]!;
-    const g = (cash: number): G => ({ aff: 'A1', district: sim.w.districts[0]!.id, books: { cash, burn: 300, income: 330 }, pulse: {}, intent: { state: 'none' }, W: {}, D: 0, gapBand: 0 });
+    const g = (cash: number): G => ({ aff: 'A1', district: sim.w.districts[0]!.id, books: { cash, burn: 300, income: 330 }, pulse: {}, seats: [], barred: [], intent: { state: 'none' }, W: {}, D: 0, gapBand: 0 });
     expect(pressures(sim, def, g(9000), 0).treasury).toBe(0);
     const dry = sim.data.groups.groups[0]!;
     const noIncome = { ...dry, books: { cash: 9000, burn: 300, income: 0 } };
@@ -266,10 +285,30 @@ describe('SF1-G: the groups', () => {
 
   const groupSim = (name: string, tweak: (d: S1Data) => void = () => {}) => Sim.create({ worldSeed: seedOf(name), index: fx3Slice(), data: quietData(tweak), only: ['group.decide'] });
   const gstate = (sim: Sim, aff: 'A1' | 'A2'): G => sim.stateOf<GroupState>('group.decide')!.groups[sim.w.group(sim.w.districts[0]!.id, aff)]!;
+  /** An intention starts only with the head's seat held (S1 7.8): the fixture seats a member of the group at the head's seat. */
+  const seatHead = (sim: Sim, aff: 'A1' | 'A2'): Id => {
+    const d = sim.w.districts[0]!;
+    const want = aff === 'A1' ? 2 : 3;
+    let who: Id | undefined;
+    for (const cell of d.cellIds) for (const r of sim.people.residentsOfBlock(cell)) {
+      const v = sim.people.view(r);
+      if (who === undefined && v && v.affc === want && v.role === 'gang' && v.ageClass === 'adult' && v.aband >= 2) who = r;
+    }
+    sim.setState('group.decide', (st) => {
+      const g = (st as GroupState).groups[sim.w.group(d.id, aff)]!;
+      for (const seat of g.seats) if (seat.holder === who) seat.holder = null;
+      g.seats[0]!.holder = who!;
+      g.seats[0]!.lean = Object.keys(sim.data.groups.groups.find((x) => x.aff === aff)!.ethos)[0]!;
+      g.seats[0]!.edged = true;
+      delete g.seats[0]!.retry;
+    });
+    return who!;
+  };
 
   test('SF1-G-5: the Claws with no income: collect-fee starts about day 8.3, is active from the next window, publishes the boost, expires 144 windows later, cools for 72, then none', () => {
     const sim = groupSim('SF1-G-5', (d) => { d.groups.groups[0]!.books.income = 0; });
     const district = sim.w.districts[0]!.id;
+    seatHead(sim, 'A1');
     let startedAt = -1;
     let activeFrom = -1;
     let expiredAt = -1;
@@ -323,8 +362,10 @@ describe('SF1-G: the groups', () => {
     const sim = groupSim('SF1-G-4');
     const district = sim.w.districts[0]!.id;
     const id = sim.w.group(district, 'A1');
+    seatHead(sim, 'A1');
     sim.setState('group.decide', (st) => {
-      (st as GroupState).groups[id]!.pulse.retribution = { at: 0, sev: 0.6, latched: true, rival: 3, pub: true };
+      // v0.6's operative weight gives the pressures a share of 0.4 (v0.5: 0.5), so the harm that starts a retaliation here is the gravest one
+      (st as GroupState).groups[id]!.pulse.retribution = { at: 0, sev: 1, latched: true, rival: 3, pub: true };
     });
     const hazard = sim.data.groups.h0 * (1 + 0.5);
     expect(hazard).toBeCloseTo(0.03, 12);
@@ -335,7 +376,7 @@ describe('SF1-G: the groups', () => {
     const g = gstate(sim, 'A1');
     // retaliate starts at the first window whose draw passes the hazard (while the pulse stays strong)
     expect(g.intent.state === 'active' || g.intent.state === 'cooling').toBe(true);
-    if (g.intent.state === 'active') expect(g.intent.id).toBe('retaliate');
+    if (g.intent.state === 'active') expect(g.intent.name).toBe('retaliate');
     expect(sim.record.log.some((e) => e.reason === 'intent-start' && e.key?.includes('retaliate'))).toBe(true);
     // demand independence: a different demand history changes nothing
     const a = groupSim('SF1-G-6');

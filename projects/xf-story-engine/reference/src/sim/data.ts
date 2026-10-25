@@ -304,6 +304,8 @@ export interface IntentDef {
 }
 
 export interface GroupDef {
+  /** v0.6 (S1 7.8): the number of seats; seat 0 is the head. */
+  seats: number;
   aff: 'A1' | 'A2';
   books: { cash: number; burn: number; income: number };
   perShakedown: number;
@@ -312,6 +314,16 @@ export interface GroupDef {
 }
 
 export interface GroupsData {
+  /** v0.6 (S1 7.8): the head's seat weight (the other seats share the rest), the severity multiplier of harm to a holder, the interregnum's length and its boost, the bar after an arrest, the severity of a defiance, and the weight of an effect on the one wronged. */
+  seatHead: number;
+  leaderSev: number;
+  interregnumW: number;
+  interregnumBoost: number;
+  arrestBar: number;
+  defianceSev: number;
+  effectW: Record<string, number>;
+  /** v0.6: mirrored canon holders of a seat, joined to a person of the game by key. */
+  canonSeats: Array<{ gameKey: string; seat: number; aff: 'A1' | 'A2' }>;
   /** v0.6: pairs of hostile groups (S1 5.2a, `pRefuse`'s backing, S1 7.8); hostility is symmetric. */
   hostile: Array<['A1' | 'A2' | 'A3', 'A1' | 'A2' | 'A3']>;
   groups: GroupDef[];
@@ -638,10 +650,12 @@ export function defaultData(): S1Data {
       reachMin: 0.02, confidence: { witnessed: 1.0, institutional: 0.9 }, tellerDiscount: 1,
     },
     groups: {
+      seatHead: 0.6, leaderSev: 1.5, interregnumW: 144, interregnumBoost: 0.3, arrestBar: 2016, defianceSev: 0.6,
+      effectW: { kill: 1.5, harm: 1, take: 0.6, expose: 0.6, none: 0.5 }, canonSeats: [],
       hostile: [['A1', 'A2']],
       groups: [
-        { aff: 'A1', books: { cash: 9000, burn: 300, income: 330 }, perShakedown: 25, ethos: { treasury: 2, retribution: 1, reputation: 1.5, cohesion: 1 }, intents: ['collect-fee', 'retaliate'] },
-        { aff: 'A2', books: { cash: 4000, burn: 150, income: 140 }, perShakedown: 0, ethos: { care_of_members: 2, retribution: 1, reputation: 1, legitimacy: 1.5 }, intents: ['protect-members', 'retaliate'] },
+        { seats: 3, aff: 'A1', books: { cash: 9000, burn: 300, income: 330 }, perShakedown: 25, ethos: { treasury: 2, retribution: 1, reputation: 1.5, cohesion: 1 }, intents: ['collect-fee', 'retaliate'] },
+        { seats: 2, aff: 'A2', books: { cash: 4000, burn: 150, income: 140 }, perShakedown: 0, ethos: { care_of_members: 2, retribution: 1, reputation: 1, legitimacy: 1.5 }, intents: ['protect-members', 'retaliate'] },
       ],
       intents: [
         { id: 'collect-fee', serves: 'treasury', groups: ['A1'], duration: 144, cooling: 72, boost: { shakedown: 1.0 } },

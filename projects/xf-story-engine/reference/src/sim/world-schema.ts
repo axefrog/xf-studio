@@ -213,6 +213,8 @@ export function worldDefs(data: S1Data, wSim = data.time.W): SchemaDefs {
         slot('boundary', 'core:display-name', { mode: 'assigned', tier: 3 }),
       ],
     },
+    // v0.6 (S1 4.9): a minimal possession; S1 never mints one in the core
+    { id: 'xf:item', extends: ['core:thing'], slots: [slot('label', 'core:display-name', { mode: 'assigned', tier: 1 })] },
     {
       id: 'xf:v-state', extends: ['core:thing'],
       slots: [
@@ -237,6 +239,9 @@ export function worldDefs(data: S1Data, wSim = data.time.W): SchemaDefs {
   const edgeTypes: EdgeTypeDef[] = [
     { id: 'xf:tie', from: ['core:thing'], to: ['core:thing'], attrs: { kind: 'xf:tie-kind', status: 'xf:tie-status', strength: 'core:unit', lastContact: 'xf:lastcontact' }, data: ['history'], symmetric: true },
     { id: 'xf:regard', from: ['core:thing'], to: ['core:thing'], attrs: { warmth: 'xf:signed', respect: 'xf:signed', trustA: 'core:unit', trustB: 'core:unit', trustI: 'core:unit', evN: 'xf:evn' } },
+    // v0.6 (S1 7.0, 4.9): a seat holder leads a group (writer `group.decide`), an item is held by an actor (writer `city.events`)
+    { id: 'xf:leads', from: ['core:thing'], to: ['core:group'], attrs: { seat: 'core:count-small' } },
+    { id: 'xf:held-by', from: ['xf:item'], to: ['core:thing'], attrs: {} },
   ];
   return { dims, kinds, edgeTypes };
 }

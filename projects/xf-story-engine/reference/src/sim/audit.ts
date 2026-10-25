@@ -144,7 +144,7 @@ export const PROCESS_WRITES: Record<string, string[]> = {
   'city.mirror': ['mint:mir', 'state:seen'],
   'order.ledger': ['pin:xf:standing.label-*', 'state:labels'],
   'order.norms': ['mint:enf', 'pin:xf:district.gap-*', 'state:slots'],
-  'group.decide': ['pin:xf:group.group-gap', 'state:groups'],
+  'group.decide': ['pin:xf:group.group-gap', 'state:groups', 'mint:decide', 'mint:relent', 'mint:succession', 'edge:xf:leads'],
   'scene.acts': ['op:publish-item', 'contribute:time', 'contribute:place', 'contribute:kind', 'contribute:participants', 'contribute:effects', 'contribute:witnesses', 'contribute:causes', 'contribute:outcome', 'state:published'],
 };
 

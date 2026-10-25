@@ -21,7 +21,8 @@ const adult = { alive: 'yes', 'age-class': 'adult' } as const;
 
 /** The digest the transcript below must hash to. A deliberate change of the layer's behaviour changes it, with the reason in the commit. */
 /** Change it only for a deliberate change of the layer's answers, with the reason in the commit. */
-const FROZEN = '158e89e481c3cd72aaf891c55c1c75f1';
+// Re-frozen for S1 v0.6 (the leaders' term changes a group's operative weights, so the one retaliation of this story starts at window 0 and the idle line of window 0 is gone; the seats left vacant at the start are logged, `seat-vacant`: the only lines that differ, SPEC-NOTES, S0 v4.17 and S1 v0.6 build). Was 158e89e481c3cd72aaf891c55c1c75f1.
+const FROZEN = '201ddb388078d7ef15687eb9f7f3b4f8';
 
 function story(): { lines: string[]; sim: Sim; facts: Record<string, unknown> } {
   const sim = Sim.create({

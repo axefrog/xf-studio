@@ -502,6 +502,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
           id: d.id, kind: d.kind, size: d.size, w, time: d.time, cell: d.cell, district: sim.w.cell(d.cell).district, public: d.public, witnesses: d.witnesses,
           policeChild: police.has(d.id), creator: 'sim', outcome: d.outcome ?? 'done',
           parties: sim.partiesOf(sim.occurrenceOf(d, castOf.get(d.id) ?? [], proc, 'sim').participants, d.time),
+          effects: sim.occurrenceOf(d, castOf.get(d.id) ?? [], proc, 'sim').effects,
         };
         if (d.sides) f.sides = d.sides;
         if (d.parent !== undefined) {

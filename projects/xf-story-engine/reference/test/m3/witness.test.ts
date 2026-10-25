@@ -175,7 +175,7 @@ describe('the report is of one incident: the second stage matches that kind of i
 
 describe('V told of an incident near it (the real run)', () => {
   const play = (witness: boolean, windows: number): Run => {
-    const { opts, notes } = run2World('p3b', 'E', 'restless');
+    const { opts, notes } = run2World('p3f', 'E', 'restless');
     const r = new Run(opts, early, policies.decline!, { walk: true, witness, notes });
     r.runWindows(windows);
     return r;
