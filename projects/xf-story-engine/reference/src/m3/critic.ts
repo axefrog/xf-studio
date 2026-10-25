@@ -33,7 +33,12 @@ export function skeleton(text: string, names: string[]): string {
   return t.replace(/\s+/g, ' ').trim();
 }
 
-export function tells(hooks: Hook[], namesOf: (h: Hook) => string[]): Record<string, ArmTells> {
+/**
+ * `namesOf` gives the strings to mask from a card (every name token, so that a skeleton hides the names); `peopleOf` gives the distinct people the
+ * card names, which is what `twoPeople` counts. They are different lists: a masking list that holds a given name and a family name for one person
+ * would make every named person two. Without `peopleOf`, `namesOf` serves for both (run 1's report, whose list is the pairs of capitalised words).
+ */
+export function tells(hooks: Hook[], namesOf: (h: Hook) => string[], peopleOf: (h: Hook) => string[] = namesOf): Record<string, ArmTells> {
   const out: Record<string, ArmTells> = {};
   for (const arm of [...new Set(hooks.map((h) => h.arm))] as Arm[]) {
     const cards = hooks.filter((h) => h.arm === arm);
@@ -54,7 +59,7 @@ export function tells(hooks: Hook[], namesOf: (h: Hook) => string[]): Record<str
       causeMarker: round(cards.filter((h) => CAUSE.test(h.text)).length / Math.max(1, cards.length)),
       meanWords: round(cards.reduce((a, h) => a + h.text.split(/\s+/).length, 0) / Math.max(1, cards.length)),
       priced: round(cards.filter((h) => /\beddies\b/i.test(h.text)).length / Math.max(1, cards.length)),
-      twoPeople: round(cards.filter((h) => namesOf(h).length >= 2).length / Math.max(1, cards.length)),
+      twoPeople: round(cards.filter((h) => new Set(peopleOf(h)).size >= 2).length / Math.max(1, cards.length)),
       skeletons: [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, c]) => ({ skeleton: k, count: c })),
     };
   }

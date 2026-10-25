@@ -84,6 +84,19 @@ export function allNames(n: NameData = WIDE_NAMES): string[] {
   return [...out].sort();
 }
 
+/**
+ * The distinct people a text names: a full name is a given name of the registry followed by a family name of it, each once however often the
+ * text repeats it. This is a person count, which is not the same as the tokens that mask names (`allNames`): "Kai Mori" is one person and two
+ * tokens, and a text that gives only a first name or a place that looks like a name names no one.
+ */
+export function peopleIn(text: string, n: NameData = WIDE_NAMES): string[] {
+  const given = new Set<string>(), family = new Set<string>();
+  for (const o of Object.values(n.origins)) { for (const x of o.given) given.add(x); for (const x of o.family) family.add(x); }
+  const found = new Set<string>();
+  for (const m of text.matchAll(/\b([A-Z][a-z]+) ([A-Z][a-z]+)\b/g)) if (given.has(m[1]!) && family.has(m[2]!)) found.add(m[0]);
+  return [...found].sort();
+}
+
 /** The names of people in the game's own stories that no pool may hold as a given name or a family name. */
 export const RESERVED_NAMES: readonly string[] = [
   'Goro', 'Takemura', 'Saburo', 'Arasaka', 'Yorinobu', 'Hanako', 'Johnny', 'Silverhand', 'Judy', 'Alvarez', 'Panam', 'Palmer', 'Jackie', 'Welles', 'River', 'Ward',

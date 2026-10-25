@@ -8,7 +8,7 @@ import { type Arm, type Hook, type Packet, type RaterAnswer, ARM_NAMES, CRITERIA
 import { findings, tells } from '../../src/m3/critic.ts';
 import type { RunRecord } from '../../src/m3/transcript.ts';
 import { OFFER_PACK } from '../../src/m3/kits.ts';
-import { allNames } from '../../src/sim/names.ts';
+import { allNames, peopleIn } from '../../src/sim/names.ts';
 
 const [runs, packetDir, answersDir, run1Packet, run1Answers, out] = process.argv.slice(2);
 if (!runs || !packetDir || !answersDir || !run1Packet || !run1Answers || !out) throw new Error('usage: report2 <rundir> <packetdir> <answersdir|-> <run1 packetdir> <run1 answersdir> <out.md>');
@@ -58,9 +58,10 @@ const readPacket = (dir: string) => {
 };
 const p2 = readPacket(packetDir);
 const registry = allNames();
+// the strings that mask names (every token of the registry, and any pair of capitalised words) are not the people a card names (a given and a family name are one person)
 const namesOf = (h: Hook): string[] => [...(h.text.match(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/g) ?? []).filter((x) => !['Tyger Claws', 'Night City'].includes(x)), ...registry.filter((n) => new RegExp(`\\b${n}\\b`).test(h.text))];
 const hooks2: Hook[] = p2.packet.cards.map((c) => ({ arm: p2.key.key[c.id]!.arm, text: c.text, meta: {} }));
-const t2 = tells(hooks2, namesOf);
+const t2 = tells(hooks2, namesOf, (h) => peopleIn(h.text));
 lines.push(`## What would give a card away (automatic critic), ${p2.key.n} cards per arm`, '', 'Names are masked from the whole name registry, not only from the pattern of two capitalised words.', '', '| Arm | Repeated skeleton | Most on one skeleton | Word-pair diversity | Cause or order word | Mean words | Priced | Names two people |', '|---|---|---|---|---|---|---|---|');
 for (const [arm, v] of Object.entries(t2)) lines.push(`| ${arm} ${ARM_NAMES[arm as Arm]} | ${v.repeatedSkeleton} | ${v.maxSkeleton} | ${v.bigramDiversity} | ${v.causeMarker} | ${v.meanWords} | ${v.priced} | ${v.twoPeople} |`);
 lines.push('', ...findings(t2).map((f) => `- ${f}`), '');

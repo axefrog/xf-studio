@@ -8,6 +8,7 @@ import { defaultData as l3Default } from '../../src/procedural/data.ts';
 import { TEMPLATES, radiantJob, randomWithinGates } from '../../src/m3/arms.ts';
 import { type Arm, type Hook, type RaterAnswer, buildPacket, cardsMarkdown, instructions, pairsMarkdown, score } from '../../src/m3/blind.ts';
 import { findings, skeleton, tells } from '../../src/m3/critic.ts';
+import { WIDE_NAMES, allNames, peopleIn } from '../../src/sim/names.ts';
 import { Run, policies } from '../../src/m3/driver.ts';
 import { R2_ID, r2Pack } from '../../src/m3/r2.ts';
 import { stateById } from '../../src/m3/states.ts';
@@ -60,7 +61,7 @@ describe('A3, the Radiant-style baseline', () => {
     const declared = Array.from({ length: 40 }, (_, i) => radiantJob(run.w, (id) => run.nameOf(id), 'a3-rule', i)!);
     for (const j of declared) {
       expect(j.names[0], 'client is the nearest eligible resident, smallest identifier').toBe(run.nameOf(nearest));
-      if (/from (the|a) /.test(j.text) || j.text.includes('near ')) expect(j.text.includes(venues[0]!), j.text).toBe(true);
+      if (/\\bfrom (the|a) /.test(j.text) || j.text.includes('near ')) expect(j.text.includes(venues[0]!), j.text).toBe(true);
     }
     // an escort walks from the nearest place to the next distinct one
     const escort = declared.find((j) => j.template === 'escort');
@@ -173,6 +174,25 @@ describe('the critic', () => {
     expect(t.A3!.maxSkeleton).toBe(2);
     expect(t.A3!.priced).toBeCloseTo(0.67, 2);
     expect(findings(t).some((f) => f.includes('share a masked skeleton'))).toBe(true);
+  });
+
+  test('"names two people" counts distinct people, not the tokens that mask names (M3B-03)', () => {
+    const h = (text: string): Hook => ({ arm: 'E', text, meta: {} });
+    // the masking list holds every token of the registry that appears (a given and a family name for each person), so it is not a person count
+    const mask = (x: Hook): string[] => allNames().filter((n) => new RegExp(`\\b${n}\\b`).test(x.text));
+    const one = h('Kai Mori says the till is short. Mori asks you to cover it, and Kai will owe you.');
+    const two = h('Kai Mori says Mei Sato was at the stall again.');
+    expect(mask(one).length).toBe(2);
+    const t = tells([one, two], mask, (x) => peopleIn(x.text));
+    expect(t.E!.twoPeople).toBe(0.5);
+    // the old count (the length of the masking list) called the card of one person a card of two
+    expect(tells([one, two], mask).E!.twoPeople).toBe(1);
+  });
+
+  test('peopleIn: a person is a given and a family name of the registry, counted once however often it is repeated', () => {
+    expect(peopleIn('Kai Mori met Kai Mori again, and Mori left.', WIDE_NAMES)).toEqual(['Kai Mori']);
+    expect(peopleIn('Tyger Claws and Night City: no one.', WIDE_NAMES)).toEqual([]);
+    expect(peopleIn('Marcus Washington gave Priya Patel the bag.', WIDE_NAMES)).toEqual(['Marcus Washington', 'Priya Patel']);
   });
 });
 
