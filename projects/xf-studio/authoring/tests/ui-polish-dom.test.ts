@@ -799,6 +799,24 @@ describe("Polish batch 2: the profiles phase 1 UI follow-ups", () => {
   const leaseFrame = (lease: Record<string, unknown>) => ({ status: { lease, outbox: { unprotected: 0, pending: 0, conflicts: 0, failing: false, recovering: idle } },
     preview: { gesture: null, control: null } }) as never;
 
+  test("failed startup uses its own notice and no takeover action, before or after migration", async () => {
+    const { workspaceNotice, workspaceNoticeState } = await import("../src/studio-ui/app");
+    const { profileWorkspaceLease } = await import("../src/app/profiles/profile-window");
+    const { leaseSnapshot, LEASE_MESSAGES } = await import("../src/app/workspace/workspace-lease");
+    for (const verification of [false, true]) for (const stored of [false, true]) for (const phase of ["unsupported", "disconnected"] as const) {
+      const lease = profileWorkspaceLease({ snapshot: () => leaseSnapshot({ phase, generation: null }), writable: () => false }, stored);
+      const frame = { ...leaseFrame(lease) as object, status: { lease, verification } } as never;
+      expect(lease.migrationPending).toBe(false);
+      expect(workspaceNoticeState(frame)).toMatchObject({ message: LEASE_MESSAGES[phase], actions: [], progress: false });
+      const notice = workspaceNotice({ port: {}, feedback: {} } as never);
+      notice.update(frame);
+      const root = notice.element as unknown as LightElement;
+      expect(text(root)).toContain(phase === "unsupported" ? "Use an up-to-date browser" : "Reload the window");
+      expect(text(root)).not.toContain("Workspace needs updating");
+      expect(buttons(root).filter(button => !button.hidden)).toEqual([]);
+    }
+  });
+
   test("condition 1: the kept-the-workspace line offers both ways on it names, Try again and Export this window's copy", async () => {
     const { workspaceNotice, workspaceNoticeState } = await import("../src/studio-ui/app");
     const sent: string[] = [];

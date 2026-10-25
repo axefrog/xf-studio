@@ -231,9 +231,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   // history: its operations and the graph's edits are one history (§4.1).
   const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, { history: historyService,
     graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph, initial: STUDIO_INITIAL_LAYOUT });
-  if (lease && !sessionStored && !lease.writable()) watchProfilesMigration({ storage,
+  if (lease && profileWorkspaceLease(lease, sessionStored).migrationPending) watchProfilesMigration({ storage,
     key: workspaceKeys(verification).workspace, model: STUDIO_COMPOSITION.documents,
-    readOnly: () => !lease.writable(), reload: () => location.reload(), signal: experimentLife.signal, readStored: host.readWorkspace });
+    readOnly: () => profileWorkspaceLease(lease, sessionStored).migrationPending, reload: () => location.reload(), signal: experimentLife.signal, readStored: host.readWorkspace });
   // The shown tab's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   // How a held expression's changes animate (design §5.5): the workspace's setting, available before the head loads.

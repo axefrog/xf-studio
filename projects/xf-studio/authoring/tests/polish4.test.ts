@@ -55,5 +55,12 @@ test("migration pending is read-only presentation data, without recording a migr
   const lease = { snapshot: () => leaseSnapshot({ phase: "read-only", generation: null }), writable: () => false };
   expect(profileWorkspaceLease(lease, false).migrationPending).toBe(true);
   expect(profileWorkspaceLease(lease, true).migrationPending).toBe(false);
+  for (const phase of ["unsupported", "disconnected", "starting", "holder"] as const) {
+    const failed = { snapshot: () => leaseSnapshot({ phase, generation: null }), writable: () => phase === "holder" };
+    expect(profileWorkspaceLease(failed, false).migrationPending).toBe(false);
+    expect(profileWorkspaceLease(failed, true).migrationPending).toBe(false);
+  }
+  for (const phase of ["taking-over", "waiting"] as const)
+    expect(profileWorkspaceLease({ ...lease, snapshot: () => leaseSnapshot({ phase, generation: null }) }, false).migrationPending).toBe(true);
   expect(profileWorkspaceLease({ ...lease, writable: () => true }, false).migrationPending).toBe(false);
 });

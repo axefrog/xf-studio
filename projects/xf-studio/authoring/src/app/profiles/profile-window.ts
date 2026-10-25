@@ -83,7 +83,11 @@ export function openProfileSession(workspace: WorkspaceState, services: Pick<Pro
   const character = profile?.subjects.find(subject => subject.kind === "character")?.id;
   const collection = profile?.collections.map(id => services.collections.collection(id)).find(view => view?.looks.length);
   const look: LookRef | undefined = collection ? { collection: collection.id, look: collection.looks[0]! } : undefined;
-  const session = sessionOfWorkspace(workspace, { tab: FIRST_TAB_NAME, ...(character ? { character } : {}), ...(look ? { look } : {}) }, random, deps.initial);
+  // No stored session: show the contributed factory arrangement in memory. Legacy dock preferences are migration input,
+  // not a usable profile session; opening this fallback must neither consume nor rewrite them.
+  const fallback = deps.initial ? { ...workspace, uiPreferences: { ...workspace.uiPreferences, layout: undefined } } : workspace;
+  const initial = deps.initial ? { origin: deps.initial.origin, dock: deps.initial.dock } : undefined;
+  const session = sessionOfWorkspace(fallback, { tab: FIRST_TAB_NAME, ...(character ? { character } : {}), ...(look ? { look } : {}) }, random, initial);
   return { state: open(profile?.id ?? "", session), stored: false };
 }
 
@@ -220,7 +224,9 @@ export function historyScopeName(scope: string, deps: { services: Pick<ProfileSe
   return undefined;
 }
 
-/** An unmigrated read-only workspace has no session this build can show yet. */
+/** Only a workspace held by another window waits for that holder to migrate; startup failures show the in-memory session. */
 export function profileWorkspaceLease(lease: Pick<import("../workspace/workspace-lease").WorkspaceLease, "snapshot" | "writable">, stored: boolean) {
-  return { ...lease.snapshot(), migrationPending: !stored && !lease.writable() };
+  const snapshot = lease.snapshot();
+  const heldElsewhere = snapshot.phase === "read-only" || snapshot.phase === "taking-over" || snapshot.phase === "waiting";
+  return { ...snapshot, migrationPending: !stored && !lease.writable() && heldElsewhere };
 }

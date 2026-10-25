@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { openProfileSession, type ProfileServices } from "../src/app/profiles/profile-window";
+import { profileWorkspaceLease, openProfileSession, type ProfileServices } from "../src/app/profiles/profile-window";
 import { dockPanels } from "../src/app/profiles/profiles-migration-data";
 import { UIPreferenceActions, type DockLayout } from "../src/app/ui-preferences";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
@@ -124,3 +124,44 @@ describe("upgrade a workspace written by phase 1 (3d0dabfc)", () => {
     expect(session.tabList()).toEqual(data.tabs);
   });
 });
+
+// Startup failures must leave a visible session, including before the first writable migration.
+for (const verification of [false, true]) for (const phase of ["unsupported", "disconnected"] as const)
+  for (const kind of ["fresh", "legacy", "migrated"] as const) test(`${phase}: ${kind} workspace opens read-only (${verification ? "verify" : "normal"})`, async () => {
+    const { freshWorkspace } = await import("./fixtures/eye-region");
+    const { loadBrowserWorkspace } = await import("../src/app/browser/browser-workspace-device");
+    const { workspaceKeys } = await import("../src/app/workspace/workspace-state");
+    const { leaseSnapshot, LEASE_MESSAGES } = await import("../src/app/workspace/workspace-lease");
+    const original = kind === "migrated" ? phaseOneWorkspace({ layout: custom }) : kind === "legacy"
+      ? serializeWorkspace({ ...freshWorkspace(), uiPreferences: { ...freshWorkspace().uiPreferences, layout: custom } }, STUDIO_DOCUMENTS) : null;
+    const reads: string[] = [], writes: string[] = [];
+    const storage = { getItem: (key: string) => { reads.push(key); return key === workspaceKeys(verification).workspace && original ? JSON.stringify(original) : null; },
+      setItem: (key: string) => { writes.push(key); } };
+    const restored = loadBrowserWorkspace(storage, verification, STUDIO_DOCUMENTS), workspace = restored.state;
+    const before = JSON.stringify(serializeWorkspace(workspace, STUDIO_DOCUMENTS));
+    const opened = openProfileSession(workspace, { profiles: { list: () => [] }, collections: {} } as never,
+      { history: createHistoryService(), graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner),
+        stored: sessionViewGraph, initial: STUDIO_INITIAL_LAYOUT }, seededRandom(41));
+    const lease = { snapshot: () => leaseSnapshot({ phase, generation: null }), writable: () => false };
+    const status = profileWorkspaceLease(lease, opened.stored);
+    expect(status.migrationPending).toBe(false);
+    expect(status.message).toBe(LEASE_MESSAGES[phase]);
+    expect(status.canTakeOver).toBe(false);
+    expect(opened.stored).toBe(kind === "migrated");
+    expect(opened.state.tabList()).toHaveLength(1);
+    if (kind === "migrated") {
+      expect(opened.state.tabList()[0]!.id).toBe(PHASE_ONE_TAB);
+      expect(opened.state.dock()).toEqual(custom);
+    } else {
+      expect(opened.state.tabList()[0]!.origin).toBe("eye-makeup/default");
+      expect(opened.state.tabList()[0]!.panels.some(panel => panel.type === "layers")).toBe(true);
+      expect(opened.state.tabList()[0]!.panels.some(panel => panel.type === "view")).toBe(true);
+      expect(opened.state.dock()).not.toBeNull();
+    }
+    const persistence = new WorkspacePersistence({ storage, key: workspaceKeys(verification).workspace, writable: restored.writable,
+      capture: () => workspace, model: STUDIO_DOCUMENTS, canWrite: () => lease.writable() });
+    persistence.activate(); persistence.flush(); persistence.retire();
+    expect(reads).toContain(workspaceKeys(verification).workspace);
+    expect(writes).toEqual([]);
+    expect(JSON.stringify(serializeWorkspace(workspace, STUDIO_DOCUMENTS))).toBe(before);
+  });
