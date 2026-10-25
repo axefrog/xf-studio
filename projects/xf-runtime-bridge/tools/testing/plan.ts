@@ -32,6 +32,7 @@
 //   fallback       steps run when the step still failed
 //   on_fail        continue | end (abandon the plan: the ladder's later rungs follow) | stop (end everything)
 //   together       sub-steps started at once and joined (a joint beat); they share the step's blackboard
+//   sequence       sub-steps run in order as one step (a block: its alternatives, branches and fallback apply)
 //   bind           keep the outcome's value under this name ($name.path in later steps)
 //   end            ok | fail | stop: a control step that ends the plan here (with reason)
 // The plan: {id, cast?, steps, exhaustive?, deadline_ms?, max_steps?, on_abandon?: {ask?, dissolve?}, finally?}.
@@ -88,6 +89,7 @@ export type Step = Json & {
   fallback?: Step[];
   on_fail?: OnFail;
   together?: Step[];
+  sequence?: Step[];
   bind?: string;
   end?: "ok" | "fail" | "stop";
   reason?: string;
@@ -108,11 +110,11 @@ export type Plan = {
 
 export const CONTROL_KEYS: ReadonlySet<string> = new Set([
   "label", "roles", "when", "until", "interval_ms", "success", "deadline_ms", "retry", "alternatives", "outcomes",
-  "exhaustive", "fallback", "on_fail", "together", "bind", "end", "reason",
+  "exhaustive", "fallback", "on_fail", "together", "sequence", "bind", "end", "reason",
 ]);
 
 /** The executor's context for one attempt. raw is the action before $references were resolved. */
-export type ExecContext = { signal: AbortSignal; deadline: number; plan: string; step: string; attempt: number; board?: unknown; raw: Action };
+export type ExecContext = { signal: AbortSignal; deadline: number; plan: string; step: string; attempt: number; board?: unknown; raw: Action; bind?: string };
 export interface Executor {
   run(action: Action, context: ExecContext): Promise<Outcome>;
   /** The blackboard: read once per step and shared by every role in it (as $board). */
@@ -201,7 +203,8 @@ export function resolveRefs(value: unknown, bindings: Record<string, unknown>, m
     return found === undefined ? value : structuredClone(found);
   }
   if (Array.isArray(value)) return value.map((v) => resolveRefs(v, bindings, missing));
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveRefs(v, bindings, missing)]));
+  // A key may be a reference too (a role map keyed by the actor bound at run time): it resolves to a string.
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [REF.test(k) ? String(resolveRefs(k, bindings, missing)) : k, resolveRefs(v, bindings, missing)]));
   return value;
 }
 
@@ -239,7 +242,7 @@ const MATCH_KEYS = new Set(["ok", "code", "path", "ref", "equals", "one_of", "ex
 const isObject = (v: unknown): v is Json => !!v && typeof v === "object" && !Array.isArray(v);
 const inRange = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
 
-function checkMatch(match: unknown, where: string, problems: string[]) {
+export function checkMatch(match: unknown, where: string, problems: string[]) {
   if (!isObject(match)) { problems.push(`${where}: a match must be an object`); return; }
   for (const key of Object.keys(match)) if (!MATCH_KEYS.has(key)) problems.push(`${where}: unknown match field ${key}`);
   for (const key of ["all", "any"] as const) {
@@ -272,8 +275,9 @@ export function checkPlan(plan: Plan, checkAction: ActionChecker = () => []): st
     steps.forEach((step, i) => {
       const at = `${where}[${i + 1}]${isObject(step) && step.label ? ` (${step.label})` : ""}`;
       if (!isObject(step)) { problems.push(`${at}: a step must be an object`); return; }
-      const kinds = ["do", "end", "together"].filter((k) => step[k] !== undefined);
-      if (kinds.length !== 1) problems.push(`${at}: a step has exactly one of do, end or together`);
+      const kinds = ["do", "end", "together", "sequence"].filter((k) => step[k] !== undefined);
+      if (kinds.length !== 1) problems.push(`${at}: a step has exactly one of do, end, together or sequence`);
+      if (step.retry !== undefined && (step.together !== undefined || step.sequence !== undefined)) problems.push(`${at}: a block doesn't retry (give its steps their own retry, or an alternative)`);
       if (step.end !== undefined && !["ok", "fail", "stop"].includes(step.end as string)) problems.push(`${at}: end is ok, fail or stop`);
       if (step.do !== undefined && typeof step.do !== "string") problems.push(`${at}: do must be a string`);
       if (step.deadline_ms !== undefined && !inRange(step.deadline_ms, 1, MAX_DEADLINE_MS)) problems.push(`${at}: deadline_ms must be 1 to ${MAX_DEADLINE_MS}`);
@@ -321,6 +325,7 @@ export function checkPlan(plan: Plan, checkAction: ActionChecker = () => []): st
       }
       if (step.fallback !== undefined) walk(step.fallback, `${at}.fallback`, depth + 1);
       if (step.together !== undefined) walk(step.together, `${at}.together`, depth + 1);
+      if (step.sequence !== undefined) walk(step.sequence, `${at}.sequence`, depth + 1);
       if (typeof step.do === "string") {
         const action = actionOf(step as Step);
         problems.push(...checkAction(action, at));
@@ -367,7 +372,7 @@ export function describePlan(plan: Plan, indent = ""): string[] {
   const lines: string[] = [];
   const steps = (list: Step[] | undefined, pad: string) => list?.forEach((step, i) => node(step, `${i + 1}`, pad));
   const node = (step: Step, n: string, pad: string) => {
-    const head = step.end ? `end ${step.end}${step.reason ? `: ${step.reason}` : ""}` : step.together ? "together" : `${step.do} ${brief(Object.fromEntries(Object.entries(actionOf(step)).filter(([k]) => k !== "do")))}`;
+    const head = step.end ? `end ${step.end}${step.reason ? `: ${step.reason}` : ""}` : step.together ? "together" : step.sequence ? "in order" : `${step.do} ${brief(Object.fromEntries(Object.entries(actionOf(step)).filter(([k]) => k !== "do")))}`;
     lines.push(`${pad}${n}${step.label ? ` [${step.label}]` : ""}${step.roles?.length ? ` <${step.roles.join(", ")}>` : ""} ${head}`);
     const sub = `${pad}    `;
     if (step.when) lines.push(`${sub}when ${step.when.check ? `${step.when.check.do} ` : ""}${describeMatch(step.when.match)}${step.when.wait_ms ? ` (waits up to ${step.when.wait_ms} ms)` : ""}, otherwise ${step.when.otherwise ?? "skip"}`);
@@ -375,6 +380,7 @@ export function describePlan(plan: Plan, indent = ""): string[] {
     if (step.deadline_ms) lines.push(`${sub}deadline ${step.deadline_ms} ms`);
     if (step.retry) lines.push(`${sub}retry ${step.retry.times}x, ${step.retry.backoff_ms ?? 500} ms x${step.retry.factor ?? 2}${step.retry.on ? ` on ${describeMatch(step.retry.on)}` : ""}`);
     step.together?.forEach((child, i) => node(child, `${n}.${i + 1}`, sub));
+    step.sequence?.forEach((child, i) => node(child, `${n}.${i + 1}`, sub));
     step.alternatives?.forEach((route, r) => {
       lines.push(`${sub}else route ${r + 2}:`);
       route.forEach((child, i) => node(child, `${n}.r${r + 2}.${i + 1}`, `${sub}    `));
@@ -445,7 +451,7 @@ function emit(run: Run, entry: Omit<ReportEntry, "key" | "plan" | "at_ms"> & { k
 }
 
 /** One call to the executor, bounded by its deadline and the plan's. */
-async function perform(run: Run, raw: Action, path: string, attempt: number, deadlineMs: number, board: unknown): Promise<Outcome> {
+async function perform(run: Run, raw: Action, path: string, attempt: number, deadlineMs: number, board: unknown, bind?: string): Promise<Outcome> {
   if (run.halt) return { ok: false, code: "halted", message: run.halt, halt: run.halt };
   if (run.signal.aborted) return { ok: false, code: "cancelled", message: "The plan was cancelled." };
   const remaining = Math.min(deadlineMs, run.deadline - run.clock.now());
@@ -456,7 +462,7 @@ async function perform(run: Run, raw: Action, path: string, attempt: number, dea
   const limit = linked(run.signal, remaining, run.clock);
   try {
     const outcome = await Promise.race([
-      run.options.executor.run(action, { signal: limit.signal, deadline: run.clock.now() + remaining, plan: run.plan.id, step: path, attempt, board, raw }).catch((error) => ({ ok: false, code: "executor_error", message: String((error as Error)?.message ?? error) }) as Outcome),
+      run.options.executor.run(action, { signal: limit.signal, deadline: run.clock.now() + remaining, plan: run.plan.id, step: path, attempt, board, raw, bind }).catch((error) => ({ ok: false, code: "executor_error", message: String((error as Error)?.message ?? error) }) as Outcome),
       limit.expired.then(() => new Promise<Outcome>((resolve) => setTimeout(() => resolve(run.signal.aborted ? { ok: false, code: "cancelled", message: "The plan was cancelled." } : { ok: false, code: "deadline", message: `No outcome within ${Math.round(remaining)} ms.` }), 0))),
     ]);
     if (outcome.halt && !run.halt) run.halt = outcome.halt;
@@ -479,14 +485,14 @@ async function primary(run: Run, step: Step, path: string, board: unknown): Prom
     if (step.until) {
       const stopAt = started + deadlineMs;
       for (;;) {
-        outcome = await perform(run, raw, path, attempt, Math.max(1, stopAt - run.clock.now()), board);
+        outcome = await perform(run, raw, path, attempt, Math.max(1, stopAt - run.clock.now()), board, step.bind);
         if (matches(step.until, outcome, run.bindings)) { outcome = { ...outcome, ok: true }; break; }
         if (outcome.halt || run.signal.aborted || ["cancelled", "halted"].includes(outcome.code ?? "")) break;
         if (run.clock.now() + (step.interval_ms ?? 1000) >= stopAt) { outcome = { ok: false, code: "deadline", message: `Not reached within ${deadlineMs} ms.`, value: outcome.value }; break; }
         await run.clock.sleep(step.interval_ms ?? 1000, run.signal);
       }
     } else {
-      outcome = await perform(run, raw, path, attempt, deadlineMs, board);
+      outcome = await perform(run, raw, path, attempt, deadlineMs, board, step.bind);
     }
     emit(run, { kind: "attempt", step: path, label: step.label, attempt, route: 1, action: raw.do, ok: outcome.ok, code: outcome.code, message: outcome.message, value: outcome.value, ms: Math.round(run.clock.now() - started) });
     if (succeeded(step, outcome, run.bindings) || outcome.halt || run.signal.aborted) break;
@@ -536,15 +542,20 @@ async function runStep(run: Run, step: Step, path: string, inherited?: unknown):
     if (step.when.otherwise === "fallback") return finish(run, step, vpath, visit, unmet, board, record, { guard: "unmet" });
     return finish(run, { ...step, fallback: undefined, outcomes: undefined }, vpath, visit, unmet, board, record, { guard: "unmet" });
   }
-  let outcome: Outcome;
+  let outcome: Outcome = { ok: false, code: "not_run" };
   let route = 1;
   if (step.together) {
     const children = await Promise.all(step.together.map((child, i) => runStep(run, child, `${vpath}/t${i + 1}`, board ?? null)));
     const failedChild = children.find((c) => c.status !== "ok");
     outcome = failedChild ? { ok: false, code: failedChild.status === "stopped" ? "stopped" : "joint_failed", message: failedChild.reason ?? failedChild.outcome?.message } : { ok: true, value: children.map((c) => c.outcome?.value) };
     if (failedChild?.jump) return failedChild;
-  } else {
-    outcome = await primary(run, step, vpath, board);
+  } else if (step.sequence) {
+    const result = await runList(run, step.sequence, `${vpath}/s`, board);
+    if (result.jump || result.status === "stopped" || result.status === "ended") return result;
+    outcome = result.status === "ok" ? { ...(result.outcome ?? { ok: true }), ok: true } : { ...(result.outcome ?? { ok: false }), ok: false, code: result.outcome?.code ?? "block_failed", message: result.reason };
+  }
+  if (!step.together) {
+    if (!step.sequence) outcome = await primary(run, step, vpath, board);
     // Rung 2: alternative routes, in order, while the route before failed.
     for (let r = 0; !succeeded(step, outcome, run.bindings) && !outcome.halt && !run.signal.aborted && r < (step.alternatives?.length ?? 0); r++) {
       route = r + 2;

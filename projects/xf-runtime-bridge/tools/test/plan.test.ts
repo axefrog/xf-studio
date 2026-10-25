@@ -273,7 +273,7 @@ describe("plan: data", () => {
       ],
     });
     const text = problems.join("\n");
-    for (const expected of ["plan id", 'label "a" is used more than once', "retry.times", "role mark is not in the plan's cast", "$cast.mark name no role", 'goto "nowhere"', "exactly one of do, end or together", "unknown match field colour", "on_fail is", "deadline_ms must be"]) expect(text).toContain(expected);
+    for (const expected of ["plan id", 'label "a" is used more than once', "retry.times", "role mark is not in the plan's cast", "$cast.mark name no role", 'goto "nowhere"', "exactly one of do, end, together or sequence", "unknown match field colour", "on_fail is", "deadline_ms must be"]) expect(text).toContain(expected);
   });
 
   test("matches covers its predicates", () => {

@@ -55,7 +55,8 @@ describe("planScript", () => {
 
   test("the committed session scripts are valid and follow their cards", () => {
     const dir = join(projectDir, "tools", "sessions");
-    const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
+    // Schema-3 batches (st-styling, borg4-smoke) and the fixtures example are checked in batch.test.ts.
+    const files = readdirSync(dir).filter((f) => f.endsWith(".json") && JSON.parse(readFileSync(join(dir, f), "utf8")).schema === SCRIPT_SCHEMA);
     expect(files.sort()).toEqual(["session-2.json", "session-3.json"]);
     for (const file of files) {
       const s = JSON.parse(readFileSync(join(dir, file), "utf8")) as SessionScript;

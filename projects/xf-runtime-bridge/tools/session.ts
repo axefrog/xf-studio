@@ -41,6 +41,43 @@
 // runs "restore" once and records the run as "interrupted"; a second Ctrl+C exits immediately.
 // While it runs, the runner holds an advisory lock (tools/session-lock.ts) beside session.json,
 // and the MCP server refuses bridge commands in plain words until it is released.
+//
+// Schema 3 ("xfb/session-script-3"): unattended batches of rows with verdicts (testing/batch.ts), built on the
+// plan module (testing/plan.ts), so a session runs as a prepared script that anticipates what can happen.
+//
+//   bun tools/session.ts <script.json> --fixtures <private.json> --preflight      offline checks, then exit
+//   bun tools/session.ts <script.json> --fixtures <private.json> --dry-run        the full branch tree
+//   bun tools/session.ts <script.json> --fixtures <private.json> [--rows ST1-dark,ST3-dark] [--out <dir>] [--force]
+//
+//   {
+//     "schema": "xfb/session-script-3", "name": "...", "title": "...", "card": "...", "requires": ["..."],
+//     "fixtures": {...defaults; the private file adds the machine's values...},
+//     "setup":    [ ...steps ],
+//     "rows": [ { "id": "ST1-dark", "title": "...",
+//                 "requires": [ {"config": "overlay.theme", "equals": "dark"}, {"binding": "cet.overlay_key", "equals": "$fixture.cet_overlay_key"}, {"fixture": "save"} ],
+//                 "steps":   [ ...steps ], "pass": [ {"label": "...", "ref": "$ov", "match": {...}}, {"label": "...", "ref": "$shot", "captured": true} ],
+//                 "cleanup": [ ...steps, always run ], "judged_by": "the UI review", "after": "restart" } ],
+//     "teardown": [ ...steps, then the built-in teardown ]
+//   }
+// A step is a plan step (testing/plan.ts has the fields): the action (do: run with command and input, a schema-1
+// kind such as capture, a schema-2 test step, or a local or host action: wait, note, ask, set, capture.compare,
+// host.running, host.launch, host.close, host.wait_exit, host.key, host.window, host.commit, config.set, config.read,
+// config.restore, actors.release_all), and its anticipation: when (a precondition), until (polling), retry,
+// alternatives (other routes), outcomes (branches that run steps, go to a label or decide), fallback, deadline_ms,
+// bind, and on_fail: skip_row (the default: the row couldn't be set up), fail_row (the step's failure is the
+// row's FAIL), continue or stop (the batch). Every attempt has a deadline (60 s unless the step names one).
+//
+// Each row ends PASS, FAIL, PARTIAL or SKIP(reason), with its evidence files in the manifest. Before a row, the
+// runner sets the staged config.ini keys the row requires (a backup first; restored at the end) and restarts the
+// game through MO2 when they changed (theme, motion and the overlay are read at load), so rows are ordered to batch
+// a config: the dry run prints the restarts. --preflight checks the staged build, its config, the CET key bindings,
+// the free commit, the writer seat and frame generation before anything launches; a run starts only when it has
+// no blockers (--force overrides). One persistent writer connection holds for the whole run (the recorder's and the
+// supervisor's leases hold); a handed_over refusal or the commit tripwire stops the batch cleanly, and the teardown
+// always runs. The private fixtures file holds every machine value: mo2 {exe, profile, executable, arguments},
+// game_dir, staged_mod, save, cet_overlay_key, commit_floor_gb (tools/sessions/fixtures.example.json shows the keys).
+// The report folder has manifest.json (schema xfb/session-report-3) and report.md (verdicts, the detours the run
+// took, refused key presses).
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
@@ -48,6 +85,10 @@ import { findCommand } from "./api/catalogue.ts";
 import { CommandApi, type CommandOutcome } from "./api/command-api.ts";
 import { bool, str, validate, type JsonSchema } from "./api/schema.ts";
 import { acquireSessionLock, sessionRunningMessage } from "./session-lock.ts";
+import { describeBatch, planBatch, runBatch, SCRIPT_SCHEMA_3, type BatchScript } from "./testing/batch.ts";
+import { readIni, stagedConfigPath } from "./testing/config-ini.ts";
+import { windowsHost } from "./testing/host.ts";
+import { formatPreflight, preflight } from "./testing/preflight.ts";
 import { validateBound } from "./testing/assertions.ts";
 import { planTestStep, SCRIPT_SCHEMA_2, TEST_STEP_KINDS, TestSession, validateBindingName } from "./testing/script.ts";
 import type { Clock } from "./testing/windows.ts";
@@ -485,6 +526,68 @@ export async function runScript(
   return { ok: run.ok, outcome, next: paused?.next, manifestPath, records };
 }
 
+/** The command line for schema-3 batches: --preflight, --dry-run, or a run (preflight first). */
+async function batchMain(script: BatchScript, scriptPath: string, args: string[], option: (name: string) => string | undefined) {
+  const fixtures = { ...(script.fixtures ?? {}), ...(option("--fixtures") ? JSON.parse(readFileSync(option("--fixtures")!, "utf8")) : {}) };
+  script.fixtures = fixtures;
+  const { problems, rows } = planBatch(script);
+  if (problems.length) {
+    console.error(`The script has problems:\n  ${problems.join("\n  ")}`);
+    process.exit(2);
+  }
+  const configPath = typeof fixtures.staged_mod === "string" ? stagedConfigPath(fixtures.staged_mod) : undefined;
+  const staged = configPath && existsSync(configPath) ? readIni(readFileSync(configPath, "utf8")) : undefined;
+  if (args.includes("--dry-run")) {
+    const lines = describeBatch(script, staged);
+    for (const line of lines) console.log(line);
+    console.log(`\nDry run: the script is valid (${rows.length} rows, ${lines.length} lines in the branch tree). Nothing was sent to the game.`);
+    process.exit(0);
+  }
+  const api = new CommandApi({ runtimeDir: option("--runtime-dir"), idleCloseMs: 3_600_000 });
+  const checked = await preflight({
+    script, fixtures, projectDir: join(import.meta.dir, ".."), runtimeDir: api.runtimeDir,
+    freeCommitBytes: () => windowsHost.freeCommitBytes(),
+    gameRunning: async () => (await windowsHost.gameProcess()) !== null,
+    writerBusy: async () => {
+      const ping = await api.run("bridge.ping", {}, { source: "session-preflight" });
+      api.release();
+      return { busy: !ping.ok && ping.error.code === "bridge_busy", detail: ping.ok ? "the bridge answered" : ping.error.code };
+    },
+  });
+  console.log(formatPreflight(checked, script.title ?? script.name));
+  if (args.includes("--preflight")) {
+    api.close();
+    process.exit(checked.ready ? 0 : 1);
+  }
+  if (!checked.ready && !args.includes("--force")) {
+    console.error("\nNot started: the preflight found blockers (--force runs anyway).");
+    api.close();
+    process.exit(1);
+  }
+  const lock = acquireSessionLock(api.runtimeDir, script.name);
+  if ("heldBy" in lock) {
+    console.error("\n" + sessionRunningMessage(lock.heldBy).replace(/ Screenshots still work.*$/, "") + " Only one session can run at a time.");
+    process.exit(2);
+  }
+  // Ctrl+C: the current step ends, the remaining rows are SKIP(interrupted), and the teardown runs once.
+  const stop = new AbortController();
+  process.on("SIGINT", () => {
+    if (stop.signal.aborted) process.exit(130);
+    console.error("\nStopping: the current step ends, then the teardown runs (Ctrl+C again to quit at once).");
+    stop.abort();
+  });
+  const stampText = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const outDir = resolve(option("--out") ?? join(import.meta.dir, "..", "captures", "sessions", `${script.name}-${stampText}`));
+  const result = await runBatch(script, {
+    api, host: windowsHost, outDir, fixtures, signal: stop.signal, echo: !args.includes("--no-echo"), scriptPath: basename(scriptPath), preflight: checked,
+    rows: option("--rows")?.split(",").map((r) => r.trim()).filter(Boolean),
+  });
+  lock.release();
+  console.log(`\n${result.outcome === "complete" ? "Batch complete" : result.outcome === "interrupted" ? "Batch interrupted (teardown ran)" : `Batch stopped: ${result.halt}`}`);
+  console.log(`Report: ${result.reportPath}\nManifest: ${result.manifestPath}`);
+  process.exit(result.outcome === "interrupted" ? 130 : result.ok ? 0 : 1);
+}
+
 async function askOnTerminal(text: string) {
   process.stdout.write(`\n>>> ${text}\n>>> Press Enter when done (Ctrl+C stops the session). `);
   await new Promise<void>((resolveAsk) => {
@@ -500,17 +603,18 @@ async function askOnTerminal(text: string) {
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
-  const valued = ["--out", "--from", "--until", "--runtime-dir", "--fixtures"];
+  const valued = ["--out", "--from", "--until", "--runtime-dir", "--fixtures", "--rows"];
   const option = (name: string) => {
     const index = args.indexOf(name);
     return index >= 0 ? args[index + 1] : undefined;
   };
   const scriptPath = args.find((a, i) => !a.startsWith("--") && !valued.includes(args[i - 1]));
   if (!scriptPath || !existsSync(scriptPath)) {
-    console.error("usage: bun tools/session.ts <script.json> [--dry-run] [--fixtures <private.json>] [--out <dir>] [--from <step label>] [--until <step label>] [--no-ask] [--no-echo] [--setup-asks-private]");
+    console.error("usage: bun tools/session.ts <script.json> [--dry-run] [--fixtures <private.json>] [--out <dir>] [--from <step label>] [--until <step label>] [--no-ask] [--no-echo] [--setup-asks-private]\n       schema 3: bun tools/session.ts <script.json> --fixtures <private.json> [--preflight | --dry-run] [--rows <id,id>] [--out <dir>] [--force] [--no-echo]");
     process.exit(2);
   }
   const script = JSON.parse(readFileSync(scriptPath, "utf8")) as SessionScript;
+  if (script.schema === SCRIPT_SCHEMA_3) await batchMain(script as unknown as BatchScript, scriptPath, args, option);
   if (option("--fixtures")) script.fixtures = { ...script.fixtures, ...JSON.parse(readFileSync(option("--fixtures")!, "utf8")) };
   const { plan, problems } = planScript(script);
   console.log(`${script.title ?? script.name}: ${plan.length} steps${script.card ? ` (card: ${script.card})` : ""}`);

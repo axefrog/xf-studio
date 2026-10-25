@@ -1,0 +1,14 @@
+{
+  "mo2": {
+    "exe": "PATH_TO_MO2/ModOrganizer.exe",
+    "profile": "XF test profile name",
+    "executable": "Cyberpunk 2077",
+    "arguments": "-skipStartScreen"
+  },
+  "game_dir": "PATH_TO_GAME",
+  "staged_mod": "PATH_TO_MO2/mods/XF Runtime Bridge",
+  "save": "ManualSave-NN",
+  "cet_overlay_key": "Ctrl+`",
+  "commit_floor_gb": 4,
+  "game_commit_gb": 16
+}
