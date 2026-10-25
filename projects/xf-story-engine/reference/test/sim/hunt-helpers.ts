@@ -23,6 +23,17 @@ export interface Hunt {
   /** Windows to step; after each the harness pins the warnings and prices it has seen `observed`, `delay` windows after they were minted (never when `delay` is null). */
   step(n: number): void;
   delay: number | null;
+  /** The warnings and prices seen so far and the window each was minted in, for a second stepper that carries on from a save. */
+  seen: Map<Id, number>;
+}
+
+/** One window of a hunt, and then the harness's part: each warning or price seen is pinned `observed` `delay` windows after it was minted (never when `delay` is null). */
+export function stepOne(sim: Sim, delay: number | null, seen: Map<Id, number>): void {
+  sim.advance(1);
+  if (delay === null) return;
+  for (const a of actsOf(sim)) if ((a.kind === 'warning' || a.kind === 'price') && !seen.has(a.id)) seen.set(a.id, a.w);
+  const w = sim.windowNow();
+  for (const [id, mintedAt] of seen) if (mintedAt + delay === w) sim.k.pin({ node: id, slot: 'outcome', value: 'done', reason: 'observed', at: sim.k.now, cause: H(hs('layer2')), evidence: id });
 }
 
 export interface HuntOptions {
@@ -58,15 +69,9 @@ export function startHunt(o: HuntOptions): Hunt {
   const seen = new Map<Id, number>();
   const delay = o.delay === undefined ? 20 : o.delay;
   const h: Hunt = {
-    sim, GA, m, cell, delay,
+    sim, GA, m, cell, delay, seen,
     step(n: number): void {
-      for (let i = 0; i < n; i++) {
-        sim.advance(1);
-        if (delay === null) continue;
-        for (const a of actsOf(sim)) if ((a.kind === 'warning' || a.kind === 'price') && !seen.has(a.id)) seen.set(a.id, a.w);
-        const w = sim.windowNow();
-        for (const [id, mintedAt] of seen) if (mintedAt + delay === w) sim.k.pin({ node: id, slot: 'outcome', value: 'done', reason: 'observed', at: sim.k.now, cause: H(hs('layer2')), evidence: id });
-      }
+      for (let i = 0; i < n; i++) stepOne(sim, delay, seen);
     },
   };
   return h;

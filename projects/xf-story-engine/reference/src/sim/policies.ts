@@ -34,7 +34,8 @@ export interface EventView {
 }
 
 const CLASS_NAMES = ['civilian', 'ncpd', 'A1', 'A2', 'A3', 'other'] as const;
-const ACTOR_ROLES = ['actor', 'aggressor', 'enforcer'];
+// v0.6: `protagonist` is the role of V in a seed's `response` (S1 5.3): what V answered is an act of V's
+const ACTOR_ROLES = ['actor', 'aggressor', 'enforcer', 'protagonist'];
 const RAW = new Set<string>(RAW_KIND_NAMES);
 const TIES = new Set<string>(TIE_KIND_NAMES);
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
