@@ -43,6 +43,10 @@ Grades: **[source]** inspected decompiled game scripts or public framework sourc
 
 **[source/binary] VM ABI:** SDK `Scripting/Functions.hpp:93` defines `Handler_t` as `void (*)(void*, CStackFrame&, void*, rtti::IType*)`. Thus Windows x64 uses RCX=context, RDX=frame pointer, R8=result storage, R9=result type. The thunks above consume/advance that frame. **[hypothesis]** An observational hook must not decode it once and hand the advanced frame to the original. Prefer script-producer logging plus a later native post tap; use a thunk hook only with a separately validated, non-mutating argument reader. These are called on the invoking VM thread; **its runtime thread identity was not established**.
 
+### Hearing an incident (bridge 0.8.20)
+
+The incident reports (`witness.report`) say V *heard* an incident when V was inside the stimulus' own radius (the sender's, else the stim record's, [NPC reactions §2](npc-reactions.md)); 15 m for a combat or fear bark, 12 m for a reprimand. That is a distance rule on script events, **not** audio evidence: no Wwise post, selected line or audibility is read, walls do not attenuate it, and a `PlayVoiceOver` request is only a request ([above](#names-and-entities-before-the-audio-queue)). The allow-listed barks (`vo_any_damage_hit`, `grenade_throw`, `reloading`, `fear_beg`, `fear_run`, `battlecry_*`, `combat_target_hit`) count a quarter of a report each. See [game events §13](game-events.md#13-incidents-what-v-witnessed-bridge-0820).
+
 ### Selected VO is a different event
 
 **[source]** `GameObject.PlayVoiceOver` can reject missing objects, vehicle-mounted actors, server execution and invalid triggers before queuing; a delay can defer it (`gameObject.script:743–769`). SDK `ent/GameplayVOEvent.hpp:19–39` supplies `voContext`, quest/frustum/distance/global-limit flags, debug context, answering entity and expression/context overrides. Codeware `scripts/Base/Addons/SoundPlayVo.reds:1–17` exposes the additional native fields. Observing this request does not identify which line survived selection and limits.

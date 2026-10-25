@@ -271,6 +271,8 @@ Three independent readings of "which gang lives where":
 
 Display names, age, job, personality and relationships are not in these records. A character record is a *casting type*, not a person: `Character.HomelessMan` appears hundreds of times, and its looks, positions and moods are drawn per spawn.
 
+**Incident participants (bridge 0.8.20) [source/offline].** An incident report names each person by entity id and, read straight from the character record, its record id, `Affiliation().EnumName()` and whether it is a crowd person (`ScriptedPuppet.IsCrowd()`); a bridge-placed stand-in also carries its handle (`a1`, `p2`). No faction table is added: the affiliation is whatever the record says (`NCPD`, a gang, a corp), so the simulation can map it to its own groups. A vehicle names its record only. See [game events §13](game-events.md#13-incidents-what-v-witnessed-bridge-0820).
+
 ## 8. Persistent and ephemeral
 
 [resource] Kind flags correlate strongly with where a record appears:

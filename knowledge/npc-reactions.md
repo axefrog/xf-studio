@@ -52,6 +52,8 @@ flowchart LR
 - `ScriptedReactionSystem` only counts fleeing NPCs and picks one police caller [source] `core/systems/reactionSystem.script:2-85`; the reaction logic lives per NPC.
 - Crowd NPCs keep a fear stage (`Relaxed`, `Stressed`, `Alarmed`, `Panic`) and their own crowd handling (`HandleCrowdReaction`, `OnCrowdReaction`) that plays `fear_beg`, `fear_run` and similar triggers [source] `reactionComponent.script:2323-2760`.
 
+**Who sent a stimulus, and how far it carries (bridge 0.8.20).** For a single broadcast the sender is the broadcaster component's **owner**; `contextOwner` can be another object. A shot comes from the shooter's broadcaster with the weapon as `contextOwner` (`cyberpunk/items/weapon.script:1610`); a melee `MeleeHit` comes from the **victim's** with the attacker in `stimInvestigateData.attackInstigator`, and the matching `CrimeWitness` from the **attacker's** with the victim as `contextOwner` (`cyberpunk/puppet/scriptedPuppet.script:3921-3930`). The radius a sender passes is the stimulus' reach; when it passes none the game uses the stim record's `Radius()` (`StimuliSystem.GetStimRecord(type)`, `orphans.script:24259, 46131`; `GameEffectExecutor_StimOnHit.CreateStim` does the same, `cyberpunk/strike/executors/executorStimOnHit.script:9-21`). That radius is how far NPCs react, so the bridge's incident reports take it as the distance within which V *heard* something; it is not the audio engine's audibility, and the audio occlusion of walls is not modelled. The set of types that mean "something happened" is in [game events §13](game-events.md#13-incidents-what-v-witnessed-bridge-0820).
+
 ### 2.2 Proximity look-at and the facial reaction [source]
 
 This is the path that matters for "NPCs notice V":
