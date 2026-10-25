@@ -11,6 +11,7 @@
 // for a person to fix). Nothing here writes a file, launches anything or sends a key.
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { findCommand, type Permission } from "../api/catalogue.ts";
@@ -110,14 +111,17 @@ export async function preflight(options: PreflightOptions): Promise<PreflightRes
   let classes: string[] | null = null;
   let stagedValues: Record<string, string> | null = null;
   let stagedCommit: string | undefined;
+  // The script's own steps (not the runner's built-in prelude and teardown): what it asks of the build.
+  const scriptSteps = allSteps([...planned.setup.steps, ...planned.rows.flatMap((r) => [...r.plan.steps, ...(r.plan.finally ?? [])]), ...planned.teardown.steps]);
+  let manifest: { version?: string; variant?: string; commit?: string; source_tree_clean?: boolean; allow_test_hooks?: boolean; autonomous_test_hooks?: boolean; files?: { path?: string; sha256?: string }[] } | undefined;
   if (staged) {
     const manifestText = text(stagedManifestPath(staged));
     if (!manifestText) add("blocker", "staged build", `No manifest.json in the staged mod (${stagedManifestPath(staged).split(/[\\/]/).slice(-4).join("/")}).`);
     else {
-      const manifest = JSON.parse(manifestText) as { version?: string; variant?: string; commit?: string; source_tree_clean?: boolean };
+      manifest = JSON.parse(manifestText) as NonNullable<typeof manifest>;
       const version = manifest.version === tools ? "ok" : "warn";
       add(version, "staged build", `${manifest.version} ${manifest.variant} (commit ${manifest.commit?.slice(0, 8)}${manifest.source_tree_clean === false ? ", dirty" : ""}); these tools are ${tools}`);
-      if (manifest.variant !== "writes") add("blocker", "staged build", `The staged build is the ${manifest.variant} package; the batch's changes need the -writes package in the test profile.`);
+      if (manifest!.variant !== "writes") add("blocker", "staged build", `The staged build is the ${manifest.variant} package; the batch's changes need the -writes package in the test profile.`);
       if (manifest.commit) {
         const known = git(["cat-file", "-e", `${manifest.commit}^{commit}`]) !== null;
         if (known) stagedCommit = manifest.commit;
@@ -135,10 +139,19 @@ export async function preflight(options: PreflightOptions): Promise<PreflightRes
       const def = command ? findCommand(command) : undefined;
       if (def?.bridge?.method) methods.set(def.bridge.method, [...(methods.get(def.bridge.method) ?? []), command!]);
     }
+    // The manifest must describe this very binary (its sha256), from a clean tree, before its commit's source can speak for it.
+    const dllHash = dll ? createHash("sha256").update(dll).digest("hex") : undefined;
+    const listed = manifest?.files?.find((f) => f.path === "red4ext/plugins/XFRuntimeBridge/XFRuntimeBridge.dll")?.sha256;
+    const tied = dllHash !== undefined && listed === dllHash && manifest?.source_tree_clean === true;
+    if (dll && manifest) add(tied ? "ok" : "blocker", "staged binary", tied ? `XFRuntimeBridge.dll is the one its manifest lists (sha256 ${dllHash!.slice(0, 12)}), built from a clean tree`
+      : listed === undefined ? "The manifest doesn't list the DLL's hash, so nothing ties this binary to a build: restage from a packaged zip."
+      : listed !== dllHash ? `The staged DLL (sha256 ${dllHash!.slice(0, 12)}) isn't the one its manifest lists (${listed.slice(0, 12)}): it was replaced after packaging; restage.`
+      : "The manifest says the build came from a dirty tree, so its commit doesn't describe the binary: rebuild from a clean commit.");
     if (!dll) add("blocker", "staged build", "No XFRuntimeBridge.dll in the staged mod.");
     else {
-      // Not in the DLL's text: the staged commit's own source registering it also counts (a name split across immediates).
-      const registered = (m: string) => stagedCommit !== undefined && git(["grep", "-q", "-F", `Register({"${m}"`, stagedCommit, "--", "native/src/core", "native/src/plugin"]) !== null;
+      // Not in the DLL's text: the staged commit's own source registering it also counts (a name split across immediates),
+      // but only when the manifest is tied to this binary.
+      const registered = (m: string) => tied && stagedCommit !== undefined && git(["grep", "-q", "-F", `Register({"${m}"`, stagedCommit, "--", "native/src/core", "native/src/plugin"]) !== null;
       const missing = [...methods.keys()].filter((m) => !dllHasString(dll, m) && !registered(m));
       const tails = [...methods.keys()].filter((m) => ["tail", "embedded", false].includes(dllHasString(dll, m)) && !missing.includes(m));
       add(missing.length ? "blocker" : "ok", "commands", missing.length ? `The staged DLL doesn't answer ${missing.map((m) => `${m} (${methods.get(m)![0]})`).join(", ")}: stage a build that has them`
@@ -150,6 +163,17 @@ export async function preflight(options: PreflightOptions): Promise<PreflightRes
       stagedValues = readIni(configText);
       classes = (stagedValues["bridge.allow_write_classes"] ?? "photo, world, character").split(",").map((c) => c.trim()).filter(Boolean);
       if (stagedValues["bridge.allow_writes"] !== "true") add("warn", "config", "The staged config has allow_writes off: every change the batch makes is refused until a row sets it.");
+    }
+    // The test gates: the recorder (telemetry, always on), test probes and the event-armed captures need the autonomous
+    // -writes package and allow_test_hooks in its config.
+    const hookCommands = [...new Set(scriptSteps.map((st) => commandOf(st as Record<string, unknown>)).filter((c): c is string => !!c && (/^test\./.test(c) || ["game.catchup", "capture.arm", "game.lifecycle.probe"].includes(c))))];
+    const builtWithHooks = manifest?.allow_test_hooks === true && manifest?.autonomous_test_hooks === true;
+    const configHooks = stagedValues?.["bridge.allow_test_hooks"] === "true";
+    if (manifest && stagedValues) {
+      const gap = [...(builtWithHooks ? [] : ["the staged build isn't the autonomous -writes package (manifest allow_test_hooks and autonomous_test_hooks)"]), ...(configHooks ? [] : ["config.ini's [bridge] allow_test_hooks isn't true"])];
+      if (!gap.length) add("ok", "test hooks", "the autonomous build with allow_test_hooks: the recorder and test probes are available");
+      else if (hookCommands.length) add("blocker", "test hooks", `${gap.join("; ")}, and the script uses ${hookCommands.slice(0, 4).join(", ")}: stage the autonomous -writes package`);
+      else add("warn", "test hooks", `${gap.join("; ")}: telemetry runs without the recorder`);
     }
   }
 

@@ -5,12 +5,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runPlan, type Plan } from "../testing/plan.ts";
-import { SessionExecutor } from "../testing/batch.ts";
+import { SessionExecutor, type Row } from "../testing/batch.ts";
 import { windowsHost } from "../testing/host.ts";
-import { stagedConfigPath } from "../testing/config-ini.ts";
+import { stagedConfigPath, stagedDllPath, stagedManifestPath } from "../testing/config-ini.ts";
+import { formatPreflight, preflight } from "../testing/preflight.ts";
+import { createHash } from "node:crypto";
 import { fakeApi, fakeHost, go, script, STAGED_INI, stagedMod } from "./batch-fakes.ts";
 import { FakeClock } from "./fake-clock.ts";
-import { tempDir } from "./helpers.ts";
+import { projectDir, tempDir } from "./helpers.ts";
 
 describe("H2 and M12: the tripwire can't block the restore, and the restore's outcome is recorded", () => {
   test("a low commit reading during the teardown still lets config.ini go back", async () => {
@@ -186,6 +188,48 @@ describe("M9: handed_over is seen on every API path", () => {
     expect(result.haltInfo?.kind).toBe("handed_over");
     expect(host.log).not.toContain("close");
     expect(result.rows[1].reason).toContain("not reached");
+  });
+});
+
+describe("M11: the preflight certifies only a binary its manifest describes, with the test gates", () => {
+  const staged = (dir: string, manifest: Record<string, unknown>, ini = STAGED_INI) => {
+    const mod = stagedMod(dir);
+    writeFileSync(stagedConfigPath(mod), ini);
+    const dll = "\0\0overlay.state\0";
+    writeFileSync(stagedDllPath(mod), dll);
+    const sha256 = createHash("sha256").update(Buffer.from(dll, "latin1")).digest("hex");
+    writeFileSync(stagedManifestPath(mod), JSON.stringify({ version: "0.8.22", variant: "writes", commit: "abc", source_tree_clean: true, allow_test_hooks: true, autonomous_test_hooks: true,
+      files: [{ path: "red4ext/plugins/XFRuntimeBridge/XFRuntimeBridge.dll", sha256 }], ...manifest }));
+    return { staged_mod: mod };
+  };
+  const check = (fixtures: Record<string, unknown>, rows: Row[] = [{ id: "r", title: "r", steps: [{ do: "run", command: "ui.hud", input: { show: false } }] }]) =>
+    preflight({ script: script(rows), fixtures, projectDir, runtimeDir: tempDir("xfb-rt-"), freeCommitBytes: async () => 40 * 1024 ** 3, gameRunning: async () => false,
+      // The staged commit's source "registers" everything: only a tied manifest may use that.
+      git: (args) => (args[0] === "grep" || args[0] === "cat-file" ? "" : null) });
+
+  test("a DLL replaced after packaging is a blocker, and the commit's source no longer vouches for its methods", async () => {
+    const result = await check(staged(tempDir("xfb-review-"), { files: [{ path: "red4ext/plugins/XFRuntimeBridge/XFRuntimeBridge.dll", sha256: "0".repeat(64) }] }));
+    const text = formatPreflight(result, "t");
+    expect(text).toContain("isn't the one its manifest lists");
+    expect(text).toContain("doesn't answer ui.hud");
+    expect(result.ready).toBe(false);
+  });
+
+  test("a build from a dirty tree can't lean on its commit either", async () => {
+    const result = await check(staged(tempDir("xfb-review-"), { source_tree_clean: false }));
+    expect(formatPreflight(result, "t")).toContain("dirty tree");
+    expect(result.ready).toBe(false);
+  });
+
+  test("a script that needs the test hooks is refused on a build or config without them", async () => {
+    const rows = [{ id: "r", title: "r", steps: [{ do: "run", command: "test.record.start", input: {} }] }];
+    const noBuild = await check(staged(tempDir("xfb-review-"), { autonomous_test_hooks: false }), rows);
+    expect(formatPreflight(noBuild, "t")).toContain("isn't the autonomous -writes package");
+    expect(noBuild.ready).toBe(false);
+    const noConfig = await check(staged(tempDir("xfb-review-"), {}), rows);
+    expect(formatPreflight(noConfig, "t")).toContain("allow_test_hooks isn't true");
+    const ready = await check(staged(tempDir("xfb-review-"), {}, STAGED_INI.replace("allow_writes = true", "allow_writes = true\r\nallow_test_hooks = true")), rows);
+    expect(ready.items.filter((i) => i.check === "test hooks")[0].status).toBe("ok");
   });
 });
 

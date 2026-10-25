@@ -4,6 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { CommandApi } from "../api/command-api.ts";
 import { encodePng } from "../capture/image.ts";
@@ -329,8 +330,12 @@ describe("preflight", () => {
   const files = (dir: string, overrides: { ini?: string; manifest?: Record<string, unknown>; dll?: string; bindings?: string } = {}) => {
     const mod = stagedMod(dir);
     if (overrides.ini) writeFileSync(stagedConfigPath(mod), overrides.ini);
-    writeFileSync(stagedManifestPath(mod), JSON.stringify({ version: "0.8.22", variant: "writes", commit: "abc", ...overrides.manifest }));
-    writeFileSync(stagedDllPath(mod), `\0\0${overrides.dll ?? "overlay.state\0ui.hud\0native.ping\0game.status\0photo.open\0supervisor.clear\0test.record.stop\0ui.message\0photo.exit"}\0\0`);
+    const dll = `\0\0${overrides.dll ?? "overlay.state\0ui.hud\0native.ping\0game.status\0photo.open\0supervisor.clear\0test.record.stop\0ui.message\0photo.exit"}\0\0`;
+    writeFileSync(stagedDllPath(mod), dll);
+    // A manifest tied to this binary, as the packager writes it.
+    const sha256 = createHash("sha256").update(Buffer.from(dll, "latin1")).digest("hex");
+    writeFileSync(stagedManifestPath(mod), JSON.stringify({ version: "0.8.22", variant: "writes", commit: "abc", source_tree_clean: true, allow_test_hooks: true, autonomous_test_hooks: true,
+      files: [{ path: "red4ext/plugins/XFRuntimeBridge/XFRuntimeBridge.dll", sha256 }], ...overrides.manifest }));
     const game = join(dir, "game");
     mkdirSync(join(game, "bin", "x64", "plugins", "cyber_engine_tweaks"), { recursive: true });
     writeFileSync(join(game, "bin", "x64", "plugins", "cyber_engine_tweaks", "bindings.json"), overrides.bindings ?? '{ "cet": { "overlay_key": 4785899237801984 } }');
