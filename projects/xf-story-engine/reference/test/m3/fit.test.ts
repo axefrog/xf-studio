@@ -1,10 +1,12 @@
-// Phase 2 of M3: the authored seed R2 fitted on story states with sowing off and with sowing on gives the same fit report, and
-// plays to the same end (D23 S23-S2-10). The default suite runs two states over a short span; `S1_FULL=1` runs all of them.
+// Phase 2 of M3: the authored seed R2 fitted on story states with sowing off and with sowing on gives the same fit report (D23
+// S23-S2-10, M3's second done-when). What R2 then plays is a separate question: layer 3's pacing holds the first delivery, and a
+// later world can select a different fragment, so the play is compared on selection and content and is not claimed identical.
+// The default suite runs two states over a short span; `S1_FULL=1` runs all of them.
 
 import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { defaultData as l3Default } from '../../src/procedural/data.ts';
 import { Run, policies } from '../../src/m3/driver.ts';
-import { fitKey, fitOfR2, semanticOfR2 } from '../../src/m3/fit.ts';
+import { fitKey, fitOfR2, playDifference, releaseTimesOfR2, semanticOfR2 } from '../../src/m3/fit.ts';
 import { hookPack, hookPatterns } from '../../src/m3/hooks.ts';
 import { R2_ID, r2Pack } from '../../src/m3/r2.ts';
 import { STATES, stateById } from '../../src/m3/states.ts';
@@ -24,7 +26,7 @@ function arm(which: Arm, state: string, policy = 'decline'): Run {
 
 describe('R2 fitted with sowing off and on', () => {
   for (const id of ids) {
-    test(`${id}: the same fit report, and the same play, with layer 3 absent, attached with tempo off, and sowing on`, () => {
+    test(`${id}: the same fit report with layer 3 absent, attached with tempo off, and sowing on; the same selection and content when declined`, () => {
       const runs = (['absent', 'attached-off', 'on'] as Arm[]).map((a) => arm(a, id));
       for (const r of runs) r.runWindows(2);
       const fits = runs.map((r) => fitOfR2(r));
@@ -36,13 +38,39 @@ describe('R2 fitted with sowing off and on', () => {
       // the layer 3 world terms are the one thing that differs by construction, and only when layer 3 is attached
       expect(fits[0]!.fit).toBeUndefined();
       expect(fits[2]!.fit?.policy).toBe('world');
-      // layer 3 holds the first delivery for its pacing (SF3-36), so the play is read after the hold has passed
+      // layer 3 holds the first delivery for its pacing (SF3-36), so the play is read after the hold has passed. The comparison
+      // reads the selected fragments and the delivered words as well as the cast and the end state; only release times are left out.
       for (const r of runs) r.runWindows(18);
       const sem = runs.map((r) => semanticOfR2(r));
+      expect(playDifference(sem[0], sem[1])).toEqual([]);
+      expect(playDifference(sem[0], sem[2])).toEqual([]);
       expect(sem[1]).toEqual(sem[0]);
       expect(sem[2]).toEqual(sem[0]);
+      expect(JSON.stringify(sem[0])).toContain('ff-ask');
+      // the pacing hold is real: with layer 3 attached the first delivery is released later
+      expect(releaseTimesOfR2(runs[2]!)[0]).toBeGreaterThan(releaseTimesOfR2(runs[0]!)[0]!);
     });
   }
+
+  // Regression (M3-R1): the play comparison once left out the selected fragments and the delivered words, and reported equal plays
+  // here. Sowing off delivers the plain payment; sowing on holds the offer until the stalls know V, and then delivers the known one.
+  test('S-mid-squeezed, accepting first: the fit is the same, the play is not (the held offer meets a later world and selects another fragment)', () => {
+    const off = arm('absent', 'S-mid-squeezed', 'accept-first');
+    const on = arm('on', 'S-mid-squeezed', 'accept-first');
+    for (const r of [off, on]) r.runWindows(2);
+    expect(fitKey(fitOfR2(on))).toEqual(fitKey(fitOfR2(off)));
+    for (const r of [off, on]) r.runWindows(24);
+    const a = semanticOfR2(off)!, b = semanticOfR2(on)!;
+    const fragments = (s: Record<string, unknown>): string[] => Object.values(s.beats as Record<string, { fragment: string | null }>).map((x) => x.fragment).filter((x): x is string => x !== null).sort();
+    expect(fragments(a)).toEqual(['ff-ask', 'ff-paid-plain']);
+    expect(fragments(b)).toEqual(['ff-ask', 'ff-paid-known']);
+    expect(playDifference(a, b)).toEqual(['beats', 'deliveries', 'delivered']);
+    // what the two plays share: the cast, the draws, the answer, and that R2 resolved
+    expect(a.roles).toEqual(b.roles);
+    expect(a.draws).toEqual(b.draws);
+    expect(a.closure).toEqual(b.closure);
+    expect(releaseTimesOfR2(on)[0]).toBeGreaterThan(releaseTimesOfR2(off)[0]!);
+  });
 
   test('the fit report follows the story state (it is not the same report for every state)', () => {
     const early = fitKey(fitOfR2(arm('absent', 'S-early-quiet')));

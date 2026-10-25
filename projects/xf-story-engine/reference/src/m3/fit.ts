@@ -33,7 +33,13 @@ export function fitOfR2(run: Run): FitReport {
   return fitReport(run.w.l2, R2_PACK, R2_ID);
 }
 
-/** What an R2 play came to, apart from when it was released (pacing may move that, SF3-36). */
+/**
+ * What an R2 play came to: who was cast, what was drawn, which fragment each beat selected, what was delivered (the words, in
+ * order, with how V answered), and the state it left behind (the closure and what each beat ended as). The only things left out
+ * are when each thing was released and the counters of the clock (`since`, `availableAt`, `finalAt`, `doneAt`), which layer 3's
+ * pacing is allowed to move (SF3-36). A later release can change what a beat selects, because the world has moved on by then, so
+ * the comparison reads the selected fragments and the delivered words and does not assume pacing leaves them alone.
+ */
 export function semanticOfR2(run: Run): Record<string, unknown> | undefined {
   const inst = run.instancesOf(R2_ID)[0];
   if (!inst) return undefined;
@@ -42,9 +48,21 @@ export function semanticOfR2(run: Run): Record<string, unknown> | undefined {
     state: inst.st.state,
     roles: Object.fromEntries(Object.entries(inst.st.roles).map(([k, r]) => [k, r.cast])),
     draws: Object.fromEntries(Object.entries(inst.st.draws).map(([k, d]) => [k, d.value])),
-    offers: inst.st.deliveries.filter((d) => d.what === 'offer').map((d) => d.id),
-    answers: run.deliveries.filter((d) => d.template === R2_ID && d.answer).map((d) => d.answer),
-    beats: Object.fromEntries(Object.entries(inst.st.beats).map(([k, b]) => [k, b.state])),
-    closure: inst.st.closed ? { status: inst.st.closed.status } : null,
+    beats: Object.fromEntries(Object.entries(inst.st.beats).map(([k, b]) => [k, { state: b.state, fragment: b.fragment ?? null, response: b.response ?? null, releases: b.releases, offers: b.offers, attempt: b.attempt, skip: b.skip ?? null }])),
+    facts: Object.fromEntries(Object.entries(inst.st.facts).map(([k, f]) => [k, f.n])),
+    deliveries: inst.st.deliveries.map((d) => ({ what: d.what, beat: d.beat ?? null, fragment: d.fragment ?? null, state: d.state })),
+    delivered: run.deliveries.filter((d) => d.template === R2_ID).map((d) => ({ what: d.what, beat: d.beat, channel: d.channel, words: d.words, names: d.names, answer: d.answer ?? null })),
+    closure: inst.st.closed ? { status: inst.st.closed.status, witnessed: inst.st.closed.witnessed } : null,
   };
+}
+
+/** When R2's deliveries were released (game seconds), the one thing the play comparison leaves out. */
+export function releaseTimesOfR2(run: Run): number[] {
+  return run.deliveries.filter((d) => d.template === R2_ID).map((d) => d.game);
+}
+
+/** The top-level parts of two plays that differ (empty when they agree); `a` and `b` are `semanticOfR2` results. */
+export function playDifference(a: Record<string, unknown> | undefined, b: Record<string, unknown> | undefined): string[] {
+  if (!a || !b) return a === b ? [] : ['instance'];
+  return Object.keys(a).filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
 }
