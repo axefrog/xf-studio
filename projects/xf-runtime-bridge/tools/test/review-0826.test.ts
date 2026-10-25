@@ -173,6 +173,22 @@ describe("M8: a launch that can't start says so", () => {
   });
 });
 
+describe("M9: handed_over is seen on every API path", () => {
+  test("a schema-2 observe step refused handed_over halts the batch as handed_over, not runner_error", async () => {
+    const clock = new FakeClock();
+    const api = fakeApi(clock, { "npc.move": () => ({ ok: false, code: "handed_over", message: "handed over" }) });
+    const rows = [
+      { id: "walk", title: "walk", steps: [{ do: "set", value: { who: "a1" }, bind: "actor" }, { do: "observe", command: "npc.move", subject: "$actor.who", input: { who: "$actor.who", to: "v" }, timeout_s: 5, bind: "walk" }] },
+      { id: "next", title: "next", steps: [{ do: "set", value: 1 }] },
+    ];
+    const host = fakeHost({ running: true });
+    const result = await go(script(rows), api, host, clock, tempDir("xfb-review-"));
+    expect(result.haltInfo?.kind).toBe("handed_over");
+    expect(host.log).not.toContain("close");
+    expect(result.rows[1].reason).toContain("not reached");
+  });
+});
+
 describe("H1: exceptions never bypass the cleanup", () => {
   test("a report callback that throws doesn't skip the release or the close", async () => {
     const clock = new FakeClock();

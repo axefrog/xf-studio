@@ -398,9 +398,26 @@ export class SessionExecutor implements Executor {
   /** The batch's commit monitor (set by runBatch): a trip refuses every further action. */
   monitor?: CommitMonitor;
 
+  /** Every API path the executor takes (commands, schema-2 steps, questions, releases) goes through this, so a handed_over refusal is seen on any of them. */
+  private readonly api: Pick<CommandApi, "run">;
+  private handedOver = false;
+
   constructor(private readonly c: BatchContext, script: BatchScript) {
-    this.testing = new TestSession(c.api, { ...script, fixtures: c.fixtures } as never, c.outDir, false, c.clock);
+    this.api = {
+      run: (async (name: string, input: unknown, options?: Parameters<CommandApi["run"]>[2]) => {
+        const out = await c.api.run(name, input, options);
+        if (!out.ok && out.error.code === "handed_over") this.handedOver = true;
+        return out;
+      }) as CommandApi["run"],
+    };
+    this.testing = new TestSession(this.api, { ...script, fixtures: c.fixtures } as never, c.outDir, false, c.clock);
     this.rowDir = c.outDir;
+  }
+
+  /** The teardown's start: earlier stops no longer gate actions (each teardown step is tried and recorded). */
+  clearStops() {
+    this.stopReason = undefined;
+    this.handedOver = false;
   }
 
   get bindings() {
@@ -436,6 +453,15 @@ export class SessionExecutor implements Executor {
   }
 
   async run(action: Action, context: ExecContext): Promise<Outcome> {
+    const outcome = await this.perform(action, context);
+    if (this.handedOver && !outcome.halt) {
+      this.stopReason ??= HANDED_OVER;
+      return { ...outcome, ok: false, code: "handed_over", message: outcome.message ?? HANDED_OVER, halt: HANDED_OVER };
+    }
+    return outcome;
+  }
+
+  private async perform(action: Action, context: ExecContext): Promise<Outcome> {
     const tripped = this.stopReason ?? this.monitor?.reason;
     if (tripped) return { ok: false, code: "tripwire", message: tripped, halt: tripped };
     const kind = action.do;
@@ -525,22 +551,25 @@ export class SessionExecutor implements Executor {
           return { ok: fine, ...(fine ? {} : { code: "not_restored", message: restored.reason }), value: restored };
         }
         case "actors.release_all": {
-          const status = await this.c.api.run("npc.status", {}, { source: "session", signal: context.signal });
+          const status = await this.api.run("npc.status", {}, { source: "session", signal: context.signal });
           if (!status.ok) return { ok: false, code: status.error.code, message: status.error.message };
           const actors = ((status.result as { npcs?: { who?: string }[] })?.npcs ?? []).map((n) => n.who).filter((w): w is string => typeof w === "string");
           const released: string[] = [];
-          for (const who of actors) if ((await this.c.api.run("npc.release", { who, how: "despawn" }, { source: "session" })).ok) released.push(who);
+          for (const who of actors) if ((await this.api.run("npc.release", { who, how: "despawn" }, { source: "session" })).ok) released.push(who);
           return { ok: released.length === actors.length, value: { actors, released } };
         }
       }
       return { ok: false, code: "unknown_action", message: `No action "${kind}".` };
     } catch (error) {
-      return { ok: false, code: context.signal.aborted ? "cancelled" : "runner_error", message: String((error as Error)?.message ?? error) };
+      // A refusal thrown by a read helper ("npc.move: npc_busy: ...") keeps its code; only the runner's own failures are runner_error.
+      const message = String((error as Error)?.message ?? error);
+      const refused = /^[a-z][a-z0-9_.]*: ([a-z][a-z0-9_]*): /.exec(message)?.[1];
+      return { ok: false, code: context.signal.aborted ? "cancelled" : refused ?? "runner_error", message };
     }
   }
 
   private async runCommand(command: string, input: Record<string, unknown>, expectError: string | undefined, context: ExecContext): Promise<Outcome> {
-    const outcome = await this.c.api.run(command, input, { source: "session", captureRoot: this.rowDir, signal: context.signal });
+    const outcome = await this.api.run(command, input, { source: "session", captureRoot: this.rowDir, signal: context.signal });
     if (!outcome.ok) {
       if (outcome.error.code === "handed_over") return { ok: false, code: "handed_over", message: outcome.error.message, halt: HANDED_OVER };
       if (expectError && outcome.error.code === expectError) return { ok: true, code: outcome.error.code, value: { refused: outcome.error } };
@@ -565,17 +594,17 @@ export class SessionExecutor implements Executor {
 
   /** A question in the game: the answer comes through the event stream (answer keys or the CET window's button). */
   private async ask(action: Action, context: ExecContext): Promise<Outcome> {
-    const cursor = await captureCursor(this.c.api, context.signal);
+    const cursor = await captureCursor(this.api, context.signal);
     const choices = Array.isArray(action.choices) ? action.choices : undefined;
     const seconds = Math.min(600, Math.max(5, Number(action.seconds ?? Math.round((context.deadline - this.c.clock.now()) / 1000))));
-    const posted = await this.c.api.run("ui.message", { text: String(action.text).slice(0, 600), level: "ask", seconds, ...(choices ? { choices } : {}) }, { source: "session" });
+    const posted = await this.api.run("ui.message", { text: String(action.text).slice(0, 600), level: "ask", seconds, ...(choices ? { choices } : {}) }, { source: "session" });
     if (!posted.ok) return { ok: false, code: posted.error.code, message: posted.error.message, ...(posted.error.code === "handed_over" ? { halt: HANDED_OVER } : {}) };
     const id = (posted.result as { id?: number }).id;
     this.c.log(`     ASK (in game, id ${id}): ${action.text}`);
-    const window = await waitForEvent(this.c.api, cursor, { kind: "answer", message_id: id }, Math.max(1, (context.deadline - this.c.clock.now()) / 1000 - 1), context.signal, this.c.clock);
+    const window = await waitForEvent(this.api, cursor, { kind: "answer", message_id: id }, Math.max(1, (context.deadline - this.c.clock.now()) / 1000 - 1), context.signal, this.c.clock);
     const answer = window.events.find((e) => e.kind === "answer" && e.data?.message_id === id);
     if (!answer) {
-      await this.c.api.run("ui.message", { withdraw: id }, { source: "session" }).catch(() => undefined);
+      await this.api.run("ui.message", { withdraw: id }, { source: "session" }).catch(() => undefined);
       return { ok: false, code: "no_answer", message: "Nobody answered in time.", value: { message_id: id } };
     }
     return { ok: true, value: { message_id: id, label: answer.data?.label, choice: answer.data?.choice, via: answer.data?.via } };
@@ -938,7 +967,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   if (monitor.reason) stopWith("tripwire", monitor.reason);
   await attemptCleanup("telemetry", () => telemetry.finish());
   const teardownPlan: Plan = { id: "teardown", steps: [...planned.teardown.steps.map((s) => ({ ...s, on_fail: "continue" as const })), ...builtinTeardown()] };
-  executor.stopReason = undefined;
+  executor.clearStops();
   const teardownExecutor: Executor = { run: async (action, context) => ({ ...(await executor.run(action, context)), halt: undefined }) };
   let teardown: PlanResult | undefined;
   await attemptCleanup("teardown", async () => { teardown = await runPlan(teardownPlan, { executor: teardownExecutor, clock, bindings }); });
