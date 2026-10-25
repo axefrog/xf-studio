@@ -355,12 +355,17 @@ describe("exporter cache keys", () => {
     const failed = failing.open(archiveExportSource(join(root, "nameless-failing.archive"), route.gameRoot)).textures(wanted)
       .then(() => { settled = true; return null; }, error => { settled = true; return error; });
     // The path launch resolves immediately. Wait for its hash wave, whose third launch fails synchronously.
-    // The siblings stay held until the test releases them; no real timer decides the failure order.
+    // Keep the siblings held across an event-loop checkpoint so an early rejection has time to propagate.
     await Promise.all(started.slice(0, BY_HASH_CONCURRENCY).map(gate => gate.promise));
-    expect(running).toBe(BY_HASH_CONCURRENCY - 1);
-    expect(settled).toBe(false);
-    for (const gate of finish) gate.resolve();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    try {
+      expect(running).toBe(BY_HASH_CONCURRENCY - 1);
+      expect(settled).toBe(false);
+    } finally {
+      for (const gate of finish) gate.resolve();
+    }
     expect(await failed).toMatchObject({ code: "tool_failed" });
+    expect(settled).toBe(true);
     expect(launches).toEqual([`path ${wanted.length}`, ...wanted.slice(0, BY_HASH_CONCURRENCY).map(path => `hash ${path}`)]);
     expect(running).toBe(0);
   });
