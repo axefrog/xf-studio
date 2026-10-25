@@ -92,3 +92,6 @@ export const EYE_STARTERS: readonly ContributedStarter[] = Object.freeze([
     description: "The shape new layers started from before starters: a lid shape with a wing tip at the outer end.",
     shape: originalWing() },
 ]);
+
+/** The window a starter thumbnail shows: the eye with room for the wing tip and the smoky crescent (15 : 8, as the thumbnail is). */
+export const EYE_THUMBNAIL_WINDOW: UvWindow = Object.freeze({ u0: 0.3, u1: 0.45, v0: 0.205, v1: 0.285 });

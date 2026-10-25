@@ -12,6 +12,8 @@ export type EyeMakeupViewContext = FeatureViewContext<EyeMakeupFacade>;
 
 /** Add a layer at the front of the selected preset (a fresh action each time). */
 export const addLayer = (): EyeMakeupAction => ({ kind: "layer.edit", command: { kind: "add" } });
+/** Add a layer at the front of the selected preset, starting from the starter `starter` names. */
+export const addLayerFrom = (starter: string): EyeMakeupAction => ({ kind: "layer.edit", command: { kind: "add", starter } });
 /** Layer creation; refused (with a reason) while no preset owns the editor. */
 export const addLayerCapability = (ctx: EyeMakeupViewContext) => ctx.facade.capability(addLayer());
 

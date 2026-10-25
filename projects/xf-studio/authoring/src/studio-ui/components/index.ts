@@ -36,6 +36,7 @@ export { favouriteToggle, TreeView, TREE_ROW_HEIGHT, treeHeightWords, type TreeB
 export { progressBar, type ProgressBar } from "./progress";
 export { attachSwatchCard, ChoiceList, choiceItem, swatchCard, type ChoiceListOptions, type ChoiceOption } from "./choice-list";
 export { FolderSetting, type FolderChoice, type FolderOutcome, type FolderSettingOptions, type FolderSettingState } from "./folder-setting";
+export { shapeThumbnail, type ShapeThumbnailOptions, type ThumbnailPoint } from "./shape-thumbnail";
 export { RecordList, recordTime, type RecordListOptions, type RecordRow } from "./record-list";
 export { ConflictNotice, type ConflictKeep, type ConflictNoticeOptions, type ConflictNoticeState } from "./conflict-notice";
 export { DISCARD_WAITING_CONFIRM, WorkspaceNotice, WORKSPACE_NOTICE_ACTIONS, type WorkspaceNoticeAction, type WorkspaceNoticeOptions, type WorkspaceNoticeState } from "./workspace-notice";

@@ -1,5 +1,6 @@
 import { chordsLabel, keyBindingById, shortcutLabel } from "../../../app/input-bindings";
 import { applyCapability, button, emptyState, note } from "../../../studio-ui/controls";
+import { openMenu } from "../../../studio-ui/components";
 import { h, pct, setAttr, setText } from "../../../studio-ui/dom";
 import { icon } from "../../../studio-ui/icons";
 import { EmptyState, helpTip, iconButton } from "../../../studio-ui/components";
@@ -8,6 +9,7 @@ import type { PanelController } from "../../../studio-ui/panels/collection";
 import { addLayer, addLayerCapability, catalogues, type EyeMakeupViewContext } from "./actions";
 import { EYE_MAKEUP_PANEL_META } from "./contribution";
 import { openLayerMenu } from "./layer-menu";
+import { starterItems } from "./starter-menu";
 
 /** The Layers flag's words for a layer cut off at the plate's outer edge: the consequence first, then the fix (90 characters or fewer). */
 export const EDGE_CUT_NOTE = "Cut off at the plate's edge in game: pull the shape in or make its edge less soft.";
@@ -17,6 +19,13 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
   const count = h("span", { class: "count" });
   const add = button({ label: "Add layer", icon: "plus", small: true,
     onClick: () => { if (ctx.dispatch(addLayer())) ctx.feedback.announce("Layer added at the front and selected"); } });
+  // The starters beside Add layer (the New tab menu's layout): a layer from any starter, and which one Add layer and new looks use.
+  const starters = button({ label: "Add a layer from a starter shape", icon: "chevronDown", iconOnly: true, small: true, variant: "ghost", menu: true,
+    onClick: event => {
+      const listing = ctx.starters.list(), invoker = event.currentTarget as HTMLElement;
+      if (listing) openMenu(starterItems(ctx, listing, invoker), invoker, { label: "Starter shapes", invoker,
+        focusLabel: listing.starters.find(item => item.isDefault)?.name });
+    } });
   const duplicate = button({ label: "Duplicate selected layer", icon: "duplicate", iconOnly: true, small: true, variant: "ghost", onClick: () => {
     const layer = view.layer(); if (layer) ctx.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: layer.id } });
   } });
@@ -93,7 +102,7 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
     // How the stack works and its keys are the heading's help tip, not a permanent footer (ui-copy-and-layout-review.md §3.3).
     h("div", { class: "list-head" }, h("span", { class: "control-line" }, h("span", { class: "eyebrow" }, "Stack ", count),
       helpTip("the layer stack", `The top layer is in front. Drag a row's grip or press ${chordsLabel(keyBindingById("rows.reorder"))} to reorder; ${shortcutLabel("rows.rename")} renames and ${shortcutLabel("rows.remove")} removes (${shortcutLabel("shell.undo")} undoes).`)),
-      h("div", { class: "row gap-xs" }, add, duplicate, more)),
+      h("div", { class: "row gap-xs" }, add, starters, duplicate, more)),
     noPreset, newer.element, empty, list.element);
   ctx.anchors.register("layers.add", add);
   ctx.anchors.register("layers.list", list.element);
@@ -117,6 +126,7 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
         return { id: layer.id, name: layer.name, meta: `${descriptor?.label ?? layer.finish} · ${pct(layer.opacity)}${layer.symmetry ? "" : " · one side"}` };
       }), active?.id);
       applyCapability(add, addLayerCapability(ctx));
+      applyCapability(starters, ctx.starters.list() ? addLayerCapability(ctx) : { available: false, reason: "The starter shapes are still loading." });
       applyCapability(duplicate, active ? ctx.facade.contextCapability({ kind: "layer", id: active.id },
         { kind: "layer.edit", command: { kind: "duplicate", id: active.id } }) : { available: false, reason: "Select a layer first." });
       applyCapability(more, active ? { available: true } : { available: false, reason: "Select a layer first." });

@@ -11,6 +11,8 @@ import { badge } from "../controls";
  *   panel breaks the line at a "·", never inside a date.
  * - **One action**, at the row's end, vertically centred; the owner builds it (a Button) so its capability and reason are its own. A row
  *   with nothing to do (the collection open now) has none, rather than an unavailable button.
+ * - **An optional thumbnail** sits before the name, vertically centred: a small drawing that tells rows apart at a glance (a Shape thumbnail).
+ *   Its size is the owner's; the row keeps its height and the name keeps its line. It is decorative: the name is the row's name.
  * - The current row (the one open now) has the signal background.
  *
  * `update(records)` rebuilds the rows; the owner keys it on what it shows, so an unchanged list is left alone (focus stays).
@@ -23,6 +25,8 @@ export type RecordRow = {
   badge?: { text: string; tone: "neutral" | "accent" | "info" | "success" | "warning" | "error" };
   /** The row open now: the signal background. */
   current?: boolean;
+  /** A small decorative drawing before the name (a Shape thumbnail); none for rows that have no shape. */
+  thumbnail?: Element;
   /** The row's one action (a small Button); none where there is nothing to do with the row (the one open now). */
   action?: HTMLElement;
 };
@@ -38,6 +42,7 @@ export class RecordList {
       const meta = record.meta.flatMap((fact, index) => [index ? h("span", { class: "record-sep", "aria-hidden": "true", text: " · " }) : null,
         h("span", { class: "record-fact", text: fact })]).filter((node): node is HTMLSpanElement => !!node);
       return h("li", { class: `record-row${record.current ? " current" : ""}`, "data-view-key": `record:${record.id}` },
+        record.thumbnail ? h("span", { class: "record-thumb", "aria-hidden": "true" }, record.thumbnail) : null,
         h("div", { class: "record-main" },
           h("div", { class: "record-name-line" }, h("strong", { class: "record-name", title: record.name, text: record.name }),
             record.badge ? badge(record.badge.text, record.badge.tone) : null),

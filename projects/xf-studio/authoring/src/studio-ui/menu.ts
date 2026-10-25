@@ -22,7 +22,12 @@ export type MenuItem =
        * like entries stays one row each (G2: what a thing is goes in a tip; C-32). A visible `hint` or reason still shows as usual.
        */
       tip?: string;
-      secondary?: { icon: IconName; name: string; capability?: Capability; run(): void } }
+      /**
+       * A small drawing in the icon's place (a Shape thumbnail): rows that are shapes, so they can be told apart at a glance. Built when
+       * the menu opens; decorative, since the label names the row.
+       */
+      thumbnail?: () => Element;
+      secondary?: { icon: IconName; name: string; capability?: Capability; tone?: "danger" | "neutral"; run(): void } }
   | { kind: "submenu"; label: string; icon?: IconName; hint?: string; capability?: Capability; items: () => MenuItem[]; width?: "wide" }
   | { kind: "separator" }
   | { kind: "heading"; label: string; detail?: string };
@@ -150,7 +155,8 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
       "aria-checked": item.kind === "action" && item.checked !== undefined ? String(item.checked) : undefined,
       "aria-haspopup": item.kind === "submenu" ? "menu" : undefined,
       "aria-describedby": reason || item.hint || tip ? descId : undefined, title: tip ?? item.label },
-      h("span", { class: "menu-icon" }, item.kind === "action" && item.checked ? icon("check") : item.icon ? icon(item.icon) : null),
+      item.kind === "action" && item.thumbnail ? h("span", { class: "menu-thumb", "aria-hidden": "true" }, item.thumbnail())
+        : h("span", { class: "menu-icon" }, item.kind === "action" && item.checked ? icon("check") : item.icon ? icon(item.icon) : null),
       h("span", { class: "menu-text" }, h("span", { class: "menu-label" }, item.label, item.kind === "action" && item.tag ? h("span", { class: "menu-tag", text: item.tag }) : null,
         item.kind === "action" ? stageTag(item.stage, "menu-tag") : null),
         reason || item.hint ? h("small", { id: descId, class: reason ? "menu-reason" : "menu-hint", text: reason ?? item.hint })

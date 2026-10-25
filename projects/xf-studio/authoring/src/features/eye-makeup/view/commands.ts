@@ -1,7 +1,7 @@
 import type { EyeMakeupAction } from "../../../legacy/eye-makeup/eye-makeup-model";
 import { shortcutLabel } from "../../../app/input-bindings";
 import type { FeatureCommand } from "../../../studio-ui/views/feature-view";
-import { addLayer, catalogues, finishOffered, type EyeMakeupViewContext } from "./actions";
+import { addLayer, addLayerFrom, catalogues, finishOffered, type EyeMakeupViewContext } from "./actions";
 
 /**
  * Eye makeup's command-palette entries (a view contribution the shell renders after its own Edit commands):
@@ -14,6 +14,9 @@ export function eyeMakeupCommands(ctx: EyeMakeupViewContext): FeatureCommand<Eye
     ({ id, title, group, ...extra, action, unavailable });
   return [
     { id: "layer.add", title: "Add layer", group: "Edit", icon: "plus", action: addLayer() },
+    // A layer from any starter (the Layers panel's starter menu, by name).
+    ...(ctx.starters.list()?.starters.filter(starter => starter.shape).map(starter => ({ id: `layer.add.${starter.id}`, title: `Add layer: ${starter.name}`, group: "Edit",
+      icon: "plus" as const, keywords: "starter shape new layer", action: addLayerFrom(starter.id) })) ?? []),
     act("layer.duplicate", "Duplicate selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "duplicate", id: layer.id } }, { icon: "duplicate", shortcut: `${shortcutLabel("rows.duplicate")} in Layers` }),
     act("layer.remove", "Remove selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "remove", id: layer.id } }, { icon: "trash", shortcut: `${shortcutLabel("rows.remove")} in Layers` }),
     act("layer.reset", "Reset selected layer", "Edit", layer && { kind: "layer.edit", command: { kind: "reset", id: layer.id } }, { icon: "reset" }),

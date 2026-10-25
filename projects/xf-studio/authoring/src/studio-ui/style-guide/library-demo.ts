@@ -1,5 +1,5 @@
 /** Live specimens for the style guide's Component library section: each is the production component, wired to sample state. */
-import { menuSecondaryRow, openChoicePopover, badge, blockSection, button, ConflictNotice, WorkspaceNotice, type WorkspaceNoticeAction, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, EmptyChoices, EmptyTargetPointer, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
+import { menuSecondaryRow, shapeThumbnail, openChoicePopover, badge, blockSection, button, ConflictNotice, WorkspaceNotice, type WorkspaceNoticeAction, setButtonLabel, setButtonVariant, codeBlock, Combobox, EmptyState, EmptyChoices, EmptyTargetPointer, expander, expanderLabel, GroupSection, helpTip, iconButton, ItemList, note,
   PageHeader, PairControl, PanelHeader, progressBar, propertyList, SearchField, Segmented, SelectField, Slider, SliderWithValue, SplitView, Splitter, stack, TabStrip,
   Toggle, ColorField, applyCapability, openMenu, openValuePopover, openConfirmPopover, TreeView, favouriteToggle, FolderSetting, BipolarSlider, ScrubSlider, ChoiceList, choiceItem, attachSwatchCard, contrastMark, setContrastMark,
   sampleBackground, LightList, DirectionDial, SizeBar, previewTile, previewStage, ScrollMemory, VIEW_KEY, stageTag, RecordList, recordTime, modLine, notDrawnState, type LightListItem, type TabItem, type TreeNodeData } from "../components";
@@ -395,6 +395,25 @@ const MOUNTS: Record<string, Mount> = {
       make("Waiting for the other window to finish saving. Close the other window to continue.", ["cancelTakeOver"]),
       make("Restoring changes from your last session is taking a while. Your library hasn't confirmed them yet.", ["retryRestore", "exportCopy"]),
       make(UNPROTECTED, ["protect", "exportCopy", "showInFolder"]), narrow);
+  },
+  "lib-shape-thumbnail": () => {
+    const window = { u0: .3, u1: .45, v0: .205, v1: .285 };
+    const guides = [[[.428, .2456], [.4182, .2495], [.4063, .2544], [.3931, .2563], [.3826, .2544], [.3735, .2515]], [[.43, .2371], [.41, .231], [.39, .2343], [.37, .244]]]
+      .map(line => line.map(([u, v]) => ({ u, v })));
+    const shape = (points: number[][]) => points.map(([u, v]) => ({ u, v }));
+    const outlines = [
+      ["Lid wash", shape([[.4268, .2432], [.4125, .2498], [.3931, .2541], [.379, .2514], [.37, .2455], [.3745, .2352], [.39, .2268], [.408, .2238], [.425, .2262], [.4318, .2345]])],
+      ["Classic wing", shape([[.4262, .244], [.3931, .252], [.366, .243], [.3555, .2388], [.3625, .2437], [.3735, .2512], [.3931, .2558], [.4255, .2458]])],
+      ["Lower-lash smudge", shape([[.3695, .2548], [.3826, .2559], [.4055, .2554], [.4225, .2538], [.4, .264], [.379, .2622]])]] as const;
+    const list = new RecordList({ label: "Sample starters" });
+    list.update(outlines.map(([name, outline], index) => ({ id: name, name, meta: [index === 0 ? "Default" : "Eye makeup"], thumbnail: shapeThumbnail({ outline, guides, window }) })));
+    const menu = h("div", { class: "menu static-menu", role: "menu", "aria-label": "Starters" }, ...outlines.map(([name, outline], index) => {
+      const main = h("div", { class: "menu-item", role: "menuitem", tabindex: "0", title: name },
+        h("span", { class: "menu-thumb", "aria-hidden": "true" }, shapeThumbnail({ outline, guides, window })),
+        h("span", { class: "menu-text" }, h("span", { class: "menu-label" }, name, index === 0 ? h("span", { class: "menu-tag", text: "Default" }) : null)));
+      return menuSecondaryRow(main, { icon: "star", name: `Use ${name} for new layers`, tone: "neutral", ...(index === 0 ? { capability: { available: false, reason: "Already used for new layers." } } : {}), run: () => {} }).element;
+    }));
+    return stack({ gap: "normal" }, list.element, menu);
   },
   "lib-record-list": () => {
     const saved = new RecordList({ label: "Saved collections" });

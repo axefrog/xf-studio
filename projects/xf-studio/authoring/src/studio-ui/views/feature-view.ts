@@ -14,6 +14,7 @@ import type { NamedTargets, Unnamed } from "../../app/action-targets";
 import type { StudioCapability, StudioOwnerActions, StudioOwnerId, StudioTarget } from "../../app/studio-application";
 import type { EasingId } from "../../platform/api/easing";
 import type { StudioContextHit } from "../../app/studio-context-targets";
+import type { StarterAction, StarterListing } from "../../app/starters/starter-actions";
 import type { FacialPort, FeatureFacade, GenericFeatureFacade, PresentationFeatures, ProjectLinkPort } from "../../app/studio-presentation";
 import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "../../library/part-presets";
 import type { ModuleService } from "../../platform/api";
@@ -45,6 +46,8 @@ export type MenuTarget = Extract<StudioTarget, StudioContextHit>;
 export type FeatureMenuItem<A> =
   | { kind: "action"; label: string; icon?: IconName; action: A; capability?: StudioCapability;
       shortcut?: string; hint?: string; checked?: boolean }
+  /** A command that opens something first (a name popover) rather than dispatching one of the feature's actions: it carries its own capability. */
+  | { kind: "run"; label: string; icon?: IconName; capability: StudioCapability; hint?: string; run(anchor: MenuAnchor): void }
   | { kind: "submenu"; label: string; icon?: IconName; items(): FeatureMenuItem<A>[] };
 /**
  * A feature's menu for one of its targets. The shell puts the application-bound context entries for the
@@ -100,6 +103,14 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
     presetMenu(id: string, anchor: MenuAnchor, invoker?: Element): void;
     reopenPreviousAction(): FeedbackAction;
     import(): void;
+  };
+  /**
+   * The live feature's starter shapes (profiles design §6): the contributed ones and the person's own, and which one new layers use
+   * (undefined before they load). Changes are `platform` actions (`starters.*`); adding a layer from one is the feature's own `layer.edit`.
+   */
+  readonly starters: {
+    list(): StarterListing | undefined;
+    capability(action: StarterAction): StudioCapability;
   };
   /** Open (or bring forward) a panel. */
   reveal(panel: string, focus?: boolean): void;

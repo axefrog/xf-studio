@@ -3,6 +3,7 @@ import { chordLabel, keyBindingById, shortcutLabel } from "../../../app/input-bi
 import type { MenuAnchor, MenuSection } from "../../../studio-ui/menu";
 import type { FeatureMenuItem, FeatureTargetMenu } from "../../../studio-ui/views/feature-view";
 import { catalogues, finishOffered, type EyeMakeupViewContext } from "./actions";
+import { saveStarter } from "./starter-menu";
 
 /** Row reorder chords from the catalogue ("Alt+↑", "Alt+↓"). */
 const reorderKey = (index: 0 | 1) => chordLabel(keyBindingById("rows.reorder").chords[index]);
@@ -37,6 +38,9 @@ export function layerMenu(ctx: EyeMakeupViewContext, layerId: string): FeatureTa
       }) },
     { kind: "action", label: "Reset shape and settings", icon: "reset", action: { kind: "layer.edit", command: { kind: "reset", id: layerId } },
       hint: `Keeps the name; Undo with ${shortcutLabel("shell.undo")}` },
+    // The name is asked in the popover and checked there; the menu entry asks only whether a shape can be saved at all.
+    { kind: "run", label: "Save shape as starter…", icon: "save", capability: ctx.starters.capability({ kind: "starters.save", layerId, name: "Starter" }),
+      run: anchor => saveStarter(ctx, layerId, anchor) },
   ];
   return { label: layer.name, detail: `Layer ${recipe.layers.length - index} of ${recipe.layers.length} from front`,
     title: `${layer.name} layer actions`, items };

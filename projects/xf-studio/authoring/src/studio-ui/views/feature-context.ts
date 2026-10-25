@@ -33,14 +33,15 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
   const featureKinds = new Set<string>(port.features().flatMap(info => port.feature(info.id)?.kinds() ?? []));
   const dispatch = (action: Action, options?: Parameters<StudioRuntime["report"]>[2]) =>
     rt.report(action.kind, facade.dispatch(action), options);
-  const render = (target: MenuTarget, item: FeatureMenuItem<Action>): MenuItem => item.kind === "submenu"
-    ? { kind: "submenu", label: item.label, ...defined({ icon: item.icon }), items: () => item.items().map(entry => render(target, entry)) }
+  const render = (target: MenuTarget, item: FeatureMenuItem<Action>, anchor: Parameters<typeof openMenu>[1]): MenuItem => item.kind === "submenu"
+    ? { kind: "submenu", label: item.label, ...defined({ icon: item.icon }), items: () => item.items().map(entry => render(target, entry, anchor)) }
+    : item.kind === "run" ? { kind: "action", label: item.label, ...defined({ icon: item.icon, hint: item.hint }), capability: item.capability, run: () => { item.run(anchor); } }
     : { kind: "action", label: item.label, ...defined({ icon: item.icon }),
       capability: item.capability ?? facade.contextCapability(target, item.action),
       ...defined({ shortcut: item.shortcut, hint: item.hint, checked: item.checked }), run: () => { dispatch(item.action); } };
   const targetSections = (target: MenuTarget, menu: FeatureTargetMenu<Action>, anchor: Parameters<typeof openMenu>[1]): MenuSection[] => [
     { label: menu.label, detail: menu.detail, items: contextItems(rt, port.authoring.contextQuery(target), anchor) },
-    { items: menu.items.map(item => render(target, item)) }];
+    { items: menu.items.map(item => render(target, item, anchor)) }];
   return Object.freeze({
     facade,
     dispatch,
@@ -71,6 +72,10 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
       reopenPreviousAction: () => reopenPreviousAction(rt),
       import: () => importCollection(rt),
     } satisfies FeatureViewContext["collection"]),
+    starters: Object.freeze({
+      list: () => port.starters?.snapshot(),
+      capability: action => port.authoring.capability(action as never),
+    }),
     reveal: (panel, focus) => rt.dock.reveal(panel, focus),
     openSettings: section => rt.settings.open(section),
     links: Object.freeze({ open: (link: Parameters<typeof port.links.open>[0]) => port.links.open(link) }),
