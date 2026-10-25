@@ -15,6 +15,8 @@ import { WIDE_NAMES } from '../../src/sim/names.ts';
 import type { Id } from '../../src/types.ts';
 
 setDefaultTimeout(300_000);
+// The default suite plays each kit once (see "the kits played"); `S1_FULL=1` plays every kit under every answer and the world-picks-the-wording test over all kits.
+const FULL = process.env.S1_FULL === '1';
 
 const pack = offerKitPack();
 const names = (d: import('../../src/sim/data.ts').S1Data): void => { d.people.names = WIDE_NAMES; };
@@ -124,42 +126,61 @@ describe('the kits played', () => {
     return { r, inst };
   }
 
-  for (const k of KITS) {
-    test(`${k.id}: the offer is made in the words of the people, with a cause, an ask and what it is worth`, () => {
-      const { r } = sow(k.id, `kit-ask-${k.id}`, 'decline');
-      const offer = r.deliveries.find((d) => d.what === 'offer')!;
-      expect(offer, 'an offer was delivered').toBeDefined();
-      expect(offer.words).not.toMatch(/\[[a-z]+\.[a-z]+\]|\{[a-z.]+\}/);
-      for (const n of Object.values(offer.names)) expect(offer.words).toContain(n);
-      // a cause (what happened), an ask (a request) and a stake or reward clause: three sentences at least
-      expect(offer.words.split(/(?<=[.?!])\s+/).length).toBeGreaterThanOrEqual(3);
-      expect(offer.words).toMatch(/\?|Find|Cover|Carry|Deliver|Watch|Pay|Take|Track|Trace|Ask|Will you|Can you|Someone|Somebody|Speak|Whoever|Get the bag/);
-    });
+  /** The ask: made in the words of the people, with a cause, an ask and what it is worth. */
+  function checkAsk(r: Run): void {
+    const offer = r.deliveries.find((d) => d.what === 'offer')!;
+    expect(offer, 'an offer was delivered').toBeDefined();
+    expect(offer.words).not.toMatch(/\[[a-z]+\.[a-z]+\]|\{[a-z.]+\}/);
+    for (const n of Object.values(offer.names)) expect(offer.words).toContain(n);
+    // a cause (what happened), an ask (a request) and a stake or reward clause: three sentences at least
+    expect(offer.words.split(/(?<=[.?!])\s+/).length).toBeGreaterThanOrEqual(3);
+    expect(offer.words).toMatch(/\?|Find|Cover|Carry|Deliver|Watch|Pay|Take|Track|Trace|Ask|Will you|Can you|Someone|Somebody|Speak|Whoever|Get the bag/);
+  }
+
+  /** The answer: its own consequence plays, a fact is written that the exit reads, and the seed resolves. */
+  function checkAnswer(r: Run, inst: ReturnType<typeof sow>['inst'], k: (typeof KITS)[number], exit: number): void {
+    expect(inst.st.state).toBe('resolved');
+    expect(readSeedFact(r.w.l2, inst, 'exit')).toBe(exit);
+    const beats = r.deliveries.filter((d) => d.template === `${OFFER_PACK}:${k.id}`).map((d) => d.beat);
+    expect(beats[0]).toBe('ask');
+    expect(beats).toContain(exit <= 3 ? `x-${k.actions[exit - 1]!.id}` : 'x-decline');
+    const out = r.deliveries.find((d) => d.beat.startsWith('x-'))!;
+    expect(out.words.length).toBeGreaterThan(20);
+    expect(out.words).not.toMatch(/\[[a-z]+\.[a-z]+\]/);
   }
 
   const answers: Array<[string, number]> = [['accept-first', 1], ['accept-middle', 2], ['accept-last', 3], ['decline', 4]];
+
+  // the default: each kit played once, answered by a policy that rotates through the four answers, so that every kit's ask and one of its answers are
+  // checked and every answer (each action and the decline) is checked on at least one kit
+  KITS.forEach((k, i) => {
+    const [policy, exit] = answers[i % answers.length]!;
+    test(`${k.id} answered by ${policy}: the offer is made in the words of the people, and its own consequence plays`, () => {
+      const { r, inst } = sow(k.id, `kit-${k.id}-${policy}`, policy);
+      checkAsk(r);
+      checkAnswer(r, inst, k, exit);
+    });
+  });
+
+  // S1_FULL=1: every kit under every answer, and the ask on its own
   for (const k of KITS) {
+    (FULL ? test : test.skip)(`${k.id}: the offer is made in the words of the people (S1_FULL=1)`, () => {
+      checkAsk(sow(k.id, `kit-ask-${k.id}`, 'decline').r);
+    });
     for (const [policy, exit] of answers) {
-      test(`${k.id} answered by ${policy}: its own consequence plays, a fact is written that the exit reads, and the seed resolves`, () => {
-        const { r, inst } = sow(k.id, `kit-${k.id}-${policy}`, policy);
-        expect(inst.st.state).toBe('resolved');
-        expect(readSeedFact(r.w.l2, inst, 'exit')).toBe(exit);
-        const beats = r.deliveries.filter((d) => d.template === `${OFFER_PACK}:${k.id}`).map((d) => d.beat);
-        expect(beats[0]).toBe('ask');
-        expect(beats).toContain(exit <= 3 ? `x-${k.actions[exit - 1]!.id}` : 'x-decline');
-        const out = r.deliveries.find((d) => d.beat.startsWith('x-'))!;
-        expect(out.words.length).toBeGreaterThan(20);
-        expect(out.words).not.toMatch(/\[[a-z]+\.[a-z]+\]/);
+      (FULL ? test : test.skip)(`${k.id} answered by ${policy}: its own consequence plays, a fact is written that the exit reads, and the seed resolves (S1_FULL=1)`, () => {
+        const { r, inst } = sow(k.id, `kit-${k.id}-${policy}-full`, policy);
+        checkAnswer(r, inst, k, exit);
       });
     }
   }
 
   test('the world picks the wording: the same kit offered in a crackdown and in a quiet district reads differently', () => {
     const seen = new Map<string, Set<string>>();
-    for (const state of ['S-early-quiet', 'S-mid-crackdown', 'S-mid-squeezed']) {
+    for (const state of FULL ? ['S-early-quiet', 'S-mid-crackdown', 'S-mid-squeezed'] : ['S-early-quiet', 'S-mid-crackdown']) {
       const r = new Run({ name: 'kit-world', layer3: true, tempo: 'steady', packs: [pack], s1: names }, stateById(state), policies.decline!);
       const [subject, other] = people(r, false);
-      for (const kit of ['goods-back', 'assault-why']) {
+      for (const kit of FULL ? ['goods-back', 'assault-why'] : ['goods-back']) {
         const res = r.w.l2.sowRequest({ template: `${OFFER_PACK}:${kit}`, pack: OFFER_PACK, overlay: { roles: { subject: { identity: subject }, other: { identity: other } } }, localName: `${kit}-${state}`, decision: H(hs('world-test'), hs(kit), hs(state)) });
         expect(res.ok).toBe(true);
       }
@@ -171,7 +192,7 @@ describe('the kits played', () => {
         seen.set(key, set);
       }
     }
-    // each kit was told in three worlds, and the three tellings are not one text
+    // each kit was told in two worlds (three with S1_FULL=1), and the tellings are not one text
     for (const [, set] of seen) expect(new Set([...set].map((x) => x.replace(/^[^:]+: /, ''))).size).toBeGreaterThanOrEqual(2);
   });
 });
