@@ -104,7 +104,7 @@ describe("0.8.22 the theme generator reads the Studio's in-game table", () => {
     const run = spawnSync("bun", [join(projectDir, "tools", "overlay", "theme.ts"), "--check", "--css", changed], { encoding: "utf8" });
     expect(run.status).toBe(1);
     expect(run.stdout).toContain("out of date");
-  });
+  }, 30_000); // spawns the generator as a separate Bun process: about 12 s under full-suite load
 
   test("the native table has one line per entry, the CET table loads and carries the type roles", () => {
     const native = read("native", "src", "core", "overlay", "ThemeTable.inc");
