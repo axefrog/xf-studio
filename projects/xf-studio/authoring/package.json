@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "bun server.ts",
-    "test": "bun test",
+    "test": "bun test --timeout 20000",
     "check": "tsc --noEmit && tsc -p tools && tsc -p tsconfig.experiments.json && tsc -p ../../../experiments/038-profiles-spikes",
     "build": "bun browser-build.ts",
     "smoke:render": "bun tools/render-smoke.ts"

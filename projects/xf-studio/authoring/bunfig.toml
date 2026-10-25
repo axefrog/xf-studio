@@ -1,4 +1,5 @@
 [test]
 # Removes any scratch folder a test left behind once the whole run ends (tests/temp-dir.ts).
-# A 20 s default per test (tests/test-timeout.ts): heavy tests pass 5 s under full-suite load.
-preload = ["./tests/temp-dir-sweep.ts", "./tests/test-timeout.ts"]
+# The 20 s per-test default is the `--timeout 20000` flag (package.json "test"): Bun 1.4.4 has no bunfig key for it, and a preload's
+# setDefaultTimeout reaches only the first test file of a run.
+preload = ["./tests/temp-dir-sweep.ts"]
