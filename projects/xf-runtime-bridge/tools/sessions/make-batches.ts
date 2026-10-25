@@ -1,36 +1,43 @@
 // Generates the schema-3 batch scripts (tools/session.ts, testing/batch.ts) from one place, so their repeated parts
-// (opening the CET overlay with its capture-based check, the XF box set-up, photo mode's routes) stay consistent:
+// (setting the overlay's look live, opening the CET overlay with its capture-based check, the XF box set-up, photo
+// mode's routes) stay consistent:
 //
 //   bun tools/sessions/make-batches.ts        writes st-styling.json and borg4-smoke.json beside this file
 //
-// st-styling.json: the test card's "In-game styling (0.8.22)" rows ST1-ST12, dark then light, as one unattended
-// batch. What it anticipates, from what the Borg 4 session ran into:
-//   - the staged config has [overlay] enabled = false: the rows require enabled = true and diagnostics = true, so the
-//     runner sets them and restarts (the dry run shows each prelude);
-//   - theme and motion are read only at load: rows are grouped by config (overlay off or on, motion auto, full or
-//     reduced, read-only or changes allowed) and each theme's rows run together, one restart per group;
-//   - frame-generation modules are loaded here, so motion auto reads reduced: the pulse and settle rows require
-//     motion = full, ST3 reduced, and ST9a reads auto against frame generation on purpose;
+// st-styling.json: the test card's "In-game styling (0.8.22)" rows ST1-ST13, dark then light, as one unattended
+// batch. What it anticipates, from what the Borg 4 session ran into and what 0.8.22 added since:
+//   - the staged config has [overlay] enabled = false: every row requires enabled = true and diagnostics = true, so
+//     the runner sets them once before the launch (config.set);
+//   - theme, motion and drawing switch live (overlay.set, in memory): each row sets its own look first, so it holds
+//     after any restart, checks overlay_state shows it, and waits 2.5 s for the CET window and line to repaint. An
+//     overlay that was off at load answers needs_restart: that branch sets config.ini and restarts, then sets the
+//     look again;
+//   - the only restart left: read-only (allow_writes = false) is read at load. Stopped is bridge.kill, so the dark
+//     stopped row comes last among the writes rows (its restart is the read-only one) and the light one ends the run;
+//   - frame-generation modules are loaded here, so motion auto reads reduced: the pulse and settle rows set motion
+//     full, ST3 reduced, and ST9a reads auto against frame generation on purpose;
 //   - the CET overlay opens with the fixtures' cet_overlay_key (Ctrl+` here; the preflight checks CET's
-//     bindings.json agrees); overlay.state's cet_open has read false with CET open, so a capture-based comparison
-//     of the CET window's area before and after the key is the alternative evidence;
+//     bindings.json agrees); a capture-based comparison of the CET window's area before and after the key is the
+//     alternative evidence when overlay.state's cet_open doesn't follow (ST13 checks it does);
 //   - the CET window draws at the bottom left: the crop comes from host.window's regions.cet_window, derived from
 //     the window size;
 //   - the ink panel's answer flash (ST11) fires only in photo mode, with ui.hud modal, a waiting question, and Esc;
-//   - answer_keys = IK_F6 only, required by every row that answers a question;
+//   - answer_keys = IK_F6 only, required by every row;
 //   - photo.open has its routes: the key (retried while the game isn't in front), the posted key, then a note asking
 //     the player and a wait for photo mode;
 //   - a question is answered with F6 (CET closed) or the CET window's button (the player, as the fallback);
 //   - the XF box shows only while the HUD is hidden or the ink panel is off and CET is closed: its rows hide the
-//     ink panel (ui.hud show false) and keep the CET line out (cet_label false);
-//   - Paused is session.handover (the bridge pauses its changes) and session.resume; Stopped is bridge.kill, so
-//     those rows come last in a group and the next row restarts the game;
-//   - the Diagnostics header and the Windows animation setting need the player's hand: an in-game question asks for
-//     the header; ST9b and ST10 (alt-Enter) run only when the fixtures opt in.
+//     ink panel (ui.hud show false) and keep the CET line out (cet_label false); the CET line rows switch the XF
+//     box off live (overlay.set enabled false);
+//   - Paused is session.handover (the bridge pauses its changes) and session.resume;
+//   - the Diagnostics header, CET's Reload all mods and the Windows animation setting need the player's hand: an
+//     in-game question asks; ST9b and ST10 (alt-Enter) run only when the fixtures opt in.
+// The teardown puts the overlay's live look back (the first overlay.set's undo) and restores config.ini.
 // borg4-smoke.json: the Borg 4 PASS rows as a short regression smoke (B318-1, B318-3, B318-4, CS8181, DI2, DI3, CRS).
 
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { closeSteps, launchSteps } from "../testing/batch.ts";
 
 type Json = Record<string, unknown>;
 const key = (row: string, name: string) => `${row.replace(/[^A-Za-z0-9]/g, "_")}_${name}`;
@@ -38,13 +45,14 @@ const ref = (row: string, name: string, path = "") => `$${key(row, name)}${path 
 const CARD = "research/runtime/runtime-bridge-test-card.md#in-game-styling-0822";
 const STUDIO = "XF · Studio's UI review (the style guide's In-game surfaces specimens)";
 
-// ---- Config groups ----------------------------------------------------------------------------------------
+// ---- Config ---------------------------------------------------------------------------------------------------
 
 type Theme = "dark" | "light";
+type Motion = "auto" | "reduced" | "full";
 const cfg = (pairs: Record<string, string>) => Object.entries(pairs).map(([config, equals]) => ({ config, equals }));
-const common = { "ui.answer_keys": "IK_F6", "overlay.scale_percent": "100" };
-const overlayOn = (theme: Theme, motion: string, writes = true) => cfg({ ...common, "bridge.allow_writes": String(writes), "overlay.enabled": "true", "overlay.diagnostics": "true", "overlay.theme": theme, "overlay.motion": motion });
-const overlayOff = (theme: Theme, motion: string) => cfg({ ...common, "bridge.allow_writes": "true", "overlay.enabled": "false", "overlay.theme": theme, "overlay.motion": motion });
+const common = { "ui.answer_keys": "IK_F6", "overlay.scale_percent": "100", "overlay.enabled": "true", "overlay.diagnostics": "true" };
+/** What every ST row needs at load: the overlay on (so its look can switch live), and writes on or off. */
+const atLoad = (writes = true) => cfg({ ...common, "bridge.allow_writes": String(writes) });
 const cetKey = { binding: "cet.overlay_key", equals: "$fixture.cet_overlay_key" };
 
 // ---- Repeated parts ----------------------------------------------------------------------------------------
@@ -57,6 +65,27 @@ const inPlay = (row: string): Json => ({
 /** At the main menu or in play (read-only rows: the bridge can't load a save without writes). */
 const atMenuOrPlay = (row: string): Json => ({ label: `${row}-ready`, do: "run", command: "game.wait", input: { phase: ["main_menu", "gameplay", "menu"], timeout_ms: 60_000 }, deadline_ms: 65_000 });
 const windowOf = (row: string): Json => ({ label: `${row}-window`, do: "host.window", bind: "win" });
+
+/**
+ * The row's look, live: overlay.set, then overlay_state showing it in force (bound as <row>_overlay), then 2.5 s for
+ * the CET window and line to take it with their next info refresh. needs_restart (an overlay off at load): set
+ * config.ini, restart, and set the look again.
+ */
+const look = (row: string, theme: Theme, motion: Motion, enabled = true, writes = true): Json[] => {
+  const input = { theme, motion, enabled, diagnostics: true };
+  return [
+    { label: `${row}-look`, do: "run", command: "overlay.set", input, bind: key(row, "look"),
+      outcomes: [{ name: "needs_restart", match: { code: "needs_restart" }, run: [
+        { do: "note", text: `${row}: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once.` },
+        { do: "config.set", values: { "overlay.enabled": "true", "overlay.diagnostics": "true" } },
+        ...closeSteps(), ...launchSteps(writes),
+        { do: "run", command: "overlay.set", input, bind: key(row, "look") },
+      ] }] },
+    { label: `${row}-in-force`, do: "run", command: "overlay.state", input: {}, until: { all: [{ path: "theme", equals: theme }, { path: "motion.setting", equals: motion }] },
+      interval_ms: 250, deadline_ms: 3000, bind: key(row, "overlay") },
+    { label: `${row}-repaint`, do: "wait", ms: 2500 },
+  ];
+};
 
 /** A guarded key: retried while the game isn't in front, then a note to the player and a longer patient retry. */
 const press = (label: string, keys: string, extra: Json = {}): Json => ({
@@ -81,9 +110,9 @@ const cetOpen = (row: string): Json[] => [
     ]] },
 ];
 /** Closes the CET overlay if this run opened it (cleanup: always). */
-const cetClose = (row: string): Json[] => [
-  { label: `${row}-cet-close`, do: "host.key", keys: "$fixture.cet_overlay_key", when: { match: { ref: "$cetOpen", equals: true } }, retry: { times: 3, backoff_ms: 2000, on: { code: "not_foreground" } } },
-  { label: `${row}-cet-closed`, do: "set", value: false, bind: "cetOpen" },
+const cetClose = (row: string, label = "cet-close"): Json[] => [
+  { label: `${row}-${label}`, do: "host.key", keys: "$fixture.cet_overlay_key", when: { match: { ref: "$cetOpen", equals: true } }, retry: { times: 3, backoff_ms: 2000, on: { code: "not_foreground" } } },
+  { label: `${row}-${label}-flag`, do: "set", value: false, bind: "cetOpen" },
 ];
 /** A full capture plus its crop to the CET window (both evidence). */
 const cetShot = (row: string, name: string, bind: string): Json[] => [
@@ -94,6 +123,8 @@ const cetShot = (row: string, name: string, bind: string): Json[] => [
 const xfBox = (row: string): Json[] => [
   { label: `${row}-xfbox`, do: "run", command: "ui.hud", input: { show: false, cet_label: false }, bind: key(row, "hud") },
 ];
+/** The CET line as the status surface: the XF box off (live), the ink panel off, the line on. */
+const cetLine = (row: string): Json => ({ label: `${row}-line`, do: "run", command: "ui.hud", input: { show: false, cet_label: true }, bind: key(row, "hud") });
 const hudBack = (row: string): Json => ({ label: `${row}-hud-back`, do: "run", command: "ui.hud", input: { reset: true } });
 const overlayState = (row: string, name = "overlay"): Json => ({ label: `${row}-${name}`, do: "run", command: "overlay.state", input: {}, bind: key(row, name) });
 const captured = (label: string, row: string, bind: string) => ({ label, ref: ref(row, bind), captured: true });
@@ -102,39 +133,67 @@ const resume = (row: string): Json => ({ label: `${row}-resume`, do: "run", comm
 
 // ---- The ST rows -------------------------------------------------------------------------------------------
 
-function overlayOffRows(theme: Theme): Json[] {
+/** Motion auto against frame generation, the CET line under it, the Windows half of ST9 (opt-in), and ST13's cet_open. */
+function firstRows(): Json[] {
+  const requires = [...atLoad(), cetKey];
+  let row = "ST9a-dark";
+  const rows: Json[] = [{ id: row, title: "Motion auto with frame generation loaded reads reduced (ST9, the frame-generation half)", requires,
+    steps: [inPlay(row), ...look(row, "dark", "auto")],
+    pass: [check("setting auto", row, "overlay", "motion.setting", { equals: "auto" }), check("reduced", row, "overlay", "motion.effective", { equals: "reduced" }),
+      check("because of frame generation", row, "overlay", "motion.reason", { equals: "frame_generation" }), check("frame-generation modules listed", row, "overlay", "frame_generation_modules.0", { exists: true })] }];
+  row = "ST8-dark-auto";
+  rows.push({ id: row, title: "CET line connected with motion auto under frame generation: a still dot (the Borg 4 ST8 repeat)", requires, judged_by: STUDIO,
+    steps: [inPlay(row), ...look(row, "dark", "auto", false), cetLine(row),
+      { label: `${row}-burst`, do: "burst", name: "ST8-cetline-connected-auto-dark", frames: 6, interval_ms: 240, clear_overlay: false, bind: key(row, "burst") }],
+    pass: [captured("the still dot", row, "burst")], cleanup: [hudBack(row)] });
+  row = "ST9b-dark";
+  rows.push({ id: row, title: "Motion auto follows Windows' Animation effects within 2 s (ST9, the Windows half; the player changes the setting)",
+    requires: [...requires, { fixture: "allow_windows_animation_check", note: "the player turns Windows' Animation effects off and back; set allow_windows_animation_check in the fixtures to run it" }],
+    steps: [inPlay(row), ...look(row, "dark", "auto"),
+      { label: `${row}-off`, do: "ask", text: "ST9: please turn Windows' Settings > Accessibility > Visual effects > Animation effects OFF, then press Done.", choices: ["Done"], deadline_ms: 300_000 },
+      { label: `${row}-follows`, do: "run", command: "overlay.state", input: {}, until: { path: "motion.reason", equals: "windows_animations_off" }, interval_ms: 500, deadline_ms: 5000, bind: key(row, "off"), on_fail: "fail_row" },
+      { label: `${row}-on`, do: "ask", text: "ST9: thank you. Please turn Animation effects back ON, then press Done.", choices: ["Done"], deadline_ms: 300_000, on_fail: "continue" }],
+    pass: [check("reduced by Windows", row, "off", "motion.reason", { equals: "windows_animations_off" })] });
+  row = "ST13-dark";
+  const state = (name: string): Json => ({ label: `${row}-${name}`, do: "run", command: "overlay.state", input: {}, bind: key(row, name) });
+  rows.push({ id: row, title: "cet_open follows CET's overlay with the XF box off: false, true, false, then true after CET's Reload all mods", requires,
+    steps: [inPlay(row), ...look(row, "dark", "full", false), state("closed1"),
+      press(`${row}-open`, "$fixture.cet_overlay_key"), { label: `${row}-opened`, do: "set", value: true, bind: "cetOpen" }, { label: `${row}-w1`, do: "wait", ms: 700 }, state("open1"),
+      ...cetClose(row, "close1"), { label: `${row}-w2`, do: "wait", ms: 700 }, state("closed2"),
+      press(`${row}-open2`, "$fixture.cet_overlay_key"), { label: `${row}-opened2`, do: "set", value: true, bind: "cetOpen" },
+      // The answer comes before the reload (a reload rebuilds the XF Runtime Bridge window and its question).
+      { label: `${row}-reload`, do: "ask", text: "ST13: press Done, then within 10 s press Reload all mods in the CET overlay (leave the overlay open).", choices: ["Done"], deadline_ms: 180_000 },
+      { label: `${row}-reloading`, do: "wait", ms: 12_000 },
+      { label: `${row}-after-reload`, do: "run", command: "overlay.state", input: {}, until: { path: "cet_open", equals: true }, interval_ms: 500, deadline_ms: 8000, bind: key(row, "reloaded"), on_fail: "continue" }],
+    pass: [check("closed: false", row, "closed1", "cet_open", { equals: false }), check("open: true", row, "open1", "cet_open", { equals: true }),
+      check("closed again: false", row, "closed2", "cet_open", { equals: false }), check("after the reload, open: true", row, "reloaded", "cet_open", { equals: true })],
+    cleanup: [...cetClose(row)] });
+  return rows;
+}
+
+/** The rows with changes allowed, for one theme, all switched live. */
+function writesRows(theme: Theme): Json[] {
   const rows: Json[] = [];
-  const requires = [...overlayOff(theme, "full")];
+  const requires = [...atLoad(), cetKey];
   let row = `ST8-${theme}-connected`;
   rows.push({ id: row, title: `CET line, connected, motion full (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), { label: `${row}-line`, do: "run", command: "ui.hud", input: { show: false, cet_label: true }, bind: key(row, "hud") }, overlayState(row),
+    steps: [inPlay(row), ...look(row, theme, "full", false), cetLine(row),
       { label: `${row}-burst`, do: "burst", name: `ST8-cetline-connected-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, bind: key(row, "burst") }],
     pass: [check("motion full in force", row, "overlay", "motion.effective", { equals: "full" }), captured("the pulse burst", row, "burst")],
     cleanup: [hudBack(row)] });
   row = `ST8-${theme}-paused`;
   rows.push({ id: row, title: `CET line, paused (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), { label: `${row}-line`, do: "run", command: "ui.hud", input: { show: false, cet_label: true } },
+    steps: [inPlay(row), ...look(row, theme, "full", false), cetLine(row),
       { label: `${row}-pause`, do: "run", command: "session.handover", input: { note: `${row}: the paused CET line`, restore_ui: false } },
       { label: `${row}-wait`, do: "wait", ms: 800 },
       { label: `${row}-shot`, do: "capture", name: `ST8-cetline-paused-${theme}`, clear_overlay: false, bind: key(row, "shot") }],
     pass: [captured("the paused line", row, "shot")],
     cleanup: [resume(row), hudBack(row)] });
-  row = `ST8-${theme}-stopped`;
-  rows.push({ id: row, title: `CET line, stopped (${theme}; the bridge is switched off, then the game restarts)`, requires, judged_by: STUDIO, after: "restart",
-    steps: [inPlay(row), { label: `${row}-line`, do: "run", command: "ui.hud", input: { show: false, cet_label: true } },
-      { label: `${row}-kill`, do: "run", command: "bridge.kill", input: {} }, { label: `${row}-wait`, do: "wait", ms: 800 },
-      { label: `${row}-shot`, do: "capture", name: `ST8-cetline-stopped-${theme}`, clear_overlay: false, bind: key(row, "shot") }],
-    pass: [captured("the stopped line", row, "shot")] });
-  return rows;
-}
 
-function overlayOnRows(theme: Theme): Json[] {
-  const rows: Json[] = [];
-  const requires = [...overlayOn(theme, "full"), cetKey];
   const n = theme === "dark" ? "ST1" : "ST2";
-  let row = `${n}-${theme}`;
+  row = `${n}-${theme}`;
   rows.push({ id: row, title: `The XF box with diagnostics, motion full (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), ...xfBox(row), overlayState(row),
+    steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row),
       // The question shows in the box while it is captured (the card's "the question and its keys"); the player's answer is the visibility check.
       { label: `${row}-ask-and-shoot`, together: [
         { do: "ask", text: `${n}: is the XF box fully visible, or partly cut off?`, choices: ["Fully visible", "Partly cut off"], deadline_ms: 90_000, bind: key(row, "answer"), on_fail: "continue" },
@@ -147,14 +206,14 @@ function overlayOnRows(theme: Theme): Json[] {
 
   row = `ST4-${theme}-changes`;
   rows.push({ id: row, title: `The dot's pulse with changes allowed, motion full (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), ...xfBox(row), overlayState(row),
+    steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row),
       { label: `${row}-burst`, do: "burst", name: `ST4-xfbox-pulse-changes-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, bind: key(row, "burst") }],
     pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the pulse burst (12 x 200 ms, one 2.4 s period)", row, "burst")],
     cleanup: [hudBack(row)] });
 
   row = `ST5-${theme}`;
   rows.push({ id: row, title: `The settle on a change of state, and none for a second change within 2 s (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), ...xfBox(row), overlayState(row),
+    steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row),
       { label: `${row}-change`, together: [
         { do: "burst", name: `ST5-xfbox-settle-${theme}`, frames: 20, interval_ms: 100, clear_overlay: false, bind: key(row, "burst") },
         { sequence: [{ do: "wait", ms: 300 }, { do: "run", command: "session.handover", input: { note: `${row}: settle`, restore_ui: false } }, { do: "wait", ms: 700 }, { do: "run", command: "session.resume", input: {} }] },
@@ -166,7 +225,7 @@ function overlayOnRows(theme: Theme): Json[] {
 
   row = `ST6-${theme}-chips`;
   rows.push({ id: row, title: `The chips: Changes allowed, then Paused (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), windowOf(row), ...cetOpen(row), ...cetShot(row, `ST6-cet-chip-changes-${theme}`, "changes"),
+    steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row), ...cetShot(row, `ST6-cet-chip-changes-${theme}`, "changes"),
       { label: `${row}-pause`, do: "run", command: "session.handover", input: { note: `${row}: the Paused chip`, restore_ui: false } },
       { label: `${row}-wait`, do: "wait", ms: 800 },
       ...cetShot(row, `ST6-cet-chip-paused-${theme}`, "paused")],
@@ -175,13 +234,13 @@ function overlayOnRows(theme: Theme): Json[] {
 
   row = `ST7-${theme}-running`;
   rows.push({ id: row, title: `The CET window running with changes allowed, and the disabled Send (ST12) (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), windowOf(row), ...cetOpen(row), ...cetShot(row, `ST7-cet-running-${theme}`, "running")],
+    steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row), ...cetShot(row, `ST7-cet-running-${theme}`, "running")],
     pass: [captured("the window", row, "running")],
     cleanup: [...cetClose(row)] });
 
   row = `ST7-${theme}-question`;
   rows.push({ id: row, title: `The CET window: a question waiting (it breathes), then answered with F6 (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), windowOf(row), ...cetOpen(row),
+    steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
       { label: `${row}-cursor`, do: "cursor", bind: key(row, "cursor") },
       { label: `${row}-ask`, do: "run", command: "ui.message", input: { level: "ask", text: `${row}: a waiting question (the runner answers it with F6).`, choices: ["First", "Second", "Third"], seconds: 180 }, bind: key(row, "q") },
       { label: `${row}-wait1`, do: "wait", ms: 600 },
@@ -197,7 +256,6 @@ function overlayOnRows(theme: Theme): Json[] {
           { do: "await", cursor: ref(row, "cursor"), kind: "answer", message_id: ref(row, "q", "id"), timeout_s: 120, bind: key(row, "answer") },
         ]] },
       { label: `${row}-window2`, do: "host.window", bind: "win" },
-      { label: `${row}-reopen-before`, do: "capture", name: `${row}-cet-before2`, clear_overlay: false, bind: key(row, "cetBefore2") },
       press(`${row}-reopen`, "$fixture.cet_overlay_key"),
       { label: `${row}-reopened`, do: "set", value: true, bind: "cetOpen" },
       { label: `${row}-settle`, do: "wait", ms: 700 },
@@ -209,7 +267,7 @@ function overlayOnRows(theme: Theme): Json[] {
 
   row = `ST7-${theme}-diagnostics`;
   rows.push({ id: row, title: `The CET window with the DIAGNOSTICS header open (${theme}; the player opens it)`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), windowOf(row), ...cetOpen(row),
+    steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
       { label: `${row}-ask`, do: "ask", text: `${row}: please click the DIAGNOSTICS header in the XF Runtime Bridge window to open it, then press Done.`, choices: ["Done"], deadline_ms: 180_000 },
       { label: `${row}-settle`, do: "wait", ms: 500 },
       ...cetShot(row, `ST7-cet-diagnostics-${theme}`, "diag")],
@@ -218,7 +276,7 @@ function overlayOnRows(theme: Theme): Json[] {
 
   row = `ST11-${theme}`;
   rows.push({ id: row, title: `The ink panel's answer flash in photo mode (modal, a waiting question, Esc) (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row),
+    steps: [inPlay(row), ...look(row, theme, "full"),
       { label: `${row}-photo`, do: "run", command: "photo.open", input: {}, deadline_ms: 12_000, retry: { times: 2, backoff_ms: 2000, on: { code: "not_foreground" } },
         alternatives: [
           [{ do: "run", command: "photo.open", input: { route: "postmessage" }, deadline_ms: 12_000 }],
@@ -240,26 +298,16 @@ function overlayOnRows(theme: Theme): Json[] {
   if (theme === "dark") {
     row = "ST10-dark";
     rows.push({ id: row, title: "Fonts baked once: overlay.state across a window-mode change (alt-Enter twice)", requires: [...requires, { fixture: "allow_alt_enter", note: "alt-Enter changes the window mode; set allow_alt_enter in the fixtures to run it" }],
-      steps: [inPlay(row), ...xfBox(row), overlayState(row, "before"), press(`${row}-toggle`, "Alt+Enter"), { label: `${row}-w1`, do: "wait", ms: 5000 }, overlayState(row, "mid"),
+      steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row), overlayState(row, "before"), press(`${row}-toggle`, "Alt+Enter"), { label: `${row}-w1`, do: "wait", ms: 5000 }, overlayState(row, "mid"),
         press(`${row}-back`, "Alt+Enter"), { label: `${row}-w2`, do: "wait", ms: 5000 }, overlayState(row, "after"), windowOf(row)],
       pass: [check("a resize was seen", row, "after", "resizes", { min: 1 }), check("frames kept rising", row, "after", "frames", { min: ref(row, "mid", "frames") }),
         check("still drawing", row, "after", "drawing_now", { equals: true })],
       cleanup: [hudBack(row)] });
   }
 
-  row = `ST7-${theme}-stopped`;
-  rows.push({ id: row, title: `Stopped: the CET window with Reconnect, and the Stopped chip (ST6) (${theme}; the game restarts after)`, requires, judged_by: STUDIO, after: "restart",
-    steps: [inPlay(row), windowOf(row), ...cetOpen(row), { label: `${row}-kill`, do: "run", command: "bridge.kill", input: {} }, { label: `${row}-wait`, do: "wait", ms: 800 },
-      ...cetShot(row, `ST7-cet-stopped-${theme}`, "stopped")],
-    pass: [captured("stopped, with Reconnect", row, "stopped")],
-    cleanup: [...cetClose(row)] });
-  return rows;
-}
-
-function reducedRows(theme: Theme): Json[] {
-  const row = `ST3-${theme}`;
-  return [{ id: row, title: `The XF box with motion reduced: a still dot, no settle (${theme})`, requires: [...overlayOn(theme, "reduced")], judged_by: STUDIO,
-    steps: [inPlay(row), ...xfBox(row), overlayState(row),
+  row = `ST3-${theme}`;
+  rows.push({ id: row, title: `The XF box with motion reduced: a still dot, no settle (${theme})`, requires, judged_by: STUDIO,
+    steps: [inPlay(row), ...look(row, theme, "reduced"), ...xfBox(row),
       { label: `${row}-still`, do: "burst", name: `ST3-xfbox-reduced-${theme}`, frames: 6, interval_ms: 240, clear_overlay: false, bind: key(row, "still") },
       { label: `${row}-change`, together: [
         { do: "burst", name: `ST3-xfbox-reduced-settle-${theme}`, frames: 10, interval_ms: 100, clear_overlay: false, bind: key(row, "settle") },
@@ -268,45 +316,37 @@ function reducedRows(theme: Theme): Json[] {
     pass: [check("motion reduced", row, "overlay", "motion.effective", { equals: "reduced" }), check("by the setting", row, "overlay", "motion.reason", { equals: "setting" }),
       captured("still dot (6 x 240 ms)", row, "still"), captured("no wash on a change", row, "settle"),
       check("all 10 settle frames", row, "settle", "frames.9", { exists: true }), check("over about 1 s", row, "settle", "timing.first_to_last_ms", { min: 800 })],
-    cleanup: [resume(row), hudBack(row)] }];
+    cleanup: [resume(row), hudBack(row)] });
+  return rows;
 }
 
+/** Stopped: the CET window with Reconnect and the Stopped chip (ST7, ST6), then the stopped CET line (ST8), from one bridge.kill. */
+function stoppedRow(theme: Theme, writes: boolean): Json {
+  const row = `ST7-${theme}-stopped`;
+  return { id: row, title: `Stopped (one bridge.kill): the CET window with Reconnect, the Stopped chip, the stopped CET line (ST7, ST6, ST8) (${theme})`,
+    requires: [...atLoad(writes), cetKey], judged_by: STUDIO, ...(writes ? { after: "restart" } : {}),
+    steps: [writes ? inPlay(row) : atMenuOrPlay(row), ...look(row, theme, "full", false, writes), cetLine(row), windowOf(row), ...cetOpen(row),
+      { label: `${row}-kill`, do: "run", command: "bridge.kill", input: {} }, { label: `${row}-wait`, do: "wait", ms: 800 },
+      ...cetShot(row, `ST7-cet-stopped-${theme}`, "stopped"), ...cetShot(row, `ST6-cet-chip-stopped-${theme}`, "chip"),
+      ...cetClose(row, "cet-close-for-line"), { label: `${row}-line-wait`, do: "wait", ms: 800 },
+      { label: `${row}-line-shot`, do: "capture", name: `ST8-cetline-stopped-${theme}`, clear_overlay: false, bind: key(row, "line") }],
+    pass: [captured("stopped, with Reconnect", row, "stopped"), captured("the Stopped chip", row, "chip"), captured("the stopped CET line", row, "line")],
+    cleanup: [...cetClose(row)] };
+}
+
+/** Read-only (the one restart: allow_writes is read at load): the chip, the window, the pulse; at the main menu. */
 function readOnlyRows(theme: Theme): Json[] {
-  const requires = [...overlayOn(theme, "full", false), cetKey];
+  const requires = [...atLoad(false), cetKey];
   let row = `ST6-${theme}-readonly`;
   const rows: Json[] = [{ id: row, title: `Read-only: the chip and the CET window running read-only (ST6, ST7) (${theme}; at the menu)`, requires, judged_by: STUDIO,
-    steps: [atMenuOrPlay(row), windowOf(row), ...cetOpen(row), ...cetShot(row, `ST6-cet-chip-readonly-${theme}`, "chip"), ...cetShot(row, `ST7-cet-running-readonly-${theme}`, "running")],
+    steps: [atMenuOrPlay(row), ...look(row, theme, "full", true, false), windowOf(row), ...cetOpen(row), ...cetShot(row, `ST6-cet-chip-readonly-${theme}`, "chip"), ...cetShot(row, `ST7-cet-running-readonly-${theme}`, "running")],
     pass: [captured("Read-only chip", row, "chip"), captured("running read-only", row, "running")],
     cleanup: [...cetClose(row)] }];
   row = `ST4-${theme}-readonly`;
   rows.push({ id: row, title: `The dot's pulse, connected and read-only, motion full (${theme}; the XF box at the menu)`, requires, judged_by: STUDIO,
-    steps: [atMenuOrPlay(row), overlayState(row),
+    steps: [atMenuOrPlay(row), ...look(row, theme, "full", true, false),
       { label: `${row}-burst`, do: "burst", name: `ST4-xfbox-pulse-readonly-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, bind: key(row, "burst") }],
     pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), check("the XF box draws", row, "overlay", "drawing_now", { equals: true }), captured("the pulse burst", row, "burst")] });
-  return rows;
-}
-
-function stagedRows(): Json[] {
-  // The staged config as it is (overlay off, motion auto): what frame generation does to auto, and the Borg 4 ST8 repeat.
-  const requires = overlayOff("dark", "auto");
-  let row = "ST9a-dark";
-  const rows: Json[] = [{ id: row, title: "Motion auto with frame generation loaded reads reduced (ST9, the frame-generation half)", requires,
-    steps: [inPlay(row), overlayState(row)],
-    pass: [check("setting auto", row, "overlay", "motion.setting", { equals: "auto" }), check("reduced", row, "overlay", "motion.effective", { equals: "reduced" }),
-      check("because of frame generation", row, "overlay", "motion.reason", { equals: "frame_generation" }), check("frame-generation modules listed", row, "overlay", "frame_generation_modules.0", { exists: true })] }];
-  row = "ST8-dark-auto";
-  rows.push({ id: row, title: "CET line connected with motion auto under frame generation: a still dot (the Borg 4 ST8 repeat)", requires, judged_by: STUDIO,
-    steps: [inPlay(row), { label: `${row}-line`, do: "run", command: "ui.hud", input: { show: false, cet_label: true } },
-      { label: `${row}-burst`, do: "burst", name: "ST8-cetline-connected-auto-dark", frames: 6, interval_ms: 240, clear_overlay: false, bind: key(row, "burst") }],
-    pass: [captured("the still dot", row, "burst")], cleanup: [hudBack(row)] });
-  row = "ST9b-dark";
-  rows.push({ id: row, title: "Motion auto follows Windows' Animation effects within 2 s (ST9, the Windows half; the player changes the setting)",
-    requires: [...requires, { fixture: "allow_windows_animation_check", note: "the player turns Windows' Animation effects off and back; set allow_windows_animation_check in the fixtures to run it" }],
-    steps: [inPlay(row), overlayState(row, "before"),
-      { label: `${row}-off`, do: "ask", text: "ST9: please turn Windows' Settings > Accessibility > Visual effects > Animation effects OFF, then press Done.", choices: ["Done"], deadline_ms: 300_000 },
-      { label: `${row}-follows`, do: "run", command: "overlay.state", input: {}, until: { path: "motion.reason", equals: "windows_animations_off" }, interval_ms: 500, deadline_ms: 5000, bind: key(row, "off"), on_fail: "fail_row" },
-      { label: `${row}-on`, do: "ask", text: "ST9: thank you. Please turn Animation effects back ON, then press Done.", choices: ["Done"], deadline_ms: 300_000, on_fail: "continue" }],
-    pass: [check("reduced by Windows", row, "off", "motion.reason", { equals: "windows_animations_off" })] });
   return rows;
 }
 
@@ -314,10 +354,10 @@ function stScript(): Json {
   return {
     schema: "xfb/session-script-3",
     name: "st-styling-0822",
-    title: "In-game styling (0.8.22): ST1-ST12, dark then light",
+    title: "In-game styling (0.8.22): ST1-ST13, dark then light, the look switched live",
     card: CARD,
     requires: [
-      "The XF test profile with the bridge's -writes build staged (0.8.22 or later); the runner sets config.ini's [overlay] and [ui] keys per row and restores the file at the end.",
+      "The XF test profile with the bridge's autonomous -writes build staged (0.8.22 with overlay.set); the runner sets config.ini's [overlay] enabled and diagnostics once and restores the file at the end.",
       "A private fixtures file (--fixtures): mo2 {exe, profile, executable, arguments: -skipStartScreen}, game_dir, staged_mod, save, cet_overlay_key (Ctrl+` here), commit_floor_gb.",
       "Borderless windowed, the game window in front; Windows' Do Not Disturb on (focus-taking toasts stopped the Borg 4 key press).",
       "Captures are evidence for XF · Studio's UI review; a PASS here means the state and the capture, not the design verdict.",
@@ -326,8 +366,7 @@ function stScript(): Json {
       { label: "cet-closed", do: "set", value: false, bind: "cetOpen" },
       { label: "commit", do: "host.commit", on_fail: "stop" },
     ],
-    rows: [...stagedRows(), ...overlayOffRows("dark"), ...overlayOnRows("dark"), ...reducedRows("dark"), ...readOnlyRows("dark"),
-      ...readOnlyRows("light"), ...overlayOnRows("light"), ...reducedRows("light"), ...overlayOffRows("light")],
+    rows: [...firstRows(), ...writesRows("dark"), ...writesRows("light"), stoppedRow("dark", true), ...readOnlyRows("dark"), ...readOnlyRows("light"), stoppedRow("light", false)],
     teardown: [{ label: "cet", do: "host.key", keys: "$fixture.cet_overlay_key", when: { match: { ref: "$cetOpen", equals: true } } }],
   };
 }

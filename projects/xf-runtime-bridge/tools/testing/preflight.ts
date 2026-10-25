@@ -249,8 +249,14 @@ export async function preflight(options: PreflightOptions): Promise<PreflightRes
   // Frame generation: motion auto reads reduced while a module is loaded.
   const modules = gameDir ? (options.listDir ?? list)(join(gameDir, "bin", "x64")).filter((n) => FRAME_GENERATION_MODULES.includes(n.toLowerCase())) : [];
   if (modules.length) {
-    const auto = rows.filter((r) => (r.requires ?? []).some((n) => n.config === "overlay.motion" && n.equals === "auto")).map((r) => r.id);
-    const full = rows.filter((r) => (r.requires ?? []).some((n) => n.config === "overlay.motion" && n.equals === "full")).map((r) => r.id);
+    // A row's motion: set at load (a config requirement) or live (an overlay.set in its steps).
+    const motionOf = (id: string, wanted: string) => {
+      const entry = planned.rows.find((r) => r.row.id === id)!;
+      return (entry.row.requires ?? []).some((n) => n.config === "overlay.motion" && n.equals === wanted) ||
+        allSteps(entry.plan.steps).some((st) => commandOf(st as Record<string, unknown>) === "overlay.set" && (st.input as { motion?: string } | undefined)?.motion === wanted);
+    };
+    const auto = rows.filter((r) => motionOf(r.id, "auto")).map((r) => r.id);
+    const full = rows.filter((r) => motionOf(r.id, "full")).map((r) => r.id);
     add("info", "frame generation", `${modules.join(", ")} in the game folder: motion auto reads reduced (reason frame_generation)${auto.length ? ` for ${auto.join(", ")}` : ""}; ${full.length ? `${full.length} rows set motion = full for animation` : "no row sets motion = full"}.`);
   } else if (gameDir) add("info", "frame generation", "no frame-generation module in the game folder");
 

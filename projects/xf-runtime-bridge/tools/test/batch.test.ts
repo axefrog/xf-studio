@@ -266,12 +266,18 @@ describe("batch: planning", () => {
     walk(st.rows);
     expect(names.length).toBeGreaterThan(40);
     for (const name of names) expect(name).toMatch(/^ST\d+-[a-z]+-[a-z0-9-]+-(dark|light)$/);
-    // Dark rows come before light ones, and each theme's restarts are batched.
-    const themes = st.rows.map((r) => (r.requires ?? []).find((n) => n.config === "overlay.theme")?.equals);
-    expect(themes.lastIndexOf("dark")).toBeLessThan(themes.indexOf("light"));
-    expect(simulateConfig(st.rows, readIni(STAGED_INI.replace("[overlay]", "[overlay]\r\nscale_percent = 100\r\ndiagnostics = false"))).filter((s) => s.restart).length).toBeLessThanOrEqual(9);
+    // Every row sets its own look live first; the writes rows' dark ones come before their light ones.
+    const lookOf = (r: Row) => (r.steps.find((st) => st.command === "overlay.set")?.input as { theme?: string } | undefined)?.theme;
+    expect(st.rows.every((r) => lookOf(r) !== undefined)).toBe(true);
+    // (The dark stopped row, which kills the bridge, closes the writes rows: its restart is the read-only one.)
+    const writes = st.rows.filter((r) => r.after !== "restart" && (r.requires ?? []).some((n) => n.config === "bridge.allow_writes" && n.equals === "true")).map(lookOf);
+    expect(writes.lastIndexOf("dark")).toBeLessThan(writes.indexOf("light"));
+    // One restart: the config goes in before the launch, and read-only is the only value read at load that changes.
+    const plan = simulateConfig(st.rows, readIni(STAGED_INI.replace("[overlay]", "[overlay]\r\nscale_percent = 100\r\ndiagnostics = false")));
+    expect(plan.slice(1).filter((s) => s.restart).length).toBe(1);
+    expect(st.rows.at(-1)!.id).toBe("ST7-light-stopped");
     const tree = describeBatch(st, readIni(STAGED_INI));
-    expect(tree.some((line) => line.includes("prelude (from the staged config): overlay.enabled = true"))).toBe(true);
+    expect(tree.some((line) => line.includes("prelude (from the staged config)") && line.includes("overlay.enabled = true"))).toBe(true);
     expect(tree.length).toBeGreaterThan(500);
   });
 });

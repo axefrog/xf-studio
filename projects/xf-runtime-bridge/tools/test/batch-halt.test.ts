@@ -178,3 +178,41 @@ describe("the loop's signal and next attempt", () => {
     expect(readResume(dir)).toMatchObject({ attempt: 2, rows: ["x"] });
   });
 });
+
+describe("the overlay's look, live (overlay.set)", () => {
+  const set = (theme: string) => ({ do: "run", command: "overlay.set", input: { theme, motion: "full" } });
+  test("the teardown puts back each key as the first overlay.set of the game session found it", async () => {
+    const clock = new FakeClock();
+    let theme = "dark";
+    let motion = "auto";
+    const api = fakeApi(clock, { "overlay.set": (input) => {
+      const undo: Record<string, unknown> = {};
+      if (input.theme) { undo.theme = theme; theme = input.theme; }
+      if (input.motion) { undo.motion = motion; motion = input.motion; }
+      return { ok: true, result: { theme, motion: { setting: motion }, undo: { method: "overlay.set", params: undo } } };
+    } });
+    const rows: Row[] = [{ id: "a", title: "a", steps: [set("light")] }, { id: "b", title: "b", steps: [set("dark"), set("light")] }];
+    await go(script(rows), api, fakeHost(), clock, tempDir("xfb-batch-"));
+    expect(api.calls.filter((c) => c.name === "overlay.set").at(-1)!.input).toEqual({ theme: "dark", motion: "auto" });
+    expect([theme, motion]).toEqual(["dark", "auto"]);
+  });
+
+  test("needs_restart (the overlay off at load): config.ini gets it, the game restarts once, and the look is set again", async () => {
+    const clock = new FakeClock();
+    const dir = tempDir("xfb-batch-");
+    const mod = stagedMod(dir);
+    const api = fakeApi(clock, {
+      "overlay.set": (_i, n) => (n === 1 ? { ok: false, code: "needs_restart", message: "off at load" } : { ok: true, result: { theme: "dark", motion: { setting: "auto" } } }),
+      "overlay.state": () => ({ ok: true, result: { theme: "dark", motion: { setting: "auto", effective: "reduced", reason: "frame_generation" }, frame_generation_modules: ["nvngx_dlssg.dll"] } }),
+    });
+    const host = fakeHost({ running: true });
+    const st = JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "st-styling.json"), "utf8"));
+    // ST9a's own steps, with the staged config already as the rows need it (so only the branch restarts).
+    const row = { ...st.rows.find((r: Row) => r.id === "ST9a-dark"), requires: [], pass: [] };
+    const result = await go(script([row]), api, host, clock, dir, { fixtures: { staged_mod: mod, mo2: { exe: "m", profile: "p", executable: "g" } } });
+    expect(result.rows[0].verdict).toBe("PASS");
+    expect(host.log.filter((l) => l === "close" || l === "launch")).toEqual(["close", "launch"]);
+    expect(api.calls.filter((c) => c.name === "overlay.set").length).toBeGreaterThanOrEqual(2);
+    expect(result.rows[0].reports.some((r) => r.branch === "needs_restart")).toBe(true);
+  });
+});
