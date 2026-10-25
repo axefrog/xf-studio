@@ -382,6 +382,12 @@ export type BatchContext = {
   /** The commit floor in GB (fixtures commit_floor_gb, default 4) and how often it is read. */
   commitFloorGb?: number;
   commitEveryMs?: number;
+  /**
+   * A second, observational API for captures that leave the overlay alone (clear_overlay false): its lifetime is
+   * its own, so a session.handover in the same beat (which supersedes the writer's in-flight work) can't cancel
+   * the burst recording it.
+   */
+  observer?: Pick<CommandApi, "run">;
 };
 
 const GB = 1024 ** 3;
@@ -569,7 +575,8 @@ export class SessionExecutor implements Executor {
   }
 
   private async runCommand(command: string, input: Record<string, unknown>, expectError: string | undefined, context: ExecContext): Promise<Outcome> {
-    const outcome = await this.api.run(command, input, { source: "session", captureRoot: this.rowDir, signal: context.signal });
+    const observing = this.c.observer && ["capture.screenshot", "capture.burst"].includes(command) && input.clear_overlay === false;
+    const outcome = await (observing ? this.c.observer! : this.api).run(command, input, { source: "session", captureRoot: this.rowDir, signal: context.signal });
     if (!outcome.ok) {
       if (outcome.error.code === "handed_over") return { ok: false, code: "handed_over", message: outcome.error.message, halt: HANDED_OVER };
       if (expectError && outcome.error.code === expectError) return { ok: true, code: outcome.error.code, value: { refused: outcome.error } };
@@ -758,6 +765,8 @@ export type BatchRunOptions = {
   resumeCommand?: (rows: string[]) => string;
   /** Bridge pings before the bridge counts as lost (default 3, 2 s apart). */
   bridgeProbes?: number;
+  /** The observational API for overlay-preserving captures (see BatchContext.observer). */
+  observer?: Pick<CommandApi, "run"> & { close?: () => void };
 };
 export type BatchResult = {
   ok: boolean;
@@ -805,7 +814,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
     const path = typeof fixtures.game_dir === "string" ? join(fixtures.game_dir, "bin", "x64", "plugins", "cyber_engine_tweaks", "bindings.json") : "";
     return path && existsSync(path) ? readFileSync(path, "utf8") : null;
   });
-  const executor = new SessionExecutor({ api: options.api, host: options.host, outDir: options.outDir, fixtures, clock, log, echo: options.echo !== false, config, readCetBindings,
+  const executor = new SessionExecutor({ api: options.api, observer: options.observer, host: options.host, outDir: options.outDir, fixtures, clock, log, echo: options.echo !== false, config, readCetBindings,
     commitFloorGb: typeof fixtures.commit_floor_gb === "number" ? fixtures.commit_floor_gb : 4, commitEveryMs: options.commitEveryMs }, script);
   const logs = fixtures.logs as { plugin_dir?: string } | undefined;
   const telemetry = new Telemetry({ api: options.api, host: options.host, outDir: options.outDir, attempt, clock,
@@ -1005,7 +1014,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
     command: left.length ? (options.resumeCommand?.(left) ?? `bun tools/session.ts ${options.scriptPath ?? "<script.json>"} --fixtures <private.json> --out "${options.outDir}" --rows ${left.join(",")}`) : null,
     ...(cleanupErrors.length ? { cleanup_errors: cleanupErrors } : {}),
   }, null, 2) + "\n"));
-  await attemptCleanup("closing the connection", async () => options.api.close());
+  await attemptCleanup("closing the connection", async () => { options.api.close(); options.observer?.close?.(); });
   const outcome = signal.aborted ? "interrupted" : halt ? "stopped" : "complete";
   return { ok: !halt && !signal.aborted && !cleanupErrors.length && records.every((r) => r.verdict === "PASS" || r.reason === "not selected"), outcome, halt: halt?.reason, haltInfo: halt, attempt, remaining: left, rows: records, cleanupErrors, ...paths, resumePath };
 }

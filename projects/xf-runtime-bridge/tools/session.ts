@@ -609,6 +609,8 @@ async function batchMain(script: BatchScript, scriptPath: string, args: string[]
   const result = await runBatch(script, {
     api, host: windowsHost, outDir, fixtures, signal: stop.signal, echo: !args.includes("--no-echo"), scriptPath: basename(scriptPath), preflight: checked,
     rows: rowsWanted, haltOn, resumeCommand: command,
+    // Captures that keep the overlay go through their own read-only API, outside the writer's lifetime.
+    observer: new CommandApi({ runtimeDir: option("--runtime-dir"), readOnly: true }),
   });
   lock.release();
   console.log(`\n${result.outcome === "complete" ? "Batch complete" : result.outcome === "interrupted" ? "Batch interrupted (teardown ran)" : `Batch stopped${result.haltInfo ? ` (${result.haltInfo.kind})` : ""}: ${result.halt}`}`);

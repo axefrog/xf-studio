@@ -52,7 +52,7 @@ export function fakeApi(clock: FakeClock, handlers: Record<string, Handler> = {}
       calls.push({ name, input });
       const n = (counts.get(name) ?? 0) + 1;
       counts.set(name, n);
-      if (name === "capture.screenshot" || name === "capture.burst") {
+      if ((name === "capture.screenshot" || name === "capture.burst") && !handlers[name]) {
         const dir = opts.captureRoot ?? "."; mkdirSync(dir, { recursive: true });
         const file = join(dir, `${input.name}.full.png`);
         const shade = (calls.length * 37) % 255;

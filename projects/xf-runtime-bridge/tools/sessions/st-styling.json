@@ -1073,6 +1073,20 @@
           "label": "the settle burst (change at 0.3 s, second change at 1.0 s)",
           "ref": "$ST5_dark_burst",
           "captured": true
+        },
+        {
+          "label": "all 20 frames",
+          "ref": "$ST5_dark_burst.frames.19",
+          "match": {
+            "exists": true
+          }
+        },
+        {
+          "label": "over about 2 s",
+          "ref": "$ST5_dark_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 1700
+          }
         }
       ],
       "cleanup": [
@@ -3120,6 +3134,20 @@
           "label": "no wash on a change",
           "ref": "$ST3_dark_settle",
           "captured": true
+        },
+        {
+          "label": "all 10 settle frames",
+          "ref": "$ST3_dark_settle.frames.9",
+          "match": {
+            "exists": true
+          }
+        },
+        {
+          "label": "over about 1 s",
+          "ref": "$ST3_dark_settle.timing.first_to_last_ms",
+          "match": {
+            "min": 800
+          }
         }
       ],
       "cleanup": [
@@ -4186,6 +4214,20 @@
           "label": "the settle burst (change at 0.3 s, second change at 1.0 s)",
           "ref": "$ST5_light_burst",
           "captured": true
+        },
+        {
+          "label": "all 20 frames",
+          "ref": "$ST5_light_burst.frames.19",
+          "match": {
+            "exists": true
+          }
+        },
+        {
+          "label": "over about 2 s",
+          "ref": "$ST5_light_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 1700
+          }
         }
       ],
       "cleanup": [
@@ -6006,6 +6048,20 @@
           "label": "no wash on a change",
           "ref": "$ST3_light_settle",
           "captured": true
+        },
+        {
+          "label": "all 10 settle frames",
+          "ref": "$ST3_light_settle.frames.9",
+          "match": {
+            "exists": true
+          }
+        },
+        {
+          "label": "over about 1 s",
+          "ref": "$ST3_light_settle.timing.first_to_last_ms",
+          "match": {
+            "min": 800
+          }
         }
       ],
       "cleanup": [

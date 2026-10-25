@@ -159,7 +159,9 @@ function overlayOnRows(theme: Theme): Json[] {
         { do: "burst", name: `ST5-xfbox-settle-${theme}`, frames: 20, interval_ms: 100, clear_overlay: false, bind: key(row, "burst") },
         { sequence: [{ do: "wait", ms: 300 }, { do: "run", command: "session.handover", input: { note: `${row}: settle`, restore_ui: false } }, { do: "wait", ms: 700 }, { do: "run", command: "session.resume", input: {} }] },
       ] }],
-    pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the settle burst (change at 0.3 s, second change at 1.0 s)", row, "burst")],
+    pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the settle burst (change at 0.3 s, second change at 1.0 s)", row, "burst"),
+      // The handover in the same beat must not cut the burst short: every frame, over the whole span.
+      check("all 20 frames", row, "burst", "frames.19", { exists: true }), check("over about 2 s", row, "burst", "timing.first_to_last_ms", { min: 1700 })],
     cleanup: [resume(row), hudBack(row)] });
 
   row = `ST6-${theme}-chips`;
@@ -264,7 +266,8 @@ function reducedRows(theme: Theme): Json[] {
         { sequence: [{ do: "wait", ms: 300 }, { do: "run", command: "session.handover", input: { note: `${row}: no settle under reduced`, restore_ui: false } }, { do: "wait", ms: 400 }, { do: "run", command: "session.resume", input: {} }] },
       ] }],
     pass: [check("motion reduced", row, "overlay", "motion.effective", { equals: "reduced" }), check("by the setting", row, "overlay", "motion.reason", { equals: "setting" }),
-      captured("still dot (6 x 240 ms)", row, "still"), captured("no wash on a change", row, "settle")],
+      captured("still dot (6 x 240 ms)", row, "still"), captured("no wash on a change", row, "settle"),
+      check("all 10 settle frames", row, "settle", "frames.9", { exists: true }), check("over about 1 s", row, "settle", "timing.first_to_last_ms", { min: 800 })],
     cleanup: [resume(row), hudBack(row)] }];
 }
 

@@ -233,6 +233,32 @@ describe("M11: the preflight certifies only a binary its manifest describes, wit
   });
 });
 
+describe("M13: a settle burst survives the handover it records", () => {
+  test("a burst that keeps the overlay runs on the observer, so session.handover's supersede can't cancel it", async () => {
+    const clock = new FakeClock();
+    let epoch = new AbortController();
+    // The writer's API as CommandApi behaves: session.handover supersedes (aborts) whatever the writer has in flight.
+    const writer = fakeApi(clock, {
+      "session.handover": () => { epoch.abort(); epoch = new AbortController(); return { ok: true, result: { handed_over: true } }; },
+      "capture.burst": async () => {
+        const mine = epoch.signal;
+        await clock.sleep(2000, mine);
+        return mine.aborted ? { ok: false, code: "interrupted", message: "superseded by session.handover" } : { ok: true, result: { contact_sheet: { path: "x" } } };
+      },
+    });
+    const observer = fakeApi(clock);
+    const rows: Row[] = [{ id: "ST5", title: "settle", steps: [
+      { label: "change", together: [
+        { do: "burst", name: "ST5-xfbox-settle-dark", frames: 20, interval_ms: 100, clear_overlay: false, bind: "burst" },
+        { sequence: [{ do: "wait", ms: 300 }, { do: "run", command: "session.handover", input: {} }, { do: "wait", ms: 700 }, { do: "run", command: "session.resume", input: {} }] },
+      ] },
+    ], pass: [{ label: "the burst", ref: "$burst", captured: true }] }];
+    const result = await go(script(rows), writer, fakeHost(), clock, tempDir("xfb-review-"), { observer });
+    expect(result.rows[0].verdict).toBe("PASS");
+    expect(observer.calls.some((c) => c.name === "capture.burst")).toBe(true);
+  });
+});
+
 describe("H1: exceptions never bypass the cleanup", () => {
   test("a report callback that throws doesn't skip the release or the close", async () => {
     const clock = new FakeClock();
