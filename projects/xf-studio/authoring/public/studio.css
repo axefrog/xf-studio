@@ -458,6 +458,34 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .folder-choice[aria-pressed="true"] { border-color: var(--signal); color: var(--text); background: var(--signal-bg); box-shadow: inset 2px 0 0 var(--signal); }
 .folder-choice-path { overflow-wrap: break-word; }
 .folder-choice-source { font-size: var(--fs-xs); color: var(--text-muted); }
+/* Framework status (components/framework-status.ts): the Mod frameworks group: heading, one line, a row per framework. */
+.framework-status { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.framework-status[hidden] { display: none; }
+.framework-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
+.framework-title { display: inline-flex; align-items: center; gap: var(--sp-2); margin: 0; font: 600 var(--fs-sm)/1.3 var(--font-ui); color: var(--text); }
+.framework-line { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); font-size: var(--fs-sm); overflow-wrap: anywhere;
+  border-left: 2px solid var(--line-strong); background: var(--bg-raised); }
+.framework-status[data-tone="ready"] .framework-line { border-color: var(--success); }
+.framework-status[data-tone="attention"] .framework-line { border-color: var(--warning); }
+.framework-line .expander { font-size: var(--fs-sm); }
+.framework-line .expander[hidden], .framework-line-plain[hidden] { display: none; }
+.framework-line-plain { display: flex; align-items: center; gap: var(--sp-3); margin: 0; }
+.framework-mark { display: inline-flex; flex: none; }
+.framework-mark[hidden] { display: none; }
+.framework-mark .icon { width: 14px; height: 14px; }
+.framework-status[data-tone="ready"] .framework-mark { color: var(--success); }
+.framework-status[data-tone="attention"] .framework-mark { color: var(--warning); }
+.framework-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--line); background: var(--line-soft); }
+.framework-list[hidden] { display: none; }
+.framework-row { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; padding: var(--sp-3) var(--sp-4); background: var(--bg-panel); }
+.framework-row:is([data-status="too-old"], [data-status="missing"], [data-status="unreadable"]) { box-shadow: inset 2px 0 0 var(--warning); }
+.framework-name-line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); }
+.framework-name-line .badge { flex: none; }
+.framework-meta .record-fact { white-space: normal; }
+.framework-message { margin: 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.framework-links { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-6); }
+.framework-note { max-width: none; font-size: var(--fs-xs); }
+.settings-panel .section > .framework-status { margin-top: var(--sp-5); }
 /* Tree view (components/tree-view.ts): a frame the owner sizes, holding the scrolling tree (fixed-height items positioned in a
    spacer, so only the rows in view are in the page), the empty message at its top and the loading status pinned to its corner. */
 .tree-view { position: relative; display: flex; flex-direction: column; min-height: 0; background: var(--bg-panel); border: 1px solid var(--line);

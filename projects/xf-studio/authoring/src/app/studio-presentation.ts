@@ -31,6 +31,7 @@ import type { UIPreferenceActions } from "./ui-preferences";
 import type { ViewportAttachment } from "./viewport-attachment";
 import type { LocalSetupActions } from "../setup/local-setup-actions";
 import { InstallDetectionActions } from "../installation/install-detection-actions";
+import { frameworkStatusView, type FrameworkStatusView } from "../installation/framework-status";
 import { ModInstallActions } from "../installation/mod-install-actions";
 import { DesktopAppActions, type DesktopAppState } from "../setup/desktop-app";
 import { UpdateCheckActions, type UpdateCheckState } from "../setup/update-check-actions";
@@ -173,6 +174,9 @@ type PresentationAuthoring = Pick<StudioApplication,
   /** The editing context's steps, for the History panel. */
   historyTimeline(): HistorySnapshot;
 };
+/** The detection service's state with what the Mod frameworks group shows of the framework check (see `StudioPresentationPort.installDetection`). */
+export type InstallDetectionSnapshot = ReturnType<InstallDetectionActions["snapshot"]> & { readonly frameworkStatus: FrameworkStatusView };
+
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
   readonly experiments?: ExperimentPort;
@@ -251,9 +255,13 @@ export type StudioPresentationPort<Slot> = {
   readonly modInstall: Pick<ModInstallActions, "capability" | "dispatch" | "descriptors"> & {
     snapshot(): ReadonlyDeep<ReturnType<ModInstallActions["snapshot"]>>;
   };
-  /** Read-only discovery of game installs and MO2 instances for setup suggestions. */
+  /**
+   * Read-only discovery of game installs and MO2 instances for setup suggestions, and the framework check. The snapshot adds what
+   * Settings › Game › Mod frameworks and the Mod package card show of that check (`frameworkStatus`, derived here from the check, whether
+   * it is running and whether a game folder is chosen), so the presentation holds none of its rules.
+   */
   readonly installDetection: Pick<InstallDetectionActions, "capability" | "dispatch" | "descriptors"> & {
-    snapshot(): ReadonlyDeep<ReturnType<InstallDetectionActions["snapshot"]>>;
+    snapshot(): ReadonlyDeep<InstallDetectionSnapshot>;
   };
   /**
    * 3D preview setup: the card, the WolvenKit consent and the head pane's next step, as a detached
@@ -335,7 +343,7 @@ export type StudioPresentationPort<Slot> = {
     previewReadiness: PreviewReadiness;
     status: PresentationStatus;
     localSetup: ReturnType<LocalSetupActions["snapshot"]>;
-    installDetection: ReturnType<InstallDetectionActions["snapshot"]>;
+    installDetection: InstallDetectionSnapshot;
     modInstall: ReturnType<ModInstallActions["snapshot"]>;
     previewSetup: PreviewSetupSnapshot;
     desktopApp: DesktopAppState;
@@ -594,7 +602,10 @@ export function createStudioPresentation<Slot>(sources: {
   };
   const detection = sources.installDetection ?? new InstallDetectionActions(null);
   const installDetection: StudioPresentationPort<Slot>["installDetection"] = {
-    snapshot: () => detection.snapshot(), capability: action => detection.capability(action),
+    snapshot: () => {
+      const read = detection.snapshot();
+      return { ...read, frameworkStatus: frameworkStatusView({ gameChosen: !!localSetup.snapshot().view?.fields.gameRoot, check: read.frameworks, checking: read.busy === "frameworks" }) };
+    }, capability: action => detection.capability(action),
     dispatch: action => detection.dispatch(action), descriptors: () => detection.descriptors(),
   };
   const install = sources.modInstall ?? new ModInstallActions(null, () => []);

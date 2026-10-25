@@ -15,6 +15,7 @@ import type { FeedbackAction } from "../feedback";
 import type { Frame, StudioRuntime } from "../runtime";
 import { openReportDialog } from "../diagnostics/report-dialog";
 import { setupStatus, wantsWolvenKitStep } from "./game-setup";
+import { frameworkNote } from "./framework-group";
 import { wolvenKitStepButton } from "../wolvenkit-step";
 import { modInstallLabel, openModInstallSheet } from "./mod-install-sheet";
 
@@ -30,7 +31,7 @@ export type PanelController = { spec: PanelSpec; update(frame: Frame): void;
   /** The panel's own palette commands (its presentation state, e.g. folding), read when the palette opens. */
   commands?(): Command[];
   /** Bring one part of the panel into view and focus it (Settings: a group, `settings-sections.ts`). */
-  show?(section?: string): void };
+  show?(section?: string, part?: string): void };
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** Library facts derived only from the draft summary and saved list; nothing is guessed. */
@@ -95,8 +96,14 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   // When the line says WolvenKit is needed, its one next step is the button beside it (release-readiness-audit.md item 14).
   const wolvenKitStep = wolvenKitStepButton(rt);
   // Named after the Settings group it mirrors (release-readiness-audit.md C-6).
-  const setup = section({ title: "Game", help: "Your game folder and mod manager are chosen in Settings › Game; your own WolvenKit, if you use one, in Settings › Tools." },
-    setupLine, h("div", { class: "row wrap gap-s" }, wolvenKitStep.element, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup })));
+  // Frameworks are checked in Settings › Game › Mod frameworks: while one needs attention this card says so in one line and points there,
+  // and never repeats the detail.
+  const frameworkLine = note("", "warning");
+  frameworkLine.hidden = true;
+  const showFrameworks = button({ label: "Show mod frameworks", icon: "settings", small: true, onClick: () => rt.settings.open("game", "frameworks") });
+  showFrameworks.hidden = true;
+  const setup = section({ title: "Game", help: "Your game folder and mod manager are chosen in Settings › Game; your own WolvenKit, if you use one, in Settings › Tools. Settings › Game › Mod frameworks says whether the frameworks your mod needs are in place." },
+    setupLine, frameworkLine, h("div", { class: "row wrap gap-s" }, wolvenKitStep.element, button({ label: "Open Settings", icon: "settings", small: true, onClick: showSetup }), showFrameworks));
   const check = button({ label: "Check", icon: "check", title: "Check which presets and layers can become mod files (creates no files)", onClick: () => void runPackage("check") });
   const build = button({ label: "Build mod files…", icon: "package", variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
   // While the latest Build is current, its result's Add is the one primary action: Build again is a secondary one.
@@ -212,6 +219,8 @@ export function packagePanel(rt: StudioRuntime): PanelController {
       const line = setupStatus(frame);
       setText(setupLine, line.text); setupLine.className = `setup-status ${line.tone}`;
       wolvenKitStep.update(frame, wantsWolvenKitStep(frame));
+      const pointer = frameworkNote(frame);
+      setText(frameworkLine, pointer ?? ""); frameworkLine.hidden = !pointer; showFrameworks.hidden = !pointer;
       const working = library.busy && library.progress?.code === "package";
       const stopCapability = port.files.capability({ kind: "package.stop" });
       const buildRunning = files.activity.some(entry => entry.kind === "package.build");

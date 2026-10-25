@@ -5,6 +5,9 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { InstallDetectionActions } from "../src/installation/install-detection-actions";
 import { LocalSetupActions, type LocalSetupTransport } from "../src/setup/local-setup-actions";
 import { ModInstallActions, type ModInstallPlan } from "../src/installation/mod-install-actions";
+import type { FrameworkVersionCheck } from "../src/installation/framework-catalogue";
+import { frameworkCheckFor, frameworkCheckSample } from "../src/installation/framework-fixtures";
+import { frameworkStatusView } from "../src/installation/framework-status";
 import { UpdateCheckActions, type UpdateCheckTransport } from "../src/setup/update-check-actions";
 import { emptyUpdateCheckMemory, UpdateCheckService } from "../src/setup/update-check";
 import { simulatedReleases } from "../src/setup/host/update-check-github";
@@ -93,6 +96,8 @@ type HarnessOptions = { plan?: ModInstallPlan; files?: Record<string, unknown>; 
   updates?: UpdateCheckTransport;
   /** The update service itself, when a test drives it before the panel opens (a check already running). */
   updateActions?: UpdateCheckActions;
+  /** The host's framework check (Settings › Game › Mod frameworks): each request's answer, by its number; without it the host can't check. */
+  frameworks?: (call: number) => FrameworkVersionCheck | Promise<FrameworkVersionCheck>;
   /** A read-only window: the port refuses what the workspace lease refuses (everything but view preferences and diagnostics). */
   readOnly?: string };
 async function packageHarness(options: HarnessOptions = {}) {
@@ -102,7 +107,8 @@ async function packageHarness(options: HarnessOptions = {}) {
 async function panelHarness<P extends { spec: { element: HTMLElement }; update(frame: never): void }>(options: HarnessOptions, make: (rt: unknown) => P) {
   const { Feedback } = await import("../src/studio-ui/feedback");
   const { Frame } = await import("../src/studio-ui/runtime");
-  const saved: unknown[] = [], sentInstall: unknown[] = [], opened: (string | undefined)[] = [];
+  const saved: unknown[] = [], sentInstall: unknown[] = [], opened: (string | undefined)[] = [], openedParts: (string | undefined)[] = [], openedLinks: string[] = [];
+  let frameworkCalls = 0;
   let view = options.view ?? VIEW();
   const transport: LocalSetupTransport = async (method, body) => {
     if (method === "PATCH") {
@@ -114,7 +120,10 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
   };
   const setup = new LocalSetupActions(transport, options.picker ? async field => field === "savesDirectory" ? "E:\\Saves" : "E:\\Games\\Cyberpunk 2077" : null);
   await setup.dispatch({ kind: "setup.refresh" });
-  const detection = new InstallDetectionActions(async target => ({ ok: true, status: 200, data: (target === "games"
+  const detection = new InstallDetectionActions(async target => target === "frameworks"
+    ? (options.frameworks ? { ok: true, status: 200, data: await options.frameworks(++frameworkCalls) }
+      : { ok: false, status: 404, data: { code: "unavailable", error: "This host can't check frameworks." } })
+    : ({ ok: true, status: 200, data: (target === "games"
     ? { schema: "xfs/game-install-detection-1", supported: true, rejected: [], unsupported: [], issues: [], limitations: [],
       candidates: [{ root: "D:\\Steam\\Cyberpunk 2077", evidence: [{ source: "steam", detail: "" }], executableFound: true }] }
     : { schema: "xfs/mo2-instance-detection-1", supported: true, issues: [], limitations: [],
@@ -139,12 +148,16 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
     previewSetup: { snapshot: () => ({ wolvenKitStep: { label: "Set up WolvenKit…", action: { kind: "previewSetup.consent" } } }),
       capability: () => ({ available: true }), dispatch: async () => ({ ok: true }) },
     localSetup: { snapshot: () => setup.snapshot(), capability: (a: never) => setup.capability(a), dispatch: (a: never) => setup.dispatch(a) },
-    installDetection: { snapshot: () => detection.snapshot(), capability: (a: never) => detection.capability(a), dispatch: (a: never) => detection.dispatch(a) },
+    // The presentation port adds the framework status to the detection snapshot (studio-presentation.ts).
+    installDetection: { snapshot: () => { const read = detection.snapshot();
+      return { ...read, frameworkStatus: frameworkStatusView({ gameChosen: !!setup.snapshot().view?.fields.gameRoot, check: read.frameworks, checking: read.busy === "frameworks" }) }; },
+      capability: (a: never) => detection.capability(a), dispatch: (a: never) => detection.dispatch(a) },
     modInstall: { snapshot: () => install.snapshot(), capability: (a: never) => install.capability(a), dispatch: (a: never) => install.dispatch(a) },
     diagnostics: { expected: (code?: string) => code === "package_build_unavailable", capability: () => ({ available: true }), snapshot: () => ({ mode: null }),
       dispatch: async () => ({ ok: true, message: "" }) },
     preferences: { snapshot: () => ({ researchTools: false }), capability: () => ({ available: true }) },
     updates: { snapshot: () => updates.snapshot(), capability: (a: never) => updates.capability(a), dispatch: (a: never) => updates.dispatch(a) },
+    links: { open: async (link: string) => { openedLinks.push(link); return { ok: true as const }; } },
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
   if (options.readOnly) {
@@ -157,12 +170,13 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
   const feedback = new Feedback();
   const dispatched: unknown[] = [];
   const rt = { port, feedback, finishes: [], anchors: { register() {} }, dock: { reveal() {} }, request: async () => {}, dispatch: (action: unknown) => { dispatched.push(action); return true; },
-    changed: () => paint(), report: () => true, settings: { open: (section?: string) => { opened.push(section); } } };
+    changed: () => paint(), report: () => true, settings: { open: (section?: string, part?: string) => { opened.push(section); openedParts.push(part); } } };
   const panel = make(rt);
   lightDocument.body.append(panel.spec.element as never);
   const paint = () => panel.update(new Frame(port as never) as never);
   paint();
-  return { panel, root: panel.spec.element as unknown as LightElement, paint, saved, sentInstall, setup, detection, feedback, opened, dispatched };
+  return { panel, root: panel.spec.element as unknown as LightElement, paint, saved, sentInstall, setup, detection, feedback, opened, openedParts, openedLinks, dispatched,
+    frameworkCalls: () => frameworkCalls };
 }
 /** The Settings panel over the same services, with appearance preferences kept in memory. */
 async function settingsHarness(options: HarnessOptions = {}) {
@@ -386,8 +400,9 @@ describe("Settings in a read-only window (style guide t-read-only-window)", () =
     const game = h.root.querySelector("[data-settings-section=game]")!;
     const gameControls = [...game.querySelectorAll("button"), ...game.querySelectorAll("input")];
     expect(gameControls.length).toBeGreaterThan(5);
-    expect(gameControls.filter(control => !unavailable(control) && !control.matches(".help-tip")).map(control => text(control) || control.getAttribute("aria-label"))).toEqual([]);
-    expect(gameControls.filter(control => control.tagName === "button" && !control.matches(".help-tip")).every(control => control.getAttribute("data-reason") === reason)).toBe(true);
+    // Expanders only fold what is shown (read-safe, like help tips): the Mod frameworks fold is one.
+    expect(gameControls.filter(control => !unavailable(control) && !control.matches(".help-tip, .expander")).map(control => text(control) || control.getAttribute("aria-label"))).toEqual([]);
+    expect(gameControls.filter(control => control.tagName === "button" && !control.matches(".help-tip, .expander")).every(control => control.getAttribute("data-reason") === reason)).toBe(true);
     h.panel.spec.element.remove();
   });
 });
@@ -921,5 +936,169 @@ describe("Polish batch 2: the profiles phase 1 UI follow-ups", () => {
     expect(CONTEXT_LABELS["collection.undoOpen"]![0]).toBe("Reopen previous collection");
     const { reopenPreviousAction } = await import("../src/studio-ui/panels/collection");
     expect(reopenPreviousAction({ port: { library: { summary: () => ({ draft: { id: "c" } }) } } } as never).label).toBe("Reopen previous");
+  });
+});
+
+/** The line as shown: the fold button's words while the rows fold under it, else the plain sentence (the other is hidden). */
+const lineOf = (group: LightElement) => text(group.querySelector(".framework-line")!.children.find(child => !child.hidden)!);
+describe("Settings › Game › Mod frameworks: what the game will load, and the one next step", () => {
+  const CHOSEN = VIEW({ gameRoot: "D:\\Game", mo2Root: "D:\\MO2", mo2ProfileId: "Main" });
+  /** The panel after the page's own watcher asked for the check (the composition root's job; here the test does). */
+  async function shown(options: HarnessOptions & { check?: (call: number) => FrameworkVersionCheck | Promise<FrameworkVersionCheck> } = {}) {
+    const h = await settingsHarness({ view: CHOSEN, frameworks: options.check ?? (() => frameworkCheckFor("all-ok")), ...options });
+    h.panel.spec.visibility?.(true);
+    await settle(20); h.paint();
+    await h.detection.dispatch({ kind: "detect.frameworkVersions" });
+    await settle(); h.paint();
+    const group = h.root.querySelector(".framework-status")!;
+    return { ...h, group, rows: () => group.querySelectorAll(".framework-row"), line: () => lineOf(group) };
+  }
+
+  test("nothing shows before a game folder is chosen: no empty group, no 'nothing available' line", async () => {
+    const h = await settingsHarness({ frameworks: () => frameworkCheckFor("all-ok") });
+    const group = h.root.querySelector(".framework-status")!;
+    expect(group).toBeTruthy();
+    expect(group.hidden).toBe(true);
+    // It lives in Game, after the game folder and mod manager.
+    expect(h.root.querySelector("[data-settings-section=game]")!.querySelector(".framework-status")).toBe(group);
+    h.panel.spec.element.remove();
+  });
+
+  test("everything fine: one line, rows folded under it, expandable; nothing is offered to do", async () => {
+    const h = await shown();
+    expect(h.group.hidden).toBe(false);
+    expect(h.group.getAttribute("data-tone")).toBe("ready");
+    expect(text(h.group.querySelector("h4")!)).toContain("Mod frameworks");
+    expect(h.line()).toBe("All frameworks up to date");
+    const fold = h.group.querySelector(".expander")!;
+    expect(fold.hidden).toBe(false);
+    expect(fold.getAttribute("aria-expanded")).toBe("false");
+    expect(h.group.querySelector(".framework-list")!.hidden).toBe(true);
+    (fold as unknown as HTMLElement).click();
+    expect(fold.getAttribute("aria-expanded")).toBe("true");
+    expect(h.group.querySelector(".framework-list")!.hidden).toBe(false);
+    expect(h.rows().map(row => text(row.querySelector(".framework-name")!))).toEqual(["ArchiveXL", "RED4ext", "redscript", "TweakXL", "Codeware", "Cyber Engine Tweaks"]);
+    expect(h.rows().map(row => text(row.querySelector(".badge")!))).toEqual(["OK", "OK", "OK", "Not needed for what you build", "Not needed for what you build", "Not needed for what you build"]);
+    expect(text(h.rows()[0]!.querySelector(".framework-meta")!)).toBe("1.27.5 · from the Mod Organizer 2 mod “ArchiveXL”");
+    expect(h.group.querySelectorAll(".link-button")).toHaveLength(0);
+    expect(buttonNamed(h.group, "Check again")).toBeTruthy();
+    h.panel.spec.element.remove();
+  });
+
+  test("too old: every row shown, the sentence and both release pages; pressing a page opens it by name and changes nothing", async () => {
+    const h = await shown({ check: () => frameworkCheckFor("too-old") });
+    expect(h.group.getAttribute("data-tone")).toBe("attention");
+    expect(h.line()).toBe("1 framework needs attention");
+    expect(h.group.querySelector(".expander")!.hidden).toBe(true);
+    expect(h.group.querySelector(".framework-list")!.hidden).toBe(false);
+    const archive = h.rows()[0]!;
+    expect(archive.getAttribute("data-status")).toBe("too-old");
+    expect(text(archive.querySelector(".badge")!)).toBe("Too old (minimum 1.27.3)");
+    expect(text(archive.querySelector(".framework-message")!)).toBe("XF Eye Artistry needs ArchiveXL 1.27.3 or newer; you have 1.26.3. Update it in Mod Organizer 2 with the latest release from Nexus Mods or GitHub.");
+    const pages = archive.querySelectorAll(".link-button");
+    expect(pages.map(page => [text(page), page.getAttribute("aria-label")])).toEqual([["Nexus Mods", "ArchiveXL on Nexus Mods"], ["GitHub", "ArchiveXL on GitHub"]]);
+    (pages[0] as unknown as HTMLElement).click();
+    (pages[1] as unknown as HTMLElement).click();
+    await settle();
+    expect(h.openedLinks).toEqual(["framework-archivexl-nexus", "framework-archivexl-github"]);
+    // The rows that are fine carry no next step; there is no install or update button anywhere.
+    expect(h.rows().slice(1).flatMap(row => row.querySelectorAll(".link-button"))).toHaveLength(0);
+    expect(buttons(h.group).map(button => text(button) || button.getAttribute("aria-label") || "").filter(name => /install|update|replace|disable/i.test(name))).toEqual([]);
+    h.panel.spec.element.remove();
+  });
+
+  test("missing: the install sentence and the pages for that framework", async () => {
+    const h = await shown({ check: () => frameworkCheckFor("missing") });
+    const redscript = h.rows().find(row => row.getAttribute("data-framework") === "redscript")!;
+    expect([redscript.getAttribute("data-status"), text(redscript.querySelector(".badge")!), text(redscript.querySelector(".framework-meta")!)]).toEqual(["missing", "Missing", "Not installed"]);
+    expect(text(redscript.querySelector(".framework-message")!)).toContain("isn't installed in this profile");
+    expect(redscript.querySelectorAll(".link-button").map(page => page.getAttribute("aria-label"))).toEqual(["redscript on Nexus Mods", "redscript on GitHub"]);
+    h.panel.spec.element.remove();
+  });
+
+  test("Mod Organizer 2 with a hidden duplicate: the copy in use is named, the unused copy is a note, and it isn't a problem", async () => {
+    const h = await shown({ check: () => frameworkCheckFor("hidden-duplicate") });
+    expect(h.line()).toBe("All frameworks up to date");
+    (h.group.querySelector(".expander") as unknown as HTMLElement).click();
+    const note = h.rows()[0]!.querySelector(".framework-note")!;
+    expect(text(note)).toBe(`ArchiveXL is installed more than once in this profile. Mod Organizer uses the copy in "ArchiveXL"; "Old ArchiveXL" is not used.`);
+    expect(h.rows()[0]!.querySelectorAll(".link-button")).toHaveLength(0);
+    h.panel.spec.element.remove();
+  });
+
+  test("Check again reads the versions again: it says it is checking, keeps the rows, and shows the new answer", async () => {
+    let release!: () => void;
+    const answers = [frameworkCheckFor("too-old"), frameworkCheckFor("all-ok")];
+    const h = await shown({ check: call => call === 1 ? answers[0]! : new Promise<FrameworkVersionCheck>(done => { release = () => done(answers[1]!); }) });
+    expect(h.frameworkCalls()).toBe(1);
+    expect(h.line()).toBe("1 framework needs attention");
+    const again = buttonNamed(h.group, "Check again")!;
+    expect(again.getAttribute("aria-disabled")).toBeNull();
+    (again as unknown as HTMLElement).click();
+    await settle(); h.paint();
+    expect(h.frameworkCalls()).toBe(2);
+    // While it runs: the line and the button say so, the earlier rows stay where they were.
+    expect(h.line()).toBe("Checking your frameworks…");
+    expect(h.group.getAttribute("data-tone")).toBe("checking");
+    expect(h.rows()).toHaveLength(6);
+    const checking = buttonNamed(h.group, "Checking…")!;
+    expect([checking.getAttribute("aria-disabled"), checking.getAttribute("data-reason")]).toEqual(["true", "XF Studio is checking your frameworks now."]);
+    release();
+    await settle(); h.paint();
+    expect(h.line()).toBe("All frameworks up to date");
+    expect(buttonNamed(h.group, "Check again")!.getAttribute("aria-disabled")).toBeNull();
+    h.panel.spec.element.remove();
+  });
+
+  test("a host that can't check keeps Check again and says why in a notice; a route that can't be read says what to choose", async () => {
+    const none = await settingsHarness({ view: CHOSEN });
+    none.panel.spec.visibility?.(true);
+    await settle(20); none.paint();
+    const group = none.root.querySelector(".framework-status")!;
+    expect(lineOf(group)).toBe("Your frameworks haven't been checked yet. Choose Check again.");
+    (buttonNamed(group, "Check again") as unknown as HTMLElement).click();
+    await settle(); none.paint();
+    expect(none.feedback.log.some(entry => entry.message === "This host can't check frameworks.")).toBe(true);
+    none.panel.spec.element.remove();
+
+    const unreadable = await shown({ check: () => ({ ...frameworkCheckSample(), routes: [{ route: "mo2" as const, label: "Mod Organizer 2", profileId: null, available: false,
+      problem: "Choose your Mod Organizer 2 folder and profile in Settings › Game.", frameworks: [], verdicts: [], ready: false }] }) });
+    expect(unreadable.line()).toBe("Choose your Mod Organizer 2 folder and profile in Settings › Game.");
+    expect(unreadable.rows()).toHaveLength(0);
+    unreadable.panel.spec.element.remove();
+  });
+
+  test("opening Settings at Mod frameworks lands on its Check again", async () => {
+    const h = await shown();
+    const focused: unknown[] = [];
+    (buttonNamed(h.group, "Check again") as unknown as { focus(): void }).focus = () => focused.push("check-again");
+    (h.panel as unknown as { show(section: string, part?: string): void }).show("game", "frameworks");
+    await settle(20);
+    expect(focused).toEqual(["check-again"]);
+    h.panel.spec.element.remove();
+  });
+
+  test("the Mod package card points here in one line while a needed framework needs attention, and never repeats the detail", async () => {
+    const h = await packageHarness({ view: CHOSEN, frameworks: () => frameworkCheckFor("too-old") });
+    const line = h.root.querySelectorAll(".note.warning").find(item => item.hidden && item.textContent === "")!;
+    expect(line.hidden).toBe(true);
+    await h.detection.dispatch({ kind: "detect.frameworkVersions" });
+    await settle(); h.paint();
+    expect(line.hidden).toBe(false);
+    expect(text(line)).toBe("A mod framework needs attention before your mod works in the game. Settings › Game › Mod frameworks says which, and where to get each.");
+    expect(text(h.root)).not.toContain("1.26.3");
+    expect(text(h.root)).not.toContain("Too old");
+    const show = buttonNamed(h.root, "Show mod frameworks")!;
+    expect(show.hidden).toBe(false);
+    (show as unknown as HTMLElement).click();
+    expect([h.opened, h.openedParts]).toEqual([["game"], ["frameworks"]]);
+    h.panel.spec.element.remove();
+    // All fine: the card says nothing about frameworks.
+    const fine = await packageHarness({ view: CHOSEN, frameworks: () => frameworkCheckFor("all-ok") });
+    await fine.detection.dispatch({ kind: "detect.frameworkVersions" });
+    await settle(); fine.paint();
+    expect(fine.root.querySelectorAll(".note.warning").filter(item => !item.hidden && text(item).includes("framework"))).toHaveLength(0);
+    expect(buttonNamed(fine.root, "Show mod frameworks")!.hidden).toBe(true);
+    fine.panel.spec.element.remove();
   });
 });

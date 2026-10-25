@@ -14,7 +14,7 @@ import { SHELL_VIEW } from "./views/shell";
 import type { StudioModule } from "../platform/api";
 import type { LayoutTab } from "../app/profiles/profile-session";
 import { allGroups, type DockTree } from "./dock/layout";
-import type { SettingsSection } from "./settings-sections";
+import type { SettingsPart, SettingsSection } from "./settings-sections";
 
 export type Port = StudioPresentationPort<HTMLElement>;
 
@@ -103,7 +103,7 @@ export class StudioRuntime {
    * Open the Settings panel at a group (UI-109): floating when it was closed (it has no home among the docked groups), otherwise brought
    * forward and expanded where it is, then the group is shown and focused. The shell sets this once the dock exists.
    */
-  settings: { open(section?: SettingsSection): void } = { open: () => {} };
+  settings: { open(section?: SettingsSection, part?: SettingsPart): void } = { open: () => {} };
   /**
    * @param views the catalogue of every contributed panel (the shell's and each feature's) that the
    *   composition root handed `mountStudio`.

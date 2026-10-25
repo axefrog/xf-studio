@@ -8,3 +8,5 @@ export const SETTINGS_SECTION_TITLES: Readonly<Record<SettingsSection, string>> 
   game: "Game", saves: "Saves", tools: "Tools", appearance: "Appearance", updates: "Updates", privacy: "Privacy & diagnostics" };
 /** The Settings panel's catalogue ID (the shell's view contribution, `views/shell.ts`). */
 export const SETTINGS_PANEL = "settings";
+/** A part inside a group that Settings can bring into view: Game's Mod frameworks (what the Mod package card and Help point to). */
+export type SettingsPart = "frameworks";

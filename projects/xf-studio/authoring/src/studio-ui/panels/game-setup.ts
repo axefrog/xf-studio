@@ -148,8 +148,11 @@ export function gameSetupForm(rt: StudioRuntime) {
   async function detect(force = false) {
     if (detected && !force) return;
     detected = true;
-    for (const kind of ["detect.gameInstalls", "detect.mo2Instances"] as const)
+    for (const kind of ["detect.gameInstalls", "detect.mo2Instances"] as const) {
+      // The framework check shares the detection service (one request at a time): wait for it rather than skip a step.
+      for (let waited = 0; port.installDetection.snapshot().busy && waited < 100; waited++) await new Promise(done => setTimeout(done, 20));
       if (port.installDetection.capability({ kind }).available) await port.installDetection.dispatch({ kind });
+    }
     rt.changed();
   }
 

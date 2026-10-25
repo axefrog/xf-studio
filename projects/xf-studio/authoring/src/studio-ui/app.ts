@@ -36,7 +36,7 @@ import { Frame, StudioRuntime, type Port } from "./runtime";
 import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./guidance/desktop-app-sheet";
 import { openReportDialog } from "./diagnostics/report-dialog";
 import { readinessText } from "./readiness-text";
-import { SETTINGS_PANEL, type SettingsSection } from "./settings-sections";
+import { SETTINGS_PANEL, type SettingsPart, type SettingsSection } from "./settings-sections";
 import { bindViewState, PreferenceViewState } from "./view-state";
 import { flushScrollMemories } from "./scroll-anchor";
 import { HeaderFit } from "./header-fit";
@@ -214,9 +214,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
    * collapsed. Then the group asked for is shown and focused.
    */
   const settingsPanel = byId.get(SETTINGS_PANEL);
-  rt.settings = { open: (section?: SettingsSection) => {
+  rt.settings = { open: (section?: SettingsSection, part?: SettingsPart) => {
     dock.reveal(SETTINGS_PANEL, false);
-    requestAnimationFrame(() => settingsPanel?.show?.(section));
+    requestAnimationFrame(() => settingsPanel?.show?.(section, part));
   } };
   guidance = mountGuidance(rt, { openHelp });
   const header = shellHeader(rt, theme, view, () => openHelp());

@@ -42,6 +42,8 @@ export { ConflictNotice, type ConflictKeep, type ConflictNoticeOptions, type Con
 export { DISCARD_WAITING_CONFIRM, WorkspaceNotice, WORKSPACE_NOTICE_ACTIONS, type WorkspaceNoticeAction, type WorkspaceNoticeOptions, type WorkspaceNoticeState } from "./workspace-notice";
 // Feature-specific: mod packaging (the Mod package and Expression sets panels).
 export { modLine, type ModLineOptions } from "./mod-line";
+// Feature-specific: mod frameworks (Settings › Game › Mod frameworks).
+export { FrameworkStatus, type FrameworkStatusLink, type FrameworkStatusOptions, type FrameworkStatusRow, type FrameworkStatusState } from "./framework-status";
 export { contrastMark, CONTRAST_WORDS, sampleBackground, setContrastMark, SwatchCard, type SwatchCardOptions, type SwatchSample } from "./swatch-card";
 // Feature-specific: lighting setups.
 export { LightList, type LightListItem, type LightListOptions } from "./light-list";

@@ -8,6 +8,7 @@ import { SETTINGS_PANEL, SETTINGS_SECTION_TITLES, type SettingsSection } from ".
 import type { ViewContext } from "../views/panels";
 import { wolvenKitStepButton } from "../wolvenkit-step";
 import type { PanelController } from "./collection";
+import { frameworkGroup } from "./framework-group";
 import { gameSetupForm, wantsWolvenKitStep } from "./game-setup";
 import { checkForUpdatesNow, checkingForUpdates, openReleasesPage, setUpdateLine, updateCheckLine } from "../update-check";
 
@@ -19,13 +20,15 @@ type Theme = "system" | "light" | "dark";
 /**
  * Settings (UI-109): everything a person configures, in one panel with plain groups: Game (game folder, mod manager and profile, the eye
  * plate head), Saves (where the Save Explorer reads saves), Tools (WolvenKit), Appearance (theme, input hints, research tools), Updates
- * (the check at start, and checking now), optional Experimental features and Privacy & diagnostics. Composed from the library's controls and the one setup form (`game-setup.ts`); each choice is saved as it is
+ * (the check at start, and checking now), optional Experimental features and Privacy & diagnostics. Game ends with Mod frameworks: which
+ * ArchiveXL, RED4ext and redscript the game will load, and where to get one that is too old or missing (`framework-group.ts`). Composed from the library's controls and the one setup form (`game-setup.ts`); each choice is saved as it is
  * made, through its own typed port (local settings, UI preferences, diagnostics). Opened from the header's Settings button, the command
  * palette ("Settings", "Game folder and mod manager", "Where are my saves?"), Help and every "Open Settings" next step (`rt.settings.open`).
  */
 export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelController & { show(section?: SettingsSection): void } {
   const port = rt.port, appearance = context.appearance;
   const form = gameSetupForm(rt);
+  const frameworks = frameworkGroup(rt);
 
   const theme = new Segmented<Theme>({ label: "Theme", options: [{ value: "system", label: "Match system", icon: "monitor" },
     { value: "light", label: "Light", icon: "sun" }, { value: "dark", label: "Dark", icon: "moon" }], onSelect: value => { appearance.setTheme(value); rt.changed(); } });
@@ -89,7 +92,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
   showWorkspace.hidden = !port.files.snapshot().workspaceFile;
   const sections: Record<SettingsSection, HTMLElement> = {
     game: group("game", "Saved on this computer as you choose. XF Studio finds your game and mod manager for you; change a choice only if it picked the wrong one.",
-      form.status, h("div", { class: "row wrap gap-s" }, gameStep.element), form.game),
+      form.status, h("div", { class: "row wrap gap-s" }, gameStep.element), form.game, frameworks.element),
     saves: group("saves", "Where the Save Explorer finds your saves. XF Studio uses the game's own saves folder unless you choose another.", form.saves),
     tools: group("tools", ["XF Studio sets WolvenKit up for you (it asks before downloading). Name your own copy only if you'd rather use it.",
       "The 3D view is built from files XF Studio prepares from your game. Clearing them frees the space; they're prepared again when needed."],
@@ -108,8 +111,10 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       // Finding the game and mod manager is read only and quick: done the first time Settings is shown.
       visibility: visible => { if (visible && !shown) { shown = true; form.detect(); } } },
     /** Bring a group into view and put focus on its first control (the first thing still to choose, in Game). */
-    show(which: SettingsSection = "game") {
+    show(which: SettingsSection = "game", part?: string) {
       const target = sections[which];
+      // The Mod frameworks group, inside Game (the Mod package card and Help point here).
+      if (which === "game" && part === "frameworks") { frameworks.focus(); return; }
       target.scrollIntoView?.({ block: "start" });
       // While WolvenKit is the thing to do, Game lands on its step (the palette's WolvenKit entry comes here).
       if (which === "game" && !gameStep.element.hidden) requestAnimationFrame(() => gameStep.element.focus());
@@ -121,6 +126,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       const revealCapability = port.files.capability({ kind: "workspace.showInFolder" });
       capabilityScope(showWorkspace, revealCapability); applyCapability(showWorkspace, revealCapability);
       form.update(frame);
+      frameworks.update(frame);
       const step = wantsWolvenKitStep(frame);
       gameStep.update(frame, step);
       gameStep.element.parentElement!.hidden = gameStep.element.hidden;

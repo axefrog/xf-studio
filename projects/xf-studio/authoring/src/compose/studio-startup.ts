@@ -30,6 +30,8 @@ import { openProjectLinkInNewTab } from "../app/browser/project-links-device";
 import type { ProjectLink } from "../app/project-links";
 import { createBrowserLocalSetup } from "../setup/browser/browser-local-setup-device";
 import { createBrowserInstallDetection } from "../installation/browser/browser-install-detection-device";
+import { watchFrameworkInputs } from "../installation/framework-check-watch";
+import { frameworkStatusVerification } from "./framework-status-verification";
 import { createBrowserSaveExplorerDevice, savesLocationSignal } from "../saves/browser/browser-save-explorer-device";
 import { createModuleServices } from "./module-services";
 import { createBrowserPoseLibraryDevice } from "../animation/browser/browser-pose-device";
@@ -240,7 +242,11 @@ async function start(host: StudioHost, root: HTMLElement) {
   const transitions = new TransitionSettings(workspace.preview.transitions);
   // A verification workspace has its own settings and never adds a mod (INSTALL-01, UI-98).
   const localSetup = host.localSetup ?? createBrowserLocalSetup({ verification });
-  const installDetection = createBrowserInstallDetection();
+  // Verification only: the framework check is answered by specimens (compose/framework-status-verification.ts).
+  const frameworkFixture = verification ? frameworkStatusVerification({ setup: localSetup, detection: () => installDetection }) : undefined;
+  const installDetection = createBrowserInstallDetection(frameworkFixture?.transport);
+  // The framework check reads the settings and a few installed files: it runs by itself as they change, so it is ready when it is looked at.
+  watchFrameworkInputs(localSetup, installDetection);
   // Part-less modules' services (the Save Explorer, Poses), over their browser devices. The saves device reads the workspace's own saves
   // folder and follows Settings › Saves (UI-109). Poses reach the shown V through the stage, which the head fills in once it is attached;
   // the whole-body view goes through the application like the toolbar's.
@@ -559,6 +565,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     const viewer = () => heads.shown()?.scene;
     Object.assign(window, { xfStudioPresentation: port,
     xfStudioTabFixtures: tabFixtures,
+    // Verification only (Settings › Game › Mod frameworks, tools/framework-status-look.ts): the check's states, answered by specimens.
+    xfStudioFrameworkStatus: { states: frameworkFixture!.states, state: frameworkFixture!.state, release: frameworkFixture!.release },
     xfStudioPolish5: {
       running: () => {
         if (bootstrap.collection.service.activity()) throw Error("Wait for the current request first.");

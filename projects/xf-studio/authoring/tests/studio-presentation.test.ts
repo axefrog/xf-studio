@@ -25,6 +25,8 @@ test("replacement presentation can perform current cross-surface workflows witho
   // No desktop-app offer without a host that has one (the desktop app, fixtures): nothing about it is shown.
   expect(shell.desktopApp.offered()).toBe(false);
   expect(shell.desktopApp.capability({ kind: "desktopApp.refresh" }).available).toBe(false);
+  // The detection snapshot carries what Settings › Game › Mod frameworks shows: nothing without a chosen game folder.
+  expect(shell.installDetection.snapshot().frameworkStatus).toMatchObject({ shown: false, rows: [], attention: 0 });
   let notifications = 0; const unsubscribe = shell.subscribe(() => notifications++);
   const initial = shell.snapshot(), firstLayer = initial.authoring.document.recipe.layers[0];
   expect(initial.previewReadiness).toMatchObject({ phase: "ready", size: 1024 });
