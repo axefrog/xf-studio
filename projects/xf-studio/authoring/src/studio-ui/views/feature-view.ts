@@ -60,7 +60,9 @@ export type FeatureTargetMenu<A> = { label: string; detail?: string; title: stri
  * dispatches through the facade with the shell's feedback.
  */
 export type FeatureCommand<A> = Pick<Command, "id" | "title" | "group" | "icon" | "shortcut" | "keywords"> & {
-  action: A | undefined; unavailable?: string };
+  action: A | undefined; unavailable?: string;
+  /** A command that opens something first (a menu, a name popover) rather than dispatching one of the feature's actions: it carries its own capability. */
+  custom?: { capability: StudioCapability; run(): void } };
 
 /** The flat UV editor a view hosts in one of its panels (today only eye makeup's UV map; UI-75). */
 export type UvViewportSlot = {

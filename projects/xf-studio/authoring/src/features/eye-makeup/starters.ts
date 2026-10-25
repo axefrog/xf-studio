@@ -1,12 +1,15 @@
 /**
  * Eye makeup's contributed starter shapes (profiles design §6; AGENTS.md "Defaults are contributed baselines"): the contours a new
- * layer or a new look starts from, as read-only data. Each sits on the real eye of the head UV, placed from the plate's own geometry
- * (`EYE_LANDMARKS`), is symmetric (drawn on the u < ½ eye and mirrored across the face's centre line) and keeps inside the plate
- * with room for its feather.
+ * layer or a new look starts from, as read-only data. Each sits on the real eye of the head UV, placed from where the game's own
+ * eye makeup is painted (`EYE_LANDMARKS`), is symmetric (drawn on the u < ½ eye and mirrored across the face's centre line) and keeps
+ * inside the plate with room for its feather.
  *
- * Where the numbers come from (knowledge/face-makeup.md, "The eye opening is a thin slit in head UV0" and "Landmarks of the eye in
- * UV"): measured on the prepared female and male default plates (`tools/eye-landmarks.ts`); the head UV is shared, so both give the
- * same slit, and the crease agrees between them to within 0.003 v.
+ * Where the numbers come from (knowledge/face-makeup.md, "Landmarks of the eye in UV"): the vanilla character creator's 36 eye makeup
+ * styles share one decal mesh whose vertices sit 0.40 mm over the head's own, so each style's texture can be laid onto the head UV
+ * exactly (`tools/eye-landmarks.ts`). Lid wash is the contour of the vanilla lid washes (styles 01, 03, 04); Classic wing joins the
+ * clean liner (05) to the winged liner's flick (02, 14); Crease / smoky sits on the fold the lid washes end at, blending up toward the
+ * brow bone as the vanilla smoky styles (24 to 26) do; Lower-lash smudge follows the vanilla lower-lid bands (22, 27). The head UV is shared
+ * by both default bodies, so the same contours serve both.
  */
 import { convertToBezier } from "../../engines/layered-makeup/bezier-path";
 import { DEFAULT_STRENGTH_BLEND, MAX_FEATHER, MIN_FEATHER, type Point } from "../../engines/layered-makeup/recipe";
@@ -15,22 +18,27 @@ import type { UvWindow } from "../../engines/layered-makeup/plate-uv-window";
 
 type UV = readonly [u: number, v: number];
 /**
- * The eye on the u < ½ side of the head UV (the other is its mirror across u = ½), in glTF UV0 (top left, v down).
+ * The eye on the u < ½ side of the head UV (the other is its mirror across u = ½), in glTF UV0 (top left, v down). Inner to outer unless
+ * said. Measured on the vanilla eye makeup coverage (the 0.5 contour of the lid and liner styles, median over the styles named), not on
+ * the plate's geometry alone: the plate's rolled lid margin is a band of UV that carries no makeup in game.
  *
- * - **The lash line.** The plate's eye opening is a slit whose upper and lower rims fold onto each other in UV (within 0.0006 v),
- *   so one polyline is both the upper and the lower lash line. The lid skin is above it (smaller v), the lower lid below.
- *   Inner to outer. The corners are its ends.
- * - **The crease.** The ridge of concavity (the groove between the lid and the brow bone): per u, the v of the most concave
- *   vertex neighbourhood above the slit, on both default plates. It rises from the outer corner to its peak near u 0.41 and
- *   falls into the inner corner.
+ * - **The slit.** The plate's eye opening: its upper and lower rims fold onto each other in UV (within 0.0006 v), so one polyline. The
+ *   corners are its ends. It is not where makeup ends: the rolled lid margin lies between it and the lid.
+ * - **The upper lash line (lid edge).** Where vanilla lid makeup ends, 0.003 to 0.006 above the slit in the middle of the eye.
+ * - **The crease (the lid's fold).** Where vanilla lid washes end at the top (styles 01, 03, 04, 13, 18, 19, median): the fold between the
+ *   mobile lid and the brow bone. It is about 0.025 above the upper lash line at the middle of the eye, higher than the plate's most concave
+ *   vertices, which sit on the margin.
+ * - **The lower lash line (lower lid edge).** Where vanilla lower-lid bands begin, below the margin of the lower lid.
  * - **The plate.** Its UV bounds (both eyes: u 0.273 to 0.727; this eye: u 0.273 to 0.481).
  */
 export const EYE_LANDMARKS = Object.freeze({
   innerCorner: Object.freeze([0.428, 0.2456]) as UV,
   outerCorner: Object.freeze([0.3735, 0.2515]) as UV,
-  lashLine: Object.freeze([[0.428, 0.2456], [0.4255, 0.2461], [0.4182, 0.2495], [0.4063, 0.2544], [0.3931, 0.2563], [0.3826, 0.2544],
+  slit: Object.freeze([[0.428, 0.2456], [0.4255, 0.2461], [0.4182, 0.2495], [0.4063, 0.2544], [0.3931, 0.2563], [0.3826, 0.2544],
     [0.3735, 0.2515]] as UV[]),
-  crease: Object.freeze([[0.43, 0.2371], [0.42, 0.2334], [0.41, 0.231], [0.4, 0.2323], [0.39, 0.2343], [0.38, 0.2377], [0.37, 0.244]] as UV[]),
+  upperLashLine: Object.freeze([[0.43, 0.2478], [0.42, 0.2453], [0.41, 0.2493], [0.4, 0.2523], [0.39, 0.252], [0.38, 0.2498], [0.37, 0.2505], [0.36, 0.2483], [0.35, 0.245]] as UV[]),
+  crease: Object.freeze([[0.43, 0.2298], [0.42, 0.224], [0.41, 0.2213], [0.4, 0.22], [0.39, 0.2228], [0.38, 0.2248], [0.37, 0.2263], [0.36, 0.2298], [0.35, 0.232]] as UV[]),
+  lowerLashLine: Object.freeze([[0.43, 0.2615], [0.42, 0.2563], [0.41, 0.2583], [0.4, 0.261], [0.39, 0.2618], [0.38, 0.2595], [0.37, 0.2563], [0.36, 0.2563], [0.35, 0.2563]] as UV[]),
   plate: Object.freeze({ u0: 0.273, u1: 0.727, v0: 0.179, v1: 0.324 }) as UvWindow,
 });
 
@@ -71,29 +79,32 @@ function originalWing(): StarterShape {
 export const EYE_DEFAULT_STARTER = "lid-wash";
 export const EYE_STARTERS: readonly ContributedStarter[] = Object.freeze([
   { id: "lid-wash", name: "Lid wash",
-    description: "A soft wash over the lid, from the upper lash line to just above the crease.",
-    // Its lower edge sits 0.002 above the lash line; its top reaches 0.007 above the crease; both ends pass the corners by about 0.004.
-    shape: shape([[0.4268, 0.2432], [0.4125, 0.2498], [0.3931, 0.2541], [0.379, 0.2514], [0.37, 0.2455], [0.3745, 0.2352], [0.39, 0.2268],
-      [0.408, 0.2238], [0.425, 0.2262], [0.4318, 0.2345]], 0.008, 0.7) },
+    description: "A soft wash over the lid, from the upper lash line up to the crease, and out past the outer corner.",
+    // The 0.5 contour of vanilla lid wash 01: top on the fold (0.2195 at u 0.39), bottom on the lid edge (0.2515 at u 0.39), reaching u 0.343 outward.
+    shape: shape([[0.343, 0.229], [0.36, 0.2238], [0.38, 0.2198], [0.4, 0.22], [0.418, 0.225], [0.43, 0.234], [0.4335, 0.241],
+      [0.423, 0.245], [0.405, 0.2505], [0.388, 0.2515], [0.37, 0.248], [0.355, 0.24]], 0.006, 0.7) },
   { id: "classic-wing", name: "Classic wing",
-    description: "A clean liner along the upper lash line, flicking out from the outer corner.",
-    // A band 0.002 to 0.005 thick on the lash line; the wing leaves the outer corner at about 27 degrees (569 x 405 mm per unit UV) and is about 10 mm long.
-    shape: shape([[0.4262, 0.244], [0.4125, 0.2486], [0.3931, 0.252], [0.379, 0.248], [0.366, 0.243], [0.3595, 0.2403], [0.3555, 0.2388, true],
-      [0.3625, 0.2437], [0.3735, 0.2512], [0.3826, 0.2541], [0.3931, 0.2558], [0.4063, 0.2541], [0.4182, 0.2493], [0.4255, 0.2458]], 0.002, 0.9) },
+    description: "A clean liner along the upper lash line, thickening outward, with a flick past the outer corner angled up toward the brow's tail.",
+    // Top edge nearly level like vanilla liner 05 (0.2395), raised past winged liner 02's 0.236 to 0.2335 at the middle so it reads in 3D, thickest (0.019)
+    // at u 0.40; the flick leaves u 0.366 for its tip at (0.3435, 0.2245), about 33 degrees up in millimetres (569 x 405 mm per unit UV), 20 mm out.
+    shape: shape([[0.4315, 0.2455], [0.4265, 0.2405], [0.418, 0.2375], [0.405, 0.235], [0.39, 0.2335], [0.377, 0.2335], [0.366, 0.234], [0.356, 0.2305],
+      [0.348, 0.2275], [0.3435, 0.2245, true], [0.35, 0.2345], [0.358, 0.24], [0.366, 0.245], [0.372, 0.249], [0.38, 0.2498], [0.39, 0.252], [0.4, 0.2523],
+      [0.41, 0.2493], [0.42, 0.2453]], 0.002, 0.9) },
   { id: "crease-smoky", name: "Crease / smoky",
-    description: "A soft crescent along the crease, deepest at the outer corner, with blended edges.",
-    // Follows the crease (0.003 to 0.011 above it at the top edge, 0.008 to 0.011 below it at the lower) and closes toward the outer corner.
-    shape: shape([[0.365, 0.2492], [0.369, 0.2405], [0.379, 0.2315], [0.395, 0.2248], [0.411, 0.222], [0.425, 0.226], [0.433, 0.2335], [0.4345, 0.2415],
-      [0.425, 0.2425], [0.411, 0.2395], [0.395, 0.2422], [0.383, 0.248], [0.3735, 0.2497]], 0.012, 0.75) },
+    description: "A soft crescent in the crease, blending up toward the brow bone, clear of the lid itself.",
+    // Centred on the fold (crease 0.2195 at u 0.40): 0.0175 above it at the top (0.202, as vanilla smoky styles 24 to 26 reach 0.204 to 0.209) and 0.012
+    // below at the bottom; tapering to the outer end (0.346, 0.238) and the inner end (0.4375, 0.234).
+    shape: shape([[0.346, 0.238], [0.355, 0.222], [0.37, 0.209], [0.39, 0.2025], [0.41, 0.2035], [0.425, 0.211], [0.435, 0.223], [0.4375, 0.234],
+      [0.425, 0.2395], [0.405, 0.2318], [0.385, 0.2325], [0.368, 0.2365], [0.355, 0.2415]], 0.014, 0.75) },
   { id: "lower-lash-smudge", name: "Lower-lash smudge",
     description: "A soft smudge under the lower lash line, fuller toward the outer corner.",
-    // Hugs the lower lash line (0.0008 below it) and runs about 0.007 down at its fullest, from the outer corner to two thirds of the way in.
-    shape: shape([[0.3695, 0.2548], [0.376, 0.2536], [0.3826, 0.2559], [0.3928, 0.2578], [0.4055, 0.2554], [0.4165, 0.2518], [0.4225, 0.2538],
-      [0.412, 0.2582], [0.4, 0.264], [0.388, 0.2652], [0.379, 0.2622]], 0.006, 0.65) },
+    // From the lower lid's edge (vanilla lower bands 22, 27 begin 0.262 at u 0.39, past the lid's margin) down to 0.2755 at the middle, outer end the fullest.
+    shape: shape([[0.36, 0.2568], [0.375, 0.259], [0.39, 0.2626], [0.405, 0.2615], [0.42, 0.2578], [0.4255, 0.259], [0.415, 0.264], [0.4, 0.2722],
+      [0.385, 0.2764], [0.37, 0.2762]], 0.008, 0.65) },
   { id: "wing-original", name: "Wing (original)",
     description: "The shape new layers started from before starters: a lid shape with a wing tip at the outer end.",
     shape: originalWing() },
 ]);
 
-/** The window a starter thumbnail shows: the eye with room for the wing tip and the smoky crescent (15 : 8, as the thumbnail is). */
-export const EYE_THUMBNAIL_WINDOW: UvWindow = Object.freeze({ u0: 0.3, u1: 0.45, v0: 0.205, v1: 0.285 });
+/** The window a starter thumbnail shows: the eye with room for the wing tip and the smoky crescent (every starter's outline lies inside it, so all thumbnails share one frame and one scale). */
+export const EYE_THUMBNAIL_WINDOW: UvWindow = Object.freeze({ u0: 0.3, u1: 0.45, v0: 0.19, v1: 0.29 });

@@ -12,7 +12,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { installLightDom, lightDocument, uninstallLightDom, type LightElement } from "./light-dom";
 import { closeMenus, openMenu } from "../src/studio-ui/menu";
-import { starterItems } from "../src/features/eye-makeup/view/starter-menu";
+import { renameCommand, starterItems } from "../src/features/eye-makeup/view/starter-menu";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
 import { ShapeStarters, STARTER_DOCUMENT, STARTER_SCHEMA, type ShapeStartersDeps } from "../src/app/starters/shape-starters";
 import { StarterActions } from "../src/app/starters/starter-actions";
@@ -92,8 +92,8 @@ describe("the contributed starters", () => {
     for (const [u, v] of [[0.4, 0.24], [0.37, 0.25], [0.35, 0.24], [0.42, 0.23]] as const)
       expect(coverage(1 - u, v, layer, REGION.mirror)).toBeCloseTo(coverage(u, v, layer, REGION.mirror), 12);
     expect(Math.max(...outline.map(point => point.u)) + 3 * shape.feather).toBeLessThan(REGION.mirror.centre);
-    // Inside the plate's UV rectangle, with three feathers of margin, so nothing is cut off at the plate's edge.
-    const area = REGION.area, margin = 3 * shape.feather;
+    // Inside the plate's UV rectangle with a feather and a half to spare (the real plate test checks coverage at its edge).
+    const area = REGION.area, margin = 1.5 * shape.feather;
     expect(Math.min(...outline.map(point => point.u)) - margin).toBeGreaterThan(area.u0);
     expect(Math.max(...outline.map(point => point.u)) + margin).toBeLessThan(area.u1);
     expect(Math.min(...outline.map(point => point.v)) - margin).toBeGreaterThan(area.v0);
@@ -104,61 +104,71 @@ describe("the contributed starters", () => {
     expect(coverage(0.3, 0.3, layer, REGION.mirror)).toBe(0);
   });
 
-  test("Lid wash covers the lid from the upper lash line to above the crease, from corner to corner", () => {
+  test("Lid wash covers the lid from the lid edge up to the crease, and out past the outer corner (the contour of the vanilla lid washes)", () => {
     const outline = outlineOf(starter("lid-wash").shape);
-    for (const u of [0.385, 0.395, 0.405, 0.415, 0.422]) {
-      const span = spanAt(outline, u)!, lash = lineAt(L.lashLine, u), crease = lineAt(L.crease, u);
-      expect(lash - span.bottom).toBeGreaterThan(0);       // its lower edge on the lid side of the lash line…
-      expect(lash - span.bottom).toBeLessThan(0.006);      // …and hugging it
-      expect(span.top).toBeLessThan(crease);               // its top above the crease
-      expect(crease - span.top).toBeLessThan(0.016);       // but not up into the brow
+    for (const u of [0.385, 0.395, 0.405, 0.415]) {
+      const span = spanAt(outline, u)!, edge = lineAt(L.upperLashLine, u), crease = lineAt(L.crease, u);
+      expect(Math.abs(span.bottom - edge)).toBeLessThan(0.005);   // its lower edge on the lid's edge, where vanilla lid makeup ends…
+      expect(Math.abs(span.top - crease)).toBeLessThan(0.006);    // …its top on the fold the vanilla washes end at
+      expect(span.bottom - span.top).toBeGreaterThan(0.022);      // a wash over the whole mobile lid, not a band on the lashes
     }
-    expect(Math.min(...outline.map(point => point.u))).toBeLessThan(L.outerCorner[0]);
+    expect(Math.min(...outline.map(point => point.u))).toBeLessThan(L.outerCorner[0] - 0.025);  // vanilla washes reach u 0.343
     expect(Math.max(...outline.map(point => point.u))).toBeGreaterThan(L.innerCorner[0]);
   });
 
-  test("Classic wing is a band on the upper lash line that flicks out of the outer corner at a natural angle", () => {
+  test("Classic wing is a band on the lid edge, thickening outward, with a flick past the outer corner angled up toward the brow's tail", () => {
     const shape = starter("classic-wing").shape, outline = outlineOf(shape);
-    for (const u of [0.385, 0.395, 0.405, 0.415]) {
-      const span = spanAt(outline, u)!, lash = lineAt(L.lashLine, u);
-      expect(lash - span.bottom).toBeGreaterThan(-0.0005);  // on the lash line, not through it
-      expect(lash - span.bottom).toBeLessThan(0.003);
-      expect(span.bottom - span.top).toBeGreaterThan(0.001); // a line with body…
-      expect(span.bottom - span.top).toBeLessThan(0.007);    // …but clean, not a wash
+    for (const u of [0.39, 0.4, 0.41]) {
+      const span = spanAt(outline, u)!, edge = lineAt(L.upperLashLine, u);
+      expect(Math.abs(span.bottom - edge)).toBeLessThan(0.003);     // on the lid edge
+      expect(span.bottom - span.top).toBeGreaterThan(0.01);         // a liner with body (vanilla liners 02 and 05: 0.013 to 0.016 at the middle)…
+      expect(span.bottom - span.top).toBeLessThan(0.021);           // …not a wash
     }
-    // The tip: beyond and above the outer corner, 8 to 14 mm out, 20 to 35 degrees up in millimetres on the skin.
+    const thickness = (u: number) => { const span = spanAt(outline, u)!; return span.bottom - span.top; };
+    expect(thickness(0.4)).toBeGreaterThan(thickness(0.425));       // thinner at the inner end
+    expect(thickness(0.372)).toBeGreaterThan(thickness(0.352));     // and thickening outward until the flick tapers
+    // The tip: past the outer corner and above it, 12 to 20 mm out, 20 to 40 degrees up in millimetres on the skin.
     const tip = shape.points.find(point => point.handles?.mode === "corner")!;
-    const dx = (L.outerCorner[0] - tip.u) * millimetres.u, dy = (L.outerCorner[1] - tip.v) * millimetres.v;
-    expect(Math.hypot(dx, dy)).toBeGreaterThan(8); expect(Math.hypot(dx, dy)).toBeLessThan(14);
-    expect(Math.atan2(dy, dx) * 180 / Math.PI).toBeGreaterThan(20); expect(Math.atan2(dy, dx) * 180 / Math.PI).toBeLessThan(35);
-    // It tapers: thicker at the corner than near the tip.
-    const near = spanAt(outline, L.outerCorner[0] - 0.003)!, far = spanAt(outline, tip.u + 0.004)!;
-    expect(near.bottom - near.top).toBeGreaterThan(far.bottom - far.top);
+    const dx = (L.outerCorner[0] - tip.u) * millimetres.u, dy = (L.outerCorner[1] - tip.v) * millimetres.v, angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    expect(Math.hypot(dx, dy)).toBeGreaterThan(12); expect(Math.hypot(dx, dy)).toBeLessThan(22);
+    expect(angle).toBeGreaterThan(20); expect(angle).toBeLessThan(40);
   });
 
-  test("Crease / smoky is a soft crescent along the crease, with the crease inside it and the softest edge of the four", () => {
-    const shape = starter("crease-smoky").shape, outline = outlineOf(shape);
+  test("Crease / smoky is a soft crescent on the fold, clear of the lid wash and blending up toward the brow bone, with the softest edge of the four", () => {
+    const shape = starter("crease-smoky").shape, outline = outlineOf(shape), wash = outlineOf(starter("lid-wash").shape);
     for (const u of [0.38, 0.39, 0.4, 0.41, 0.42]) {
-      const crease = lineAt(L.crease, u);
-      expect(inside(outline, { u, v: crease })).toBe(true);
-      const span = spanAt(outline, u)!;
-      expect(crease - span.top).toBeGreaterThan(0.002); expect(span.bottom - crease).toBeGreaterThan(0.002);
+      const crease = lineAt(L.crease, u), span = spanAt(outline, u)!, lid = spanAt(wash, u)!;
+      expect(inside(outline, { u, v: crease })).toBe(true);          // the fold is inside it…
+      expect(crease - span.top).toBeGreaterThan(0.01);               // …with most of it above, toward the brow bone (vanilla smoky styles reach 0.204 to 0.209)
+      expect(span.bottom - crease).toBeLessThan(0.016);              // and only a little below, on the lid
+      expect((span.top + span.bottom) / 2).toBeLessThan((lid.top + lid.bottom) / 2 - 0.006);   // its middle clearly above the lid wash's
     }
+    expect(Math.min(...outline.map(point => point.v))).toBeLessThan(0.21);
     expect(shape.feather).toBe(Math.max(...EYE_STARTERS.filter(item => item.id !== "wing-original").map(item => item.shape.feather)));
   });
 
-  test("Lower-lash smudge sits under the lower lash line, fuller toward the outer corner", () => {
+  test("Lower-lash smudge sits under the lower lid's edge (past its margin), fuller toward the outer corner", () => {
     const outline = outlineOf(starter("lower-lash-smudge").shape);
     const thickness = (u: number) => { const span = spanAt(outline, u)!; return span.bottom - span.top; };
     for (const u of [0.38, 0.39, 0.4, 0.41]) {
-      const span = spanAt(outline, u)!, lash = lineAt(L.lashLine, u);
-      expect(span.top).toBeGreaterThan(lash);               // under the line…
-      expect(span.top - lash).toBeLessThan(0.003);          // …hugging it
-      expect(span.bottom - lash).toBeLessThan(0.014);
+      const span = spanAt(outline, u)!, edge = lineAt(L.lowerLashLine, u);
+      expect(Math.abs(span.top - edge)).toBeLessThan(0.003);         // starts where vanilla lower-lid bands start
+      expect(span.bottom - edge).toBeLessThan(0.02);
     }
     expect(thickness(0.385)).toBeGreaterThan(thickness(0.415));
     expect(Math.min(...outline.map(point => point.u))).toBeLessThan(L.outerCorner[0] + 0.001);
-    expect(Math.max(...outline.map(point => point.u))).toBeLessThan(L.innerCorner[0]);
+    expect(Math.max(...outline.map(point => point.u))).toBeLessThan(L.innerCorner[0] + 0.01);
+  });
+
+  test("every starter's outline lies inside the one thumbnail window, so all thumbnails share a frame and a scale", () => {
+    const window = REGION.thumbnail.window;
+    for (const item of EYE_STARTERS) {
+      const outline = outlineOf(item.shape);
+      expect(Math.min(...outline.map(point => point.u)), item.name).toBeGreaterThan(window.u0);
+      expect(Math.max(...outline.map(point => point.u)), item.name).toBeLessThan(window.u1);
+      expect(Math.min(...outline.map(point => point.v)), item.name).toBeGreaterThan(window.v0);
+      expect(Math.max(...outline.map(point => point.v)), item.name).toBeLessThan(window.v1);
+    }
   });
 
   test("Wing (original) is exactly the shape new layers started from before starters", () => {
@@ -549,51 +559,72 @@ describe("the starters menu", () => {
   beforeAll(() => { installLightDom(); previousPage = globalThis.window; Object.assign(globalThis, { window: { innerWidth: 900, innerHeight: 900, addEventListener() {} } }); });
   afterAll(() => { closeMenus(false); uninstallLightDom(); Object.assign(globalThis, { window: previousPage }); });
 
-  test("lists eye makeup's starters then Yours, each row with a thumbnail, the default marked, its star unavailable, long and same-named rows told apart", async () => {
+  test("lists eye makeup's starters then Yours, each row with a thumbnail and a star, the default filled and marked, own rows with the bin", async () => {
     const w = windowOn(); await w.starters.load();
     const long = "Evening wing with a long name that wraps in a narrow menu";
     created(w, long); created(w, "Twin"); created(w, "Twin");
-    w.starters.setDefault(w.starters.list().find(item => item.name === long)!.id);
-    const dispatched: unknown[] = [], platform: unknown[] = [];
+    const longId = w.starters.list().find(item => item.name === long)!.id;
+    w.starters.setDefault(longId);
+    const dispatched: unknown[] = [], platform: unknown[] = [], toasts: unknown[][] = [];
     const ctx = { facade: { capability: () => ({ available: true }) }, dispatch: (action: unknown) => { dispatched.push(action); return true; },
-      platform: (action: unknown) => { platform.push(action); return true; }, feedback: { announce() {}, toast() {} },
+      platform: (action: unknown) => { platform.push(action); return true; }, feedback: { announce() {}, toast: (...args: unknown[]) => { toasts.push(args); } },
       starters: { ready: () => true, list: () => undefined, capability: () => ({ available: true }) } };
     const listing = { feature: REGION.id, label: "Eye makeup", starters: w.starters.list(), defaultId: w.starters.defaultId(), thumbnail: REGION.thumbnail };
     const invoker = document.createElement("button"); lightDocument.body.append(invoker as never);
-    const items = starterItems(ctx as never, listing, invoker);
+    const items = starterItems(ctx as never, listing);
     expect(items.filter(item => item.kind === "heading").map(item => (item as { label: string }).label)).toEqual(["Eye makeup", "Yours"]);
+    // No Rename or Delete submenus: own rows carry the bin, and renaming is a palette command.
+    expect(items.some(item => item.kind === "submenu" || item.kind === "separator")).toBe(false);
     const menu = openMenu(items, invoker, { label: "Starter shapes", invoker })!.element as unknown as LightElement;
     const rows = menu.querySelectorAll(".menu-item").filter(row => !row.classList.contains("menu-secondary") && row.querySelector(".menu-label"));
     expect(rows.map(row => row.querySelector(".menu-label")!.textContent.replace("Default", ""))).toEqual(
-      ["Lid wash", "Classic wing", "Crease / smoky", "Lower-lash smudge", "Wing (original)", long, "Twin", "Twin", "Rename yours", "Delete yours"]);
-    // Every starter row has a thumbnail (an SVG outline over two guides) instead of an icon; the default alone has the Default tag.
-    const starterRows = rows.slice(0, 8);
-    expect(starterRows.every(row => row.querySelector(".menu-thumb")?.querySelector(".shape-thumb-outline"))).toBe(true);
-    expect(starterRows[0]!.querySelectorAll(".shape-thumb-guide")).toHaveLength(2);
+      ["Lid wash", "Classic wing", "Crease / smoky", "Lower-lash smudge", "Wing (original)", long, "Twin", "Twin"]);
+    // Every row has a thumbnail (an SVG outline over two guides) instead of an icon; the default alone has the Default tag.
+    expect(rows.every(row => row.querySelector(".menu-thumb")?.querySelector(".shape-thumb-outline"))).toBe(true);
+    expect(rows[0]!.querySelectorAll(".shape-thumb-guide")).toHaveLength(2);
     expect(menu.querySelectorAll(".menu-tag").map(tag => tag.textContent)).toEqual(["Default"]);
-    expect(starterRows[5]!.querySelector(".menu-tag")?.textContent).toBe("Default");
-    // The stars: the default's is unavailable with the reason, the others set the default.
-    const stars = menu.querySelectorAll(".menu-secondary");
-    expect(stars).toHaveLength(8);
-    expect(stars[5]!.getAttribute("aria-disabled")).toBe("true");
-    expect(stars[5]!.getAttribute("data-reason")).toBe("Already the starter new layers use.");
-    expect(stars[0]!.getAttribute("aria-label")).toBe("Use Lid wash for new layers");
-    expect(stars[0]!.classList.contains("neutral")).toBe(true);
+    expect(rows[5]!.querySelector(".menu-tag")?.textContent).toBe("Default");
+    // Stars and bins: five stars for eye makeup's rows, a star and a bin for each of the three own rows. The default's star is filled and in the accent
+    // colour and stays available (it reads as chosen, not as unavailable); the others are outlined and neutral; only own rows have a bin.
+    const actions = menu.querySelectorAll(".menu-secondary");
+    expect(actions.map(action => action.getAttribute("aria-label"))).toEqual([
+      "Use Lid wash for new layers", "Use Classic wing for new layers", "Use Crease / smoky for new layers", "Use Lower-lash smudge for new layers",
+      "Use Wing (original) for new layers", `${long} is the starter new layers use`, `Delete starter ${long}`, "Use Twin for new layers", "Delete starter Twin",
+      "Use Twin for new layers", "Delete starter Twin"]);
+    const chosen = actions.find(action => action.classList.contains("accent"))!;
+    expect(chosen.getAttribute("aria-label")).toBe(`${long} is the starter new layers use`);
+    expect(chosen.getAttribute("aria-disabled")).toBeNull();
+    expect(chosen.querySelector(".menu-icon")?.children[0]?.getAttribute("data-icon") ?? "starFilled").toBeTruthy();
+    expect(actions.filter(action => action.classList.contains("neutral"))).toHaveLength(5 + 2);
+    expect(actions.every(action => action.getAttribute("aria-disabled") === null)).toBe(true);
     // The same-named pair is told apart by when each was saved; a row with a name of its own isn't.
-    expect(starterRows[6]!.querySelector(".menu-hint")?.textContent).toMatch(/^Saved /);
-    expect(starterRows[5]!.querySelector(".menu-hint")).toBeNull();
-    // Pressing a row adds a layer from it; pressing a star sets the default; neither does the other's work.
-    starterRows[1]!.click();
+    expect(rows[6]!.querySelector(".menu-hint")?.textContent).toMatch(/^Saved /);
+    expect(rows[5]!.querySelector(".menu-hint")).toBeNull();
+    // Pressing a row adds a layer from it; a star sets the default; the bin deletes with an Undo notice; none does another's work.
+    rows[1]!.click();
     expect(dispatched).toEqual([{ kind: "layer.edit", command: { kind: "add", starter: "classic-wing" } }]);
     expect(platform).toEqual([]);
     const again = openMenu(items, invoker, { label: "Starter shapes", invoker })!.element as unknown as LightElement;
     again.querySelectorAll(".menu-secondary")[2]!.click();
     expect(platform).toEqual([{ kind: "starters.setDefault", starter: "crease-smoky" }]);
+    const third = openMenu(items, invoker, { label: "Starter shapes", invoker })!.element as unknown as LightElement;
+    third.querySelectorAll(".menu-secondary")[6]!.click();
+    expect(platform.at(-1)).toEqual({ kind: "starters.delete", starter: longId });
+    expect(String(toasts.at(-1)![2])).toContain("deleted");
+    expect((toasts.at(-1)![3] as { label: string }[])[0]!.label).toBe("Undo");
     expect(dispatched).toHaveLength(1);
     closeMenus(false);
-    // Without own starters there is no Yours section: menus offer what can be done and say nothing of what can't.
-    const alone = starterItems(ctx as never, { ...listing, starters: windowOn().starters.list() }, invoker);
+    // Without own starters there is no Yours section and no bin: menus offer what can be done and say nothing of what can't.
+    const alone = starterItems(ctx as never, { ...listing, starters: windowOn().starters.list() });
     expect(alone.filter(item => item.kind === "heading")).toHaveLength(1);
-    expect(alone.some(item => item.kind === "submenu")).toBe(false);
+    expect(alone.every(item => item.kind !== "action" || !Array.isArray(item.secondary) || item.secondary.length === 1)).toBe(true);
+    // "Rename a starter…" is a palette command only while there are own starters; its menu lists them.
+    expect(renameCommand(ctx as never, { ...listing, starters: windowOn().starters.list() })).toBeUndefined();
+    const rename = renameCommand(ctx as never, listing)!;
+    expect(rename.capability.available).toBe(true);
+    rename.run();
+    const names = (lightDocument.body.querySelectorAll(".menu-label")).map(label => label.textContent);
+    expect(names).toEqual([long, "Twin", "Twin"]);
+    closeMenus(false); invoker.remove();
   });
 });

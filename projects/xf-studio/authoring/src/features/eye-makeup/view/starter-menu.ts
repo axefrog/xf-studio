@@ -1,5 +1,6 @@
-import { recordTime, shapeThumbnail, openValuePopover, type MenuItem } from "../../../studio-ui/components";
+import { openMenu, recordTime, shapeThumbnail, openValuePopover, type MenuItem } from "../../../studio-ui/components";
 import type { MenuAnchor } from "../../../studio-ui/menu";
+import type { MenuSecondary } from "../../../studio-ui/components/menu-secondary";
 import type { StarterListing } from "../../../app/starters/starter-actions";
 import type { StarterView } from "../../../app/starters/shape-starters";
 import { addLayerFrom, type EyeMakeupViewContext } from "./actions";
@@ -13,10 +14,12 @@ const ALREADY = "Already the starter new layers use.";
 
 /**
  * The starters menu's rows (the New tab menu's layout, U3): a section for the feature's own starters, then Yours. Pressing a row adds
- * a layer with that shape; its star makes it the starter new layers and new looks use. Yours also offers Rename and Delete (a
- * tombstone, with Undo). A section with nothing in it is left out: menus are actionable, never informational.
+ * a layer with that shape. Its star makes it the starter new layers and new looks use (filled and in the accent colour on the one that
+ * is, beside its Default tag, and still available). A row of Yours also carries the quiet bin: delete, with Undo in the notice, as own
+ * layout defaults do. Renaming is a registered action reached from the command palette ("Rename a starter…"). A section with nothing
+ * in it is left out: menus are actionable, never informational.
  */
-export function starterItems(ctx: EyeMakeupViewContext, listing: StarterListing, invoker: Element): MenuItem[] {
+export function starterItems(ctx: EyeMakeupViewContext, listing: StarterListing): MenuItem[] {
   const own = listing.starters.filter(item => item.owner.kind === "user"), feature = listing.starters.filter(item => item.owner.kind !== "user");
   const savedAt = (item: StarterView) => item.owner.kind === "user" ? item.owner.savedAt : 0;
   const duplicate = (item: StarterView) => own.some(other => other.id !== item.id && other.name === item.name);
@@ -28,24 +31,35 @@ export function starterItems(ctx: EyeMakeupViewContext, listing: StarterListing,
       ...(item.isDefault ? { tag: "Default" } : {}), ...(item.description ? { tip: item.description } : {}),
       ...(item.owner.kind === "user" && duplicate(item) ? { hint: `Saved ${recordTime(savedAt(item), sameMinute(item))}` } : {}),
       run: () => { if (ctx.dispatch(apply)) ctx.feedback.announce(`Layer added from ${item.name}`); },
-      secondary: { icon: "star", name: `Use ${item.name} for new layers`, tone: "neutral",
-        capability: item.isDefault ? { available: false, reason: ALREADY } : ctx.starters.capability({ kind: "starters.setDefault", starter: item.id }),
-        run: () => { if (ctx.platform({ kind: "starters.setDefault", starter: item.id })) ctx.feedback.announce(`${item.name} will start new layers and new looks`); } } };
+      secondary: [star(item), ...(item.owner.kind === "user" ? [bin(item)] : [])] };
   };
+  const star = (item: StarterView): MenuSecondary => item.isDefault
+    ? { icon: "starFilled", name: `${item.name} is the starter new layers use`, tone: "accent", run: () => { ctx.feedback.announce(ALREADY); } }
+    : { icon: "star", name: `Use ${item.name} for new layers`, tone: "neutral", capability: ctx.starters.capability({ kind: "starters.setDefault", starter: item.id }),
+      run: () => { if (ctx.platform({ kind: "starters.setDefault", starter: item.id })) ctx.feedback.announce(`${item.name} will start new layers and new looks`); } };
+  const bin = (item: StarterView): MenuSecondary => ({ icon: "trash", name: `Delete starter ${item.name}`,
+    capability: ctx.starters.capability({ kind: "starters.delete", starter: item.id }), run: () => remove(ctx, item) });
   const items: MenuItem[] = [];
   if (feature.length) items.push({ kind: "heading", label: listing.label }, ...feature.map(row));
   if (own.length) {
     items.push({ kind: "heading", label: "Yours" }, ...own.map(row));
-    const named = (title: string, icon: "rename" | "trash", act: (item: StarterView) => void, capability: (item: StarterView) => { available: boolean; reason?: string }): MenuItem =>
-      ({ kind: "submenu", label: title, icon, items: () => own.map(item => ({ kind: "action" as const, label: item.name, thumbnail: () => starterThumbnail(item, listing.thumbnail),
-        capability: capability(item), run: () => act(item) })) });
-    items.push({ kind: "separator" },
-      named("Rename yours", "rename", item => rename(ctx, item, invoker), item => ctx.starters.capability({ kind: "starters.rename", starter: item.id, name: item.name })),
-      named("Delete yours", "trash", item => remove(ctx, item), item => ctx.starters.capability({ kind: "starters.delete", starter: item.id })));
   }
   return items;
 }
 
+/**
+ * The command palette's "Rename a starter…" (the person's own starters only): a menu of them, then the name in the value popover. Undefined
+ * while there are none. The popover opens near the top of the window, where the palette was.
+ */
+export function renameCommand(ctx: EyeMakeupViewContext, listing: StarterListing | undefined): { capability: { available: boolean; reason?: string }; run(): void } | undefined {
+  const own = listing?.starters.filter(item => item.owner.kind === "user") ?? [];
+  if (!listing || !own.length) return undefined;
+  const anchor = { x: 24, y: 96 };
+  return { capability: ctx.starters.capability({ kind: "starters.rename", starter: own[0]!.id, name: own[0]!.name }),
+    run: () => { openMenu(own.map(item => ({ kind: "action" as const, label: item.name, thumbnail: () => starterThumbnail(item, listing.thumbnail),
+      capability: ctx.starters.capability({ kind: "starters.rename", starter: item.id, name: item.name }), run: () => rename(ctx, item, anchor) })), anchor,
+      { label: "Rename a starter" }); } };
+}
 /** Rename an own starter in the value popover (1 to 60 characters). */
 function rename(ctx: EyeMakeupViewContext, item: StarterView, anchor: MenuAnchor) {
   openValuePopover({ kind: "text", label: "Name", value: item.name, maxLength: 61 }, anchor, { title: "Rename starter", apply: "Rename",

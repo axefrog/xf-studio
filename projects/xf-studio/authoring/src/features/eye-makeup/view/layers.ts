@@ -23,7 +23,7 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
   const starters = button({ label: "Add a layer from a starter shape", icon: "chevronDown", iconOnly: true, small: true, variant: "ghost", menu: true,
     onClick: event => {
       const listing = ctx.starters.list(), invoker = event.currentTarget as HTMLElement;
-      if (listing) openMenu(starterItems(ctx, listing, invoker), invoker, { label: "Starter shapes", invoker,
+      if (listing) openMenu(starterItems(ctx, listing), invoker, { label: "Starter shapes", invoker,
         focusLabel: listing.starters.find(item => item.isDefault)?.name });
     } });
   const duplicate = button({ label: "Duplicate selected layer", icon: "duplicate", iconOnly: true, small: true, variant: "ghost", onClick: () => {

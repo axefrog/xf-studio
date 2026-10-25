@@ -411,7 +411,9 @@ const MOUNTS: Record<string, Mount> = {
       const main = h("div", { class: "menu-item", role: "menuitem", tabindex: "0", title: name },
         h("span", { class: "menu-thumb", "aria-hidden": "true" }, shapeThumbnail({ outline, guides, window })),
         h("span", { class: "menu-text" }, h("span", { class: "menu-label" }, name, index === 0 ? h("span", { class: "menu-tag", text: "Default" }) : null)));
-      return menuSecondaryRow(main, { icon: "star", name: `Use ${name} for new layers`, tone: "neutral", ...(index === 0 ? { capability: { available: false, reason: "Already used for new layers." } } : {}), run: () => {} }).element;
+      const star = index === 0 ? { icon: "starFilled" as const, name: `${name} is the starter new layers use`, tone: "accent" as const, run: () => {} }
+        : { icon: "star" as const, name: `Use ${name} for new layers`, tone: "neutral" as const, run: () => {} };
+      return menuSecondaryRow(main, index === 2 ? [star, { icon: "trash" as const, name: `Delete starter ${name}`, run: () => {} }] : [star]).element;
     }));
     return stack({ gap: "normal" }, list.element, menu);
   },

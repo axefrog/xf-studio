@@ -12,7 +12,9 @@
  *   menu   the starter menu beside Add layer at 300 px and 620 px panel widths: eye makeup's starters alone, then with own starters
  *          (a long name, a same-named pair, one the default, so the Default mark sits on a long row)
  *   save   Save shape as starter…: the layer's menu, the name popover, the notice, and the saved starter in the menu
- *   head   the 3D view on the game's default feminine V and its default masculine V with each starter, from the front and close on the eyes
+ *   head   the 3D view on the game's default feminine V and its default masculine V with each starter, both eyes and the brow in frame, from
+ *          the front (the hair is off, so no strand covers a lid; every menu, popover and floating panel is closed first, and each shot records
+ *          whether anything was open over the view)
  *
  * Verification hooks (installed only with ?verify=1, compose/studio-startup.ts):
  *   window.xfStudioStarters.fixtures()   saves the own starters above through the real owner and makes the first the default
@@ -71,6 +73,16 @@ async function capture(page: Session, name: string, selectors: string[], section
   }
   await theme(page, "light");
 }
+/**
+ * Every menu, popover and floating panel closed before a state: Escape twice (a menu, then a popover), then the shown tab reset to its
+ * default arrangement (which docks the panels a section floated; `reset` false leaves the camera alone between shots). Returns what is still open over the page, which should be nothing.
+ */
+async function tidy(page: Session, reset = true): Promise<string[]> {
+  await page.key("Escape"); await page.key("Escape");
+  if (reset) await page.evaluate(`(() => { const shown = ${P}.tabs?.snapshot().shown; if (shown) ${S}.runtime.dispatch({ kind: "tabs.reset", tab: shown }); })()`).catch(() => {});
+  await page.wait(500);
+  return await page.evaluate(`[...document.querySelectorAll(".menu, .popover, .dock-floating > *")].filter(e => e.getClientRects().length).map(e => e.className)`) as string[];
+}
 const press = (page: Session, find: string) => page.evaluate(`(() => { const e = ${find}; if (!e) return false; e.click(); return true; })()`) as Promise<boolean>;
 const MENU = `.menu-layer .menu`;
 const chevron = `document.querySelector('button[aria-label="Add a layer from a starter shape"]')`;
@@ -94,6 +106,7 @@ try {
 
   // ---- The UV map with each starter, both eye modes. ----
   if (want("uv")) for (const starter of EYE_STARTERS) {
+    await tidy(page);
     await page.evaluate(`${X}.only(${JSON.stringify(starter.id)})`);
     for (const mode of ["both", "single"] as const) {
       await page.evaluate(`${P}.viewport.uvCommand(${JSON.stringify(mode)})`);
@@ -105,6 +118,7 @@ try {
   // ---- The starter menu at a narrow and a wide panel. ----
   if (want("menu")) {
     const open = async (width: number, state: string, shows: string) => {
+      await tidy(page!);
       await floatLayers(page!, width); await page!.wait(500);
       if (!await press(page!, chevron)) { unreached.push({ state: `${state}-${width}`, why: "the chevron beside Add layer was not found" }); return; }
       await page!.waitFor(`!!document.querySelector("${MENU}")`, 5_000).catch(() => {});
@@ -120,6 +134,7 @@ try {
 
   // ---- Save shape as starter…. ----
   if (want("save")) {
+    await tidy(page);
     await floatLayers(page, WIDE); await page.wait(400);
     await press(page, `document.querySelector('button[aria-label^="Actions for"]')`);
     await page.waitFor(`!!${item("Save shape as starter")}`, 5_000).catch(() => {});
@@ -142,16 +157,27 @@ try {
   if (want("head") && !noGame) {
     // Both eyes of the default plate, from the front (world metres, measured on the prepared plates: knowledge/face-makeup.md, landmarks).
     const eyes = { female: { y: 1.691 }, male: { y: 1.6957 } } as const;
+    notes.headOpenOverView = {};
+    await tidy(page);
+    await page.waitFor(headReady, 240_000).catch(() => {});
     for (const body of ["female", "male"] as const) {
       await run(page, { kind: "character.useDefault", bodyGender: body });
       await page.waitFor(headReady, 240_000).catch(() => {});
       await settle(page);
-      for (const action of [{ kind: "motion.setIdle", enabled: false }, { kind: "preview.setSurfaceControls", enabled: false }]) await run(page, action).catch(() => {});
-      const camera = { position: [0, eyes[body].y, -0.46], target: [0, eyes[body].y, -0.06], fov: 20 };
+      // The next V's building chip (a status over the corner of the view) has gone before any shot.
+      await page.waitFor(`!/building the head/.test(document.body.innerText)`, 120_000).catch(() => unreached.push({ state: `head-${body}`, why: "the building-the-head chip stayed over the view" }));
+      // The hair off (a strand across a lid hides what the shot is for) and the brow on; no idle, no surface controls.
+      for (const action of [{ kind: "motion.setIdle", enabled: false }, { kind: "preview.setSurfaceControls", enabled: false }, { kind: "preview.setHair", enabled: false }])
+        await run(page, action).catch(() => {});
+      (notes.headOpenOverView as Record<string, unknown>)[body] = await tidy(page, false);
+      // 28 degrees: both eyes with the wings' outer ends and the brows in a portrait 3D view, nothing cut at its edge.
+      const camera = { position: [0, eyes[body].y, -0.46], target: [0, eyes[body].y, -0.06], fov: 28 };
       await run(page, { kind: "camera.restore", camera }).catch(error => notes[`camera-${body}`] = String(error));
       for (const starter of EYE_STARTERS) {
         await page.evaluate(`${X}.only(${JSON.stringify(starter.id)})`);
         await settle(page);
+        const open = await tidy(page, false);
+        if (open.length) unreached.push({ state: `head-${body}-${starter.id}`, why: `still open over the view: ${open.join(", ")}` });
         await capture(page, `head-${body}-${starter.id}`, ["#device-head canvas"], "head", `${starter.name} on the default ${body === "female" ? "feminine" : "masculine"} V`, 0);
       }
     }

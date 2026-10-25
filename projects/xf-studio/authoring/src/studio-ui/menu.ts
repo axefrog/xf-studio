@@ -2,7 +2,7 @@ import { Toggle } from "./controls";
 import { clamp, h, uid } from "./dom";
 import { icon, type IconName } from "./icons";
 import { stageTag, type Stage } from "./components/stage-tag";
-import { menuSecondaryRow } from "./components/menu-secondary";
+import { menuSecondaryRow, type MenuSecondary } from "./components/menu-secondary";
 
 /**
  * Accessible menu and popover primitives. Items carry their own capability, so a
@@ -27,7 +27,8 @@ export type MenuItem =
        * the menu opens; decorative, since the label names the row.
        */
       thumbnail?: () => Element;
-      secondary?: { icon: IconName; name: string; capability?: Capability; tone?: "danger" | "neutral"; run(): void } }
+      /** One trailing action, or several side by side (a starter's star and bin). Delete on the main row runs the danger-toned one, else the first. */
+      secondary?: MenuSecondary | readonly MenuSecondary[] }
   | { kind: "submenu"; label: string; icon?: IconName; hint?: string; capability?: Capability; items: () => MenuItem[]; width?: "wide" }
   | { kind: "separator" }
   | { kind: "heading"; label: string; detail?: string };
@@ -178,16 +179,18 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
     entry.addEventListener("keydown", event => {
       if (event.key === "Delete" && item.kind === "action" && item.secondary) {
         event.preventDefault(); event.stopPropagation();
-        if (item.secondary.capability?.available !== false) { closeMenus(true); item.secondary.run(); }
+        const all = Array.isArray(item.secondary) ? item.secondary as readonly MenuSecondary[] : [item.secondary as MenuSecondary];
+        const remove = all.find(action => (action.tone ?? "danger") === "danger");
+        if (remove && remove.capability?.available !== false) { closeMenus(true); remove.run(); }
       }
       if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(); }
       if (event.key === "ArrowRight" && item.kind === "submenu") { event.preventDefault(); if (available) openChild(entry, item, true); }
     });
     entries.push(entry);
     if (item.kind === "action" && item.secondary) {
-      const secondary = item.secondary;
-      const row = menuSecondaryRow(entry, { ...secondary, run: () => { closeMenus(true); secondary.run(); } });
-      entries.push(row.action); element.append(row.element);
+      const all = Array.isArray(item.secondary) ? item.secondary as readonly MenuSecondary[] : [item.secondary as MenuSecondary];
+      const row = menuSecondaryRow(entry, all.map(action => ({ ...action, run: () => { closeMenus(true); action.run(); } })));
+      entries.push(...row.actions); element.append(row.element);
     } else element.append(entry);
   }
   function openChild(entry: HTMLElement, item: Extract<MenuItem, { kind: "submenu" }>, focusFirst = false) {

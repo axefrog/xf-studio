@@ -23,7 +23,7 @@ export function shapeThumbnail(options: ShapeThumbnailOptions): SVGSVGElement {
   const svg = document.createElementNS(NS, "svg");
   svg.setAttribute("class", "shape-thumb"); svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("width", String(width)); svg.setAttribute("height", String(height));
-  svg.setAttribute("aria-hidden", "true"); svg.setAttribute("focusable", "false");
+  svg.setAttribute("aria-hidden", "true"); svg.setAttribute("focusable", "false"); svg.setAttribute("overflow", "hidden");
   const draw = (className: string, d: string) => { const element = document.createElementNS(NS, "path"); element.setAttribute("class", className); element.setAttribute("d", d); svg.append(element); };
   for (const guide of guides) if (guide.length > 1) draw("shape-thumb-guide", path(guide, false));
   if (outline.length > 2) draw("shape-thumb-outline", path(outline, true));

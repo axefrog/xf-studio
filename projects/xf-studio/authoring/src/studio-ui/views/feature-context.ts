@@ -128,8 +128,8 @@ export function featureCommands(binding: FeatureViewBinding, ctx: FeatureViewCon
   return (binding.commands?.(ctx as never) ?? []).map(command => ({
     id: command.id, title: command.title, group: command.group,
     ...defined({ icon: command.icon, shortcut: command.shortcut, keywords: command.keywords }),
-    capability: () => command.action ? ctx.facade.capability(command.action) : { available: false, reason: command.unavailable },
-    run: () => { if (command.action) ctx.dispatch(command.action); },
+    capability: () => command.custom ? command.custom.capability : command.action ? ctx.facade.capability(command.action) : { available: false, reason: command.unavailable },
+    run: () => { if (command.custom) command.custom.run(); else if (command.action) ctx.dispatch(command.action); },
   }));
 }
 

@@ -1626,8 +1626,10 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .menu-secondary:is(:hover, :focus):not([aria-disabled="true"]) .menu-icon { color:var(--danger); }
 .menu-secondary-row .menu-label { white-space:normal; }
 .menu-secondary.neutral:is(:hover, :focus):not([aria-disabled="true"]) .menu-icon { color:var(--signal); }
+.menu-secondary.accent .menu-icon { color:var(--signal); }
+.menu-secondary-row > .menu-secondary + .menu-secondary { padding-inline-start:0; }
 /* Shape thumbnail (lib-shape-thumbnail): an outline over faint guides, in a menu row's icon place or before a record row's name. */
-.shape-thumb { display:block; flex:none; color:var(--text); }
+.shape-thumb { display:block; flex:none; overflow:hidden; color:var(--text); }
 .shape-thumb-guide { fill:none; stroke:currentColor; stroke-opacity:.3; stroke-width:1; stroke-linecap:round; stroke-linejoin:round; }
 .shape-thumb-outline { fill:currentColor; fill-opacity:.22; stroke:currentColor; stroke-width:1.25; stroke-linejoin:round; }
 .menu-thumb { display:grid; place-items:center; flex:none; width:44px; }

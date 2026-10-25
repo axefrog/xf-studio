@@ -26,8 +26,8 @@ derivedPreviewTest("real plate: the landmarks are the slit's rims and corners, a
   expect(outerU).toBeCloseTo(EYE_LANDMARKS.outerCorner[0], 3);
   expect(rim.find(point => point.u === innerU)!.v).toBeCloseTo(EYE_LANDMARKS.innerCorner[1], 3);
   expect(rim.find(point => point.u === outerU)!.v).toBeCloseTo(EYE_LANDMARKS.outerCorner[1], 3);
-  // The lash line follows the rims: each landmark sample lies within 0.0015 of a rim vertex.
-  for (const [u, v] of EYE_LANDMARKS.lashLine)
+  // The slit follows the rims: each landmark sample lies within 0.0015 of a rim vertex.
+  for (const [u, v] of EYE_LANDMARKS.slit)
     expect(Math.min(...rim.map(point => Math.hypot(point.u - u, point.v - v)))).toBeLessThan(0.0015);
   // The plate's UV bounds are the region's area.
   let u0 = 1, u1 = 0, v0 = 1, v1 = 0;

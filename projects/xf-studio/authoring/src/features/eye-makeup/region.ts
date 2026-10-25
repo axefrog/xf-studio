@@ -109,7 +109,7 @@ export const EYE_MAKEUP_REGION: LayeredMakeupRegion = Object.freeze({
   wording: Object.freeze({ area: "the eye UV area", surface: "the lid" }),
   /** The plate's UV rectangle (starters.ts `EYE_LANDMARKS`). */
   area: EYE_LANDMARKS.plate,
-  thumbnail: Object.freeze({ window: EYE_THUMBNAIL_WINDOW, guides: Object.freeze([EYE_LANDMARKS.lashLine, EYE_LANDMARKS.crease]) }),
+  thumbnail: Object.freeze({ window: EYE_THUMBNAIL_WINDOW, guides: Object.freeze([EYE_LANDMARKS.slit, EYE_LANDMARKS.crease]) }),
   starters: EYE_STARTERS,
   defaultStarter: EYE_DEFAULT_STARTER,
   starter: starterRecipe,
