@@ -325,3 +325,17 @@ describe("M14: B318-3 needs the call answered and ended, for its own call", () =
     expect((await run(["ringing", "auto_answer", "answered", "ended"])).verdict).toBe("PASS");
   });
 });
+
+describe("M15: DI3 turns V away after the actors are placed, before the incident", () => {
+  test("the spawns come first, then the turn, then the declare and the take", () => {
+    const smoke = JSON.parse(readFileSync(join(projectDir, "tools", "sessions", "borg4-smoke.json"), "utf8"));
+    const steps = smoke.rows.find((r: { id: string }) => r.id === "DI3").steps as { command?: string; input?: { cast?: string } }[];
+    const at = (pred: (s: { command?: string; input?: { cast?: string } }) => boolean) => steps.findIndex(pred);
+    const lastSpawn = Math.max(...steps.map((s, i) => (s.command === "npc.spawn" ? i : -1)));
+    const turn = at((s) => s.command === "player.look");
+    const declare = at((s) => s.command === "incidents.declare");
+    expect(lastSpawn).toBeGreaterThan(-1);
+    expect(turn).toBeGreaterThan(lastSpawn);
+    expect(declare).toBeGreaterThan(turn);
+  });
+});

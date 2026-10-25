@@ -386,9 +386,11 @@ function smokeScript(): Json {
     pass: [check("handed back to the game's combat", row, "engaged", "complete", { equals: true })],
     cleanup: [{ label: `${row}-release`, do: "run", command: "npc.release", input: { who: ref(row, "fighter", "who"), how: "despawn" }, when: { match: { ref: ref(row, "fighter"), exists: true } } }] });
 
-  const fixture = (r: string, id: string): Json[] => [
+  // beforeDeclare runs once the actors stand and before the incident is declared (DI3 turns V away there).
+  const fixture = (r: string, id: string, beforeDeclare: Json[] = []): Json[] => [
     { label: `${r}-mark`, do: "run", command: "npc.spawn", input: { cast: "woman_corpo", ahead_m: 7, side_m: -1.5, label: "Mark" }, bind: key(r, "mark") },
     { label: `${r}-thief`, do: "run", command: "npc.spawn", input: { cast: "man_lowlife", ahead_m: 7, side_m: 2.5, label: "Thief" }, bind: key(r, "thief") },
+    ...beforeDeclare,
     // An id is refused (duplicate_id) while the bridge remembers it: a second id is the other route.
     { label: `${r}-declare`, do: "run", command: "incidents.declare", input: { id, kind: "pickpocket", roles: { [ref(r, "thief", "who")]: "thief", [ref(r, "mark", "who")]: "mark" }, ttl_s: 45 }, bind: key(r, "declared"),
       alternatives: [[{ do: "run", command: "incidents.declare", input: { id: `${id}b`, kind: "pickpocket", roles: { [ref(r, "thief", "who")]: "thief", [ref(r, "mark", "who")]: "mark" }, ttl_s: 45 }, bind: key(r, "declared") }]] },
@@ -408,8 +410,11 @@ function smokeScript(): Json {
     cleanup: release(row) });
   row = "DI3";
   rows.push({ id: row, title: "V turned away: witness.unwitnessed (not_in_view), no report", requires: writes,
-    steps: [inPlay(row), { label: `${row}-away`, do: "run", command: "player.look", input: { yaw: 180, relative: true, when: quiet }, retry: { times: 2, backoff_ms: 3000, on: { code: "precondition_failed" } } },
-      { label: `${row}-settle`, do: "wait", ms: 1500 }, ...fixture(row, "pp-smoke-3")],
+    // The actors are placed in front of V first; then V turns away, and the incident is declared and played behind her.
+    steps: [inPlay(row), ...fixture(row, "pp-smoke-3", [
+      { label: `${row}-away`, do: "run", command: "player.look", input: { yaw: 180, relative: true, when: quiet }, retry: { times: 2, backoff_ms: 3000, on: { code: "precondition_failed" } } },
+      { label: `${row}-settle`, do: "wait", ms: 1500 },
+    ])],
     pass: [check("unwitnessed", row, "closed", "outcome", { equals: "unwitnessed" }), check("because V wasn't looking", row, "closed", "unwitnessed_reason", { equals: "not_in_view" })],
     cleanup: [...release(row), { label: `${row}-look-stop`, do: "run", command: "player.look.stop", input: {} }] });
 

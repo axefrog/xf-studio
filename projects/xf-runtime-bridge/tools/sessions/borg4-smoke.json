@@ -866,6 +866,30 @@
           ]
         },
         {
+          "label": "DI3-mark",
+          "do": "run",
+          "command": "npc.spawn",
+          "input": {
+            "cast": "woman_corpo",
+            "ahead_m": 7,
+            "side_m": -1.5,
+            "label": "Mark"
+          },
+          "bind": "DI3_mark"
+        },
+        {
+          "label": "DI3-thief",
+          "do": "run",
+          "command": "npc.spawn",
+          "input": {
+            "cast": "man_lowlife",
+            "ahead_m": 7,
+            "side_m": 2.5,
+            "label": "Thief"
+          },
+          "bind": "DI3_thief"
+        },
+        {
           "label": "DI3-away",
           "do": "run",
           "command": "player.look",
@@ -890,30 +914,6 @@
           "label": "DI3-settle",
           "do": "wait",
           "ms": 1500
-        },
-        {
-          "label": "DI3-mark",
-          "do": "run",
-          "command": "npc.spawn",
-          "input": {
-            "cast": "woman_corpo",
-            "ahead_m": 7,
-            "side_m": -1.5,
-            "label": "Mark"
-          },
-          "bind": "DI3_mark"
-        },
-        {
-          "label": "DI3-thief",
-          "do": "run",
-          "command": "npc.spawn",
-          "input": {
-            "cast": "man_lowlife",
-            "ahead_m": 7,
-            "side_m": 2.5,
-            "label": "Thief"
-          },
-          "bind": "DI3_thief"
         },
         {
           "label": "DI3-declare",
