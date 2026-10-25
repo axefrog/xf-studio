@@ -12,8 +12,10 @@
  * `compare` writes every resource and the archive natively (the game's Oodle from the configured game folder, XF Studio's texture
  * compressor) and reports, per file, whether the bytes are identical; the archive is compared except the file times its index records
  * and the index CRC that covers them.
+ * `XFS_NATIVE_WRITER_ORACLE` selects a private oracle root (as in the test); `XFS_NATIVE_WRITER_OUTPUT` optionally keeps compared
+ * native resources in a fresh private diagnostics folder (its parent must exist). Existing entries are refused and files use exclusive creation.
  */
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
 import { loadGameOodle } from "../src/native/oodle";
@@ -23,9 +25,10 @@ import { archiveEqualExceptTimes, fileTimeOf, packArchive, walkOrder } from "../
 import { karkSegment, LEVEL_OPTIMAL2 } from "../src/native/write/segments";
 import { importTexture } from "../src/native/write/xbm-writer";
 import { TEXTURE_GROUP_SETTINGS } from "../src/legacy/eye-makeup/export/host/package-resource-builder";
+import { createDiagnosticDirectory, refuseInputOverlap, requireFreshDiagnosticPath, writeDiagnosticFile } from "./native-writer-paths";
 
 const app = resolve(import.meta.dir, "..");
-const DEFAULT_ORACLE = resolve(app, "data", "native-writer-oracle");
+const DEFAULT_ORACLE = resolve(process.env.XFS_NATIVE_WRITER_ORACLE ?? resolve(app, "data", "native-writer-oracle"));
 const [mode, first, second] = process.argv.slice(2);
 
 const listFiles = (root: string): string[] => readdirSync(root, { recursive: true }).map(String)
@@ -34,10 +37,12 @@ const listFiles = (root: string): string[] => readdirSync(root, { recursive: tru
 if (mode === "capture") {
   if (!first || !second || !/^[\w-]+$/.test(second)) throw Error("Usage: bun tools/native-writer-oracle.ts capture <kept Build work folder> <name>");
   const kept = resolve(first), out = join(DEFAULT_ORACLE, second);
+  refuseInputOverlap(out, [kept]);
   const product = readdirSync(kept).map(name => join(kept, name)).find(path => existsSync(join(path, "archive")) && existsSync(join(path, "features")));
   if (!product) throw Error("No product folder with an archive and features in the kept Build.");
   const feature = join(product, "features", "eye-makeup");
-  rmSync(out, { recursive: true, force: true });
+  mkdirSync(DEFAULT_ORACLE, { recursive: true });
+  mkdirSync(out, { recursive: false });
   mkdirSync(join(out, "json"), { recursive: true });
   for (const folder of ["models-json", "app-json", "cc-json"])
     for (const name of readdirSync(join(feature, folder))) cpSync(join(feature, folder, name), join(out, "json", name));
@@ -57,21 +62,41 @@ if (mode === "capture") {
   console.log(`Captured ${listFiles(join(out, "wolvenkit")).length} WolvenKit resources and its archive into ${out}`);
 } else if (mode === "compare") {
   const names = first ? [first] : readdirSync(DEFAULT_ORACLE).filter(name => existsSync(join(DEFAULT_ORACLE, name, "oracle.json")));
+  if (names.some(name => !/^[\w-]+$/.test(name))) throw Error("Invalid oracle name");
+  // Check the whole input root before *any* comparison writes, including sibling oracles.
+  if (process.env.XFS_NATIVE_WRITER_OUTPUT) {
+    requireFreshDiagnosticPath(process.env.XFS_NATIVE_WRITER_OUTPUT);
+    refuseInputOverlap(process.env.XFS_NATIVE_WRITER_OUTPUT, [DEFAULT_ORACLE]);
+    if (names.length !== 1) throw Error("Diagnostic output requires exactly one oracle; compare each oracle with a fresh output path.");
+  }
   for (const name of names) { console.log(`== ${name}`); compare(join(DEFAULT_ORACLE, name)); }
 } else {
   throw Error("Usage: bun tools/native-writer-oracle.ts capture <kept Build work folder> <name> | compare [name]");
 }
 
 function compare(root: string) {
-  const settings = new LocalSettingsStore().load().settings;
-  if (!settings.gameRoot) throw Error("Set the game folder in Settings first.");
-  const oodle = loadGameOodle(settings.gameRoot);
-  const bcn = loadBcnLibrary(process.env.XFS_BCN_LIBRARY ?? resolve(app, "data", "tools", "xfs-bcn", "xfs_bcn.dll"));
+  // Optional private diagnostics; the oracle inputs remain read-only.
+  const output = process.env.XFS_NATIVE_WRITER_OUTPUT ? resolve(process.env.XFS_NATIVE_WRITER_OUTPUT) : null;
+  if (output) refuseInputOverlap(output, [DEFAULT_ORACLE, root]);
+  const gameRoot = process.env.XFS_NATIVE_WRITER_GAME_ROOT ?? new LocalSettingsStore().load().settings.gameRoot;
+  if (!gameRoot) throw Error("Supply XFS_NATIVE_WRITER_GAME_ROOT or set the game folder in Settings first.");
+  const bcnPath = process.env.XFS_BCN_LIBRARY ?? resolve(app, "data", "tools", "xfs-bcn", "xfs_bcn.dll");
+  if (output) {
+    createDiagnosticDirectory(output, [DEFAULT_ORACLE, root, gameRoot, bcnPath]);
+  }
+  const oodle = loadGameOodle(gameRoot);
+  const identity = { path: oodle.path, identity: oodle.identity, sha256: oodle.sha256, trustedBy: oodle.trustedBy };
+  console.log("Oodle: " + JSON.stringify(identity));
+  if (output) {
+    writeDiagnosticFile(join(output, "oodle-identity.json"), JSON.stringify(identity, null, 2) + "\n");
+  }
+  const bcn = loadBcnLibrary(bcnPath);
   const store = (raw: Uint8Array) => karkSegment(raw, LEVEL_OPTIMAL2, oodle.compress!);
   const wolvenkit = listFiles(join(root, "wolvenkit"));
   const byName = new Map(wolvenkit.map(path => [path.slice(path.lastIndexOf("/") + 1), path]));
   let failures = 0;
   const report = (name: string, got: Uint8Array, ms: number) => {
+    if (output) writeDiagnosticFile(join(output, name), got);
     const want = new Uint8Array(readFileSync(join(root, "wolvenkit", byName.get(name)!)));
     const same = got.length === want.length && got.every((byte, i) => byte === want[i]);
     if (!same) failures++;

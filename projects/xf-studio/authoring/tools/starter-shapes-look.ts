@@ -34,6 +34,8 @@ const args = process.argv.slice(2);
 const flag = (name: string) => { const at = args.indexOf(name); if (at < 0) return undefined; const value = args[at + 1]; args.splice(at, 2); return value; };
 const bare = (name: string) => { const at = args.indexOf(name); if (at < 0) return false; args.splice(at, 1); return true; };
 const only = flag("--only"), noGame = bare("--no-game");
+// Baselines use explicit game/tool environment overrides and never borrow personal settings.
+const emptySettings = bare("--empty-settings");
 const want = (section: string) => !only || only.split(",").includes(section);
 const [outArg, portArg] = args;
 if (!outArg) throw Error("Usage: bun tools/starter-shapes-look.ts <output-folder-on-C> [port=4571] [--only uv,menu,save,head] [--no-game]");
@@ -92,7 +94,7 @@ const settle = async (page: Session) => { await page.waitFor(`${P}.previewReadin
 const floatLayers = (page: Session, width: number) =>
   page.evaluate(`${S}.dock.moveTo("layers", { kind: "float", x: 24, y: 24, w: ${width}, h: 640 }, "Capture starter shapes")`);
 
-const { server } = await startServer(port, { settings: noGame ? "empty" : "copy" });
+const { server } = await startServer(port, { settings: noGame || emptySettings ? "empty" : "copy" });
 let page: Session | undefined;
 try {
   page = await launch(`http://127.0.0.1:${port}/?verify=1`, { width: 1600, height: HEIGHT, scheme: "light", debugPort: port + 5000 });
