@@ -176,7 +176,8 @@ describe.skipIf(!runnable)("the install-refresh helper", () => {
 });
 
 describe("the installed app's instance lock name", () => {
-  test("is the one main.ts claims for the data folder Electrobun gives an installed app", () => {
+  // Windows paths and a Windows named mutex: the pairing only exists on Windows (path resolution differs elsewhere).
+  test.skipIf(process.platform !== "win32")("is the one main.ts claims for the data folder Electrobun gives an installed app", () => {
     const local = String.raw`C:\Users\Someone\AppData\Local`;
     expect(installedUserData(local, "dev.axefrog.xf-studio", "canary")).toBe(String.raw`C:\Users\Someone\AppData\Local\dev.axefrog.xf-studio\canary`);
     const name = installedInstanceName(local, "dev.axefrog.xf-studio", "canary");

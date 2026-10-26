@@ -189,8 +189,11 @@ test("log discovery refuses backup-only folders and remote candidates", async ()
   const dataFacts = { platform: process.platform === "win32" ? "win32" : "posix", appData, lastRunUserData: custom } as const;
   const inspect = (lastRunUserData: string) => inspectVortexSetup(game, () => undefined, { dataFacts: { ...dataFacts, lastRunUserData } });
   expect((await inspect(custom)).state).toBeNull();
-  const remote = await inspect("//fixture.invalid/share/Vortex");
-  expect(remote.state).toBeNull(); expect(remote.problems.some(text => text.includes("local drive"))).toBe(true);
+  // A UNC share is a Windows notion; elsewhere "//host/share" is an ordinary absolute path.
+  if (process.platform === "win32") {
+    const remote = await inspect("//fixture.invalid/share/Vortex");
+    expect(remote.state).toBeNull(); expect(remote.problems.some(text => text.includes("local drive"))).toBe(true);
+  }
 });
 
 test("Windows rooted and drive-relative paths never acquire Studio's current drive", () => {
