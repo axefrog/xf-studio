@@ -128,8 +128,8 @@ export class CreatorCatalogue {
     }
   }
   private keepPanel(gender: BodyGender, state: CreatorState, generation: number): CreatorState {
-    // Labels that may read next time, or need WolvenKit, are served but not final (NATIVE-46): the next question asks the host again.
-    if (state.phase !== "ready" || !state.panel || state.next || generation !== this.generation(gender)) return state;
+    // Retryable labels, missing WolvenKit and pending maker evidence are usable but not final: ask the host again.
+    if (state.phase !== "ready" || !state.panel || state.next || state.pending || generation !== this.generation(gender)) return state;
     if (this.identity(gender) !== state.panel.identity) this.forget(gender);
     const kept = deepFreeze(state);
     this.panels.set(gender, kept);
@@ -233,6 +233,15 @@ export class CreatorCatalogue {
       preset: (request, name, kept) => host.preset(request, name, kept),
       wait: (ms, signal) => host.wait(ms, signal),
       retry: (gender, signal) => this.retry(gender, signal),
+    };
+    if (host.watch) port.watch = (gender, signal) => {
+      const generation = this.generation(gender);
+      return this.shared(`watch\n${gender}\n${generation}`, signal, inner => host.watch!(gender, inner)).then(state => {
+        if (generation !== this.generation(gender)) return state;
+        if (state.phase !== "ready") this.forget(gender);
+        else this.seen(gender, state.panel?.identity);
+        return this.keepPanel(gender, state, this.generation(gender));
+      });
     };
     if (host.search) port.search = (gender, query, signal) => this.search(gender, query, signal);
     if (host.legacy) port.legacy = (gender, style, definition) => host.legacy!(gender, style, definition);

@@ -39,7 +39,7 @@ import { type CharacterRequest, savedOfRequest } from "../character-detail-reque
 import { type CharacterInput, customLabel, type loadMergedCco } from "../character-resolver";
 import { personalDataIn } from "../../app/private-data";
 import { modMakers } from "./mod-makers";
-import { vortexShortcutDiscovery } from "../../installation/host/vortex-data-host";
+import { vortexShortcutDiscovery, type VortexShortcutDiscovery } from "../../installation/host/vortex-data-host";
 import type { Installation, InstallationOptions } from "../../game/host/resolver-host";
 
 export type CreatorRoute = Omit<InstallationOptions, "cacheDir" | "log">;
@@ -66,6 +66,7 @@ export type CreatorHostOptions = {
   makers?: (installation: Installation, route: CreatorRoute) => ReadonlyMap<string, ModMaker> | Promise<ReadonlyMap<string, ModMaker>>;
   /** Background discovery moves the normal catalogue identity on when new maker evidence arrives. */
   makerRevision?: () => number;
+  shortcutDiscovery?: VortexShortcutDiscovery;
   /** How long after a catalogue is ready its swatches start being worked out in the background (ms; default 1,500). */
   swatchDelayMs?: number;
   /** The game's on-screen language, part of the catalogue's key (default: the game's own settings, `currentGameLanguage`). */
@@ -86,6 +87,7 @@ export interface SwatchSource {
 }
 
 type Loaded = {
+  makerDiscovery: boolean;
   source: CharacterSource & { index: CatalogueIndex };
   panel: CcPanel;
   mods: Map<string, number>;
@@ -154,11 +156,12 @@ export class CreatorCatalogueHost {
   /** Builds so far (part of each panel's identity). */
   private builds = 0;
   constructor(private readonly options: CreatorHostOptions) {}
+  private get discovery() { return this.options.shortcutDiscovery ?? vortexShortcutDiscovery; }
   private now() { return this.options.now?.() ?? Date.now(); }
 
   /** The catalogue's key: the installation fingerprint and the game's on-screen language (NATIVE-51). */
   private key(): string {
-    return `${this.options.fingerprint()}\n${(this.options.language ?? currentGameLanguage)() ?? ""}\n${this.options.makerRevision?.() ?? vortexShortcutDiscovery.revision}`;
+    return `${this.options.fingerprint()}\n${(this.options.language ?? currentGameLanguage)() ?? ""}\n${this.options.makerRevision?.() ?? this.discovery.revision}`;
   }
   private backoff(entry: Entry): void {
     entry.failures++;
@@ -209,7 +212,7 @@ export class CreatorCatalogueHost {
     const identity = createHash("sha256").update(`${fingerprint}\n${gender}\n${load.catalogue.language}\n${load.catalogue.counts.choices}\n` +
       `${load.labels?.next ?? ""}\n${++this.builds}`).digest("hex").slice(0, 24);
     let makers: ReadonlyMap<string, ModMaker> = new Map();
-    try { makers = await (this.options.makers ?? ((inst: Installation, r: CreatorRoute) => inst.plan ? modMakers(inst, r.gameRoot) : new Map()))(installation, route); }
+    try { makers = await (this.options.makers ?? ((inst: Installation, r: CreatorRoute) => inst.plan ? modMakers(inst, r.gameRoot, { shortcutDiscovery: this.discovery }) : new Map()))(installation, route); }
     catch (error) { this.options.log?.(`Mod authors won't be shown: ${(error as Error)?.message ?? error}`); }
     const { panel, mods } = panelProjection(load.catalogue, catalogueCoverage(load.catalogue), identity, makers);
     this.options.log?.(`Creator options (${gender}) read in ${((performance.now() - started) / 1000).toFixed(1)} s: ${panel.counts.options} options, ` +
@@ -219,7 +222,7 @@ export class CreatorCatalogueHost {
     catch (error) { this.options.log?.(`Creator swatches won't be shown: ${(error as Error)?.message ?? error}`); }
     // Worked out in the background once the panel has its first paint; a row the panel opens goes first.
     if (swatches) { const started = swatches; setTimeout(() => started.start(), this.options.swatchDelayMs ?? 1500); }
-    return { source: { catalogue: load.catalogue, cco: load.source.cco, index }, panel, mods, recovered: new Map(), labels: load.labels ?? null, swatches };
+    return { makerDiscovery: !!installation.vortexMods?.size, source: { catalogue: load.catalogue, cco: load.source.cco, index }, panel, mods, recovered: new Map(), labels: load.labels ?? null, swatches };
   }
 
   /**
@@ -233,10 +236,22 @@ export class CreatorCatalogueHost {
     const entry = this.entries.get(gender);
     if (entry?.loaded) {
       const labels = entry.loaded.labels;
-      return labels ? { phase: "ready", message: labels.message, next: labels.next, panel: entry.loaded.panel } : { phase: "ready", message: "", panel: entry.loaded.panel };
+      const pending = entry.loaded.makerDiscovery && !this.discovery.completed ? { pending: true } : {};
+      return labels ? { phase: "ready", message: labels.message, next: labels.next, panel: entry.loaded.panel, ...pending }
+        : { phase: "ready", message: "", panel: entry.loaded.panel, ...pending };
     }
     if (entry?.error) return { phase: "failed", message: FAILED };
     return { phase: "preparing", message: PREPARING };
+  }
+  /** The ready browser holds this question only while it wants late maker evidence.
+   * Its request signal releases its own want; the last release aborts the native/helper work. */
+  async followState(gender: BodyGender, signal: AbortSignal): Promise<CreatorState> {
+    signal.throwIfAborted();
+    const state = this.state(gender);
+    if (!state.pending) return state;
+    const want = this.discovery.acquire(name => process.env[name], signal);
+    try { await want.settled; signal.throwIfAborted(); return this.state(gender); }
+    finally { want.release(); }
   }
   /**
    * Try again now (the panel's Try again): a failed build, or one whose labels may read next time, starts again at once (the panel follows

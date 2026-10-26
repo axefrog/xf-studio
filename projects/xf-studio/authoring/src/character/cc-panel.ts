@@ -310,7 +310,11 @@ export type CreatorPhase = "preparing" | "ready" | "failed";
  * or `wolvenkit` (set WolvenKit up).
  */
 export type CreatorNext = "retry" | "wolvenkit";
-export interface CreatorState { readonly phase: CreatorPhase; readonly message: string; readonly next?: CreatorNext; readonly panel?: CcPanel }
+export interface CreatorState {
+  /** A usable panel whose maker evidence is still being discovered; follow the state once in the background. */
+  readonly pending?: boolean;
+  readonly phase: CreatorPhase; readonly message: string; readonly next?: CreatorNext; readonly panel?: CcPanel;
+}
 /** One option's value as the panel shows it: the view's value, with the current and own choices' labels and swatch colours. */
 export interface CreatorValue {
   readonly choice: string; readonly own: string; readonly set: boolean; readonly active: boolean;

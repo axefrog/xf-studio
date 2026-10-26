@@ -1,11 +1,12 @@
 /** Read-only launch evidence. Native process metadata and small settings reads are cheap;
  * the session-owned shortcut sweep runs separately, never on an inspection's critical path. */
 import { execFile } from "node:child_process";
-import { lstat, open, opendir, readFile, stat } from "node:fs/promises";
+import { lstat, open, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { isLocalDrivePath } from "../../platform/api/path-containment";
 import { vortexLastRunUserData, vortexStartupUserData, type VortexDataFacts } from "../vortex-data";
 import { readWindowsVortexProcesses } from "./vortex-process-host";
+import { openWindowsVortexDirectory, type VortexDirectoryReader, type VortexDirectoryStats } from "./vortex-directory-host";
 
 const LOG_TAIL_BYTES = 256 * 1024;
 export type VortexLaunchFacts = Pick<VortexDataFacts, "processes" | "shortcuts">;
@@ -73,11 +74,9 @@ const environmentRoots = (env: (name: string) => string | undefined) => [
   env("USERPROFILE") && join(env("USERPROFILE")!, "Desktop"), env("PUBLIC") && join(env("PUBLIC")!, "Desktop"),
 ].filter((path): path is string => !!path && isLocalDrivePath(path));
 
-type DirectoryEntry = { name: string; isSymbolicLink(): boolean; isDirectory(): boolean; isFile(): boolean };
-type DirectoryReader = { read(): Promise<DirectoryEntry | null>; close(): Promise<void> };
-/** Counts entries actually fetched, including ignored files. bufferSize=1 prevents hidden prefetch past the cap. */
+/** Counts every native result, including ignored/dot entries; never fetches past the cap. */
 export async function enumerateVortexShortcuts(roots: readonly string[], signal: AbortSignal, options: {
-  maxEntries?: number; open?: (path: string) => Promise<DirectoryReader>;
+  maxEntries?: number; stats?: VortexDirectoryStats;
 } = {}): Promise<{ paths: string[]; entriesFetched: number }> {
   const queue = [...new Set(roots.filter(path => isLocalDrivePath(path)))], paths: string[] = [], seen = new Set<string>();
   const limit = options.maxEntries ?? 4096;
@@ -87,17 +86,18 @@ export async function enumerateVortexShortcuts(roots: readonly string[], signal:
     const path = queue.shift()!, key = process.platform === "win32" ? path.toLowerCase() : path;
     if (seen.has(key)) continue;
     seen.add(key); visited++;
-    let directory: DirectoryReader | undefined;
+    let directory: VortexDirectoryReader | undefined;
     try {
       const info = await lstat(path);
       if (!info.isDirectory() || info.isSymbolicLink()) continue;
-      directory = await (options.open ?? (path => opendir(path, { bufferSize: 1 })))(path);
+      directory = await openWindowsVortexDirectory(path, options.stats);
       while (entriesFetched < limit) {
+        if (entriesFetched && entriesFetched % 64 === 0) await new Promise<void>(resolve => setImmediate(resolve));
         signal.throwIfAborted();
         const entry = await directory.read();
         if (!entry) break;
         entriesFetched++;
-        if (entry.isSymbolicLink()) continue;
+        if (entry.name === "." || entry.name === ".." || entry.isSymbolicLink()) continue;
         const child = join(path, entry.name);
         if (entry.isDirectory()) { if (queue.length + visited < 512) queue.push(child); }
         else if (entry.isFile() && entry.name.toLowerCase().endsWith(".lnk")) paths.push(child);
@@ -122,35 +122,61 @@ export async function readWindowsVortexShortcuts(env: (name: string) => string |
   return parseVortexLaunchSnapshots(await metadataScript(VORTEX_SHORTCUT_SCRIPT, signal, JSON.stringify(paths))).shortcuts ?? [];
 }
 
-/** One sweep per host session, shared by inspections. Its own AbortSignal owns background work;
- * a request's cancellation does not cancel discovery for later requests. stop() ends this owner. */
+/** One cache per host session. Each follow request holds its own want. The last
+ * release cancels scheduled/running work; only a completed sweep is kept forever. */
 export class VortexShortcutDiscovery {
-  private started = false;
-  private readonly controller = new AbortController();
+  private readonly wants = new Set<() => void>();
+  private run?: { controller: AbortController; scheduled?: ReturnType<typeof setImmediate>; finish(): void };
   private rows: NonNullable<VortexDataFacts["shortcuts"]> = [];
-  private scheduled?: ReturnType<typeof setImmediate>;
-  private finish?: () => void;
+  completed = false;
   revision = 0;
   settled: Promise<void> = Promise.resolve();
   constructor(private readonly sweep = readWindowsVortexShortcuts) {}
   snapshot(): NonNullable<VortexDataFacts["shortcuts"]> { return this.rows; }
-  start(env: (name: string) => string | undefined): void {
-    if (this.started || this.controller.signal.aborted) return;
-    this.started = true;
-    this.settled = new Promise<void>(done => {
-      this.finish = done;
-      this.scheduled = setImmediate(() => {
-        this.scheduled = undefined;
-        this.sweep(env, AbortSignal.any([this.controller.signal, AbortSignal.timeout(8000)])).then(rows => {
-          if (!this.controller.signal.aborted && rows.length) { this.rows = rows; this.revision++; }
-        }).catch(() => {}).finally(done);
-      });
+  get requesters(): number { return this.wants.size; }
+  acquire(env: (name: string) => string | undefined, signal: AbortSignal): { settled: Promise<void>; release(): void } {
+    let done!: () => void;
+    const settled = new Promise<void>(resolve => { done = resolve; });
+    const release = () => {
+      signal.removeEventListener("abort", release);
+      this.wants.delete(release);
+      done();
+      if (!this.wants.size && this.run) {
+        this.run.controller.abort();
+        if (this.run.scheduled) { clearImmediate(this.run.scheduled); this.run.finish(); }
+      }
+    };
+    if (signal.aborted || this.completed) { done(); return { settled, release }; }
+    this.wants.add(release);
+    signal.addEventListener("abort", release, { once: true });
+    this.start(env);
+    return { settled, release };
+  }
+  private start(env: (name: string) => string | undefined): void {
+    if (this.run || this.completed || !this.wants.size) return;
+    let done!: () => void;
+    this.settled = new Promise<void>(resolve => { done = resolve; });
+    const run = { controller: new AbortController(), scheduled: undefined as ReturnType<typeof setImmediate> | undefined, finish: () => {
+      if (this.run !== run) return;
+      this.run = undefined;
+      done();
+      if (this.completed) { for (const release of [...this.wants]) release(); }
+      else this.start(env); // A new requester may have arrived while the cancelled run was stopping.
+    } };
+    this.run = run;
+    run.scheduled = setImmediate(() => {
+      run.scheduled = undefined;
+      if (!this.wants.size || run.controller.signal.aborted) { run.finish(); return; }
+      void (async () => {
+        try {
+          const rows = await this.sweep(env, AbortSignal.any([run.controller.signal, AbortSignal.timeout(8000)]));
+          if (!run.controller.signal.aborted && rows.length) { this.rows = rows; this.revision++; }
+        } catch { /* Unavailable/timeout evidence is empty; cancellation can be retried by another requester. */ }
+        finally { if (!run.controller.signal.aborted) this.completed = true; run.finish(); }
+      })();
     });
   }
-  stop(): void {
-    this.controller.abort();
-    if (this.scheduled) { clearImmediate(this.scheduled); this.finish?.(); }
-  }
+  stop(): void { for (const release of [...this.wants]) release(); }
 }
 export const vortexShortcutDiscovery = new VortexShortcutDiscovery();
 

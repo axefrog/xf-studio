@@ -39,7 +39,7 @@ export type VortexReadOptions = {
   signal?: AbortSignal;
   /** Inject already gathered facts (also keeps fixture tests independent of this computer's Vortex). */
   dataFacts?: VortexDataFacts;
-  /** The host session owns the once-only background shortcut scan. Fixtures inject their own owner. */
+  /** Read the session cache only. The catalogue follow request owns background discovery. */
   shortcutDiscovery?: VortexShortcutDiscovery;
   factsReader?: typeof gatherVortexDataFacts;
   /** Stop reading state files at this time (on `now`'s clock); what isn't read by then is a gap. */
@@ -293,7 +293,6 @@ export async function inspectVortexSetup(gameRoot: string, env: (name: string) =
     stagingMarker = { instance: typeof marker?.instance === "string" ? marker.instance : null, game: typeof marker?.game === "string" ? marker.game : null };
   } catch { options.signal?.throwIfAborted(); }
   options.signal?.throwIfAborted();
-  shortcuts?.start(env);
   if (primary?.gameId && primary.gameId !== gameId) problems.push(`The deployment manifest belongs to Vortex game "${primary.gameId}".`);
   return { schema: "xfs/vortex-setup-1", deployed: !!deployment,
     manifests: deployment?.manifests.map(row => ({ fileName: row.fileName, modType: row.modType, deploymentMethod: row.manifest.deploymentMethod,

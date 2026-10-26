@@ -69,6 +69,8 @@ export { PRELOAD_DWELL_MS } from "./creator-requester";
 /** The host side of the context: the installed catalogue's panel, pages, searches, views and presets (cc-catalogue-server.ts). */
 export type CreatorPort = {
   panel(gender: BodyGender, signal: AbortSignal): Promise<CreatorState>;
+  /** Follow late metadata after the first ready paint; releasing the signal cancels this consumer only. */
+  watch?(gender: BodyGender, signal: AbortSignal): Promise<CreatorState>;
   page(gender: BodyGender, option: string, offset: number, signal: AbortSignal, query?: string): Promise<CcChoicePage>;
   view(request: CharacterRequest, signal: AbortSignal): Promise<CreatorView>;
   preset(request: CharacterRequest, name: string | null, kept: Record<string, unknown> | undefined): Promise<{ text: string; values: number; leftOut: number; personal: number }>;
@@ -699,6 +701,13 @@ export class CharacterContextActions {
         this.refreshView();
         this.refreshPrepared();
         this.migrateLegacy();
+        // Render first. This one bounded follow question owns the optional background evidence.
+        if (state.pending && this.creator.watch) {
+          try {
+            const updated = await this.creator.watch(gender, controller.signal);
+            if (live() && (updated.phase !== "ready" || updated.panel?.identity !== panel.identity)) this.start(true);
+          } catch { /* Late metadata cannot turn an already usable panel into a failure. */ }
+        }
       } catch (error) {
         if (!live()) return;
         this.catalogue = { phase: "failed", message: (error as Error)?.message || "The creator options couldn't be read.", panel: null, gender };

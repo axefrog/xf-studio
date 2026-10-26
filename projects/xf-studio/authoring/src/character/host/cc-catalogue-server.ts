@@ -10,6 +10,7 @@ import { BodyTooLargeError, readBodyText } from "../../platform/api/request-body
 /**
  * Host endpoint for the Character panel's creator options (cc-catalogue-service.ts), shared by localhost and the desktop, mounted
  * behind the caller's own session checks like the character endpoint:
+ * - `GET ?gender=female&follow=1` → follow pending maker evidence after first paint; the request signal releases this consumer.
  * - `GET ?gender=female` → the catalogue's state and, once ready, the panel's first-paint projection (`xfs/cc-panel-5`);
  * - `GET ?gender=female&option=<part/name>&offset=<n>[&search=<text>]` → one page of that option's choices (the matching ones);
  * - `GET ?gender=female&search=<text>` → the options with a choice matching a search;
@@ -76,7 +77,7 @@ export function createCreatorHandler(host: CreatorCatalogueHost, options: { trus
         if (option === null) {
           if (search) return json(await host.search(body, search));
           await options.refresh?.();
-          return json(host.state(body));
+          return json(url.searchParams.get("follow") === "1" ? await host.followState(body, request.signal) : host.state(body));
         }
         const offset = Number(url.searchParams.get("offset") ?? 0);
         if (!isOptionId(option) || !Number.isInteger(offset) || offset < 0) return json({ code: "invalid", error: "Unknown option." }, 400);

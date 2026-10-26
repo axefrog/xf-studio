@@ -33,6 +33,7 @@ export type MakerSources = {
 };
 export type MakerOptions = {
   env?: (name: string) => string | undefined;
+  shortcutDiscovery?: VortexReadOptions["shortcutDiscovery"];
   budgetMs?: number;
   now?: () => number;
   /** Vortex's records for the game folder (tests pass their own). */
@@ -47,7 +48,7 @@ export async function modMakers(installation: MakerSources, gameRoot: string, op
     if (archive.provider === "game" && archive.group === "mod" && !vortex.has(archive.providerName)) makers.set(archive.providerName, { author: null, name: GAME_FOLDER_MODS });
   if (!vortex.size) return makers;
   const now = options.now ?? Date.now, env = options.env ?? (name => process.env[name]);
-  const setup = await (options.inspect ?? inspectVortexSetup)(gameRoot, env, { deadline: now() + (options.budgetMs ?? MAKERS_BUDGET_MS), now });
+  const setup = await (options.inspect ?? inspectVortexSetup)(gameRoot, env, { deadline: now() + (options.budgetMs ?? MAKERS_BUDGET_MS), now, shortcutDiscovery: options.shortcutDiscovery });
   const identities = setup.state?.game.mods;
   if (!identities) return makers;
   for (const [provider, modId] of vortex) {

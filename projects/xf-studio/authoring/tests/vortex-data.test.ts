@@ -223,17 +223,16 @@ test("every discovery source rejects a backup-only folder", async () => {
   }
 });
 
-test("streaming shortcut traversal fetches at most its cap, including ignored entries, and closes the directory", async () => {
-  const root = tempDir("vortex-enumeration-");
-  let fetched = 0, closed = 0;
-  const result = await enumerateVortexShortcuts([root], new AbortController().signal, { open: async () => ({
-    read: async () => { fetched++; return { name: `ignored-${fetched}.txt`, isSymbolicLink: () => false, isDirectory: () => false, isFile: () => true }; },
-    close: async () => { closed++; },
-  }) });
-  expect(fetched).toBe(4096);
+test.skipIf(process.platform !== "win32" || process.arch !== "x64")("real native enumeration materialises only the cap from a larger directory and closes its search handle", async () => {
+  const root = tempDir("vortex-native-enumeration-");
+  for (let i = 0; i < 4100; i++) writeFileSync(join(root, `ignored-${i}.txt`), "");
+  const stats = { materialised: 0, searchesOpened: 0, searchesClosed: 0 };
+  const result = await enumerateVortexShortcuts([root], new AbortController().signal, { stats });
+  expect(stats.materialised).toBe(4096);
   expect(result.entriesFetched).toBe(4096);
   expect(result.paths).toEqual([]);
-  expect(closed).toBe(1);
+  expect(stats.searchesOpened).toBe(1);
+  expect(stats.searchesClosed).toBe(1);
 });
 
 test.skipIf(process.platform !== "win32" || process.arch !== "x64")("native process metadata reads this test process without starting WMI or a helper", () => {
@@ -263,6 +262,9 @@ test("cold inspection validates custom state before a hung shortcut sweep can co
     expect([result.state?.current, result.state?.game.mods.size, result.instanceMatches]).toEqual([true, 3, true]);
     expect(scans).toBe(0); // The first answer even precedes starting the slow sweep.
     await new Promise<void>(resolve => setImmediate(resolve));
+    expect(scans).toBe(0); // A finished one-shot inspection has no background consumer.
+    discovery.acquire(() => undefined, new AbortController().signal);
+    await new Promise<void>(resolve => setImmediate(resolve));
     expect(scans).toBe(1);
     expect((await inspectVortexSetup(game, () => undefined, { deadline: Date.now() + 3000, factsReader, shortcutDiscovery: discovery })).state?.current).toBe(true);
     expect(scans).toBe(1);
@@ -270,7 +272,7 @@ test("cold inspection validates custom state before a hung shortcut sweep can co
   expect(stopped).toBe(true);
 });
 
-test("the once-only background shortcut cache upgrades later inspections and survives a request's cancellation", async () => {
+test("the background shortcut cache upgrades later inspections while each requester releases only its own want", async () => {
   const base = tempDir("vortex-shortcut-upgrade-"), game = join(base, "Game"), custom = join(base, "Custom"), target = join(base, "App", "Vortex.exe");
   cpSync(join(sandbox, "state.v2-closed"), join(custom, "state.v2"), { recursive: true });
   mkdirSync(game, { recursive: true }); cpSync(join(sandbox, "vortex.deployment.json"), join(game, "vortex.deployment.json"));
@@ -281,14 +283,39 @@ test("the once-only background shortcut cache upgrades later inspections and sur
   const factsReader: typeof gatherVortexDataFacts = async () => ({ platform: process.platform === "win32" ? "win32" : "posix" });
   try {
     expect((await inspectVortexSetup(game, () => undefined, { factsReader, shortcutDiscovery: discovery, signal: controller.signal })).state).toBeNull();
+    const first = discovery.acquire(() => undefined, controller.signal);
+    const second = discovery.acquire(() => undefined, new AbortController().signal);
     controller.abort();
+    await first.settled;
+    expect(discovery.requesters).toBe(1);
     await new Promise<void>(resolve => setImmediate(resolve));
     complete([{ target, arguments: `--user-data "${custom}"` }]);
-    await discovery.settled;
+    await second.settled;
+    expect(discovery.requesters).toBe(0);
+    expect(discovery.completed).toBe(true);
     expect(discovery.revision).toBe(1);
     const updated = await inspectVortexSetup(game, () => undefined, { factsReader, shortcutDiscovery: discovery });
     expect(updated.state?.current).toBe(true);
     expect(updated.stateSelection?.candidate.source).toBe("shortcut");
     expect(scans).toBe(1);
   } finally { discovery.stop(); await discovery.settled; }
+});
+
+test("the sole requester aborts before scheduling: no sweep starts, and a later want can retry", async () => {
+  let scans = 0;
+  const discovery = new VortexShortcutDiscovery(async () => { scans++; return []; });
+  const controller = new AbortController();
+  const first = discovery.acquire(() => undefined, controller.signal);
+  controller.abort();
+  await first.settled;
+  await discovery.settled;
+  await new Promise<void>(resolve => setImmediate(resolve));
+  expect(scans).toBe(0);
+  expect(discovery.requesters).toBe(0);
+  expect(discovery.completed).toBe(false);
+  const second = discovery.acquire(() => undefined, new AbortController().signal);
+  await second.settled;
+  expect(scans).toBe(1);
+  expect(discovery.requesters).toBe(0);
+  expect(discovery.completed).toBe(true);
 });

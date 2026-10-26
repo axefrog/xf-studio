@@ -50,10 +50,12 @@ export function createBrowserCreatorDevice(transport: Fetch = (url, init) => fet
     mods = panel.mods.length;
     // Labels the host couldn't read, and their next step (NATIVE-46).
     const next = value.next === "retry" || value.next === "wolvenkit" ? value.next : undefined;
-    return next && typeof value.message === "string" ? { phase: "ready", message: value.message.slice(0, 400), next, panel } : { phase: "ready", message: "", panel };
+    const pending = value.pending === true ? { pending: true } : {};
+    return next && typeof value.message === "string" ? { phase: "ready", message: value.message.slice(0, 400), next, panel, ...pending } : { phase: "ready", message: "", panel, ...pending };
   };
   return {
     panel: (gender: BodyGender, signal: AbortSignal) => state(fetcher(`${CREATOR_ENDPOINT}?gender=${gender}`, { signal })),
+    watch: (gender, signal) => state(fetcher(`${CREATOR_ENDPOINT}?gender=${gender}&follow=1`, { signal })),
     retry: (gender: BodyGender, signal: AbortSignal) => state(post({ kind: "retry", bodyGender: gender }, signal)),
     async page(gender, option, offset, signal, query) {
       const search = query ? `&search=${encodeURIComponent(query)}` : "";
