@@ -258,13 +258,30 @@ async function runHandover(input: Json, context: CommandContext): Promise<Comman
       ...(dm.released === false && dm.nothing_held !== true ? { why: dm.why } : { spawned_removed: dm.spawned_removed ?? 0 }),
     });
   }
-  await attempt(context, "ui.message", { text: "Handed over: the game is yours. XF automation is paused until the session resumes.", level: "ask", seconds: 15 });
+  // One notice at a time (scripted session 1 showed it twice): the last one is withdrawn first, the new one's id kept so
+  // the resume (or the next handover) takes it down; info, since it asks nothing. quiet posts none (a runner's own pause).
+  await withdrawNotice(context);
+  if (input.quiet !== true) {
+    const posted = await attempt(context, "ui.message", { text: "Handed over: the game is yours. XF automation is paused until the session resumes.", level: "info", seconds: 15 });
+    if (typeof posted.id === "number") (context.api as unknown as Record<symbol, number>)[HANDOVER_NOTICE] = posted.id;
+  }
   return { value: { handed_over: true, was: handed.was, steps, note: input.note ?? null, undo: { method: "session.resume", params: {} } } };
+}
+
+/** The open handover notice's message id, kept on the command API (shared by every view of it, the control route's too). */
+const HANDOVER_NOTICE = Symbol.for("xfb.handover-notice");
+async function withdrawNotice(context: CommandContext) {
+  const holder = context.api as unknown as Record<symbol, number | undefined>;
+  const id = holder[HANDOVER_NOTICE];
+  if (id === undefined) return;
+  holder[HANDOVER_NOTICE] = undefined;
+  await attempt(context, "ui.message", { withdraw: id });
 }
 
 async function runResume(input: Json, context: CommandContext): Promise<CommandResult> {
   const resumed = await call(context, "bridge.handover", { on: false, ...(input.note ? { note: input.note } : {}) });
-  await attempt(context, "ui.message", { text: "Resumed: XF automation continues.", level: "done", seconds: 6 });
+  await withdrawNotice(context);
+  if (input.quiet !== true) await attempt(context, "ui.message", { text: "Resumed: XF automation continues.", level: "done", seconds: 6 });
   return { value: { handed_over: false, was: resumed.was, undo: { method: "session.handover", params: {} } } };
 }
 
@@ -417,6 +434,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
       lights: oneOf("keep (default) or clear the showroom's rigs.", ["keep", "clear"]),
       restore_ui: bool("Show photo mode's menu and cursor again (default true)."),
       note: str("Why, for the log (for example what the player should judge).", { maxLength: 200 }),
+      quiet: bool("Post no notice in the game (a script's own brief pause); an earlier notice is still withdrawn."),
     }),
     undo: "session_resume gives the bridge its changes back.",
     local: runHandover,
@@ -426,7 +444,7 @@ export const SCENE_COMMANDS: CommandDef[] = [
     title: "Take the game back from the player",
     description: "Ends a handover: the bridge may change the game again (within what its settings allow). A line in the game says so, and the session log records it.",
     permission: "control",
-    input: obj({ note: str("What the player did or decided, for the log.", { maxLength: 200 }) }),
+    input: obj({ note: str("What the player did or decided, for the log.", { maxLength: 200 }), quiet: bool("Post no line in the game (a script's own brief pause); the handover notice is still withdrawn.") }),
     undo: "session_handover hands over again.",
     local: runResume,
   },

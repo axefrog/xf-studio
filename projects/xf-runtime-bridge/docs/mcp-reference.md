@@ -166,6 +166,7 @@ No parameters.
 | `lights` | string | `keep`, `clear` | keep (default) or clear the showroom's rigs. |
 | `restore_ui` | boolean | `true`, `false` | Show photo mode's menu and cursor again (default true). |
 | `note` | string | at most 200 characters | Why, for the log (for example what the player should judge). |
+| `quiet` | boolean | `true`, `false` | Post no notice in the game (a script's own brief pause); an earlier notice is still withdrawn. |
 
 ### `session_resume`
 
@@ -179,6 +180,7 @@ No parameters.
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `note` | string | at most 200 characters | What the player did or decided, for the log. |
+| `quiet` | boolean | `true`, `false` | Post no line in the game (a script's own brief pause); the handover notice is still withdrawn. |
 
 ### `game_status`
 
