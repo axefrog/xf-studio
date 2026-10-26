@@ -18,7 +18,7 @@ import { fx3Slice, makeKabukiSlice } from '../../src/sim/slices.ts';
 import { itemTime } from '../../src/summary.ts';
 import { child as childOf, eventsState, fxData, inject as injectInto, occurrences, seedOf } from './helpers.ts';
 import { lcg, restate, transfer } from './feed.ts';
-import { differing, recordOf } from './records.ts';
+import { differing, recordOf, sameHistoricalEdges } from './records.ts';
 
 // Bun 1.4 gives the default set in test/setup.ts to the first test file only
 setDefaultTimeout(120_000);
@@ -102,10 +102,8 @@ function countRuns(sim: Sim): Map<string, number[]> {
     expect(cur.windowNow()).toBe(N);
     expect(differing(recordOf(cur, { endedEdges: true }), reference)).toEqual([]);
     // the past is answered alike: every seat and holder interval U's store holds, ended ones included, gives the same reads in R (S1 9.1)
-    for (const e of u.sim.k.store.allEdges().filter((x) => x.type === 'xf:leads' || x.type === 'xf:held-by')) {
-      const read = (sim: Sim): unknown => (e.type === 'xf:leads' ? sim.reads.transitions('leads', [e.from, e.to], 0, sim.k.now) : sim.reads.transitions('holds', [e.to, e.from], 0, sim.k.now));
-      expect(read(cur), `the past of ${e.type} ${e.id}`).toEqual(read(u.sim));
-    }
+    // (both ways: an edge R holds that U does not would show too)
+    expect(sameHistoricalEdges(u.sim, cur)).toEqual([]);
 
     // the outstanding batch applied at its boundary without running its process again: no window ran twice, and none ran at b*
     for (const [id, ks] of runs) {

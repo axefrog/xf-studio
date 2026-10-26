@@ -17,6 +17,7 @@ import { Sim } from '../../src/sim/sim.ts';
 import { makeKabukiSlice } from '../../src/sim/slices.ts';
 import { child as childOf, inject, seedOf } from './helpers.ts';
 import { transfer } from './feed.ts';
+import { sameHistoricalEdges } from './records.ts';
 import { adults, goalSim, W } from './goals-helpers.ts';
 import { stepOne } from './hunt-helpers.ts';
 
@@ -102,6 +103,37 @@ function observation(sim: Sim, skip: string[] = []): unknown {
   return { procs, frames, edges, grudges: sim.record.grudges, roleGoals: sim.record.roleGoals, log: sim.record.log.filter((e) => !skip.includes(e.proc)).map(({ seq: _s, ...rest }) => rest) };
 }
 
+/**
+ * What a run that was saved and loaded must hold as the one that went on holds it: every process's state and digest, the record's entries and the live item edges,
+ * all of it; the past of the seat and holder edges is compared by the reads (`sameHistoricalEdges`) and the goal frames by `sameFrames`.
+ */
+function intended(sim: Sim, skip: string[] = []): string {
+  const o = observation(sim, skip) as { procs: unknown; edges: unknown; grudges: unknown; roleGoals: unknown; log: unknown };
+  const edges = sim.k.store.idsOfKind('xf:item').flatMap((i) => sim.k.store.edgesFrom(i).filter((e) => e.type === 'xf:held-by' && e.valid.to === undefined).map((e) => [e.to, e.valid]));
+  return JSON.stringify({ procs: o.procs, edges, grudges: o.grudges, roleGoals: o.roleGoals, log: o.log });
+}
+
+/** The retained frames of a run, by Id, as the full records. */
+const retainedFrames = (sim: Sim): Map<Id, ReturnType<Sim['k']['frames']['all']>[number]> => new Map(sim.k.frames.all().filter((f) => f.retain === true).map((f) => [f.id, f]));
+
+/**
+ * The retained frames of a reloaded run against the run that went on: each one the reloaded run holds is the other's, field for field (an ended frame's terminal status
+ * included); each the reloaded run lacks is an ended frame that no save held and no record refers to; and it holds ended frames at all (a run that never ends a goal
+ * would show nothing). Returns how many ended frames the reloaded run holds.
+ */
+function sameFrames(reloaded: Sim, unbroken: Sim): number {
+  const r = retainedFrames(reloaded);
+  const u = retainedFrames(unbroken);
+  for (const [id, f] of r) expect(f, `frame ${id}`).toEqual(u.get(id)!);
+  const kept = unbroken.k.retention.rootFrameIds();
+  for (const [id, f] of u) {
+    if (r.has(id)) continue;
+    expect(f.status === 'active' || f.status === 'blocked', `the active frame ${id} is held`).toBe(false);
+    expect(kept.has(id), `the referenced frame ${id} is held`).toBe(false);
+  }
+  return [...r.values()].filter((f) => f.status !== 'active' && f.status !== 'blocked').length;
+}
+
 describe('SF1-E5 (v0.6): the Friday fee under protection', () => {
   // the Claws' treasury runs low early, so that collect-fee starts and its collectors work the market
   const poor = (d: S1Data): void => { d.groups.groups.find((g) => g.aff === 'A1')!.books.cash = 600; };
@@ -109,6 +141,7 @@ describe('SF1-E5 (v0.6): the Friday fee under protection', () => {
   const SEEDS = SOAK ? 20 : FULL ? 2 : 1;
 
   test('A, B and D agree; collectors work their posts; goals, acts and the protagonist stay within bounds; a run with V at the market differs only in scene.acts', () => {
+    let endedHeld = 0;
     for (let i = 0; i < SEEDS; i++) {
       const name = `SF1-E5-${i}`;
       const a = kabuki(name, poor);
@@ -124,9 +157,11 @@ describe('SF1-E5 (v0.6): the Friday fee under protection', () => {
       }
       d.advance(N - d.windowNow());
       expect(JSON.stringify(observation(b)), `B at seed ${i}`).toEqual(JSON.stringify(observation(a)));
-      // a reload drops the ended frames nobody refers to: what is alive agrees
-      const alive = (s: Sim): unknown => ((observation(s) as { frames: unknown }).frames);
-      expect(alive(d), `D at seed ${i}`).toEqual(alive(a));
+      // D, reloaded three times, holds everything A does: the processes' states and digests, the record, the live item edges, the past of every seat and holder, and the retained
+      // goal frames in full, the ended ones a save held among them
+      expect(intended(d), `D at seed ${i}`).toEqual(intended(a));
+      expect(sameHistoricalEdges(a, d), `the past of seats and holders at seed ${i}`).toEqual([]);
+      endedHeld += sameFrames(d, a);
       // bounds
       const goals = a.stateOf<GoalsState>('people.goals')!;
       expect(goals.counters.opened, 'goals opened').toBeGreaterThan(0);
@@ -161,49 +196,62 @@ describe('SF1-E5 (v0.6): the Friday fee under protection', () => {
       c.advance(N);
       expect(JSON.stringify(observation(c, ['scene.acts'])), `V at the market, seed ${i}`).toEqual(JSON.stringify(observation(a, ['scene.acts'])));
     }
+    // not vacuous: the reloaded runs held ended goal frames, so the terminal statuses were compared
+    expect(endedHeld, 'ended goal frames held by the reloaded runs').toBeGreaterThan(0);
   });
 });
 
 describe('SF1-E6 (v0.6): a hunt, end to end', () => {
   const TEMPOS = SOAK ? (['restless', 'steady', 'calm', 'off'] as const) : FULL ? (['restless', 'steady'] as const) : (['restless'] as const);
   const SEEDS = SOAK ? 3 : 1;
-  const N = SOAK ? 1300 : FULL ? 760 : 520;
+  // The specification's scale has the game's own pace: the killing at window 300, a dwell of 144 windows, V's response 300 windows after the price. The other scales
+  // keep every step and shorten the waits (the killing at window 100, a dwell of 48, the response 100 windows after the price), so that a hunt runs to its end inside the run.
+  const KILL = SOAK ? 300 : 100;
+  const DWELL = SOAK ? 144 : 48;
+  const PAY = SOAK ? 300 : 100;
+  const RELOADS = SOAK ? [330, 520] : [KILL + 50, KILL + 160];
+  const N = SOAK ? 1300 : FULL ? 560 : 420;
+  /** A run goes on past `N` until the scheduled response has been made and the intention has ended `paid`, or for at most this long more. */
+  const EXTRA = SOAK ? 0 : 500;
 
-  /** The harness stands in for S2: each warning and price is pinned `observed` 20 windows after it is minted, and V's response complying with the first price comes 300 windows later. */
+  const make = (name: string, tempo: 'restless' | 'steady' | 'calm' | 'off'): Sim => {
+    const s = kabuki(name, (d) => { d.groups.punish.climbP = 0.5; d.groups.punish.rungDwell = DWELL; });
+    s.k.settings.set({ tempo });
+    s.k.eventKinds.register({ name: 'response', roles: ['protagonist', 'asker'], fills: [{ fn: 'comply', args: { who: 'protagonist', to: 'asker' } }] });
+    return s;
+  };
+  const paidEnd = (s: Sim): boolean => s.record.log.some((e) => e.reason === 'intent-end' && /\|punish\|paid$/.test(e.key ?? ''));
+
+  /** The harness stands in for S2: each warning and price is pinned `observed` 20 windows after it is minted, and V's response complying with the first price comes `PAY` windows later. */
   function hunt(name: string, tempo: 'restless' | 'steady' | 'calm' | 'off', mode: 'window' | 'reload') {
-    let sim = kabuki(name, (d) => { d.groups.punish.climbP = 0.5; });
-    sim.k.settings.set({ tempo });
-    sim.k.eventKinds.register({ name: 'response', roles: ['protagonist', 'asker'], fills: [{ fn: 'comply', args: { who: 'protagonist', to: 'asker' } }] });
+    let sim = make(name, tempo);
     const GA = sim.w.group(sim.w.districts[0]!.id, 'A1');
     const market = sim.w.districts[0]!.cellIds.find((x) => sim.w.cell(x).marketCell && sim.w.cell(x).public === 'public') ?? sim.w.districts[0]!.cellIds.find((x) => sim.w.cell(x).marketCell)!;
     const m = adults(sim, 2).find((r) => sim.people.view(r)!.aband >= 2)!;
     const vcell = sim.w.districts[0]!.cellIds[0]!;
-    new ReplayPort(sim).submit([{ t: 0, op: 'reading', node: 'v', slot: 'cell', value: vcell }, { t: 300 * W + 30, op: 'event', kind: 'game.death', place: market, participants: [{ who: m, role: 'victim' }, { who: 'v', role: 'actor' }], effects: [{ on: m, effect: 'kill' }], witnesses: 6 }]);
+    new ReplayPort(sim).submit([{ t: 0, op: 'reading', node: 'v', slot: 'cell', value: vcell }, { t: KILL * W + 30, op: 'event', kind: 'game.death', place: market, participants: [{ who: m, role: 'victim' }, { who: 'v', role: 'actor' }], effects: [{ on: m, effect: 'kill' }], witnesses: 6 }]);
     const seed = sim.k.root('layer2', 'core:seed');
     const seen = new Map<Id, number>();
     let paid = false;
     const pay = (s: Sim): void => {
       if (paid) return;
       const price = [...seen].find(([id]) => s.k.value(id, 'kind') === 'price');
-      if (price === undefined || s.windowNow() < price[1] + 300) return;
+      if (price === undefined || s.windowNow() < price[1] + PAY) return;
       paid = true;
       const warner = s.policies.viewEvent(price[0])!.participants.find((p) => p.role === 'warner')!.who;
       s.k.events.mintEvent({ creator: seed, cause: seed, name: 'v-pays', time: s.k.now, kind: 'response', place: market, participants: [{ who: s.w.v, role: 'protagonist' }, { who: warner, role: 'asker' }], effects: [], witnesses: [], causes: [price[0]] });
     };
-    for (let w = 0; w < N; w++) {
+    for (let w = 0; ; w++) {
       stepOne(sim, 20, seen);
       pay(sim);
-      if (mode === 'reload' && (w === 330 || w === 520)) {
+      if (mode === 'reload' && RELOADS.includes(w)) {
         sim.k.persistence.save(`E6-${name}-${tempo}-${w}`);
-        const next = transfer(sim, `E6-${name}-${tempo}-${w}`, () => {
-          const s = kabuki(name, (d) => { d.groups.punish.climbP = 0.5; });
-          s.k.settings.set({ tempo });
-          s.k.eventKinds.register({ name: 'response', roles: ['protagonist', 'asker'], fills: [{ fn: 'comply', args: { who: 'protagonist', to: 'asker' } }] });
-          return s;
-        }, 5);
+        const next = transfer(sim, `E6-${name}-${tempo}-${w}`, () => make(name, tempo), 5);
         next.k.root('layer2', 'core:seed');
         sim = next;
       }
+      // the same rule in both modes, so both stop at the same window: past `N` only until the response has been made and the intention has ended paid
+      if (w + 1 >= N && (paidEnd(sim) || w + 1 >= N + EXTRA || tempo === 'off' || tempo === 'calm')) break;
     }
     return { sim, GA };
   }
@@ -227,7 +275,13 @@ describe('SF1-E6 (v0.6): a hunt, end to end', () => {
       }
       // order: the first act with V as its object is a warning; no price or search before the warning's observed pin; at calm no price, at steady no confront
       const withV = acts(sim).filter((x) => x.punish !== undefined).sort((x, y) => x.w - y.w);
-      if (withV.length > 0) expect(withV[0]!.kind).toBe('warning');
+      // not vacuous: at every tempo that allows it the hunt began, warned first and, at the tempos that allow a price, reached one
+      if (tempo !== 'off') {
+        expect(punishEvents.length, 'the intention started').toBeGreaterThanOrEqual(1);
+        expect(withV.length, 'acts with V as their object').toBeGreaterThanOrEqual(1);
+        expect(withV[0]!.kind).toBe('warning');
+      }
+      if (tempo === 'restless' || tempo === 'steady') expect(withV.some((x) => x.kind === 'price'), 'a price').toBe(true);
       if (tempo === 'calm') expect(withV.some((x) => x.kind === 'price' || x.kind === 'search')).toBe(false);
       const confronts = sim.k.store.idsOfKind('core:event').filter((x) => sim.k.value(x, 'kind') === 'confront');
       if (tempo === 'steady' || tempo === 'calm' || tempo === 'off') expect(confronts).toHaveLength(0);
@@ -235,7 +289,11 @@ describe('SF1-E6 (v0.6): a hunt, end to end', () => {
       for (const c of confronts) expect(sim.policies.viewEvent(c)!.effects).toEqual([]);
       // the end: an injected response settles the grudge and ends the intention paid, with a relent.punish; with no response it ends expired or ended
       const relents = sim.k.store.idsOfKind('core:event').filter((x) => sim.k.value(x, 'kind') === 'relent.punish');
-      if (withV.some((x) => x.kind === 'price')) expect(sim.record.log.some((e) => e.reason === 'intent-end' && /\|punish\|(paid)$/.test(e.key ?? '')) || relents.length === 0).toBe(true);
+      // the run went on past the scheduled response, so the end is `paid` and a relent.punish was minted for it
+      if (tempo === 'restless' || tempo === 'steady') {
+        expect(paidEnd(sim), 'the intention ended paid').toBe(true);
+        expect(relents.length, 'a relent.punish').toBeGreaterThanOrEqual(1);
+      }
       // the protagonist: nothing S1 minted puts a harmful effect on V or binds V to a victim or target role
       for (const ev of sim.k.store.idsOfKind('core:event')) {
         const view = sim.policies.viewEvent(ev);
@@ -245,10 +303,11 @@ describe('SF1-E6 (v0.6): a hunt, end to end', () => {
       }
       // identity: per-window and reloaded runs give the same records
       const b = hunt(name, tempo, 'reload');
-      const alive = (s: Sim): unknown => JSON.stringify((observation(s, ['scene.acts']) as { procs: unknown; frames: unknown; grudges: unknown }).frames) + JSON.stringify(acts(s));
-      expect(alive(b.sim)).toEqual(alive(sim));
-      expect(JSON.stringify(b.sim.stateOf<GoalsState>('people.goals'))).toEqual(JSON.stringify(sim.stateOf<GoalsState>('people.goals')));
-      expect(JSON.stringify(b.sim.digestOf<GroupDigest>('group.decide')!.against)).toEqual(JSON.stringify(sim.digestOf<GroupDigest>('group.decide')!.against));
+      expect(b.sim.windowNow()).toBe(sim.windowNow());
+      expect(intended(b.sim, ['scene.acts'])).toEqual(intended(sim, ['scene.acts']));
+      expect(sameHistoricalEdges(sim, b.sim)).toEqual([]);
+      expect(JSON.stringify(acts(b.sim))).toEqual(JSON.stringify(acts(sim)));
+      sameFrames(b.sim, sim);
     }
   });
 });

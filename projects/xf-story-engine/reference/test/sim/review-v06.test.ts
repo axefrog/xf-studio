@@ -3,6 +3,7 @@
 import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import type { Id } from '../../src/types.ts';
 import { transfer } from './feed.ts';
+import { differing, recordOf, sameHistoricalEdges } from './records.ts';
 import { isActOfV } from '../../src/sim/grievance.ts';
 import { H, s as hs } from '../../src/id.ts';
 import type { GroupDigest, GroupState } from '../../src/sim/proc-groups.ts';
@@ -391,5 +392,51 @@ describe('review 12: the foreign-event index is bounded by the windows that can 
     expect(seen.every((i) => ids.includes(i))).toBe(true);
     expect(seen.length).toBeGreaterThan(60);
     expect(seen.length).toBeLessThanOrEqual(sim.data.goals.seenMax);
+  });
+});
+
+describe('review 13: the ended-edge normalisation is narrow', () => {
+  const make = (): Sim => bigSim('SF1-ended-seats', undefined, ['group.decide']);
+  const killHolders = (sim: Sim): void => {
+    const GA = gnode(sim, 'A1');
+    for (const e of sim.k.store.edgesTo(GA).filter((x) => x.type === 'xf:leads' && x.valid.to === undefined)) sim.k.pin({ node: e.from, slot: 'died', value: sim.k.now, reason: 'committed', cause: sim.w.port, at: sim.k.now });
+  };
+
+  test('an unsaved run and one saved and reloaded after the holders died agree on every section but the ended seat edges, whose histories agree both ways', () => {
+    const u = make();
+    u.advance(5); killHolders(u); u.advance(4);
+    const a = make();
+    a.advance(5); killHolders(a); a.advance(4);
+    a.k.persistence.save('X');
+    const c = transfer(a, 'X', make, 5);
+    expect(differing(recordOf(u, { endedEdges: true }), recordOf(c, { endedEdges: true }))).toEqual([]);
+    expect(sameHistoricalEdges(u, c)).toEqual([]);
+    // the run on from there stays the same
+    u.advance(6); c.advance(6);
+    expect(differing(recordOf(u, { endedEdges: true }), recordOf(c, { endedEdges: true }))).toEqual([]);
+    expect(sameHistoricalEdges(u, c)).toEqual([]);
+  });
+
+  test('an ended edge of another type, or a seat edge whose history differs, is still a difference', () => {
+    const a = make();
+    const b = make();
+    a.advance(5); b.advance(5);
+    // a cast edge of a seed that one run saved while live and then ended, the other never saved: the saved run's view lists it, and it is not a seat or holder
+    // edge, so it is not normalised away
+    const person = adults(b, 0)[0]!;
+    adults(a, 0);
+    for (const sim of [a, b]) {
+      const seed = sim.k.root('seed-r13', 'core:seed');
+      sim.k.addEdge({ type: 'core:cast', from: seed, to: person, data: { role: 'x' }, cause: seed, valid: { from: 3 } });
+    }
+    b.k.persistence.save('B');
+    for (const sim of [a, b]) { sim.advance(1); sim.k.endEdge(sim.k.store.allEdges().find((e) => e.type === 'core:cast')!.id, sim.k.now); sim.advance(1); }
+    expect(differing(recordOf(a, { endedEdges: true }), recordOf(b, { endedEdges: true }))).toContain('edges');
+    // a seat that ended in one run only has a different past, which the reads show
+    const c = make();
+    const d = make();
+    c.advance(5); d.advance(5);
+    killHolders(d); d.advance(2); c.advance(2);
+    expect(sameHistoricalEdges(c, d).length).toBeGreaterThan(0);
   });
 });

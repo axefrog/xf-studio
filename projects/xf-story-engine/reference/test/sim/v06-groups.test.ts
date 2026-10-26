@@ -11,12 +11,13 @@ import { Sim } from '../../src/sim/sim.ts';
 import { fx3Slice } from '../../src/sim/slices.ts';
 import type { S1Data } from '../../src/sim/data.ts';
 import { quietData, seedOf } from './helpers.ts';
+import { bigSlice } from './goals-helpers.ts';
 
 setDefaultTimeout(120_000);
 const W = 600;
 const GROUP_PROC = processCause('group.decide');
 
-const groupSim = (name: string, tweak: (d: S1Data) => void = () => {}, only = ['group.decide']): Sim => Sim.create({ worldSeed: seedOf(name), index: fx3Slice(), data: quietData(tweak), only });
+const groupSim = (name: string, tweak: (d: S1Data) => void = () => {}, only = ['group.decide'], index = fx3Slice()): Sim => Sim.create({ worldSeed: seedOf(name), index, data: quietData(tweak), only });
 const gid = (sim: Sim, aff: 'A1' | 'A2'): Id => sim.w.group(sim.w.districts[0]!.id, aff);
 const gstate = (sim: Sim, aff: 'A1' | 'A2'): G => sim.stateOf<GroupState>('group.decide')!.groups[gid(sim, aff)]!;
 const gnow = (sim: Sim, aff: 'A1' | 'A2'): G => (sim.k.evolution.states.get('group.decide')!.outstanding.at(-1)?.state as GroupState | undefined)?.groups[gid(sim, aff)] ?? gstate(sim, aff);
@@ -212,8 +213,8 @@ describe('SF1-G-8: seats', () => {
 });
 
 describe('SF1-G-9, SF1-G-15 and SF1-G-16: removal, succession, interregnum, the bar', () => {
-  const world = (name: string, tweak: (d: S1Data) => void = () => {}) => {
-    const sim = groupSim(name, (d) => { d.groups.canonSeats = [{ gameKey: 'canon-head', seat: 0, aff: 'A1' }]; tweak(d); });
+  const world = (name: string, tweak: (d: S1Data) => void = () => {}, index = fx3Slice()) => {
+    const sim = groupSim(name, (d) => { d.groups.canonSeats = [{ gameKey: 'canon-head', seat: 0, aff: 'A1' }]; tweak(d); }, ['group.decide'], index);
     const port = new ReplayPort(sim);
     port.submit([{ t: 0, op: 'person', key: 'canon-head', slots: { affiliation: 'GA', alive: 'yes', 'age-class': 'adult' } }]);
     sim.advance(2);
@@ -267,6 +268,34 @@ describe('SF1-G-9, SF1-G-15 and SF1-G-16: removal, succession, interregnum, the 
     expect(g.intent.state === 'none' || g.intent.state === 'idle').toBe(true);
     sim.advance(10);
     expect(sim.record.log.filter((l) => l.reason === 'intent-leaderless' && l.key === group).length).toBe(1);
+  });
+
+  test('review 15: each new holder edge cites its own succession event, and a seat drawn a window after the removal keeps the removal as the cause of its succession', () => {
+    const { sim, port, head } = world('SF1-G-9r', () => {}, bigSlice());
+    const ga = members(sim, 'A1');
+    const group = gid(sim, 'A1');
+    const gb = members(sim, 'A2');
+    seat(sim, 'A1', [head, ga[0]!, null], ['treasury', 'reputation', 'treasury']);
+    sim.advance(1);
+    const w0 = sim.windowNow();
+    port.submit([{ t: w0 * W + 1, op: 'person', key: 'canon-head', slots: { alive: 'no' } }]);
+    const kill = fact(sim, { kind: 'assault', time: (w0 + 1) * W + 20, w: w0 + 1, parties: [{ role: 'aggressor', who: gb[0]!, group: gid(sim, 'A2') }, { role: 'victim', who: head, group }], effects: [{ on: head, effect: 'kill' }] });
+    feed(sim, w0 + 1, [kill]);
+    sim.advance(8);
+    const succ = eventsOf(sim, 'succession').map((e) => ({ id: e, v: sim.policies.viewEvent(e)! }));
+    // the promoted head's succession and the draw for the seat it left both answer the removal, whichever window the second came in
+    const late = succ.filter((x) => x.v.participants.some((p) => p.role === 'late' && p.who === head));
+    expect(late).toHaveLength(1);
+    const later = succ.filter((x) => x.id !== late[0]!.id);
+    expect(later.length).toBeGreaterThan(0);
+    for (const x of [...late, ...later.slice(0, 1)]) expect(x.v.causes).toContain(kill.id);
+    // each new holder's edge cites the succession that placed them, not the group
+    const edges = [...sim.k.store.allEdges()].filter((e) => e.type === 'xf:leads' && e.to === group && e.valid.from > 0);
+    const sp = new Set(succ.map((x) => x.id));
+    expect(edges.length).toBeGreaterThan(0);
+    for (const e of edges) expect(sp.has(e.cause), `edge of ${e.from} cites ${e.cause}`).toBe(true);
+    // a holder placed at initialisation has no succession: its edge cites the group
+    expect([...sim.k.store.allEdges()].some((e) => e.type === 'xf:leads' && e.to === group && e.cause === group)).toBe(true);
   });
 
   test('an arrest removes a lieutenant and bars them: no draw picks them before the bar ends, and a succession names the predecessor', () => {

@@ -56,6 +56,10 @@ export interface Seat {
   prev?: Id;
   /** Whether the `xf:leads` edge of the holder has been written. */
   edged?: boolean;
+  /** What emptied the seat (the removal's cause), kept for the succession event of a draw that comes later (S1 7.8). */
+  vacancy?: Id;
+  /** The succession event the holder's `xf:leads` edge cites, until the edge is written (a holder placed at initialisation has none: its edge cites the group). */
+  edgeCause?: Id;
   /** Whether the seat's vacancy at initialisation has been logged (`seat-vacant`, S1 7.8). */
   logged?: boolean;
 }
@@ -393,13 +397,14 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
       const pairBoost: GroupDigest['pairBoost'] = {};
       const outGroups: GroupDigest['groups'] = {};
       const groupIds = Object.keys(st.groups).sort();
-      const minted = (g: Id, name: string, kind: string, participants: Array<{ who: Id; role: string }>, causes: Id[], place: Id): void => {
+      const minted = (g: Id, name: string, kind: string, participants: Array<{ who: Id; role: string }>, causes: Id[], place: Id): boolean => {
         const spec = {
           cause: g, name, time: T + Math.floor(c.keys.decideT(w, g) * W), kind, place, participants, causes, outcome: 'done' as const,
         };
         // lifecycle notices pass the gate and are counted by no budget (S1 5.3)
-        if (!c.produce({ kind, origin: 'sim', size: 1, window: w, participants, effects: [], creator: proc }).ok) return;
+        if (!c.produce({ kind, origin: 'sim', size: 1, window: w, participants, effects: [], creator: proc }).ok) return false;
         ops.push({ op: 'mint-event', spec });
+        return true;
       };
 
       for (const id of groupIds) {
@@ -432,7 +437,8 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
           const alive = predecessor !== undefined && (sim.people.view(predecessor) ? sim.people.alive(predecessor, T) : sim.k.value(predecessor, 'alive', T) !== 'no');
           const parts: Array<{ who: Id; role: string }> = [{ who: id, role: 'group' }, { who: successor, role: 'successor' }];
           if (predecessor !== undefined) parts.push({ who: predecessor, role: alive ? 'predecessor' : 'late' });
-          minted(id, `succession/${seat.seat}/${w}`, 'succession', parts, [cause], g.district);
+          // the new holder's edge cites this event, and the event's cause is what emptied the seat (S1 7.8)
+          if (minted(id, `succession/${seat.seat}/${w}`, 'succession', parts, [cause], g.district)) seat.edgeCause = mintedId(proc, id, `succession/${seat.seat}/${w}`);
           c.log({ w, proc: procId, kind: 'decision', reason: 'seat-taken', key: `${id}|${seat.seat}`, refs: [id, successor] });
         };
         // the removals: not alive, no longer a member, or arrested by a police action of size 2 or more that came out `done`
@@ -457,6 +463,7 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
           r.seat.prev = holder;
           r.seat.holder = null;
           r.seat.edged = false;
+          r.seat.vacancy = r.cause;
           c.log({ w, proc: procId, kind: 'decision', reason: 'seat-vacant', key: `${id}|${r.seat.seat}`, refs: [id, holder, r.cause] });
           if (r.seat.seat === 0) headLost = true;
         }
@@ -472,6 +479,7 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
             next.holder = null;
             next.edged = false;
             next.retry = w + 1;
+            next.vacancy = removed.find((r) => r.seat.seat === 0)!.cause;
             head.holder = moved;
             head.since = w + 1;
             head.lean = leanOf(def, moved, id);
@@ -500,7 +508,8 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
           seat.since = w + 1;
           seat.lean = leanOf(def, holder, id);
           seat.edged = false;
-          succession(seat, holder, seat.prev, id);
+          succession(seat, holder, seat.prev, seat.vacancy ?? id);
+          delete seat.vacancy;
         }
         // a canon holder whose bar has ended takes the seat back at once, as a succession (S1 7.8)
         for (const cs of cfg.canonSeats ?? []) {
@@ -529,8 +538,9 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
         // the holders' edges: `xf:leads`, `Id` `H("edge", "xf:leads", holder, group, since)`, cause the group node or the succession
         for (const seat of g.seats) {
           if (seat.holder === null || seat.edged) continue;
-          ops.push({ op: 'edge', type: 'xf:leads', from: seat.holder, to: id, attrs: { seat: seat.seat }, valid: { from: seat.since * W }, cause: id, id: edgeId(seat.holder, id, seat.since * W) });
+          ops.push({ op: 'edge', type: 'xf:leads', from: seat.holder, to: id, attrs: { seat: seat.seat }, valid: { from: seat.since * W }, cause: seat.edgeCause ?? id, id: edgeId(seat.holder, id, seat.since * W) });
           seat.edged = true;
+          delete seat.edgeCause;
         }
         const holders = new Set(g.seats.filter((s) => s.holder !== null).map((s) => s.holder!));
 

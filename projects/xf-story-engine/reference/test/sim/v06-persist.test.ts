@@ -87,7 +87,7 @@ describe('SF1-Y-9: reload', () => {
     // no frame change on load: the goal frames are restored from their records, never opened again
     expect(changes.filter((c) => c.c === 'frame')).toHaveLength(0);
     loaded.advance(FULL ? 200 : 80);
-    // the frames that are alive agree; an ended frame no event refers to is not in a save, and recovery restores it from its records
+    // the frames that are alive agree (the ended ones a save held or a record refers to are in the reload too: e2e-v06 compares them in full)
     expect(observation(loaded, false)).toEqual(observation(ref, false));
     // a forgetting sweep removes no active or blocked goal frame
     const live = loaded.k.frames.all().filter((f) => f.retain === true && (f.status === 'active' || f.status === 'blocked')).map((f) => f.id);
