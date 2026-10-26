@@ -249,7 +249,7 @@ describe("M13: a settle burst survives the handover it records", () => {
     const observer = fakeApi(clock);
     const rows: Row[] = [{ id: "ST5", title: "settle", steps: [
       { label: "change", together: [
-        { do: "burst", name: "ST5-xfbox-settle-dark", frames: 20, interval_ms: 100, clear_overlay: false, bind: "burst" },
+        { do: "burst", name: "ST5-xfbox-settle-dark", frames: 20, interval_ms: 100, clear_overlay: false, rect: { x: 0, y: 0, width: 8, height: 8 }, bind: "burst" },
         { sequence: [{ do: "wait", ms: 300 }, { do: "run", command: "session.handover", input: {} }, { do: "wait", ms: 700 }, { do: "run", command: "session.resume", input: {} }] },
       ] },
     ], pass: [{ label: "the burst", ref: "$burst", captured: true }] }];
