@@ -86,7 +86,9 @@
 // handles. A significant bug stops the batch early (--halt-on, default all: crash, bridge_lost, draw_call (the
 // plugin log's halt patterns), runner_error, repeated:3; a row's halt_on overrides): the teardown runs, the game is
 // closed cleanly, and resume.json lists the rows not yet run, the evidence and the command that continues.
-//   --resume (with --out <the session folder>) continues those rows into the same report.
+//   --resume (with --out <the session folder>) continues those rows into the same report. It refuses another script's
+//   folder, and a script edited since (resume.json keeps its hash) unless --reconcile, which runs the stored rows it
+//   still has plus the rows it gained and names any it dropped.
 //   --loop waits after a halt, with no game running, for the fix and a go (a file named go in the session folder,
 //   or "go" typed in a terminal; stop ends it), runs the fixtures' restage hook (restage: a command line), then
 //   starts the next attempt as a fresh process: preflight, relaunch, continue. --max-attempts (default 5) bounds it.
@@ -99,7 +101,7 @@ import { bool, str, validate, type JsonSchema } from "./api/schema.ts";
 import { acquireSessionLock, sessionRunningMessage } from "./session-lock.ts";
 import { spawnSync } from "node:child_process";
 import { describeBatch, parseHaltOn, planBatch, runBatch, SCRIPT_SCHEMA_3, type BatchScript } from "./testing/batch.ts";
-import { nextAttemptArgs, readResume, runRestage, waitForSignal } from "./testing/loop.ts";
+import { nextAttemptArgs, readResume, resumeRows, runRestage, waitForSignal } from "./testing/loop.ts";
 import { realClock } from "./testing/plan.ts";
 import { readIni, stagedConfigPath } from "./testing/config-ini.ts";
 import { windowsHost } from "./testing/host.ts";
@@ -601,8 +603,15 @@ async function batchMain(script: BatchScript, scriptPath: string, args: string[]
       console.error(`\n--resume: no resume.json in ${outDir} (give --out the session's report folder).`);
       process.exit(2);
     }
-    rowsWanted = resume.rows;
-    console.log(`\nResuming after attempt ${resume.attempt}: ${resume.rows.length} rows (${resume.rows.join(", ")}).`);
+    // The same script, and every stored row still in it; an edited script only with --reconcile, named either way.
+    const plan = resumeRows(resume, script, args.includes("--reconcile"));
+    if ("error" in plan) {
+      console.error(`\n--resume: ${plan.error}`);
+      process.exit(2);
+    }
+    for (const note of plan.notes) console.log(`\n${note}`);
+    rowsWanted = plan.rows;
+    console.log(`\nResuming after attempt ${resume.attempt}: ${plan.rows.length} rows (${plan.rows.join(", ")}).`);
   }
   let haltOn;
   try { haltOn = option("--halt-on") !== undefined ? parseHaltOn(option("--halt-on")) : undefined; } catch (error) { console.error(String((error as Error).message)); process.exit(2); }
@@ -661,7 +670,7 @@ if (import.meta.main) {
   };
   const scriptPath = args.find((a, i) => !a.startsWith("--") && !valued.includes(args[i - 1]));
   if (!scriptPath || !existsSync(scriptPath)) {
-    console.error("usage: bun tools/session.ts <script.json> [--dry-run] [--fixtures <private.json>] [--out <dir>] [--from <step label>] [--until <step label>] [--no-ask] [--no-echo] [--setup-asks-private]\n       schema 3: bun tools/session.ts <script.json> --fixtures <private.json> [--preflight | --dry-run] [--rows <id,id>] [--out <dir>] [--resume] [--halt-on <kinds>] [--loop] [--max-attempts <n>] [--force] [--no-echo]");
+    console.error("usage: bun tools/session.ts <script.json> [--dry-run] [--fixtures <private.json>] [--out <dir>] [--from <step label>] [--until <step label>] [--no-ask] [--no-echo] [--setup-asks-private]\n       schema 3: bun tools/session.ts <script.json> --fixtures <private.json> [--preflight | --dry-run] [--rows <id,id>] [--out <dir>] [--resume [--reconcile]] [--halt-on <kinds>] [--loop] [--max-attempts <n>] [--force] [--no-echo]");
     process.exit(2);
   }
   const script = JSON.parse(readFileSync(scriptPath, "utf8")) as SessionScript;

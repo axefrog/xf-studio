@@ -6,6 +6,7 @@
 // relaunches the game and continues from resume.json into the same report folder, whose report spans every attempt.
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PlanClock } from "./plan.ts";
@@ -13,11 +14,39 @@ import type { PlanClock } from "./plan.ts";
 export type LoopSignal = "go" | "stop";
 
 /** The rows still to run, from a report folder's resume.json. */
-export function readResume(outDir: string): { attempt: number; rows: string[]; halt?: unknown } | null {
+export function readResume(outDir: string): { attempt: number; rows: string[]; done: string[]; halt?: unknown; script?: { name?: string; sha256?: string } } | null {
   const path = join(outDir, "resume.json");
   if (!existsSync(path)) return null;
   const resume = JSON.parse(readFileSync(path, "utf8"));
-  return resume?.schema === "xfb/session-resume-1" ? { attempt: resume.attempt, rows: resume.rows_remaining ?? [], halt: resume.halt } : null;
+  return resume?.schema === "xfb/session-resume-1"
+    ? { attempt: resume.attempt, rows: resume.rows_remaining ?? [], done: (resume.rows_done ?? []).map((r: { id: string }) => r.id), halt: resume.halt, script: resume.script }
+    : null;
+}
+
+/** A script's identity for resume: its content's hash (an edited script resumes only when reconciled). */
+export function scriptHash(script: unknown): string {
+  return createHash("sha256").update(JSON.stringify(script)).digest("hex");
+}
+
+/**
+ * What a resume runs, checked against the script it resumes into: the same script (by name), and the rows still to
+ * run all present in it. An edited script (its hash differs) is refused unless reconcile is given, which runs the
+ * stored rows the script still has plus the rows it gained, and names what was dropped; a row the script no longer
+ * has is never dropped silently.
+ */
+export function resumeRows(resume: NonNullable<ReturnType<typeof readResume>>, script: { name: string; rows: { id: string }[] }, reconcile = false):
+  { rows: string[]; notes: string[] } | { error: string } {
+  if (resume.script?.name !== undefined && resume.script.name !== script.name) return { error: `resume.json is for the script ${resume.script.name}, not ${script.name}: give --out that script's report folder.` };
+  const ids = new Set(script.rows.map((r) => r.id));
+  const missing = resume.rows.filter((id) => !ids.has(id));
+  const known = new Set([...resume.rows, ...resume.done]);
+  const added = script.rows.map((r) => r.id).filter((id) => !known.has(id));
+  const edited = resume.script?.sha256 !== undefined && resume.script.sha256 !== scriptHash(script);
+  if (!edited && !missing.length) return { rows: resume.rows, notes: [] };
+  const what = [...(missing.length ? [`rows still to run that the script no longer has: ${missing.join(", ")}`] : []), ...(added.length ? [`rows the script gained: ${added.join(", ")}`] : []),
+    ...(!missing.length && !added.length ? ["its rows' steps changed"] : [])];
+  if (!reconcile) return { error: `The script changed since the attempt resume.json records (${what.join("; ")}). Rerun with --reconcile to resume what it still has plus what it gained, or start a new report folder.` };
+  return { rows: [...resume.rows.filter((id) => ids.has(id)), ...added], notes: [`Reconciled with the edited script: ${what.join("; ")}.`] };
 }
 
 /**
@@ -64,5 +93,6 @@ export function nextAttemptArgs(args: string[], outDir: string): string[] {
     if (["--resume", "--force"].includes(args[i])) continue;
     out.push(args[i]);
   }
-  return [...out, "--out", outDir, "--resume"];
+  // The loop's go stands for the fix, which may edit the script: the next attempt reconciles (and names what changed).
+  return [...out.filter((a) => a !== "--reconcile"), "--out", outDir, "--resume", "--reconcile"];
 }

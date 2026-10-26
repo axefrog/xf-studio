@@ -171,7 +171,7 @@ describe("the loop's signal and next attempt", () => {
   });
 
   test("nextAttemptArgs keeps the script and options and continues into the same folder", () => {
-    expect(nextAttemptArgs(["s.json", "--fixtures", "f.json", "--rows", "a,b", "--out", "old", "--loop", "--force"], "D:/out")).toEqual(["s.json", "--fixtures", "f.json", "--loop", "--out", "D:/out", "--resume"]);
+    expect(nextAttemptArgs(["s.json", "--fixtures", "f.json", "--rows", "a,b", "--out", "old", "--loop", "--force"], "D:/out")).toEqual(["s.json", "--fixtures", "f.json", "--loop", "--out", "D:/out", "--resume", "--reconcile"]);
   });
 
   test("readResume reads the rows still to run", () => {

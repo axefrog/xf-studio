@@ -32,6 +32,7 @@ import { checkMatch, checkPlan, describePlan, matches, realClock, resolveRefs, r
 import { planTestStep, TEST_STEP_KINDS, TestSession } from "./script.ts";
 import { captureCursor, waitForEvent } from "./windows.ts";
 import { tripReason } from "../commit-tripwire.ts";
+import { scriptHash } from "./loop.ts";
 import { ALL_CHANNELS, DEFAULT_HALT_PATTERNS, Telemetry, earlierSummaries, mergeSummaries, type RowTelemetry } from "./telemetry.ts";
 
 export const SCRIPT_SCHEMA_3 = "xfb/session-script-3";
@@ -1108,6 +1109,9 @@ function previousRun(outDir: string, name: string): PreviousRun {
 export async function runBatch(script: BatchScript, options: BatchRunOptions): Promise<BatchResult> {
   const planned = planBatch(script);
   if (planned.problems.length) throw new Error(`script problems:\n  ${planned.problems.join("\n  ")}`);
+  // A row asked for that the script doesn't have is an error, never silently nothing.
+  const unknownRows = (options.rows ?? []).filter((id) => !planned.rows.some((r) => r.row.id === id));
+  if (unknownRows.length) throw new Error(`rows not in the script: ${unknownRows.join(", ")}`);
   const log = options.log ?? ((line: string) => console.log(line));
   const clock = options.clock ?? realClock;
   const fixtures = { ...(script.fixtures ?? {}), ...(options.fixtures ?? {}) };
@@ -1349,7 +1353,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   const resumePath = join(options.outDir, "resume.json");
   await attemptCleanup("resume.json", async () => writeFileSync(resumePath, JSON.stringify({
     schema: "xfb/session-resume-1",
-    script: { name: script.name, path: options.scriptPath },
+    script: { name: script.name, path: options.scriptPath, sha256: scriptHash(script) },
     attempt,
     finished_at: new Date().toISOString(),
     outcome: signal.aborted ? "interrupted" : halt ? "halted" : "complete",

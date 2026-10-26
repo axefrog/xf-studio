@@ -182,3 +182,31 @@ describe("M6: a recorder rollover drains and acknowledges the old run before sta
     expect(order.slice(before + 1, last)).toContain("stop");
   });
 });
+
+describe("M7: a resume checks the script it resumes into", () => {
+  const stored = (extra: Record<string, unknown> = {}) => ({ attempt: 1, rows: ["b", "c"], done: ["a"], script: { name: "t" }, ...extra });
+  const script = (ids: string[], name = "t") => ({ name, rows: ids.map((id) => ({ id })) });
+  test("a renamed row isn't dropped silently: refused, then reconciled with what changed named", async () => {
+    const { resumeRows, scriptHash } = await import("../testing/loop.ts");
+    const before = script(["a", "b", "c"]), after = script(["a", "b", "c2"]);
+    const resume = stored({ script: { name: "t", sha256: scriptHash(before) } });
+    const refused = resumeRows(resume as never, after);
+    expect("error" in refused && refused.error).toContain("no longer has: c");
+    const reconciled = resumeRows(resume as never, after, true);
+    expect(reconciled).toEqual({ rows: ["b", "c2"], notes: [expect.stringContaining("no longer has: c; rows the script gained: c2")] });
+  });
+  test("another script's resume.json is refused; an unchanged script resumes as stored", async () => {
+    const { resumeRows, scriptHash } = await import("../testing/loop.ts");
+    expect("error" in resumeRows(stored() as never, script(["a", "b", "c"], "other"))).toBe(true);
+    const same = script(["a", "b", "c"]);
+    expect(resumeRows(stored({ script: { name: "t", sha256: scriptHash(same) } }) as never, same)).toEqual({ rows: ["b", "c"], notes: [] });
+  });
+  test("runBatch refuses rows the script doesn't have, and resume.json keeps the script's hash", async () => {
+    const { clock, fakeApi, fakeHost, go, script: make } = await fakes();
+    const { readFileSync } = await import("node:fs");
+    const rows = [{ id: "a", title: "a", steps: [] }];
+    await expect(go(make(rows as never), fakeApi(clock), fakeHost(), clock, tempDir("xfb-r34-"), { rows: ["gone"] })).rejects.toThrow("rows not in the script: gone");
+    const result = await go(make(rows as never), fakeApi(clock), fakeHost(), clock, tempDir("xfb-r34-"));
+    expect(JSON.parse(readFileSync(result.resumePath, "utf8")).script.sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
