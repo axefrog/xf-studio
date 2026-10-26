@@ -467,8 +467,13 @@ function writesRows(theme: Theme): Json[] {
         ...cetShot(row, `ST7-cet-diagnostics-${theme}`, "diag", theme)],
       pass: [captured("Diagnostics open", row, "diag"), framed(row, "diag")],
       // The header back as the window had it before (the request's undo: what the CET layer captured when it applied it).
-      cleanup: [{ label: `${row}-close-header`, do: "run", command: "cet.panel", input: { undo: ref(row, "open_req", "id") }, on_fail: "continue",
-        when: { match: { ref: ref(row, "open_req", "id"), exists: true } } }, ...cetClose(row)] });
+      // CET stays open until the window has drawn the undo (its own request's header applied): closed first, the header
+      // would wait for the next time someone opens CET.
+      cleanup: [{ label: `${row}-close-header`, do: "run", command: "cet.panel", input: { undo: ref(row, "open_req", "id") }, on_fail: "continue", bind: key(row, "undo_req"),
+        when: { match: { ref: ref(row, "open_req", "id"), exists: true } } },
+        { label: `${row}-undo-drawn`, do: "run", command: "bridge.info", input: {}, until: request(row, "undo", [{ path: "header", one_of: ["applied", "cancelled", "superseded"] }]),
+          interval_ms: 250, deadline_ms: 4000, on_fail: "continue", when: { match: { ref: ref(row, "undo_req", "queued"), equals: true } } },
+        ...cetClose(row)] });
   } else waiting.push({ row, hook: "cet.panel diagnostics_open" });
 
   // The ink panel isn't a themed plate, so its frames have no in-frame check; its state is checked instead.

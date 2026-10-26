@@ -4878,10 +4878,45 @@
             "undo": "$ST7_dark_diagnostics_open_req.id"
           },
           "on_fail": "continue",
+          "bind": "ST7_dark_diagnostics_undo_req",
           "when": {
             "match": {
               "ref": "$ST7_dark_diagnostics_open_req.id",
               "exists": true
+            }
+          }
+        },
+        {
+          "label": "ST7-dark-diagnostics-undo-drawn",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "path": "cet_panel.requests",
+            "some": {
+              "all": [
+                {
+                  "path": "id",
+                  "equals": "$ST7_dark_diagnostics_undo_req.id"
+                },
+                {
+                  "path": "header",
+                  "one_of": [
+                    "applied",
+                    "cancelled",
+                    "superseded"
+                  ]
+                }
+              ]
+            }
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST7_dark_diagnostics_undo_req.queued",
+              "equals": true
             }
           }
         },
@@ -11253,10 +11288,45 @@
             "undo": "$ST7_light_diagnostics_open_req.id"
           },
           "on_fail": "continue",
+          "bind": "ST7_light_diagnostics_undo_req",
           "when": {
             "match": {
               "ref": "$ST7_light_diagnostics_open_req.id",
               "exists": true
+            }
+          }
+        },
+        {
+          "label": "ST7-light-diagnostics-undo-drawn",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "path": "cet_panel.requests",
+            "some": {
+              "all": [
+                {
+                  "path": "id",
+                  "equals": "$ST7_light_diagnostics_undo_req.id"
+                },
+                {
+                  "path": "header",
+                  "one_of": [
+                    "applied",
+                    "cancelled",
+                    "superseded"
+                  ]
+                }
+              ]
+            }
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST7_light_diagnostics_undo_req.queued",
+              "equals": true
             }
           }
         },

@@ -210,3 +210,18 @@ describe("M7: a resume checks the script it resumes into", () => {
     expect(JSON.parse(readFileSync(result.resumePath, "utf8")).script.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 });
+
+describe("M8: the Diagnostics undo is drawn before CET closes", () => {
+  test("the cleanup waits for the undo's own header applied, then closes CET", async () => {
+    const { stScript } = await import("../sessions/make-batches.ts");
+    const row = (stScript(false, { panel: true, cpu: true }) as { rows: { id: string; cleanup: Record<string, unknown>[] }[] }).rows.find((r) => r.id === "ST7-light-diagnostics")!;
+    const labels = row.cleanup.map((s) => s.label);
+    const undo = labels.indexOf("ST7-light-diagnostics-close-header"), drawn = labels.indexOf("ST7-light-diagnostics-undo-drawn"), close = labels.indexOf("ST7-light-diagnostics-cet-close");
+    expect(undo).toBeGreaterThanOrEqual(0);
+    expect(drawn).toBeGreaterThan(undo);
+    expect(close).toBeGreaterThan(drawn);
+    const wait = JSON.stringify(row.cleanup[drawn]);
+    expect(wait).toContain('"path":"header","one_of":["applied"');
+    expect(wait).toContain("$ST7_light_diagnostics_undo_req.id");
+  });
+});
