@@ -94,8 +94,13 @@ export type TelemetrySummary = {
    * Each run's taps as the recorder's status last reported them (channel_stats.<ch>.ready, tap_not_ready,
    * complete_coverage), and every run whose tap never became ready ("run 3: voice"): such a run's coverage isn't complete.
    */
-  taps: { runs: Record<string, { ready: Record<string, boolean>; tap_not_ready: string[]; complete_coverage: boolean }>; never_ready: string[] };
+  taps: { runs: Record<string, { ready: Record<string, boolean>; tap_not_ready: string[]; complete_coverage: boolean }>; never_ready: string[];
+    /** Readiness that is unknown: a run the batch recorded with no successful report, or a tap a report left out. Never a pass. */
+    unknown: string[] };
 };
+
+/** The recorder channels with a readiness the recorder reports (0.8.22: the subtitle and voice taps). */
+export const TAP_CHANNELS = ["subtitles", "voice"];
 
 function readFrom(path: string, from: number): string {
   const size = statSync(path).size;
@@ -121,7 +126,9 @@ export class Telemetry {
   private mark?: { file: string; size: number };
   private readonly patterns: RegExp[];
   private readonly total: TelemetrySummary = { runs: [], pages: 0, rows: [], gaps: [], channels: {}, coverage: { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false }, invalid_in: [], gaps_in: [], unread: [],
-    not_ready: { total: 0, by_channel: {}, runs: {} }, taps: { runs: {}, never_ready: [] } };
+    not_ready: { total: 0, by_channel: {}, runs: {} }, taps: { runs: {}, never_ready: [], unknown: [] } };
+  /** Every recorder run this batch started, whose readiness it must have seen reported. */
+  private readonly startedRuns: number[] = [];
   private readonly notReadyByRun: Record<string, Record<string, number>> = {};
 
   /** When the attempt started (wall clock: log files carry wall-clock times), and the logs kept so far. */
@@ -187,6 +194,7 @@ export class Telemetry {
       return { restarted: false, unavailable: this.unavailable };
     }
     this.run = (started.value as { run?: number }).run;
+    if (this.run !== undefined && !this.startedRuns.includes(this.run)) this.startedRuns.push(this.run);
     this.sid = sid;
     this.startedMs = this.o.clock.now();
     this.cursor = undefined;
@@ -350,7 +358,13 @@ export class Telemetry {
   }
 
   summary(): TelemetrySummary {
-    return structuredClone(this.total);
+    const out = structuredClone(this.total);
+    out.taps.unknown = this.startedRuns.flatMap((run) => {
+      const entry = out.taps.runs[String(run)];
+      if (!entry) return [`run ${run}: no readiness report (the recorder's status couldn't be read)`];
+      return TAP_CHANNELS.filter((ch) => typeof entry.ready[ch] !== "boolean").map((ch) => `run ${run}: ${ch}: no readiness reported`);
+    });
+    return out;
   }
 
   /** The end of the run: the rest of the history, then the recorder stopped. */
@@ -375,7 +389,7 @@ export class Telemetry {
  */
 export function mergeSummaries(attempts: { attempt: number; summary?: TelemetrySummary }[]): TelemetrySummary & { attempts: number[]; missing_attempts: number[] } {
   const out: TelemetrySummary & { attempts: number[]; missing_attempts: number[] } = { runs: [], pages: 0, rows: [], gaps: [], channels: {}, coverage: { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false },
-    invalid_in: [], gaps_in: [], unread: [], not_ready: { total: 0, by_channel: {}, runs: {} }, taps: { runs: {}, never_ready: [] }, attempts: [], missing_attempts: [] };
+    invalid_in: [], gaps_in: [], unread: [], not_ready: { total: 0, by_channel: {}, runs: {} }, taps: { runs: {}, never_ready: [], unknown: [] }, attempts: [], missing_attempts: [] };
   for (const { attempt, summary: s } of attempts) {
     out.attempts.push(attempt);
     if (!s) { out.missing_attempts.push(attempt); continue; }
@@ -397,9 +411,10 @@ export function mergeSummaries(attempts: { attempt: number; summary?: TelemetryS
     out.not_ready.total += nr.total;
     for (const [ch, n] of Object.entries(nr.by_channel)) out.not_ready.by_channel[ch] = (out.not_ready.by_channel[ch] ?? 0) + n;
     for (const [run, n] of Object.entries(nr.runs)) out.not_ready.runs[`a${attempt}:${run}`] = n;
-    const taps = s.taps ?? { runs: {}, never_ready: [] };
+    const taps = s.taps ?? { runs: {}, never_ready: [], unknown: [] };
     for (const [run, t] of Object.entries(taps.runs)) out.taps.runs[`a${attempt}:${run}`] = t;
     out.taps.never_ready.push(...taps.never_ready.map(tag));
+    out.taps.unknown.push(...(taps.unknown ?? []).map(tag));
   }
   return out;
 }

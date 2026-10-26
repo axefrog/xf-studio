@@ -59,3 +59,27 @@ describe("H2: whole-batch rows are judged again on every attempt, over every att
     expect(manifest.rows.find((r: { id: string }) => r.id === "B318-1").verdict).toBe("PARTIAL");
   });
 });
+
+describe("H3: B318-1 needs readiness evidence for every run, and says when it has none", () => {
+  const judge = async (status: (() => { ok: boolean; result?: unknown; code?: string })) => {
+    const { readFileSync } = await import("node:fs");
+    const { clock, fakeApi, fakeHost, go, script } = await fakes();
+    const b318 = JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "borg4-smoke.json"), "utf8")).rows.find((r: { id: string }) => r.id === "B318-1");
+    const api = fakeApi(clock, { "test.record.read": status as never, "test.record.stop": status as never });
+    return (await go(script([{ id: "a", title: "a", steps: [{ label: "w", do: "wait", ms: 10 }] }, b318] as never), api, fakeHost(), clock, tempDir("xfb-r34-"))).rows.find((r) => r.id === "B318-1")!;
+  };
+  test("status reads that fail are unknown evidence, not a pass", async () => {
+    const row = await judge(() => ({ ok: false, code: "recording_changed" }));
+    expect(row.verdict).not.toBe("PASS");
+    expect(JSON.stringify(row.facts)).toContain("no readiness report");
+  });
+  test("a report without a tap's ready entry is unknown for that tap", async () => {
+    const row = await judge(() => ({ ok: true, result: { not_ready: 0, tap_not_ready: [], complete_coverage: true, channel_stats: { subtitles: { ready: true } } } }));
+    expect(row.verdict).not.toBe("PASS");
+    expect(JSON.stringify(row.facts)).toContain("voice: no readiness reported");
+  });
+  test("a full report passes", async () => {
+    const row = await judge(() => ({ ok: true, result: { not_ready: 0, tap_not_ready: [], complete_coverage: true, channel_stats: { subtitles: { ready: true }, voice: { ready: true } } } }));
+    expect(row.verdict).toBe("PASS");
+  });
+});

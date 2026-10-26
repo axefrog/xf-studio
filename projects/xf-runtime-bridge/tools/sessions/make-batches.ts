@@ -617,6 +617,10 @@ function smokeScript(): Json {
       // valid sample counted apart, never invalid; only those two channels may have any.
       // A tap that never became ready in a run makes that run incomplete (the recorder's complete_coverage, tap_not_ready).
       check("every tap became ready in every run (complete coverage)", row, "all", "taps.never_ready", { equals: [] }),
+      // Readiness the recorder never reported (a status read that failed, a tap left out) is unknown, never a pass; and
+      // an earlier attempt that left no evidence leaves the whole batch's unknown.
+      check("readiness reported for every run and tap", row, "all", "taps.unknown", { equals: [] }),
+      check("every attempt's evidence present", row, "all", "missing_attempts", { equals: [] }),
       { label: "not_ready only on the subtitle and voice taps", ref: ref(row, "all", "not_ready.by_channel"), match: { all:
         ALL_CHANNELS.filter((ch) => ch !== "subtitles" && ch !== "voice").map((ch) => ({ not: { path: ch, min: 1 } })) } },
     ],
@@ -624,7 +628,8 @@ function smokeScript(): Json {
       { label: "runs", ref: ref(row, "all", "runs") }, { label: "pages", ref: ref(row, "all", "pages") }, { label: "gaps", ref: ref(row, "all", "gaps") },
       { label: "coverage loss", ref: ref(row, "all", "coverage") },
       { label: "not ready (early tap samples, not invalid)", ref: ref(row, "all", "not_ready") },
-      { label: "taps by run (ready, tap_not_ready, complete_coverage)", ref: ref(row, "all", "taps") }, { label: "invalid samples by row", ref: ref(row, "all", "invalid_in") }, { label: "gaps by row", ref: ref(row, "all", "gaps_in") },
+      { label: "taps by run (ready, tap_not_ready, complete_coverage, unknown)", ref: ref(row, "all", "taps") },
+      { label: "attempts judged", ref: ref(row, "all", "attempts") }, { label: "invalid samples by row", ref: ref(row, "all", "invalid_in") }, { label: "gaps by row", ref: ref(row, "all", "gaps_in") },
     ] });
 
   row = "B318-3";

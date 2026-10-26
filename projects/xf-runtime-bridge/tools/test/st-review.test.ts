@@ -220,7 +220,7 @@ describe("not_ready samples (bridge 0.8.22) are counted apart, never invalid", (
     const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
     const { readFileSync } = await import("node:fs");
     const clock = new FakeClock();
-    const status = { not_ready: 3, channel_stats: { subtitles: { attempts: 9, not_ready: 2 }, voice: { attempts: 9, not_ready: 1 }, v: { attempts: 9 } } };
+    const status = { not_ready: 3, tap_not_ready: [], complete_coverage: true, channel_stats: { subtitles: { attempts: 9, not_ready: 2, ready: true }, voice: { attempts: 9, not_ready: 1, ready: true }, v: { attempts: 9 } } };
     const api = fakeApi(clock, { "test.record.read": () => ({ ok: true, result: status }), "test.record.stop": () => ({ ok: true, result: status }) });
     const smoke = JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "borg4-smoke.json"), "utf8"));
     const b318 = smoke.rows.find((r: { id: string }) => r.id === "B318-1");
