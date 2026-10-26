@@ -47,7 +47,7 @@ export function wiring() {
     port(core: Core, participants: () => HistoryParticipant[]) {
       service.participants(participants);
       const experiments = { history: documents, snapshot: () => [], set: async () => ({ ok: true }), subscribe: () => () => {},
-        registrations: () => [{ histories: participants } as never] };
+        registrations: () => [{ histories: participants } as never], registrationGeneration: () => 0, onRegistrationsChanged: () => () => {} };
       return createStudioPresentation({ authoring: core.application, targets: core.targets, library: {} as never, files: {} as never, viewport: {} as never,
         preferences: {} as never, previewReadiness: { readiness: () => ({}) as never, subscribe: () => () => {} }, experiments });
     },

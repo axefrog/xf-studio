@@ -61,3 +61,23 @@ test("a lost save acknowledgement is sent again under its ID and confirmed by it
   const nextLife = new AbortController(), next = await createExperiments({ definitions: [definition], overrides: {}, ...sources(documents), signal: nextLife.signal });
   expect(next.snapshot()[0].enabled).toBe(true); nextLife.abort();
 });
+
+test("the registration generation moves only when the enabled set changes: on load and on switch-off, never for service changes", async () => {
+  const life = new AbortController(), documents = storeDocuments(), src = sources(documents);
+  let poke: () => void = () => {};
+  const loaded = { ...definition, load: async () => ({ create: () => ({ module: { id: "sample" }, service: { subscribe: (listener: () => void) => { poke = listener; return () => {}; } } }) as never }) };
+  const port = await createExperiments({ definitions: [loaded], overrides: {}, ...src, signal: life.signal });
+  const signals: number[] = [];
+  port.onRegistrationsChanged(() => signals.push(port.registrationGeneration()));
+  expect(port.registrationGeneration()).toBe(0);
+  await port.set("sample", true);
+  for (let i = 0; i < 50 && !port.registrations().length; i++) await new Promise(resolve => setTimeout(resolve, 2));
+  expect(port.registrations()).toHaveLength(1);
+  expect(signals).toEqual([1]);
+  poke(); poke(); // the experiment's own service changes: general notifications only
+  expect(port.registrationGeneration()).toBe(1);
+  await port.set("sample", false);
+  expect(port.registrations()).toEqual([]);
+  expect(signals).toEqual([1, 2]);
+  life.abort();
+});

@@ -26,7 +26,12 @@ export const STUDIO_LAYOUT_DEFAULTS = contributedDefaults(STUDIO_MODULES);
 
 /** An experiment as the layouts see it: its module (with any defaults) and the panels its view contributes while it's on. */
 export type LayoutExperiment = { readonly module: StudioModule; readonly contribution: { readonly panels: readonly { readonly id: string }[] } };
-export type LayoutExperiments = { registrations(): readonly LayoutExperiment[]; subscribe(listener: () => void): () => void };
+/** What the layouts need of the experiments: their registrations, and the owner's signal that the set of them changed. */
+export type LayoutExperiments = {
+  registrations(): readonly LayoutExperiment[];
+  registrationGeneration(): number;
+  onRegistrationsChanged(listener: () => void): () => void;
+};
 
 /**
  * The one source of default layouts and fragment knowledge the startup hands over: the built-in modules' (checked above, at
@@ -42,16 +47,12 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
     log(`The ${item.module.label} experiment's default layouts can't be offered: ${reason}.`);
   };
   // One snapshot per registration set: the defaults and the panel types come from the same `registrations()` read, so the list and the
-  // knowledge can never disagree. It is rebuilt whenever the experiments notify a change, so a module registered again is checked
-  // afresh; the generation is what dispatch-time checks compare.
-  // The generation counts every change notification as it happens (not when read), so withdraw-then-reinstate with the same objects
-  // still moves it. This listener is registered first, so it has counted a change before any other listener reads the source.
-  let generation = 0;
-  experiments.subscribe(() => { generation++; });
+  // knowledge can never disagree. The experiments own the fact that the set changed (`registrationGeneration`, `onRegistrationsChanged`);
+  // the snapshot is rebuilt eagerly in that signal's handler, before this source tells its own subscribers, so a reader always sees the
+  // current set whatever order it subscribed in. Reading never rebuilds.
   type Snapshot = { generation: number; list: readonly ContributedLayoutDefault[]; panels: ReadonlySet<string> };
-  let snap: Snapshot | null = null;
   const build = (): Snapshot => {
-    const on = experiments.registrations(), at = generation;
+    const at = experiments.registrationGeneration(), on = experiments.registrations();
     const added = on.flatMap(item => {
       // One experiment's broken defaults never take the others, or the built-in ones, with them.
       try {
@@ -67,22 +68,28 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
       panels: new Set(on.flatMap(item => item.contribution.panels.map(panel => panel.id))) };
   };
   /**
-   * The current snapshot. A change notified while it is being built (say, an experiment switched off from inside its own `defaults`)
-   * makes it stale before it is published: it is built again from the current set. If the set keeps changing, only the built-in
-   * defaults and knowledge are offered until it settles, never a set that has already been withdrawn.
+   * Build, and build again if the set changed during the build (an experiment switched off from inside its own `defaults`): a signal
+   * that arrives mid-build only marks the snapshot dirty. If it is still changing after a few rounds, the built-in defaults and knowledge
+   * are published and kept until the next signal; a withdrawn set is never published.
    */
-  const snapshot = (): Snapshot => {
-    if (snap && snap.generation === generation) return snap;
-    for (let tries = 0; tries < 4; tries++) {
-      const built = build();
-      if (built.generation === generation) return (snap = built);
-    }
-    return { generation, list: STUDIO_LAYOUT_DEFAULTS, panels: new Set() };
+  let snap: Snapshot = { generation: -1, list: STUDIO_LAYOUT_DEFAULTS, panels: new Set() }, building = false, dirty = false;
+  const listeners = new Set<() => void>();
+  const rebuild = () => {
+    if (building) { dirty = true; return; }
+    building = true;
+    try {
+      let rounds = 0;
+      do { dirty = false; snap = build(); } while (dirty && ++rounds < 4);
+      if (dirty) snap = { generation: experiments.registrationGeneration(), list: STUDIO_LAYOUT_DEFAULTS, panels: new Set() };
+    } finally { building = false; dirty = false; }
+    for (const listener of [...listeners]) listener();
   };
+  experiments.onRegistrationsChanged(rebuild);
+  rebuild(); // the first snapshot goes through the same guarded build (no subscribers yet to tell)
   const known: FragmentKnowledge = Object.freeze({ rules: STUDIO_VIEW_GRAPH_RULES, tool: STUDIO_FRAGMENT_KNOWLEDGE.tool,
-    panel: (type: string) => panels.has(type) || snapshot().panels.has(type) });
-  const contributed: ContributedDefaultsSource = { list: () => snapshot().list, generation: () => snapshot().generation,
-    subscribe: listener => experiments.subscribe(listener) };
+    panel: (type: string) => panels.has(type) || snap.panels.has(type) });
+  const contributed: ContributedDefaultsSource = { list: () => snap.list, generation: () => snap.generation,
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; } };
   return { contributed, known };
 }
 // A first workspace keeps its legacy view graph, and starts with Eye makeup's contributed panel arrangement in both size classes.

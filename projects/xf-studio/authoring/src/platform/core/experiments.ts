@@ -58,6 +58,11 @@ export async function createExperiments<T extends ExperimentRegistration>(option
   const context = contextFor(signal);
   const listeners = new Set<() => void>();
   const changed = () => { for (const listener of [...listeners]) listener(); };
+  // The registration set's own generation and signal: moved only where an experiment's registration appears or goes, never for
+  // settings, phases, services or history.
+  let registrationGeneration = 0;
+  const registrationListeners = new Set<() => void>();
+  const registrationsChanged = () => { registrationGeneration++; for (const listener of [...registrationListeners]) listener(); };
   const phases: Record<string, { phase: ExperimentState["phase"]; message: string }> = {};
   // Per-experiment save problems, shown instead of the load message until a later save of that experiment succeeds.
   const saveErrors: Record<string, string> = {};
@@ -72,7 +77,12 @@ export async function createExperiments<T extends ExperimentRegistration>(option
     for (const definition of definitions) {
       const task = loads.get(definition.id);
       if (!effective(definition.id)) {
-        if (task) { loads.delete(definition.id); task.cancel("experiment off"); publish(definition.id, "off"); }
+        if (task) {
+          const wasRegistered = task.state().phase === "done";
+          loads.delete(definition.id); task.cancel("experiment off");
+          if (wasRegistered) registrationsChanged();
+          publish(definition.id, "off");
+        }
         continue;
       }
       if (task || signal.aborted) continue;
@@ -88,7 +98,8 @@ export async function createExperiments<T extends ExperimentRegistration>(option
         run.addEventListener("abort", off, { once: true });
         return contribution;
       }).then(outcome => {
-        if (outcome.status === "done") publish(definition.id, "ready");
+        // Registered only if this load is still the one held (a quick off-on replaces it): the set changes here, once.
+        if (outcome.status === "done") { if (loads.get(definition.id) === load) registrationsChanged(); publish(definition.id, "ready"); }
         else if (outcome.status === "failed") publish(definition.id, "failed", `Couldn't open ${definition.label}. Turn it off and on to try again.`);
       });
     }
@@ -122,11 +133,14 @@ export async function createExperiments<T extends ExperimentRegistration>(option
       return { ok: true };
     },
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    registrationGeneration: () => registrationGeneration,
+    onRegistrationsChanged(listener) { registrationListeners.add(listener); return () => { registrationListeners.delete(listener); }; },
   };
 }
 
 export const OFF_EXPERIMENTS = Object.freeze({ snapshot: () => [], registrations: () => [],
-  set: async () => ({ ok: false, message: "Experimental features aren't available in this host yet." }), subscribe: () => () => {} }) satisfies ExperimentPort;
+  set: async () => ({ ok: false, message: "Experimental features aren't available in this host yet." }), subscribe: () => () => {},
+  registrationGeneration: () => 0, onRegistrationsChanged: () => () => {} }) satisfies ExperimentPort;
 
 /** Mounts immediately: the preference is read in the background, and that read can't delay or fail the ordinary shell. */
 export function startExperiments<T extends ExperimentRegistration>(options: ExperimentOptions<T>) {
@@ -138,10 +152,13 @@ export function startExperiments<T extends ExperimentRegistration>(options: Expe
   const reading = createTask<Experiments<T>>({ signal: options.signal });
   reading.subscribe(changed);
   const runtime = () => { const state = reading.state(); return state.phase === "done" ? state.result : undefined; };
+  // The registration signal passes straight through: the set is empty until the runtime exists, so its arrival changes nothing.
+  const registrationListeners = new Set<() => void>();
   const ready = reading.run(async signal => {
     const loaded = await createExperiments({ ...options, history, signal });
     const off = loaded.subscribe(changed);
-    signal.addEventListener("abort", off, { once: true });
+    const offRegistrations = loaded.onRegistrationsChanged(() => { for (const listener of [...registrationListeners]) listener(); });
+    signal.addEventListener("abort", () => { off(); offRegistrations(); }, { once: true });
     return loaded;
   }).then(outcome => outcome.status === "done");
   return {
@@ -155,5 +172,7 @@ export function startExperiments<T extends ExperimentRegistration>(options: Expe
     settle: async () => await runtime()?.settle?.() ?? true,
     async set(id: string, enabled: boolean) { return await ready && runtime() ? runtime()!.set(id, enabled) : { ok: false, message: "Couldn't read experimental settings. Reload Studio to try again." }; },
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    registrationGeneration: () => runtime()?.registrationGeneration() ?? 0,
+    onRegistrationsChanged(listener: () => void) { registrationListeners.add(listener); return () => { registrationListeners.delete(listener); }; },
   };
 }
