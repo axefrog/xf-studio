@@ -112,10 +112,10 @@ describe("Holotable projection", () => {
     expect([5, 10, 20, 50, 100, 200, 500]).toContain(scene.metresPerBar);
   });
   test("clipping keeps what is inside, cuts at the edges, breaks the run where a line leaves, and drops what misses", () => {
-    expect(clipToRect([[10, 10], [50, 10], [50, 50]], 0, 0, 100, 100)).toEqual([[[10, 10], [50, 10], [50, 50]]]);
-    expect(clipToRect([[-100, 50], [200, 50]], 0, 0, 100, 100)).toEqual([[[0, 50], [100, 50]]]);
-    // Out through the right edge and back in: two runs, each ending on the edge.
-    expect(clipToRect([[50, 20], [150, 20], [150, 80], [50, 80]], 0, 0, 100, 100)).toEqual([[[50, 20], [100, 20]], [[100, 80], [50, 80]]]);
+    expect(clipToRect([[10, 10], [50, 10], [50, 50]], 0, 0, 100, 100)).toEqual([{ points: [[10, 10], [50, 10], [50, 50]], offset: 0 }]);
+    expect(clipToRect([[-100, 50], [200, 50]], 0, 0, 100, 100)).toEqual([{ points: [[0, 50], [100, 50]], offset: 100 }]);
+    // Out through the right edge and back in: two runs, each ending on the edge; the second starts 100 + 60 + 50 px along.
+    expect(clipToRect([[50, 20], [150, 20], [150, 80], [50, 80]], 0, 0, 100, 100)).toEqual([{ points: [[50, 20], [100, 20]], offset: 0 }, { points: [[100, 80], [50, 80]], offset: 210 }]);
     expect(clipToRect([[-50, -50], [-10, 200]], 0, 0, 100, 100)).toEqual([]);
   });
   test("no line runs far past the drawing: a district outline around the camera stays within the margin", () => {

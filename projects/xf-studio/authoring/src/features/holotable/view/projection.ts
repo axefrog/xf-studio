@@ -8,7 +8,7 @@ import type { HoloLayer } from "../service";
 
 export type Style = "grid" | "area" | "venue" | "cell" | "trail" | "v" | "cone" | "camera" | "event" | "event-selected" | "gap" | "label" | "label-muted";
 export type Primitive =
-  | { kind: "line"; points: [number, number][]; style: Style; opacity: number; closed?: boolean }
+  | { kind: "line"; points: [number, number][]; style: Style; opacity: number; closed?: boolean; /** How far into its dash pattern the line starts, in pixels: a line cut at the edge keeps its dashes where they were. */ dashOffset?: number }
   | { kind: "marker"; at: [number, number]; size: number; style: Style; id?: string; shape: "chevron" | "diamond" | "dot"; angle?: number }
   | { kind: "text"; at: [number, number]; text: string; style: Style };
 
@@ -50,7 +50,7 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
    * A polyline clipped against the near plane, then against the drawing (plus a margin): only what can be seen, as separate runs.
    * Unclipped, a district outline near the camera projects millions of pixels off-screen, and the browser dashes every one each frame.
    */
-  const line = (ps: readonly Vec3[], closed = false): [number, number][][] => {
+  const line = (ps: readonly Vec3[], closed = false): ClippedRun[] => {
     const qs = ps.map(view); if (closed && qs.length) qs.push(qs[0]);
     const runs: [number, number][][] = []; let run: [number, number][] = [];
     for (let i = 0; i < qs.length; i++) {
@@ -78,7 +78,7 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
   const target: Vec3 = v ? v.position : [0, 0, 0];
   const C = camera(target, orbit, width, height), out: Primitive[] = [];
   const fade = (p: Vec3) => { const d = Math.hypot(p[0] - C.position[0], p[1] - C.position[1], p[2] - C.position[2]); return Math.max(0.15, Math.min(1, 1.3 - d / (orbit.distance * 2.6))); };
-  const lines = (ps: readonly Vec3[], style: Style, opacity: number, closed = false) => { for (const r of C.line(ps, closed)) out.push({ kind: "line", points: r, style, opacity }); };
+  const lines = (ps: readonly Vec3[], style: Style, opacity: number, closed = false) => { for (const r of C.line(ps, closed)) out.push({ kind: "line", points: r.points, style, opacity, dashOffset: r.offset }); };
 
   // The metric ground grid at V's height: there is no terrain decoded yet, so the floor is honest about it.
   const z = target[2] - 0.05, span = 300, step = 20;
@@ -134,12 +134,14 @@ const MARGIN = 32;
 
 /**
  * A screen polyline clipped to a rectangle (Liang–Barsky per segment): the parts inside, as separate runs. A run breaks where a segment
- * leaves the rectangle; a segment wholly outside draws nothing.
+ * leaves the rectangle; a segment wholly outside draws nothing. Each run carries the distance along the whole polyline to its first
+ * point, so its dash pattern can continue where the cut-away part left it.
  */
-export function clipToRect(ps: readonly [number, number][], x0: number, y0: number, x1: number, y1: number): [number, number][][] {
-  const runs: [number, number][][] = []; let run: [number, number][] = [];
-  const flush = () => { if (run.length > 1) runs.push(run); run = []; };
-  for (let i = 1; i < ps.length; i++) {
+export type ClippedRun = { points: [number, number][]; offset: number };
+export function clipToRect(ps: readonly [number, number][], x0: number, y0: number, x1: number, y1: number): ClippedRun[] {
+  const runs: ClippedRun[] = []; let run: [number, number][] = [], offset = 0, along = 0;
+  const flush = () => { if (run.length > 1) runs.push({ points: run, offset }); run = []; };
+  for (let i = 1; i < ps.length; i++, along += Math.hypot(ps[i - 1][0] - ps[i - 2][0], ps[i - 1][1] - ps[i - 2][1])) {
     const [ax, ay] = ps[i - 1], [bx, by] = ps[i], dx = bx - ax, dy = by - ay;
     let t0 = 0, t1 = 1, inside = true;
     for (const [p, q] of [[-dx, ax - x0], [dx, x1 - ax], [-dy, ay - y0], [dy, y1 - ay]] as const) {
@@ -149,7 +151,7 @@ export function clipToRect(ps: readonly [number, number][], x0: number, y0: numb
       else { if (r < t0) { inside = false; break; } if (r < t1) t1 = r; }
     }
     if (!inside) { flush(); continue; }
-    if (!run.length || t0 > 0) { flush(); run.push(t0 > 0 ? [ax + dx * t0, ay + dy * t0] : [ax, ay]); }
+    if (!run.length || t0 > 0) { flush(); offset = along + Math.hypot(dx, dy) * t0; run.push(t0 > 0 ? [ax + dx * t0, ay + dy * t0] : [ax, ay]); }
     run.push(t1 < 1 ? [ax + dx * t1, ay + dy * t1] : [bx, by]);
     if (t1 < 1) flush();
   }
@@ -177,8 +179,8 @@ function frustum(cam: HoloCameraSample, C: ReturnType<typeof camera>, out: Primi
   const f = cam.forward, u = cam.up, r: Vec3 = [f[1] * u[2] - f[2] * u[1], f[2] * u[0] - f[0] * u[2], f[0] * u[1] - f[1] * u[0]];
   const o = cam.position, far = (sx: number, sy: number): Vec3 => [o[0] + f[0] * len + r[0] * w * sx + u[0] * h * sy, o[1] + f[1] * len + r[1] * w * sx + u[1] * h * sy, o[2] + f[2] * len + r[2] * w * sx + u[2] * h * sy];
   const corners = [far(-1, -1), far(1, -1), far(1, 1), far(-1, 1)];
-  for (const c of corners) for (const run of C.line([o, c])) out.push({ kind: "line", points: run, style: "camera", opacity: 0.6 });
-  for (const run of C.line(corners, true)) out.push({ kind: "line", points: run, style: "camera", opacity: 0.6 });
+  for (const c of corners) for (const run of C.line([o, c])) out.push({ kind: "line", points: run.points, style: "camera", opacity: 0.6, dashOffset: run.offset });
+  for (const run of C.line(corners, true)) out.push({ kind: "line", points: run.points, style: "camera", opacity: 0.6, dashOffset: run.offset });
 }
 
 export type { HoloArea, HoloCell };

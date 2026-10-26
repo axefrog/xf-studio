@@ -24,6 +24,8 @@ const STROKES: Readonly<Record<Style, string>> = {
   gap: "var(--warning)", label: "var(--text)", "label-muted": "var(--text-muted)",
 };
 const DASH: Partial<Record<Style, string>> = { gap: "2 5", area: "10 4 2 4", camera: "4 3" };
+/** Each dash pattern's length (an odd-length list repeats twice), so a line cut at the edge continues its pattern in phase. */
+const DASH_PERIOD = Object.fromEntries(Object.entries(DASH).map(([style, d]) => { const xs = d!.split(" ").map(Number), sum = xs.reduce((a, b) => a + b, 0); return [style, xs.length % 2 ? sum * 2 : sum]; })) as Partial<Record<Style, number>>;
 
 export function holotablePanel(ctx: Ctx): PanelController {
   const facade = ctx.facade;
@@ -115,7 +117,7 @@ export function holotablePanel(ctx: Ctx): PanelController {
     const bx = width - 24 - scene.barPx, by = height - 22;
     const lineList = scene.primitives.filter((p): p is Extract<Primitive, { kind: "line" }> => p.kind === "line");
     lineList.push({ kind: "line", points: [[bx, by - 4], [bx, by], [bx + scene.barPx, by], [bx + scene.barPx, by - 4]], style: "label-muted", opacity: 1 });
-    lineList.forEach((p, i) => paintLine(pooled(linesLayer, "polyline", i), p.points, p.style, p.opacity));
+    lineList.forEach((p, i) => paintLine(pooled(linesLayer, "polyline", i), p.points, p.style, p.opacity, p.dashOffset));
     trim(linesLayer, lineList.length);
     const textList: { at: readonly [number, number]; text: string; style: Style; anchor?: "end" }[] =
       scene.primitives.filter((p): p is Extract<Primitive, { kind: "text" }> => p.kind === "text").map(p => ({ at: p.at, text: p.text, style: p.style }));
@@ -144,9 +146,10 @@ export function holotablePanel(ctx: Ctx): PanelController {
     if (p.style === "event-selected") { const ring = document.createElementNS(NS, "circle"); ring.setAttribute("cx", String(x)); ring.setAttribute("cy", String(y)); ring.setAttribute("r", String(s + 5)); ring.setAttribute("style", "fill:none;stroke:var(--signal);stroke-width:2"); g.append(ring); }
     return g;
   }
-  function paintLine(e: Element, points: readonly (readonly [number, number])[], style: Style, opacity: number) {
+  function paintLine(e: Element, points: readonly (readonly [number, number])[], style: Style, opacity: number, dashOffset = 0) {
     set(e, "points", points.map(q => `${f1(q[0])},${f1(q[1])}`).join(" "));
-    set(e, "style", `fill:none;stroke:${STROKES[style]};stroke-width:${style === "trail" ? 2 : style === "gap" ? 3 : 1};opacity:${opacity.toFixed(2)}${DASH[style] ? `;stroke-dasharray:${DASH[style]}` : ""}`);
+    const dash = DASH[style], phase = dash ? dashOffset % DASH_PERIOD[style]! : 0;
+    set(e, "style", `fill:none;stroke:${STROKES[style]};stroke-width:${style === "trail" ? 2 : style === "gap" ? 3 : 1};opacity:${opacity.toFixed(2)}${dash ? `;stroke-dasharray:${dash};stroke-dashoffset:${f1(phase)}` : ""}`);
   }
   function line(points: readonly (readonly [number, number])[], style: Style, opacity: number): Element {
     const e = document.createElementNS(NS, "polyline"); paintLine(e, points, style, opacity); return e;
