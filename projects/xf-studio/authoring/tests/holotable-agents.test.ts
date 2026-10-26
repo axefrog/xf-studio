@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { installLightDom, uninstallLightDom, lightDocument, lightEvent, type LightElement } from "./light-dom";
-import { createHolotable } from "../src/features/holotable/service";
-import { openNotice } from "../src/features/holotable/view/panel";
+import { createHolotable, type HoloState } from "../src/features/holotable/service";
+import { momentItems, openNotice } from "../src/features/holotable/view/panel";
 import { holotableDetailsPanel } from "../src/features/holotable/view/details-panel";
 import { holotableFacade } from "../src/features/holotable/facade";
 import type { ModuleViewContext } from "../src/studio-ui/views/feature-view";
@@ -59,4 +59,25 @@ test("failed opens render their title and reason in place with the library retry
  expect(notice.textContent).toContain("Couldn't open Kabuki week: Spool is unreadable.");expect(notice.textContent).not.toContain("No recording open");
  const retry=(notice as unknown as LightElement).querySelectorAll("button").find(b=>b.textContent.includes("Try again"))!;
  retry.dispatchEvent(lightEvent("click"));expect(retried).toBe("layers:writer/week");ctl.abort();
+});
+
+test("layers-only switches hide recording controls and restore them on a recording or live session",()=>{
+ const ctl=new AbortController(),service=createHolotable({transport:null},ctl.signal);
+ let state:HoloState={...service.snapshot(),open:{dir:"layers:writer/week",session:{...session,meta:{...session.meta,standalone:{set:"writer/week",title:"Week",clock:"game",branches:[]}}},world:{provenance:null,areas:[],cells:[]}}};
+ const facade=holotableFacade(service),ctx={facade:{...facade,snapshot:()=>state},dispatch:()=>Promise.resolve({ok:true})} as unknown as ModuleViewContext<HolotableFacade>;
+ const panel=holotableDetailsPanel(ctx);lightDocument.body.append(panel.spec.element as unknown as LightElement);
+ const row=(label:string)=>(panel.spec.element as unknown as LightElement).querySelectorAll("input").find(i=>i.parentNode?.textContent.includes(label))!.closest(".toggle-row")!;
+ panel.update(undefined as never);
+ for(const label of ["V and trail","Camera","Events with a place","Recorder gaps"])expect(row(label).hidden).toBe(true);
+ for(const label of ["Districts","Streaming cells","Solid shapes","Story content"])expect(row(label).hidden).toBe(false);
+ for(const dir of ["recording","live"]){state={...state,open:{...state.open!,dir,session}};panel.update(undefined as never);for(const label of ["V and trail","Camera","Events with a place","Recorder gaps"])expect(row(label).hidden).toBe(false);}
+ state={...state,selected:"cluster:[0,0,0]",agents:{...full,layers:full.layers.map(l=>({...l,items:l.items.map(i=>({...i,place:[0,0,0] as const}))}))}};panel.update(undefined as never);
+ expect(panel.spec.element.textContent).toContain("Synthetic Mira");expect(panel.spec.element.textContent).toContain("Synthetic Kai");
+ ctl.abort();panel.dispose?.();
+});
+
+test("layers-only readout counts active items in visible layers, with a singular and empty state",()=>{
+ const ctl=new AbortController(),service=createHolotable({transport:null},ctl.signal),base={...service.snapshot(),agents:full};
+ expect(momentItems(base)).toBe("3 items at this moment");expect(momentItems({...base,agentEnabled:{"writer/actors":false}})).toBe("");
+ expect(momentItems({...base,agents:{...full,layers:[{...full.layers[0],items:full.layers[0].items.slice(0,1)}]}})).toBe("1 item at this moment");ctl.abort();
 });

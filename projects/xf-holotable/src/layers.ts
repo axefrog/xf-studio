@@ -80,7 +80,7 @@ export function validateRecord(x: unknown, m: LayerManifest): string | null {
   if ([x.t, x.until].some(t => t !== undefined && !time(t, m.clock))) return "Item time does not match the layer clock.";
   if (x.t !== undefined && x.until !== undefined && (m.clock === "wall" ? Date.parse(x.until) < Date.parse(x.t) : x.until < x.t)) return "Item ends before it starts.";
   if (!validateAnchor(x.anchor)) return "Item has an invalid anchor (fields are limited to 128 by 128 cells).";
-  const a = Object.keys(x.anchor)[0], permitted: Record<LayerKind, string[]> = { point: ["at", "entity", "region"], actor: ["at", "entity", "zone", "box", "sphere", "region"], label: ["at", "entity", "region"], target: ["at", "entity", "region"], influence: ["at", "entity", "region"], path: ["path"], zone: ["zone", "box", "sphere", "region"], field: ["grid"], relation: ["item"] };
+  const a = Object.keys(x.anchor)[0], permitted: Record<LayerKind, string[]> = { point: ["at", "entity", "region", "item"], actor: ["at", "entity", "zone", "box", "sphere", "region", "item"], label: ["at", "entity", "region", "item"], target: ["at", "entity", "region", "item"], influence: ["at", "entity", "region", "item"], path: ["path"], zone: ["zone", "box", "sphere", "region"], field: ["grid"], relation: ["item"] };
   if (!permitted[x.kind as LayerKind]?.includes(a)) return `The ${x.kind} kind cannot use that anchor.`;
   if (x.kind !== "label" && !short(x.cite, 512) || x.cite !== undefined && (typeof x.cite !== "string" || !/^(?:recorder:[^:]+(?::[^:]+)?:\d+|event:[^:]+:\d+|se:.+|agent:[^:]+:.+)$/.test(x.cite))) return "Item needs a recorder, event, se or agent citation.";
   if (x.tone !== undefined && !["signal", "accent", "warning", "danger", "muted"].includes(x.tone) || x.weight !== undefined && !unit(x.weight)) return "Tone must be a Studio tone and weight must be between 0 and 1.";
@@ -93,8 +93,8 @@ export function validateRecord(x: unknown, m: LayerManifest): string | null {
     return keys(v, ["scalars", "vectors"]) && ((Array.isArray(v.scalars) && v.vectors === undefined && v.scalars.length === n && v.scalars.every(number)) || (Array.isArray(v.vectors) && v.scalars === undefined && v.vectors.length === n && v.vectors.every((p: unknown) => vector(p, 2)))) ? null : "Field needs one scalar or vector per cell.";
   }
   if (x.kind === "relation") return keys(v, ["to", "type", "strength", "mutual"]) && validateAnchor(v.to) && "item" in v.to && short(v.type) && (v.strength === undefined || unit(v.strength)) && (v.mutual === undefined || typeof v.mutual === "boolean") ? null : "Relation needs an item target, type, strength from 0 to 1 and optional mutual flag.";
-  if (x.kind === "influence") return keys(v, ["to"]) && validateAnchor(v.to) && !("item" in v.to) ? null : "Influence needs a target anchor.";
-  return v === undefined || object(v) && keys(v, ["from"]) && (v.from === undefined || validateAnchor(v.from) && !("item" in v.from)) ? null : "Target takes only an optional from anchor.";
+  if (x.kind === "influence") return keys(v, ["to"]) && validateAnchor(v.to) ? null : "Influence needs a target anchor.";
+  return v === undefined || object(v) && keys(v, ["from"]) && (v.from === undefined || validateAnchor(v.from)) ? null : "Target takes only an optional from anchor.";
 }
 
 export function recordingTime(t: number | string | undefined, m: LayerManifest, s: Session): number | undefined {
@@ -214,12 +214,28 @@ export function evaluateLayers(data: readonly LayerData[], s: Session, t: number
     views.push(view);
   }
   const visible = views.filter(v => !hidden.includes(v.id));
+  const layerCounts = new Map<string, number>(); for (const layer of visible) layerCounts.set(layer.id, (layerCounts.get(layer.id) ?? 0) + 1);
+  const byKey = new Map(visible.flatMap(l => l.items.map(i => [i.key, i] as const)));
   const resolve = (ref: string, layer: LayerView) => {
-    const parts = ref.split("/"), candidates = parts.length === 1 ? [layer] : parts.length === 2 ? visible.filter(l => l.producer === layer.producer && l.layer === parts[0]) : visible.filter(l => l.producer === parts[0] && l.layer === parts[1]);
-    if (candidates.length !== 1) return undefined;
-    return candidates[0].items.find(i => i.id === parts.at(-1) && ["actor", "point", "target", "zone"].includes(i.kind));
+    const parts = ref.split("/"), key = parts.length === 1 ? `${layer.id}/${ref}` : parts.length === 2 ? `${layer.producer}/${ref}` : ref;
+    if (layerCounts.get(key.slice(0, key.lastIndexOf("/"))) !== 1) return undefined;
+    const item = byKey.get(key);
+    return item && ["actor", "point", "target", "zone"].includes(item.kind) ? item : undefined;
   };
+  const owners = new Map(views.flatMap(l => l.items.map(i => [i.key, l] as const))), placed = new Set<string>();
+  // Walk reference chains iteratively: forward references work and cycles cannot exhaust the stack.
   for (const layer of views) for (const item of layer.items) {
+    if (item.kind === "relation" || !("item" in item.anchor) || placed.has(item.key)) continue;
+    const chain: PlacedItem[] = [], seen = new Set<string>(); let end: PlacedItem | undefined = item;
+    while (end && "item" in end.anchor && !placed.has(end.key)) {
+      if (seen.has(end.key)) { end = undefined; break; }
+      seen.add(end.key); chain.push(end); end = resolve(end.anchor.item, owners.get(end.key)!);
+    }
+    for (const link of chain) { link.place = end?.place; link.resolvedAnchor = end?.place ? { at: end.place } : link.anchor; placed.add(link.key); }
+  }
+  for (const layer of views) for (const item of layer.items) {
+    const other = item.kind === "influence" ? item.value?.to : item.kind === "target" ? item.value?.from : undefined;
+    if (other && "item" in other) { item.to = resolve(other.item, layer)?.place; item.toResolvedAnchor = item.to ? { at: item.to } : other; }
     if (item.kind === "relation" && "item" in item.anchor && item.value?.to && "item" in item.value.to) {
       const a = resolve(item.anchor.item, layer), b = resolve(item.value.to.item, layer);
       item.place = a?.place; item.to = b?.place;

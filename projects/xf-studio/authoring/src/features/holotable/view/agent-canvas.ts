@@ -51,9 +51,9 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
       const items = answer.layers.filter(l => enabled[l.id] !== false).flatMap(l => l.items.filter(i => i.place && !l.notPlaced.includes(i.id)));
       const important = labelContext(items, selected, hovered);
       const positions = new Map<string, XY>(), clusters = new Map<string, AgentItem[]>();
-      const positionItems = [...items, ...items.filter(i => i.toRegion && i.to).map(i => ({ ...i, key: i.key + ":to", region: i.toRegion, place: i.to }))];
+      const positionItems = [...items, ...items.filter(i => i.kind !== "relation" && i.to).map(i => ({ ...i, key: i.key + ":to", region: i.toRegion, place: i.to }))];
       for (const i of positionItems) {
-        if (i.region && !["actor", "zone"].includes(i.kind)) { const key = JSON.stringify(i.place), group = clusters.get(key) ?? []; group.push(i); clusters.set(key, group); }
+        if (["point", "target", "label", "actor", "influence"].includes(i.kind)) { const key = JSON.stringify(i.place), group = clusters.get(key) ?? []; group.push(i); clusters.set(key, group); }
         const p = C.point(i.place!); if (p) positions.set(i.key, p);
       }
       const collapsed = new Set<string>();
@@ -61,7 +61,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
         group.sort((a, b) => a.key.localeCompare(b.key)); const center = positions.get(group[0].key); if (!center) continue;
         if (group.length > 12) {
           for (const i of group) collapsed.add(i.key);
-          const key = `cluster:${group[0].region!.id}`;
+          const key = `cluster:${JSON.stringify(group[0].place)}`;
           ctx.fillStyle = palette.signal; ctx.globalAlpha = 1; if (fresh) ctx.fillText(`+${group.length}`, center[0] + 3, center[1] - 3);
           if (fresh) badges.push({ x: center[0] + 3, y: center[1] - 3, width: ctx.measureText(`+${group.length}`).width });
           if (fresh) hits.push({ key, points: [[center[0] - 4, center[1] - 18], [center[0] + 38, center[1] - 18], [center[0] + 38, center[1] + 4], [center[0] - 4, center[1] + 4]], fill: true, priority: 3 });

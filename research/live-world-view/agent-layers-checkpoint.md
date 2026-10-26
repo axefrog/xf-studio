@@ -1,10 +1,12 @@
 # Agent layers implementation checkpoint
 
-The real-data fixes and all seven review findings against `fddbbe41` are implemented, tested and left uncommitted for the dispatching chat. Work is checkpointed at the maintainer's restart request; final static checks and handoff cleanup remain. Optional `glyph` and `badge` metadata is accepted, preserved at both content levels and passed to the client; it draws nothing new. The dispatch brief and the maintainer's new [glyph specification](glyphs.md) were left unchanged. No game, runtime-bridge tool, commit or merge was run.
+The real-data fixes and all seven review findings against `fddbbe41` landed in the maintainer's checkpoint `83cf0655`. This follow-up adds the three Kabuki design fixes and finishes verification; its edits remain uncommitted for the dispatching chat. Optional `glyph` and `badge` metadata remains accepted at both content levels and draws nothing new. The dispatch brief and [glyph specification](glyphs.md) were left unchanged. No game, runtime-bridge tool, commit or merge was run by this agent.
 
 Layers-only sets open independently of optional solid context. Their context loads in the background within 350 m of the camera's orbit target, refreshed after the target moves more than 150 m. Recordings retain their path-based region, with context failures also tolerated. Failed session opens retain their title and plain reason in the view, with the library's Try again button. Layers-only rows appear beneath Live game and above recorder runs. Details includes the requested limits sentence.
 
 Structure filtering now strips story fields from every item regardless of the publisher's manifest. Ingestion uses distinct-id sets and time slices, with no historical occupancy sweep. Publication, spool ingestion and validation share line/field checks. File/stdin publication stops reading immediately above 16 MiB. Running consumed-byte hashes detect rewritten prefixes. Superseded watch startups cannot schedule another timer. Spatial culling uses bounds or segments, retaining geometry that crosses the view even when its first vertex lies outside it.
+
+The new `{ item: "places/cell" }` anchor follows a published actor, point, target or zone at the current moment, using the existing relation reference scopes. Point, target, label, actor and influence ends accept it. Forward chains resolve iteratively; missing references and cycles remain unplaced. Markers sharing a place fan out deterministically on the 12 px ring or collapse above 12 into a selectable count badge. Layers-only Show hides the four recording-only rows and restores them for replay/live. Its readout counts active items across visible layers, with correct singular wording and no text at zero; the slider alone shows day/time.
 
 ## Files in this round
 
@@ -12,7 +14,7 @@ Paths in this group are under `projects/xf-holotable/`:
 
 | File | Change |
 | --- | --- |
-| [src/layers.ts](../../projects/xf-holotable/src/layers.ts) | Unconditional structure filtering; optional validated glyph/badge metadata. Actor names become role or kind, relation types disappear, and unstructured agent/Story Engine citation text is removed. |
+| [src/layers.ts](../../projects/xf-holotable/src/layers.ts) | Unconditional structure filtering; optional validated glyph/badge metadata; item-anchor validation and indexed, iterative current-place resolution, shared with relation references. |
 | [src/layer-line.ts](../../projects/xf-holotable/src/layer-line.ts) | New shared raw-line, JSON, manifest/item validation and O(1) distinct-id admission; 1 MiB checked before ignoring whitespace. |
 | [src/bounded-input.ts](../../projects/xf-holotable/src/bounded-input.ts) | New streaming batch reader with running 16 MiB cap and immediate cancellation on overflow. |
 | [src/layer-spool.ts](../../projects/xf-holotable/src/layer-spool.ts) | Async time-sliced scans, distinct-id sets, running consumed-byte hash and bounded prefix verification, common publication validation, serialized publication/read-back, responsive cancellation and watch lifetime. |
@@ -32,13 +34,13 @@ Studio paths are under `projects/xf-studio/authoring/`:
 | [src/features/holotable/agent-types.ts](../../projects/xf-studio/authoring/src/features/holotable/agent-types.ts) | Optional glyph/badge protocol metadata. |
 | [src/features/holotable/service.ts](../../projects/xf-studio/authoring/src/features/holotable/service.ts) | Optional background context/cancellation, movement refresh, retained errors/retry, row ordering and watch-token scheduling guards. |
 | [src/features/holotable/view/agent-bounds.ts](../../projects/xf-studio/authoring/src/features/holotable/view/agent-bounds.ts) | New pure bounds/segment intersection against the view circle. |
-| [src/features/holotable/view/agent-canvas.ts](../../projects/xf-studio/authoring/src/features/holotable/view/agent-canvas.ts) | Bounds culling and crossing-geometry rendering without inventing marker positions. |
-| [src/features/holotable/view/panel.ts](../../projects/xf-studio/authoring/src/features/holotable/view/panel.ts) | Reports the camera target and composes existing empty-state/button components for open errors. |
-| [src/features/holotable/view/details-panel.ts](../../projects/xf-studio/authoring/src/features/holotable/view/details-panel.ts) | Adds “Solid shapes are drawn within 350 m of where you're looking.” for layers-only sets. |
+| [src/features/holotable/view/agent-canvas.ts](../../projects/xf-studio/authoring/src/features/holotable/view/agent-canvas.ts) | Bounds culling, crossing geometry, deterministic fan-out and count badges for markers sharing an item or region place. |
+| [src/features/holotable/view/panel.ts](../../projects/xf-studio/authoring/src/features/holotable/view/panel.ts) | Camera-target requests, library open-error composition and layers-only item-count readout. |
+| [src/features/holotable/view/details-panel.ts](../../projects/xf-studio/authoring/src/features/holotable/view/details-panel.ts) | Limits note, applicable Show rows and shared-place cluster inspector. |
 | [tests/holotable-context.test.ts](../../projects/xf-studio/authoring/tests/holotable-context.test.ts) | New regressions for failed/deferred context, movement threshold, stale/hide cancellation, retry/order and late startup polls. |
-| [tests/holotable-agent-canvas.test.ts](../../projects/xf-studio/authoring/tests/holotable-agent-canvas.test.ts) | New renderer regression: drawing and picking a crossing path despite its distant first vertex. |
+| [tests/holotable-agent-canvas.test.ts](../../projects/xf-studio/authoring/tests/holotable-agent-canvas.test.ts) | Crossing-path drawing/picking plus deterministic 12 px placement under reordered input and the above-12 selectable badge. |
 | [tests/holotable-labels.test.ts](../../projects/xf-studio/authoring/tests/holotable-labels.test.ts) | Crossing/far paths, zones, fields and relation culling cases. |
-| [tests/holotable-agents.test.ts](../../projects/xf-studio/authoring/tests/holotable-agents.test.ts) | Open-error text/library retry and client metadata preservation. |
+| [tests/holotable-agents.test.ts](../../projects/xf-studio/authoring/tests/holotable-agents.test.ts) | Open-error retry, client metadata, recording-only switch hiding/restoration and visible-layer readout counts. |
 
 The [agent-layer specification](agent-layers.md) records the approved disclosure rule, distinct-id contract, optional context and metadata admission. Its accepted frame allowance remains 8 ms steady state and up to 12 ms per cold/resumed preparation frame. No component-library or style-guide files changed.
 
@@ -47,7 +49,7 @@ The [agent-layer specification](agent-layers.md) records the approved disclosure
 | Finding | Regression |
 | --- | --- |
 | Publisher-declared structure leaks story text | A structure manifest with labels, details, facets, actor names, relation types and free citation text loses those fields. Role and glyph/badge metadata remain. |
-| Quadratic occupancy and blocked ingestion | 8,000 replacements ingest in under 200 ms and yield to a timer; another case cancels a reader and renews a watch during ingestion. The final combined run passed the threshold; its whole test, including setup, took 121.70 ms. |
+| Quadratic occupancy and blocked ingestion | 8,000 replacements ingest in under 200 ms and yield to a timer; another case cancels a reader and renews a watch during ingestion. Combined runs passed the threshold, including a 31.65 ms whole-test sample with setup. |
 | Unbounded CLI input | Controlled streams cancel on the first oversized chunk. A CLI child fed 17 MiB exits with the bound refusal before the writer sends EOF. |
 | Publish/ingest disagreement | The same oversized raw line and field violations receive matching refusals. |
 | Missed rewritten prefix | A rewritten prefix with the same final 64 bytes reloads the layer. |
@@ -57,23 +59,27 @@ The [agent-layer specification](agent-layers.md) records the approved disclosure
 | Open error disappears | Failed title/reason and library retry dispatch are tested. |
 | Standalone order/region | Sets first, one 350 m centre, preserved recording paths and 150 m refresh threshold. |
 | Glyph/badge admission | Valid/unknown slugs, length/type/format refusals, both content levels and client read-back. |
+| Item anchors | Allowed kinds/ends, cross-layer/producer refs, zone centroid, moving actors, forward chains, cycles, missing/hidden refs and both content levels. |
+| Layers-only presentation | Four recording-only switches disappear and return for recording/live; readout counts visible layers, singular and zero. Captures assert these states. |
 
 The maintainer simplified the contract to **at most 5,000 distinct item ids**. Replacements and retractions retain their ids; the 16 MiB spool cap bounds history. No peak-occupancy algorithm or test remains. Ingestion and publication refuse a new 5,001st id with exactly: “This layer already has 5,000 items; split it (for example by district).”
 
 ## Checks
 
-- **168 tests passed**, zero failures: 122 Holotable/Studio feature tests plus 46 architecture/UI boundary tests, across 17 files. This includes all headless Holotable tests and the targeted Studio Holotable module/live/agents/budget/labels/context/canvas files.
+- **171 tests passed**, zero failures: 125 Holotable/Studio feature tests plus 46 architecture/UI boundary tests, across 17 files. This includes all headless Holotable tests and the targeted Studio Holotable module/live/agents/budget/labels/context/canvas files.
 - **Studio and headless Holotable typechecks passed.** Studio used `bun x tsc --noEmit -p .`; headless used the installed authoring compiler/type roots.
 - Heavy checks/captures used 2–3 GB memory guards, below their limits. The full Studio suite remains the landing chat's responsibility. No heavy run or browser capture started during the 06:45–07:15 quiet window.
-- Final link/privacy, whitespace and mechanical UI results are added after execution. Newly added source is included in a supplemental privacy scan because the repository tools normally scan tracked files.
+- Link checking passed across 480 Markdown files; the full tracked privacy scan found no private paths; `git diff --check` passed. The mechanical UI detector returned no findings for all three changed view modules. This follow-up adds no untracked source; only the unchanged private dispatch brief is untracked.
 
 ## Real-data captures
 
 Private evidence in `local/holotable/evidence/story-layers/` contains `day-1-light-wide.png`, `day-1-dark-wide.png`, `day-4-light-wide.png`, `day-4-dark-wide.png`, `verification.json` and an evidence README. These replace the initial copies from this round. The normal service read the private Story Engine spool; the normal solid worker used the offline world pack and reusable sector cache. No game or runtime bridge was used. Verification used an isolated `?verify=1` fixture, not the maintainer's draft or running server.
 
-Every capture shows **12 layers, 369 active items, zero refusals, no V and no open error**. Day 1 is game second 3,600; day 4 is 262,800. Each context request used one centre and margin 350; each completed client snapshot contained 12,000 solid shapes. Recordings order and the limits sentence are visible. Unresolved input placements remain reported as “not placed”; these are not parser refusals and were not rewritten by this task. The overview spans the authored extent, with the fixture explicitly describing the generated placements as schematic reference-model content.
+Every capture shows **12 layers, 369 active items, zero refusals, no V and no open error**. Day 1 is game second 3,600; day 4 is 262,800. Each context request used one centre and margin 350; each completed client snapshot contained 12,000 solid shapes. All four recording-only switches are hidden and the readout says “369 items at this moment”; the slider shows the day/time once. Recordings order and the limits sentence are visible. The private input still publishes `{ region: "unplaced" }` for 21 events and 10 stories; these remain “not placed” until the producer republishes with valid item anchors. Other unresolved input placements are director (3) and people (1). No private spool was rewritten. The overview spans the authored extent, with a truthful schematic reference-model banner.
 
-The initial day-1 light and day-4 dark captures were visually inspected; the final four-capture confirmation still needs a batched visual check. Earlier accepted synthetic evidence remains under `local/holotable/evidence/agent-layers/` (24 PNGs, about 12 MiB) for its design review. New real-data evidence is under 1 MiB. The capture command exited successfully and closed its browser, service and local fixture server. Canonical ignored evidence, the private spool and reusable cache remain; the final scratch/footprint check is pending.
+All four refreshed captures were inspected together in light/dark at both days, beside the existing library reference. The Show rows and item readout match the requested design. Earlier accepted synthetic evidence remains under `local/holotable/evidence/agent-layers/` (24 PNGs, about 12 MiB) for its design review. Current real-data evidence totals 910,291 bytes. The capture command exited successfully and closed its browser, service and local fixture server. Only canonical ignored evidence, the private spool and reusable cache are retained after scratch cleanup.
+
+The empty task scratch directory was removed. The wrap-up disk-footprint check reports 300.6 GiB free on C and no owned folder above 5 GiB; unrelated projects' retained outputs were left alone. No command started by this agent remains running.
 
 ## Handoff limits
 
@@ -81,6 +87,6 @@ The earlier design PASS and accepted frame sample remain the prior round's evide
 
 The dispatching chat owns independent review of this follow-up, any new UI review and the full Studio suite before integration. This round makes no new independent design-PASS claim and no in-game commissioning claim. MCP publication, the in-game interpreter and drawing glyphs/badges remain outside this slice.
 
-Restart checkpoint: all code fixes and regression tests are done. The final headless typecheck passed again after the capture-wait adjustment; the Studio typecheck and 168-test run passed before that tool-only change. No agent-started command remains running. On resumption, finish link/privacy scans (including untracked source), `git diff --check`, the mechanical UI detector, final capture inspection, disk-footprint/scratch cleanup and this report's final check results. No additional feature or rendering-performance work is planned.
+The three Kabuki fixes build on `83cf0655` and remain ready for the maintainer's commit. No additional feature or rendering-performance work is planned. Any input requiring item anchors must be republished by its producer; this implementation never guesses a replacement for an unknown region.
 
 Knowledge used: [places](../../knowledge/places.md), [world and streaming](../../knowledge/world-and-streaming.md), [layer proposal](proposal.md), [agent-layer specification](agent-layers.md), [glyph specification](glyphs.md), [architecture contract](../authoring/architecture-contract.md), [visual QA checklist](../authoring/ui-visual-qa-checklist.md). No game-knowledge page was contradicted; the findings concern implementation bounds, disclosure and async lifetime.

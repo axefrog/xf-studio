@@ -57,7 +57,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
       if (!state.agents.here.length) body.append(note("No visible items cover this place."));
       return body;
     }
-    if (state.selected?.startsWith("cluster:")) return itemList(visible(state).flatMap(l => l.items).filter(i => i.region?.id === state.selected!.slice(8) || i.toRegion?.id === state.selected!.slice(8)), state);
+    if (state.selected?.startsWith("cluster:")) return itemList(visible(state).flatMap(l => l.items.filter(i => !l.notPlaced.includes(i.id))).filter(i => ["point", "target", "label", "actor", "influence"].includes(i.kind) && (JSON.stringify(i.place) === state.selected!.slice(8) || JSON.stringify(i.to) === state.selected!.slice(8))), state);
     if (state.selected && state.selected !== "v") {
       const item = find(state, state.selected); if (item) return itemFacts(item, state);
       const e = s.events.find(x => x.id === state.selected); if (!e) return note("That mark isn't visible at this moment.");
@@ -89,7 +89,10 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
   }
   return { spec: { id: "holotable.details", ...HOLOTABLE_PANEL_META["holotable.details"], element }, update() {
     const state = facade.snapshot(), s = state.open?.session;
-    for (const { id, toggle } of toggles) toggle.update(state.layers[id]);
+    for (const { id, toggle } of toggles) {
+      toggle.element.hidden = !!s?.meta.standalone && ["v", "camera", "events", "gaps"].includes(id);
+      toggle.update(state.layers[id]);
+    }
     story.update(state.level === "full", { disabled: !s, reason: s ? undefined : "Open a recording first." });
     updateAgents(state);
     setText(limits, s ? `${s.meta.standalone ? "Layers only; no recorded observations. Solid shapes are drawn within 350 m of where you're looking. " : `${s.meta.dropped} dropped, ${s.meta.missedDeadlines} missed, largest gap ${f1(s.meta.largestGapS)} s. `}Districts and solid shapes are offline estimates of the live world.` : "");

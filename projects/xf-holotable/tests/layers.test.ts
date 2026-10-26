@@ -55,6 +55,34 @@ test("replacement, expiry, retraction and clock binding preserve historical mome
  const game=data([item({t:10})],manifest({clock:"game"})); expect(evaluateLayers([game],session(),1002,"full")[0].reason).toContain("no game-clock");
 });
 
+test("item anchors validate on markers and influence ends, and resolve current places across layers",()=>{
+ const markers = ["point","target","label","actor","influence"] as const;
+ for (const kind of markers) expect(validateRecord(item({kind,anchor:{item:"places/cell"},value:kind==="actor"?{name:"A"}:kind==="influence"?{to:{item:"places/cell"}}:kind==="target"?{from:{item:"places/cell"}}:undefined}),manifest())).toBeNull();
+ const marks=data([
+   item({id:"event",anchor:{item:"places/cell"}}),
+   item({id:"follow",kind:"actor",anchor:{item:"places/moving"},value:{name:"Follower"}}),
+   item({id:"chain",anchor:{item:"event"}}),
+   item({id:"edge",kind:"influence",anchor:{item:"places/cell"},value:{to:{item:"other/places/foreign"}}}),
+   item({id:"target",kind:"target",anchor:{item:"places/moving"},value:{from:{item:"places/cell"}}}),
+   item({id:"missing",anchor:{item:"places/absent"}}),
+   item({id:"cycle-a",anchor:{item:"cycle-b"}}),item({id:"cycle-b",anchor:{item:"cycle-a"}}),
+   item({id:"relation",kind:"relation",anchor:{item:"chain"},value:{to:{item:"places/moving"},type:"near"}}),
+ ]);
+ const places=data([item({id:"cell",kind:"zone",anchor:zone}),item({id:"moving",kind:"actor",anchor:{at:[1,2,3]},value:{name:"Mover"}}),item({id:"moving",kind:"actor",t:1005,anchor:{at:[4,5,6]},value:{name:"Mover"}})],manifest({layer:"places"}));
+ const foreign=data([item({id:"foreign",anchor:{at:[20,30,40]}})],manifest({producer:"other",layer:"places"}));
+ for(const level of ["full","structure"] as const){
+   const views=evaluateLayers([marks,places,foreign],session(),1006,level), byId=new Map(views[0].items.map(i=>[i.id,i]));
+   expect(byId.get("event")?.place).toEqual([10,10,10]);expect(byId.get("event")?.resolvedAnchor).toEqual({at:[10,10,10]});
+   expect(byId.get("chain")?.place).toEqual([10,10,10]);expect(byId.get("follow")?.place).toEqual([4,5,6]);
+   expect(byId.get("edge")?.to).toEqual([20,30,40]);expect(byId.get("target")?.to).toEqual([10,10,10]);
+   expect(byId.get("relation")?.place).toEqual([10,10,10]);expect(byId.get("relation")?.to).toEqual([4,5,6]);
+   expect(views[0].notPlaced).toEqual(["missing","cycle-a","cycle-b"]);
+ }
+ expect(evaluateLayers([marks,places,foreign],session(),1004,"full")[0].items.find(i=>i.id==="follow")?.place).toEqual([1,2,3]);
+ expect(evaluateLayers([marks,places,foreign],session(),1006,"full",["test/places"])[0].notPlaced).toContain("event");
+ expect(evaluateLayers([marks,places,places,foreign],session(),1006,"full")[0].notPlaced).toContain("event");
+});
+
 test("facets, names, details and relation types never leave the structure boundary",async()=>{
  const d=data([item({kind:"actor",label:"secret label",detail:"secret detail",facets:{thinking:"secret thought"},value:{name:"secret name",role:"generated fixer",facets:{saying:"secret line"}}}),item({id:"edge",kind:"relation",anchor:{item:"one"},value:{to:{item:"one"},type:"secret tie"}})]);
  const safe=evaluateLayers([d],session(),1000,"structure"); expect(JSON.stringify(safe)).not.toContain("secret"); expect(safe[0].items[0].value?.name).toBe("generated fixer");

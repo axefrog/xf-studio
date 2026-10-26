@@ -277,8 +277,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       if (s) {
         const v = vAt(state);
         const reconnecting = state.live.watching && state.live.phase === "disconnected";
-        const gameClock = s.meta.standalone?.clock === "game";
-        setText(readout, gameClock ? gameTime(state.t) : `${reconnecting ? "Reconnecting · " : state.live.following ? "Live · " : ""}${f1(state.t - s.meta.from)} s${state.live.following ? "" : ` of ${f1(s.meta.to - s.meta.from)} s`}${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}${state.live.following && !reconnecting && state.live.behindS > 2 ? ` · ${f1(state.live.behindS)} s behind` : ""}`);
+        setText(readout, s.meta.standalone ? momentItems(state) : `${reconnecting ? "Reconnecting · " : state.live.following ? "Live · " : ""}${f1(state.t - s.meta.from)} s${state.live.following ? "" : ` of ${f1(s.meta.to - s.meta.from)} s`}${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}${state.live.following && !reconnecting && state.live.behindS > 2 ? ` · ${f1(state.live.behindS)} s behind` : ""}`);
       } else setText(readout, "");
       readout.title = readout.textContent ?? "";
       const dk = JSON.stringify([state.revision, orbit, svg.clientWidth, svg.clientHeight]);
@@ -288,6 +287,11 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   };
 }
 function gameTime(t: number) { const day = Math.floor(t / 86400) + 1, hour = Math.floor(t / 3600) % 24, minute = Math.floor(t / 60) % 60; return `Day ${day} · ${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`; }
+
+export function momentItems(state: HoloState): string {
+  const count = state.agents.layers.reduce((n, layer) => n + (state.agentEnabled[layer.id] === false ? 0 : layer.items.length), 0);
+  return count ? `${count} ${count === 1 ? "item" : "items"} at this moment` : "";
+}
 
 /** Shared empty-state composition also exercised without a canvas in presentation tests. */
 export function openNotice(state: HoloState, retry: (dir: string) => void): HTMLElement {
