@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "bun test tools",
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && bun tools/capabilities.ts validate && bun tools/capabilities.ts render --check",
+    "capabilities": "bun tools/capabilities.ts",
     "mcp": "bun tools/mcp-server.ts"
   },
   "dependencies": {
