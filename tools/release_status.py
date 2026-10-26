@@ -34,6 +34,18 @@ QUEUE = ROOT / "research/backlog/README.md"
 LEDGER = ROOT / "research/authoring/code-health.md"
 BOARD = ROOT / "local/coordination.md"
 MONTHS = {m: i for i, m in enumerate("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(), 1)}
+# What belongs to which chat: its paths (for commits since its own release), its release tags, its CI
+# workflows and its code-health ID prefixes. The work queue's Beta blockers and Polish lanes are XF Studio's.
+# Anything not listed here (the Docs links and Pages site workflows, unknown prefixes) stays repo-wide.
+PROJECTS = {
+    "XF · Studio": {"paths": ["projects/xf-studio"], "tag_glob": "v*", "where": "GitHub pre-release",
+                    "ci": ["Authoring", "Desktop release"],
+                    "prefixes": ["UI", "CORE", "PIPE", "PREV", "DESK", "NATIVE", "INSTALL", "PERF", "SAVE"], "queue": True},
+    "XF · Runtime bridge": {"paths": ["projects/xf-runtime-bridge", "research/runtime"], "prefixes": ["RB"]},
+    "XF · Story Engine": {"paths": ["projects/xf-story-engine", "research/story-engine"], "ci": ["Story Engine"], "prefixes": ["SE"]},
+    "XF · Hair Lab": {"paths": ["research/hair"], "prefixes": ["HAIR"]},
+    "XF · Holotable": {"paths": ["projects/xf-holotable", "research/live-world-view"], "prefixes": ["HT", "HOLO"]},
+}
 STALE_BLOCKER_DAYS = 14
 STALE_ROW_DAYS = 3
 
@@ -78,13 +90,32 @@ def lane_items(lane: str, today: date) -> list[dict]:
     return out
 
 
-def ledger_counts() -> dict:
-    counts = {"High": 0, "Med": 0, "Low": 0}
+def ledger_rows() -> list[tuple[str, str]]:
+    """(prefix, severity) for every open code-health finding."""
     text = LEDGER.read_text(encoding="utf-8")
     section = text.split("## Open findings", 1)[-1].split("\n## ", 1)[0]
-    for row in re.findall(r"^\| [A-Z]+-\d+ \| (High|Med|Medium|Low) \|", section, re.M):
-        counts["Med" if row.startswith("Med") else row] += 1
+    return [(p, "Med" if s.startswith("Med") else s) for p, s in re.findall(r"^\| ([A-Z]+)-\d+ \| (High|Med|Medium|Low) \|", section, re.M)]
+
+
+def ledger_counts(rows: list[tuple[str, str]] | None = None) -> dict:
+    counts = {"High": 0, "Med": 0, "Low": 0}
+    for _, sev in (ledger_rows() if rows is None else rows):
+        counts[sev] += 1
     return counts
+
+
+def last_release(cfg: dict) -> dict | None:
+    if not cfg.get("tag_glob"):
+        return None
+    tag = git("describe", "--tags", "--abbrev=0", "--match", cfg["tag_glob"], "main").strip()
+    if not tag:
+        return None
+    return {"version": tag, "date": git("log", "-1", "--format=%cs", tag).strip(), "where": cfg.get("where")}
+
+
+def commits_since(paths: list[str], tag: str | None) -> int:
+    rng = [f"{tag}..main"] if tag else ["main"]
+    return len(git("rev-list", *rng, "--", *paths).split())
 
 
 def project_activity(days: int) -> list[dict]:
@@ -207,9 +238,29 @@ def main() -> int:
     today = date.today()
 
     blockers, polish = lane_items("Beta blockers", today), lane_items("Polish lane", today)
-    ledger, activity, tags, ci, rows = ledger_counts(), project_activity(a.days), release_tags(), ci_status(), board_rows(today)
+    findings = ledger_rows()
+    ledger, activity, tags, ci, rows = ledger_counts(findings), project_activity(a.days), release_tags(), ci_status(), board_rows(today)
     if not a.no_jev and (key := jev_key()):
         jev_progress(blockers, git("log", f"--since={a.days}.days", "--format=%s", "main"), key)
+
+    # Attribute per project; whatever no project claims stays at the top level.
+    claimed_prefixes, claimed_ci = set(), set()
+    for r in rows:
+        cfg = PROJECTS.get(r["chat"])
+        if not cfg:
+            continue
+        rel = last_release(cfg)
+        r["last_release"] = rel
+        r["commits_since_release"] = commits_since(cfg["paths"], rel["version"] if rel else None)
+        if cfg.get("queue"):
+            r["blockers"] = [{k: b.get(k) for k in ("title", "age_days", "jev", "waits_on")} for b in blockers]
+            r["polish"] = len(polish)
+        r["findings"] = ledger_counts([f for f in findings if f[0] in cfg["prefixes"]])
+        r["ci"] = [{"workflow": c["workflow"], "result": c["result"]} for c in ci if c["workflow"] in cfg.get("ci", [])]
+        claimed_prefixes.update(cfg["prefixes"])
+        claimed_ci.update(cfg.get("ci", []))
+    repo_wide = {"findings": ledger_counts([f for f in findings if f[0] not in claimed_prefixes]),
+                 "ci": [c for c in ci if c["workflow"] not in claimed_ci]}
 
     signals = []
     if ledger["High"] > 3:
@@ -244,7 +295,7 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(md) + "\n", encoding="utf-8")
     out.with_suffix(".json").write_text(json.dumps({"blockers": blockers, "polish": polish, "ledger": ledger, "projects": activity,
-                                                    "tags": tags, "ci": ci, "chats": rows, "signals": signals,
+                                                    "tags": tags, "ci": ci, "chats": rows, "repo_wide": repo_wide, "signals": signals,
                                                     "decisions": decisions()}, indent=1, default=str), encoding="utf-8")
     print(f"wrote {out} ({len(signals)} signals)")
     return 0
