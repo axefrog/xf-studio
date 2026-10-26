@@ -214,3 +214,15 @@ describe("experiment-contributed default layouts", () => {
     expect(JSON.stringify(w.s.tab(id))).toBe(tab);
   });
 });
+
+describe("order-proof reads", () => {
+  test("a registration listener registered before the layouts never reads a withdrawn set", () => {
+    const experiments = experimentsDouble(), seen: boolean[] = [];
+    let w: ReturnType<typeof windowWith> | undefined;
+    experiments.onRegistrationsChanged(() => { if (w) seen.push(w.layouts.contributed.list().some(item => item.id === HOLO) || w.layouts.known.panel("holotable.view")); });
+    w = windowWith(experiments);
+    experiments.set(true); experiments.set(false);
+    expect(seen).toEqual([true, false]);
+    expect(w.layouts.contributed.generation!()).toBe(experiments.registrationGeneration());
+  });
+});

@@ -1,5 +1,6 @@
 import { startExperiments, experimentOverrides, type ExperimentDefinition } from "../platform/core/experiments";
 import { hostRandom } from "../platform/core/random";
+import { pageFailure } from "../diagnostics/page-sink";
 import type { StartedOutbox } from "../app/browser/document-outbox-device";
 import type { ExperimentRegistration } from "../platform/api/experiments";
 import type { ViewContribution } from "../studio-ui/views/contribution";
@@ -13,5 +14,6 @@ export function browserExperiments(query: string, signal: AbortSignal, verificat
       load: async () => { const feature = await import("./holotable-experiment"); return { create: context => feature.create(context, { verification }) }; } },
   ];
   return startExperiments({ definitions, overrides: experimentOverrides(query, definitions.map(info => info.id), verification), signal,
-    documents: documents.documents, outbox: documents.outbox, random: hostRandom() });
+    documents: documents.documents, outbox: documents.outbox, random: hostRandom(),
+    report: error => pageFailure("experiments", "experiment_listener_failed", "An experimental feature couldn't update.", error, { level: "warn" }) });
 }

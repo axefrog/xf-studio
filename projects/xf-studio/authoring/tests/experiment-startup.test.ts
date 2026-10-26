@@ -81,3 +81,39 @@ test("the registration generation moves only when the enabled set changes: on lo
   expect(signals).toEqual([1, 2]);
   life.abort();
 });
+
+test("a superseded load's completion never publishes over the newer load (off and on between finishing and its follow-up)", async () => {
+  const life = new AbortController(), src = sources();
+  const resolvers: ((value: unknown) => void)[] = [];
+  const loaded = { ...definition, load: async () => ({ create: () => new Promise(resolve => { resolvers.push(resolve); }) as never }) };
+  const port = await createExperiments({ definitions: [loaded], overrides: {}, ...src, signal: life.signal });
+  await port.set("sample", true);
+  for (let i = 0; i < 50 && !resolvers.length; i++) await Promise.resolve();
+  resolvers[0]!({ module: { id: "sample" }, service: { subscribe: () => () => {} } });
+  // Step one microtask at a time to the window: the first load is done (registered) but its follow-up hasn't run yet.
+  let window = false;
+  for (let i = 0; i < 50 && !window; i++) { await Promise.resolve(); window = port.registrations().length === 1 && port.snapshot()[0]!.phase === "loading"; }
+  expect(window).toBe(true);
+  await port.set("sample", false); await port.set("sample", true);
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  expect(port.snapshot()[0]!.phase).toBe("loading"); // the newer load is still pending; the old one didn't mark it ready
+  expect(port.registrations()).toEqual([]);
+  life.abort();
+});
+
+test("a registration listener that throws is reported, the others still hear, and switching off completes", async () => {
+  const life = new AbortController(), src = sources(), reported: unknown[] = [];
+  const loaded = { ...definition, load: async () => ({ create: () => ({ module: { id: "sample" }, service: { subscribe: () => () => {} } }) as never }) };
+  const port = await createExperiments({ definitions: [loaded], overrides: {}, ...src, signal: life.signal, report: error => reported.push(error) });
+  let heard = 0;
+  port.onRegistrationsChanged(() => { throw Error("listener broke"); });
+  port.onRegistrationsChanged(() => { heard++; });
+  await port.set("sample", true);
+  for (let i = 0; i < 50 && !port.registrations().length; i++) await new Promise(resolve => setTimeout(resolve, 2));
+  await port.set("sample", false);
+  expect(heard).toBe(2);
+  expect(reported).toHaveLength(2);
+  expect(port.snapshot()[0]!.phase).toBe("off");
+  expect(port.snapshot()[0]!.enabled).toBe(false);
+  life.abort();
+});

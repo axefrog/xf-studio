@@ -31,6 +31,8 @@ export type ExperimentOptions<T extends ExperimentRegistration> = {
   documents: Pick<DocumentStorePort, "list">; outbox: DocumentOutbox; random: Random; signal: AbortSignal;
   /** The session's history service: the experiments' documents are its `doc:*` scopes (default: one of their own). */
   history?: HistoryService;
+  /** A listener's failure, sent to the page's diagnostics (default: the console); it never stops the others or a state change. */
+  report?: (error: unknown) => void;
 };
 export type Experiments<T extends ExperimentRegistration> = Omit<ExperimentPort, "registrations" | "history"> & {
   registrations(): readonly T[]; readonly history: ExperimentContext["history"]; readonly context: ExperimentContext;
@@ -57,12 +59,17 @@ export async function createExperiments<T extends ExperimentRegistration>(option
     } });
   const context = contextFor(signal);
   const listeners = new Set<() => void>();
-  const changed = () => { for (const listener of [...listeners]) listener(); };
+  const changed = () => { for (const listener of [...listeners]) { try { listener(); } catch (error) { report(error); } } };
   // The registration set's own generation and signal: moved only where an experiment's registration appears or goes, never for
   // settings, phases, services or history.
   let registrationGeneration = 0;
   const registrationListeners = new Set<() => void>();
-  const registrationsChanged = () => { registrationGeneration++; for (const listener of [...registrationListeners]) listener(); };
+  const report = options.report ?? ((error: unknown) => console.error(error));
+  // Each listener on its own: one that throws never skips the others, nor the state change and publish that follow.
+  const registrationsChanged = () => {
+    registrationGeneration++;
+    for (const listener of [...registrationListeners]) { try { listener(); } catch (error) { report(error); } }
+  };
   const phases: Record<string, { phase: ExperimentState["phase"]; message: string }> = {};
   // Per-experiment save problems, shown instead of the load message until a later save of that experiment succeeds.
   const saveErrors: Record<string, string> = {};
@@ -98,8 +105,10 @@ export async function createExperiments<T extends ExperimentRegistration>(option
         run.addEventListener("abort", off, { once: true });
         return contribution;
       }).then(outcome => {
-        // Registered only if this load is still the one held (a quick off-on replaces it): the set changes here, once.
-        if (outcome.status === "done") { if (loads.get(definition.id) === load) registrationsChanged(); publish(definition.id, "ready"); }
+        // Only the load still held speaks for the experiment: a superseded one (switched off and on before it finished) publishes
+        // nothing, so it can't mark the newer load ready or failed. The set changes here, once.
+        if (loads.get(definition.id) !== load) return;
+        if (outcome.status === "done") { registrationsChanged(); publish(definition.id, "ready"); }
         else if (outcome.status === "failed") publish(definition.id, "failed", `Couldn't open ${definition.label}. Turn it off and on to try again.`);
       });
     }

@@ -47,9 +47,9 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
     log(`The ${item.module.label} experiment's default layouts can't be offered: ${reason}.`);
   };
   // One snapshot per registration set: the defaults and the panel types come from the same `registrations()` read, so the list and the
-  // knowledge can never disagree. The experiments own the fact that the set changed (`registrationGeneration`, `onRegistrationsChanged`);
-  // the snapshot is rebuilt eagerly in that signal's handler, before this source tells its own subscribers, so a reader always sees the
-  // current set whatever order it subscribed in. Reading never rebuilds.
+  // knowledge can never disagree. The experiments own the fact that the set changed: every read compares the snapshot's generation with
+  // their `registrationGeneration()` (cheap and authoritative) and rebuilds when it is behind, so no listener, in whatever order it
+  // subscribed, can read a withdrawn set. The signal only tells this source's subscribers.
   type Snapshot = { generation: number; list: readonly ContributedLayoutDefault[]; panels: ReadonlySet<string> };
   const build = (): Snapshot => {
     const at = experiments.registrationGeneration(), on = experiments.registrations();
@@ -68,27 +68,31 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
       panels: new Set(on.flatMap(item => item.contribution.panels.map(panel => panel.id))) };
   };
   /**
-   * Build, and build again if the set changed during the build (an experiment switched off from inside its own `defaults`): a signal
-   * that arrives mid-build only marks the snapshot dirty. If it is still changing after a few rounds, the built-in defaults and knowledge
-   * are published and kept until the next signal; a withdrawn set is never published.
+   * The current snapshot. Behind the experiments' generation, it is rebuilt now; a build that the set changes under (an experiment
+   * switched off from inside its own `defaults`) is built again, a few rounds at most. If the set is still changing, the built-in defaults
+   * and knowledge stand in, cached for that generation; a withdrawn set is never returned. A read made from inside a build (a listener
+   * reached during it) gets the built-ins too.
    */
-  let snap: Snapshot = { generation: -1, list: STUDIO_LAYOUT_DEFAULTS, panels: new Set() }, building = false, dirty = false;
-  const listeners = new Set<() => void>();
-  const rebuild = () => {
-    if (building) { dirty = true; return; }
+  const builtIns = (generation: number): Snapshot => ({ generation, list: STUDIO_LAYOUT_DEFAULTS, panels: new Set() });
+  let snap: Snapshot = builtIns(-1), building = false;
+  const snapshot = (): Snapshot => {
+    const current = experiments.registrationGeneration();
+    if (snap.generation === current) return snap;
+    if (building) return builtIns(current);
     building = true;
     try {
-      let rounds = 0;
-      do { dirty = false; snap = build(); } while (dirty && ++rounds < 4);
-      if (dirty) snap = { generation: experiments.registrationGeneration(), list: STUDIO_LAYOUT_DEFAULTS, panels: new Set() };
-    } finally { building = false; dirty = false; }
-    for (const listener of [...listeners]) listener();
+      for (let rounds = 0; rounds < 4; rounds++) {
+        const built = build();
+        if (built.generation === experiments.registrationGeneration()) return (snap = built);
+      }
+      return (snap = builtIns(experiments.registrationGeneration()));
+    } finally { building = false; }
   };
-  experiments.onRegistrationsChanged(rebuild);
-  rebuild(); // the first snapshot goes through the same guarded build (no subscribers yet to tell)
+  const listeners = new Set<() => void>();
+  experiments.onRegistrationsChanged(() => { for (const listener of [...listeners]) listener(); });
   const known: FragmentKnowledge = Object.freeze({ rules: STUDIO_VIEW_GRAPH_RULES, tool: STUDIO_FRAGMENT_KNOWLEDGE.tool,
-    panel: (type: string) => panels.has(type) || snap.panels.has(type) });
-  const contributed: ContributedDefaultsSource = { list: () => snap.list, generation: () => snap.generation,
+    panel: (type: string) => panels.has(type) || snapshot().panels.has(type) });
+  const contributed: ContributedDefaultsSource = { list: () => snapshot().list, generation: () => snapshot().generation,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; } };
   return { contributed, known };
 }
