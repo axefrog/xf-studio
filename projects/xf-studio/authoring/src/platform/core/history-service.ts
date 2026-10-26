@@ -111,6 +111,8 @@ export interface HistoryScope {
   timeline(): HistorySnapshot;
   /** The step the next Undo reverts, if any. */
   top(): HistoryEntryId | undefined;
+  /** IDs retained by Undo, Redo or a displaced limit entry, for owners' session-only replay metadata. */
+  held(): Set<HistoryEntryId>;
   /** Whether checkpoints record (false inside `withoutHistory`). */
   readonly recording: boolean;
   withoutHistory<T>(apply: () => T): T;

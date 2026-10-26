@@ -17,7 +17,8 @@ export type FloatingWindow = { id: string; x: number; y: number; w: number; h: n
  * left; `window` the floating window it filled alone; `closed` that it was closed.
  */
 export type ParkedPlace = { group: PanelId[]; index: number; active: boolean; collapsed?: boolean; window?: Rect;
-  anchor?: { panel: PanelId; side: Side; share: number } } | { closed: true };
+  groupId?: string; windowId?: string; windowIndex?: number; docked?: true;
+  anchor?: { panel: PanelId; side: Side; share: number; splitId?: string } } | { closed: true };
 export type DockTree = {
   root: DockNode | null;
   /** Painted in array order; the last window is frontmost. */
@@ -202,7 +203,7 @@ const rest = (share: number) => Number((1 - share).toPrecision(12));
  * `whole`: `share` is the node's share of the split it joins (a parked group coming back, UI-104), so every sibling gives up its part;
  * otherwise it is a share of the target group, which alone gives it up.
  */
-function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultRect?: Rect, share = .5, whole = false): DockTree {
+function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultRect?: Rect, share = .5, whole = false, splitId?: string): DockTree {
   const next = clone(tree);
   if (target.kind === "tab") {
     const found = findGroup(next, target.groupId);
@@ -242,7 +243,7 @@ function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultR
       if (inserted) return visited;
       const targetNode = [...groups(subtree)].find(item => item.id === target.groupId)!;
       return replaceNode(subtree, target.groupId, split(axis, before ? [node, targetNode] : [targetNode, node],
-        before ? [share, rest(share)] : [rest(share), share]));
+        before ? [share, rest(share)] : [rest(share), share], splitId));
     };
     if (found.windowId) {
       // A magnetic composite grows by the incoming panel instead of squeezing its current content.
@@ -572,13 +573,14 @@ function placeOf(tree: DockTree, panel: PanelId, leaving: ReadonlySet<PanelId>):
   if (!at) return undefined;
   const floatingWindow = at.windowId ? tree.floating.find(item => item.id === at.windowId) : undefined;
   // A docked group that leaves whole remembers a neighbour to come back beside, on the same side and at the same share.
-  const anchor = !at.windowId && at.group.panels.every(id => leaving.has(id)) ? anchorFor(tree.root, at.group.id, leaving) : undefined;
-  return { group: [...at.group.panels], index: at.index, active: at.group.active === panel, ...(at.group.collapsed ? { collapsed: true } : {}),
-    ...(floatingWindow && floatingWindow.node.kind === "group" ? { window: { x: floatingWindow.x, y: floatingWindow.y, w: floatingWindow.w, h: floatingWindow.h } } : {}),
+  const anchor = !at.windowId ? anchorFor(tree.root, at.group.id, new Set([...leaving, ...at.group.panels])) : undefined;
+  return { group: [...at.group.panels], index: at.index, active: at.group.active === panel, groupId: at.group.id, ...(at.group.collapsed ? { collapsed: true } : {}),
+    ...(!floatingWindow ? { docked: true as const } : {}),
+    ...(floatingWindow && floatingWindow.node.kind === "group" ? { window: { x: floatingWindow.x, y: floatingWindow.y, w: floatingWindow.w, h: floatingWindow.h }, windowId: floatingWindow.id, windowIndex: tree.floating.indexOf(floatingWindow) } : {}),
     ...(anchor ? { anchor } : {}) };
 }
 /** The nearest surviving neighbour of a node that leaves: a panel beside it in the closest split that keeps something, and its side. */
-function anchorFor(root: DockNode | null, id: string, leaving: ReadonlySet<PanelId>): { panel: PanelId; side: Side; share: number } | undefined {
+function anchorFor(root: DockNode | null, id: string, leaving: ReadonlySet<PanelId>): { panel: PanelId; side: Side; share: number; splitId: string } | undefined {
   const survivor = (node: DockNode, last: boolean) => {
     const found = [...groups(node)].map(item => item.panels.find(panel => !leaving.has(panel))).filter((panel): panel is string => !!panel);
     return last ? found.at(-1) : found[0];
@@ -600,7 +602,7 @@ function anchorFor(root: DockNode | null, id: string, leaving: ReadonlySet<Panel
         const panel = neighbour && survivor(neighbour, j < index);
         if (!panel) continue;
         const side: Side = parent.axis === "row" ? (j < index ? "right" : "left") : (j < index ? "bottom" : "top");
-        return { panel, side, share: parent.sizes[index] };
+        return { panel, side, share: parent.sizes[index], splitId: parent.id };
       }
     }
     target = parent.id;
@@ -655,26 +657,31 @@ export function unparkPanels(tree: DockTree, panels: readonly PanelId[], fallbac
  * any more. The group it joins keeps showing its tab unless the panel was the shown one.
  */
 function restorePlace(tree: DockTree, panel: PanelId, place: Exclude<ParkedPlace, { closed: true }>): DockTree | undefined {
-  const member = place.group.filter(id => id !== panel).map(id => locate(tree, id)).find(Boolean);
+  const member = (place.groupId ? allGroups(tree).find(entry => entry.group.id === place.groupId) : undefined)
+    ?? place.group.filter(id => id !== panel).map(id => locate(tree, id)).find(Boolean);
   if (member) {
     // After the nearest earlier member that is back, else before the nearest later one: the tab order it had.
     const at = place.group.indexOf(panel), members = member.group.panels;
     const before = place.group.slice(0, at).reverse().find(id => members.includes(id));
     const after = place.group.slice(at + 1).find(id => members.includes(id));
-    const index = before !== undefined ? members.indexOf(before) + 1 : after !== undefined ? members.indexOf(after) : members.length;
+    const index = before !== undefined ? members.indexOf(before) + 1 : after !== undefined ? members.indexOf(after)
+      : member.group.id === place.groupId ? Math.min(place.index, members.length) : members.length;
     const next = insertNode(tree, group([panel]), { kind: "tab", groupId: member.group.id, index });
     return place.active ? next : activate(next, member.group.active);
   }
   const anchor = place.anchor && locate(tree, place.anchor.panel);
   if (place.anchor && anchor && !anchor.windowId) {
-    const created = group([panel], panel);
+    const created = group([panel], panel, place.groupId);
     return insertNode(tree, place.collapsed ? { ...created, collapsed: true } : created, { kind: "split", groupId: anchor.group.id, side: place.anchor.side },
-      undefined, place.anchor.share, true);
+      undefined, place.anchor.share, true, place.anchor.splitId);
   }
   if (place.window) {
-    const created = group([panel]);
-    return insertNode(tree, place.collapsed ? { ...created, collapsed: true } : created, { kind: "float", ...place.window });
+    const created = group([panel], panel, place.groupId), next = clone(tree);
+    next.floating.splice(Math.min(place.windowIndex ?? next.floating.length, next.floating.length), 0,
+      { id: place.windowId ?? newId("w"), ...place.window, node: place.collapsed ? { ...created, collapsed: true } : created });
+    return next;
   }
+  if (place.docked && !tree.root) { const created = group([panel], panel, place.groupId); return { ...clone(tree), root: place.collapsed ? { ...created, collapsed: true } : created }; }
   return undefined;
 }
 
@@ -834,7 +841,11 @@ function parsePlace(value: unknown, validId: (id: unknown) => id is string, fini
     ? { x: floatingWindow.x as number, y: floatingWindow.y as number, w: floatingWindow.w as number, h: floatingWindow.h as number } : undefined;
   const anchor = place.anchor as Record<string, unknown> | undefined;
   const beside = anchor && validId(anchor.panel) && ["left", "right", "top", "bottom"].includes(anchor.side as string) && finite(anchor.share) &&
-    (anchor.share as number) > 0 && (anchor.share as number) < 1 ? { panel: anchor.panel, side: anchor.side as Side, share: anchor.share as number } : undefined;
+    (anchor.share as number) > 0 && (anchor.share as number) < 1 ? { panel: anchor.panel, side: anchor.side as Side, share: anchor.share as number,
+      ...(validId(anchor.splitId) ? { splitId: anchor.splitId } : {}) } : undefined;
   return { group: [...place.group] as string[], index: place.index as number, active: place.active,
-    ...(place.collapsed === true ? { collapsed: true } : {}), ...(rect ? { window: rect } : {}), ...(beside ? { anchor: beside } : {}) };
+    ...(validId(place.groupId) ? { groupId: place.groupId } : {}), ...(place.docked === true ? { docked: true as const } : {}),
+    ...(place.collapsed === true ? { collapsed: true } : {}), ...(rect ? { window: rect,
+      ...(validId(place.windowId) ? { windowId: place.windowId } : {}), ...(Number.isSafeInteger(place.windowIndex) && (place.windowIndex as number) >= 0 ? { windowIndex: place.windowIndex as number } : {}) } : {}),
+    ...(beside ? { anchor: beside } : {}) };
 }

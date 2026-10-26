@@ -509,7 +509,7 @@ describe("P3-i instance operations and minimal replay", () => {
         const x = 100 + step * 3; float(s, tab, survivor, x);
         const scene = s.graph.node(MAIN_VIEW, "scene").id; s.setLook(scene, step % 2 ? LOOK : OTHER_LOOK);
         const actual = s.instances("presets", tab).map(panel => ({ id: panel.id, open: openIn(s.dock(tab), panel.id, "wide"), ...(panel.binding ? { binding: panel.binding } : {}) }));
-        expect(actual).toEqual(expected); expect(position(s, tab, survivor)[0]?.x).toBe(x); invariants(s);
+        expect(actual, `seed ${seed}, step ${step}`).toEqual(expected); expect(position(s, tab, survivor)[0]?.x).toBe(x); invariants(s);
         for (const item of expected) expect(openIn(s.dock(tab), item.id, "compact")).toBe(item.open);
       }
     }

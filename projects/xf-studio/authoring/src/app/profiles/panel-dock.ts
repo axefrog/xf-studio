@@ -8,6 +8,11 @@ export function panelDock(layout: DockLayout | null): DockState {
   return structuredClone({ wide: { ...empty(), ...state?.wide }, compact: { ...empty(), ...state?.compact } });
 }
 export function dockWith(layout: DockLayout | null, state: DockState): DockLayout {
+  const sorted = <T>(record: Record<string, T>) => Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)));
+  for (const size of ["wide", "compact"] as const) {
+    if (state[size].lastPlace) state[size].lastPlace = sorted(state[size].lastPlace!);
+    if (state[size].parked) state[size].parked = sorted(state[size].parked!);
+  }
   return { format: layout?.format ?? "xfs/dock", version: layout?.version ?? 1, state: state as unknown as JsonValue };
 }
 export function openIn(layout: DockLayout | null, instance: string, size: keyof DockState): boolean {
@@ -34,15 +39,29 @@ export function removePanelsDock(layout: DockLayout | null, instances: readonly 
   return dockWith(layout, state);
 }
 /** Membership replay closes the complete set before reopening any member; existing places take priority over old history places. */
-export function replayPanelsDock(layout: DockLayout | null, members: readonly { instance: string; open: Record<keyof DockState, boolean>;
-  places: Partial<Record<keyof DockState, ParkedPlace>> }[]): DockLayout {
+export function replayPanelsDock(layout: DockLayout | null, members: readonly { instance: string; recordedPlace: boolean; open: Record<keyof DockState, boolean>;
+  closed: Record<keyof DockState, boolean>; closedIndex: Record<keyof DockState, number>; parked: Partial<Record<keyof DockState, ParkedPlace>>; places: Partial<Record<keyof DockState, ParkedPlace>>; latest?: Partial<Record<keyof DockState, ParkedPlace>> }[]): DockLayout {
   const state = panelDock(layout), fallback: DockTree = { root: null, floating: [], closed: [] };
   for (const size of ["wide", "compact"] as const) {
     state[size] = closePanels(state[size], members.filter(member => !member.open[size]).map(member => member.instance));
+    for (const { instance, recordedPlace, open, closed, parked, places, latest } of members) if (!open[size]) {
+      if (closed[size]) {
+        if (!state[size].closed.includes(instance)) state[size].closed.push(instance);
+        const place = !recordedPlace && latest?.[size] || places[size];
+        if ((recordedPlace || latest?.[size] || !state[size].lastPlace?.[instance]) && place && !("closed" in place)) state[size].lastPlace = { ...state[size].lastPlace, [instance]: place };
+      } else {
+        state[size] = detachPanel(state[size], instance);
+        if (parked[size]) state[size].parked = { ...state[size].parked, [instance]: parked[size]! };
+      }
+    }
+    const ordered = members.filter(member => member.closed[size] && member.recordedPlace).sort((a, b) => a.closedIndex[size] - b.closedIndex[size]);
+    for (const member of ordered) state[size].closed = state[size].closed.filter(id => id !== member.instance);
+    for (const member of ordered) state[size].closed.splice(member.closedIndex[size], 0, member.instance);
     const returning = members.filter(member => member.open[size] && !locate(state[size], member.instance));
-    for (const { instance, places } of returning) {
-      const place = state[size].lastPlace?.[instance] ?? places[size];
+    for (const { instance, recordedPlace, places, latest } of returning) {
+      const place = recordedPlace ? places[size] ?? state[size].lastPlace?.[instance] : latest?.[size] ?? state[size].lastPlace?.[instance] ?? places[size];
       state[size] = detachPanel(state[size], instance);
+      if (state[size].parked) { delete state[size].parked[instance]; if (!Object.keys(state[size].parked).length) delete state[size].parked; }
       if (place && !("closed" in place)) state[size].parked = { ...state[size].parked, [instance]: place };
     }
     // Unlike explicit Show, a replay restores the remembered active tab/collapse instead of revealing every returning member in turn.

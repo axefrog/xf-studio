@@ -96,6 +96,12 @@ export class FocusService {
     return { seq: this.seq, views: { ...this.views }, ...(this.panel ? { panel: this.panel } : {}), ...(this.tab ? { tab: this.tab } : {}),
       ...(this.recentScopes[0] ? { editing: this.recentScopes[0] } : {}) };
   }
+  /** Restore a history position's navigation without rewinding its clock or changing recent editing scopes. */
+  restoreNavigation(data: Pick<FocusData, "views" | "panel" | "tab">) {
+    const valid = focusDataOf(data, this.seq);
+    this.views = { ...valid.views }; this.panel = valid.panel; this.tab = valid.tab;
+    this.changed();
+  }
   /** Replace everything with stored focus (a session opened again): the sequence only ever moves on. */
   restore(data: FocusData) {
     const valid = focusDataOf(data, data.seq);

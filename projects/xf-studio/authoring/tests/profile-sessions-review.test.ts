@@ -57,6 +57,19 @@ test("review H2: combined jumps across reset apply fields only to the content th
   expect(scope.jumpTo(end)).toBe(true); expect(s.tabList()).toEqual(final); expect(s.panel(original)).toBeUndefined();
 });
 
+test.each(["add", "binding"] as const)("review of 08f1e01f: %s follows pre-reset content reopened in a different tab", kind => {
+  const { s, tab, scope } = fixture(), existing = s.addPanel(tab, "presets"); scope.clear();
+  const panel = kind === "add" ? s.addPanel(tab, "presets") : existing;
+  if (kind === "binding") s.setPanelBinding(tab, panel, { policy: "pinned", target: { look: look(2) } });
+  s.reset(tab, { name: "Replacement", dock: null, panels: [], views: [], nodes: [] });
+  const reopened = s.reopen(), before = JSON.stringify(s.session()), end = scope.timeline().steps.at(-1)!.id;
+  expect(reopened).not.toBe(tab);
+  expect(scope.jumpTo(scope.timeline().startId)).toBe(true); expect(scope.jumpTo(end)).toBe(true);
+  expect(JSON.stringify(s.session())).toBe(before);
+  expect(s.panel(panel)?.tab).toBe(reopened);
+  if (kind === "binding") expect(s.panel(panel)?.binding).toEqual({ policy: "pinned", target: { look: look(2) } });
+});
+
 test("review M1: ambiguous legacy projection/input refuses before any mutation or identity allocation", () => {
   const { s, tab, scope } = fixture(), a = s.addPanel(tab, "presets"), b = s.addPanel(tab, "presets");
   const state = panelDock(s.dock(tab));
