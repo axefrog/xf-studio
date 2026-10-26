@@ -103,3 +103,33 @@ test("review M2: type Hide and repeated Undo/Redo restore a shared Presets group
     expect(scope.redo()).toBe(true);
   }
 });
+
+
+test("review navigation: binding Undo/Redo in A keeps existing B shown and its focus and arrangement", () => {
+  const { s, tab: a, scope } = fixture(), panel = s.addPanel(a, "presets"), b = s.duplicate(a);
+  const other = s.instances("presets", b)[0]!.id;
+  s.show(a); scope.clear();
+  s.setPanelBinding(a, panel, { policy: "pinned", target: { look: look(2) } });
+  s.show(b); s.focus.focusPanel(other);
+  const view = s.graph.viewIds().find(id => s.viewTab(id) === b)!;
+  s.focus.focusView(view);
+  const focus = s.focus.snapshot(), dock = s.dock(b);
+  expect(scope.undo()).toBe(true);
+  expect(s.panel(panel)?.binding).toBeUndefined();
+  expect(s.focus.snapshot()).toEqual(focus); expect(s.dock(b)).toEqual(dock);
+  expect(scope.redo()).toBe(true);
+  expect(s.panel(panel)?.binding).toEqual({ policy: "pinned", target: { look: look(2) } });
+  expect(s.focus.snapshot()).toEqual(focus); expect(s.dock(b)).toEqual(dock);
+});
+
+
+test("review navigation: first-view Redo in A leaves existing B shown and focused", () => {
+  const { s, tab: a, scope } = fixture(), baseline = s.session().views;
+  const b = s.newTab({ name: "B", dock: null, panels: [], views: [], nodes: [] }), panel = s.addPanel(b, "presets");
+  scope.clear();
+  const view = s.openView(a, baseline, { kind: "character", id: "c-1" });
+  s.show(b); s.focus.focusPanel(panel);
+  const focus = s.focus.snapshot();
+  expect(scope.undo()).toBe(true); expect(s.graph.has(view)).toBe(false); expect(s.focus.snapshot()).toEqual(focus);
+  expect(scope.redo()).toBe(true); expect(s.graph.has(view)).toBe(true); expect(s.focus.snapshot()).toEqual(focus);
+});

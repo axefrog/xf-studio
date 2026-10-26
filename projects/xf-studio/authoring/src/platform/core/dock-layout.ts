@@ -18,7 +18,7 @@ export type FloatingWindow = { id: string; x: number; y: number; w: number; h: n
  */
 export type ParkedPlace = { group: PanelId[]; index: number; active: boolean; collapsed?: boolean; window?: Rect;
   groupId?: string; windowId?: string; windowIndex?: number; docked?: true;
-  anchor?: { panel: PanelId; side: Side; share: number; splitId?: string } } | { closed: true };
+  anchor?: { panel: PanelId; side: Side; share: number; splitId?: string; shares?: Record<string, number> } } | { closed: true };
 export type DockTree = {
   root: DockNode | null;
   /** Painted in array order; the last window is frontmost. */
@@ -250,9 +250,11 @@ function insertNode(tree: DockTree, node: DockNode, target: DropTarget, defaultR
       next.floating = next.floating.map(floatingWindow => {
         if (floatingWindow.id !== found.windowId) return floatingWindow;
         // Matches previewRect(): an attached panel adds at most 360 px across or 300 px down.
-        const extra = axis === "row" ? Math.min(defaultRect?.w ?? 320, 360) : Math.min(defaultRect?.h ?? 260, 300);
         const current = axis === "row" ? floatingWindow.w : floatingWindow.h;
-        const node = place(floatingWindow.node, extra / (current + extra), true);
+        const restoring = whole && splitId !== undefined;
+        const extra = restoring ? current * share / (1 - share)
+          : axis === "row" ? Math.min(defaultRect?.w ?? 320, 360) : Math.min(defaultRect?.h ?? 260, 300);
+        const node = place(floatingWindow.node, restoring ? share : extra / (current + extra), true);
         return axis === "row"
           ? { ...floatingWindow, node, w: floatingWindow.w + extra, x: before ? floatingWindow.x - extra : floatingWindow.x }
           : { ...floatingWindow, node, h: floatingWindow.h + extra, y: before ? floatingWindow.y - extra : floatingWindow.y };
@@ -572,12 +574,12 @@ function placeOf(tree: DockTree, panel: PanelId, leaving: ReadonlySet<PanelId>):
   const at = locate(tree, panel);
   if (!at) return undefined;
   const floatingWindow = at.windowId ? tree.floating.find(item => item.id === at.windowId) : undefined;
-  // A docked group that leaves whole remembers a neighbour to come back beside, on the same side and at the same share.
-  const anchor = !at.windowId ? anchorFor(tree.root, at.group.id, new Set([...leaving, ...at.group.panels])) : undefined;
+  // A departing group remembers a neighbour in its dock or floating composite, on the same side and at the same share.
+  const anchor = anchorFor(floatingWindow?.node ?? tree.root, at.group.id, new Set([...leaving, ...at.group.panels]));
   return { group: [...at.group.panels], index: at.index, active: at.group.active === panel, groupId: at.group.id, ...(at.group.collapsed ? { collapsed: true } : {}),
     ...(!floatingWindow ? { docked: true as const } : {}),
-    ...(floatingWindow && floatingWindow.node.kind === "group" ? { window: { x: floatingWindow.x, y: floatingWindow.y, w: floatingWindow.w, h: floatingWindow.h }, windowId: floatingWindow.id, windowIndex: tree.floating.indexOf(floatingWindow) } : {}),
-    ...(anchor ? { anchor } : {}) };
+    ...(floatingWindow ? { window: { x: floatingWindow.x, y: floatingWindow.y, w: floatingWindow.w, h: floatingWindow.h }, windowId: floatingWindow.id, windowIndex: tree.floating.indexOf(floatingWindow) } : {}),
+    ...(anchor ? { anchor: floatingWindow ? anchor : { panel: anchor.panel, side: anchor.side, share: anchor.share, splitId: anchor.splitId } } : {}) };
 }
 /** Read a panel's current or remembered closed place without closing it or cloning its whole tree. */
 export function panelPlace(tree: DockTree, panel: PanelId): Exclude<ParkedPlace, { closed: true }> | undefined {
@@ -585,7 +587,7 @@ export function panelPlace(tree: DockTree, panel: PanelId): Exclude<ParkedPlace,
   return place && !("closed" in place) ? place : tree.lastPlace?.[panel];
 }
 /** The nearest surviving neighbour of a node that leaves: a panel beside it in the closest split that keeps something, and its side. */
-function anchorFor(root: DockNode | null, id: string, leaving: ReadonlySet<PanelId>): { panel: PanelId; side: Side; share: number; splitId: string } | undefined {
+function anchorFor(root: DockNode | null, id: string, leaving: ReadonlySet<PanelId>): { panel: PanelId; side: Side; share: number; splitId: string; shares: Record<string, number> } | undefined {
   const survivor = (node: DockNode, last: boolean) => {
     const found = [...groups(node)].map(item => item.panels.find(panel => !leaving.has(panel))).filter((panel): panel is string => !!panel);
     return last ? found.at(-1) : found[0];
@@ -607,7 +609,7 @@ function anchorFor(root: DockNode | null, id: string, leaving: ReadonlySet<Panel
         const panel = neighbour && survivor(neighbour, j < index);
         if (!panel) continue;
         const side: Side = parent.axis === "row" ? (j < index ? "right" : "left") : (j < index ? "bottom" : "top");
-        return { panel, side, share: parent.sizes[index], splitId: parent.id };
+        return { panel, side, share: parent.sizes[index], splitId: parent.id, shares: Object.fromEntries(parent.children.map((child, at) => [child.id, parent.sizes[at]!])) };
       }
     }
     target = parent.id;
@@ -674,16 +676,62 @@ function restorePlace(tree: DockTree, panel: PanelId, place: Exclude<ParkedPlace
     const next = insertNode(tree, group([panel]), { kind: "tab", groupId: member.group.id, index });
     return place.active ? next : activate(next, member.group.active);
   }
-  const anchor = place.anchor && locate(tree, place.anchor.panel);
-  if (place.anchor && anchor && !anchor.windowId) {
-    const created = group([panel], panel, place.groupId);
-    return insertNode(tree, place.collapsed ? { ...created, collapsed: true } : created, { kind: "split", groupId: anchor.group.id, side: place.anchor.side },
-      undefined, place.anchor.share, true, place.anchor.splitId);
+  let remembered = place.anchor;
+  let anchor = remembered && locate(tree, remembered.panel);
+  // Several departing groups can refer to a neighbour that has not returned yet. Any surviving
+  // sibling in that split is an equally good anchor; its original order determines the side.
+  const siblings = remembered?.shares, order = Object.keys(siblings ?? {}), index = order.indexOf(place.groupId ?? "");
+  if ((!anchor || anchor.windowId !== place.windowId) && siblings && index >= 0) {
+    const peer = allGroups(tree).find(item => item.windowId === place.windowId && order.includes(item.group.id));
+    if (peer) {
+      const row = remembered!.side === "left" || remembered!.side === "right", before = index < order.indexOf(peer.group.id);
+      remembered = { ...remembered!, panel: peer.group.panels[0]!, side: row ? before ? "left" : "right" : before ? "top" : "bottom" };
+      anchor = locate(tree, remembered.panel);
+    }
+  }
+  if (remembered && anchor && (!anchor.windowId || anchor.windowId === place.windowId)) {
+    const created = group([panel], panel, place.groupId), beside = remembered;
+    const restoreShares = (tree: DockTree) => {
+      const visit = (node: DockNode | null): DockNode | null => {
+        if (!node || node.kind === "group") return node;
+        const children = node.children.map(child => visit(child)!);
+        const shares = beside.shares;
+        const sizes = node.id === beside.splitId && shares && children.every(child => shares[child.id] !== undefined)
+          ? children.map(child => shares[child.id]!) : undefined;
+        return { ...node, children, ...(sizes ? { sizes: Object.keys(shares!).length === children.length ? sizes : normalizeSizes(sizes, children.length) } : {}) };
+      };
+      return { ...tree, root: visit(tree.root), floating: tree.floating.map(floatingWindow => ({ ...floatingWindow, node: visit(floatingWindow.node)! })) };
+    };
+    if (!anchor.windowId) return restoreShares(insertNode(tree, place.collapsed ? { ...created, collapsed: true } : created,
+      { kind: "split", groupId: anchor.group.id, side: beside.side }, undefined, beside.share, true, beside.splitId));
+    const floatingWindow = tree.floating.find(item => item.id === anchor!.windowId)!;
+    const row = beside.side === "left" || beside.side === "right";
+    const children = floatingWindow.node.kind === "split" && floatingWindow.node.id === beside.splitId ? floatingWindow.node.children : [floatingWindow.node];
+    const known = siblings && index >= 0 && children.every(child => siblings[child.id] !== undefined);
+    const fraction = known ? children.reduce((sum, child) => sum + siblings![child.id]!, 0) : 1 - beside.share;
+    const incoming = known ? siblings![place.groupId!]! : beside.share;
+    const share = known ? incoming / (fraction + incoming) : beside.share;
+    const next = restoreShares(insertNode(tree, place.collapsed ? { ...created, collapsed: true } : created,
+      { kind: "split", groupId: anchor.group.id, side: beside.side }, undefined, share, true, beside.splitId));
+    const restored = next.floating.find(item => item.id === anchor!.windowId)!;
+    // A minimum-size clamp can hide the departing group's exact pixel share. Use the saved
+    // rectangle when the survivor still matches that projection, including the clamp.
+    if (place.window && place.window.x === floatingWindow.x && place.window.y === floatingWindow.y
+      && Math.abs(Math.max(row ? MIN_WINDOW.w : MIN_WINDOW.h, Math.round((row ? place.window.w : place.window.h) * fraction)) - (row ? floatingWindow.w : floatingWindow.h)) < 1) {
+      const after = known ? fraction + incoming : 1;
+      Object.assign(restored, place.window);
+      if (after < 1 - 1e-12) { if (row) restored.w = Math.max(MIN_WINDOW.w, Math.round(place.window.w * after)); else restored.h = Math.max(MIN_WINDOW.h, Math.round(place.window.h * after)); }
+    }
+    return next;
   }
   if (place.window) {
     const created = group([panel], panel, place.groupId), next = clone(tree);
     next.floating.splice(Math.min(place.windowIndex ?? next.floating.length, next.floating.length), 0,
-      { id: place.windowId ?? newId("w"), ...place.window, node: place.collapsed ? { ...created, collapsed: true } : created });
+      { id: place.windowId ?? newId("w"), ...place.window,
+        ...(place.anchor ? place.anchor.side === "left" || place.anchor.side === "right"
+          ? { w: Math.max(MIN_WINDOW.w, Math.round(place.window.w * place.anchor.share)) }
+          : { h: Math.max(MIN_WINDOW.h, Math.round(place.window.h * place.anchor.share)) } : {}),
+        node: place.collapsed ? { ...created, collapsed: true } : created });
     return next;
   }
   if (place.docked && !tree.root) { const created = group([panel], panel, place.groupId); return { ...clone(tree), root: place.collapsed ? { ...created, collapsed: true } : created }; }
@@ -847,7 +895,10 @@ function parsePlace(value: unknown, validId: (id: unknown) => id is string, fini
   const anchor = place.anchor as Record<string, unknown> | undefined;
   const beside = anchor && validId(anchor.panel) && ["left", "right", "top", "bottom"].includes(anchor.side as string) && finite(anchor.share) &&
     (anchor.share as number) > 0 && (anchor.share as number) < 1 ? { panel: anchor.panel, side: anchor.side as Side, share: anchor.share as number,
-      ...(validId(anchor.splitId) ? { splitId: anchor.splitId } : {}) } : undefined;
+      ...(validId(anchor.splitId) ? { splitId: anchor.splitId } : {}),
+      ...(anchor.shares && typeof anchor.shares === "object" && !Array.isArray(anchor.shares)
+        && Object.entries(anchor.shares).length <= 64 && Object.entries(anchor.shares).every(([id, share]) => validId(id) && finite(share) && share > 0 && share < 1)
+        ? { shares: { ...anchor.shares } as Record<string, number> } : {}) } : undefined;
   return { group: [...place.group] as string[], index: place.index as number, active: place.active,
     ...(validId(place.groupId) ? { groupId: place.groupId } : {}), ...(place.docked === true ? { docked: true as const } : {}),
     ...(place.collapsed === true ? { collapsed: true } : {}), ...(rect ? { window: rect,

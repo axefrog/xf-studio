@@ -54,7 +54,7 @@ import { FIRST_TAB_NAME, rewriteDock, viewOfPanel } from "./profiles-migration-d
 import { CLOSED_TAB_LIMIT, PROFILE_SESSION_SCHEMA, panelBindingOf, type PanelBinding, type ClosedTab, type LayoutTab, type PanelInstance, type ProfileSessionData, type SessionScene, type SessionView,
   type TabId, WORKSPACE_PROFILES_SCHEMA, type WorkspaceProfiles } from "./profile-session";
 import { addPanelDock, changePanelDock, dockWith, openIn, panelDock, removePanelsDock, replayPanelsDock } from "./panel-dock";
-import { activate, allGroups, panelPlace, type DockState, type ParkedPlace } from "../../platform/core/dock-layout";
+import { panelPlace, type ParkedPlace } from "../../platform/core/dock-layout";
 
 /** What a scene shows. */
 export type SceneTarget = { readonly subject?: SubjectRef; readonly look?: LookRef; readonly gen: number };
@@ -157,10 +157,6 @@ export class ProfileSessions {
   private readonly retainedContents = new Map<HistoryEntryId, Set<number>>();
   private readonly placementVersions = new Map<number, number>();
   private readonly latestPlaces = new Map<number, Map<string, Partial<Record<"wide" | "compact", ParkedPlace>>>>();
-  private readonly navigation = new Map<HistoryEntryId | undefined, Pick<ReturnType<FocusService["snapshot"]>, "views" | "panel" | "tab"> & {
-    groups: Map<number, { version: number; wide: string[]; compact: string[] }>;
-  }>();
-  private replaying = false;
   private readonly targets = new Map<string, SceneTarget>();
   /** Every ID the session holds, keeps in a closed fragment or gave out in this run: never given out again. */
   private readonly used = new Set<string>();
@@ -201,10 +197,10 @@ export class ProfileSessions {
     this.closed = this.closed.map(fragment => fragment.id ? fragment : { ...fragment, id: this.fresh(undefined, "closed-") });
     this.focus.restore({ ...data.focus, seq: data.seq });
     if (!this.focus.shownTab() || !this.tab(this.focus.shownTab()!)) this.focus.showTab(this.tabs[0]?.id);
-    this.focus.subscribe(() => { if (!this.replaying) this.rememberNavigation(); this.changed(); });
+    this.focus.subscribe(() => this.changed());
     const owner: ViewGraphOwner = {
       history: (target, options) => { this.graphTarget = target; this.scope = deps.history.open(viewScope(this.profile), this.historyTarget(), {
-        ...options, changed: () => { options?.changed?.(); if (!this.replaying) this.rememberNavigation(); } }); return this.graphScope(); },
+        ...options }); return this.graphScope(); },
       freshId: kind => this.freshId(kind),
     };
     // The graph holds each scene's display state; the session holds what it shows.
@@ -216,7 +212,6 @@ export class ProfileSessions {
       this.graph.adoptViews(this.tabId());
     }
     for (const view of this.graph.data().views) if (!this.graph.has(view.id) && typeof view.tab === "string") this.keptTabs.add(view.tab);
-    this.rememberNavigation();
   }
 
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
@@ -289,7 +284,7 @@ export class ProfileSessions {
     const current = this.scene(scene);
     if (look ? current.look?.collection === look.collection && current.look.look === look.look : !current.look) return;
     const { look: _old, ...rest } = current;
-    this.targets.set(scene, { ...rest, ...(look ? { look: { collection: look.collection, look: look.look } } : {}), gen: current.gen + 1 });
+    this.setSceneTarget(scene, { ...rest, ...(look ? { look: { collection: look.collection, look: look.look } } : {}), gen: current.gen + 1 });
     this.changed();
   }
   /** `scene.setSubject`: the scene shows `subject`; its `gen` rises. Never an Undo step. */
@@ -297,8 +292,15 @@ export class ProfileSessions {
     const current = this.scene(scene);
     if (subject ? current.subject?.kind === subject.kind && current.subject.id === subject.id : !current.subject) return;
     const { subject: _old, ...rest } = current;
-    this.targets.set(scene, { ...rest, ...(subject ? { subject: { kind: subject.kind, id: subject.id } } : {}), gen: current.gen + 1 });
+    this.setSceneTarget(scene, { ...rest, ...(subject ? { subject: { kind: subject.kind, id: subject.id } } : {}), gen: current.gen + 1 });
     this.changed();
+  }
+
+  /** Closed tabs may still name a live shared scene. Their stored copies follow its unrecorded target edits immediately. */
+  private setSceneTarget(scene: string, target: SceneTarget) {
+    this.targets.set(scene, target);
+    this.closed = this.closed.map(fragment => ({ ...fragment, nodes: fragment.nodes.map(item => item.slot === "scene" && item.node.id === scene
+      ? { ...item, node: withTarget(graphScene(item.node), target) } : item) }));
   }
 
   // ----- The dock -----
@@ -652,7 +654,6 @@ export class ProfileSessions {
    */
   private operate<T>(label: string, actionKind: string, work: () => T): T {
     if (this.collecting) return work();
-    this.rememberNavigation();
     const release = this.holdAll();
     try {
       const previous = clone(this.tabs), before = this.sessionValues(), collected = new Map<string, unknown>();
@@ -742,7 +743,7 @@ export class ProfileSessions {
     return {
       checkpoint: (keys, label, options) => {
         const collecting = this.collecting;
-        if (!collecting) { this.rememberNavigation(); return scope().checkpoint(keys, label, options); }
+        if (!collecting) return scope().checkpoint(keys, label, options);
         for (const key of keys) if (!collecting.has(key)) collecting.set(key, options?.read ? options.read(key) : this.graphTarget.read(key));
         return undefined;
       },
@@ -831,12 +832,10 @@ export class ProfileSessions {
         const closed = this.replayedFragments(tabs ? tabs.closed : this.closed, states);
         const identities = [...contents.values()].flatMap(content => content.panels.map(panel => panel.id));
         if (new Set(identities).size !== identities.length) return false;
-        const navigation = this.navigation.get(this.scope.top());
-        this.replaying = true;
         this.releaseReplay ??= this.holdAll();
         if (Object.keys(graphValues).length && !this.graphTarget.apply(graphValues, cause)) {
           const release = this.releaseReplay; this.releaseReplay = undefined;
-          try { release(); } finally { this.replaying = false; } return false;
+          release(); return false;
         }
         // Settled whole (tabs, fragments and the shown tab) before anyone hears; listeners hear once the move has settled (`settled`).
         this.releaseReplay ??= this.holdAll();
@@ -848,28 +847,16 @@ export class ProfileSessions {
         this.closed = clone(closed);
         this.updatePanelVersions(previous);
         this.settleShown({ ...(tabs?.shown ? { shown: tabs.shown } : {}), back, removed });
-        for (const { placement } of placements) this.presentView(placement);
-        const restoreActive = (tab: HeldTab): HeldTab => {
-          const groups = navigation?.groups.get(tab[CONTENT_ID]);
-          if (!groups || groups.version !== (this.placementVersions.get(tab[CONTENT_ID]) ?? 0)) return tab;
-          const state = panelDock(tab.dock);
-          let changed = false;
-          for (const size of ["wide", "compact"] as const) for (const active of groups[size])
-            if (allGroups(state[size]).some(item => item.group.panels.includes(active) && item.group.active !== active)) { state[size] = activate(state[size], active); changed = true; }
-          if (!changed) return tab;
-          const restored = { ...tab, dock: dockWith(tab.dock, state) }; this.rememberContent(restored); return restored;
-        };
-        this.tabs = this.tabs.map(restoreActive); this.closed = this.closed.map(fragment => ({ ...fragment, tab: restoreActive(fragment.tab) }));
-        if (navigation) this.focus.restoreNavigation({ views: Object.fromEntries(Object.entries(navigation.views).filter(([id]) => views.some(view => view.id === id))),
-          ...(navigation.tab && live.has(navigation.tab) ? { tab: navigation.tab } : this.focus.shownTab() ? { tab: this.focus.shownTab() } : {}),
-          ...(navigation.panel && this.panel(navigation.panel) ? { panel: navigation.panel } : {}) });
+        for (const { placement } of placements) this.opening = { ...clone(placement), revision: ++this.openingRevision };
+        // Navigation belongs to the live session, never to a history position. settleShown above
+        // handles D15's tab lifetime exception; updatePanelVersions clears only an unavailable focus.
         this.changed();
         return true;
       },
       settled: () => {
         const release = this.releaseReplay;
         this.releaseReplay = undefined;
-        try { this.graphTarget.settled?.(); } finally { try { release?.(); } finally { this.replaying = false; this.rememberNavigation(); this.pruneReplayState(); } }
+        try { this.graphTarget.settled?.(); } finally { try { release?.(); } finally { this.pruneReplayState(); } }
       },
     };
   }
@@ -945,7 +932,7 @@ export class ProfileSessions {
     for (const panel of tab.panels) latest.set(panel.id, Object.fromEntries((["wide", "compact"] as const).flatMap(size => {
       const place = panelPlace(dock[size], panel.id); return place ? [[size, place]] : [];
     })));
-    this.latestPlaces.set(identity, latest); this.rememberContent(tab); this.rememberNavigation();
+    this.latestPlaces.set(identity, latest); this.rememberContent(tab);
   }
   private pruneReplayState() {
     const held = this.scope.held(), contents = new Set([...this.tabs, ...this.closed.map(fragment => fragment.tab)].map(tab => tab[CONTENT_ID]));
@@ -954,19 +941,6 @@ export class ProfileSessions {
       for (const identity of identities) contents.add(identity);
     }
     for (const identity of this.contentStates.keys()) if (!contents.has(identity)) { this.contentStates.delete(identity); this.placementVersions.delete(identity); this.latestPlaces.delete(identity); }
-    for (const step of this.navigation.keys()) if (step !== undefined && !held.has(step)) this.navigation.delete(step);
-  }
-  private rememberNavigation() {
-    if (!this.scope || this.replaying) return;
-    const { views, panel, tab } = this.focus.snapshot();
-    const groups = new Map([...this.tabs, ...this.closed.map(fragment => fragment.tab)].map(content => {
-      const dock = content.dock?.state as Partial<DockState> | undefined;
-      const activeTabs = (size: keyof DockState) => allGroups({ root: dock?.[size]?.root ?? null,
-        floating: dock?.[size]?.floating ?? [], closed: [] }).map(item => item.group.active);
-      return [content[CONTENT_ID], { version: this.placementVersions.get(content[CONTENT_ID]) ?? 0,
-        wide: activeTabs("wide"), compact: activeTabs("compact") }] as const;
-    }));
-    this.navigation.set(this.scope.top(), { views, groups, ...(panel ? { panel } : {}), ...(tab ? { tab } : {}) });
   }
   /** The tab beside place `at` once the tab there went: the next, else the last (undefined: none). */
   private neighbour(at: number): TabId | undefined { return (this.tabs[Math.min(at, this.tabs.length - 1)] ?? this.tabs.at(-1))?.id; }

@@ -375,3 +375,12 @@ test("a parked group comes back at its share of a three-way split, and a floatin
   expect(locate(back, "quality")!.group.collapsed).toBe(true);
   expect(back.floating.map(window => [window.x, window.y, window.w, window.h])).toEqual([[40, 40, 300, 400]]);
 });
+
+
+test("floating composite remembered shares survive persistence and module withdrawal", () => {
+  const tree: DockTree = { root: null, floating: [{ id: "floating", x: 50, y: 70, w: 1000, h: 600,
+    node: split("row", [group(["a"], "a", "ga"), group(["b"], "b", "gb")], [.42, .58], "composite") }], closed: [] };
+  const parked = parkPanels(tree, ["a"]), restored = parseTree(JSON.parse(JSON.stringify(parked)), ["b"], tree, ["a"])!;
+  expect(restored.parked).toEqual(parked.parked);
+  expect(unparkPanels(restored, ["a"], tree, area)).toEqual(tree);
+});
