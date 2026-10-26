@@ -11,8 +11,10 @@ import { Cr2wFile } from "../../xf-studio/authoring/src/native/cr2w-file";
 import { Cr2wDecoder } from "../../xf-studio/authoring/src/native/cr2w-reader";
 import { RedObject } from "../../xf-studio/authoring/src/native/red-model";
 import { NativeBudgetError, NativeMalformedError } from "../../xf-studio/authoring/src/native/native-errors";
+import { NATIVE_READER_VERSION } from "../../xf-studio/authoring/src/native/resource-document";
+import { SECTOR_READER_VERSION } from "../../xf-studio/authoring/src/native/streaming-sector";
 import type { Solid, SolidRegion, Vec3 } from "./model.ts";
-import { nearestSolids, pathBounds, pathDistance, pathNearBox, WORLD_SOLID_CAP } from "./solids.ts";
+import { significantSolids, pathBounds, pathDistance, pathNearBox, WORLD_SOLID_CAP } from "./solids.ts";
 import { ColliderOverlap } from "./solid-overlap.ts";
 import { COLLIDER_STRIDE, createSectorCache, SectorWorkers, type SourceStamp, type SectorRequest, type CachedSector } from "./sector-cache.ts";
 
@@ -20,16 +22,16 @@ export interface SolidPort {
   status?(path: readonly Vec3[], signal: AbortSignal): Promise<{ cold: boolean; sectors?: number; missing?: number }>;
   around(path: readonly Vec3[], margin: number, signal: AbortSignal): Promise<SolidRegion>;
 }
-export const SOLID_READER_VERSION = 6;
+export const SOLID_READER_VERSION = 7;
 export const SOLID_RADIUS = 350;
 const counts = () => ({ box: 0, sphere: 0, capsule: 0, convexMesh: 0, triangleMesh: 0 });
 export const emptySolids = (): SolidRegion => ({ solids: [], solidInfo: { source: "vanilla", readerVersion: SOLID_READER_VERSION,
   available: false, sectors: 0, counts: counts(), rawCounts: counts(), levels: {}, overlap: { shapes: 0, crossLevelShapes: 0, actors: 0, completeActors: 0, pairs: {}, examples: [] },
   omittedMeshShapes: 0, cut: 0, cap: WORLD_SOLID_CAP, variants: "defaults" } });
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-/** In-memory identity only; disk entries are individual sectors, independent of recording paths. */
+/** Assembled-region identity; individual sector entries use their own source-archive keys. */
 export function solidCacheKey(sources: readonly SourceStamp[], path: readonly Vec3[], radius: number, readerVersion = SOLID_READER_VERSION): string {
-  return digest({ readerVersion, sources, path, radius });
+  return digest({ readerVersion, nativeReader: NATIVE_READER_VERSION, sectorReader: SECTOR_READER_VERSION, sources, path, radius });
 }
 const BLOCKS = ["base\\worlds\\03_night_city\\_compiled\\default\\blocks\\all.streamingblock", "base\\worlds\\03_night_city\\_compiled\\default\\ep1\\blocks\\all.streamingblock"];
 type Descriptor = { resource: string; category: string; level: number; min: Vec3; max: Vec3; ranges: number[]; source: number };
@@ -46,6 +48,27 @@ export function vanillaSources(root: string): SourceStamp[] {
 export function createGameSolidSource(cacheDir: string, gameRoot = () => process.env.XFS_TEST_GAME_ROOT ?? new LocalSettingsStore().load().settings.gameRoot): SolidPort {
     const workers = new SectorWorkers(3), cache = createSectorCache(cacheDir, workers.read), ready = new Map<string, SolidRegion>(), jobs = new Map<string, Job>();
   let context: Context | undefined;
+  const regionDir = join(cacheDir, "regions"), regionFile = (key: string) => join(regionDir, `${key}.json`);
+  const hasRegion = (key: string) => { try { const size = statSync(regionFile(key)).size; return size > 0 && size <= 32 * 1024 * 1024; } catch { return false; } };
+  const readRegion = (key: string): SolidRegion | undefined => {
+    const file = regionFile(key);
+    try {
+      if (!hasRegion(key)) return;
+      const region = JSON.parse(readFileSync(file, "utf8")) as SolidRegion;
+      if (region.solidInfo?.readerVersion !== SOLID_READER_VERSION || !Array.isArray(region.solids) || region.solids.length > WORLD_SOLID_CAP) return;
+      return region;
+    } catch { /* Rebuild a damaged assembled region from individual sectors. */ }
+  };
+  const writeRegion = (key: string, region: SolidRegion) => {
+    mkdirSync(regionDir, { recursive: true });
+    const file = regionFile(key), temp = join(regionDir, `.${randomUUID()}.tmp`);
+    const json = JSON.stringify(region);
+    if (Buffer.byteLength(json) > 32 * 1024 * 1024) throw new NativeBudgetError("Assembled solid region exceeds 32 MiB.");
+    try { writeFileSync(temp, json); renameSync(temp, file); } finally { rmSync(temp, { force: true }); }
+    const files = readdirSync(regionDir).filter(name => name.endsWith(".json")).map(name => ({ path: join(regionDir, name), stamp: statSync(join(regionDir, name)) }))
+      .sort((a, b) => b.stamp.mtimeMs - a.stamp.mtimeMs);
+    let bytes = 0; for (const entry of files) { bytes += entry.stamp.size; if (bytes > 128 * 1024 * 1024) rmSync(entry.path, { force: true }); }
+  };
   function getContext(signal: AbortSignal): Context | undefined {
     signal.throwIfAborted(); const root = gameRoot(); if (!root) return;
     const sources = vanillaSources(root), key = digest({ sources, metadata: 1 });
@@ -94,7 +117,7 @@ export function createGameSolidSource(cacheDir: string, gameRoot = () => process
   const request = (c: Context, d: Descriptor): SectorRequest => ({ root: c.root, source: c.sources[d.source], resource: d.resource });
   async function build(c: Context, path: readonly Vec3[], signal: AbortSignal): Promise<SolidRegion> {
     const started = performance.now(), result = emptySolids(); result.solidInfo.available = true;
-    const bounds = pathBounds(path), solids: Solid[] = [], overlap = new ColliderOverlap(), distance = pathDistance(path), descriptors = select(c, path);
+    const bounds = pathBounds(path), selection = significantSolids(), overlap = new ColliderOverlap(), distance = pathDistance(path), descriptors = select(c, path);
     cache.begin();
     const pending = new Map<number, Promise<CachedSector>>();
     const schedule = (i: number) => { if (i < descriptors.length && !signal.aborted) { const p = cache.read(request(c, descriptors[i]), signal); p.catch(() => {}); pending.set(i, p); } };
@@ -125,7 +148,7 @@ export function createGameSolidSource(cacheDir: string, gameRoot = () => process
           }
           const x = rows[at + 5], y = rows[at + 6], z = rows[at + 7];
           if (x < bounds.min[0] - SOLID_RADIUS || x > bounds.max[0] + SOLID_RADIUS || y < bounds.min[1] - SOLID_RADIUS || y > bounds.max[1] + SOLID_RADIUS || z < bounds.min[2] - SOLID_RADIUS || z > bounds.max[2] + SOLID_RADIUS) continue;
-          const center: Vec3 = [x, y, z]; if (distance(center) > SOLID_RADIUS ** 2) continue;
+          const center: Vec3 = [x, y, z], distance2 = distance(center); if (distance2 > SOLID_RADIUS ** 2) continue;
           if (++shapeCount > 500_000 || shapeCount % 1024 === 0 && performance.now() - started > 30_000) throw new NativeBudgetError("This path exceeds the collider preparation budget.");
           inside++; actorId ||= `${resourceHash}:${ni}:${ai}`;
           const axes: Solid["axes"] = [[rows[at + 8], rows[at + 9], rows[at + 10]], [rows[at + 11], rows[at + 12], rows[at + 13]], [rows[at + 14], rows[at + 15], rows[at + 16]]];
@@ -144,20 +167,20 @@ export function createGameSolidSource(cacheDir: string, gameRoot = () => process
           }
           result.solidInfo.counts[kind]++;
           if (kind === "convexMesh" || kind === "triangleMesh") { result.solidInfo.omittedMeshShapes++; continue; }
-          solids.push({ id, kind, center, axes, size: size! });
+          selection.add({ id, kind, center, axes, size: size! }, distance2);
         }
         finishActor();
       }
       signal.throwIfAborted();
       for (const s of c.sources) { const now = statSync(s.path); if (now.size !== s.size || now.mtimeMs !== s.mtimeMs) throw Error("Game archives changed while reading the city. Open the recording again."); }
-      const selected = nearestSolids(solids, path); result.solids = selected.solids; result.solidInfo.cut = selected.cut; return result;
+      const selected = selection.finish(); result.solids = selected.solids; result.solidInfo.cut = selected.cut; return result;
     } finally { try { await workers.closeIdle(); cache.trim(); } finally { cache.end(); } }
   }
   return {
     async status(path, signal) {
       path = compactPath(path);
       const c = getContext(signal); if (!c || !path.length) return { cold: false };
-      const key = solidCacheKey(c.sources, path, SOLID_RADIUS); if (ready.has(key)) return { cold: false };
+      const key = solidCacheKey(c.sources, path, SOLID_RADIUS); if (ready.has(key) || hasRegion(key)) return { cold: false };
       cache.begin(false);
       try { const selected = select(c, path), missing = selected.filter(d => !cache.has(request(c, d))).length;
         return { cold: missing > 0, sectors: selected.length, missing };
@@ -167,9 +190,10 @@ export function createGameSolidSource(cacheDir: string, gameRoot = () => process
       path = compactPath(path);
       const c = getContext(signal); if (!c || !path.length) return emptySolids();
       const key = solidCacheKey(c.sources, path, SOLID_RADIUS); if (ready.has(key)) return ready.get(key)!;
+      const saved = readRegion(key); if (saved) { ready.clear(); ready.set(key, saved); return saved; }
       let job = jobs.get(key);
       if (!job) {
-        const ctl = new AbortController(), promise = build(c, path, ctl.signal).then(result => { ctl.signal.throwIfAborted(); ready.clear(); ready.set(key, result); return result; });
+        const ctl = new AbortController(), promise = build(c, path, ctl.signal).then(result => { ctl.signal.throwIfAborted(); writeRegion(key, result); ready.clear(); ready.set(key, result); return result; });
         job = { ctl, promise, waiters: 0 }; jobs.set(key, job); const mine = job;
         void promise.finally(() => { if (jobs.get(key) === mine) jobs.delete(key); }).catch(() => {});
       }

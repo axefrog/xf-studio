@@ -76,10 +76,46 @@ export function distanceToPath(p: Vec3, path: readonly Vec3[]): number {
   }
   return best;
 }
-export function nearestSolids(solids: readonly Solid[], path: readonly Vec3[], cap = WORLD_SOLID_CAP): { solids: Solid[]; cut: number } {
-  const distance = pathDistance(path);
-  const ordered = solids.map(s => ({ s, d: distance(s.center) })).sort((a, b) => a.d - b.d || (a.s.id < b.s.id ? -1 : a.s.id > b.s.id ? 1 : 0));
-  return { solids: ordered.slice(0, cap).map(x => x.s), cut: Math.max(0, ordered.length - cap) };
+/** Keep city-scale volumes in the bounded wire payload. Screen-size selection happens later, for the current camera. */
+export function significantSolids(cap = WORLD_SOLID_CAP) {
+  type Candidate = { solid: Solid; extent: number; volume: number };
+  const heap: Candidate[] = []; let total = 0;
+  const less = (a: Candidate, b: Candidate) => a.extent < b.extent || a.extent === b.extent &&
+    (a.volume < b.volume || a.volume === b.volume && a.solid.id > b.solid.id);
+  return {
+    /** distance2 is the already-computed squared distance from the recorded path. */
+    add(solid: Solid, distance2: number) {
+      total++;
+      const half: Vec3 = solid.kind === "box" ? solid.size :
+        [solid.size[0], solid.size[0], solid.size[0] + (solid.kind === "capsule" ? solid.size[1] / 2 : 0)];
+      const axes = solid.axes;
+      const extent = 2 * Math.max(
+        Math.abs(axes[0][0]) * half[0] + Math.abs(axes[1][0]) * half[1] + Math.abs(axes[2][0]) * half[2],
+        Math.abs(axes[0][1]) * half[0] + Math.abs(axes[1][1]) * half[1] + Math.abs(axes[2][1]) * half[2],
+        Math.abs(axes[0][2]) * half[0] + Math.abs(axes[1][2]) * half[1] + Math.abs(axes[2][2]) * half[2]);
+      if (!Number.isFinite(extent) || extent < 2 && distance2 > 30 * 30) return;
+      const [a, b, c] = axes, determinant = Math.abs(a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0]) + a[2] * (b[0] * c[1] - b[1] * c[0]));
+      const r = solid.size[0];
+      const volume = determinant * (solid.kind === "box" ? 8 * half[0] * half[1] * half[2] :
+        solid.kind === "sphere" ? 4 / 3 * Math.PI * r ** 3 : Math.PI * r * r * solid.size[1] + 4 / 3 * Math.PI * r ** 3);
+      const candidate = { solid, extent, volume };
+      if (heap.length === cap) {
+        if (!less(heap[0], candidate)) return;
+        heap[0] = candidate; let i = 0;
+        for (;;) {
+          const l = i * 2 + 1, r = l + 1;
+          if (l >= heap.length) break;
+          const child = r < heap.length && less(heap[r], heap[l]) ? r : l;
+          if (!less(heap[child], heap[i])) break;
+          [heap[i], heap[child]] = [heap[child], heap[i]]; i = child;
+        }
+      } else {
+        let i = heap.length; heap.push(candidate);
+        while (i > 0) { const p = (i - 1) >> 1; if (!less(heap[i], heap[p])) break; [heap[i], heap[p]] = [heap[p], heap[i]]; i = p; }
+      }
+    },
+    finish() { return { solids: heap.sort((a, b) => less(a, b) ? 1 : less(b, a) ? -1 : 0).map(x => x.solid), cut: total - heap.length }; },
+  };
 }
 
 /** Exact nearest-segment queries. A box tree avoids shapes × recorder-samples work, especially on long stationary recordings. */

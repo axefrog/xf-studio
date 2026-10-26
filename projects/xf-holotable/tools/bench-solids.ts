@@ -17,7 +17,7 @@ const options = { ...defaultOptions(), solidCacheDir: join(out, "cache") }, runs
 const run4 = runs.find(r => r.session.startsWith("82068e42") && r.run === 4), largest = [...runs].sort((a, b) => b.bytes - a.bytes)[0];
 if (!run4 || !largest) throw Error("The requested run 4 and a largest recording must be available.");
 const signal = AbortSignal.timeout(120_000), results = [];
-for (const r of [run4, largest]) {
+for (const r of args.includes("--run4-only") ? [run4] : args.includes("--largest-only") ? [largest] : [run4, largest]) {
   const h = createService(options).handlers;
   let t = performance.now();
   const s = await h["session.open"]({ dir: r.dir }, signal) as Session;

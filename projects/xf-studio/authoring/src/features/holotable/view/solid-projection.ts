@@ -2,7 +2,7 @@
 import type { HoloSolid, Vec3 } from "../types";
 import { clipToRect, type camera, type ClippedRun } from "./projection";
 
-export const SOLID_DRAW_CAP = 1_500;
+export const SOLID_DRAW_CAP = 900;
 type Point = [number, number];
 export interface SolidDrawing { kind: "solid"; id: string; lines: ClippedRun[]; faces: { points: Point[]; top: boolean }[]; opacity: number }
 export interface SolidInstance { kind: "solid"; id: string; source: HoloSolid; opacity: number; extentPx: number }
@@ -35,7 +35,7 @@ function prepare(s: HoloSolid) {
 /** Immutable snapshot geometry is prepared once; camera-dependent projection is never retained. */
 export function solidGeometry(s: HoloSolid) { let g = geometry.get(s); if (!g) geometry.set(s, g = prepare(s)); return g; }
 
-export function solidDrawing(s: HoloSolid, C: Camera, opacity: number, fillFaces = true): SolidDrawing {
+export function solidDrawing(s: HoloSolid, C: Camera, opacity: number, fillFaces = true, segments = 24): SolidDrawing {
   const out: SolidDrawing = { kind: "solid", id: s.id, lines: [], faces: [], opacity };
   const world = (p: Vec3): Vec3 => [s.center[0] + s.axes[0][0] * p[0] + s.axes[1][0] * p[1] + s.axes[2][0] * p[2],
     s.center[1] + s.axes[0][1] * p[0] + s.axes[1][1] * p[1] + s.axes[2][1] * p[2],
@@ -66,8 +66,8 @@ export function solidDrawing(s: HoloSolid, C: Camera, opacity: number, fillFaces
     if (d <= r * r || !r) continue;
     const n = unit(k), u = unit(cross(n, Math.abs(n[2]) < 0.9 ? [0, 0, 1] : [0, 1, 0])), v = cross(n, u);
     const center = add(origin, mul(k, r * r / d)), radius = r * Math.sqrt(1 - r * r / d);
-    for (let i = 0; i < 24; i++) {
-      const angle = i * Math.PI / 12, p = add(center, add(mul(u, radius * Math.cos(angle)), mul(v, radius * Math.sin(angle))));
+    for (let i = 0; i < segments; i++) {
+      const angle = i * 2 * Math.PI / segments, p = add(center, add(mul(u, radius * Math.cos(angle)), mul(v, radius * Math.sin(angle))));
       if (!h || sign * (p[2] - origin[2]) >= 0) contour.push(world(p));
     }
   }
@@ -79,11 +79,11 @@ export function solidDrawing(s: HoloSolid, C: Camera, opacity: number, fillFaces
     }
   }
   // The projected convex hull joins the two cap arcs and their cylinder tangents in screen order.
-  const ring = hull(contour, C); if (ring.length < 3) return out;
+  const ring = h ? hull(contour, C) : contour; if (ring.length < 3) return out;
   line(ring, true); face(ring);
   const meridian: Vec3[] = [];
-  for (let i = 0; i < 24; i++) {
-    const angle = i * Math.PI / 12;
+  for (let i = 0; i < segments; i++) {
+    const angle = i * 2 * Math.PI / segments;
     meridian.push(world([r * Math.cos(angle), 0, r * Math.sin(angle) + (Math.sin(angle) >= 0 ? h : -h)]));
   }
   line(meridian, true);

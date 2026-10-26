@@ -38,7 +38,7 @@ export function solidCanvas(canvas: HTMLCanvasElement, changed: () => void) {
       for (const instance of solids) {
         const s = instance.source, fillFaces = instance.extentPx >= 12;
         if (s.kind !== "box") {
-          const drawing = solidDrawing(s, C, instance.opacity, fillFaces);
+          const drawing = solidDrawing(s, C, instance.opacity, fillFaces, instance.extentPx < 64 ? 16 : 24);
           if (fillFaces) { ctx.beginPath(); for (const f of drawing.faces) path(f.points, true); ctx.globalAlpha = instance.opacity * 0.04; ctx.fill(); }
           ctx.beginPath(); for (const line of drawing.lines) path(line.points, false); ctx.globalAlpha = instance.opacity; ctx.stroke(); continue;
         }

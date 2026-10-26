@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import { createService } from "../src/service.ts";
 import { emptySolids, solidCacheKey } from "../src/solid-source.ts";
-import { distanceToPath, nearestSolids, pathDistance, WORLD_SOLID_CAP, worldPose } from "../src/solids.ts";
+import { distanceToPath, pathDistance, significantSolids, WORLD_SOLID_CAP, worldPose } from "../src/solids.ts";
 import type { Solid, Vec3 } from "../src/model.ts";
 import { writeFixture } from "./fixture.ts";
 
@@ -13,7 +13,7 @@ test("cache identities include every source's path, size and precise modificatio
   const key = solidCacheKey([a], path, 250);
   expect(solidCacheKey([{ ...a }], path, 250)).toBe(key);
   for (const change of [{ size: 101 }, { mtimeMs: 123.5 }, { path: "other/archive.archive" }]) expect(solidCacheKey([{ ...a, ...change }], path, 250)).not.toBe(key);
-  expect(solidCacheKey([a], path, 250, 7)).not.toBe(key);
+  expect(solidCacheKey([a], path, 250, 8)).not.toBe(key);
   expect(solidCacheKey([a, a], path, 250)).not.toBe(key);
   expect(solidCacheKey([a], path, 251)).not.toBe(key);
 });
@@ -35,18 +35,28 @@ test("the exact path index agrees with an independent linear scan, including zer
   expect(pathDistance([])([1, 2, 3])).toBe(Infinity);
 });
 
-test("world.around returns solids nearest the path, caps them and reports the cut", async () => {
+test("world.around keeps large volumes ahead of nearby props, caps them and reports the cut", async () => {
   const fixture = writeFixture();
   try {
     const { handlers } = createService({ recordingsRoot: fixture.root, worldPackPath: join(fixture.root, "absent.json"),
       solidSource: { async around(path) {
-        const data = emptySolids(), solids = Array.from({ length: WORLD_SOLID_CAP + 5 }, (_, i) => solid(String(i), [0, WORLD_SOLID_CAP - i, 10]));
-        const chosen = nearestSolids(solids, path); return { solids: chosen.solids, solidInfo: { ...data.solidInfo, available: true, cut: chosen.cut } };
+        const data = emptySolids(), choose = significantSolids();
+        for (let i = 0; i < WORLD_SOLID_CAP + 5; i++) choose.add({ ...solid(String(i), [0, i, 10]), size: [1, 2, 3 + i / 100] }, i * i);
+        const chosen = choose.finish(); return { solids: chosen.solids, solidInfo: { ...data.solidInfo, available: true, cut: chosen.cut } };
       } } });
     const result = await handlers["world.around"]({ dir: fixture.dir }, new AbortController().signal) as any;
     expect(result.solids.length).toBe(WORLD_SOLID_CAP); expect(result.solidInfo.cut).toBe(5);
-    expect(result.solids[0].center).toEqual([0, 0, 10]);
-    for (let i = 1; i < result.solids.length; i++) expect(Math.abs(result.solids[i - 1].center[1])).toBeLessThanOrEqual(Math.abs(result.solids[i].center[1]));
+    expect(result.solids[0].center).toEqual([0, WORLD_SOLID_CAP + 4, 10]);
+    expect(result.solids.at(-1).center).toEqual([0, 5, 10]);
     await expect(handlers["world.around"]({ dir: fixture.dir, margin: Infinity }, new AbortController().signal)).rejects.toThrow(/Margin/);
   } finally { fixture.dispose(); }
+});
+
+test("world significance keeps small nearby shapes, omits small distant props and breaks extent ties by volume", () => {
+  const chosen = significantSolids(2);
+  chosen.add({ ...solid("distant-prop", [80, 0, 0]), size: [0.1, 0.1, 0.1] }, 80 ** 2);
+  chosen.add({ ...solid("near-prop", [20, 0, 0]), size: [0.1, 0.1, 0.1] }, 20 ** 2);
+  chosen.add({ ...solid("thin-wall", [80, 0, 0]), size: [1, 1, 10] }, 80 ** 2);
+  chosen.add({ ...solid("large-wall", [80, 0, 0]), size: [2, 2, 10] }, 80 ** 2);
+  expect(chosen.finish()).toMatchObject({ solids: [{ id: "large-wall" }, { id: "thin-wall" }], cut: 2 });
 });
