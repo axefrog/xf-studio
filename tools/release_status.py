@@ -187,7 +187,23 @@ def board_rows(today: date) -> list[dict]:
             target = re.split(r"[:;(]", rest, maxsplit=1)[0].strip()
             progress = {"done": min(done, total), "total": total, "target": target,
                         "public": not re.search(r"\b(none|no (public|separate public) release)\b", rest, re.I)}
-        rows.append({"chat": m.group(1).strip(), "state_date": stamp.isoformat() if stamp else None,
+        # Optional **Milestones:** line: "✓ label; ✓ label; ○ label" in order (✓/✔/[x] done; ○/·/[ ] open).
+        # When present it is the source of done/total, so the meter and the checklist can't disagree.
+        ms = re.search(r"\*\*Milestones:\*\*\s*([^|]+?)(?:\s\*\*[A-Z]|\s\||$)", body)
+        if ms:
+            items = []
+            for part in [p.strip() for p in ms.group(1).split(";") if p.strip()]:
+                mark = re.match(r"^(✓|✔|\[x\]|○|·|\[ \])\s*", part, re.I)
+                label = re.sub(r"^\d+[.)]?\s*", "", part[mark.end():] if mark else part).strip().rstrip(".")
+                items.append({"label": label, "done": bool(mark and mark.group(1).lower() in ("✓", "✔", "[x]"))})
+            if items:
+                progress = progress or {"target": None, "public": not re.search(r"\b(none|no (public|separate public) release)\b", text or "", re.I)}
+                progress.update({"milestones": items, "done": sum(i["done"] for i in items), "total": len(items)})
+        plan = None
+        if text:
+            after = re.sub(r"^\[\d+\s*/\s*\d+\]\s*", "", text)
+            plan = after.split(":", 1)[1].strip() if ":" in after.split(";", 1)[0] else after
+        rows.append({"chat": m.group(1).strip(), "state_date": stamp.isoformat() if stamp else None, "plan": plan,
                      "state_age_days": (today - stamp).days if stamp else None,
                      "release": text, "progress": progress,
                      "public": progress["public"] if progress else None})
