@@ -10,17 +10,94 @@ The service speaks JSON lines over stdin/stdout and opens no port. The Studio ho
 | --- | --- | --- |
 | `live.status` | none | Bridge availability, whether the recorder is active, and feed state; discovery is cached for 5 s |
 | `live.watch` | none | `{watch}`: an independent client lease |
-| `live.poll` | `{watch, since?, level?}` | Bounded new V/camera/event/gap rows, session metadata, feed state and the next `since` cursor |
+| `live.poll` | `{watch, since?, level?}` | Bounded new V/camera/actor/event/gap rows, session metadata, feed state and the next `since` cursor |
 | `live.stop` | `{watch}` | Releases that client's lease |
 | `world.around` | `{watch, since?}` | `{version, world, pending, cold}`; cached geometry only, never waits for preparation |
 
-The first poll, or a changed session/run/world, returns `reset:true`. A client replaces its tracks before appending that response. The `since` cursor indexes the four append-only tracks in that epoch. `more` on this response means the client has more retained rows to consume; `state.more` means the bridge itself has unread pages. Neither is a gap. A disclosure-level change clears and refetches only events from index zero; V, camera and gap cursors stay in place. Hiding and showing retains the committed cursor, avoiding a full history reload.
+The first poll, or a changed session/run/world, returns `reset:true`. A client replaces its tracks before appending that response. The `since` cursor indexes the five append-only tracks in that epoch. `more` on this response means the client has more retained rows to consume; `state.more` means the bridge itself has unread pages. Neither is a gap. A disclosure-level change clears and refetches only events from index zero; V, camera, actor and gap cursors stay in place. Hiding and showing retains the committed cursor, avoiding a full history reload.
 
 Polls deliver gaps before sample tracks and stop before advancing to another track if the current one does not fit, so a known break cannot arrive after its samples. On reset the client moves paused/scrubbed time to the new start, follows the newest sample when following, and removes selections absent from the new session.
 
 `live-bridge.ts` is the only bridge mapping. It creates `CommandApi({readOnly:true})`, calls the bridge-thread `recorder.status` contract introduced for 0.8.23, and reads `game.catchup` with the complete opaque cursor, `now:false` and `detail:true`. No recorder start, emergency control, digest or game-thread query is exposed. An older bridge's unknown-command answer keeps the Live game row hidden. Discovery and achieved live performance still need runtime row RS1.
 
 Before the first run, discovery has `active:false`, `channels:[]`, the established `session`, and null for all other result fields. The adapter and fake use that same payload. `start.s` is the recorder's QPC seconds, shared with samples and the manifest; derived ISO `start.at` is wall time for display only and never sets the timeline. The confirmed contract is built as bridge `fdb214bc` on `claude/bridge-0823`, pending main for 0.8.23.
+
+## Recorded people, incidents and coverage
+
+The shared replay/live adapter preserves the recorder's actual actor fields as
+`actors: ActorSample[]`: `{t, who, valid, entity?, position?, yaw?, command_state?, prepared?}`.
+It keeps invalid observations (`valid:false`, no `position`) for counting and path breaks.
+The current actor sampler does **not** emit `record`, `affiliation` or `crowd`; those fields
+are not invented or borrowed from incident participants. These are the selected recorder
+handles, not a census of everyone around V. People is a base Show toggle, off initially,
+after Camera: 3 px muted dots, fading trails over the last five seconds, and command state
+in the existing inspector. Stale/invalid samples are not drawn as current; trails break on
+invalid observations, entity changes, sample gaps and known recorder gaps.
+
+`EventKind` includes **`"incident"`**. Each row from the native `incidents` channel becomes:
+
+```ts
+{
+  id: string, kind: "incident", t: number, seq: number,
+  at?: [number, number, number], summary: "Incident observation",
+  level: "full", cite: `recorder:${session}:${run}:${seq}`,
+  incident?: Incident // present at full; absent at structure
+}
+```
+
+`incident` is the explicitly typed native payload in [model.ts](src/model.ts), not a JSON
+string or untyped `data` bag. Its exact field groups (optional unless stated) are:
+
+- Required `event`: `witness.report | witness.gap | witness.unwitnessed | incident.coverage`.
+- Identity/classification: `schema`, `incident` (native id), `kind` (native report kind),
+  `world`, `state`, `v_involved`. `kind` is absent where the native receipt has none.
+- `participants`: `{entity, record?, affiliation?, roles, is_v, crowd, nearest_m, who?, position?}[]`;
+  `participants_dropped`. These belong to the report, not the actor track.
+- `place`: `{position, first, last, district_v}`; `when`:
+  `{start_sim_s, end_sim_s, duration_s, start_game_s?, end_game_s?}`. Game times may be null.
+- `declared`: `{id, kind, roles: Record<string,string>, at, ttl_s}`.
+- `perceived`: `{witnessed, modes, saw, heard, told, sight?}`. `saw` is null or
+  `{n, first_sim_s, nearest_m, via}`; `heard` is null or
+  `{n, first_sim_s, nearest_m, radius_m}`; `told` is `{supported, note}`.
+  `sight` (also an optional top-level field) is
+  `{samples, in_range, in_view, blocked, unchecked, view_unavailable, actors_missing}`.
+- Report evidence/state: `confidence`, `evidence: Record<string,number>`, `evidence_score`,
+  `observations`, `closed` (nullable), `reported`, `report_pending`, `report_gap`,
+  `continues` (nullable), `merged`, `passive`, `truncated`, `delayed`.
+- Gap/unwitnessed receipts: `reason`, `closed_by`, `modes`, `queue_limit`, `note`.
+- Coverage receipt: `valid`, `open`, `kept_closed`, `observed`, `accepted`, `dropped_rate`,
+  `dropped_invalid`, `reports`, `reports_queued`, `reports_delayed`, `pending_reports`,
+  `report_gaps`, `tap_admitted`, `tap_dropped_cap`, `tap_dropped_weak`, `tap_dropped_repeat`,
+  `evicted_open`, `declared_open`, `declared_unwitnessed`, `sight_samples`,
+  `sight_dropped_rate`, `told_supported`, and numeric `declared` count on coverage receipts.
+
+`at` copies `incident.place.position`, falling back to `incident.declared.at` only when
+present; receipts without a place remain unplaced. All story-bearing payload, including
+declared ids/roles and participant records, stays inside `incident` and is removed at
+structure level. The existing inspector shows the native kind at full and `incident` at
+structure. There are no separate death/combat/crime recorder channels in this bridge;
+if such classifications arrive in `incident.kind`, they are retained there.
+
+`meta.channels` now returns **`ChannelCoverage[]`**:
+`{name: string, read: number, kept: number, dropped: number, reasons: Record<string,number>}`
+for every declared channel, including zero-row and unmapped channels. Counts are source
+rows, not output items: `read = kept + dropped`, and `reasons` partitions `dropped`.
+A mapped row producing observations (including invalid actor entries or a valid empty
+actor list) is kept. Reasons are `"not mapped"` for unsupported channels, `"invalid"` for
+invalid source rows, `"no mapped content"` for filtered/duplicate or malformed mapped
+payloads, and `"batch budget"` for a dropped over-budget live page. Counts describe rows
+actually read; unavailable chunks and transport loss remain separately disclosed by gaps,
+`meta.problems` and `meta.dropped`. Manifest string lists remain readable; the adapter also
+accepts counted entries and starts fresh counters for each read. Studio accepts either
+metadata list form. Live cursors add `actors`; old cursors without it start that track at
+zero, and existing poll byte/row budgets apply across all five tracks.
+
+People evaluation binary-searches the last observation at the requested moment before
+walking the five-second window, avoiding a scan of future samples during early scrubbing.
+
+`bun tools/capture-live.ts --model` captures synthetic People-on views in light/dark at
+narrow/wide widths, beside the library Toggle pattern, under ignored
+`local/holotable/evidence/model/`, using its own headless browser and `?verify=1` workspace.
 
 ## Bounds and lifetime
 

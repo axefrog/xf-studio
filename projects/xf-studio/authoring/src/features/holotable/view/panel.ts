@@ -25,7 +25,7 @@ const NS = "http://www.w3.org/2000/svg";
 
 /** Every colour is a Studio token: cyan for live data and selection, the stage's strongest neutral for V, warning for gaps. */
 const STROKES: Readonly<Record<Style, string>> = {
-  grid: "var(--line-strong)", area: "var(--text-muted)", venue: "var(--line-strong)", cell: "var(--line-strong)", trail: "var(--stage-strong)",
+  people: "var(--text-muted)", grid: "var(--line-strong)", area: "var(--text-muted)", venue: "var(--line-strong)", cell: "var(--line-strong)", trail: "var(--stage-strong)",
   v: "var(--stage-strong)", cone: "var(--stage-strong)", camera: "var(--signal)", event: "var(--signal)", "event-selected": "var(--signal)",
   gap: "var(--warning)", label: "var(--text)", "label-muted": "var(--text-muted)",
 };
@@ -216,7 +216,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       shape.setAttribute("points", `${pt(s, 0)} ${pt(s * 0.7, 2.5)} ${pt(s * 0.25, Math.PI)} ${pt(s * 0.7, -2.5)}`);
     } else if (p.shape === "diamond") shape.setAttribute("points", `${x},${y - s} ${x + s},${y} ${x},${y + s} ${x - s},${y}`);
     else { shape.setAttribute("cx", String(x)); shape.setAttribute("cy", String(y)); shape.setAttribute("r", String(s / 2)); }
-    shape.setAttribute("style", `fill:${p.style === "event" ? "var(--signal-bg)" : colour};stroke:${p.style === "v" ? "var(--bg-app)" : colour};stroke-width:1.5`);
+    shape.setAttribute("style", `fill:${p.style === "event" ? "var(--signal-bg)" : colour};stroke:${p.style === "v" ? "var(--bg-app)" : colour};stroke-width:${p.style === "people" ? 0 : 1.5}`);
     if (p.id) shape.setAttribute("data-id", p.id);
     g.append(shape);
     if (p.style === "event-selected") { const ring = document.createElementNS(NS, "circle"); ring.setAttribute("cx", String(x)); ring.setAttribute("cy", String(y)); ring.setAttribute("r", String(s + 5)); ring.setAttribute("style", "fill:none;stroke:var(--signal);stroke-width:2"); g.append(ring); }

@@ -40,7 +40,7 @@ export function trailUntil(s: Session, t: number): Vec3[][] {
 /** Strips what a level does not allow. `structure` keeps kinds, counts and places; never words or names. */
 export function atLevel(e: TimelineEvent, level: ContentLevel): TimelineEvent {
   if (level === "full" || e.level === "structure") return e;
-  const { detail: _hidden, ...rest } = e;
+  const { detail: _hidden, incident: _incident, ...rest } = e;
   return rest;
 }
 

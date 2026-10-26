@@ -11,7 +11,7 @@ test("solid selection yields, converges on the synchronous significance set, and
  for(let i=0;i<200&&result.pending;i++)result=selection.step(solids,[0,0,0],C,clock+20);
  expect(result.pending).toBe(false);expect(result.instances).toHaveLength(900);
  const s:HoloSession={meta:{session:"s",run:0,start:0,end:1,from:0,to:1,channels:[],complete:true,dropped:0,missedDeadlines:0,largestGapS:0,coverage:"test",problems:[]},v:[],camera:[],events:[],gaps:[]};
- const sync=project(s,{provenance:null,areas:[],cells:[],solids},0,{v:false,camera:false,events:false,gaps:false,areas:false,cells:false,solids:true},ORBITS.tilt,800,500,null);
+ const sync=project(s,{provenance:null,areas:[],cells:[],solids},0,{v:false,camera:false,people:false,events:false,gaps:false,areas:false,cells:false,solids:true},ORBITS.tilt,800,500,null);
  expect(result.instances.map(i=>i.id).sort()).toEqual(sync.solids.map(i=>i.id).sort());
  selection.cancel();result=selection.step([], [1000,1000,0], camera([1000,1000,0],ORBITS.tilt,800,500),clock+10);expect(result.instances).toEqual([]);expect(result.pending).toBe(false);
 });

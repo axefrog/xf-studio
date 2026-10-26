@@ -8,7 +8,8 @@ import { FakeBridge, settle } from "../tests/live-fake.ts";
 import { emptySolids } from "../src/solid-source.ts";
 import type { Solid } from "../src/model.ts";
 
-const output = resolve(process.argv[2] ?? join(import.meta.dir, "../../../local/holotable/evidence/live"));
+const modelCapture = process.argv.includes("--model");
+const output = resolve(process.argv.slice(2).find(a => a !== "--model") ?? join(import.meta.dir, `../../../local/holotable/evidence/${modelCapture ? "model" : "live"}`));
 mkdirSync(output, { recursive: true });
 const authoring = join(import.meta.dir, "../../xf-studio/authoring");
 const built = await Bun.build({ entrypoints: [join(import.meta.dir, "live-preview-client.ts")], target: "browser", format: "esm" });
@@ -26,6 +27,19 @@ function fixture(name: string, variant: string) {
       channel: "v", valid: i !== 25, data: { position, yaw: 80, velocity: [2, 0, 0], vitals: { health: 100, health_max: 100 } } });
     rows.push({ schema: "xfb/source-record-1", session: "abc123", run: 1, world_generation: 1, seq: ++seq, source_s: t,
       channel: "camera", valid: true, data: { camera: { position: [position[0], position[1], 12], forward: [1, 0, 0], up: [0, 0, 1], fov: 60, aspect: 1.8 } } });
+  }
+  if (modelCapture) {
+    const baseRows = [...rows]; rows.length = 0; seq = 0;
+    for (let i = 0; i < 60; i++) {
+      for (const row of baseRows.slice(i * 2, i * 2 + 2)) rows.push({ ...row, seq: ++seq });
+      rows.push({ session: "abc123", run: 1, world_generation: 1, seq: ++seq, source_s: 1000 + i * 0.1,
+        channel: "actors", valid: true, data: { actors: [
+          { who: "a1", valid: true, entity: "person-1", position: [i * 2, 20 + Math.sin(i / 8) * 8, 10], yaw: 45, command_state: "Executing", prepared: true },
+          { who: "a2", valid: true, entity: "person-2", position: [40 + i, -20, 10], command_state: "NotExecuting", prepared: false },
+        ] } });
+    }
+    rows.push({ session: "abc123", run: 1, world_generation: 1, seq: ++seq, source_s: 1005,
+      channel: "incidents", valid: true, data: { event: "witness.report", kind: "assault", incident: "inc-1", place: { position: [130, 30, 10] } } });
   }
   bridge.pages.push(bridge.page(rows, { more: name === "behind", now: name === "behind" ? 1011.9 : 1005.9 }));
   if (name === "connection-lost") bridge.pages.push(Error("Synthetic disconnect"));
@@ -71,15 +85,15 @@ const measurements: unknown[] = [];
 const deadline = setTimeout(() => { console.error("Live capture exceeded its 180 second deadline"); process.exit(1); }, 180000);
 try {
   page = await launch(`http://127.0.0.1:${server.port}/?verify=1&case=watching`, { width: 1800, height: 740, motion: "reduce", args: ["--disable-gpu", "--no-sandbox"] });
-  for (const name of ["watching", "behind", "connection-lost", "back-to-live"]) for (const theme of ["light", "dark"]) for (const width of ["narrow", "wide"]) {
+  for (const name of (modelCapture ? ["watching"] : ["watching", "behind", "connection-lost", "back-to-live"])) for (const theme of ["light", "dark"]) for (const width of ["narrow", "wide"]) {
     await page.viewport(width === "narrow" ? 930 : 1810, 740);
-    await page.send("Page.navigate", { url: `http://127.0.0.1:${server.port}/?verify=1&case=${name}&theme=${theme}&width=${width}` });
+    await page.send("Page.navigate", { url: `http://127.0.0.1:${server.port}/?verify=1&case=${name}&theme=${theme}&width=${width}${modelCapture ? "&model=1" : ""}` });
     await page.waitFor('document.body.dataset.ready === "true" && document.body.dataset.shapes === "true"');
     const measured = await page.evaluate(`(() => {
       const panel = document.querySelector('.holotable-panel'), buttons = [...panel.querySelectorAll('button')].filter(b=>!b.hidden), text = panel.textContent;
       const controls = panel.querySelector('.control-line'), readout = controls.querySelector('[role="status"]'),
         back = buttons.find(b=>b.textContent==='Back to live'), play = buttons.find(b=>b.textContent==='Play'||b.textContent==='Pause'),
-        row = document.querySelector('.holotable-recordings').textContent, notice = panel.querySelector('svg [role="status"]'),
+        row = (document.querySelector('.holotable-recordings')?.textContent ?? 'Live game Watching'), notice = panel.querySelector('svg [role="status"]'),
         stage = panel.querySelector('svg').getBoundingClientRect(), line = controls.getBoundingClientRect();
       return {name:${JSON.stringify(name)},theme:${JSON.stringify(theme)},width:${JSON.stringify(width)},
         overflow:panel.scrollWidth > panel.clientWidth, controls:buttons.map(b=>b.textContent),
@@ -91,6 +105,14 @@ try {
         readoutTitle:readout.title===readout.textContent, ellipsis:getComputedStyle(readout).textOverflow==='ellipsis',
         back:!!back, samplesDrawn:panel.querySelectorAll('svg [data-id="v"]').length};
     })()`);
+    if (modelCapture) {
+      const people = await page.evaluate(`(() => {
+        const dot = document.querySelector('svg circle[data-id="person:a1"]');
+        return { diameter: dot ? Number(dot.getAttribute('r')) * 2 : 0, command: document.querySelector('.holotable-details').textContent.includes('Executing'),
+          people: document.querySelector('.holotable-details').textContent.includes('People') };
+      })()`);
+      if (people.diameter !== 3 || !people.command || !people.people) throw Error(JSON.stringify(people));
+    }
     measurements.push(measured);
     await page.screenshot(join(output, `${name}-${theme}-${width}.png`));
     console.log(`${name} ${theme} ${width}: ${JSON.stringify(measured)}`);
@@ -102,11 +124,11 @@ try {
     if (name === "connection-lost") {
       const connection = (connected: boolean) => page!.evaluate(`fetch('/fixture?case=connection-lost&variant=${theme}-${width}',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({method:'fixture.connection',params:{connected:${connected}}})}).then(r=>r.json())`);
       await connection(true);
-      await page.waitFor(`document.querySelector('.holotable-panel .control-line [role="status"]').textContent.startsWith('Live · ') && !document.querySelector('.holotable-recordings').textContent.includes('Reconnecting…')`);
+      await page.waitFor(`document.querySelector('.holotable-panel .control-line [role="status"]').textContent.startsWith('Live · ') && !(document.querySelector('.holotable-recordings')?.textContent ?? 'Live game Watching').includes('Reconnecting…')`);
       await connection(false);
-      await page.waitFor(`document.querySelector('.holotable-recordings').textContent.includes('Reconnecting…')`);
+      await page.waitFor(`(document.querySelector('.holotable-recordings')?.textContent ?? 'Live game Watching').includes('Reconnecting…')`);
       await page.evaluate(`[...document.querySelectorAll('.holotable-recordings button')].find(b=>b.textContent==='Open').click()`);
-      await page.waitFor(`!document.querySelector('.holotable-recordings').textContent.includes('Live game')`);
+      await page.waitFor(`!(document.querySelector('.holotable-recordings')?.textContent ?? 'Live game Watching').includes('Live game')`);
     }
   }
   if (page.console.some(e => e.type === "exception" || e.type === "error")) throw Error(JSON.stringify(page.console));

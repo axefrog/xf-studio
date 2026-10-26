@@ -13,14 +13,18 @@ export interface HoloVSample {
   readonly health: number; readonly healthMax: number; readonly inCombat: boolean; readonly vehicle: boolean; readonly busy: string;
 }
 export interface HoloCameraSample { readonly t: number; readonly seq: number; readonly position: Vec3; readonly forward: Vec3; readonly up: Vec3; readonly fov: number; readonly aspect: number }
+export interface HoloActorSample {
+  readonly t: number; readonly who: string; readonly valid: boolean; readonly entity?: string; readonly position?: Vec3;
+  readonly yaw?: number; readonly command_state?: string; readonly prepared?: boolean;
+}
 export interface HoloEvent {
   readonly id: string; readonly kind: string; readonly t: number; readonly seq: number; readonly at?: Vec3;
-  readonly summary: string; readonly detail?: string; readonly level: ContentLevel; readonly cite: string;
+  readonly incident?: { readonly event: string; readonly kind?: string }; readonly summary: string; readonly detail?: string; readonly level: ContentLevel; readonly cite: string;
 }
 export interface HoloGap { readonly from: number; readonly to: number; readonly reason: "sequence" | "time" | "invalid" | "missing" }
 export interface HoloSession {
   readonly meta: {
-    readonly session: string; readonly run: number; readonly start: number; readonly end: number; readonly channels: readonly string[];
+    readonly session: string; readonly run: number; readonly start: number; readonly end: number; readonly channels: readonly (string | { readonly name: string; readonly read: number; readonly kept: number; readonly dropped: number; readonly reasons: Readonly<Record<string, number>> })[];
     /** The sampled span (V's first and last samples): what replay covers. */
     readonly from: number; readonly to: number;
     readonly complete: boolean; readonly dropped: number; readonly missedDeadlines: number; readonly largestGapS: number; readonly coverage: string;
@@ -28,6 +32,7 @@ export interface HoloSession {
     readonly problems: readonly string[];
     readonly standalone?: { readonly set: string; readonly title: string; readonly clock: "wall" | "game" | "recording"; readonly branches: readonly string[]; readonly extent?: { readonly min: Vec3; readonly max: Vec3 } };
   };
+  readonly actors?: readonly HoloActorSample[];
   readonly v: readonly HoloVSample[];
   readonly camera: readonly HoloCameraSample[];
   readonly events: readonly HoloEvent[];
@@ -53,9 +58,9 @@ export interface HoloLiveState {
   readonly phase: "idle" | "watching" | "waiting" | "disconnected" | "ended";
   readonly behindS: number; readonly more: boolean; readonly droppedBatches: number; readonly message: string;
 }
-export interface HoloLiveCursor { readonly epoch: number; readonly v: number; readonly camera: number; readonly events: number; readonly gaps: number }
+export interface HoloLiveCursor { readonly epoch: number; readonly actors?: number; readonly v: number; readonly camera: number; readonly events: number; readonly gaps: number }
 export interface HoloLiveUpdate {
   readonly since: HoloLiveCursor; readonly reset: boolean; readonly more: boolean; readonly state: Omit<HoloLiveState, "following">;
   readonly meta: HoloSession["meta"] | null;
-  readonly v: HoloSession["v"]; readonly camera: HoloSession["camera"]; readonly events: HoloSession["events"]; readonly gaps: HoloSession["gaps"];
+  readonly actors?: HoloSession["actors"]; readonly v: HoloSession["v"]; readonly camera: HoloSession["camera"]; readonly events: HoloSession["events"]; readonly gaps: HoloSession["gaps"];
 }

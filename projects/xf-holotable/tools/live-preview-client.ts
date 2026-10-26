@@ -3,7 +3,8 @@ import { createHolotable } from "../../xf-studio/authoring/src/features/holotabl
 import { holotableFacade } from "../../xf-studio/authoring/src/features/holotable/facade";
 import { holotablePanel } from "../../xf-studio/authoring/src/features/holotable/view/panel";
 import { holotableRecordingsPanel } from "../../xf-studio/authoring/src/features/holotable/view/recordings-panel";
-import { button, RecordList, installReasonTips } from "../../xf-studio/authoring/src/studio-ui/components";
+import { holotableDetailsPanel } from "../../xf-studio/authoring/src/features/holotable/view/details-panel";
+import { button, RecordList, installReasonTips, Toggle } from "../../xf-studio/authoring/src/studio-ui/components";
 import { h } from "../../xf-studio/authoring/src/studio-ui/dom";
 import type { ModuleViewContext } from "../../xf-studio/authoring/src/studio-ui/views/feature-view";
 import type { HolotableFacade } from "../../xf-studio/authoring/src/features/holotable/facade";
@@ -23,7 +24,7 @@ const paint = () => {
   document.body.dataset.shapes = String((service.snapshot().open?.world.solids?.length ?? 0) > 0);
 };
 const context = { facade, changed: paint, dispatch: async action => (await service.dispatch(action)).ok } as ModuleViewContext<HolotableFacade>;
-const view = holotablePanel(context), recordings = holotableRecordingsPanel(context); panels.push(view, recordings);
+const view = holotablePanel(context), recordings = holotableRecordingsPanel(context), details = holotableDetailsPanel(context); panels.push(view, recordings, details);
 const narrow = params.get("width") === "narrow", stageWidth = narrow ? 360 : 900, listWidth = narrow ? 240 : 400;
 function section(title: string, width: number, content: HTMLElement, height?: number) {
   const s = h("section", { style: `width:${width}px;flex:none;min-width:0;background:var(--bg-panel);border:1px solid var(--line)` },
@@ -34,13 +35,14 @@ function section(title: string, width: number, content: HTMLElement, height?: nu
 const reference = new RecordList({ label: "Record list reference" });
 reference.update([{ id: "open", name: "Evening collection", meta: ["2 presets", "version 3"], current: true, badge: { text: "Open now", tone: "info" } },
   { id: "saved", name: "Saved collection", meta: ["1 preset", "version 2"], action: button({ label: "Open", small: true, onClick() {} }) }]);
-const patterns = h("div", { class: "panel-content" }, reference.element,
-  h("p", { class: "note muted", text: "Style guide: Record list, library Button and state badge." }));
+const toggleReference = new Toggle({ label: "People", onChange() {} }); toggleReference.update(true);
+const patterns = h("div", { class: "panel-content" }, ...(params.has("model") ? [toggleReference.element] : [reference.element]),
+  h("p", { class: "note muted", text: params.has("model") ? "Style guide: Toggle row." : "Style guide: Record list, library Button and state badge." }));
 document.body.replaceChildren(h("main", { style: "padding:20px;width:max-content" },
   h("h1", { style: "font-size:20px;margin:0 0 8px", text: "Holotable · synthetic live bridge" }),
   h("p", { class: "note muted", text: "Verification workspace · generated observations and shapes · no game or private assets" }),
   h("div", { style: "display:flex;align-items:flex-start;gap:16px" }, section("Holotable", stageWidth, view.spec.element, 540),
-    section("Recordings", listWidth, recordings.spec.element), section("Library pattern", listWidth, patterns))));
+    section(params.has("model") ? "Details" : "Recordings", listWidth, params.has("model") ? details.spec.element : recordings.spec.element), section("Library pattern", listWidth, patterns))));
 installReasonTips(document);
 service.subscribe(paint); service.shown(); paint();
 await new Promise<void>(resolve => { const stop = service.subscribe(() => { if (service.snapshot().live.available) { stop(); resolve(); } }); });
@@ -50,5 +52,9 @@ if (!service.snapshot().open?.session.v.length) await new Promise<void>(resolve 
   const stop = service.subscribe(() => { if (service.snapshot().open?.session.v.length) { stop(); resolve(); } });
 });
 if (params.get("case") === "back-to-live") await service.dispatch({ kind: "holo.seek", t: 1001.5 });
+if (params.has("model")) {
+  await service.dispatch({ kind: "holo.layer", id: "people", on: true });
+  await service.dispatch({ kind: "holo.select", id: "person:a1" });
+}
 paint(); document.body.dataset.ready = "true";
 addEventListener("pagehide", () => { service.withdraw(); ctl.abort(); for (const panel of panels) panel.dispose?.(); }, { once: true });

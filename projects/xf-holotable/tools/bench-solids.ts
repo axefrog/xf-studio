@@ -31,7 +31,7 @@ for (const r of args.includes("--run4-only") ? [run4] : args.includes("--largest
     const ms: number[] = [], drawn: number[] = []; let cut = 0;
     for (let i = 0; i < 240; i++) {
       const at = s.meta.from + (s.meta.to - s.meta.from) * (i % 40 / 39); t = performance.now();
-      const scene = project(s, w, at, { v: true, camera: true, events: true, gaps: true, areas: true, cells: false, solids: true }, orbit, width, 480, null);
+      const scene = project(s, w, at, { v: true, camera: true, people: false, events: true, gaps: true, areas: true, cells: false, solids: true }, orbit, width, 480, null);
       if (i >= 120) { ms.push(performance.now() - t); drawn.push(scene.solidsDrawn); cut = Math.max(cut, scene.solidsCut); }
     }
     ms.sort((a, b) => a - b);

@@ -3,7 +3,7 @@
 // sequence rules as the bridge's own replay (tools/testing/recording-replay.ts) without importing bridge internals.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { CameraSample, Cite, Gap, Session, SessionMeta, TimelineEvent, VSample, Vec3 } from "./model.ts";
+import type { CameraSample, Cite, Gap, Incident, ChannelCoverage, Session, SessionMeta, TimelineEvent, VSample, Vec3 } from "./model.ts";
 
 type Json = Record<string, any>;
 
@@ -55,7 +55,7 @@ function* parseRun(dir: string, signal?: AbortSignal): Generator<void, Session> 
   if (basename(dir) !== `run-${manifest.run}` || basename(join(dir, "..")) !== manifest.session) throw new Error("Recording folder does not match its manifest");
   const meta: SessionMeta = {
     schema: "xfh/session-1", session: manifest.session, run: manifest.run, worldGeneration: manifest.world_generation,
-    pluginVersion: manifest.plugin_version ?? "", start: manifest.start_s, end: manifest.end_s, channels: manifest.channels ?? [],
+    pluginVersion: manifest.plugin_version ?? "", start: manifest.start_s, end: manifest.end_s, channels: channelCoverage(manifest.channels ?? []),
     wallStart: manifestWallStart(manifest),
     gameTimeSamples: Array.isArray(manifest.game_time_samples) ? manifest.game_time_samples.filter((x: Json) => Number.isFinite(x.source_s) && Number.isFinite(x.game_s)).map((x: Json) => ({ source: x.source_s, game: x.game_s })) : undefined,
     complete: manifest.complete === true, dropped: manifest.dropped ?? 0, missedDeadlines: manifest.missed_deadlines ?? 0,
@@ -90,7 +90,7 @@ function* parseRun(dir: string, signal?: AbortSignal): Generator<void, Session> 
       if (row.seq <= last) throw new Error(`Sequence went backwards at ${row.seq}`);
       if (last && row.seq !== last + 1) session.gaps.push({ from: row.source_s, to: row.source_s, reason: "sequence", fromSeq: last, toSeq: row.seq });
       last = row.seq; lastT = row.source_s;
-      if (row.valid === false && row.channel !== "actors") { if (row.channel === "v") invalidV.push(row.source_s); continue; }
+      if (row.valid === false && row.channel === "v") invalidV.push(row.source_s);
       ingest(row, session, cite, lines);
     }
     yield;
@@ -102,15 +102,45 @@ function* parseRun(dir: string, signal?: AbortSignal): Generator<void, Session> 
   return session;
 }
 
+/** One mapping and one source-row accounting path for replay and live. */
 export function ingest(row: Json, s: Session, cite: (seq: number) => Cite, lines: Map<string, Json>) {
+  const coverage = s.meta.channels.find(c => c.name === row.channel);
+  const mapped = ["actors", "v", "camera", "incidents", "supervisor", "contacts", "subtitles", "voice"].includes(row.channel);
+  const size = () => s.v.length + s.camera.length + s.events.length + (s.actors?.length ?? 0);
+  const before = size();
+  const invalid = row.valid === false && row.channel !== "actors";
+  if (!invalid) ingestMapped(row, s, cite, lines);
+  if (coverage) {
+    coverage.read++;
+    if (size() > before || row.channel === "actors" && Array.isArray(row.data?.actors) && row.data.actors.length === 0 && !invalid) coverage.kept++;
+    else { coverage.dropped++; const reason = !mapped ? "not mapped" : invalid ? "invalid" : "no mapped content"; coverage.reasons[reason] = (coverage.reasons[reason] ?? 0) + 1; }
+  }
+}
+/** Accept the original string list and the counted form at adapter boundaries. Counts start fresh for this read. */
+export function channelCoverage(channels: (string | ChannelCoverage)[]): ChannelCoverage[] {
+  return channels.map(c => ({ name: typeof c === "string" ? c : c.name, read: 0, kept: 0, dropped: 0, reasons: {} }));
+}
+function ingestMapped(row: Json, s: Session, cite: (seq: number) => Cite, lines: Map<string, Json>) {
   const d = row.data ?? {}, t = row.source_s as number, seq = row.seq as number;
   switch (row.channel) {
     case "actors": {
       if (!Array.isArray(d.actors)) return;
       for (const a of d.actors.slice(0, 16)) if (typeof a.who === "string") {
-        (s.actors ??= []).push({ t, who: a.who, entity: typeof a.entity === "string" ? a.entity : undefined,
+        (s.actors ??= []).push({ t, who: a.who, valid: a.valid === true,
+          yaw: Number.isFinite(a.yaw) ? a.yaw : undefined,
+          command_state: typeof a.command_state === "string" ? a.command_state : undefined,
+          prepared: typeof a.prepared === "boolean" ? a.prepared : undefined, entity: typeof a.entity === "string" ? a.entity : undefined,
           position: a.valid === true && Array.isArray(a.position) && a.position.length === 3 && a.position.every(Number.isFinite) ? a.position : undefined });
       }
+      return;
+    }
+    case "incidents": {
+      if (!["witness.report", "witness.gap", "witness.unwitnessed", "incident.coverage"].includes(d.event)) return;
+      const position = d.place?.position ?? d.declared?.at;
+      const at = Array.isArray(position) && position.length === 3 && position.every(Number.isFinite) ? position as Vec3 : undefined;
+      // The stable timeline kind is incident; its typed payload retains the native report discriminator.
+      const kind = "incident";
+      push(s, { kind, t, seq, at, summary: "Incident observation", level: "full", incident: structuredClone(d) as Incident, cite: cite(seq) });
       return;
     }
     case "v": {

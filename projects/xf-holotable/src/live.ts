@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import type { ContentLevel, Gap, Session } from "./model.ts";
 import { atLevel } from "./query.ts";
-import { ingest, TIME_GAP_S } from "./recording.ts";
+import { channelCoverage, ingest, TIME_GAP_S } from "./recording.ts";
 import type { Discovery, LiveBridge, RecorderStatus } from "./live-bridge.ts";
 
 export const LIVE_BOUNDS = {
@@ -12,8 +12,8 @@ export const LIVE_BOUNDS = {
 } as const;
 type Json = Record<string, any>;
 // A client must receive every known break before any samples it could draw across it.
-const tracks = ["gaps", "v", "camera", "events"] as const;
-export interface LiveCursor { epoch: number; v: number; camera: number; events: number; gaps: number }
+const tracks = ["gaps", "v", "camera", "actors", "events"] as const;
+export interface LiveCursor { epoch: number; v: number; camera: number; actors?: number; events: number; gaps: number }
 export interface LiveState {
   available: boolean; recording: boolean; watching: boolean;
   phase: "idle" | "watching" | "waiting" | "disconnected" | "ended";
@@ -22,7 +22,7 @@ export interface LiveState {
 export interface LiveUpdate {
   since: LiveCursor; reset: boolean; more: boolean; state: LiveState;
   meta: Session["meta"] | null;
-  v: Session["v"]; camera: Session["camera"]; events: Session["events"]; gaps: Session["gaps"];
+  actors: NonNullable<Session["actors"]>; v: Session["v"]; camera: Session["camera"]; events: Session["events"]; gaps: Session["gaps"];
 }
 export interface LiveClock {
   now(): number;
@@ -72,7 +72,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
     epoch++; cursor = undefined; lastSeq = lastEvent = 0; pendingGap = undefined; lines = new Map(); retained = 0;
     stoppedDrained = false;
     session = { meta: { schema: "xfh/session-1", session: r.session!, run: r.run!, worldGeneration: r.world!, pluginVersion: "",
-      start: r.start!, wallStart: r.wallStart, end: r.start!, from: r.start!, to: r.start!, channels: [...r.channels], complete: false,
+      start: r.start!, wallStart: r.wallStart, end: r.start!, from: r.start!, to: r.start!, channels: channelCoverage(r.channels), complete: false,
       dropped: 0, missedDeadlines: 0, largestGapS: 0, coverage: "Live recorder observations; runtime cadence uncommissioned.", problems: [] },
       v: [], camera: [], events: [], gaps: [] };
     state = { ...state, phase: "watching", more: false, droppedBatches: 0, behindS: 0, message: "" };
@@ -92,6 +92,10 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
     // Advance the exact cursor even when a whole over-budget batch is dropped. Its loss remains visible.
     const oversized = bytes > LIVE_BOUNDS.bytesPerSecond || rows > LIVE_BOUNDS.rowsPerSecond;
     if (oversized) {
+      for (const row of page.records as Json[]) {
+        const coverage = s.meta.channels.find(c => c.name === row.channel);
+        if (coverage) { coverage.read++; coverage.dropped++; coverage.reasons["batch budget"] = (coverage.reasons["batch budget"] ?? 0) + 1; }
+      }
       cursor = c; sourceNow = page.calibration.source_s; lastPageAt = sampledAt;
       pendingGap = "missing"; state.droppedBatches++; s.meta.dropped += rows;
       const problem = "A live batch exceeded the byte or row budget and was dropped.";
@@ -126,7 +130,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
       const valid = (row.valid === true || row.channel === "actors") && d && (d.event === undefined || typeof d.event === "string") &&
         (row.channel !== "v" || vec(d.position) && Number.isFinite(d.yaw) && (!d.velocity || vec(d.velocity))) &&
         (row.channel !== "camera" || vec(d.camera?.position) && vec(d.camera?.forward) && vec(d.camera?.up) && Number.isFinite(d.camera?.fov) && Number.isFinite(d.camera?.aspect));
-      if (!valid) { pendingGap = "invalid"; continue; }
+      if (!valid) { ingest({ ...row, valid: false }, s, seq => `recorder:${s.meta.session}:${s.meta.run}:${seq}`, lines); pendingGap = "invalid"; continue; }
       const previous = s.v.at(-1);
       if (row.channel === "v" && previous) {
         if (row.source_s < previous.t) throw Error("Live source clock went backwards");
@@ -154,7 +158,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
     s.meta.missedDeadlines = Math.max(s.meta.missedDeadlines, page.source?.missed_deadlines ?? 0);
     s.meta.end = sourceNow;
     if (s.v.length) s.meta.to = s.v.at(-1)!.t;
-    if (s.v.at(-1) !== before) options.changed?.(s);
+    if (s.v.at(-1) !== before || rows) options.changed?.(s);
     return true;
   }
   async function step() {
@@ -205,11 +209,11 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
   }
   function poll(id: string, since: LiveCursor | undefined, level: ContentLevel): LiveUpdate {
     renew(id);
-    const lengths = Object.fromEntries(tracks.map(k => [k, session?.[k].length ?? 0]));
+    const lengths = Object.fromEntries(tracks.map(k => [k, session?.[k]?.length ?? 0]));
     const reset = !since || since.epoch !== epoch;
-    const next: LiveCursor = reset ? { epoch, v: 0, camera: 0, events: 0, gaps: 0 } : { ...since };
+    const next: Required<LiveCursor> = reset ? { epoch, v: 0, camera: 0, actors: 0, events: 0, gaps: 0 } : { ...since, actors: since.actors ?? 0 };
     if (tracks.some(k => !Number.isSafeInteger(next[k]) || next[k] < 0 || next[k] > lengths[k])) throw coded("Invalid live update cursor");
-    const result: LiveUpdate = { since: next, reset, more: false, meta: session ? structuredClone(session.meta) : null, state: status(), v: [], camera: [], events: [], gaps: [] };
+    const result: LiveUpdate = { since: next, reset, more: false, meta: session ? structuredClone(session.meta) : null, state: status(), v: [], camera: [], actors: [], events: [], gaps: [] };
     let bytes = 0, rows = 0;
     for (const k of tracks) {
       const source = session?.[k] ?? [];

@@ -8,6 +8,13 @@ Last reviewed **29 September 2026** (finishes, runtime bridge, showroom and wait
 
 **Holotable's W0 slice** adds a cached, vanilla collision-primitive overlay from Exterior L0–L6 and Interior to the replay service and Studio panels. Four sectors match WolvenKit; measured overlaps retain the lowest-level copy. Cooked shapes are counted but omitted pending a verified geometry-cache bounds adapter. This work awaits independent code/UI review and integration; instance buffers remain outside the completed slice ([checkpoint and measurements](../research/live-world-view/w0-sector-reader.md)).
 
+Holotable's model-field candidate preserves the recorder's selected-actor observations,
+adds typed incident events and per-channel read/kept/dropped counts, delivers actors through
+live polls, and adds an opt-in People layer. It is verified with synthetic offline tests
+and isolated light/dark captures; independent review and integration remain pending.
+The [model contract](../projects/xf-holotable/README.md#recorded-people-incidents-and-coverage)
+documents exact fields and source limitations.
+
 XF Studio's eye-makeup editor builds a verified **XF Eye Artistry** mod from the player's own game. **`v0.1.0-alpha.2`**, the first published alpha, was released on 28 September 2026 as an unsigned Windows pre-release with checksums and a build-provenance attestation ([release](https://github.com/axefrog/xf-studio/releases/tag/v0.1.0-alpha.2)); `v0.1.0-alpha.1` stays an unpublished draft.
 
 The first public release will be a **beta** ([1.0 readiness bar](release-readiness.md)). Of the [readiness audit](../research/authoring/release-readiness-audit.md#6-ranked-closing-list)'s closing list, Tracks B, C and E are done (declutter to exportable first, the first run and library, beta framing: a Beta badge, the beta's What's new tour and an update check at start and on demand); Track D's copy, terminology and states half is done (items 15–18 and 20); Track A (speed) and Track D's layout item (19) are open.

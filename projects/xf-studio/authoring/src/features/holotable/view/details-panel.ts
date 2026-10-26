@@ -8,6 +8,7 @@ import type { HoloLayer, HoloState } from "../service";
 import type { AgentItem, AgentLayer } from "../agent-types";
 import { HOLOTABLE_PANEL_META } from "./contribution";
 import { f1, heading, LAYER_LABELS, vAt } from "./shared";
+import { peopleAt } from "./projection";
 import { itemTitle, layerCounts } from "./agent-labels";
 
 type Ctx = ModuleViewContext<HolotableFacade>;
@@ -59,9 +60,16 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
     }
     if (state.selected?.startsWith("cluster:")) return itemList(visible(state).flatMap(l => l.items.filter(i => !l.notPlaced.includes(i.id))).filter(i => ["point", "target", "label", "actor", "influence"].includes(i.kind) && (JSON.stringify(i.place) === state.selected!.slice(8) || JSON.stringify(i.to) === state.selected!.slice(8))), state);
     if (state.selected && state.selected !== "v") {
+      if (state.selected.startsWith("person:") && state.layers.people) {
+        const actor = peopleAt(s, state.t).get(state.selected.slice(7))?.at(-1);
+        if (actor?.valid && actor.position && state.t - actor.t <= 0.5) return propertyList([
+          ["Kind", "Recorded person"], ["Handle", actor.who], ["Command state", actor.command_state ?? "Not recorded"],
+          ["Where", actor.position.map(f1).join(", ")],
+        ], { label: "Selected person" });
+      }
       const item = find(state, state.selected); if (item) return itemFacts(item, state);
       const e = s.events.find(x => x.id === state.selected); if (!e) return note("That mark isn't visible at this moment.");
-      return propertyList([["What", e.summary], ...(e.detail ? [["Said", e.detail] as [string, string]] : []), { term: "When", value: `${f1(e.t - m.from)} s`, mono: true }, ...(e.at ? [{ term: "Where", value: e.at.map(f1).join(", "), mono: true }] : []), { term: "Why", value: e.cite, mono: true }], { label: "Selected mark" });
+      return propertyList([["Kind", e.incident ? `${e.kind} · ${e.incident.kind ?? e.incident.event}` : e.kind], ["What", e.summary], ...(e.detail ? [["Said", e.detail] as [string, string]] : []), { term: "When", value: `${f1(e.t - m.from)} s`, mono: true }, ...(e.at ? [{ term: "Where", value: e.at.map(f1).join(", "), mono: true }] : []), { term: "Why", value: e.cite, mono: true }], { label: "Selected mark" });
     }
     const v = vAt(state); if (!v) return note(m.standalone ? "Select an item or a place to inspect it." : "V has no sample yet at this moment.");
     return propertyList([{ term: "Position", value: v.position.map(f1).join(", "), mono: true }, { term: "Heading", value: heading(v.yaw), mono: true }, { term: "Speed", value: `${f1(v.speed)} m/s`, mono: true }, { term: "Health", value: `${v.health} of ${v.healthMax}`, mono: true }, ["State", [v.inCombat ? "in combat" : "", v.vehicle ? "in a vehicle" : "", v.busy].filter(Boolean).join(", ") || "on foot"], { term: "Why", value: `recorder:${m.session}:${m.run}:${v.seq}`, mono: true }], { label: "V" });
@@ -90,7 +98,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
   return { dispose() {}, spec: { id: "holotable.details", ...HOLOTABLE_PANEL_META["holotable.details"], element }, update() {
     const state = facade.snapshot(), s = state.open?.session;
     for (const { id, toggle } of toggles) {
-      toggle.element.hidden = !!s?.meta.standalone && ["v", "camera", "events", "gaps"].includes(id);
+      toggle.element.hidden = !!s?.meta.standalone && ["v", "camera", "people", "events", "gaps"].includes(id);
       toggle.update(state.layers[id]);
     }
     story.update(state.level === "full", { disabled: !s, reason: s ? undefined : "Open a recording first." });

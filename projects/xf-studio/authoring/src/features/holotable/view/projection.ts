@@ -3,11 +3,11 @@
  * state. The panel writes them as SVG; the same rules feed the agent's text report in the headless service. World axes are the game's:
  * x east, y north, z up, metres.
  */
-import type { HoloArea, HoloCameraSample, HoloCell, HoloEvent, HoloSession, HoloSolid, HoloVSample, HoloWorld, Vec3 } from "../types";
+import type { HoloActorSample, HoloArea, HoloCameraSample, HoloCell, HoloEvent, HoloSession, HoloSolid, HoloVSample, HoloWorld, Vec3 } from "../types";
 import type { HoloLayer } from "../service";
 import { solidGeometry, type SolidInstance, SOLID_DRAW_CAP } from "./solid-projection";
 
-export type Style = "grid" | "area" | "venue" | "cell" | "trail" | "v" | "cone" | "camera" | "event" | "event-selected" | "gap" | "label" | "label-muted";
+export type Style = "people" | "grid" | "area" | "venue" | "cell" | "trail" | "v" | "cone" | "camera" | "event" | "event-selected" | "gap" | "label" | "label-muted";
 export type Primitive =
   | SolidInstance
   | { kind: "line"; points: [number, number][]; style: Style; opacity: number; closed?: boolean; /** How far into its dash pattern the line starts, in pixels: a line cut at the edge keeps its dashes where they were. */ dashOffset?: number }
@@ -187,6 +187,18 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
   // Each channel is judged on its own freshness: a camera sample older than STALE_S isn't drawn as current.
   const camStale = !!cam && t - cam.t > STALE_S;
   if (layers.camera && cam && !camStale) frustum(cam, C, out);
+  if (layers.people) for (const [id, samples] of peopleAt(s, t)) {
+    const actor = samples.at(-1)!;
+    for (let i = 1; i < samples.length; i++) {
+      const a = samples[i - 1], b = samples[i];
+      if (a.entity === b.entity && a.position && b.position && b.t - a.t <= STALE_S && !s.gaps.some(g => g.from < b.t && g.to > a.t))
+        lines([a.position, b.position], "people", Math.max(0, 1 - (t - a.t) / 5) * 0.6);
+    }
+    if (actor.valid && actor.position && t - actor.t <= STALE_S) {
+      const at = C.point(actor.position);
+      if (at) out.push({ kind: "marker", at, size: 3, style: "people", shape: "dot", id: `person:${id}` });
+    }
+  }
   if (layers.events) for (const e of s.events) if (e.at && e.t <= t) {
     const p = C.point(e.at); if (!p) continue;
     const isSel = e.id === selected;
@@ -343,3 +355,21 @@ function frustum(cam: HoloCameraSample, C: ReturnType<typeof camera>, out: Primi
 }
 
 export type { HoloArea, HoloCell };
+
+/** Only the last five seconds; entity changes never join two people's paths. */
+export function peopleAt(s: HoloSession, t: number): Map<string, HoloActorSample[]> {
+  const people = new Map<string, HoloActorSample[]>();
+  const samples = s.actors ?? [];
+  // Scrubbing near the start of a long run must not scan all its future actor samples.
+  let lo = 0, hi = samples.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1; if (samples[mid].t <= t) lo = mid + 1; else hi = mid; }
+  for (let i = lo - 1; i >= 0; i--) {
+    const a = samples[i];
+    if (a.t < t - 5) break;
+    const key = a.who;
+    let track = people.get(key); if (!track) people.set(key, track = []);
+    track.push(a);
+  }
+  for (const track of people.values()) track.reverse();
+  return people;
+}

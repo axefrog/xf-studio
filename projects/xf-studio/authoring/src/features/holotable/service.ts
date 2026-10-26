@@ -13,7 +13,7 @@ import type { ContentLevel, HoloRun, HoloSession, HoloTransport, HoloWorld, Holo
 import type { AgentAnswer } from "./agent-types";
 import type { Vec3 } from "./types";
 
-export const HOLO_LAYERS = ["v", "camera", "events", "gaps", "areas", "cells", "solids"] as const;
+export const HOLO_LAYERS = ["v", "camera", "people", "events", "gaps", "areas", "cells", "solids"] as const;
 export type HoloLayer = typeof HOLO_LAYERS[number];
 
 export type HoloAction =
@@ -70,7 +70,7 @@ const SPEED = 4; // a quarter-hour session plays in under four minutes
 export function createHolotable(device: HoloDevice, signal: AbortSignal) {
   let state: HoloState = { phase: "idle", message: "", openError: null, runs: [], open: null, t: 0, playing: false, level: "full",
     agents: { layers: [], here: [], specs: { schema: "xfh/projections-1", kinds: {} } }, agentEnabled: {}, position: null, branch: undefined,
-    layers: { v: true, camera: true, events: true, gaps: true, areas: true, cells: false, solids: true }, selected: null, revision: 0,
+    layers: { v: true, camera: true, people: false, events: true, gaps: true, areas: true, cells: false, solids: true }, selected: null, revision: 0,
     live: { available: false, recording: false, watching: false, following: false, phase: "idle", behindS: 0, more: false, droppedBatches: 0, message: "" } };
   const listeners = new Set<() => void>();
   const set = (patch: Partial<HoloState>) => { state = { ...state, ...patch, revision: state.revision + 1 }; for (const l of listeners) l(); };
@@ -190,7 +190,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
         liveSince = update.since;
         const old = update.reset ? null : state.open?.session;
         const session: HoloSession | null = update.meta ? { meta: update.meta,
-          v: [...(old?.v ?? []), ...update.v], camera: [...(old?.camera ?? []), ...update.camera],
+          actors: [...(old?.actors ?? []), ...(update.actors ?? [])], v: [...(old?.v ?? []), ...update.v], camera: [...(old?.camera ?? []), ...update.camera],
           events: [...(old?.events ?? []), ...update.events], gaps: [...(old?.gaps ?? []), ...update.gaps] } : null;
         const following = state.live.following;
         let t = state.t, selected = state.selected;
@@ -295,7 +295,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       return;
     }
     if (level !== state.level) {
-      if (level === "structure" && state.open) set({ level, open: { ...state.open, session: { ...state.open.session, events: state.open.session.events.map(e => { const { detail, ...rest } = e; return e.level === "full" ? rest : e; }) } } });
+      if (level === "structure" && state.open) set({ level, open: { ...state.open, session: { ...state.open.session, events: state.open.session.events.map(e => { const { detail, incident, ...rest } = e; return e.level === "full" ? rest : e; }) } } });
       return open(state.open!.dir, level, true);
     }
     if (pendingLevel !== null && pendingLevel !== level) { loading?.abort(); loading = null; pendingLevel = null; set({ phase: "ready", message: "" }); }

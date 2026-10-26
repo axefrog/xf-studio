@@ -123,3 +123,16 @@ test("a late full-content response cannot restore words after the person hides t
   release(); await settle();
   expect(f.service.snapshot().level).toBe("structure"); expect(JSON.stringify(f.service.snapshot().open)).not.toContain("late private words");
 });
+
+
+test("live appends people and clears incident story payload immediately when hiding story", async () => {
+  const f=setup(); f.service.shown(); await settle();
+  const first=f.data(101);
+  f.updates.push({...first,reset:true,actors:[{t:101,who:"a1",valid:true,entity:"one",position:[1,2,3],command_state:"Executing"}],events:[{id:"incident1",kind:"incident",t:101,seq:10,summary:"Incident observation",level:"full",cite:"recorder:fake:1:10",incident:{event:"witness.report",kind:"assault"}}]});
+  await f.service.dispatch({kind:"holo.watch"});
+  expect(f.service.snapshot().layers.people).toBe(false);
+  expect(f.service.snapshot().open?.session.actors).toHaveLength(1);
+  await f.service.dispatch({kind:"holo.level",level:"structure"});
+  expect(f.service.snapshot().open?.session.events.every(e=>!e.incident)).toBe(true);
+  expect(f.service.snapshot().open?.session.actors).toHaveLength(1);
+});
