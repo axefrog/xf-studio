@@ -488,7 +488,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     core, preferences, localSetup, installDetection,
     naming: () => targets.namedView(drawnView()),
 
-    bound: { session: sessionState, targets, looks: profileAuthoring.contexts, empty: profileAuthoring.empty, context: type => STUDIO_CATALOGUE.context(type),
+    bound: { session: sessionState, targets, looks: profileAuthoring.contexts, empty: profileAuthoring.empty, context: type => layouts.catalogue().context(type),
       character: id => services.characters.character(id) ? heads.context(id) : undefined },
     frameworkProducts: [{ feature: "expressions", name: "expression sets", requirements: EXPRESSION_FRAMEWORK_REQUIREMENTS }],
     modInstall, previewSetup, viewport: viewportDevice.attachment,
