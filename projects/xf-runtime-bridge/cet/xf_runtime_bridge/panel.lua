@@ -361,7 +361,7 @@ function panel.opened(state)
   state.layoutHeight = nil
   state.layoutChangedAt = nil
   state.cards = nil -- a card measures itself again
-  state.diagnosticsOpen = nil -- opening CET re-notifies its native card
+  state.diagnosticsNeedsNotify = state.diagnosticsOpen == true -- re-open the native card without forgetting the header state used by undo
   state.dangerLayout = nil
   settling = false
 end
@@ -1188,7 +1188,10 @@ local function drawDiagnostics(state, queue, theme, which, info)
   local open = false
   panel.inRole(theme, "eyebrow", function() open = ImGui.CollapsingHeader("DIAGNOSTICS##xf_diagnostics") end)
   state.diagnosticsOpen = open == true
-  if wanted ~= nil or (before ~= nil and before ~= state.diagnosticsOpen) or (before == nil and open) then queue("diagnostics", state.diagnosticsOpen) end
+  if state.diagnosticsNeedsNotify or wanted ~= nil or (before ~= nil and before ~= state.diagnosticsOpen) or (before == nil and open) then
+    queue("diagnostics", state.diagnosticsOpen)
+  end
+  state.diagnosticsNeedsNotify = false
   if wanted ~= nil and state.headerDoneFor then state.headerDoneFor({ id = wanted.id, previous = before }) end
   if open then mutedWrapped(theme, which, "Diagnostics is shown in the XF box.") end
 end

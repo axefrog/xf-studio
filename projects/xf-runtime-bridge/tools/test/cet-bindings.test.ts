@@ -135,14 +135,41 @@ function runCet(code: string): string {
 }
 
 // The behaviours the tests read (recorded calls, a cursor that moves); everything else answers CET's defaults.
+// Optional scrollModel: auto-fit uses the last measured content height, constraints cap the window, and a 24px title bar
+// leaves a clipped content viewport. Items still lay out outside it, but only visible items submit draw receipts.
+// This checks the Lua layout's overflow/reachability with CET-bound scroll calls, not Dear ImGui's renderer or game input.
 const IMPL = `
   calls, curY, T, pc, pv = {}, 0, 0, 0, 0
   local function rec(s) calls[#calls + 1] = s end
-  local function item(kind, text, h) curY = curY + (h or 14); rec(kind .. ":" .. tostring(text)) end
+  local function item(kind, text, h)
+    local top, bottom = curY, curY + (h or 14)
+    curY = bottom
+    local visible = true
+    if scrollModel then
+      local m = scrollModel
+      m.contentBottom = math.max(m.contentBottom or 0, bottom)
+      local viewportBottom = m.offset + m.height - 24
+      visible = bottom > m.offset and top < viewportBottom
+      m.items[kind .. ":" .. tostring(text)] = { top = top, bottom = bottom, fullyVisible = top >= m.offset and bottom <= viewportBottom }
+    end
+    if visible then rec(kind .. ":" .. tostring(text)) end
+  end
   unpack = table.unpack
   IMPL = {
-    Begin = function(name) rec("begin:" .. tostring(name)); return true end,
-    End = function() rec("end") end,
+    Begin = function(name)
+      if scrollModel then
+        local m = scrollModel
+        m.height = math.min((m.contentHeight or 276) + 24, m.cap or math.huge)
+        m.maxScroll = math.max(0, (m.contentHeight or 0) - (m.height - 24))
+        m.offset = math.max(0, math.min(m.offset, m.maxScroll))
+        m.contentBottom, m.items = 0, {}
+      end
+      rec("begin:" .. tostring(name)); return true
+    end,
+    End = function()
+      if scrollModel then scrollModel.contentHeight = math.max(scrollModel.contentBottom, curY) end
+      rec("end")
+    end,
     BeginChild = function(id, w, h, childFlags, windowFlags) rec("child:" .. id .. ":" .. tostring(childFlags) .. ":" .. tostring(windowFlags)); return true end,
     EndChild = function() rec("endchild") end,
     GetFontSize = function() return 13 end,
@@ -152,7 +179,11 @@ const IMPL = `
     SetCursorPosY = function(v) curY = v end,
     GetCursorScreenPos = function() return 50, 60 end,
     GetWindowPos = function() return 10, 10 end,
-    GetWindowSize = function() return 400, 300 end,
+    GetWindowSize = function() return 400, scrollModel and scrollModel.height or 300 end,
+    GetScrollMaxY = function() return scrollModel and scrollModel.maxScroll or 0 end,
+    SetScrollY = function(value)
+      if scrollModel then scrollModel.offset = math.max(0, math.min(value, scrollModel.maxScroll)) end
+    end,
     GetTextLineHeight = function() return 14 end,
     GetWindowDrawList = function() return "wl" end,
     GetForegroundDrawList = function() return "fg" end,
@@ -168,7 +199,10 @@ const IMPL = `
     TextDisabled = function(t) item("disabled", t) end,
     TextWrapped = function(t) item("wrapped", t) end,
     InputTextMultiline = function(label, text, capacity, w, h) rec("field:" .. w .. "," .. h); return text, false end,
-    SetNextWindowSizeConstraints = function(a,b,w,h) rec("cap:" .. w .. "," .. h) end,
+    SetNextWindowSizeConstraints = function(a,b,w,h)
+      if scrollModel then scrollModel.cap = h end
+      rec("cap:" .. w .. "," .. h)
+    end,
     SetNextWindowPos = function(x,y) rec("pos:" .. x .. "," .. y) end,
     SameLine = function(x,gap) rec("same:" .. tostring(x) .. "," .. tostring(gap)) end,
     CollapsingHeader = function(label) rec("header:" .. label); return true end,
@@ -358,7 +392,7 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
     expect(out.indexOf("button:Stop the bridge")).toBeGreaterThan(out.indexOf("button:Send##xf_comment_send"));
   });
 
-  test("0.8.23: height is capped at 70 percent of CET's display, with ordinary internal scrolling and a three-line field", () => {
+  test("0.8.23: submits the 70 percent height constraint, scroll-compatible flags and a three-line field", () => {
     const out = drawPanel(`return draw(state())`);
     expect(out).toContain("cap:396.0,1120.0"); // 1600px display, theme's 13px font
     expect(out).toContain("field:312.0,54.0"); // 3 x 14px lines + 2 x 6px padding; Send occupies the row's right
@@ -369,6 +403,32 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
     expect(out).toContain(`var:${bindings.enums.ImGuiStyleVar!.indexOf("FrameBorderSize")}:1,nil`);
     expect(out).toContain(`var:${bindings.enums.ImGuiStyleVar!.indexOf("ItemSpacing")}:8.0,8.0`);
     expect(out).not.toContain("failed:");
+  });
+
+  test("review Low: simulated overflow clips Danger at the top and makes it reachable by scrolling inside the height cap", () => {
+    for (const displayHeight of [1080, 1600]) {
+      const out = drawPanel(`GetDisplayResolution = function() return 2560, ${displayHeight} end
+        scrollModel = { offset = 0, items = {} }
+        local s = state()
+        for i = 1, 200 do s.info.kill_key.warnings[i] = "A key warning." end
+        local scrollToBottom = false
+        local begin = IMPL.Begin
+        IMPL.Begin = function(name, flags)
+          local shown = begin(name, flags)
+          if scrollToBottom then ImGui.SetScrollY(ImGui.GetScrollMaxY()) end
+          return shown
+        end
+        draw(s); local top = draw(s) -- auto-fit has measured the overflowing content
+        local topDanger = string.find(top, "button:Stop the bridge", 1, true) ~= nil
+        local overflow = (scrollModel.maxScroll or 0) > 0
+        local capped = scrollModel.height == ${displayHeight} * 0.7
+        scrollToBottom = true; local bottom = draw(s)
+        local bottomDanger = string.find(bottom, "button:Stop the bridge", 1, true) ~= nil
+        local danger = scrollModel.items["button:Stop the bridge"] or {}
+        return table.concat({ tostring(capped), tostring(overflow), tostring(topDanger), tostring(bottomDanger),
+          tostring(danger.fullyVisible == true), tostring((scrollModel.offset or 0) > 0) }, ",")`);
+      expect(out).toBe("true,true,false,true,true,true");
+    }
   });
 
   test("0.8.23: a primary or danger button failure restores the style and window stacks", () => {
@@ -493,6 +553,40 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
       handlers.onDraw(); handlers.onUpdate(0.3)
       return before .. "|" .. table.concat(diagnostics, ",")`);
     expect(out).toBe("0|DIAG_ON,DIAG_OFF");
+  });
+
+  test("review Medium: close, queue a close request, reopen and undo restores the known Diagnostics state", () => {
+    const out = runCet(`${panelRig({ requests: `{ { id = 1, diagnostics_open = true } }`, info: INFO(), open: true })}
+      local headerOpen, nextOpen = false, nil
+      IMPL.SetNextItemOpen = function(value) nextOpen = value end
+      IMPL.CollapsingHeader = function()
+        if nextOpen ~= nil then headerOpen, nextOpen = nextOpen, nil end
+        return headerOpen
+      end
+      handlers.onUpdate(0.3); handlers.onDraw(); handlers.onUpdate(0.3) -- open and report
+      handlers.onOverlayClose()
+      DECODE.ALL = { { id = 2, diagnostics_open = false } }
+      handlers.onUpdate(0.3) -- receive the close request while CET is closed
+      handlers.onOverlayOpen(); handlers.onDraw(); handlers.onUpdate(0.3)
+      local previous = nil
+      for _, done in ipairs(reports[#reports].header_done or {}) do if done.id == 2 then previous = done.previous end end
+      -- Channel::Request({undo:2}) only queues a header change when the reported previous value is known.
+      DECODE.ALL = previous ~= nil and { { id = 3, diagnostics_open = previous } } or {}
+      handlers.onUpdate(0.3); handlers.onDraw(); handlers.onUpdate(0.3)
+      return tostring(previous) .. "," .. tostring(headerOpen) .. "|" .. table.concat(diagnostics, ",")`);
+    expect(out).toBe("true,true|DIAG_ON,DIAG_OFF,DIAG_ON");
+  });
+
+  test("review Medium: reopening re-notifies an open native card once, and leaves an unchanged closed card alone", () => {
+    for (const open of [true, false]) {
+      const out = runCet(`${panelRig({ requests: `{}`, info: INFO(), open: true })}
+        IMPL.CollapsingHeader = function() return ${open} end
+        handlers.onUpdate(0.3); handlers.onDraw(); handlers.onUpdate(0.3)
+        handlers.onOverlayClose(); handlers.onOverlayOpen()
+        handlers.onDraw(); handlers.onUpdate(0.3); handlers.onDraw(); handlers.onUpdate(0.3)
+        return table.concat(diagnostics, ",")`);
+      expect(out).toBe(open ? "DIAG_ON,DIAG_ON" : "");
+    }
   });
 
   test("cet.panel: a press whose claim is refused (a kill came first) never reaches XFBridge_PauseWrites; a stopped bridge queues none", () => {
