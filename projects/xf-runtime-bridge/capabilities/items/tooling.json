@@ -220,11 +220,10 @@
     "summary": "This registry: structured items with stage, evidence and health kept apart, consumer demand, verification and a changelog, checked by a validator and rendered to a page and an HTML view.",
     "area": "tooling",
     "kind": "tool",
-    "stage": "built",
+    "stage": "merged",
     "evidence": "offline",
     "health": "works",
     "priority": "P2",
-    "branch": "claude/bridge-capabilities",
     "demand": [
       {
         "consumer": "story-engine",

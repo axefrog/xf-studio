@@ -10,7 +10,7 @@
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 6 | 9 | 16 | 2 | 1 | 126 | 0 | 0 |
+| items | 6 | 9 | 16 | 2 | 0 | 127 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
@@ -43,7 +43,7 @@ Built, merged or released capabilities with no game evidence (none or offline): 
 | [`supervisor.actor-entries`](#supervisor.actor-entries) Supervising XF actors | merged | offline | 2026-10-26 (0.8.19) | 0 d |
 | [`supervisor.plan-module`](#supervisor.plan-module) Plans | merged | offline | 2026-10-26 | 0 d |
 | [`supervisor.while-away`](#supervisor.while-away) While you were away | merged | offline | 2026-10-26 (0.8.15) | 0 d |
-| [`tooling.capability-registry`](#tooling.capability-registry) The capability registry | built | offline | 2026-10-26 | 0 d |
+| [`tooling.capability-registry`](#tooling.capability-registry) The capability registry | merged | offline | 2026-10-26 | 0 d |
 | [`tooling.lint`](#tooling.lint) Lints and contracts | merged | offline | 2026-10-26 (0.3.0) | 0 d |
 | [`tooling.preflight`](#tooling.preflight) Session preflight | merged | offline | 2026-10-26 | 0 d |
 | [`tooling.selftest`](#tooling.selftest) Self-test host and unit checks | merged | offline | 2026-10-26 (0.2.0) | 0 d |
@@ -172,7 +172,7 @@ Per consumer, blocking first.
 | needs | P2 | M5 | [`core.restage`](#core.restage) | planned | none | Restage after load: bring back whatever should be present; an asynchronous restaging state is a review item. |
 | needs | P4 | M5 | [`core.play-mode`](#core.play-mode) | planned | none | Story writes without the save lock: play mode takes no save lock. |
 | needs | H6 | M5 | [`core.companion`](#core.companion) | planned | none | Companion processes under the seven agreed conditions; first proof is an in-game session on a hello-world companion. |
-| wants |  |  | [`tooling.capability-registry`](#tooling.capability-registry) | built | offline | Its requirements page asks the bridge chat to mark the bridge's status per row at each milestone; the registry carries that as demand. |
+| wants |  |  | [`tooling.capability-registry`](#tooling.capability-registry) | merged | offline | Its requirements page asks the bridge chat to mark the bridge's status per row at each milestone; the registry carries that as demand. |
 | wants | H3 | Later | [`core.owned-scope`](#core.owned-scope) | planned | none | An access class for story writes in the release flavour, scoped to what the plugin owns; writes to vanilla state wait on O5. |
 | wants | C3 | Later | [`core.consent`](#core.consent) | planned | none | Release consent and a switch per feature. |
 | wants | S2 | Later | [`core.senses-plugin`](#core.senses-plugin) | planned | none | Release route planned through the XF Senses plugin. |
@@ -2903,7 +2903,7 @@ The MCP server, CLI, session runner, preflight, packaging and staging. (area `to
 | [`tooling.packaging`](#tooling.packaging) Packages | tool | merged | partial | works | P3 |
 | [`tooling.selftest`](#tooling.selftest) Self-test host and unit checks | tool | merged | offline | works | P3 |
 | [`tooling.lint`](#tooling.lint) Lints and contracts | tool | merged | offline | works | P3 |
-| [`tooling.capability-registry`](#tooling.capability-registry) The capability registry | tool | built | offline | works | P2 |
+| [`tooling.capability-registry`](#tooling.capability-registry) The capability registry | tool | merged | offline | works | P2 |
 
 <a id="tooling.command-api"></a>
 
@@ -3057,11 +3057,10 @@ redscript lint against the game's bundle (with and without Codeware, Equipment-E
 
 ### The capability registry
 
-`tooling.capability-registry` · tool · stage **built** · evidence **offline** · health **works** · P2
+`tooling.capability-registry` · tool · stage **merged** · evidence **offline** · health **works** · P2
 
 This registry: structured items with stage, evidence and health kept apart, consumer demand, verification and a changelog, checked by a validator and rendered to a page and an HTML view.
 
-- **Version:** branch `claude/bridge-capabilities`
 - **Code:** `capabilities`, `tools/capabilities.ts`
 - **Demand (story-engine, wants):** Its requirements page asks the bridge chat to mark the bridge's status per row at each milestone; the registry carries that as demand.
 - **Tests:** `tools/test/capabilities.test.ts`
