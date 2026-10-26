@@ -66,7 +66,7 @@ events, silent restatement, nominal kind compatibility), the cores of S1 v0.5 an
   - The tests (`reference/test/sim/`) hold every unit fixture of S1 14.1 the core covers, the end-to-end fixtures SF1-E1 to
     SF1-E4, the twenty-eight invariants (`invariants.test.ts`) and the property tests of 14.3 (`properties.test.ts`: generated
     scripts, random call groupings and reloads, forgetting, metamorphic relations, limits, demand). Later capabilities (S1 0.3)
-    are refused plainly. `S1_FULL=1` runs the long fixtures at the specification's scale.
+    are refused plainly. `S1_FULL=1` runs the long fixtures at the specification's scale, except the v0.6 end-to-end fixtures SF1-E5 and SF1-E6 (`e2e-v06.test.ts`), whose twenty seeds of two game weeks would take most of the weekly job's 120 minutes: `S1_FULL=1` runs a few seeds of each, and `S1_SOAK=1` (not part of any profile) their specification scale, hours, to be run by hand under the memory guard.
 
 - The **procedural layer** ([`reference/src/procedural/`](reference/src/procedural/)): the core of
   [S3 v0.4](../../research/story-engine/spec/procedural.md). World-only fitting and its report; senses, pacing,
@@ -103,7 +103,7 @@ earlier before and after timings. Run it under the repository memory guard with 
 
 `S1_FULL=1` restores the specification's long fixtures, the additional uninterrupted 1,008-window replay, and cold checks of all
 10,000 tie pairs, repeated digest/transcript checks, week-scale E1/E2 and statistical metamorphic runs,
-and 2,048 sweep/replay seeds in each snapshot mode. The weekly/manual CI job selects this profile. Run it under the same guard. The regression mutation check is
+and 2,048 sweep/replay seeds in each snapshot mode. The weekly/manual CI job selects this profile. `S1_SOAK=1` is a separate opt-in above it for the v0.6 end-to-end fixtures at the specification's scale (SF1-E5: 20 seeds of 2,016 windows; SF1-E6: 3 seeds at all four tempos): hours of CPU, not in the weekly job. Run it under the same guard. The regression mutation check is
 `bun run test/sim/check-review-mutations.ts` (optionally followed by one probe name, such as `R3-06`): it changes only the targeted
 behaviour in memory and requires failure at the named semantic assertion. Setup and import failures are rejected as evidence.
 

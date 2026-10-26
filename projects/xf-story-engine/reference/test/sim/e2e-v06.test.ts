@@ -1,5 +1,7 @@
 // SF1-E4 (the fix-round variant), the v0.6 SF1-E5 and SF1-E6 (S1 14.2): a child that outlives the posts its parent was cast under, the Friday fee under protection and a hunt, end to end.
-// The spec's scale (twenty world seeds, two game weeks) runs with `S1_FULL=1`; the default run keeps every check at a smaller scale.
+// Three scales. The default run keeps every check at a small scale. `S1_FULL=1` (the weekly CI profile, which has to fit all of the suite in 120 minutes) runs
+// two seeds of three and a half game days for SF1-E5 and one seed of two tempos for SF1-E6, about seven CPU-minutes. `S1_SOAK=1` is the specification's own scale,
+// twenty seeds of two game weeks and, for SF1-E6, three seeds at all four tempos: hours, run by hand under the memory guard (SPEC-NOTES).
 
 import { describe, expect, test, setDefaultTimeout } from 'bun:test';
 import { H, s as hs } from '../../src/id.ts';
@@ -20,6 +22,7 @@ import { stepOne } from './hunt-helpers.ts';
 
 setDefaultTimeout(600_000);
 const FULL = process.env.S1_FULL === '1';
+const SOAK = process.env.S1_SOAK === '1';
 
 describe('SF1-E4 (fix-round variant): a child outlives the posts its parent was cast under', () => {
   test('an item parent whose victim was cast while a guard stood at the cell, and a police child due after the post has left the history: the child\'s victim and target are still the parent\'s', () => {
@@ -102,8 +105,8 @@ function observation(sim: Sim, skip: string[] = []): unknown {
 describe('SF1-E5 (v0.6): the Friday fee under protection', () => {
   // the Claws' treasury runs low early, so that collect-fee starts and its collectors work the market
   const poor = (d: S1Data): void => { d.groups.groups.find((g) => g.aff === 'A1')!.books.cash = 600; };
-  const N = FULL ? 2016 : 330;
-  const SEEDS = FULL ? 20 : 1;
+  const N = SOAK ? 2016 : FULL ? 504 : 330;
+  const SEEDS = SOAK ? 20 : FULL ? 2 : 1;
 
   test('A, B and D agree; collectors work their posts; goals, acts and the protagonist stay within bounds; a run with V at the market differs only in scene.acts', () => {
     for (let i = 0; i < SEEDS; i++) {
@@ -162,9 +165,9 @@ describe('SF1-E5 (v0.6): the Friday fee under protection', () => {
 });
 
 describe('SF1-E6 (v0.6): a hunt, end to end', () => {
-  const TEMPOS = FULL ? (['restless', 'steady', 'calm', 'off'] as const) : (['restless'] as const);
-  const SEEDS = FULL ? 3 : 1;
-  const N = FULL ? 1300 : 520;
+  const TEMPOS = SOAK ? (['restless', 'steady', 'calm', 'off'] as const) : FULL ? (['restless', 'steady'] as const) : (['restless'] as const);
+  const SEEDS = SOAK ? 3 : 1;
+  const N = SOAK ? 1300 : FULL ? 760 : 520;
 
   /** The harness stands in for S2: each warning and price is pinned `observed` 20 windows after it is minted, and V's response complying with the first price comes 300 windows later. */
   function hunt(name: string, tempo: 'restless' | 'steady' | 'calm' | 'off', mode: 'window' | 'reload') {
