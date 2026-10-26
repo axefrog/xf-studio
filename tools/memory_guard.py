@@ -19,12 +19,18 @@ The job also carries a hard commit limit (limit x 1.25) that the operating syste
 in case polling is too slow for a sudden allocation, and kill-on-close, so the tree dies with
 the guard. A kill exits with code 99 and a plain message; each kill is appended to
 local/memory-guard.log. A clean run ends with one line giving the peak, to size the next limit. Raising the limit to get past a kill is not the fix: shrink the work.
+
+The guard also refuses (exit 98) to run under a packaged Python, or to start one: the
+python/python3 App Execution Aliases run inside an app container whose file filter leaked
+kernel memory on 26 Oct 2026. XF_ALLOW_PACKAGED_PYTHON=1 runs anyway, with a warning.
 """
 
 from __future__ import annotations
 
 import argparse
 import ctypes
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -34,7 +40,11 @@ from datetime import datetime
 from pathlib import Path
 
 KILLED_EXIT = 99
+PACKAGED_EXIT = 98
 GB = 1024**3
+APPMODEL_ERROR_NO_PACKAGE = 15700
+ERROR_INSUFFICIENT_BUFFER = 122
+PYTHON_COMMAND = re.compile(r"(python|pythonw|py|pyw|pip)[0-9.]*", re.IGNORECASE)
 
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 psapi = ctypes.WinDLL("psapi", use_last_error=True)
@@ -227,6 +237,59 @@ def lowest_disk_free() -> int:
     return min(free)
 
 
+def in_windows_apps(path: str | None) -> bool:
+    return bool(path) and "\\windowsapps\\" in os.path.normcase(os.path.abspath(path))
+
+
+def packaged_interpreter() -> str | None:
+    """Why this interpreter runs as a packaged app, or None when it does not."""
+    rc = kernel32.GetCurrentPackageFullName(ctypes.byref(ctypes.c_uint32(0)), None)
+    if rc in (0, ERROR_INSUFFICIENT_BUFFER):
+        return "this Python process has a package identity"
+    for exe in (sys.executable, getattr(sys, "_base_executable", None)):
+        if in_windows_apps(exe):
+            return f"this Python runs from {exe}"
+    if rc != APPMODEL_ERROR_NO_PACKAGE:
+        raise OSError(rc, "GetCurrentPackageFullName failed")
+    return None
+
+
+def packaged_command(command: list[str]) -> str | None:
+    """Why the guarded command would start a packaged Python, or None when it would not."""
+    name = Path(command[0]).name
+    if not PYTHON_COMMAND.fullmatch(name[:-4] if name.lower().endswith(".exe") else name):
+        return None
+    resolved = shutil.which(command[0])
+    if in_windows_apps(resolved):
+        return f"`{command[0]}` resolves to the packaged-app alias {resolved}"
+    return None
+
+
+def refuse_packaged_python(command: list[str]) -> int | None:
+    """The exit code to refuse with when Python would run as a packaged app, else None.
+
+    A Windows-only backstop that must never crash the guard: on any error it skips, with a note."""
+    if sys.platform != "win32":
+        return None
+    try:
+        reason = packaged_interpreter() or packaged_command(command)
+    except Exception as error:  # the backstop must never stop the guard by failing itself
+        print(f"memory guard: note: skipped the packaged-Python check ({error})", file=sys.stderr)
+        return None
+    if not reason:
+        return None
+    allowed = os.environ.get("XF_ALLOW_PACKAGED_PYTHON") == "1"
+    print("\n" + "=" * 78 + f"\nMEMORY GUARD: packaged Python: {reason}.\n"
+          "Packaged-app aliases run inside an app container: AppData is redirected and file access\n"
+          "goes through the wcifs filter, which leaked kernel memory on 26 Oct 2026. Fix: call the\n"
+          "full interpreter path (%LOCALAPPDATA%\\Python\\pythoncore-3.14-64\\python.exe), and switch\n"
+          "off the python/python3 aliases in Settings > Apps > Advanced app settings > App execution aliases.\n"
+          + ("XF_ALLOW_PACKAGED_PYTHON=1 is set, so running anyway.\n" if allowed
+             else "Not starting. Set XF_ALLOW_PACKAGED_PYTHON=1 to run anyway.\n")
+          + "=" * 78, file=sys.stderr)
+    return None if allowed else PACKAGED_EXIT
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--limit", type=float, default=8.0, help="GB the command's processes may use together")
@@ -241,6 +304,8 @@ def main() -> int:
     limit, floor = int(args.limit * GB), int(args.floor * GB)
     disk_floor = int(args.disk_floor * GB)
 
+    if (refused := refuse_packaged_python(command)) is not None:
+        return refused
     disk_free = lowest_disk_free()
     if disk_free < disk_floor:
         print(f"MEMORY GUARD: not starting; only {disk_free / GB:.1f} GB free on disk, below the {args.disk_floor:g} GB "
