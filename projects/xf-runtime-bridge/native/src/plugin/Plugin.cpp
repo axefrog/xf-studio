@@ -159,8 +159,13 @@ nlohmann::json InfoJson()
                      {"windows_animations", state.overlayHost.WindowsAnimation()},
                      // the host's own figures, for the CET window's diagnostics card
                      {"frames", state.overlayHost.Frames()},
-                     {"cpu_ms", std::round(state.overlayHost.CpuMs() * 1000.0) / 1000.0},
+                     // 0.8.22: the test figure (overlay.set diagnostics_cpu_ms) where one is set, so the CET window's bar draws it too
+                     {"cpu_ms", state.overlayHost.CpuOverridden() ? state.overlayHost.DisplayCpuMs() : std::round(state.overlayHost.CpuMs() * 1000.0) / 1000.0},
+                     {"cpu_ms_override", state.overlayHost.CpuOverridden()},
                      {"cpu_ms_max", std::round(state.overlayHost.CpuMsMax() * 1000.0) / 1000.0}}},
+        // 0.8.22: what the CET window last drew (its DIAGNOSTICS header, chip and tone) and how cet.panel's last press went; null
+        // until the CET layer has reported (core/CetPanel.hpp).
+        {"cet_panel", state.cetPanel.Report()},
         // 0.8 (the UI review): the status wording every surface shows, made in one place (core/InkUi.cpp Summarize).
         {"status", inkui::StatusJson(BridgeViewNow())},
         // 0.8.2: which status surface shows now (0.8.3's names: ink_panel, xf_box, cet_line, or none while loading).

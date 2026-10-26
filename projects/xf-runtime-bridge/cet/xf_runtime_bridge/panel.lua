@@ -1126,6 +1126,8 @@ function panel.statusBlock(state, theme, which, info, bridge)
   if dotDrawn then ImGui.Unindent(hang) end
   -- the chip row
   local label, chipTone = chipOf(info, bridge)
+  -- 0.8.22 (cet.panel's report): what the window drew with.
+  state.drawnChip, state.drawnTone, state.drawnSurface = label, chipTone or tone, "cet_window"
   if label and bridge and bridge.enabled then
     panel.chip(state, theme, which, label, chipTone, chipTone == "paused")
     local foot = (not bridge.allow_writes and not bridge.killed) and "This build can't change the game."
@@ -1191,7 +1193,14 @@ local function drawDiagnostics(state, theme, which, info)
   if not info then return end
   sectionGap(theme)
   local open = false
+  -- 0.8.22, cet.panel: a requested header state, applied once right before the header (the player's own clicks rule after it).
+  if state.diagnosticsWanted ~= nil then
+    local want = state.diagnosticsWanted == true
+    state.diagnosticsWanted = nil
+    if ImGui.SetNextItemOpen ~= nil then try(state, "SetNextItemOpen", function() ImGui.SetNextItemOpen(want) end) end
+  end
   panel.inRole(theme, "eyebrow", function() open = ImGui.CollapsingHeader("DIAGNOSTICS##xf_diagnostics") end)
+  state.diagnosticsOpen = open == true
   if not open then return end
   local overlay = type(info.overlay) == "table" and info.overlay or {}
   local bridge = type(info.bridge) == "table" and info.bridge or {}

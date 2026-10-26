@@ -358,7 +358,9 @@ json OverlayHost::Snapshot(std::chrono::steady_clock::time_point aNow) const
              {"theme", ThemeName(Theme())},
              {"scale_percent", m_scalePercent},
              {"frames", m_frames.load()},
-             {"cpu_ms", std::round(m_cpuMicros.load()) / 1000.0},
+             {"cpu_ms", CpuOverridden() ? m_cpuOverrideMs.load() : std::round(m_cpuMicros.load()) / 1000.0},
+             {"cpu_ms_measured", std::round(m_cpuMicros.load()) / 1000.0},
+             {"cpu_ms_override", CpuOverridden() ? json(m_cpuOverrideMs.load()) : json(nullptr)},
              {"cpu_ms_max", std::round(m_cpuMicrosMax.load()) / 1000.0},
              {"gpu_ms", nullptr},
              {"hidden_for_capture", HiddenForCapture(aNow)},
@@ -434,16 +436,34 @@ bool DescriptorFreeList::Free(int32_t aSlot)
     return true;
 }
 
-json SetLive(OverlayHost& aHost, const json& aParams)
+json SetLive(OverlayHost& aHost, const json& aParams, bool aTestHooks)
 {
-    params::RequireOnly(aParams, {"theme", "motion", "diagnostics", "enabled"});
+    params::RequireOnly(aParams, {"theme", "motion", "diagnostics", "enabled", "diagnostics_cpu_ms"});
+    const bool hasFigure = aParams.is_object() && aParams.contains("diagnostics_cpu_ms");
+    std::optional<double> figure;
+    if (hasFigure)
+    {
+        if (!aTestHooks)
+        {
+            throw MethodError("test_hooks_off", "diagnostics_cpu_ms is a test figure: it needs a build with test hooks and [bridge] allow_test_hooks = true");
+        }
+        const auto& value = aParams["diagnostics_cpu_ms"];
+        if (!value.is_null())
+        {
+            if (!value.is_number() || !std::isfinite(value.get<double>()) || value.get<double>() < 0.0 || value.get<double>() > 100.0)
+            {
+                params::CheckFail("'diagnostics_cpu_ms' is a number of milliseconds from 0 to 100, or null to clear it");
+            }
+            figure = value.get<double>();
+        }
+    }
     const auto theme = params::CheckText(aParams, "theme", 8);
     const auto motion = params::CheckText(aParams, "motion", 8);
     const auto diagnostics = params::CheckBoolean(aParams, "diagnostics");
     const auto enabled = params::CheckBoolean(aParams, "enabled");
-    if (!theme && !motion && !diagnostics && !enabled)
+    if (!theme && !motion && !diagnostics && !enabled && !hasFigure)
     {
-        params::CheckFail("give at least one of theme, motion, diagnostics or enabled");
+        params::CheckFail("give at least one of theme, motion, diagnostics, enabled or diagnostics_cpu_ms");
     }
     if (theme && *theme != "dark" && *theme != "light")
     {
@@ -488,12 +508,18 @@ json SetLive(OverlayHost& aHost, const json& aParams)
         undo["enabled"] = previous["enabled"];
         if (aHost.Enabled()) aHost.SetSwitchedOff(!*enabled);
     }
+    if (hasFigure)
+    {
+        undo["diagnostics_cpu_ms"] = aHost.CpuOverridden() ? json(aHost.DisplayCpuMs()) : json(nullptr);
+        aHost.SetCpuOverride(figure ? *figure : std::numeric_limits<double>::quiet_NaN());
+    }
     const auto effective = aHost.Motion();
     return json{{"theme", ThemeName(aHost.Theme())},
                 {"motion", {{"setting", MotionSettingName(aHost.MotionSettingNow())}, {"effective", effective.effective}, {"reason", effective.reason}}},
                 {"diagnostics", aHost.Diagnostics()},
                 {"enabled", aHost.EnabledNow()},
                 {"enabled_at_load", aHost.Enabled()},
+                {"diagnostics_cpu_ms", aHost.CpuOverridden() ? json(aHost.DisplayCpuMs()) : json(nullptr)},
                 {"previous", previous},
                 {"in_memory", true},
                 {"config_ini", "unchanged: a restart goes back to config.ini's [overlay] values"},

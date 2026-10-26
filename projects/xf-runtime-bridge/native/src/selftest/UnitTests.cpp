@@ -29,6 +29,7 @@
 #include "core/PinViews.hpp"
 #include "core/Hooks070.hpp"
 #include "core/overlay/Host.hpp"
+#include "core/CetPanel.hpp"
 #include "core/Player.hpp"
 #include "core/Scene.hpp"
 #include "core/Config.hpp"
@@ -3382,6 +3383,44 @@ void Bridge070Tests()
             o::SetLive(on, offNow["undo"]["params"]);
             Check("0.8.22 overlay.set: enabled false stops drawing with the hooks kept; its undo draws again", stopped && on.ShouldDraw() && on.Snapshot()["enabled"] == true,
                   offNow.dump());
+            // The test-only diagnostics figure: refused without test hooks; with them both bars draw it and the state says so.
+            const auto noHooks = ParamsCode([&] { o::SetLive(on, json{{"diagnostics_cpu_ms", 0.8}}); });
+            on.NoteFrame(150.0); // a measured 0.15 ms
+            const auto figure = o::SetLive(on, json{{"diagnostics_cpu_ms", 0.8}}, true);
+            const auto withFigure = on.Snapshot();
+            const bool drawn = std::abs(on.DisplayCpuMs() - 0.8) < 1e-9 && withFigure["cpu_ms"] == 0.8 && withFigure["cpu_ms_override"] == 0.8 &&
+                               std::abs(withFigure["cpu_ms_measured"].get<double>() - 0.15) < 1e-9 && figure["undo"]["params"] == json{{"diagnostics_cpu_ms", nullptr}};
+            o::SetLive(on, figure["undo"]["params"], true);
+            const auto cleared = on.Snapshot();
+            {
+                // 0.8.22 cet.panel: queued for the CET layer, retired by its report, undone to what the window drew and the pause state.
+                xfb::cetpanel::Channel panel;
+                const bool unreported = panel.Report().is_null();
+                const auto open = panel.Request(json{{"diagnostics_open", true}}, false, true, false);
+                const auto press = panel.Request(json{{"press", "pause_changes"}}, false, true, false);
+                const auto first = json::parse(panel.Exchange(""));
+                const bool queued = first.size() == 2 && first[0]["diagnostics_open"] == true && first[1]["press"] == "pause_changes" &&
+                                    open["undo"]["params"] == json{{"diagnostics_open", false}} && press["undo"]["params"] == json{{"press", "resume_changes"}} &&
+                                    open["applies"][0].get<std::string>().find("next time") != std::string::npos && open["cet_overlay_open"] == false;
+                const auto left = panel.Exchange(json{{"applied_id", open["id"]}, {"diagnostics_open", true}, {"chip", "Changes allowed"}}.dump());
+                const auto report = panel.Report();
+                const auto again = panel.Request(json{{"diagnostics_open", false}}, true, true, true);
+                Check("0.8.22 cet.panel: requests queue for the CET layer until its report retires them; bridge.info carries the report; the undo is what was drawn",
+                      unreported && queued && json::parse(left).size() == 1 && report["diagnostics_open"] == true && report["pending"] == 1 &&
+                          again["undo"]["params"] == json{{"diagnostics_open", true}} && panel.Exchange(json{{"applied_id", 99}}.dump()).empty() &&
+                          ParamsCode([&] { panel.Request(json{{"press", "pause_changes"}}, true, false, false); }) == "writes_disabled" &&
+                          ParamsCode([&] { panel.Request(json{{"press", "pause"}}, true, true, false); }) == "bad_params" &&
+                          ParamsCode([&] { panel.Request(json::object(), true, true, false); }) == "bad_params",
+                      report.dump());
+                xfb::cetpanel::Channel full;
+                for (size_t i = 0; i < xfb::cetpanel::kMaxPending; ++i) full.Request(json{{"diagnostics_open", true}}, std::nullopt, true, false);
+                Check("0.8.22 cet.panel: a CET layer that never takes them is said once the queue is full",
+                      ParamsCode([&] { full.Request(json{{"diagnostics_open", true}}, std::nullopt, true, false); }) == "cet_not_answering");
+            }
+            Check("0.8.22 overlay.set diagnostics_cpu_ms: test hooks only; the figure replaces the measured time in the bars and the state, null clears it",
+                  noHooks == "test_hooks_off" && drawn && cleared["cpu_ms_override"].is_null() && std::abs(on.DisplayCpuMs() - 0.15) < 1e-9 &&
+                      ParamsCode([&] { o::SetLive(on, json{{"diagnostics_cpu_ms", -1}}, true); }) == "bad_params",
+                  withFigure.dump());
         }
         host.Configure(true, o::ThemeKind::Dark, 100);
         host.NoteHooks(true, true, true, "");

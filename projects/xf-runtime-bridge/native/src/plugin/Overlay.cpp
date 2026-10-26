@@ -1175,7 +1175,7 @@ void DrawPanel(double aSeconds)
         char value[160];
         std::snprintf(value, sizeof(value), "%llu", static_cast<unsigned long long>(gHost->Frames()));
         KeyValue("Frames", value, true);
-        std::snprintf(value, sizeof(value), "%.3f ms (max %.3f)", gHost->CpuMs(), gHost->CpuMsMax());
+        std::snprintf(value, sizeof(value), "%.3f ms (max %.3f)", gHost->DisplayCpuMs(), gHost->CpuMsMax());
         KeyValue("CPU", value, true);
         std::snprintf(value, sizeof(value), "%s \xC3\x97 %u, %u \xC3\x97 %u, sdr", gR.formatText.c_str(), gR.bufferCount, gR.width, gR.height);
         KeyValue("Back buffer", value, true);
@@ -1184,7 +1184,7 @@ void DrawPanel(double aSeconds)
         KeyValue("Bridge", value, false);
         std::snprintf(value, sizeof(value), "%s, motion %s", xfb::overlay::ThemeName(gHost->Theme()), motion.effective);
         KeyValue("Theme", value, false);
-        const double cpu = gHost->CpuMs();
+        const double cpu = gHost->DisplayCpuMs(); // 0.8.22: a test figure from overlay.set, where one is set
         char label[48];
         std::snprintf(label, sizeof(label), "%.2f ms of 1 ms", cpu);
         Bar(static_cast<float>(cpu), true, label, cpu > 0.9 ? Tone::Danger : cpu > 0.75 ? Tone::Warning : Tone::Neutral, motion.reduced, aSeconds);

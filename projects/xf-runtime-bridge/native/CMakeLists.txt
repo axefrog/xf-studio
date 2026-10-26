@@ -130,6 +130,7 @@ add_library(xfb_core STATIC
   src/core/Behaviours.cpp
   src/core/Bridge.cpp
   src/core/BuildInfo.cpp
+  src/core/CetPanel.cpp
   src/core/Config.cpp
   src/core/Dispatcher.cpp
   src/core/Dm080.cpp

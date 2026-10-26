@@ -301,8 +301,23 @@ export const COMMANDS_070: CommandDef[] = [
       motion: oneOf("The motion setting.", ["auto", "reduced", "full"]),
       diagnostics: bool("Show the XF box's diagnostics card."),
       enabled: bool("Draw the XF box (live only if the overlay was on at load)."),
+      diagnostics_cpu_ms: { description: "Test builds only (test hooks): a figure in ms both diagnostics bars draw instead of the measured CPU time, to show the warning and danger tones; null clears it.",
+        anyOf: [num("The figure in milliseconds.", 0, 100), { type: "null", description: "Clears the figure." }] },
     }),
     undo: "The result's undo (overlay_set with the earlier values); a restart goes back to config.ini.",
     bridge: { method: "overlay.set" },
+  },
+  {
+    name: "cet.panel",
+    title: "Drive the CET window's own controls",
+    description:
+      "0.8.22: the XF Runtime Bridge window in Cyber Engine Tweaks' overlay, as the player would use it: diagnostics_open opens or closes its DIAGNOSTICS header (once, right before the header is drawn; the player's own clicks rule after it), and press runs its Pause changes or Resume changes button's own action, exactly as a click would. Notify class, so it works while changes are paused. The CET layer takes the request within about 0.25 s: a press runs whether or not CET's overlay is open; with the overlay closed the header state waits for the next time the window draws (the result says which). bridge_info's cet_panel says what the window last drew (diagnostics_open, chip, tone, surface) and how the last press went (last_press {id, target, answer}). The undo puts the header back as it was drawn and the pause state as it was.",
+    permission: "notify",
+    input: obj({
+      diagnostics_open: bool("Open (true) or close (false) the DIAGNOSTICS header."),
+      press: oneOf("Press the window's Pause changes or Resume changes button.", ["pause_changes", "resume_changes"]),
+    }),
+    undo: "The result's undo (cet_panel with the header as it was drawn and the press that restores the pause state).",
+    bridge: { method: "cet.panel" },
   },
 ];

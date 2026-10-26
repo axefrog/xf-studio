@@ -6,10 +6,11 @@
 // additionalProperties: false, enum, minimum, maximum, minLength, maxLength, pattern, items,
 // minItems, maxItems, description, default (documentation only); 0.8.2: anyOf (a value matching any one of its schemas,
 // for an input that takes one value or a list of them), whose schema carries no type of its own; 0.8.21: a typed map, an object
-// with additionalProperties as a schema (every value matches it) and propertyNames (every key matches the pattern).
+// with additionalProperties as a schema (every value matches it) and propertyNames (every key matches the pattern); 0.8.22: type
+// null, inside an anyOf, for an input that takes a value or null (null clears it).
 
 export type JsonSchema = {
-  type?: "object" | "number" | "integer" | "string" | "boolean" | "array";
+  type?: "object" | "number" | "integer" | "string" | "boolean" | "array" | "null";
   anyOf?: JsonSchema[];
   description?: string;
   properties?: Record<string, JsonSchema>;
@@ -42,7 +43,7 @@ export function validate(schema: JsonSchema, value: unknown, path = "input"): st
     const tried = schema.anyOf.map((branch) => validate(branch, value, path));
     if (tried.some((list) => list.length === 0)) return [];
     // The branch of the value's own kind says what is wrong (a list's items, a text's value); else the first.
-    const kind = Array.isArray(value) ? "array" : typeof value;
+    const kind = Array.isArray(value) ? "array" : value === null ? "null" : typeof value;
     const index = Math.max(0, schema.anyOf.findIndex((branch) => branch.type === kind || (kind === "number" && branch.type === "integer")));
     return tried[index]!;
   }
@@ -104,6 +105,9 @@ export function validate(schema: JsonSchema, value: unknown, path = "input"): st
     }
     case "boolean":
       if (typeof value !== "boolean") problems.push(`${where} must be true or false.`);
+      break;
+    case "null":
+      if (value !== null) problems.push(`${where} must be null.`);
       break;
     case "array": {
       if (!Array.isArray(value)) {

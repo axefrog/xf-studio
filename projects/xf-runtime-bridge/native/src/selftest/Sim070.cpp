@@ -12,6 +12,7 @@
 #include "core/Hooks070.hpp"
 #include "core/Params.hpp"
 #include "core/overlay/Host.hpp"
+#include "core/CetPanel.hpp"
 
 namespace xfb::selftest
 {
@@ -511,8 +512,15 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
                               out["simulated"] = true;
                               return out;
                           }});
+    aDispatcher.Register({"cet.panel", Access::Notify, RunOn::BridgeThread, "The CET window's header and pause button (simulated: no CET layer).",
+                          [writes = aConfig.allowWrites](const MethodContext& aContext) {
+                              static xfb::cetpanel::Channel channel;
+                              auto out = channel.Request(aContext.params, std::nullopt, writes, false);
+                              out["simulated"] = true;
+                              return out;
+                          }});
     aDispatcher.Register({"overlay.set", Access::Notify, RunOn::BridgeThread, "Sets the overlay's settings live (simulated renderer).", [](const MethodContext& aContext) {
-                              auto out = xfb::overlay::SetLive(state.overlay, aContext.params);
+                              auto out = xfb::overlay::SetLive(state.overlay, aContext.params, true); // the self-test host has test hooks
                               out["simulated"] = true;
                               return out;
                           }});

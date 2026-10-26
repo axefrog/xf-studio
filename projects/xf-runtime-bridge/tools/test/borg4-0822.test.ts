@@ -263,3 +263,15 @@ test("review 4: recorder loss found by the recheck after the delay is in the cap
   expect(calls).toContain("capture.screenshot");
   expect(arms.status().receipts.at(-1).recorder_loss_while_armed).toEqual({ dropped: 2, invalid: 0, missed_deadlines: 0, file_error: false });
 });
+
+test("0.8.22 the catalogue: cet.panel (notify) and overlay.set's test figure, which takes a number or null", async () => {
+  const { findCommand } = await import("../api/catalogue.ts");
+  const panel = findCommand("cet.panel")!, overlay = findCommand("overlay.set")!;
+  expect(panel.permission).toBe("notify");
+  expect(validate(panel.input, { diagnostics_open: true, press: "pause_changes" })).toEqual([]);
+  expect(validate(panel.input, { press: "pause" }).length).toBeGreaterThan(0);
+  expect(validate(overlay.input, { diagnostics_cpu_ms: 0.8 })).toEqual([]);
+  expect(validate(overlay.input, { diagnostics_cpu_ms: null })).toEqual([]);
+  expect(validate(overlay.input, { diagnostics_cpu_ms: "high" }).length).toBeGreaterThan(0);
+  expect(validate(overlay.input, { diagnostics_cpu_ms: 500 }).length).toBeGreaterThan(0);
+});

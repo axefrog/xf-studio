@@ -88,6 +88,15 @@ local state = {
   pending = nil,   -- "rearm" while a reconnect is under way
   message = nil,   -- the panel's last outcome, in plain words
   messageOk = true,
+  -- 0.8.22, cet.panel (XFBridge_CetPanel): the last request applied, the header state wanted (applied once, before the header) and
+  -- as last drawn, what the status surfaces last drew (chip, tone, which surface) and how the last requested press went.
+  panelApplied = 0,
+  diagnosticsWanted = nil,
+  diagnosticsOpen = nil,
+  drawnChip = nil,
+  drawnTone = nil,
+  drawnSurface = nil,
+  lastPress = nil,
 }
 
 local hasTestInput, testInput = pcall(require, "test-input")
@@ -222,6 +231,31 @@ local function answerOptions()
     found, #request.names, #skipped, tostring(sent and stored)))
 end
 
+-- 0.8.22, cet.panel: the report of what this layer drew goes in, and the requests not applied yet come back (a JSON array, oldest
+-- first). A header request waits in diagnosticsWanted until the window next draws the header (once: the player's own clicks rule
+-- after it); a press is queued as the Pause changes button's own action, so it runs as a click would, overlay open or not.
+local function exchangePanel()
+  local report = { applied_id = state.panelApplied, diagnostics_open = state.diagnosticsOpen, diagnostics_pending = state.diagnosticsWanted,
+    chip = state.drawnChip, tone = state.drawnTone, surface = state.drawnSurface, last_press = state.lastPress,
+    panel = panel ~= nil, cet_open = state.overlayOpen == true }
+  local encoded, body = pcall(json.encode, report)
+  if not encoded or type(body) ~= "string" then return end
+  local ok, text = pcall(function() return Game.XFBridge_CetPanel(body) end)
+  if not ok or type(text) ~= "string" or text == "" then return end
+  local decoded, requests = pcall(json.decode, text)
+  if not decoded or type(requests) ~= "table" then return end
+  for _, request in ipairs(requests) do
+    local id = type(request) == "table" and tonumber(request.id) or nil
+    if id and id > state.panelApplied then
+      if request.diagnostics_open ~= nil then state.diagnosticsWanted = request.diagnostics_open == true end
+      if request.press == "pause_changes" or request.press == "resume_changes" then
+        table.insert(state.actions, { name = "pause", argument = request.press == "pause_changes", request = { id = id, target = request.press } })
+      end
+      state.panelApplied = id
+    end
+  end
+end
+
 -- ui.message: the lines the plugin holds (XFBridge_Messages answers {"messages":[{text, level, ...}]} or "").
 -- A killed bridge answers none. Read-only; polled four times a second while the bridge is on.
 local function pollMessages()
@@ -232,6 +266,7 @@ local function pollMessages()
   if state.pluginPresent and bridge and bridge.enabled then
     hudOk, frame = pcall(function() return Game.XFBridge_Hud() end)
   end
+  if state.pluginPresent and bridge and bridge.enabled then exchangePanel() end
   local surface = hudOk and type(frame) == "string" and string.match(frame, "\nsurface\t([%a_]+)\n") or nil
   state.surface = surface or "cet_line"
   if not state.pluginPresent or not bridge or not bridge.enabled or bridge.killed then
@@ -347,6 +382,10 @@ local function runAction(action)
       state.messageOk = true
     end
     log("info", cid, "panel: writes paused=" .. tostring(answer and answer.writes_paused))
+    -- 0.8.22: a press cet.panel asked for says how it went (bridge.info cet_panel.last_press).
+    if action.request then
+      state.lastPress = { id = action.request.id, target = action.request.target, answer = answer or { error = "the plugin didn't answer" } }
+    end
   elseif action.name == "mark" then
     -- 0.6: a marker in the session's event stream, for the coordinator to find (session.log); changes nothing.
     local ok, noted = callNative("XFBridge_Note", "ask", "The player marked this moment in the XF Runtime Bridge window")
@@ -629,6 +668,10 @@ local function drawLabelBody(which)
     end
   end
   local status = bridgeStatus()
+  -- 0.8.22 (cet.panel's report): what the line drew with.
+  state.drawnChip = state.info and type(state.info.status) == "table" and state.info.status.chip or nil
+  state.drawnTone = status.tone
+  state.drawnSurface = "cet_line"
   local muted = themeColour(which, "XfTextMuted", MUTED)
   local tone = themeColour(which, TONE_TOKENS[status.tone] or "TextDisabled", TONE_COLORS[status.tone] or TONE_COLORS.off)
   ImGui.PushTextWrapPos(MESSAGE_WRAP_PX)

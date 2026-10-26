@@ -530,6 +530,24 @@ void CetOverlay(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut,
     });
 }
 
+// XFBridge_CetPanel(report: String) -> String   (0.8.22: cet.panel. The CET layer, about four times a second, hands in its report
+// of what the window last drew, a JSON object, and takes the requests it hasn't applied yet, a JSON array, or "" when none;
+// core/CetPanel.hpp). Bookkeeping only; no game call.
+void CetPanel(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CString* aOut, int64_t)
+{
+    RED4ext::CString report;
+    RED4ext::GetParameter(aFrame, &report);
+    aFrame->code++; // skip ParamEnd
+
+    Guarded("XFBridge_CetPanel", [&] {
+        const auto pending = Get().cetPanel.Exchange(ToStd(report));
+        if (aOut)
+        {
+            *aOut = RED4ext::CString(pending.c_str());
+        }
+    });
+}
+
 // XFBridge_InkDrawn(id: Int32, shown: Bool) -> Bool   (0.8, the UI review: the ink panel reports, about five times a second,
 // the question it draws and whether it is on screen now, so the CET label can show only the status and the answer keys
 // instead of the question a third time). Stores two numbers; reads nothing else.
@@ -1033,6 +1051,7 @@ void PostRegisterTypes()
         RegisterGlobalTyped(rtti, "XFBridge_Answer", &Answer, "String", {{"Int32", "id"}, {"Int32", "choice"}, {"String", "source"}});
         RegisterGlobal(rtti, "XFBridge_Comment", &Comment, "Bool", {"text"});
         RegisterGlobal(rtti, "XFBridge_CetOverlay", &CetOverlay, "Bool", {"open"}, "Bool");
+        RegisterGlobal(rtti, "XFBridge_CetPanel", &CetPanel, "String", {"report"});
         // 0.8 (bridge-080a): the ink panel's report of the question it shows.
         RegisterGlobalTyped(rtti, "XFBridge_InkDrawn", &InkDrawn, "Bool", {{"Int32", "id"}, {"Bool", "shown"}});
         // 0.8.4: the kill key chosen in the XF Runtime Bridge window.
@@ -1059,9 +1078,9 @@ void PostRegisterTypes()
         // 0.8.9: the pins' views, OR-ed natively (the Sol review's finding 3).
         RegisterGlobalTyped(rtti, "XFBridge_PinDrawn", &PinDrawn, "Int32", {{"Int32", "pin"}, {"Int32", "bits"}});
         #ifdef XFB_AUTONOMOUS_TEST_HOOKS
-        log::Info("rtti.register_types", "phase=post_register natives=36");
+        log::Info("rtti.register_types", "phase=post_register natives=37");
 #else
-        log::Info("rtti.register_types", "phase=post_register natives=27");
+        log::Info("rtti.register_types", "phase=post_register natives=28");
 #endif
     }
     catch (const std::exception& e)

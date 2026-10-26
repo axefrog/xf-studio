@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 157 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 158 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -25,7 +25,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (4)
-- [Other tools](#other-tools) (13)
+- [Other tools](#other-tools) (14)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -35,7 +35,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
 | `read` | Look | 57 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
-| `notify` | Show messages in the game | 4 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
+| `notify` | Show messages in the game | 5 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-character` | Change V's appearance | 5 | Yes | Opens the appearance screen, changes its options and camera, and confirms or leaves it (opening and leaving only in the XF test profile). | `allow_writes = true` and `character` in `allow_write_classes` (on by default once writes are allowed); opening, confirming and leaving the appearance screen also need `allow_creator_leave = true`. |
@@ -2889,7 +2889,7 @@ No parameters.
 - **Permission:** Show messages in the game (`notify`)
 - **Changes the game:** No: it shows or moves the bridge's own messages and panel
 - **Undo:** The result's undo (overlay_set with the earlier values); a restart goes back to config.ini.
-- **Refusals:** [`needs_restart`](#refusal-needs-restart)
+- **Refusals:** [`needs_restart`](#refusal-needs-restart), [`test_hooks_off`](#refusal-test-hooks-off)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -2897,6 +2897,7 @@ No parameters.
 | `motion` | string | `auto`, `reduced`, `full` | The motion setting. |
 | `diagnostics` | boolean | `true`, `false` | Show the XF box's diagnostics card. |
 | `enabled` | boolean | `true`, `false` | Draw the XF box (live only if the overlay was on at load). |
+| `diagnostics_cpu_ms` | number or null | 0 to 100 | Test builds only (test hooks): a figure in ms both diagnostics bars draw instead of the measured CPU time, to show the warning and danger tones; null clears it. |
 
 ## Other tools
 
@@ -2988,6 +2989,21 @@ Tools not yet sorted into an area above.
 | `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
 | `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
 | `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
+
+### `cet_panel`
+
+**Drive the CET window's own controls.** 0.8.22: the XF Runtime Bridge window in Cyber Engine Tweaks' overlay, as the player would use it: diagnostics_open opens or closes its DIAGNOSTICS header (once, right before the header is drawn; the player's own clicks rule after it), and press runs its Pause changes or Resume changes button's own action, exactly as a click would. Notify class, so it works while changes are paused. The CET layer takes the request within about 0.25 s: a press runs whether or not CET's overlay is open; with the overlay closed the header state waits for the next time the window draws (the result says which). bridge_info's cet_panel says what the window last drew (diagnostics_open, chip, tone, surface) and how the last press went (last_press {id, target, answer}). The undo puts the header back as it was drawn and the pause state as it was.
+
+- **Command:** `cet.panel`, the bridge method `cet.panel`
+- **Permission:** Show messages in the game (`notify`)
+- **Changes the game:** No: it shows or moves the bridge's own messages and panel
+- **Undo:** The result's undo (cet_panel with the header as it was drawn and the press that restores the pause state).
+- **Refusals:** [`writes_disabled`](#refusal-writes-disabled), [`cet_not_answering`](#refusal-cet-not-answering)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `diagnostics_open` | boolean | `true`, `false` | Open (true) or close (false) the DIAGNOSTICS header. |
+| `press` | string | `pause_changes`, `resume_changes` | Press the window's Pause changes or Resume changes button. |
 
 ### `supervisor_set`
 
@@ -3220,6 +3236,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-call-failed"></a>`call_failed` | The game refused the call, and nothing is known to have changed. |
 | <a id="refusal-carrier-not-loaded"></a>`carrier_not_loaded` | The animation set isn't loaded. For the XF live carrier: install the XF Live Pose test package, open photo mode and select the carrier pose (photo_pose_set with record xfs_live_carrier), then try again. |
 | <a id="refusal-carrier-not-selected"></a>`carrier_not_selected` | The XF live carrier isn't the selected photo-mode pose, so nothing was written. Select it with photo_pose_set (record xfs_live_carrier), then try again. |
+| <a id="refusal-cet-not-answering"></a>`cet_not_answering` | The XF Runtime Bridge window in Cyber Engine Tweaks hasn't taken the last requests. Check that the game runs with Cyber Engine Tweaks and the bridge's CET mod, then try again. |
 | <a id="refusal-choice-changed"></a>`choice_changed` | The dialogue offer changed before the requested line was confirmed. Read it again before choosing. |
 | <a id="refusal-choice-unsupported"></a>`choice_unsupported` | This dialogue's input and eligibility rules have not been validated. Leave this choice to the player. |
 | <a id="refusal-client-timeout"></a>`client_timeout` | The game bridge didn't answer. The game may be frozen or loading; try again shortly. |

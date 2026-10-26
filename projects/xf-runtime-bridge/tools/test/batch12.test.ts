@@ -181,6 +181,18 @@ describe("0.7 against the self-test host", () => {
     expect(await ok(api, "overlay.state", {})).toMatchObject({ theme: "dark", enabled: true, switched_off: false, drawing_now: true });
   });
 
+  test("0.8.22 the test figure for the diagnostics bars, and cet.panel queued for the CET layer with its undo", async () => {
+    const figure = await ok(api, "overlay.set", { diagnostics_cpu_ms: 0.8 });
+    expect(figure.undo.params).toEqual({ diagnostics_cpu_ms: null });
+    expect(await ok(api, "overlay.state", {})).toMatchObject({ cpu_ms: 0.8, cpu_ms_override: 0.8 });
+    await ok(api, figure.undo.method, figure.undo.params);
+    expect((await ok(api, "overlay.state", {})).cpu_ms_override).toBe(null);
+    const panel = await ok(api, "cet.panel", { diagnostics_open: true, press: "pause_changes" });
+    expect(panel).toMatchObject({ queued: true, cet_overlay_open: null, undo: { method: "cet.panel", params: { diagnostics_open: false, press: "resume_changes" } } });
+    expect(panel.applies.join(" ")).toContain("next time");
+    expect((await api.callBridge("cet.panel", { press: "pause" }, "t-bad-press")).ok).toBe(false);
+  });
+
   test("photo.scene.set: NPCs off by label, the game speed, the undo; refused outside photo mode", async () => {
     await phase(api, "gameplay");
     expect(await refused(api, "photo.scene.set", { game_speed: 0.5 })).toBe("not_in_photo_mode");

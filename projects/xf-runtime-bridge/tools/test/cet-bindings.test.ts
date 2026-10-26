@@ -169,6 +169,7 @@ const IMPL = `
     TextWrapped = function(t) item("wrapped", t) end,
     InputTextMultiline = function(label, text) return text, false end,
     CollapsingHeader = function(label) rec("header:" .. label); return true end,
+    SetNextItemOpen = function(open) rec("setnextopen:" .. tostring(open)) end,
     PushStyleColor = function() pc = pc + 1 end,
     PopStyleColor = function(n) pc = pc - (n or 1) end,
     PushStyleVar = function() pv = pv + 1 end,
@@ -325,5 +326,80 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
     expect(window).toContain("begin:XF Runtime Bridge");
     expect(out).not.toContain("failed:");
     expect(out).not.toMatch(/^run:/);
+  });
+
+  test("cet.panel: the header opens once through SetNextItemOpen right before it, a press runs the button's own action, and the report says both", () => {
+    const out = runCet(`${IMPL}
+      handlers, DECODE, natives, reports = {}, {}, {}, {}
+      registerForEvent = function(name, fn) handlers[name] = fn end
+      registerHotkey = function() end
+      logs = {}
+      local function logLine(line) logs[#logs + 1] = line end
+      spdlog = { info = logLine, warning = logLine, error = logLine, debug = logLine }
+      GetVersion = function() return "1.37.1" end
+      json = { decode = function(s) return DECODE[s] end, encode = function(t) reports[#reports + 1] = t; return "REPORT" end }
+      package.preload["panel"] = function() return (function() ${panel} end)() end
+      package.preload["theme"] = function() return (function() ${theme} end)() end
+      local requests = "REQ"
+      Game = setmetatable({ XFBridge_Info = function() return "INFO" end, XFBridge_Hud = function() return "xfhud\\t1\\nsurface\\tcet_line\\nkeys\\t1\\n" end,
+        XFBridge_Messages = function() return "" end, XFBridge_Ping = function() return "pong" end,
+        XFBridge_CetPanel = function(body) local r = requests; requests = ""; return r end,
+        XFBridge_PauseWrites = function(paused) natives[#natives + 1] = "pause:" .. tostring(paused); return "PAUSED" end },
+        { __index = function() return function() return "" end end })
+      DECODE.INFO = { plugin_version = "0.8.22", bridge = { enabled = true, listening = true, killed = false, allow_writes = true },
+        overlay = { theme = "dark", motion = "full", cpu_ms = 0.8 }, status = { label = "XF Runtime Bridge", tone = "write", chip = "Changes allowed" } }
+      DECODE.REQ = { { id = 1, diagnostics_open = true }, { id = 2, press = "pause_changes" } }
+      DECODE.PAUSED = { changed = true, writes_paused = true }
+      local mod = (function() ${init} end)()
+      handlers.onInit(); handlers.onOverlayOpen()
+      handlers.onUpdate(0.3) -- polls: the two requests come in, the press is queued
+      handlers.onUpdate(0.3) -- runs the press as the button's action, then polls again
+      calls = {}; handlers.onDraw(); local first = table.concat(calls, "|")
+      calls = {}; handlers.onDraw(); local second = table.concat(calls, "|")
+      handlers.onUpdate(0.3) -- the next poll reports what was drawn
+      local r = reports[#reports]
+      return table.concat(natives, ",") .. "~~" .. first .. "~~" .. second .. "~~" ..
+        table.concat({ tostring(r.applied_id), tostring(r.diagnostics_open), tostring(r.diagnostics_pending), tostring(r.chip), tostring(r.surface),
+          tostring(r.last_press and r.last_press.id), tostring(r.last_press and r.last_press.target), tostring(r.last_press and r.last_press.answer.writes_paused) }, ",") ..
+        "~~" .. table.concat(logs, " / ")`);
+    const [natives, first, second, report, logs] = out.split("~~");
+    if (logs === undefined) throw new Error(out.slice(0, 2000));
+    expect(natives).toBe("pause:true");
+    // once, right before the header, and not again on the next frame
+    expect(first).toMatch(/setnextopen:true\|(scale:[\d.]+\|)?header:DIAGNOSTICS##xf_diagnostics/);
+    expect(second).not.toContain("setnextopen:");
+    expect(second).toContain("child:##xf_card_diagnostics");
+    expect(report).toBe("2,true,nil,Changes allowed,cet_window,2,pause_changes,true");
+    expect(logs).not.toContain("draw call failed");
+  });
+
+  test("cet.panel with CET's overlay closed: the press still runs, and the header waits for the window", () => {
+    const out = runCet(`${IMPL}
+      handlers, DECODE, natives, reports = {}, {}, {}, {}
+      registerForEvent = function(name, fn) handlers[name] = fn end
+      registerHotkey = function() end
+      spdlog = { info = function() end, warning = function() end, error = function() end, debug = function() end }
+      GetVersion = function() return "1.37.1" end
+      json = { decode = function(s) return DECODE[s] end, encode = function(t) reports[#reports + 1] = t; return "REPORT" end }
+      package.preload["panel"] = function() return (function() ${panel} end)() end
+      package.preload["theme"] = function() return (function() ${theme} end)() end
+      local requests = "REQ"
+      Game = setmetatable({ XFBridge_Info = function() return "INFO" end, XFBridge_Hud = function() return "xfhud\\t1\\nsurface\\tcet_line\\nkeys\\t1\\n" end,
+        XFBridge_Messages = function() return "" end, XFBridge_Ping = function() return "pong" end,
+        XFBridge_CetPanel = function(body) local r = requests; requests = ""; return r end,
+        XFBridge_PauseWrites = function(paused) natives[#natives + 1] = "pause:" .. tostring(paused); return "PAUSED" end },
+        { __index = function() return function() return "" end end })
+      DECODE.INFO = { plugin_version = "0.8.22", bridge = { enabled = true, listening = true, killed = false, allow_writes = true },
+        overlay = { theme = "dark", motion = "full" }, status = { label = "XF Runtime Bridge", tone = "paused", chip = "Paused" } }
+      DECODE.REQ = { { id = 1, diagnostics_open = true, press = "resume_changes" } }
+      DECODE.PAUSED = { changed = true, writes_paused = false }
+      local mod = (function() ${init} end)()
+      handlers.onInit()
+      handlers.onUpdate(0.3); handlers.onUpdate(0.3)
+      calls = {}; handlers.onDraw()
+      handlers.onUpdate(0.3)
+      local r = reports[#reports]
+      return table.concat(natives, ",") .. "~~" .. tostring(r.diagnostics_pending) .. "," .. tostring(r.surface) .. "," .. tostring(r.chip) .. "," .. tostring(r.cet_open)`);
+    expect(out).toBe("pause:false~~true,cet_line,Paused,false");
   });
 });

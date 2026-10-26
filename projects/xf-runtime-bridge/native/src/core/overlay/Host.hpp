@@ -12,6 +12,9 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <limits>
+#include <optional>
 #include <functional>
 #include <cstdint>
 #include <mutex>
@@ -156,6 +159,11 @@ public:
     // RB-108 (Low 13): what the panel shows each frame, read from atomics (no JSON on the render thread).
     uint64_t Frames() const { return m_frames.load(); }
     double CpuMs() const { return m_cpuMicros.load() / 1000.0; }
+    // 0.8.22, test builds (overlay.set diagnostics_cpu_ms): a figure the diagnostics bars draw instead of the measured time, so the
+    // bar's warning and danger tones can be captured; NaN when none. DisplayCpuMs is what the bars and the states show.
+    void SetCpuOverride(double aMs) { m_cpuOverrideMs.store(aMs); }
+    bool CpuOverridden() const { return !std::isnan(m_cpuOverrideMs.load()); }
+    double DisplayCpuMs() const { return CpuOverridden() ? m_cpuOverrideMs.load() : CpuMs(); }
     double CpuMsMax() const { return m_cpuMicrosMax.load() / 1000.0; }
     void NoteFrameGeneration(const std::vector<std::string>& aModules);
     // 0.8.22 (the Studio's in-game motion rule): [overlay] motion, Windows' own animation-effects setting (read at start and with
@@ -216,6 +224,7 @@ private:
     std::atomic<uint64_t> m_frames{0};
     std::atomic<double> m_cpuMicros{0.0};
     std::atomic<double> m_cpuMicrosMax{0.0};
+    std::atomic<double> m_cpuOverrideMs{std::numeric_limits<double>::quiet_NaN()};
     std::atomic<int> m_motionSetting{static_cast<int>(MotionSetting::Auto)};
     std::atomic<bool> m_windowsAnimations{true};
     std::atomic<bool> m_frameGenerationLoaded{false};
@@ -291,5 +300,6 @@ private:
 // 0.8.22, overlay.set {theme?, motion?, diagnostics?, enabled?}: the [overlay] settings applied live, in memory (config.ini is not
 // rewritten; a restart goes back to it). The answer has the values now, the earlier ones and an undo that puts back exactly the
 // keys given. enabled: true on a host that was not enabled at load throws needs_restart (its hooks attach only at load).
-json SetLive(OverlayHost& aHost, const json& aParams);
+// diagnostics_cpu_ms (a number of ms, or null to clear) is a test figure: refused with test_hooks_off unless aTestHooks.
+json SetLive(OverlayHost& aHost, const json& aParams, bool aTestHooks = false);
 } // namespace xfb::overlay

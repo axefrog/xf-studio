@@ -269,6 +269,6 @@ describe("0.8.6 the panel inside photo mode's menu (knowledge/photo-mode.md §15
     expect(natives).toContain("public static native func XFBridge_MouseHeld() -> Bool");
     // 0.8.7: four more (XFBridge_SaveRefused, XFBridge_SaveAnyway, XFBridge_Event, XFBridge_ProbeFlags; batch21); 0.8.9:
     // XFBridge_PinDrawn (batch22).
-    expect(read("native", "src", "plugin", "Natives.cpp")).toContain('log::Info("rtti.register_types", "phase=post_register natives=27");');
+    expect(read("native", "src", "plugin", "Natives.cpp")).toContain('log::Info("rtti.register_types", "phase=post_register natives=28");');
   });
 });
