@@ -393,6 +393,11 @@
           "label": "ST9a-dark-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST9a-dark-look-window",
+          "do": "host.window",
+          "bind": "win"
         }
       ],
       "pass": [
@@ -799,6 +804,11 @@
           "ms": 2500
         },
         {
+          "label": "ST8-dark-auto-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST8-dark-auto-line",
           "do": "run",
           "command": "ui.hud",
@@ -815,6 +825,7 @@
           "frames": 6,
           "interval_ms": 240,
           "clear_overlay": false,
+          "rect": "$win.regions.cet_line",
           "bind": "ST8_dark_auto_burst"
         }
       ],
@@ -1210,6 +1221,11 @@
           "label": "ST9b-dark-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST9b-dark-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST9b-dark-off",
@@ -1625,6 +1641,11 @@
           "label": "ST13-dark-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST13-dark-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST13-dark-closed1",
@@ -2228,6 +2249,11 @@
           "ms": 2500
         },
         {
+          "label": "ST8-dark-connected-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST8-dark-connected-line",
           "do": "run",
           "command": "ui.hud",
@@ -2244,6 +2270,7 @@
           "frames": 12,
           "interval_ms": 200,
           "clear_overlay": false,
+          "rect": "$win.regions.cet_line",
           "bind": "ST8_dark_connected_burst"
         }
       ],
@@ -2643,6 +2670,11 @@
           "label": "ST8-dark-paused-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST8-dark-paused-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST8-dark-paused-line",
@@ -3071,6 +3103,11 @@
           "label": "ST1-dark-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST1-dark-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST1-dark-xfbox",
@@ -3540,6 +3577,11 @@
           "ms": 2500
         },
         {
+          "label": "ST4-dark-changes-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST4-dark-changes-xfbox",
           "do": "run",
           "command": "ui.hud",
@@ -3556,6 +3598,7 @@
           "frames": 12,
           "interval_ms": 200,
           "clear_overlay": false,
+          "rect": "$win.regions.xf_box",
           "bind": "ST4_dark_changes_burst"
         }
       ],
@@ -3957,6 +4000,11 @@
           "ms": 2500
         },
         {
+          "label": "ST5-dark-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST5-dark-xfbox",
           "do": "run",
           "command": "ui.hud",
@@ -3975,6 +4023,7 @@
               "frames": 20,
               "interval_ms": 100,
               "clear_overlay": false,
+              "rect": "$win.regions.xf_box",
               "bind": "ST5_dark_burst"
             },
             {
@@ -4421,6 +4470,11 @@
           "label": "ST6-dark-chips-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST6-dark-chips-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST6-dark-chips-window",
@@ -4982,6 +5036,11 @@
           "ms": 2500
         },
         {
+          "label": "ST7-dark-running-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST7-dark-running-window",
           "do": "host.window",
           "bind": "win"
@@ -5496,6 +5555,11 @@
           "label": "ST7-dark-question-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST7-dark-question-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST7-dark-question-window",
@@ -6263,6 +6327,11 @@
           "ms": 2500
         },
         {
+          "label": "ST7-dark-diagnostics-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST7-dark-diagnostics-window",
           "do": "host.window",
           "bind": "win"
@@ -6793,6 +6862,11 @@
           "ms": 2500
         },
         {
+          "label": "ST11-dark-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST11-dark-photo",
           "do": "run",
           "command": "photo.open",
@@ -6878,6 +6952,7 @@
               "frames": 14,
               "interval_ms": 50,
               "clear_overlay": false,
+              "rect": "$win.regions.ink_panel",
               "bind": "ST11_dark_burst"
             },
             {
@@ -7368,6 +7443,11 @@
           "label": "ST10-dark-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST10-dark-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST10-dark-xfbox",
@@ -7899,6 +7979,11 @@
           "ms": 2500
         },
         {
+          "label": "ST3-dark-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST3-dark-xfbox",
           "do": "run",
           "command": "ui.hud",
@@ -7915,6 +8000,7 @@
           "frames": 6,
           "interval_ms": 240,
           "clear_overlay": false,
+          "rect": "$win.regions.xf_box",
           "bind": "ST3_dark_still"
         },
         {
@@ -7926,6 +8012,7 @@
               "frames": 10,
               "interval_ms": 100,
               "clear_overlay": false,
+              "rect": "$win.regions.xf_box",
               "bind": "ST3_dark_settle"
             },
             {
@@ -8386,6 +8473,11 @@
           "ms": 2500
         },
         {
+          "label": "ST8-light-connected-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST8-light-connected-line",
           "do": "run",
           "command": "ui.hud",
@@ -8402,6 +8494,7 @@
           "frames": 12,
           "interval_ms": 200,
           "clear_overlay": false,
+          "rect": "$win.regions.cet_line",
           "bind": "ST8_light_connected_burst"
         }
       ],
@@ -8801,6 +8894,11 @@
           "label": "ST8-light-paused-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST8-light-paused-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST8-light-paused-line",
@@ -9229,6 +9327,11 @@
           "label": "ST2-light-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST2-light-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST2-light-xfbox",
@@ -9698,6 +9801,11 @@
           "ms": 2500
         },
         {
+          "label": "ST4-light-changes-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST4-light-changes-xfbox",
           "do": "run",
           "command": "ui.hud",
@@ -9714,6 +9822,7 @@
           "frames": 12,
           "interval_ms": 200,
           "clear_overlay": false,
+          "rect": "$win.regions.xf_box",
           "bind": "ST4_light_changes_burst"
         }
       ],
@@ -10115,6 +10224,11 @@
           "ms": 2500
         },
         {
+          "label": "ST5-light-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST5-light-xfbox",
           "do": "run",
           "command": "ui.hud",
@@ -10133,6 +10247,7 @@
               "frames": 20,
               "interval_ms": 100,
               "clear_overlay": false,
+              "rect": "$win.regions.xf_box",
               "bind": "ST5_light_burst"
             },
             {
@@ -10579,6 +10694,11 @@
           "label": "ST6-light-chips-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST6-light-chips-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST6-light-chips-window",
@@ -11140,6 +11260,11 @@
           "ms": 2500
         },
         {
+          "label": "ST7-light-running-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST7-light-running-window",
           "do": "host.window",
           "bind": "win"
@@ -11654,6 +11779,11 @@
           "label": "ST7-light-question-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST7-light-question-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST7-light-question-window",
@@ -12421,6 +12551,11 @@
           "ms": 2500
         },
         {
+          "label": "ST7-light-diagnostics-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST7-light-diagnostics-window",
           "do": "host.window",
           "bind": "win"
@@ -12951,6 +13086,11 @@
           "ms": 2500
         },
         {
+          "label": "ST11-light-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST11-light-photo",
           "do": "run",
           "command": "photo.open",
@@ -13036,6 +13176,7 @@
               "frames": 14,
               "interval_ms": 50,
               "clear_overlay": false,
+              "rect": "$win.regions.ink_panel",
               "bind": "ST11_light_burst"
             },
             {
@@ -13525,6 +13666,11 @@
           "ms": 2500
         },
         {
+          "label": "ST3-light-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST3-light-xfbox",
           "do": "run",
           "command": "ui.hud",
@@ -13541,6 +13687,7 @@
           "frames": 6,
           "interval_ms": 240,
           "clear_overlay": false,
+          "rect": "$win.regions.xf_box",
           "bind": "ST3_light_still"
         },
         {
@@ -13552,6 +13699,7 @@
               "frames": 10,
               "interval_ms": 100,
               "clear_overlay": false,
+              "rect": "$win.regions.xf_box",
               "bind": "ST3_light_settle"
             },
             {
@@ -14011,6 +14159,11 @@
           "label": "ST7-dark-stopped-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST7-dark-stopped-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST7-dark-stopped-line",
@@ -14480,6 +14633,11 @@
           "ms": 2500
         },
         {
+          "label": "ST6-dark-readonly-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST6-dark-readonly-window",
           "do": "host.window",
           "bind": "win"
@@ -14885,12 +15043,18 @@
           "ms": 2500
         },
         {
+          "label": "ST4-dark-readonly-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST4-dark-readonly-burst",
           "do": "burst",
           "name": "ST4-xfbox-pulse-readonly-dark",
           "frames": 12,
           "interval_ms": 200,
           "clear_overlay": false,
+          "rect": "$win.regions.xf_box",
           "bind": "ST4_dark_readonly_burst"
         }
       ],
@@ -15153,6 +15317,11 @@
           "label": "ST6-light-readonly-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST6-light-readonly-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST6-light-readonly-window",
@@ -15560,12 +15729,18 @@
           "ms": 2500
         },
         {
+          "label": "ST4-light-readonly-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
           "label": "ST4-light-readonly-burst",
           "do": "burst",
           "name": "ST4-xfbox-pulse-readonly-light",
           "frames": 12,
           "interval_ms": 200,
           "clear_overlay": false,
+          "rect": "$win.regions.xf_box",
           "bind": "ST4_light_readonly_burst"
         }
       ],
@@ -15828,6 +16003,11 @@
           "label": "ST7-light-stopped-repaint",
           "do": "wait",
           "ms": 2500
+        },
+        {
+          "label": "ST7-light-stopped-look-window",
+          "do": "host.window",
+          "bind": "win"
         },
         {
           "label": "ST7-light-stopped-line",

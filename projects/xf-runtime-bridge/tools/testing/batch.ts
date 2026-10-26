@@ -24,7 +24,8 @@ import type { CommandApi } from "../api/command-api.ts";
 import { decodePng, diffStats, crop } from "../capture/image.ts";
 import { validateBound } from "./assertions.ts";
 import { ConfigEditor, readIni, stagedConfigPath, type IniValues } from "./config-ini.ts";
-import { cetWindowRect, decodeCetBinding, keysLabel, parseCetBindings, parseKeys, type Host } from "./host.ts";
+import { burstBytes, cetLineRect, cetWindowRect, decodeCetBinding, inkPanelRect, keysLabel, parseCetBindings, parseKeys, xfBoxRect, type Host } from "./host.ts";
+import { BURST_MEMORY_LIMIT } from "../capture/capture.ts";
 import { checkMatch, checkPlan, describePlan, matches, realClock, resolveRefs, runPlan, type Action, type ExecContext, type Executor, type Match, type Outcome, type Plan, type PlanClock, type PlanResult, type ReportEntry, type Step } from "./plan.ts";
 import { planTestStep, TEST_STEP_KINDS, TestSession } from "./script.ts";
 import { captureCursor, waitForEvent } from "./windows.ts";
@@ -113,6 +114,9 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   "overlay.restore": { required: [], optional: [], help: "put the overlay's live look back as this game session started it (the first overlay.set's undo)" },
 };
 
+/** The largest game window the bursts are planned for (3840 x 1600, the maintainer's ultrawide). */
+const NOMINAL_WINDOW = { width: 3840, height: 1600 };
+
 /** The command a step's action calls, or undefined (a local, host or test action). */
 export function commandOf(action: Record<string, unknown>): string | undefined {
   if (action.do === "run") return typeof action.command === "string" ? action.command : undefined;
@@ -173,6 +177,14 @@ export function makeActionChecker(known: Set<string>) {
       for (const problem of validateBound(def.input, input, known)) problems.push(`${where}: ${problem}`);
       if (kind === "run") for (const key of Object.keys(action)) if (!["do", "command", "input", "expect_error"].includes(key)) problems.push(`${where}: unknown field ${key}`);
       if ((kind === "capture" || kind === "burst") && typeof action.name !== "string") problems.push(`${where}: a ${kind} step names its files (name)`);
+      if (kind === "burst" || command === "capture.burst") {
+        const burst = (kind === "run" ? action.input : action) as { rect?: unknown; rect_normalized?: unknown; region?: string; frames?: number } | undefined;
+        const frames = Number(burst?.frames ?? 10);
+        const literal = burst?.rect && typeof burst.rect === "object" ? (burst.rect as { width: number; height: number }) : undefined;
+        const uncropped = !burst?.rect && !burst?.rect_normalized && (!burst?.region || burst.region === "full");
+        const at = literal ?? (uncropped ? NOMINAL_WINDOW : undefined);
+        if (at && burstBytes(at, frames) > BURST_MEMORY_LIMIT) problems.push(`${where}: this burst would hold ${Math.round(burstBytes(at, frames) / 1048576)} MB (${at.width}x${at.height}, ${frames} frames; the cap is ${BURST_MEMORY_LIMIT / 1048576} MB): crop it to the surface it judges (host.window's regions)`);
+      }
       return problems;
     }
     const spec = LOCAL_KINDS[kind];
@@ -613,7 +625,8 @@ export class SessionExecutor implements Executor {
           const window = pid === undefined ? null : await this.c.host.window(pid);
           if (!window) return { ok: false, code: "no_window", message: "The game's window wasn't found." };
           const monitors = await this.c.host.monitors().catch(() => []);
-          return { ok: true, value: { ...window, monitors, regions: { cet_window: cetWindowRect(window.width, window.height) } } };
+          return { ok: true, value: { ...window, monitors, regions: { cet_window: cetWindowRect(window.width, window.height), xf_box: xfBoxRect(window.width, window.height),
+            cet_line: cetLineRect(window.width, window.height), ink_panel: inkPanelRect(window.width, window.height) } } };
         }
         case "host.commit": {
           const free = await this.c.host.freeCommitBytes();

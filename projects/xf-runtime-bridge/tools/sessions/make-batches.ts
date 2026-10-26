@@ -84,6 +84,8 @@ const look = (row: string, theme: Theme, motion: Motion, enabled = true, writes 
     { label: `${row}-in-force`, do: "run", command: "overlay.state", input: {}, until: { all: [{ path: "theme", equals: theme }, { path: "motion.setting", equals: motion }] },
       interval_ms: 250, deadline_ms: 3000, bind: key(row, "overlay") },
     { label: `${row}-repaint`, do: "wait", ms: 2500 },
+    // The window's size, for the crops of this row's captures and bursts (regions.xf_box, cet_line, cet_window, ink_panel).
+    { label: `${row}-look-window`, do: "host.window", bind: "win" },
   ];
 };
 
@@ -144,7 +146,7 @@ function firstRows(): Json[] {
   row = "ST8-dark-auto";
   rows.push({ id: row, title: "CET line connected with motion auto under frame generation: a still dot (the Borg 4 ST8 repeat)", requires, judged_by: STUDIO,
     steps: [inPlay(row), ...look(row, "dark", "auto", false), cetLine(row),
-      { label: `${row}-burst`, do: "burst", name: "ST8-cetline-connected-auto-dark", frames: 6, interval_ms: 240, clear_overlay: false, bind: key(row, "burst") }],
+      { label: `${row}-burst`, do: "burst", name: "ST8-cetline-connected-auto-dark", frames: 6, interval_ms: 240, clear_overlay: false, rect: "$win.regions.cet_line", bind: key(row, "burst") }],
     pass: [captured("the still dot", row, "burst")], cleanup: [hudBack(row)] });
   row = "ST9b-dark";
   rows.push({ id: row, title: "Motion auto follows Windows' Animation effects within 2 s (ST9, the Windows half; the player changes the setting)",
@@ -178,7 +180,7 @@ function writesRows(theme: Theme): Json[] {
   let row = `ST8-${theme}-connected`;
   rows.push({ id: row, title: `CET line, connected, motion full (${theme})`, requires, judged_by: STUDIO,
     steps: [inPlay(row), ...look(row, theme, "full", false), cetLine(row),
-      { label: `${row}-burst`, do: "burst", name: `ST8-cetline-connected-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, bind: key(row, "burst") }],
+      { label: `${row}-burst`, do: "burst", name: `ST8-cetline-connected-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, rect: "$win.regions.cet_line", bind: key(row, "burst") }],
     pass: [check("motion full in force", row, "overlay", "motion.effective", { equals: "full" }), captured("the pulse burst", row, "burst")],
     cleanup: [hudBack(row)] });
   row = `ST8-${theme}-paused`;
@@ -207,7 +209,7 @@ function writesRows(theme: Theme): Json[] {
   row = `ST4-${theme}-changes`;
   rows.push({ id: row, title: `The dot's pulse with changes allowed, motion full (${theme})`, requires, judged_by: STUDIO,
     steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row),
-      { label: `${row}-burst`, do: "burst", name: `ST4-xfbox-pulse-changes-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, bind: key(row, "burst") }],
+      { label: `${row}-burst`, do: "burst", name: `ST4-xfbox-pulse-changes-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "burst") }],
     pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the pulse burst (12 x 200 ms, one 2.4 s period)", row, "burst")],
     cleanup: [hudBack(row)] });
 
@@ -215,7 +217,7 @@ function writesRows(theme: Theme): Json[] {
   rows.push({ id: row, title: `The settle on a change of state, and none for a second change within 2 s (${theme})`, requires, judged_by: STUDIO,
     steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row),
       { label: `${row}-change`, together: [
-        { do: "burst", name: `ST5-xfbox-settle-${theme}`, frames: 20, interval_ms: 100, clear_overlay: false, bind: key(row, "burst") },
+        { do: "burst", name: `ST5-xfbox-settle-${theme}`, frames: 20, interval_ms: 100, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "burst") },
         { sequence: [{ do: "wait", ms: 300 }, { do: "run", command: "session.handover", input: { note: `${row}: settle`, restore_ui: false } }, { do: "wait", ms: 700 }, { do: "run", command: "session.resume", input: {} }] },
       ] }],
     pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the settle burst (change at 0.3 s, second change at 1.0 s)", row, "burst"),
@@ -287,7 +289,7 @@ function writesRows(theme: Theme): Json[] {
       { label: `${row}-ask`, do: "run", command: "ui.message", input: { level: "ask", text: `${row}: the answers flash when Esc is pressed (no answer needed).`, choices: ["Yes", "No"], seconds: 120 }, bind: key(row, "q") },
       { label: `${row}-wait`, do: "wait", ms: 600 },
       { label: `${row}-flash`, together: [
-        { do: "burst", name: `ST11-ink-flash-${theme}`, frames: 14, interval_ms: 50, clear_overlay: false, bind: key(row, "burst") },
+        { do: "burst", name: `ST11-ink-flash-${theme}`, frames: 14, interval_ms: 50, clear_overlay: false, rect: "$win.regions.ink_panel", bind: key(row, "burst") },
         { sequence: [{ do: "wait", ms: 150 }, press(`${row}-esc`, "Esc")] },
       ] },
       { label: `${row}-held`, do: "run", command: "game.status", input: {}, bind: key(row, "after") }],
@@ -308,9 +310,9 @@ function writesRows(theme: Theme): Json[] {
   row = `ST3-${theme}`;
   rows.push({ id: row, title: `The XF box with motion reduced: a still dot, no settle (${theme})`, requires, judged_by: STUDIO,
     steps: [inPlay(row), ...look(row, theme, "reduced"), ...xfBox(row),
-      { label: `${row}-still`, do: "burst", name: `ST3-xfbox-reduced-${theme}`, frames: 6, interval_ms: 240, clear_overlay: false, bind: key(row, "still") },
+      { label: `${row}-still`, do: "burst", name: `ST3-xfbox-reduced-${theme}`, frames: 6, interval_ms: 240, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "still") },
       { label: `${row}-change`, together: [
-        { do: "burst", name: `ST3-xfbox-reduced-settle-${theme}`, frames: 10, interval_ms: 100, clear_overlay: false, bind: key(row, "settle") },
+        { do: "burst", name: `ST3-xfbox-reduced-settle-${theme}`, frames: 10, interval_ms: 100, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "settle") },
         { sequence: [{ do: "wait", ms: 300 }, { do: "run", command: "session.handover", input: { note: `${row}: no settle under reduced`, restore_ui: false } }, { do: "wait", ms: 400 }, { do: "run", command: "session.resume", input: {} }] },
       ] }],
     pass: [check("motion reduced", row, "overlay", "motion.effective", { equals: "reduced" }), check("by the setting", row, "overlay", "motion.reason", { equals: "setting" }),
@@ -345,7 +347,7 @@ function readOnlyRows(theme: Theme): Json[] {
   row = `ST4-${theme}-readonly`;
   rows.push({ id: row, title: `The dot's pulse, connected and read-only, motion full (${theme}; the XF box at the menu)`, requires, judged_by: STUDIO,
     steps: [atMenuOrPlay(row), ...look(row, theme, "full", true, false),
-      { label: `${row}-burst`, do: "burst", name: `ST4-xfbox-pulse-readonly-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, bind: key(row, "burst") }],
+      { label: `${row}-burst`, do: "burst", name: `ST4-xfbox-pulse-readonly-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "burst") }],
     pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), check("the XF box draws", row, "overlay", "drawing_now", { equals: true }), captured("the pulse burst", row, "burst")] });
   return rows;
 }

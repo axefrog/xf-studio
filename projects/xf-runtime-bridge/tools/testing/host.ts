@@ -110,6 +110,34 @@ export function cetWindowRect(width: number, height: number) {
   return { x: 0, y, width: Math.min(width, Math.round(height * (820 / 1600))), height: height - y };
 }
 
+/**
+ * Where the XF box draws (its status row, chips and diagnostics card), for bursts that judge it: the overlay host
+ * places it like the ink panel (native/src/core/overlay/Host.cpp PanelOrigin; the default anchor top_left at 40, 360 in
+ * the HUD's 3840-wide units, at least 300 of the 2160-high floor down), 360 px wide at 1080p scaled with the height.
+ * The height is generous (the diagnostics card), and the crop keeps a margin so a moved panel still fits.
+ */
+export function xfBoxRect(width: number, height: number) {
+  const unit = width / 3840, scale = height / 1080;
+  const left = 40 * unit, top = Math.max(360 * unit, 300 * (height / 2160));
+  const x = Math.max(0, Math.round(left - 24 * scale)), y = Math.max(0, Math.round(top - 24 * scale));
+  return { x, y, width: Math.min(width - x, Math.round(360 * scale + 48 * scale)), height: Math.min(height - y, Math.round(720 * scale)) };
+}
+
+/** The CET line: one line with its dot at the far top left (Cyber Engine Tweaks' label), with room for its message lines. */
+export function cetLineRect(width: number, height: number) {
+  const scale = height / 1080;
+  return { x: 0, y: 0, width: Math.min(width, Math.round(900 * scale)), height: Math.min(height, Math.round(160 * scale)) };
+}
+
+/** The ink panel inside photo mode's menu (ST11's answer flash): placed like the XF box, a little wider. */
+export function inkPanelRect(width: number, height: number) {
+  const box = xfBoxRect(width, height);
+  return { ...box, width: Math.min(width - box.x, Math.round(box.width * 1.5)) };
+}
+
+/** Bytes a burst holds in memory (capture.ts keeps every frame's RGB crop until the burst ends: 3 bytes a pixel). */
+export const burstBytes = (rect: { width: number; height: number }, frames: number) => rect.width * rect.height * 3 * frames;
+
 // ---- The real host (Windows) ----------------------------------------------------------------------------
 
 /** A hidden PowerShell one-liner, asynchronously (never blocks the runner's event loop). */

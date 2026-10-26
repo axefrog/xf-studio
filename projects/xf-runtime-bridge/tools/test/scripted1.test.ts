@@ -127,3 +127,30 @@ describe("3: every recorder's lifetime is set, and sized to its row", () => {
     expect(of("fine").status).toBe("ok");
   });
 });
+
+describe("4: bursts crop to the surface they judge, within the capture tool's memory cap", () => {
+  test("an uncropped 20-frame burst is a planning problem; every ST burst crops through host.window's regions", async () => {
+    const { planBatch } = await import("../testing/batch.ts");
+    const { script } = await import("./batch-fakes.ts");
+    const problems = planBatch(script([{ id: "r", title: "r", steps: [{ do: "burst", name: "ST5-xfbox-settle-dark", frames: 20, interval_ms: 100, clear_overlay: false }] }])).problems;
+    expect(problems.join("\n")).toContain("would hold 352 MB");
+    const { readFileSync } = await import("node:fs");
+    const st = JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "st-styling.json"), "utf8"));
+    const bursts: { rect?: string; frames: number }[] = [];
+    const walk = (v: unknown) => { if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === "object") { const o = v as Record<string, unknown>; if (o.do === "burst") bursts.push(o as never); Object.values(o).forEach(walk); } };
+    walk(st.rows);
+    expect(bursts.length).toBeGreaterThan(10);
+    expect(bursts.every((b) => typeof b.rect === "string" && b.rect.startsWith("$win.regions."))).toBe(true);
+  });
+
+  test("the derived surfaces fit the cap at 3840 x 1600 with the ST frame counts, and follow the window's size", async () => {
+    const { burstBytes, xfBoxRect, cetLineRect, inkPanelRect } = await import("../testing/host.ts");
+    const { BURST_MEMORY_LIMIT } = await import("../capture/capture.ts");
+    expect(burstBytes(xfBoxRect(3840, 1600), 20)).toBeLessThan(BURST_MEMORY_LIMIT / 4);
+    expect(burstBytes(inkPanelRect(3840, 1600), 14)).toBeLessThan(BURST_MEMORY_LIMIT / 4);
+    expect(burstBytes(cetLineRect(3840, 1600), 12)).toBeLessThan(BURST_MEMORY_LIMIT / 4);
+    const small = xfBoxRect(1920, 1080), big = xfBoxRect(3840, 2160);
+    expect(big.width).toBeGreaterThan(small.width);
+    expect(small.x + small.width).toBeLessThanOrEqual(1920);
+  });
+});
