@@ -39,7 +39,11 @@ export const SCRIPT_SCHEMA_3 = "xfb/session-script-3";
 export const REPORT_SCHEMA_3 = "xfb/session-report-3";
 
 /** What a row needs. config: a staged config.ini key (the runner sets it); binding: a CET binding (equals: a key chord); fixture: a private value. */
-export type Requirement = { config?: string; equals?: string; binding?: string; fixture?: string; note?: string };
+/**
+ * What a row needs before it runs. A fixture requirement with equals needs that exact value (an opt-in flag:
+ * equals true, so false or absent never opts in); without equals, the fixture must be given (not absent, null or false).
+ */
+export type Requirement = { config?: string; equals?: string | boolean | number; binding?: string; fixture?: string; note?: string };
 /** A pass check over a bound result: match (plan Match against the value) or captured (its files exist). */
 export type PassCheck = { label: string; ref: string; match?: Match; captured?: boolean };
 export type SessionOnFail = "skip_row" | "fail_row" | "continue" | "stop";
@@ -1230,7 +1234,11 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
     if (setupFailed) { record.reason = setupFailed; continue; }
     try {
       const unmet = (row.requires ?? []).flatMap((need) => {
-        if (need.fixture && fixtures[need.fixture] === undefined) return [`the fixtures file has no ${need.fixture}`];
+        if (need.fixture) {
+          const value = fixtures[need.fixture];
+          if (need.equals !== undefined && value !== need.equals) return [`the fixtures file's ${need.fixture} is ${value === undefined ? "absent" : JSON.stringify(value)}, not ${JSON.stringify(need.equals)}${need.note ? ` (${need.note})` : ""}`];
+          if (need.equals === undefined && (value === undefined || value === null || value === false)) return [`the fixtures file has no ${need.fixture}`];
+        }
         if (need.binding) {
           const text = readCetBindings();
           const [mod, name] = need.binding.split(".");

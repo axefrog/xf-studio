@@ -511,7 +511,7 @@ function writesRows(theme: Theme): Json[] {
 
   if (theme === "dark") {
     row = "ST10-dark";
-    rows.push({ id: row, title: "Fonts baked once: overlay.state across a window-mode change (alt-Enter twice)", requires: [...requires, { fixture: "allow_alt_enter", note: "alt-Enter changes the window mode; set allow_alt_enter in the fixtures to run it" }],
+    rows.push({ id: row, title: "Fonts baked once: overlay.state across a window-mode change (alt-Enter twice)", requires: [...requires, { fixture: "allow_alt_enter", equals: true, note: "alt-Enter changes the window mode; set allow_alt_enter: true in the fixtures to run it" }],
       steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row), overlayState(row, "before"), press(`${row}-toggle`, "Alt+Enter"), { label: `${row}-w1`, do: "wait", ms: 5000 }, overlayState(row, "mid"),
         press(`${row}-back`, "Alt+Enter"), { label: `${row}-w2`, do: "wait", ms: 5000 }, overlayState(row, "after"), windowOf(row)],
       pass: [check("a resize was seen", row, "after", "resizes", { min: 1 }), check("frames kept rising", row, "after", "frames", { min: ref(row, "mid", "frames") }),

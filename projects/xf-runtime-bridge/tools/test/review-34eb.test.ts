@@ -312,3 +312,24 @@ describe("M12: a drain cut at its page bound is incomplete, and says where it st
     expect(JSON.stringify(b.reason)).toContain("every page read");
   });
 });
+
+describe("M13: an opt-in fixture means a literal true", () => {
+  test("ST10 runs only with allow_alt_enter: true (absent and false skip it)", async () => {
+    const { stScript } = await import("../sessions/make-batches.ts");
+    const { clock: _c, fakeApi, fakeHost, go, script } = await fakes();
+    const { FakeClock } = await import("./fake-clock.ts");
+    const row = (stScript(false) as { rows: { id: string; requires: Record<string, unknown>[] }[] }).rows.find((r) => r.id === "ST10-dark")!;
+    // Only the fixture requirement (the others are the prelude's).
+    const only = { id: "alt", title: "alt", requires: row.requires.filter((n) => n.fixture), steps: [{ label: "w", do: "wait", ms: 10 }] };
+    const verdict = async (fixtures: Record<string, unknown>) => {
+      const clock = new FakeClock();
+      return (await go(script([only] as never), fakeApi(clock), fakeHost(), clock, tempDir("xfb-r34-"), { fixtures })).rows[0];
+    };
+    void _c;
+    expect((await verdict({})).verdict).toBe("SKIP");
+    const off = await verdict({ allow_alt_enter: false });
+    expect(off.verdict).toBe("SKIP");
+    expect(off.reason).toContain("allow_alt_enter");
+    expect((await verdict({ allow_alt_enter: true })).verdict).toBe("PASS");
+  });
+});

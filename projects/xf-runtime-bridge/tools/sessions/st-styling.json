@@ -9154,7 +9154,8 @@
         },
         {
           "fixture": "allow_alt_enter",
-          "note": "alt-Enter changes the window mode; set allow_alt_enter in the fixtures to run it"
+          "equals": true,
+          "note": "alt-Enter changes the window mode; set allow_alt_enter: true in the fixtures to run it"
         }
       ],
       "steps": [
