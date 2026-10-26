@@ -147,9 +147,16 @@ def board_rows(today: date) -> list[dict]:
         state = re.search(r"\*\*State \((\d{1,2}) (\w{3})\):\*\*", body)
         stamp = date(today.year, MONTHS[state.group(2)], int(state.group(1))) if state and state.group(2) in MONTHS else None
         release = re.search(r"\*\*Release:\*\*\s*([^|]+?)(?:\s\*\*|\s\||$)", body)
+        text = release.group(1).strip() if release else None
+        progress = None
+        if text and (frac := re.match(r"\[(\d+)\s*/\s*(\d+)\]\s*(.*)", text)):
+            done, total, rest = int(frac.group(1)), int(frac.group(2)), frac.group(3)
+            target = re.split(r"[:;(]", rest, maxsplit=1)[0].strip()
+            progress = {"done": min(done, total), "total": total, "target": target,
+                        "public": not re.search(r"\b(none|no (public|separate public) release)\b", rest, re.I)}
         rows.append({"chat": m.group(1).strip(), "state_date": stamp.isoformat() if stamp else None,
                      "state_age_days": (today - stamp).days if stamp else None,
-                     "release": release.group(1).strip() if release else None})
+                     "release": text, "progress": progress})
     return rows
 
 
@@ -215,6 +222,8 @@ def main() -> int:
             signals.append(f"{r['chat']}: board state line is {r['state_age_days']} days old")
         if r["release"] is None:
             signals.append(f"{r['chat']}: no **Release:** line on its board row")
+        elif r["progress"] is None:
+            signals.append(f"{r['chat']}: its **Release:** line has no [done/total] progress fraction")
 
     md = [f"# Release status ({datetime.now():%d %b %Y %H:%M})", "",
           f"Last release tag: {tags.get('last_tag')} ({tags.get('tag_date', '?')}), {tags.get('commits_since', '?')} commits since.",
