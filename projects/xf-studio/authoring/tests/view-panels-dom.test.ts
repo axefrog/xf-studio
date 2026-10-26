@@ -297,7 +297,14 @@ describe("a pane per view", () => {
     session.show(a); panes.sync();
     const keptA = structuredClone(session.dock(a));
     saves.length = 0;
-    session.show(b); panes.sync();
+    session.show(b);
+    // The timing probe's `loaded` checkpoint must capture the destination before loading,
+    // in the phase-2 dock's alias currency (047 D1 / 044 D2), while storage keeps instance IDs.
+    const projectedB = session.legacyDock()!;
+    expect(projectedB).not.toEqual(customB);
+    expect(serializeDockState(dock.dockState)).not.toEqual(projectedB);
+    panes.sync();
+    expect(serializeDockState(dock.dockState)).toEqual(projectedB);
     expect(session.dock(b)).toEqual(customB);
     expect(group(bPanel)?.id).toBe(groupB);
     expect(session.dock(a)).toEqual(keptA);

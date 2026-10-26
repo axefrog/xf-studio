@@ -79,7 +79,9 @@ async function measureTabSwitches(): Promise<TabSwitchProbe> {
     for (let n = 0; n < 8; n++) {
       const target = n % 2 === 0 ? b : a, before = performance.now(), beforeLoads = loads;
       tabs.strip.tab(target)!.click(); const dispatchMs = performance.now() - before;
-      const saved = session.dock();
+      // P3-i D1 / 044 D2: compare the captured destination in the same alias currency
+      // this phase-2 dock loads. Raw session.dock() uses instance IDs, even after a correct load.
+      const saved = session.legacyDock();
       let paintTaskMs = 0;
       await new Promise<void>(resolve => requestAnimationFrame(() => {
         const began = performance.now(); panes.sync(); bind();
