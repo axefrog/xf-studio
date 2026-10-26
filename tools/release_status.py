@@ -156,7 +156,8 @@ def board_rows(today: date) -> list[dict]:
                         "public": not re.search(r"\b(none|no (public|separate public) release)\b", rest, re.I)}
         rows.append({"chat": m.group(1).strip(), "state_date": stamp.isoformat() if stamp else None,
                      "state_age_days": (today - stamp).days if stamp else None,
-                     "release": text, "progress": progress})
+                     "release": text, "progress": progress,
+                     "public": progress["public"] if progress else None})
     return rows
 
 
