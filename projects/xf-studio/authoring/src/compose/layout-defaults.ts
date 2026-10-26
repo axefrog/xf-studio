@@ -42,12 +42,16 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
     log(`The ${item.module.label} experiment's default layouts can't be offered: ${reason}.`);
   };
   // One snapshot per registration set: the defaults and the panel types come from the same `registrations()` read, so the list and the
-  // knowledge can never disagree. Cached on the registrations' identities, so a module registered again is checked afresh; the
-  // generation moves whenever the set changes (dispatch-time checks compare it).
-  let snap: { on: readonly LayoutExperiment[]; generation: number; list: readonly ContributedLayoutDefault[]; panels: ReadonlySet<string> } | null = null;
-  const snapshot = () => {
-    const on = experiments.registrations();
-    if (snap && snap.on.length === on.length && snap.on.every((item, index) => item === on[index])) return snap;
+  // knowledge can never disagree. It is rebuilt whenever the experiments notify a change, so a module registered again is checked
+  // afresh; the generation is what dispatch-time checks compare.
+  // The generation counts every change notification as it happens (not when read), so withdraw-then-reinstate with the same objects
+  // still moves it. This listener is registered first, so it has counted a change before any other listener reads the source.
+  let generation = 0;
+  experiments.subscribe(() => { generation++; });
+  type Snapshot = { generation: number; list: readonly ContributedLayoutDefault[]; panels: ReadonlySet<string> };
+  let snap: Snapshot | null = null;
+  const build = (): Snapshot => {
+    const on = experiments.registrations(), at = generation;
     const added = on.flatMap(item => {
       // One experiment's broken defaults never take the others, or the built-in ones, with them.
       try {
@@ -59,9 +63,21 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
       } catch (error) { refuse(item, String((error as Error)?.message ?? error)); }
       return [];
     });
-    snap = { on, generation: (snap?.generation ?? 0) + 1, list: Object.freeze([...STUDIO_LAYOUT_DEFAULTS, ...added]),
+    return { generation: at, list: Object.freeze([...STUDIO_LAYOUT_DEFAULTS, ...added]),
       panels: new Set(on.flatMap(item => item.contribution.panels.map(panel => panel.id))) };
-    return snap;
+  };
+  /**
+   * The current snapshot. A change notified while it is being built (say, an experiment switched off from inside its own `defaults`)
+   * makes it stale before it is published: it is built again from the current set. If the set keeps changing, only the built-in
+   * defaults and knowledge are offered until it settles, never a set that has already been withdrawn.
+   */
+  const snapshot = (): Snapshot => {
+    if (snap && snap.generation === generation) return snap;
+    for (let tries = 0; tries < 4; tries++) {
+      const built = build();
+      if (built.generation === generation) return (snap = built);
+    }
+    return { generation, list: STUDIO_LAYOUT_DEFAULTS, panels: new Set() };
   };
   const known: FragmentKnowledge = Object.freeze({ rules: STUDIO_VIEW_GRAPH_RULES, tool: STUDIO_FRAGMENT_KNOWLEDGE.tool,
     panel: (type: string) => panels.has(type) || snapshot().panels.has(type) });

@@ -132,6 +132,33 @@ describe("experiment-contributed default layouts", () => {
     expect(w.layouts.known.panel("holotable.view")).toBe(false);
   });
 
+  test("an experiment withdrawn while its defaults are being read is never offered, and no tab can be made from it", () => {
+    let on = true, withdrawn = false;
+    const listeners = new Set<() => void>();
+    const notify = () => { for (const listener of listeners) listener(); };
+    const module = { ...HOLOTABLE_MODULE, get defaults() {
+      // Reading the defaults switches the experiment off (a flag flipped synchronously mid-validation).
+      if (!withdrawn) { withdrawn = true; on = false; notify(); }
+      return HOLOTABLE_MODULE.defaults;
+    } } as StudioModule;
+    const experiments = { registrations: () => (on ? [{ module, contribution: HOLOTABLE_VIEW }] : []),
+      subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; } };
+    const w = windowWith(experiments as never);
+    expect(w.tabs.capability({ kind: "tabs.new", default: HOLO }).available).toBe(false);
+    expect(w.defaults.get(HOLO)).toBeUndefined();
+    expect(w.layouts.known.panel("holotable.view")).toBe(false);
+    expect(w.defaults.list().map(item => item.id)).not.toContain(HOLO);
+  });
+
+  test("withdraw then reinstate with the very same registration objects, unread in between, still moves the generation", () => {
+    const experiments = experimentsDouble([holotable]), w = windowWith(experiments);
+    experiments.set(true);
+    const g1 = w.layouts.contributed.generation!();
+    experiments.set(false); experiments.set(true); // no read in between; the same `holotable` object both times
+    expect(w.layouts.contributed.generation!()).toBeGreaterThan(g1);
+    expect(w.defaults.get(HOLO)).toBeDefined();
+  });
+
   test("§6.6, this side: a tab and an own default made from the experiment survive it going off and on; the own default is unavailable meanwhile", () => {
     const experiments = experimentsDouble([holotable]), w = windowWith(experiments);
     experiments.set(true);
