@@ -100,13 +100,13 @@ function Invoke-Refresh {
       Write-Line "building commit $($head.Substring(0, 8))..."
       Push-Location $authoring
       try {
-        & $bun install --frozen-lockfile; if ($LASTEXITCODE -ne 0) { throw "bun install (authoring) exited $LASTEXITCODE" }
-        & $bun install --frozen-lockfile --cwd $desktop; if ($LASTEXITCODE -ne 0) { throw "bun install (desktop) exited $LASTEXITCODE" }
-        & $bun tools/build-native-bcn.ts; if ($LASTEXITCODE -ne 0) { throw "the texture compressor build exited $LASTEXITCODE" }
+        & $bun install --frozen-lockfile | Out-Host; if ($LASTEXITCODE -ne 0) { throw "bun install (authoring) exited $LASTEXITCODE" }
+        & $bun install --frozen-lockfile --cwd $desktop | Out-Host; if ($LASTEXITCODE -ne 0) { throw "bun install (desktop) exited $LASTEXITCODE" }
+        & $bun tools/build-native-bcn.ts | Out-Host; if ($LASTEXITCODE -ne 0) { throw "the texture compressor build exited $LASTEXITCODE" }
       } finally { Pop-Location }
       Push-Location $desktop
       try {
-        & $python (Join-Path $Checkout "tools\memory_guard.py") --limit 3 -- $bun run build:installer
+        & $python (Join-Path $Checkout "tools\memory_guard.py") --limit 3 -- $bun run build:installer | Out-Host
         if ($LASTEXITCODE -ne 0) { throw "build:installer exited $LASTEXITCODE (99 means the memory guard stopped it)" }
       } finally { Pop-Location }
     } finally {
@@ -207,7 +207,7 @@ $mutex = New-Object System.Threading.Mutex($false, "Global\xfs-desktop-refresh-i
 $owned = try { $mutex.WaitOne(0) } catch [Threading.AbandonedMutexException] { $true }  # a killed run left it: now ours
 if (-not $owned) { Write-Line "another refresh is running; nothing to do."; exit 0 }
 $outcome = $null
-try { $outcome = Invoke-Refresh }
+try { $outcome = @(Invoke-Refresh)[-1] }  # the last value; native output is sent to the host
 catch { $outcome = "failed: " + (($_.Exception.Message -replace "\s+", " ").Trim()); Write-Line $outcome }
 finally {
   foreach ($file in @($setupLog, $helperScript, $exitFile)) { if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force -ErrorAction SilentlyContinue } }
