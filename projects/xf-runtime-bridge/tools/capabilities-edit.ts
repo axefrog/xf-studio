@@ -1,16 +1,19 @@
 // Edits to the capability registry (capabilities/README.md, "Editing"). Every edit goes through here, never by hand:
 // it loads the whole registry, applies the change in memory, sets the item's updated date, appends the matching
 // changelog line, runs the full validation on the result, and only then writes, each file through a temporary file and
-// a rename, in the canonical format so diffs stay small. A change that would fail validation writes nothing and says
-// why. --as <consumer> (default runtime-bridge, the owner) says who is editing: a consumer may change only its own
+// a rename, in the canonical format so diffs stay small, together with the regenerated CAPABILITIES.md. A change that
+// would fail validation writes nothing and says why. The whole edit holds an exclusive lock (.edit.lock, with stale-lock
+// takeover), and publication is a journalled transaction (.edit-journal.json): the temp files are recorded before they
+// are written, a commit mark follows the last one, and recovery on the next start rolls back an unfinished write or
+// completes a committed one, so no edit lands without its changelog line. --as <consumer> (default runtime-bridge, the owner) says who is editing: a consumer may change only its own
 // demand entries and its own requests/<consumer>.json.
 //
 // tools/capabilities.ts dispatches here; tools/test/capabilities.test.ts drives runEdit on a scratch copy.
 
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
-  CAP_DIR, EVIDENCE, HEALTH, PRIORITIES, STAGES, canonical, formatChange, formatItems, formatJson, load, realContext, validate,
+  CAP_DIR, EVIDENCE, HEALTH, PRIORITIES, STAGES, canonical, formatChange, formatItems, formatJson, itemDigest, load, realContext, renderMarkdown, validate, view,
   type Change, type Context, type Item, type Loaded,
 } from "./capabilities.ts";
 
@@ -22,8 +25,12 @@ export type EditOptions = {
   capDir?: string;
   /** The validation context (catalogue commands, test-card rows, paths); the real one by default. */
   context?: Context;
-  /** The time of the edit, ISO 8601 with an offset; now by default. */
+  /** The time of the edit, ISO 8601 with an offset; now (once the lock is held) by default. */
   at?: string;
+  /** How long to wait for another edit's lock before refusing (10 s by default). */
+  lockWaitMs?: number;
+  /** Failure injection for the tests: called before each temp-file write, the commit mark and each rename; may throw. */
+  fault?: (step: "temp" | "commit" | "rename", path: string) => void;
 };
 
 export type EditResult = { code: number; out: string; err: string };
@@ -407,7 +414,8 @@ function cmdTriage(s: State, a: Args): void {
   const into = need(a, "into", "triage");
   const request = get(s, requestId);
   if (!request.consumer) throw new EditError(`'${requestId}' is an item, not a request`);
-  const target = find(s, into);
+  // Into its own id is a promotion: the request becomes an item under the same id, so every reference stays valid.
+  const target = into === requestId ? undefined : find(s, into);
   if (target && target.consumer) throw new EditError(`'${into}' is another request; triage into an item`);
   removeFrom(s, request);
   if (target) {
@@ -424,9 +432,30 @@ function cmdTriage(s: State, a: Args): void {
     oneOf(item.stage, STAGES, "stage");
     s.items.get(area)!.push(item);
     s.dirtyItems.add(area);
-    if (into !== requestId) log(s, { kind: "removed", items: [requestId], summary: `${request.consumer}'s ask is triaged as ${into}.` });
-    log(s, { kind: "added", items: [into], summary: `Triaged from ${request.consumer}'s ask: ${item.title} (stage ${item.stage}).` });
+    if (into !== requestId) {
+      log(s, { kind: "removed", items: [requestId], summary: `${request.consumer}'s ask is triaged as ${into}.` });
+      retarget(s, requestId, into);
+    }
+    log(s, { kind: "added", items: [into], summary: `${into === requestId ? "Promoted" : "Triaged"} from ${request.consumer}'s ask: ${item.title} (stage ${item.stage}).` });
   }
+}
+
+/** Every depends_on and parent naming `from` now names `to`; the items it changed (other than `except`). */
+function retarget(s: State, from: string, to: string, except?: Item): string[] {
+  const refs: string[] = [];
+  for (const [owner, group] of [...[...s.items].map(([k, v]) => [{ area: k }, v] as const), ...[...s.requests].map(([k, v]) => [{ consumer: k }, v] as const)]) {
+    for (const item of group) {
+      let changed = false;
+      if (item.parent === from) (item.parent = to), (changed = true);
+      if (item.depends_on?.includes(from)) (item.depends_on = item.depends_on.map((d: string) => (d === from ? to : d))), (changed = true);
+      if (changed && item !== except) {
+        touch(s, { item, ...owner });
+        refs.push(item.id);
+      }
+    }
+  }
+  if (refs.length && !except) log(s, { kind: "detail", items: refs, summary: `References to ${from} now name ${to}.` });
+  return refs;
 }
 
 function cmdRename(s: State, a: Args): void {
@@ -445,18 +474,7 @@ function cmdRename(s: State, a: Args): void {
     found.area = area;
   } else if (found.consumer) found.item.area = area;
   touch(s, found);
-  const refs: string[] = [];
-  for (const [owner, group] of [...[...s.items].map(([k, v]) => [{ area: k }, v] as const), ...[...s.requests].map(([k, v]) => [{ consumer: k }, v] as const)]) {
-    for (const item of group) {
-      let changed = false;
-      if (item.parent === from) (item.parent = to), (changed = true);
-      if (item.depends_on?.includes(from)) (item.depends_on = item.depends_on.map((d: string) => (d === from ? to : d))), (changed = true);
-      if (changed && item !== found.item) {
-        touch(s, { item, ...owner });
-        refs.push(item.id);
-      }
-    }
-  }
+  const refs = retarget(s, from, to, found.item);
   log(s, { kind: "removed", items: [from], summary: `Renamed to ${to}.` });
   log(s, { kind: "added", items: [to], summary: `Renamed from ${from}.` });
   if (refs.length) log(s, { kind: "detail", items: refs, summary: `References to ${from} now name ${to}.` });
@@ -477,6 +495,25 @@ function cmdRetire(s: State, a: Args): void {
   log(s, { kind: "retired", items: by ? [id, by] : [id], from: before, to: "retired", summary: `${found.item.title}: ${note}` });
 }
 
+/** Records the digest baseline: one line naming every item whose newest line has no digest (the migration to digests). */
+function cmdAudit(s: State, a: Args): void {
+  ownerOnly(s, "The digest baseline");
+  if (!a.flags.has("baseline")) throw new EditError("usage: audit --baseline (records a digest for every item whose newest changelog line has none)");
+  const parsed = s.data.changes.map((c) => JSON.parse(c.text) as Change);
+  const ids: string[] = [];
+  for (const group of [...s.items.values(), ...s.requests.values()]) {
+    for (const item of group) {
+      const last = [...parsed].reverse().find((c) => (c.items ?? []).includes(item.id) && c.kind !== "removed");
+      if (!last?.digests?.[item.id]) ids.push(item.id);
+    }
+  }
+  if (!ids.length) throw new EditError("every item's newest changelog line already has its digest; a mismatch means a change without its line: redo it through the tool");
+  log(s, {
+    kind: "schema", items: ids,
+    summary: one(a, "summary") ?? "Changelog lines now carry each named item's digest (and verification rows can be marked optional); this line records the baseline digest of every item.",
+  });
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Commit: validate the whole result, then write atomically.
 
@@ -485,6 +522,16 @@ function render(s: State): { files: Map<string, string>; data: Loaded } {
   const schema = s.data.schemas.item;
   for (const area of s.dirtyItems) files.set(join(s.capDir, "items", `${area}.json`), formatItems(s.items.get(area)!, schema));
   for (const consumer of s.dirtyRequests) files.set(join(s.capDir, "requests", `${consumer}.json`), formatItems(s.requests.get(consumer)!, schema));
+  // Each new line records the digests of the items it names, as they are after the whole edit.
+  for (const line of s.lines) {
+    if (line.kind === "removed" || !line.items?.length) continue;
+    const digests: Record<string, string> = {};
+    for (const id of line.items) {
+      const found = find(s, id);
+      if (found) digests[id] = itemDigest(found.item, schema);
+    }
+    if (Object.keys(digests).length) line.digests = digests;
+  }
   const byMonth = new Map<string, string[]>();
   for (const line of s.lines) {
     const month = line.at.slice(0, 7);
@@ -504,23 +551,134 @@ function render(s: State): { files: Map<string, string>; data: Loaded } {
       ...s.data.changes,
       ...s.lines.map((line, i) => ({ file: `changelog/${line.at.slice(0, 7)}.jsonl`, line: 1_000_000 + i, text: formatChange(line, s.data.schemas.change) })),
     ],
+    journal: false,
   };
+  // The page is regenerated in the same write, so it can never drift from the data.
+  files.set(join(s.capDir, "CAPABILITIES.md"), renderMarkdown(view(data)));
   return { files, data };
 }
 
-function writeAtomically(files: Map<string, string>): void {
-  const temps: [string, string][] = [];
+export const JOURNAL = ".edit-journal.json";
+export const LOCK = ".edit.lock";
+/** A lock older than this is stale whoever holds it (an edit takes well under a second). */
+const LOCK_STALE_MS = 10 * 60_000;
+
+type Journal = { state: "writing" | "commit"; files: { path: string; temp: string }[] };
+
+function writeJournal(capDir: string, journal: Journal): void {
+  const path = join(capDir, JOURNAL);
+  const temp = `${path}.tmp-${process.pid}`;
+  writeFileSync(temp, JSON.stringify(journal, null, 2) + "\n");
+  renameSync(temp, path);
+}
+
+const removeIfThere = (path: string) => {
+  if (existsSync(path)) unlinkSync(path);
+};
+
+/**
+ * Publishes the files as one transaction. The journal lists every temp file before any is written; a failure while
+ * writing removes them and publishes nothing. The commit mark follows the last temp; from then on the renames are
+ * completed, now or by recover() on the next start, so data never lands without its changelog line.
+ */
+export function publish(capDir: string, files: Map<string, string>, fault?: EditOptions["fault"]): void {
+  const stamp = `${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
+  const entries = [...files.keys()].map((path) => ({ path, temp: `${path}.tmp-${stamp}` }));
+  const journal: Journal = { state: "writing", files: entries.map((e) => ({ path: relativeTo(capDir, e.path), temp: relativeTo(capDir, e.temp) })) };
+  writeJournal(capDir, journal);
   try {
-    for (const [path, text] of files) {
+    for (const { path, temp } of entries) {
+      fault?.("temp", path);
       mkdirSync(dirname(path), { recursive: true });
-      const temp = `${path}.tmp-${process.pid}`;
-      writeFileSync(temp, text);
-      temps.push([temp, path]);
+      writeFileSync(temp, files.get(path)!);
     }
-    for (const [temp, path] of temps) renameSync(temp, path);
+    fault?.("commit", join(capDir, JOURNAL));
+    writeJournal(capDir, { ...journal, state: "commit" });
   } catch (error) {
-    for (const [temp] of temps) if (existsSync(temp)) unlinkSync(temp);
+    for (const { temp } of entries) removeIfThere(temp);
+    removeIfThere(join(capDir, JOURNAL));
     throw error;
+  }
+  try {
+    for (const { path, temp } of entries) {
+      fault?.("rename", path);
+      renameSync(temp, path);
+    }
+  } catch (error) {
+    throw new Error(`the edit was interrupted while publishing (${(error as Error).message}); the next run of the tool completes it`);
+  }
+  removeIfThere(join(capDir, JOURNAL));
+}
+
+function relativeTo(capDir: string, path: string): string {
+  return path.slice(capDir.length + 1).replaceAll("\\", "/");
+}
+
+/** Finishes or undoes an interrupted publish; a message when there was one. Run under the lock, before loading. */
+export function recover(capDir: string): string {
+  // A journal's own temp file is from a crash before the journal existed: nothing was written under it.
+  for (const f of existsSync(capDir) ? readdirSync(capDir) : []) if (f.startsWith(`${JOURNAL}.tmp-`)) unlinkSync(join(capDir, f));
+  const path = join(capDir, JOURNAL);
+  if (!existsSync(path)) return "";
+  const journal = JSON.parse(readFileSync(path, "utf8")) as Journal;
+  if (journal.state === "commit") {
+    for (const f of journal.files) if (existsSync(join(capDir, f.temp))) renameSync(join(capDir, f.temp), join(capDir, f.path));
+  } else {
+    for (const f of journal.files) removeIfThere(join(capDir, f.temp));
+  }
+  unlinkSync(path);
+  return journal.state === "commit"
+    ? `recovered: an interrupted edit was completed (${journal.files.length} file(s))`
+    : "recovered: an interrupted edit was rolled back (nothing had been published)";
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/** Takes the registry's exclusive lock, waiting up to waitMs; a lock whose process is gone, or that is too old, is taken over. */
+function acquireLock(capDir: string, waitMs: number): () => void {
+  const path = join(capDir, LOCK);
+  const token = `${process.pid}-${Math.random().toString(36).slice(2)}`;
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    try {
+      const fd = openSync(path, "wx");
+      writeSync(fd, JSON.stringify({ pid: process.pid, token, started: new Date().toISOString() }));
+      closeSync(fd);
+      return () => {
+        try {
+          if (JSON.parse(readFileSync(path, "utf8")).token === token) unlinkSync(path);
+        } catch {
+          /* already gone */
+        }
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    let holder: { pid?: number; started?: string } = {};
+    try {
+      holder = JSON.parse(readFileSync(path, "utf8"));
+    } catch {
+      // Being written this instant, or damaged: stale only once it is a few seconds old.
+      try {
+        if (Date.now() - statSync(path).mtimeMs > 5_000) holder = { pid: -1 };
+      } catch {
+        continue;
+      }
+    }
+    const age = holder.started ? Date.now() - Date.parse(holder.started) : 0;
+    if ((holder.pid !== undefined && (holder.pid < 0 || !alive(holder.pid))) || age > LOCK_STALE_MS) {
+      removeIfThere(path);
+      continue;
+    }
+    if (Date.now() >= deadline) throw new EditError(`another edit holds the registry (process ${holder.pid ?? "unknown"}, since ${holder.started ?? "unknown"}); try again in a moment`);
+    Bun.sleepSync(20 + Math.floor(Math.random() * 30));
   }
 }
 
@@ -547,17 +705,24 @@ function cmdList(s: State, a: Args): string {
 
 // ---------------------------------------------------------------------------------------------------------------
 
-export const EDIT_COMMANDS = ["add", "set", "stage", "evidence", "health", "priority", "demand", "demand-met", "issue", "quirk", "limit", "unknown", "improve", "verdict", "request", "triage", "rename", "retire", "format", "show", "list"] as const;
+export const EDIT_COMMANDS = ["add", "set", "stage", "evidence", "health", "priority", "demand", "demand-met", "issue", "quirk", "limit", "unknown", "improve", "verdict", "request", "triage", "rename", "retire", "audit", "format", "recover", "show", "list"] as const;
 
 export async function runEdit(argv: string[], options: EditOptions = {}): Promise<EditResult> {
   const [command, ...rest] = argv;
   const a = parseArgs(rest);
   const as = one(a, "as") ?? "runtime-bridge";
   const capDir = options.capDir ?? CAP_DIR;
+  let release: (() => void) | undefined;
   try {
+    // The lock covers everything from loading to publication, so concurrent edits never overwrite each other.
+    release = acquireLock(capDir, options.lockWaitMs ?? 10_000);
+    const recovered = recover(capDir);
+    const note = recovered ? `${recovered}\n` : "";
     const s = loadState(capDir, as, options.at ?? localNow());
-    if (command === "show") return { code: 0, out: cmdShow(s, a), err: "" };
-    if (command === "list") return { code: 0, out: cmdList(s, a), err: "" };
+    if (command === "recover") return { code: 0, out: note || "nothing to recover\n", err: "" };
+    if (command === "show") return { code: 0, out: note + cmdShow(s, a), err: "" };
+    if (command === "list") return { code: 0, out: note + cmdList(s, a), err: "" };
+    const context = options.context ?? (await realContext());
     if (command === "format") {
       ownerOnly(s, "Reformatting");
       for (const area of s.items.keys()) if (s.data.itemFiles.some((f) => f.area === area)) s.dirtyItems.add(area);
@@ -568,9 +733,10 @@ export async function runEdit(argv: string[], options: EditOptions = {}): Promis
       for (const c of s.data.changes) byFile.set(c.file, [...(byFile.get(c.file) ?? []), formatChange(JSON.parse(c.text), s.data.schemas.change)]);
       for (const [file, lines] of byFile) files.set(join(capDir, file), lines.join("\n") + "\n");
       data.changes = s.data.changes.map((c) => ({ ...c, text: formatChange(JSON.parse(c.text), s.data.schemas.change) }));
-      const errors = validate(data, options.context ?? (await realContext()));
-      writeAtomically(files);
-      return { code: errors.length ? 1 : 0, out: `formatted ${files.size} file(s)\n`, err: errors.length ? `still invalid after formatting:\n  ${errors.join("\n  ")}\n` : "" };
+      files.set(join(capDir, "CAPABILITIES.md"), renderMarkdown(view(data)));
+      const errors = validate(data, context);
+      publish(capDir, files, options.fault);
+      return { code: errors.length ? 1 : 0, out: `${note}formatted ${files.size} file(s)\n`, err: errors.length ? `still invalid after formatting:\n  ${errors.join("\n  ")}\n` : "" };
     }
     switch (command) {
       case "add": cmdAdd(s, a); break;
@@ -585,23 +751,25 @@ export async function runEdit(argv: string[], options: EditOptions = {}): Promis
       case "triage": cmdTriage(s, a); break;
       case "rename": cmdRename(s, a); break;
       case "retire": cmdRetire(s, a); break;
+      case "audit": cmdAudit(s, a); break;
       default: throw new EditError(`unknown command '${command}' (${EDIT_COMMANDS.join(", ")})`);
     }
     const { files, data } = render(s);
-    const context = options.context ?? (await realContext());
     // Only problems the edit introduces refuse it, so the tool can also repair a registry that is already invalid.
     const before = new Set(validate(s.data, context));
     const errors = validate(data, context);
     const introduced = errors.filter((e) => !before.has(e));
     if (introduced.length) {
-      return { code: 1, out: s.messages.map((m) => `${m}\n`).join(""), err: `nothing written: the result would not validate:\n  ${introduced.join("\n  ")}\n` };
+      return { code: 1, out: note + s.messages.map((m) => `${m}\n`).join(""), err: `nothing written: the result would not validate:\n  ${introduced.join("\n  ")}\n` };
     }
-    writeAtomically(files);
+    publish(capDir, files, options.fault);
     const remaining = errors.length ? [`note: ${errors.length} problem(s) from before this edit remain (bun tools/capabilities.ts validate)`] : [];
-    const out = [...s.lines.map((l) => `logged: ${l.kind} ${(l.items ?? []).join(", ")}: ${l.summary}`), ...s.messages, ...remaining].join("\n") + "\n";
+    const out = note + [...s.lines.map((l) => `logged: ${l.kind} ${(l.items ?? []).length > 6 ? `${l.items!.length} items` : (l.items ?? []).join(", ")}: ${l.summary}`), ...s.messages, ...remaining].join("\n") + "\n";
     return { code: 0, out, err: "" };
   } catch (error) {
     if (error instanceof EditError) return { code: 1, out: "", err: `refused: ${error.message}\n` };
-    throw error;
+    return { code: 1, out: "", err: `failed: ${(error as Error).message}\n` };
+  } finally {
+    release?.();
   }
 }

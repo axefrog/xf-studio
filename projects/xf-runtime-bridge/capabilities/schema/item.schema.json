@@ -91,7 +91,8 @@
               "session": { "description": "The session that gave the verdict, e.g. 'borg-4'.", "type": "string" },
               "build": { "description": "Bridge version and commit, e.g. '0.8.22 1cd681c3'.", "type": "string" },
               "date": { "type": "string", "format": "date" },
-              "note": { "type": "string" }
+              "note": { "type": "string" },
+              "optional": { "description": "True for a row the capability doesn't need to be proven (an optional variant); every other row must pass for evidence 'proven'.", "type": "boolean" }
             }
           }
         },

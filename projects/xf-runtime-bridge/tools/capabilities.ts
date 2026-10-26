@@ -9,9 +9,10 @@
 // validate checks the JSON Schemas (a small local validator for the subset the schemas use), unique ids and the area
 // prefix of each id, known areas and consumers, depends_on and parent (resolved, no cycles), surface.commands against
 // the command catalogue, verification.rows against the test card, docs links (files and anchors), code and test paths
-// of merged items, the changelog (schema, time order, month files) and that every item's updated date has a changelog
-// line touching it on or after that date. tools/test/capabilities.test.ts runs it on the real registry.
+// of merged items, the changelog (schema, time order, month files), that every item's updated date has a changelog
+// line touching it on or after that date, and that every item still matches the digest on the newest line naming it. tools/test/capabilities.test.ts runs it on the real registry.
 
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -38,6 +39,8 @@ export type Loaded = {
   schemas: { item: Json; registry: Json; change: Json };
   /** Errors met while reading (unparseable JSON). */
   readErrors: string[];
+  /** An interrupted edit's journal is waiting for recovery (tools/capabilities-edit.ts). */
+  journal?: boolean;
 };
 
 export type Context = {
@@ -86,15 +89,31 @@ export function load(capDir = CAP_DIR): Loaded {
       if (text.trim()) changes.push({ file: `changelog/${f}`, line: i + 1, text });
     });
   }
-  return { registry, itemFiles, requestFiles, changes, schemas: { item: schema("item.schema.json"), registry: schema("registry.schema.json"), change: schema("changelog.schema.json") }, readErrors };
+  const journal = existsSync(join(capDir, ".edit-journal.json"));
+  return { registry, itemFiles, requestFiles, changes, schemas: { item: schema("item.schema.json"), registry: schema("registry.schema.json"), change: schema("changelog.schema.json") }, readErrors, journal };
 }
 
-/** Every first-cell token of a Markdown table row in the test card: its row ids (CS8181, ST7, B318-1, 11, ...). */
+/** The header cells (first column) of the test card's test tables: "Row" (the session cards) and "#" (the early checks). */
+const TEST_TABLE_HEADERS = new Set(["Row", "#"]);
+
+/**
+ * The test card's row ids: the first cell of each body row of a test table (a table whose header's first cell is Row or
+ * #), so headers and other tables (groups, build records, logs) never count.
+ */
 export function testCardRows(text: string): Set<string> {
   const rows = new Set<string>();
-  for (const line of text.split(/\r?\n/)) {
-    const match = /^\|\s*\**([A-Za-z0-9][A-Za-z0-9.-]*)/.exec(line);
-    if (match) rows.add(match[1]!.replace(/[.-]+$/, ""));
+  const lines = text.split(/\r?\n/);
+  const firstCell = (line: string) => /^\|\s*\**([^|*]*?)\**\s*\|/.exec(line)?.[1]?.trim() ?? "";
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i]!.startsWith("|") || !/^\|\s*:?-{3,}/.test(lines[i + 1] ?? "")) continue;
+    const isTest = TEST_TABLE_HEADERS.has(firstCell(lines[i]!));
+    let j = i + 2;
+    for (; j < lines.length && lines[j]!.startsWith("|"); j++) {
+      if (!isTest) continue;
+      const match = /^\|\s*\**([A-Za-z0-9][A-Za-z0-9.-]*)/.exec(lines[j]!);
+      if (match) rows.add(match[1]!.replace(/[.-]+$/, ""));
+    }
+    i = j - 1;
   }
   return rows;
 }
@@ -224,6 +243,11 @@ export function formatItems(items: unknown[], itemSchema: Json): string {
   return formatJson(items.map((i) => canonical(i, itemSchema))) + "\n";
 }
 
+/** An item's content digest: sha-256 of its canonical form, 16 hex digits (the changelog's digests). */
+export function itemDigest(item: unknown, itemSchema: Json): string {
+  return createHash("sha256").update(formatJson(canonical(item, itemSchema))).digest("hex").slice(0, 16);
+}
+
 /** One changelog line in the canonical format. */
 export function formatChange(change: Change, changeSchema: Json): string {
   return JSON.stringify(canonical(change, changeSchema));
@@ -311,6 +335,7 @@ export function parseChanges(data: Loaded, errors: string[] = []): Change[] {
 
 export function validate(data: Loaded, context: Context): string[] {
   const errors: string[] = [...data.readErrors];
+  if (data.journal) errors.push("an interrupted edit awaits recovery (.edit-journal.json): run bun tools/capabilities.ts recover, or any edit");
   if (!data.registry || !data.schemas.item) return errors;
 
   // The registry.
@@ -367,8 +392,11 @@ export function validate(data: Loaded, context: Context): string[] {
     if ((item.priority === "P0" || item.priority === "P1") && !item.priority_reason) errors.push(`${where}: ${item.priority} needs a priority_reason`);
     if ((item.stage === "building" || item.stage === "built") && !item.branch) errors.push(`${where}: stage '${item.stage}' needs the branch it lives on`);
     const rows: Json[] = item.verification?.rows ?? [];
-    if (item.evidence === "proven" && !rows.some((r) => r.verdict === "pass")) errors.push(`${where}: evidence 'proven' needs at least one test-card row that passed (offline tests never prove a capability)`);
-    if (item.evidence === "proven" && rows.some((r) => r.verdict === "fail")) errors.push(`${where}: evidence 'proven' but a row's latest verdict is fail`);
+    if (item.evidence === "proven") {
+      if (!rows.some((r) => r.verdict === "pass")) errors.push(`${where}: evidence 'proven' needs at least one test-card row that passed (offline tests never prove a capability)`);
+      const open = rows.filter((r) => !r.optional && r.verdict !== "pass");
+      if (open.length) errors.push(`${where}: evidence 'proven' needs every required row to pass: ${open.map((r) => `${r.row} is ${r.verdict}`).join(", ")} (mark a row the capability doesn't need with optional, or set the evidence to partial)`);
+    }
     for (const [i, demand] of (item.demand ?? []).entries()) {
       if (!consumers.has(demand.consumer)) errors.push(`${where}: demand[${i}]: '${demand.consumer}' is not a consumer in registry.json`);
     }
@@ -451,6 +479,11 @@ export function validate(data: Loaded, context: Context): string[] {
     if (typeof item.id !== "string" || typeof item.updated !== "string") continue;
     const touched = parsed.some(({ change }) => (change.items ?? []).includes(item.id) && typeof change.at === "string" && change.at.slice(0, 10) >= item.updated);
     if (!touched) errors.push(`${file}: ${item.id}: updated ${item.updated}, but no changelog line touches it on or after that date`);
+    // Every content change has its own line: the newest line naming the item carries the item's digest as it is now.
+    const last = [...parsed].reverse().find(({ change }) => (change.items ?? []).includes(item.id) && change.kind !== "removed");
+    const recorded = last?.change.digests?.[item.id];
+    if (last && touched && recorded === undefined) errors.push(`${file}: ${item.id}: its last changelog line (${last.where}) records no digest; record the baseline with bun tools/capabilities.ts audit --baseline`);
+    else if (recorded !== undefined && data.schemas.item && recorded !== itemDigest(item, data.schemas.item)) errors.push(`${file}: ${item.id}: changed since its last changelog line (${last!.where}): edited by hand, or a change without its line`);
   }
   return errors;
 }
@@ -894,3 +927,4 @@ async function main(argv: string[]): Promise<number> {
 }
 
 if (import.meta.main) process.exit(await main(process.argv.slice(2)));
+

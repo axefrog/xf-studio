@@ -1,0 +1,4 @@
+# The edit tool's lock and transaction files (tools/capabilities-edit.ts): transient, never committed.
+.edit.lock
+.edit-journal.json
+*.tmp-*

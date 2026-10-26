@@ -17,6 +17,7 @@
     "from": { "description": "The previous value, for an axis change." },
     "to": { "description": "The new value, for an axis change." },
     "summary": { "description": "One plain sentence a reader can follow without the diff.", "type": "string", "maxLength": 300 },
-    "refs": { "description": "Commits, sessions, findings files, messages.", "type": "array", "items": { "type": "string" } }
+    "refs": { "description": "Commits, sessions, findings files, messages.", "type": "array", "items": { "type": "string" } },
+    "digests": { "description": "Written by the tool: each named item's content digest after the change (sha-256 of its canonical form, 16 hex digits). validate compares an item with the digest on the newest line naming it, so a change without its own line is caught.", "type": "object" }
   }
 }

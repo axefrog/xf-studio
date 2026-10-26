@@ -4,13 +4,13 @@
 // would not validate, and log every change completely.
 
 import { describe, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  CAP_DIR, PAGE, digest, formatChange, formatItems, load, realContext, renderHtml, renderMarkdown, testCardRows, validate, view,
+  CAP_DIR, PAGE, digest, formatChange, formatItems, itemDigest, load, realContext, renderHtml, renderMarkdown, testCardRows, validate, view,
   type Context,
 } from "../capabilities.ts";
-import { runEdit, suggestEvidence } from "../capabilities-edit.ts";
+import { JOURNAL, LOCK, runEdit, suggestEvidence } from "../capabilities-edit.ts";
 import { tempDir } from "./temp-dir.ts";
 
 type Any = any;
@@ -48,7 +48,10 @@ function fixture(items: Record<string, Any[]>, changes: Any[] = [added(Object.va
   mkdirSync(join(dir, "items"));
   mkdirSync(join(dir, "changelog"));
   for (const [area, list] of Object.entries(items)) writeFileSync(join(dir, "items", `${area}.json`), formatItems(list, itemSchema));
-  writeFileSync(join(dir, "changelog", "2026-10.jsonl"), changes.map((c) => formatChange(c, changeSchema)).join("\n") + "\n");
+  // Each line records the digest of the items it names, as the tool writes them (unless the test gave its own).
+  const byId = new Map(Object.values(items).flat().map((i) => [i.id, i]));
+  const withDigests = changes.map((c) => (c.digests || !c.items ? c : { ...c, digests: Object.fromEntries(c.items.filter((id: string) => byId.has(id)).map((id: string) => [id, itemDigest(byId.get(id), itemSchema)])) }));
+  writeFileSync(join(dir, "changelog", "2026-10.jsonl"), withDigests.map((c) => formatChange(c, changeSchema)).join("\n") + "\n");
   for (const [path, text] of Object.entries(raw)) writeFileSync(join(dir, path), text);
   return dir;
 }
@@ -122,8 +125,29 @@ describe("the validator", () => {
     writeFileSync(join(dir, "items", "alpha.json"), JSON.stringify([item("alpha.one")]));
     expectProblem(dir, /items\/alpha\.json: not in the tool's format/);
   });
-  test("test-card rows are the first cells of table rows", () => {
-    expect([...testCardRows("| Row | Do |\n|---|---|\n| CS8181 — hostile | x |\n| B318-3b — stale | y |\n| **ST7** | z |\n| 11 | w |\ntext | Q9 |")]).toEqual(["Row", "CS8181", "B318-3b", "ST7", "11"]);
+  test("test-card rows: the first cells of the test tables' body rows, never a header, never another table", () => {
+    const card = [
+      "| Row | Do |", "|---|---|", "| CS8181 — hostile | x |", "| B318-3b — stale | y |", "| **ST7** | z |", "",
+      "| # | Who | Do |", "|---|---|---|", "| 11 | C | w |", "",
+      "| Group | What |", "|---|---|", "| Z | launch |", "",
+      "| File | SHA-256 |", "|---|---|", "| XFRuntimeBridge.dll | abc |", "",
+      "text | Q9 |",
+    ].join("\n");
+    expect([...testCardRows(card)]).toEqual(["CS8181", "B318-3b", "ST7", "11"]);
+    for (const header of ["Row", "#", "Group", "File", "Z"]) expect(testCardRows(card).has(header)).toBe(false);
+  });
+  test("proven needs every required row to pass; optional rows are marked", () => {
+    const rows = (...r: Any[]) => ({ evidence: "proven", verification: { rows: r } });
+    const pass = { row: "R1", verdict: "pass", session: "s" };
+    expectProblem(fixture({ alpha: [item("alpha.one", rows(pass, { row: "R2", verdict: "unrun" }))] }), /proven' needs every required row to pass: R2 is unrun/);
+    expectProblem(fixture({ alpha: [item("alpha.one", rows(pass, { row: "R2", verdict: "partial", session: "s" }))] }), /R2 is partial/);
+    expect(problems(fixture({ alpha: [item("alpha.one", rows(pass, { row: "R2", verdict: "unrun", optional: true }))] }))).toEqual([]);
+    expectProblem(fixture({ alpha: [item("alpha.one", rows({ row: "R2", verdict: "unrun", optional: true }))] }), /needs at least one test-card row that passed/);
+  });
+  test("an item changed without a new changelog line is caught, even on the same day", () => {
+    const dir = fixture({ alpha: [item("alpha.one")] });
+    writeFileSync(join(dir, "items", "alpha.json"), formatItems([item("alpha.one", { summary: "Quietly different." })], itemSchema));
+    expectProblem(dir, /alpha\.one: changed since its last changelog line/);
   });
 });
 
@@ -206,7 +230,7 @@ describe("edits", () => {
     const result = await edit(dir, "priority", "alpha.one", "P1", "--reason", "Blocks the next session.", "--ref", "abc123");
     expect(result.code, result.err).toBe(0);
     const line = lines(dir).at(-1);
-    expect(line).toEqual({ at: AT, by: "runtime-bridge", kind: "priority", items: ["alpha.one"], from: "P3", to: "P1", summary: expect.any(String), refs: ["abc123"] });
+    expect(line).toEqual({ at: AT, by: "runtime-bridge", kind: "priority", items: ["alpha.one"], from: "P3", to: "P1", summary: expect.any(String), refs: ["abc123"], digests: { "alpha.one": expect.any(String) } });
     const one = read(dir, "alpha").find((i) => i.id === "alpha.one");
     expect(one.priority_reason).toBe("Blocks the next session.");
     expect(one.updated).toBe("2026-10-26");
@@ -278,6 +302,31 @@ describe("edits", () => {
     expect(lines(dir).at(-1)).toMatchObject({ kind: "retired", from: "merged", to: "retired", items: ["alpha.two", "alpha.first"] });
     expect(problems(dir)).toEqual([]);
   });
+  test("a request promoted under its own id keeps every reference", async () => {
+    const dir = base();
+    expect((await edit(dir, "request", "story-engine", "beta.ask", "--title", "An ask", "--summary", "Please.", "--kind", "verb", "--as", "story-engine")).code).toBe(0);
+    expect((await edit(dir, "set", "alpha.two", "depends_on", '["alpha.one","beta.ask"]')).code).toBe(0);
+    const result = await edit(dir, "triage", "beta.ask", "--into", "beta.ask", "--stage", "planned");
+    expect(result.code, result.err).toBe(0);
+    const promoted = read(dir, "beta").find((i) => i.id === "beta.ask");
+    expect(promoted).toMatchObject({ stage: "planned", area: "beta", demand: [{ consumer: "story-engine", level: "needs" }] });
+    expect(JSON.parse(readFileSync(join(dir, "requests", "story-engine.json"), "utf8"))).toEqual([]);
+    expect(read(dir, "alpha").find((i) => i.id === "alpha.two").depends_on).toEqual(["alpha.one", "beta.ask"]);
+    expect(lines(dir).at(-1)).toMatchObject({ kind: "added", items: ["beta.ask"] });
+    expect(problems(dir)).toEqual([]);
+  });
+  test("every edit regenerates CAPABILITIES.md in the same write, so the page never drifts", async () => {
+    const dir = base();
+    expect((await edit(dir, "health", "alpha.one", "caveats")).code).toBe(0);
+    expect(readFileSync(join(dir, "CAPABILITIES.md"), "utf8")).toBe(renderMarkdown(view(load(dir))));
+    expect(readFileSync(join(dir, "CAPABILITIES.md"), "utf8")).toContain("health **caveats**");
+  });
+  test("every edit's lines carry the digests of the items they name", async () => {
+    const dir = base();
+    expect((await edit(dir, "health", "alpha.one", "caveats")).code).toBe(0);
+    const one = read(dir, "alpha").find((i) => i.id === "alpha.one");
+    expect(lines(dir).at(-1).digests).toEqual({ "alpha.one": itemDigest(one, itemSchema) });
+  });
   test("every successful edit leaves a valid registry with a line for each touched item (changelog completeness)", async () => {
     const dir = base();
     const edits: string[][] = [
@@ -298,4 +347,76 @@ describe("edits", () => {
     }
     expect(lines(dir).slice(-5).map((l) => l.kind)).toEqual(["added", "detail", "stage", "health", "detail"]);
   });
+});
+
+describe("edit transactions and the lock", () => {
+  const AT = "2026-10-26T11:00:00+10:00";
+  const base = () => fixture({ alpha: [item("alpha.one"), item("alpha.two")], beta: [item("beta.one")] });
+  const files = (dir: string) => ["items/alpha.json", "items/beta.json", "changelog/2026-10.jsonl"].map((p) => readFileSync(join(dir, p), "utf8")).join("\n---\n");
+  const leftovers = (dir: string) => [".", "items", "changelog", "requests"].flatMap((d) => (existsSync(join(dir, d)) ? readdirSync(join(dir, d)).filter((f) => f.includes(".tmp-") || f === JOURNAL || f === LOCK) : []));
+
+  test("a failure while writing the new files publishes nothing and leaves no temp file", async () => {
+    const dir = base();
+    const before = files(dir);
+    let writes = 0;
+    const result = await runEdit(["quirk", "add", "alpha.one", "Slow."], { capDir: dir, context: CONTEXT, at: AT, fault: (step) => { if (step === "temp" && ++writes === 2) throw new Error("disk full"); } });
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("disk full");
+    expect(files(dir)).toBe(before);
+    expect(leftovers(dir)).toEqual([]);
+  });
+  test("a crash part-way through publishing is completed by recovery on the next start", async () => {
+    const dir = base();
+    let renames = 0;
+    const crashed = await runEdit(["quirk", "add", "alpha.one", "Slow."], { capDir: dir, context: CONTEXT, at: AT, fault: (step) => { if (step === "rename" && ++renames === 2) throw new Error("power cut"); } });
+    expect(crashed.code).toBe(1);
+    expect(existsSync(join(dir, JOURNAL))).toBe(true);
+    // Half published: the next start finishes it before anything else.
+    const next = await runEdit(["list"], { capDir: dir, context: CONTEXT, at: AT });
+    expect(next.code, next.err).toBe(0);
+    expect(next.out).toContain("recovered");
+    expect(leftovers(dir)).toEqual([]);
+    expect(JSON.parse(readFileSync(join(dir, "items", "alpha.json"), "utf8"))[0].quirks).toEqual(["Slow."]);
+    expect(readFileSync(join(dir, "changelog", "2026-10.jsonl"), "utf8")).toContain("Slow.");
+    expect(problems(dir)).toEqual([]);
+  });
+  test("validate reports an interrupted edit that awaits recovery", async () => {
+    const dir = base();
+    await runEdit(["quirk", "add", "alpha.one", "Slow."], { capDir: dir, context: CONTEXT, at: AT, fault: (step) => { if (step === "rename") throw new Error("power cut"); } });
+    expectProblem(dir, /an interrupted edit awaits recovery/);
+  });
+  test("a lock held by a live process refuses after the wait; a stale lock is taken over", async () => {
+    const dir = base();
+    writeFileSync(join(dir, LOCK), JSON.stringify({ pid: process.pid, started: new Date().toISOString() }));
+    const busy = await runEdit(["health", "alpha.one", "caveats"], { capDir: dir, context: CONTEXT, at: AT, lockWaitMs: 200 });
+    expect(busy.code).toBe(1);
+    expect(busy.err).toContain("another edit holds the registry");
+    writeFileSync(join(dir, LOCK), JSON.stringify({ pid: 2_147_483_000, started: new Date().toISOString() }));
+    const taken = await runEdit(["health", "alpha.one", "caveats"], { capDir: dir, context: CONTEXT, at: AT, lockWaitMs: 200 });
+    expect(taken.code, taken.err).toBe(0);
+    expect(existsSync(join(dir, LOCK))).toBe(false);
+  });
+  test("two consumers editing at once both land, each with its line", async () => {
+    const dir = base();
+    const script = join(tempDir("xfb-capabilities-child-"), "child.ts");
+    writeFileSync(script, `
+import { runEdit } from ${JSON.stringify(join(import.meta.dir, "..", "capabilities-edit.ts"))};
+const [dir, as] = process.argv.slice(2);
+const context = { commands: new Set(["a.read", "a.write"]), rows: new Set(["R1", "R2", "R3"]), repoDir: null, projectDir: null };
+for (let n = 0; n < 5; n++) {
+  const r = await runEdit(["demand", "alpha.one", "--level", "needs", "--ref", as + "-" + n, "--as", as], { capDir: dir, context, lockWaitMs: 30000 });
+  if (r.code) { console.error(r.err); process.exit(1); }
+}
+`);
+    const children = ["story-engine", "studio"].map((as) => Bun.spawn(["bun", script, dir, as], { stdout: "pipe", stderr: "pipe" }));
+    const codes = await Promise.all(children.map((c) => c.exited));
+    const errs = await Promise.all(children.map((c) => new Response(c.stderr).text()));
+    expect(codes, errs.join("\n")).toEqual([0, 0]);
+    const demand = JSON.parse(readFileSync(join(dir, "items", "alpha.json"), "utf8"))[0].demand;
+    expect(demand.map((d: Any) => d.ref).sort()).toEqual(["story-engine-0", "story-engine-1", "story-engine-2", "story-engine-3", "story-engine-4", "studio-0", "studio-1", "studio-2", "studio-3", "studio-4"]);
+    const log = readFileSync(join(dir, "changelog", "2026-10.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    expect(log.filter((l) => l.kind === "demand").length).toBe(10);
+    expect(problems(dir)).toEqual([]);
+    expect(leftovers(dir)).toEqual([]);
+  }, 60_000);
 });
