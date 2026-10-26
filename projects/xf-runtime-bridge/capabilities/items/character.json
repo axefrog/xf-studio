@@ -1,0 +1,144 @@
+[
+  {
+    "id": "character.creator-open",
+    "title": "Opening the character creator",
+    "summary": "cc.open opens the creator from normal play by Character Customization Anywhere's route (the pause menu redirected to the mirror's scenario), after taking the save lock; cc.page points the creator's camera at a part of V.",
+    "area": "character",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.3.0",
+    "changed_in": "0.5.1",
+    "surface": { "commands": ["cc.open", "cc.page"], "config": ["[bridge] allow_creator_leave"] },
+    "verification": { "tests": ["tools/test/batch4.test.ts", "tools/test/batch7.test.ts"] },
+    "limits": [
+      "Refused in combat, a scene (tier 3 and above; V's apartment, tier 2, is accepted), a vehicle, a menu, a Johnny section or where photo mode isn't allowed; only with allow_creator_leave (the -writes build)."
+    ],
+    "quirks": ["A request withdrawn after its event may still let the pause menu open (pause_menu_may_open)."],
+    "docs": ["knowledge/photo-mode.md#31-how-character-customization-anywhere-opens-it", "knowledge/runtime-access.md#6-what-agents-can-and-cannot-do-yet"],
+    "notes": "cc.open and cc.back from the street were seen working in sessions 4 to 6.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "character.creator-apply",
+    "title": "Changing creator options",
+    "summary": "cc.apply changes one creator option through the option's own row, by name, on-screen label or slot, with the value by index, name or label; it never confirms.",
+    "area": "character",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.5.1",
+    "surface": { "commands": ["cc.apply"] },
+    "verification": {
+      "rows": [
+        { "row": "19", "verdict": "pass", "session": "first session", "build": "0.2.0 c31156a", "date": "2026-09-26", "note": "cc.apply changed the preview." }
+      ],
+      "tests": ["tools/test/batch6.test.ts"]
+    },
+    "quirks": ["Options are matched by name or label, never a stored index (ArchiveXL rebuilds indices); a value already shown is a no-op success."],
+    "docs": ["research/runtime/runtime-bridge-design.md#74-menus-appearance-and-saves", "knowledge/cc-file-chain.md"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "character.creator-leave",
+    "title": "Confirm and Back in the creator",
+    "summary": "cc.confirm keeps the look and cc.back discards it, through the creator's own functions; cc.confirm never discards a change.",
+    "area": "character",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.4.1",
+    "surface": { "commands": ["cc.confirm", "cc.back"], "config": ["[bridge] allow_creator_leave"] },
+    "limits": ["Only with allow_creator_leave = true, in sessions that end by loading the safety save (the maintainer's decision of 26 September)."],
+    "docs": ["knowledge/photo-mode.md#33-what-confirm-and-back-do"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "character.inventory",
+    "title": "V's clothing inventory",
+    "summary": "inventory.list reads the clothing V owns, one entry per copy; inventory.equip and inventory.unequip equip by record (optionally adding it) or empty a slot, each waiting for the slot and answering its undo.",
+    "area": "character",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.4.0",
+    "changed_in": "0.8.3",
+    "surface": { "commands": ["inventory.list", "inventory.equip", "inventory.unequip"] },
+    "verification": {
+      "rows": [
+        { "row": "L6", "verdict": "unrun", "session": "session 10", "note": "The jacket row couldn't run." }
+      ],
+      "tests": ["tools/test/batch5.test.ts"]
+    },
+    "limits": [
+      "Clothing slots only, in normal play outside combat and scene tiers 3-5; writes off until the maintainer approves the inventory class (the test zip adds it with --allow-inventory)."
+    ],
+    "quirks": ["An active wardrobe outfit can keep an equipped item from drawing (hidden_by_outfit); sessions 4 and 5's helmet was equipped but hidden."],
+    "docs": ["projects/xf-runtime-bridge/README.md#one-command-api-many-frontends", "knowledge/clothing.md#in-game-results-sessions-5-and-6"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "character.cyberware",
+    "title": "Cyberware",
+    "summary": "cyberware.state reads V's cyberware area by area with the arms' holster chain and humanity; cyberware.equip and cyberware.unequip use the ripperdoc's own requests, holstering the arms first.",
+    "area": "character",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.7.0",
+    "changed_in": "0.8.0",
+    "demand": [
+      { "consumer": "story-engine", "level": "needs", "ref": "S6", "milestone": "M4", "note": "V's cyberware.", "since": "2026-10-26" }
+    ],
+    "surface": { "commands": ["cyberware.state", "cyberware.equip", "cyberware.unequip"], "code": ["redscript/XFRuntimeBridgeCyberware.reds"] },
+    "docs": ["knowledge/body-rendering.md#11-how-equipped-arm-cyberware-picks-the-holster-state"],
+    "notes": "Ran in session 8's checks (the render study's arm captures).",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "character.live-pose",
+    "title": "Live posing (L0)",
+    "summary": "pose.live.read checks a loaded XF carrier clip against the layout the bridge expects; pose.live.apply writes joint rotations into its constant keys in photo mode, with the carrier's own keys kept for the undo and the kill switch.",
+    "area": "character",
+    "kind": "research",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P3",
+    "since": "0.3.0",
+    "demand": [
+      {
+        "consumer": "studio",
+        "level": "wants",
+        "note": "Live posing through the bridge: pose V from the Studio and see it in the running game.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": {
+      "commands": ["pose.live.read", "pose.live.apply"],
+      "config": ["[bridge] allow_live_pose"],
+      "code": ["native/src/plugin/LivePoseMemory.cpp", "native/src/core/LivePose.cpp", "tools/live-pose"]
+    },
+    "verification": { "tests": ["tools/test/batch4.test.ts", "tools/test/carrier.test.ts"] },
+    "limits": [
+      "Only with allow_live_pose (the -writes build) and the separate XF Live Pose test package; refused for the session when an engine address is missing (live_pose_unavailable)."
+    ],
+    "docs": [
+      "research/animation/pose-editor-design.md#74-first-experiment-plan-one-supervised-session",
+      "research/runtime/runtime-bridge-test-card.md#batch-4-checks-refusals-the-panel-and-live-posing-l0"
+    ],
+    "updated": "2026-10-26"
+  }
+]

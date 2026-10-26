@@ -1,0 +1,294 @@
+[
+  {
+    "id": "photo.open",
+    "title": "Opening photo mode",
+    "summary": "photo.open presses the player's own photo-mode key in the game window (the one allowlisted input), only while the game window is in front and photo mode is allowed, then waits for photo mode.",
+    "area": "photo",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.4.2",
+    "surface": { "commands": ["photo.open", "photo.enter"], "code": ["tools/input/photo-key.ts"] },
+    "verification": { "tests": ["tools/test/framing.test.ts"] },
+    "limits": [
+      "Only while the game window is already in front (focus: require); posted keys don't reach a background window, because the game reads Raw Input.",
+      "Punctuation keys depend on the keyboard layout and are refused; an unbound or malformed binding is refused, never guessed."
+    ],
+    "quirks": ["photo.enter's quest-node route opens a restricted photo mode (first-person camera only, no V tab), so it refuses unless asked for by name."],
+    "docs": ["knowledge/photo-mode.md#23-routes-to-the-full-photo-mode", "knowledge/runtime-access.md#6-what-agents-can-and-cannot-do-yet"],
+    "notes": "Seen working in sessions 4 to 6 and in Borg 1 (sendinput, the user's key).",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "photo.state",
+    "title": "Photo-mode state and subject",
+    "summary": "photo.state reads every menu item with its key, range, options and value (each expression with its face-table index); photo.subject reads V's head in the world and on screen, the camera and V's placement values.",
+    "area": "photo",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.5.2",
+    "surface": { "commands": ["photo.state", "photo.subject"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "10",
+          "verdict": "pass",
+          "session": "first session",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "92 menu items; every researched key matched."
+        }
+      ]
+    },
+    "docs": ["knowledge/photo-mode.md#112-three-layers-for-reading-and-writing-an-attribute"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "photo.camera",
+    "title": "Photo-mode camera",
+    "summary": "photo.camera.set sets the camera preset, field of view, roll, focus, depth of field, look-at, grain, aberration, the effects page's exposure, contrast, vignette and highlights, and V's placement, each with an undo.",
+    "area": "photo",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.5.2",
+    "surface": { "commands": ["photo.camera.set"], "code": ["tools/api/presets.ts"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "11",
+          "verdict": "pass",
+          "session": "first session",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "Field-of-view writes applied visibly."
+        }
+      ]
+    },
+    "quirks": ["XF camera presets 6 to 9 come from a TweakXL file only the test packages carry; it overrides any other mod's presets for the profile."],
+    "docs": ["research/runtime/runtime-bridge-design.md#73-photo-mode"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "photo.camera-place",
+    "title": "Placing photo mode's camera directly",
+    "summary": "photo.camera.place (research) moves photo mode's own camera entity to a point or about a target and reads back whether photo mode kept it there.",
+    "area": "photo",
+    "kind": "research",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "broken",
+    "priority": "P3",
+    "since": "0.5.2",
+    "surface": { "commands": ["photo.camera.place"] },
+    "verification": { "tests": ["tools/test/batch8.test.ts"] },
+    "known_issues": [
+      {
+        "summary": "Found not to work in game: photo mode puts its camera back (held: false).",
+        "severity": "low",
+        "status": "open",
+        "since": "2026-09-29",
+        "ref": "knowledge/runtime-access.md"
+      }
+    ],
+    "docs": ["knowledge/runtime-access.md#6-what-agents-can-and-cannot-do-yet", "knowledge/photo-mode.md#4-camera-placement"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "photo.camera-preset",
+    "title": "Rewriting a camera preset",
+    "summary": "photo.camera.preset (research) rewrites one of photo mode's nine camera presets through TweakXL and selects it, as a second camera-placement route; the kill switch writes the first values back.",
+    "area": "photo",
+    "kind": "research",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P3",
+    "since": "0.6.0",
+    "changed_in": "0.6.1",
+    "surface": { "commands": ["photo.camera.preset"], "code": ["redscript/XFRuntimeBridgePresets.reds"] },
+    "verification": { "tests": ["tools/test/batch10.test.ts", "tools/test/batch11.test.ts"] },
+    "limits": ["Needs TweakXL (tweakxl_missing); rewrites outlive loads until the game restarts unless put back."],
+    "docs": ["research/runtime/runtime-bridge-test-card.md#session-7-checks-bridge-06"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "photo.frame",
+    "title": "Framing V",
+    "summary": "photo.frame frames V's eyes, face, head and shoulders or full body at the window's centre from its lens's known pose, measuring through the game's own projection after every change and correcting with a refined Jacobian; any failure puts everything back.",
+    "area": "photo",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.7.0",
+    "depends_on": ["photo.state", "photo.camera"],
+    "surface": { "commands": ["photo.frame"], "code": ["tools/api/framing.ts"] },
+    "verification": { "tests": ["tools/test/framing.test.ts"] },
+    "quirks": ["A read straight after a change still shows the world from before it; framing reads until two readings agree (session 3)."],
+    "docs": ["projects/xf-runtime-bridge/README.md#one-command-api-many-frontends", "knowledge/runtime-access.md#6-what-agents-can-and-cannot-do-yet"],
+    "notes": "Seen working without drift in sessions 4 to 6; the target offsets are anatomical estimates until a session checks one capture per framing.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "photo.lights",
+    "title": "Photo-mode lights",
+    "summary": "photo.light.set switches lights 1 to 3 on and off and sets shadow, brightness, range, cone and colour, and places a light where the camera is or about V's head, reading its position back.",
+    "area": "photo",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.4.1",
+    "surface": { "commands": ["photo.light.set"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "13",
+          "verdict": "pass",
+          "session": "first session",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "Brightness and hue applied visibly; light on/off by the player then."
+        }
+      ]
+    },
+    "quirks": ["Azimuth is measured from the way V's stand-in faces, not the camera.", "The 2.31 menu has no light-type row, so type is skipped with a note."],
+    "unknowns": [
+      {
+        "question": "Do light type and shadow writes apply?",
+        "settle_by": "A photo-mode session row (built, not confirmed per runtime access §6)",
+        "needs_game": true
+      }
+    ],
+    "docs": ["knowledge/photo-mode-lights.md", "knowledge/photo-mode.md#51-photo-mode-lights"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "photo.hud-hide",
+    "title": "Hiding photo mode's menu",
+    "summary": "photo.hud.hide fades photo mode's menu out or in, with the mouse cursor, for a clean capture.",
+    "area": "photo",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "surface": { "commands": ["photo.hud.hide"] },
+    "verification": {
+      "rows": [
+        { "row": "14", "verdict": "pass", "session": "first session", "build": "0.2.0 c31156a", "date": "2026-09-26" }
+      ]
+    },
+    "docs": ["knowledge/photo-mode.md#6-the-photo-mode-cursor"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "photo.expressions",
+    "title": "V's expression in photo mode",
+    "summary": "photo.expression.set sets V's expression as the menu does, by label or menu value; photo.expression.index (research) applies a face-table index straight to the face animation; face.rig.read reads the head's facial setup.",
+    "area": "photo",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.5.2",
+    "surface": { "commands": ["photo.expression.set", "photo.expression.index", "face.rig.read"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "15",
+          "verdict": "pass",
+          "session": "first session",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "Expression 1 (Charm) applied visibly."
+        }
+      ]
+    },
+    "quirks": [
+      "With an expression pack installed the menu's value (list position) differs from the face-table index; an index known only by position is refused unless force."
+    ],
+    "docs": ["research/runtime/runtime-bridge-test-card.md#expression-checks-r1-and-r2", "knowledge/facial-expressions.md"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "photo.poses",
+    "title": "V's photo-mode pose",
+    "summary": "photo.pose.set selects a pose through the menu, by record, label or option, with an undo to the earlier category and pose.",
+    "area": "photo",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P3",
+    "since": "0.3.0",
+    "surface": { "commands": ["photo.pose.set"] },
+    "verification": { "tests": ["tools/test/batch4.test.ts"] },
+    "docs": ["research/runtime/runtime-bridge-test-card.md#batch-4-checks-refusals-the-panel-and-live-posing-l0"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "photo.scene-rows",
+    "title": "Photo-mode scene rows",
+    "summary": "photo.scene.set sets photo mode's surrounding NPCs, weather and game-speed rows by value or label, with an undo.",
+    "area": "photo",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.7.0",
+    "surface": { "commands": ["photo.scene.set"] },
+    "docs": ["research/runtime/runtime-bridge-test-card.md#session-8-checks-bridge-07"],
+    "notes": "Ran in session 8's checks.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "photo.exit",
+    "title": "Leaving photo mode",
+    "summary": "photo.exit leaves photo mode; in the autonomous candidate test.photo.exit_attempt raises the game's own exit event, so the real Exit photo mode? prompt (or the bridge's modal hold) answers it.",
+    "area": "photo",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.13",
+    "surface": { "commands": ["photo.exit", "test.photo.exit_attempt"] },
+    "verification": {
+      "rows": [
+        { "row": "17", "verdict": "pass", "session": "first session", "build": "0.2.0 c31156a", "date": "2026-09-26" },
+        { "row": "IC2", "verdict": "pass", "session": "borg-1", "build": "0.8.13 306fa3c4", "date": "2026-10-24", "note": "Modal on held the exit." },
+        {
+          "row": "IC3",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13 306fa3c4",
+          "date": "2026-10-24",
+          "note": "Modal off raised the real confirmation."
+        }
+      ]
+    },
+    "docs": ["knowledge/input-and-choices.md#3-photo-mode-esc-exercise-the-exit-attempt"],
+    "updated": "2026-10-26"
+  }
+]

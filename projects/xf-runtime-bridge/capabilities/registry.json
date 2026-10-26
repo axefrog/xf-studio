@@ -24,7 +24,7 @@
     { "id": "story-engine", "title": "XF · Story Engine", "kind": "chat", "requirements_doc": "research/story-engine/runtime-requirements.md" },
     { "id": "studio", "title": "XF · Studio", "kind": "chat" },
     { "id": "meta-coordinator", "title": "XF · Meta-coordinator", "kind": "chat" },
-    { "id": "orrery", "title": "Live world view (working name XF Orrery)", "kind": "product" },
+    { "id": "holotable", "title": "XF · Holotable", "kind": "chat" },
     { "id": "photo-mode-tools", "title": "Photo Mode Tools", "kind": "product" },
     { "id": "session-runner", "title": "Session runner and test sessions", "kind": "tool" },
     { "id": "maintainer", "title": "The maintainer", "kind": "person-role" }

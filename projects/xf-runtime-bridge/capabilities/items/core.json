@@ -1,0 +1,392 @@
+[
+  {
+    "id": "core.plugin-host",
+    "title": "XF Core's plugin host",
+    "summary": "The bridge promoted to XF Core, a runtime base with no game features: plugins declared as a manifest plus redscript (and, first-party only, a native part through a C interface), checked at load, their scripts added only once accepted, with quarantine and a circuit breaker.",
+    "area": "core",
+    "kind": "service",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "H2",
+        "milestone": "M5",
+        "note": "A Story Engine plugin on XF Core: a manifest, redscript for game-side senses, verbs and watchers, and the engine as a companion process; the player installs XF Core and the plugin and nothing else.",
+        "since": "2026-10-26"
+      }
+    ],
+    "docs": ["research/runtime/xf-core-architecture.md#3-plugin-api", "research/runtime/xf-core-architecture.md#12-phased-plan"],
+    "notes": "Phase C1 of the XF Core design: rename, flavours, plugin host, the native-part loader, bridge.hello, the session-file transition. Command names survive the move, so the MCP tools, CLI and scripts keep working.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.plugin-split",
+    "title": "The first plugins",
+    "summary": "Split the bridge's commands, under the same names, into XF Lab (every research and test command, test profile only) and XF Photo Mode, with the catalogue and MCP composed from the plugins.",
+    "area": "core",
+    "kind": "service",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["core.plugin-host"],
+    "docs": ["research/runtime/xf-core-architecture.md#22-plugins", "research/runtime/xf-core-architecture.md#42-commands-and-the-catalogue"],
+    "notes": "Phase C2. RB-203's test probes move into XF Lab here.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.events",
+    "title": "Events for plugins",
+    "summary": "An events capability plugins subscribe to from redscript or a native part, carrying the world event feed, and to which plugins publish their own events.",
+    "area": "core",
+    "kind": "service",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["core.plugin-host", "recorder.world-event-feed"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S1",
+        "milestone": "M4",
+        "note": "Plugin API need 5: the world event feed as additions to events@, subscribable from redscript and native; plugins publish story.* events.",
+        "since": "2026-10-26"
+      }
+    ],
+    "docs": ["research/runtime/xf-core-architecture.md#44-events"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.sequencer",
+    "title": "Tick and sequencer",
+    "summary": "A tick capability with a per-plugin frame budget that yields to the player and pauses in menus, plus worker time for a native part, and the sequencer for staged beats.",
+    "area": "core",
+    "kind": "service",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["core.plugin-host"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "H4",
+        "milestone": "M5",
+        "note": "A frame budget and background scheduling for plugins; the companion's clock feed is a review item.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "H5",
+        "milestone": "M4",
+        "note": "XF Core's sequencer@1 (designed) for staging beats.",
+        "since": "2026-10-26"
+      }
+    ],
+    "docs": ["research/runtime/xf-core-architecture.md#45-sequencer"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.store",
+    "title": "Plugin store",
+    "summary": "A store namespace per plugin and per save branch with a megabyte-scale quota, compressed, with clean-up of branches whose saves are gone.",
+    "area": "core",
+    "kind": "service",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["core.plugin-host"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "P3",
+        "milestone": "M6",
+        "note": "A store quota sized for a world record (megabytes, compressed); large records need streaming.",
+        "since": "2026-10-26"
+      }
+    ],
+    "docs": ["research/runtime/xf-core-architecture.md#7-snapshot-store"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.save-ledger",
+    "title": "A ledger keyed to the save",
+    "summary": "ledger@1: an append-only branching ledger keyed to the save's identity and its parent's (a five-fact pin), committing on change, so a plugin's world record branches with saves.",
+    "area": "core",
+    "kind": "service",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["core.store"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "P1",
+        "milestone": "M6",
+        "note": "A store keyed to the save: the save's identity and its parent, so the world record branches with saves; a session card proves the pin.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "P5",
+        "milestone": "M4",
+        "note": "Saves at a tick boundary: Codeware's Session/BeforeSave is the commit point; whether autosaves and quick-saves run that step is open.",
+        "since": "2026-10-26"
+      }
+    ],
+    "unknowns": [
+      {
+        "question": "Do autosaves and quick-saves run Codeware's Session/BeforeSave step?",
+        "settle_by": "The save-identity session card's row 4",
+        "needs_game": true
+      }
+    ],
+    "docs": ["knowledge/save-identity.md#the-story-engines-save-key", "knowledge/save-identity.md#session-card"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.restage",
+    "title": "Restore and restage hooks",
+    "summary": "On the kill switch a plugin's restore hook removes everything it owns; after a load a restage hook brings back what should be present.",
+    "area": "core",
+    "kind": "service",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["core.plugin-host"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "P2",
+        "milestone": "M5",
+        "note": "Restage after load: bring back whatever should be present; an asynchronous restaging state is a review item.",
+        "since": "2026-10-26"
+      }
+    ],
+    "docs": ["research/runtime/xf-core-architecture.md#34-loading-gating-and-graceful-refusal"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.play-mode",
+    "title": "Play mode without the save lock",
+    "summary": "A mode for release play in which a plugin's owned writes take no save lock, so a campaign can save normally.",
+    "area": "core",
+    "kind": "safety",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["core.owned-scope", "core.save-ledger"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "P4",
+        "milestone": "M5",
+        "note": "Story writes without the save lock: play mode takes no save lock.",
+        "since": "2026-10-26"
+      }
+    ],
+    "docs": ["research/runtime/xf-core-architecture.md#43-access-classes"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.owned-scope",
+    "title": "Owned-scope access class",
+    "summary": "A release access class (write-owned) that lets a plugin create, change and remove only what it owns, in its own namespace, plus people it spawned or adopted, with per-plugin consent; vanilla state is read-only.",
+    "area": "core",
+    "kind": "safety",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["core.plugin-host"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "wants",
+        "ref": "H3",
+        "milestone": "Later",
+        "note": "An access class for story writes in the release flavour, scoped to what the plugin owns; writes to vanilla state wait on O5.",
+        "since": "2026-10-26"
+      }
+    ],
+    "unknowns": [
+      { "question": "May a plugin write vanilla state (O5)?", "settle_by": "The maintainer's decision", "needs_game": false }
+    ],
+    "docs": ["research/runtime/xf-core-architecture.md#43-access-classes"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.consent",
+    "title": "Release consent",
+    "summary": "Release builds compile the research commands out and keep the link off until the player agrees, in game or in the Studio's install plan, with a switch per feature.",
+    "area": "core",
+    "kind": "safety",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["core.plugin-host"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "wants",
+        "ref": "C3",
+        "milestone": "Later",
+        "note": "Release consent and a switch per feature.",
+        "since": "2026-10-26"
+      }
+    ],
+    "docs": ["research/runtime/xf-core-architecture.md#11-decisions-for-the-maintainer"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.companion",
+    "title": "Companion processes",
+    "summary": "companion@1: XF Core starts a first-party plugin's hash-pinned executable as a child process under a job object (kill-on-close, below-normal priority, a memory cap, bounded restarts) and connects it over a private pipe with every gate applied.",
+    "area": "core",
+    "kind": "service",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["core.plugin-host"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "H6",
+        "milestone": "M5",
+        "note": "Companion processes under the seven agreed conditions; first proof is an in-game session on a hello-world companion.",
+        "since": "2026-10-26"
+      }
+    ],
+    "unknowns": [
+      {
+        "question": "Does MO2's virtual file system reach a child of the game, and what do Vortex hardlinks and antivirus do?",
+        "settle_by": "test.companion.probe (session 15) and the packaging probes H6 asks for early",
+        "needs_game": true
+      }
+    ],
+    "docs": ["research/runtime/xf-core-architecture.md#35-isolation"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.senses-plugin",
+    "title": "XF Senses",
+    "summary": "A first-party plugin carrying the read-only senses (perception, the people and places around V, quest state, V's state) into release builds.",
+    "area": "core",
+    "kind": "sense",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "depends_on": ["core.plugin-split"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "wants",
+        "ref": "S2",
+        "milestone": "Later",
+        "note": "Release route planned through the XF Senses plugin.",
+        "since": "2026-10-26"
+      },
+      { "consumer": "story-engine", "level": "wants", "ref": "S3", "milestone": "Later", "note": "Release route.", "since": "2026-10-26" },
+      { "consumer": "story-engine", "level": "wants", "ref": "S4", "milestone": "Later", "note": "Release route.", "since": "2026-10-26" },
+      { "consumer": "story-engine", "level": "wants", "ref": "S6", "milestone": "Later", "note": "Release route.", "since": "2026-10-26" }
+    ],
+    "docs": ["research/story-engine/runtime-requirements.md"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.overlay-framework",
+    "title": "Overlay framework",
+    "summary": "The CET overlay framework, its kit and theme generator, and the Reconnect panel moved into XF Core, so plugins contribute panels that are caught and restored separately.",
+    "area": "core",
+    "kind": "surface",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "depends_on": ["core.plugin-host", "surfaces.in-game-styling"],
+    "docs": ["research/runtime/xf-core-architecture.md#8-in-game-ui"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.photo-mode-plugin",
+    "title": "XF Photo Mode",
+    "summary": "The photo commands with complete photo-mode snapshots and a rebuilt head and eye freeze, as the plugin that succeeds Photo Mode Tools on its Nexus page.",
+    "area": "core",
+    "kind": "verb",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "depends_on": ["core.plugin-split"],
+    "demand": [
+      {
+        "consumer": "photo-mode-tools",
+        "level": "wants",
+        "note": "XF Photo Mode succeeds Photo Mode Tools on its Nexus page, keeping its CET folder so players keep their bindings.",
+        "since": "2026-10-26"
+      }
+    ],
+    "docs": ["research/runtime/xf-core-architecture.md#65-photo-mode-tools-transition", "research/runtime/photo-snapshots-design.md"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.lighting-plugin",
+    "title": "XF Lighting (the lighting mirror)",
+    "summary": "Place an XF Studio lighting setup about V in photo mode with every light field set, follow V, remove it on exit and the kill switch, and read game lights back into the Studio.",
+    "area": "core",
+    "kind": "verb",
+    "stage": "proposed",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P3",
+    "depends_on": ["core.plugin-host"],
+    "demand": [
+      {
+        "consumer": "studio",
+        "level": "wants",
+        "note": "A bridge-applied photo-mode rig that matches the Studio's lighting (banked until the product reaches 1.0).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "code": ["tools/lighting/mirror-map.ts"] },
+    "verification": { "tests": ["tools/test/lighting-mirror.test.ts"] },
+    "docs": ["research/runtime/lighting-mirror-design.md"],
+    "notes": "Only the mapping exists, as an offline prototype (phase C6 of the XF Core plan).",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "core.distribution",
+    "title": "Per-mod distribution",
+    "summary": "One archive per XF mod, the Studio bundling and installing the tested versions through its consented install host (MO2 with separator sections, Vortex, manual), XF Core with its own Nexus page.",
+    "area": "core",
+    "kind": "tool",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "depends_on": ["core.plugin-split"],
+    "docs": ["research/runtime/xf-core-architecture.md#6-distribution"],
+    "updated": "2026-10-26"
+  }
+]

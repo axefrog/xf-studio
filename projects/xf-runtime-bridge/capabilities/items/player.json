@@ -1,0 +1,369 @@
+[
+  {
+    "id": "player.state",
+    "title": "V's state",
+    "summary": "player.state reads V's position, yaw, the camera, the player state machine, combat, vehicle, scene and dialogue, why the bridge wouldn't move her, what she looks at and what the bridge holds on her.",
+    "area": "player",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.6.0",
+    "changed_in": "0.8.18",
+    "surface": { "commands": ["player.state"], "code": ["redscript/XFRuntimeBridgePlayer.reds", "native/src/core/Player.cpp"] },
+    "verification": { "tests": ["tools/test/batch10.test.ts", "tools/test/batch11.test.ts"] },
+    "quirks": ["position is V's feet and camera.position her eyes."],
+    "docs": ["knowledge/player-control.md#2-moving-v", "knowledge/game-crashes.md#24-a-string-operator-with-a-null-operand-session-7"],
+    "notes": "Used in every session since session 7; a player_state while V looked at a door crashed the game in session 7, fixed by the world-object rule in 0.7.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "player.weapon-state",
+    "title": "Weapon readiness",
+    "summary": "The active weapon's kind (ranged, melee, none), whether it is drawn, the ranged and melee state values and what blocks readiness, in player.state, the digest and the recorder's V rows.",
+    "area": "player",
+    "parent": "player.state",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.15",
+    "changed_in": "0.8.18",
+    "surface": { "commands": ["player.state", "game.digest"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "SN6",
+          "verdict": "pass",
+          "session": "borg-4",
+          "build": "0.8.22 1cd681c3",
+          "date": "2026-10-26",
+          "note": "Answered by B318-2. It failed in Borg 3 on 0.8.17 (raw 0 with a weapon drawn)."
+        },
+        {
+          "row": "B318-2",
+          "verdict": "pass",
+          "session": "borg-4",
+          "build": "0.8.22 1cd681c3",
+          "date": "2026-10-26",
+          "note": "The settled read said drawn, kind melee, melee_raw 2; the immediate read-back after weapon.draw says none (queued, not settled)."
+        }
+      ],
+      "tests": ["tools/test/borg3-0818.test.ts"]
+    },
+    "quirks": ["The immediate read-back after weapon.draw is queued, not settled; read again for the drawn state."],
+    "docs": ["knowledge/navigation-and-safety.md#8-weapon-readiness-aim-reload-and-fire"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "player.status",
+    "title": "V's status (senses)",
+    "summary": "player.status reads V's health, level, street cred, money, wanted level, current vehicle, an inventory summary, clothing per area and the scanner (whether V scans and what the scanner is on).",
+    "area": "player",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.8.8",
+    "changed_in": "0.8.11",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S6",
+        "milestone": "M4",
+        "note": "V's state: appearance tags, vehicle, wanted level, health, street cred, money, inventory summary and cyberware.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S2",
+        "milestone": "M4",
+        "note": "Perception: what V scanned (the scanner part, proven in session 15).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": {
+      "commands": ["player.status"],
+      "code": ["redscript/XFRuntimeBridgeSenses.reds", "native/src/core/Senses.cpp", "native/src/plugin/HandlersSenses.cpp", "tools/api/catalogueSenses.ts"]
+    },
+    "verification": {
+      "rows": [
+        { "row": "SS5r3", "verdict": "unrun", "note": "Clothing per area under an Equipment-EX outfit." },
+        {
+          "row": "SS1",
+          "verdict": "pass",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "Health, level, street cred and money agreed with the screens."
+        },
+        {
+          "row": "SS6",
+          "verdict": "pass",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "Scanning an officer: scanning true, progress 1, the officer's record at 5.7 m."
+        }
+      ],
+      "tests": ["tools/test/senses.test.ts"]
+    },
+    "quirks": [
+      "An outfit's pieces are visual only and never equipped: equipped lists what is equipped, clothing per area what each area shows.",
+      "Refused game_loading on the main menu and during loads."
+    ],
+    "docs": ["research/runtime/runtime-bridge-test-card.md#s16-the-senses-and-the-event-feed-9-min", "projects/xf-runtime-bridge/README.md"],
+    "notes": "Session 15: health, level, street cred, money and vehicle agreed with the screens; the inventory count and star state were misread and fixed in 0.8.9, proven in session 16.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "player.appearance",
+    "title": "V's creator state",
+    "summary": "player.appearance reads every creator option and value while the mirror screen is open, and outside it the last full reading with its age.",
+    "area": "player",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.5.1",
+    "surface": { "commands": ["player.appearance"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "18",
+          "verdict": "pass",
+          "session": "first session",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "The XF row read Off plus 12 in the creator."
+        }
+      ]
+    },
+    "quirks": ["Outside the creator the reading is the last one made on the screen since the last load (last_creator_reading, not live), dropped when a save loads."],
+    "docs": ["research/runtime/runtime-bridge-test-card.md#first-session-bridge-checks"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "player.wardrobe",
+    "title": "Wardrobe and outfits",
+    "summary": "wardrobe.state says who decides what V shows (the wardrobe, a script outfit system such as Equipment-EX, or none) and what each area shows; wardrobe.equip applies, suspends and resumes outfits with an exact undo.",
+    "area": "player",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.5.2",
+    "changed_in": "0.8.11",
+    "surface": { "commands": ["wardrobe.state", "wardrobe.equip"], "code": ["redscript/XFRuntimeBridgeWardrobe.reds", "redscript/XFRuntimeBridgeEquipmentEx.reds"] },
+    "verification": {
+      "rows": [
+        { "row": "SS5r3", "verdict": "unrun" }
+      ],
+      "tests": ["tools/test/batch8.test.ts", "tools/test/batch10.test.ts"]
+    },
+    "limits": ["In the inventory write class, off until the maintainer approves writes to V's inventory."],
+    "quirks": [
+      "Under Equipment-EX, vanilla wardrobe requests are no-ops (it wraps IsVisualSetActive); the bridge drives its own outfit system through Codeware's reflection and refuses that route for the session if a function differs (script_outfit_api_changed)."
+    ],
+    "known_issues": [
+      {
+        "summary": "An Equipment-EX part whose area is not one of the six (a full-body Outfit item) is reported against no area, and an area covered by two parts reports the first.",
+        "severity": "low",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "RB-220"
+      }
+    ],
+    "docs": ["knowledge/clothing.md#in-game-results-sessions-5-and-6", "projects/xf-runtime-bridge/README.md"],
+    "notes": "Session 6 found the wardrobe's 'set 0 but active' was Equipment-EX; 0.6 answered it.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "player.teleport",
+    "title": "Teleporting V",
+    "summary": "player.teleport moves V to a point or an offset along her facing, snapped to the navmesh, with streaming and distance checks and a read-back, and an undo that brings her back.",
+    "area": "player",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.6.0",
+    "changed_in": "0.8.15",
+    "depends_on": ["safety.road-safe-placement"],
+    "surface": { "commands": ["player.teleport"] },
+    "verification": {
+      "rows": [
+        { "row": "SN1", "verdict": "pass", "session": "borg-2", "build": "0.8.16 c96779ee", "date": "2026-10-25" },
+        { "row": "L7", "verdict": "unrun", "session": "session 10", "note": "The 60 m teleport couldn't run." },
+        { "row": "BR11", "verdict": "unrun" }
+      ]
+    },
+    "limits": ["At most 50 m unless far; two a second; a destination more than 0.5 m away must be streamed in."],
+    "quirks": ["Teleport applies no movement hold: settled means V stayed put for two ticks, not that she is held (Borg 1, V carried off by traffic)."],
+    "docs": ["knowledge/player-control.md#2-moving-v"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "player.look",
+    "title": "Turning V's view",
+    "summary": "player.look turns V's view to angles or a point, instantly or smoothly over a duration; the player's own mouse ends it.",
+    "area": "player",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.6.0",
+    "changed_in": "0.8.3",
+    "surface": { "commands": ["player.look", "player.look.stop"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "L2",
+          "verdict": "fail",
+          "session": "session 10",
+          "build": "0.8.2",
+          "date": "2026-10-22",
+          "note": "A five-second smooth look took 1.5 s; 0.8.3 takes its duration_s."
+        }
+      ]
+    },
+    "docs": ["knowledge/player-control.md#3-the-camera"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "player.actions",
+    "title": "V's actions",
+    "summary": "player.action crouches and stands V, draws, holsters and switches weapons (arm cyberware too), and opens and closes the game's menus, each with an undo; player.stop lifts everything the bridge holds on V.",
+    "area": "player",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.6.0",
+    "changed_in": "0.7.0",
+    "surface": { "commands": ["player.action", "player.stop", "player.interact.list"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "DK1",
+          "verdict": "pass",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "weapon.draw fired the weapon watcher."
+        }
+      ]
+    },
+    "quirks": ["menu.close (ForceCloseHubMenuEvent) is a hypothesis; selecting an interaction needs an input channel (research)."],
+    "docs": ["knowledge/player-control.md#5-other-player-actions"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "player.behaviours",
+    "title": "Frame-rate behaviours",
+    "summary": "Routines that run in the plugin at tick rate with limits and stop conditions: a showroom turntable, a smooth look, a glide along a navmesh path, keeping a subject framed; they stream events and stop on the kill switch, a handover, the pause or a load.",
+    "area": "player",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.6.0",
+    "changed_in": "0.6.1",
+    "surface": {
+      "commands": ["behave.turntable", "behave.look", "behave.glide.path", "behave.keep.framed", "behave.stop", "behave.list"],
+      "events": ["behaviour"],
+      "code": ["native/src/core/Behaviours.cpp"]
+    },
+    "verification": {
+      "rows": [
+        { "row": "D1", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" },
+        { "row": "D2", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22", "note": "The player's mouse ended the look." }
+      ],
+      "tests": ["tools/test/batch10.test.ts", "tools/test/batch11.test.ts"]
+    },
+    "limits": ["A glide runs at most 30 s and 50 m, with no walk animation; at most four behaviours at once."],
+    "docs": [
+      "research/runtime/runtime-bridge-design.md#8a-control-layers-deliberation-behaviours-and-small-models-direction-29-september-2026",
+      "projects/xf-runtime-bridge/README.md#one-command-api-many-frontends"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "player.native-input",
+    "title": "Native input pulses",
+    "summary": "Pressing the game's own inputs from inside the game (no window focus, no desktop keys), through the retail build's input dispatch, released cleanly on every stop path.",
+    "area": "player",
+    "kind": "verb",
+    "stage": "building",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "branch": "main",
+    "surface": { "commands": ["test.input.pulse", "test.input.arm", "test.input.state", "input.probe"], "code": ["native/src/plugin/InputDispatch.cpp"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "IC5",
+          "verdict": "skipped",
+          "session": "borg-1",
+          "build": "0.8.13",
+          "date": "2026-10-24",
+          "note": "Blocked by design: the receiver-lifecycle capture adapter isn't built."
+        }
+      ]
+    },
+    "known_issues": [
+      {
+        "summary": "Receiver ownership and type, resolved implementations, physical overlap and a release/axis-zero lifetime are not established; the adapter refuses input_unavailable without calling an untyped receiver.",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-24",
+        "ref": "RB-227"
+      }
+    ],
+    "docs": [
+      "knowledge/input-and-choices.md#5-r1-general-input-dispatch-and-native-hook-points",
+      "research/runtime/runtime-bridge-test-card.md#r1-read-only-capture-protocol"
+    ],
+    "notes": "The expiring owner and state machine are merged; the native adapter stays refused until IC5's read-only trace is reviewed and a release/zero commissioning is approved.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "player.real-choices",
+    "title": "Choosing lines in the game's own dialogues",
+    "summary": "Observing the game's real dialogue offers and picking a line in a vanilla quest or vendor hub, with the attempt and its downstream result attributed.",
+    "area": "player",
+    "kind": "verb",
+    "stage": "building",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "branch": "main",
+    "depends_on": ["player.native-input"],
+    "surface": { "commands": ["player.choice.state", "player.choice.select"] },
+    "known_issues": [
+      {
+        "summary": "Retail offers carry captions, not certified eligibility or action semantics; no input_eligible offer is published and the last attempted choice has no hub or scene id.",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-24",
+        "ref": "RB-228"
+      }
+    ],
+    "docs": ["knowledge/input-and-choices.md#real-questvendor-hubs-drive-input-observe-the-attempt"],
+    "notes": "player.choice.select is refused input_unavailable; player.choice.state observes.",
+    "updated": "2026-10-26"
+  }
+]

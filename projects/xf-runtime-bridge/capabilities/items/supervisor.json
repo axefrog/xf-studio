@@ -1,0 +1,261 @@
+[
+  {
+    "id": "supervisor.v-entry",
+    "title": "Supervising V between turns",
+    "summary": "supervisor.set arms an entry for V with a goal (hold_position, idle_safe), invariants (not_in_combat, no_contact, not_on_road, alive) and fixed policy actions, evaluated on the game tick at 3 Hz; it yields at once to the player's own input and keeps a receipt of every intervention.",
+    "area": "supervisor",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.8.15",
+    "changed_in": "0.8.17",
+    "surface": { "commands": ["supervisor.set", "supervisor.state", "supervisor.clear"], "code": ["native/src/core/Supervisor.cpp", "native/src/plugin/Supervisor.cpp"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "SV8151",
+          "verdict": "inconclusive",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "A hostile civilian stand-in never started a fight; the combat fixture came in 0.8.18."
+        },
+        {
+          "row": "SV8152",
+          "verdict": "pass",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "A violation 0.1 s after a teleport, then player.stop and a teleport back 0.6 s later."
+        },
+        {
+          "row": "SV8153",
+          "verdict": "pass",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "Yielded on mapped W (Borg 2) and on a raw mouse axis (Borg 3)."
+        },
+        { "row": "SV8153a", "verdict": "unrun", "note": "Aim, fire and reload need a weapon fixture." },
+        {
+          "row": "SV8154",
+          "verdict": "pass",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "Armed, then game_load: ended world_detach, nothing left."
+        },
+        { "row": "SV8156", "verdict": "unrun" },
+        { "row": "B217-4", "verdict": "pass", "session": "borg-3", "build": "0.8.17 356f04c4", "date": "2026-10-25", "note": "ref v accepted, stored V." }
+      ],
+      "tests": ["tools/test/supervisor0815.test.ts", "tools/test/supervisor-review0815.test.ts"]
+    },
+    "limits": ["Explicit autonomous candidate only; unknown road and partial contact coverage stay explicit in every receipt."],
+    "quirks": ["Kill, pause, handover, load, disconnect and replacement invalidate queued work."],
+    "docs": ["research/runtime/runtime-bridge-supervisor-design.md", "research/runtime/runtime-bridge-test-card.md#supervisor-0815-round-3"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "supervisor.actor-entries",
+    "title": "Supervising XF actors",
+    "summary": "Up to five actor-keyed entries: an XF actor takes hold_position or idle_safe, alive, not_in_combat or not_lost, and release, return_last_safe, handover or pause_world.",
+    "area": "supervisor",
+    "parent": "supervisor.v-entry",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P2",
+    "since": "0.8.19",
+    "depends_on": ["supervisor.v-entry", "npc.actors"],
+    "surface": { "commands": ["supervisor.set", "supervisor.state", "supervisor.clear"] },
+    "verification": {
+      "rows": [
+        { "row": "SV8191", "verdict": "unrun" },
+        { "row": "SV8192", "verdict": "unrun" },
+        { "row": "SV8193", "verdict": "unrun" },
+        { "row": "SV8194", "verdict": "unrun" },
+        { "row": "SV8195", "verdict": "unrun" }
+      ],
+      "tests": ["tools/test/crowd-substitute.test.ts"]
+    },
+    "limits": [
+      "Five entries at most (supervisor_limit); an actor's entry needs the NPC write class, not the player class. Picked passers-by and spawned objects still refuse."
+    ],
+    "docs": ["research/runtime/runtime-bridge-supervisor-design.md#xf-actors-and-several-entries-0819"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "supervisor.while-away",
+    "title": "While you were away",
+    "summary": "game.catchup's supervisor_summary reconciles every violation and action with its result into a 'while you were away' line, carrying run totals and the latest receipts in the cursor.",
+    "area": "supervisor",
+    "parent": "supervisor.v-entry",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "caveats",
+    "priority": "P1",
+    "priority_reason": "Borg 4 found a reporting gap in the summary; the fix (2949a677) needs SV8155 in the next session.",
+    "since": "0.8.15",
+    "changed_in": "0.8.22",
+    "depends_on": ["recorder.catchup"],
+    "surface": { "commands": ["game.catchup"] },
+    "verification": {
+      "rows": [
+        { "row": "SV8155", "verdict": "unrun" }
+      ],
+      "tests": ["tools/test/borg4-0822.test.ts"]
+    },
+    "known_issues": [
+      {
+        "summary": "The summary under-reported receipts already reported by an earlier call. 0.8.22 (2949a677) counts them and links the supervisor's own writes to its actions by cid: a reporting gap, not lost receipts.",
+        "severity": "medium",
+        "status": "fixed-unverified",
+        "since": "2026-10-26",
+        "ref": "2949a677"
+      },
+      {
+        "summary": "Review of 0.8.22 (Medium): a supervisor write and its action read by different catch-up calls were never paired. Fixed in 2ff42305: unpaired writes and action cids wait in the cursor (16 each) and are counted once, in either order. Unverified in game.",
+        "severity": "medium",
+        "status": "fixed-unverified",
+        "since": "2026-10-26",
+        "ref": "2ff42305"
+      }
+    ],
+    "docs": ["research/runtime/runtime-bridge-supervisor-design.md"],
+    "notes": "Borg 2 read 'while you were away: … violations 1, actions 2' after SV8152.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "supervisor.plan-module",
+    "title": "Plans",
+    "summary": "A plain-data, serialisable plan: steps with a precondition, an action, anticipated outcomes, branches, bounded retries, alternatives, a fallback and a deadline, roles and a shared blackboard, the failure ladder, and one report stream ending in exactly one closing report.",
+    "area": "supervisor",
+    "kind": "service",
+    "stage": "built",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P1",
+    "priority_reason": "The Story Engine's scene execution sits on it, and the batch runner (the next session's ST batch) is its first consumer.",
+    "branch": "claude/bridge-runner",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "runtime-requirements.md#scene-execution-what-the-engine-needs-from-the-bridges-plan-layer",
+        "milestone": "M4",
+        "note": "The engine decides what is true and what happens next; the plan decides how bodies carry it out, performs, observes and reports, and never changes the record.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "runtime-requirements.md#1-what-a-scene-decides-at-run-time-and-against-which-signals",
+        "milestone": "M4",
+        "note": "Anticipated outcomes map onto the scene's declared branches; an unanticipated outcome is reported as such and takes the fallback.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "runtime-requirements.md#3-several-actors",
+        "milestone": "M4",
+        "note": "A scene is a unit with a cast: joint beats, roles bound to actors, one blackboard per scene, one report stream per scene, up to 5 actors.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "runtime-requirements.md#4-failure-semantics",
+        "milestone": "M4",
+        "note": "The ladder: retry, alternative, drop a rung, dissolve, release; the truth once, no contradiction, a safe world, closed bookkeeping.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "runtime-requirements.md#6-save-and-load",
+        "milestone": "M4",
+        "note": "A load cancels every plan with one signal; start a scene at phase X at time t, not resume mid-plan; reports keyed by scene, plan and step so a duplicate counts once.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "H5",
+        "milestone": "M4",
+        "note": "The sequencer and frame-rate behaviours for staging beats (waits, conditions, per-step checks, undo).",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "session-runner",
+        "level": "needs",
+        "note": "Rows with verdicts are plans: schema-3 session scripts run on the plan module.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "code": ["tools/testing/plan.ts", "tools/testing/fixtures/scene-a-pickpocket.plan.json"] },
+    "verification": { "tests": ["tools/test/plan.test.ts"] },
+    "unknowns": [
+      {
+        "question": "Does the shape cover the start-at-phase entry point and idempotent reports keyed by scene, plan and step that the Story Engine asks for?",
+        "settle_by": "Review against the scene execution section with XF · Story Engine",
+        "needs_game": false
+      }
+    ],
+    "docs": ["research/story-engine/runtime-requirements.md"],
+    "notes": "Built with fake-clock tests and the Story Engine's scene A (the pickpocketing) on stub primitives. Executed host-side only today.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "supervisor.frame-rate-executor",
+    "title": "Plans executed in the game",
+    "summary": "Run plans inside the game at frame rate, so the reflexes a scene needs (avoidance, facing, holding a bark its reading time, stopping when V blocks, aborting on combat, keeping inside the area) happen without the host, with beat-level reports within about a second.",
+    "area": "supervisor",
+    "kind": "service",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["supervisor.plan-module", "supervisor.actor-entries"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "runtime-requirements.md#2-timing",
+        "milestone": "M4",
+        "note": "Frame-rate reflexes in game; a report within about a second of the signal; a reflex may change how something looks, never what happened.",
+        "since": "2026-10-26"
+      }
+    ],
+    "notes": "The plan module is written as data so later in-game code can execute it; the supervisor's actor policies are its other planned consumer.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "supervisor.primitives",
+    "title": "Scene primitives",
+    "summary": "The hand-written primitives plans are made of, parameterised by roles, places and timings with no story knowledge: approach and talk, a pickpocket's pass, paying at a stall, a shove, fleeing, following, waiting with an idle, leaving the area.",
+    "area": "supervisor",
+    "kind": "verb",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["supervisor.plan-module", "npc.direct", "npc.speech"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "runtime-requirements.md#5-authoring",
+        "milestone": "M4",
+        "note": "The bridge owns the primitives and the executor; the engine owns composition. Fixtures: the market pickpocketing, the Friday collection, a warning under D-30.",
+        "since": "2026-10-26"
+      }
+    ],
+    "notes": "Scene A runs on stub primitives in the plan module's tests.",
+    "updated": "2026-10-26"
+  }
+]

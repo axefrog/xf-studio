@@ -1,0 +1,439 @@
+[
+  {
+    "id": "surfaces.ink-panel",
+    "title": "The ink panel",
+    "summary": "The bridge's status and the coordinator's messages and questions in the game's own UI (ink), drawn on the HUD layer in the game's font and colours at one of nine anchors, kept clear of the HUD's own blocks; ui.hud shows, hides, moves or scales it.",
+    "area": "surfaces",
+    "kind": "surface",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.5.3",
+    "changed_in": "0.8.22",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V12",
+        "milestone": "M4",
+        "note": "Messages to the player: ui.message and ui.hud (on main).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": {
+      "commands": ["ui.hud", "ui.state"],
+      "config": ["[ui] hud_panel", "[ui] layer"],
+      "code": ["redscript/XFRuntimeBridgeInk.reds", "native/src/core/InkUi.cpp", "tools/overlay/ink-place.ts"]
+    },
+    "verification": {
+      "rows": [
+        {
+          "row": "B1",
+          "verdict": "fail",
+          "session": "session 10",
+          "build": "0.8.2",
+          "date": "2026-10-22",
+          "note": "Every anchor about 280 units too low; 0.8.3 reads the visible screen from the game's own layout."
+        },
+        { "row": "B3", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22", "note": "Missing glyphs show as the bullet." },
+        { "row": "S1", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" },
+        {
+          "row": "B318-4",
+          "verdict": "pass",
+          "session": "borg-4",
+          "build": "0.8.22 1cd681c3",
+          "date": "2026-10-26",
+          "note": "The panel steps aside for the incoming-call widget."
+        },
+        { "row": "ST11", "verdict": "unrun", "note": "The answer flash as a hold and an ease (0.8.22)." }
+      ],
+      "tests": ["tools/test/batch9.test.ts"]
+    },
+    "limits": ["Needs Codeware and V in the world; no XF surface on a loading screen; a temporary test feature."],
+    "quirks": ["The ink panel and the pin mark follow the game's own style and have no light variant."],
+    "known_issues": [
+      {
+        "summary": "Before the beta: C7 (one 16:9 run), C8's truncation with an ellipsis and the light XF box over a bright scene are outstanding.",
+        "severity": "low",
+        "status": "open",
+        "since": "2026-10-22",
+        "ref": "UI-186"
+      }
+    ],
+    "docs": [
+      "knowledge/ink-ui.md#9-the-xf-runtime-bridges-ink-demos-053-temporary-test-features",
+      "research/runtime/runtime-bridge-design.md#311-bridge-083-session-10s-findings"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.photo-menu-panel",
+    "title": "The panel inside photo mode's menu",
+    "summary": "In photo mode the ink panel draws on a layer of the bridge's own under photo mode's menu: it fades with the menu, its answers take clicks, it keeps out of the menu's title row, tabs and hints, and ui.hud's modal holds photo mode's exit while a question waits.",
+    "area": "surfaces",
+    "parent": "surfaces.ink-panel",
+    "kind": "surface",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.8.6",
+    "changed_in": "0.8.11",
+    "surface": { "commands": ["ui.hud"], "config": ["[ui] layer"], "code": ["redscript/XFRuntimeBridgePhotoPanel.reds"] },
+    "verification": {
+      "rows": [
+        { "row": "H18", "verdict": "unrun", "note": "UI-221 fix 3: Esc held only while a question waits." },
+        { "row": "P18", "verdict": "unrun", "note": "UI-221 fix 4: slides stop at one panel width, then the first free corner." }
+      ]
+    },
+    "known_issues": [
+      {
+        "summary": "ui_hud {modal} holds only photo mode's exit (its camera keys are read natively), but the switch's name promises more.",
+        "severity": "low",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "UI-204"
+      },
+      {
+        "summary": "The UI review of 0.8.11: fixes 4, 5 and 8 are done in source and await session 18's captures.",
+        "severity": "low",
+        "status": "fixed-unverified",
+        "since": "2026-10-23",
+        "ref": "UI-221"
+      }
+    ],
+    "docs": ["knowledge/photo-mode.md#156-recommended-attach-route-for-an-xf-photo-mode-panel", "knowledge/photo-mode.md#session-16-on-bridge-089-23-october-2026"],
+    "notes": "Session 15: photo mode's panel took clicks and held the exit; session 16 passed its zone rule.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.xf-box",
+    "title": "The XF box (overlay host)",
+    "summary": "XF's own Dear ImGui panel drawn over the game from a hook on the engine's present, where the ink panel can't draw (photo mode, menus); hidden for captures, refused in HDR, working beside DLSS frame generation.",
+    "area": "surfaces",
+    "kind": "surface",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.7.0",
+    "changed_in": "0.8.22",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V12",
+        "milestone": "M4",
+        "note": "A debug overlay that shows what the director is doing (lab only): overlay state on 0.8.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": {
+      "commands": ["overlay.state"],
+      "config": ["[overlay] enabled", "[overlay] scale_percent", "[overlay] diagnostics"],
+      "code": ["native/src/plugin/Overlay.cpp", "native/src/core/overlay"]
+    },
+    "verification": {
+      "rows": [
+        {
+          "row": "S2",
+          "verdict": "pass",
+          "session": "session 10",
+          "build": "0.8.2",
+          "date": "2026-10-22",
+          "note": "In photo mode the overlay panel showed the status and the question."
+        }
+      ]
+    },
+    "limits": ["Off by default ([overlay] enabled = false); only the -diagnostic and -writes packages switch it on; hooks attach only at load."],
+    "docs": ["research/runtime/imgui-overlay-feasibility.md", "knowledge/ink-ui.md#8-an-xf-imgui-host-beside-cet"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.cet-line",
+    "title": "The CET line",
+    "summary": "One always-visible line with a coloured dot at the top left, drawn by the CET layer when neither the ink panel nor the XF box can draw, with the coordinator's message lines under it.",
+    "area": "surfaces",
+    "kind": "surface",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.22",
+    "surface": { "config": ["[ui] cet_label"], "code": ["cet/xf_runtime_bridge/init.lua"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "ST8",
+          "verdict": "pass",
+          "session": "borg-4",
+          "build": "0.8.22 1cd681c3",
+          "date": "2026-10-26",
+          "note": "Dark theme, reduced motion (frame generation on): a still dot, connected, still and burst. Light theme deferred."
+        }
+      ]
+    },
+    "known_issues": [
+      {
+        "summary": "The dot sat 48 px in against 26 px on the right; 0.8.11 draws it on the foreground draw list. Close on session 18's capture, dark and light.",
+        "severity": "low",
+        "status": "fixed-unverified",
+        "since": "2026-10-22",
+        "ref": "UI-195"
+      }
+    ],
+    "docs": ["projects/xf-runtime-bridge/README.md#layers"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.cet-window",
+    "title": "The XF Runtime Bridge window",
+    "summary": "The interactive window in CET's overlay (test builds): the connection in plain words, the question with answer buttons and a comment box, Keys (the stop key), Reconnect, Pause changes, Mark this moment, Save anyway and Stop the bridge.",
+    "area": "surfaces",
+    "kind": "surface",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.3.0",
+    "changed_in": "0.8.22",
+    "surface": { "code": ["cet/xf_runtime_bridge/panel.lua", "cet/xf_runtime_bridge/init.lua"] },
+    "verification": {
+      "rows": [
+        { "row": "A3", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22", "note": "Done pressed in the window." },
+        { "row": "C1", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22", "note": "A comment sent with Ctrl+Enter." },
+        { "row": "Q18", "verdict": "unrun", "note": "UI-221 fix 5: the question slot keeps its tallest height." }
+      ]
+    },
+    "limits": ["Takes input only while CET's overlay is open, which blocks the game; the work queue's own ImGui host is meant to replace that reliance."],
+    "docs": ["research/runtime/runtime-bridge-test-card.md#c-the-xf-runtime-bridge-window-and-the-cet-line-3-min"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.questions",
+    "title": "Questions to the player",
+    "summary": "ui.message with level ask shows a question with its answers on the current surface, a key per answer (F6 by default) and buttons in the window; session.wait returns the answer or a comment, and a soft sound plays once per new question.",
+    "area": "surfaces",
+    "kind": "surface",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.7.0",
+    "changed_in": "0.8.11",
+    "depends_on": ["surfaces.ink-panel"],
+    "surface": { "commands": ["ui.message", "session.wait"], "events": ["answer", "comment"], "config": ["[ui] answer_keys", "[ui] question_sound"] },
+    "verification": {
+      "rows": [
+        { "row": "B4", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22", "note": "One question at a time." },
+        { "row": "B5", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" },
+        { "row": "B6", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" },
+        { "row": "A4", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" }
+      ]
+    },
+    "quirks": ["F9 is the game's quick load, so it is never an answer key; the key guard ignores a press in the first half second after the keys arm."],
+    "docs": ["research/runtime/runtime-bridge-design.md#37-bridge-07-more-hooks-in-game-answers-and-the-overlay-host"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.messages",
+    "title": "Message lines",
+    "summary": "ui.message shows short info, warn and done lines to the player under the bridge's in-game label (the session runner echoes its notes there); at most four, each up to 600 characters on every surface, cleared or withdrawn by id.",
+    "area": "surfaces",
+    "kind": "surface",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.4.0",
+    "changed_in": "0.8.0",
+    "demand": [
+      { "consumer": "story-engine", "level": "needs", "ref": "V12", "milestone": "M4", "note": "Messages to the player.", "since": "2026-10-26" }
+    ],
+    "surface": { "commands": ["ui.message"], "code": ["native/src/core/Messages.cpp"] },
+    "verification": {
+      "rows": [
+        { "row": "B3", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" }
+      ],
+      "tests": ["tools/test/batch5.test.ts"]
+    },
+    "quirks": ["notify class: changes nothing in the game, so it needs no write permission and --read-only includes it."],
+    "docs": ["projects/xf-runtime-bridge/README.md#one-command-api-many-frontends"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.one-status-surface",
+    "title": "One status surface at a time",
+    "summary": "The ink panel while the HUD shows, the XF box in photo mode and menus (carrying the question then), the CET line only when neither can draw; one wording and colour rule on every surface, with a short chip (Read-only, Changes allowed, Paused, Stopped).",
+    "area": "surfaces",
+    "kind": "surface",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.2",
+    "changed_in": "0.8.22",
+    "surface": { "code": ["native/src/core/InkUi.cpp"] },
+    "verification": {
+      "rows": [
+        { "row": "S1", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" },
+        { "row": "S2", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" },
+        { "row": "S3", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" },
+        { "row": "S4", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" }
+      ]
+    },
+    "docs": ["research/runtime/runtime-bridge-design.md#310-bridge-082-the-crash-at-load-the-re-checks-findings-session-9-and-one-status-surface"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.in-game-styling",
+    "title": "In-game styling (the Studio's design)",
+    "summary": "The bridge's surfaces take XF Studio's 'In-game surfaces' design: generated colour, metric and type tables, five baked fonts, cards, chips, bars, the chamfered mark, light and dark themes, and a pulse and settle that stand still under reduced motion.",
+    "area": "surfaces",
+    "kind": "surface",
+    "stage": "built",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P0",
+    "priority_reason": "The 0.8.22 merge is on hold until the cards draw, and XF · Studio's UI review (a polish-lane item) needs the ST captures in both themes.",
+    "branch": "claude/bridge-0822",
+    "since": "0.8.22",
+    "depends_on": ["surfaces.xf-box", "surfaces.cet-window", "surfaces.cet-line"],
+    "demand": [
+      {
+        "consumer": "studio",
+        "level": "blocking",
+        "ref": "polish lane: in-game styling",
+        "note": "The UI track reviews the in-game captures, light and dark; the review needs the cards drawing.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": {
+      "config": ["[overlay] theme", "[overlay] motion"],
+      "code": [
+        "tools/overlay/theme.ts",
+        "native/src/core/overlay/ThemeTable.inc",
+        "cet/xf_runtime_bridge/theme.lua",
+        "tools/overlay/cet-bindings.ts",
+        "tools/lint-lua.ts"
+      ]
+    },
+    "verification": {
+      "rows": [
+        { "row": "ST1", "verdict": "unrun" },
+        { "row": "ST2", "verdict": "unrun" },
+        { "row": "ST3", "verdict": "unrun" },
+        { "row": "ST4", "verdict": "unrun" },
+        { "row": "ST5", "verdict": "unrun" },
+        { "row": "ST6", "verdict": "unrun" },
+        {
+          "row": "ST7",
+          "verdict": "fail",
+          "session": "borg-4",
+          "build": "0.8.22 1cd681c3",
+          "date": "2026-10-26",
+          "note": "Every card drew plain: 'stack index -1, expected userdata, received nil'."
+        },
+        { "row": "ST8", "verdict": "pass", "session": "borg-4", "build": "0.8.22 1cd681c3", "date": "2026-10-26", "note": "Dark, reduced motion." },
+        { "row": "ST10", "verdict": "unrun" },
+        { "row": "ST11", "verdict": "unrun" },
+        { "row": "ST12", "verdict": "unrun" }
+      ],
+      "tests": ["tools/test/styling0822.test.ts", "tools/test/cet-bindings.test.ts"]
+    },
+    "quirks": [
+      "Borg 4 observations for the Studio: the CHANGES ALLOWED chip drew as an amber outline where the spec says an amber wash; the TEST chip's cut corners don't show at that size."
+    ],
+    "known_issues": [
+      {
+        "summary": "CET cards drew plain: a tail call out of a pcall'd function made CET's wrapper find pcall's environment. Fixed in 2949a677 (no tail calls into ImGui, the lint refuses them, a fengari test against CET 1.37.1's binding table), unverified.",
+        "severity": "high",
+        "status": "fixed-unverified",
+        "since": "2026-10-26",
+        "ref": "2949a677"
+      }
+    ],
+    "docs": ["research/runtime/runtime-bridge-test-card.md#in-game-styling-0822", "knowledge/ink-ui.md", "projects/xf-runtime-bridge/README.md"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.motion",
+    "title": "The motion setting",
+    "summary": "[overlay] motion is auto, reduced or full: auto follows Windows' animation-effects setting and also stays still while frame generation is on; the effective value is reported in overlay.state.",
+    "area": "surfaces",
+    "parent": "surfaces.in-game-styling",
+    "kind": "surface",
+    "stage": "built",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P1",
+    "priority_reason": "Part of the ST session that unblocks the 0.8.22 merge; the pulse and settle rows need motion full, since frame generation forces auto to reduced.",
+    "branch": "claude/bridge-0822",
+    "since": "0.8.22",
+    "surface": { "commands": ["overlay.state"], "config": ["[overlay] motion"] },
+    "verification": {
+      "rows": [
+        { "row": "ST9", "verdict": "unrun" }
+      ]
+    },
+    "docs": ["research/runtime/runtime-bridge-test-card.md#in-game-styling-0822"],
+    "notes": "Borg 4 saw auto resolve to reduced with reason frame_generation (FSR FI, XeSS FG and DLSSG modules loaded).",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.overlay-set",
+    "title": "Overlay settings live",
+    "summary": "overlay.set changes the XF box's theme, motion, diagnostics and drawing while the game runs, in memory only (config.ini untouched), with an undo of exactly the keys given.",
+    "area": "surfaces",
+    "kind": "surface",
+    "stage": "built",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P1",
+    "priority_reason": "The ST session starts with [overlay] enabled = true and switches the rest live, so the styling rows need no restart per theme.",
+    "branch": "claude/bridge-0822",
+    "since": "0.8.22",
+    "depends_on": ["surfaces.xf-box"],
+    "surface": { "commands": ["overlay.set", "overlay.state"], "code": ["native/src/core/overlay"] },
+    "verification": { "tests": ["tools/test/styling0822.test.ts"] },
+    "limits": [
+      "Switching on an overlay that was off at load answers needs_restart: the hooks attach only at load (RB-107), and a live patch of the present beside CET's hook is untested."
+    ],
+    "quirks": ["The CET window and line repaint with the next info refresh (about 2 s); the ink panel uses the game's own colours."],
+    "docs": ["research/runtime/runtime-bridge-test-card.md#in-game-styling-0822"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.overlay-state",
+    "title": "Overlay state",
+    "summary": "overlay.state reports the XF box (on or off, hooked, drawing or why not, back buffer, theme, frames and CPU time, hidden for a capture), frame-generation modules, the effective motion, and whether CET's overlay is open.",
+    "area": "surfaces",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P1",
+    "priority_reason": "cet_open misread in Borg 4 and the batch runner works around it with a capture check; the fix needs ST13.",
+    "since": "0.7.0",
+    "changed_in": "0.8.22",
+    "surface": { "commands": ["overlay.state"] },
+    "verification": {
+      "rows": [
+        { "row": "ST13", "verdict": "unrun", "note": "cet_open with the XF box off." }
+      ]
+    },
+    "known_issues": [
+      {
+        "summary": "cet_open stayed false with CET's overlay open: the host heard CET only on ticks while it was enabled. Fixed in 2949a677 (the native tells it directly; null until the CET layer reports), unverified.",
+        "severity": "medium",
+        "status": "fixed-unverified",
+        "since": "2026-10-26",
+        "ref": "2949a677"
+      }
+    ],
+    "docs": ["research/runtime/runtime-bridge-test-card.md#in-game-styling-0822"],
+    "updated": "2026-10-26"
+  }
+]

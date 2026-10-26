@@ -1,0 +1,315 @@
+[
+  {
+    "id": "lifecycle.status",
+    "title": "Game phase and waiting",
+    "summary": "game.status reads the phase (main menu, loading, gameplay, photo mode, character menu, menu, paused), the save lock, photo state, the clock and the script layer; game.wait waits for a phase.",
+    "area": "lifecycle",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.2",
+    "surface": { "commands": ["game.status", "game.wait"], "code": ["redscript/XFRuntimeBridgeActions.reds", "tools/api/catalogue.ts"] },
+    "verification": {
+      "rows": [
+        { "row": "S2", "verdict": "pass", "session": "script-call check", "build": "0.2.0 c31156a", "date": "2026-09-26" },
+        { "row": "I3", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22", "note": "game_wait with one phase as text." }
+      ]
+    },
+    "quirks": ["A step that timed out or found the queue busy counts as loading, and the wait goes on (0.5.2)."],
+    "docs": ["projects/xf-runtime-bridge/README.md#one-command-api-many-frontends"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "lifecycle.saves",
+    "title": "The save list",
+    "summary": "game.saves lists saves newest first with the Load menu's details: type, location, quest, level, life path, time, play time, version and whether it is modded.",
+    "area": "lifecycle",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.7.0",
+    "changed_in": "0.8.2",
+    "surface": { "commands": ["game.saves"] },
+    "verification": {
+      "rows": [
+        { "row": "I1", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" }
+      ]
+    },
+    "limits": [
+      "Returns at most the newest 20 saves with metadata, so a checker comparing two lists must judge removals only within the overlapping window (Borg 1, IC4's save_delta)."
+    ],
+    "quirks": ["Writer-only on the multi-client pipe (a singleton request exchange)."],
+    "docs": ["research/runtime/runtime-bridge-test-card.md#session-10-checks-bridge-082"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "lifecycle.load",
+    "title": "Loading a save",
+    "summary": "game.load loads the latest save of the playthrough or one by its name, from gameplay or the main menu, discarding unsaved progress only when told to.",
+    "area": "lifecycle",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.4.0",
+    "changed_in": "0.8.15",
+    "depends_on": ["link.script-gate", "lifecycle.saves"],
+    "surface": { "commands": ["game.load"], "code": ["redscript/XFRuntimeBridgeGame.reds", "tools/api/load-continue.ts"] },
+    "verification": {
+      "rows": [
+        { "row": "I2", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" },
+        { "row": "NE4", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23", "note": "A load left no actor behind." },
+        {
+          "row": "LC8154",
+          "verdict": "pass",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "An in-game load went straight to gameplay with prompt_state none."
+        }
+      ]
+    },
+    "limits": ["Always needs discard_unsaved: true (the game's own unsaved-progress question isn't asked on this route); refused in photo mode and the creator."],
+    "docs": [
+      "projects/xf-runtime-bridge/README.md#one-command-api-many-frontends",
+      "knowledge/game-lifecycle-control.md#4-post-load-continue-observe-the-real-initial-loading-controller"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "lifecycle.save",
+    "title": "Making a manual save",
+    "summary": "game.save makes one new manual save through the game's own ManualSave, never overwriting or deleting one, and refuses while the bridge's save lock is held unless override_lock is given.",
+    "area": "lifecycle",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.4.0",
+    "changed_in": "0.6.1",
+    "depends_on": ["safety.save-lock"],
+    "surface": { "commands": ["game.save", "test.save.delay"] },
+    "verification": {
+      "rows": [
+        { "row": "L1", "verdict": "unrun", "session": "session 10", "note": "Its prepare path couldn't run." }
+      ],
+      "tests": ["tools/test/batch5.test.ts"]
+    },
+    "limits": ["Blocks the pipe while it waits for the game (up to 20 s); the kill key and the KILL file still work."],
+    "docs": ["projects/xf-runtime-bridge/README.md#one-command-api-many-frontends"],
+    "notes": "The save path itself ran in Borg 1 through Save anyway (IC4: one save, relocked).",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "lifecycle.prompt-detector",
+    "title": "Load prompt detection",
+    "summary": "A test-build UI detector watches the initial-load controller (readiness gates, the skip panel, its subscription and consumption) and the start screen's engagement menu, and reports prompt_state, so a load says truthfully whether press-any-key is waiting.",
+    "area": "lifecycle",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.8.15",
+    "surface": { "commands": ["game.load", "game.status"], "code": ["native/src/plugin/Lifecycle.cpp"] },
+    "verification": {
+      "rows": [
+        { "row": "LC8151", "verdict": "unrun" },
+        {
+          "row": "LC8152",
+          "verdict": "pass",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "-skipStartScreen through MO2 skipped the start screen."
+        },
+        {
+          "row": "LC8153",
+          "verdict": "pass",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "A full trace: loading, initial_continue (skip panel visible, waiting for input), continuing, none."
+        },
+        {
+          "row": "LC8154",
+          "verdict": "pass",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "Borg 1's false press-any-key after an in-game load is fixed."
+        },
+        { "row": "LC8156", "verdict": "unrun" }
+      ],
+      "tests": ["tools/test/lifecycle0815.test.ts"]
+    },
+    "limits": ["Autonomous candidate only (a test-only native)."],
+    "docs": [
+      "knowledge/game-lifecycle-control.md#bridge-0815-round-2-offline-observer-and-read-only-plan",
+      "research/runtime/runtime-bridge-test-card.md#lifecycle-detection-and-continue-plan-0815-round-2"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "lifecycle.continue-plan",
+    "title": "Read-only continue plan",
+    "summary": "game.lifecycle.probe records the plan a continue would follow (which consumer, which call) without calling anything, as the step before a real in-game continue.",
+    "area": "lifecycle",
+    "kind": "research",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.8.15",
+    "depends_on": ["lifecycle.prompt-detector"],
+    "surface": { "commands": ["game.lifecycle.probe"], "code": ["native/src/plugin/Lifecycle.cpp"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "LC8155",
+          "verdict": "pass",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "would_call UI_Skip at the consumer, called false."
+        }
+      ]
+    },
+    "docs": ["knowledge/game-lifecycle-control.md#bridge-0815-round-2-offline-observer-and-read-only-plan"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "lifecycle.continue",
+    "title": "Continue past press-any-key in the game",
+    "summary": "Ending the press-any-key screen from inside the game, exactly once, so a launch and load need no key press from outside the game.",
+    "area": "lifecycle",
+    "kind": "verb",
+    "stage": "planned",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P1",
+    "priority_reason": "The one key press failed in Borg 4's unattended trial (a desktop toast took the foreground) and the maintainer had to press through; unattended runs need the bridge's own continue route, which Borg 4 moved up.",
+    "depends_on": ["lifecycle.continue-plan"],
+    "demand": [
+      {
+        "consumer": "session-runner",
+        "level": "needs",
+        "note": "Unattended launches: today the external key is the only route (Borg 1 to 4).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["game.continue"] },
+    "known_issues": [
+      {
+        "summary": "No active GSM owner/phase acceptance reader, validated Start/UI_Skip event ABI, execution-thread lifetime or one-shot compare-and-act adapter: game.continue stays refused (no_safe_route).",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-25",
+        "ref": "RB-234"
+      }
+    ],
+    "unknowns": [
+      {
+        "question": "What are the original consumers' ABI and lifetimes for an exact-once invocation in the foreground and background?",
+        "settle_by": "LC8151 to LC8156, then a separately reviewed invocation with stale, consumed, replaced and gameplay counterexamples (RB-234).",
+        "needs_game": true
+      }
+    ],
+    "docs": ["knowledge/game-lifecycle-control.md#3-the-launch-screen-engagement-and-the-native-start-action", "research/authoring/code-health.md"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "lifecycle.launch",
+    "title": "Launching the game through MO2",
+    "summary": "The batch runner's host adapter starts the game through MO2's command line in the test profile with -skipStartScreen, waits for the bridge, and restarts it when a row needs other config.ini keys.",
+    "area": "lifecycle",
+    "kind": "tool",
+    "stage": "built",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "branch": "claude/bridge-runner",
+    "depends_on": ["tooling.batch-runner"],
+    "surface": { "code": ["tools/testing/host.ts"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "LC8152",
+          "verdict": "pass",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "Run by hand with the same command line."
+        }
+      ]
+    },
+    "quirks": [
+      "The bridge is attach-only: agents launch only under the session rules, and only the test profile.",
+      "Launching MO2 minimised left a stale caption stub after it exited (Borg 2); launch it normally."
+    ],
+    "unknowns": [
+      {
+        "question": "Does the host adapter's launch and restart work end to end?",
+        "settle_by": "The first batch session (the ST styling batch).",
+        "needs_game": true
+      }
+    ],
+    "docs": ["knowledge/game-lifecycle-control.md#mo2-v252-and-game-switches", "research/runtime/runtime-bridge-design.md#76-input-launch-and-exit"],
+    "notes": "Borg 1 to 4 launched by hand with the MO2 command line; the adapter is offline only.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "lifecycle.quit",
+    "title": "Quitting the game",
+    "summary": "A bridge command that leaves the game through its own exit, after the save flush, so a session can end without desktop input.",
+    "area": "lifecycle",
+    "kind": "verb",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "demand": [
+      {
+        "consumer": "session-runner",
+        "level": "wants",
+        "note": "Borg 1's rule: use the game's own quit route, or a bridge quit command; CloseMainWindow acts like Alt+F4 and is the fallback.",
+        "since": "2026-10-26"
+      }
+    ],
+    "unknowns": [
+      {
+        "question": "What is the shutdown and save-flush ordering, and does ExitGame exit cleanly from gameplay without a prompt?",
+        "settle_by": "Research brief (RB-234 keeps game.quit out of the current candidate)",
+        "needs_game": true
+      }
+    ],
+    "docs": ["knowledge/game-lifecycle-control.md#5-exit-and-launch-arguments", "research/runtime/runtime-bridge-design.md#76-input-launch-and-exit"],
+    "notes": "Meanwhile the batch runner's host adapter closes the game with CloseMainWindow, which Borg 4 found clean (about 25 s).",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "lifecycle.options-read",
+    "title": "Graphics settings record",
+    "summary": "game.options.read records the graphics and display settings (upscaler, frame generation, ray and path tracing, HDR and more) and, through the CET layer, the engine's character render options.",
+    "area": "lifecycle",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P3",
+    "since": "0.3.0",
+    "surface": { "commands": ["game.options.read"], "code": ["native/src/core/OptionsExchange.cpp", "tools/api/options.ts"] },
+    "verification": { "tests": ["tools/test/mcp.test.ts"] },
+    "quirks": ["Writer-only on the multi-client pipe."],
+    "docs": ["knowledge/runtime-access.md#6-what-agents-can-and-cannot-do-yet"],
+    "notes": "knowledge/runtime-access.md lists it as built, not yet confirmed in game.",
+    "updated": "2026-10-26"
+  }
+]

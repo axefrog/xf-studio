@@ -1,0 +1,303 @@
+[
+  {
+    "id": "recorder.session-events",
+    "title": "The session event stream",
+    "summary": "The plugin keeps a ring of the session's events (writes with their undo, refusals, the kill switch, handovers, behaviours, notes, answers); session.log merges it with the tools' log, session.note adds a marker and session.wait blocks until the player answers or something happens.",
+    "area": "recorder",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.6.0",
+    "changed_in": "0.8.21",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S1",
+        "milestone": "M4",
+        "note": "The bridge's own event ring and npc.* events are part of the world event feed.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["session.events", "session.log", "session.note", "session.wait"], "code": ["native/src/core/Events.cpp", "tools/api/catalogue070.ts"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "A4",
+          "verdict": "pass",
+          "session": "session 10",
+          "build": "0.8.2",
+          "date": "2026-10-22",
+          "note": "session_wait from one process while another called game_status."
+        }
+      ],
+      "tests": ["tools/test/batch10.test.ts"]
+    },
+    "limits": ["A ring of 1000 events, with dropped for a reader that fell behind."],
+    "docs": ["projects/xf-runtime-bridge/README.md#one-command-api-many-frontends"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "recorder.source-recorder",
+    "title": "Source recorder",
+    "summary": "test.record.start, read and stop sample fresh V, selected actors and the camera on 100 ms deadlines, plus the taps' channels, into a private ring and chunk files, so the coordinator can read what happened between turns.",
+    "area": "recorder",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.8.14",
+    "changed_in": "0.8.18",
+    "surface": {
+      "commands": ["test.record.start", "test.record.read", "test.record.stop"],
+      "code": ["native/src/core/Recording.cpp", "native/src/plugin/HandlersRecording.cpp", "redscript/XFRuntimeBridgeRecording.reds", "tools/testing/recording.ts"]
+    },
+    "verification": {
+      "rows": [
+        { "row": "RT1", "verdict": "unrun" },
+        { "row": "RT2", "verdict": "unrun" },
+        {
+          "row": "B318-1",
+          "verdict": "pass",
+          "session": "borg-4",
+          "build": "0.8.22 1cd681c3",
+          "date": "2026-10-26",
+          "note": "invalid 0, no gaps, count_detail reconciles; 25 missed deadlines and 2 drops under memory pressure."
+        },
+        { "row": "B318-7", "verdict": "unrun" }
+      ],
+      "tests": ["tools/test/recording.test.ts", "tools/test/borg3-0818.test.ts"]
+    },
+    "limits": [
+      "One 512-slot ring of 8192-byte payloads; 1 MiB JSONL chunks under the runtime folder's recordings.",
+      "Explicit autonomous candidate only; missed deadlines are counted, never filled from a cache."
+    ],
+    "unknowns": [
+      { "question": "What do sampling cost, achieved cadence and teardown look like in game?", "settle_by": "RT1 to RT7", "needs_game": true }
+    ],
+    "docs": ["knowledge/runtime-access.md#source-recording-source", "research/runtime/runtime-bridge-test-card.md#recorder-and-taps-borg-mode-session"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "recorder.taps-speech",
+    "title": "Subtitle and voice taps",
+    "summary": "The recorder's subtitles and voice channels observe source notifications, the controller's delivery and the line widget's creation, text and removal, plus script voice requests and reaction callers.",
+    "area": "recorder",
+    "parent": "recorder.source-recorder",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.8.14",
+    "changed_in": "0.8.18",
+    "surface": { "code": ["tools/testing/subtitles.ts"] },
+    "verification": {
+      "rows": [
+        { "row": "RT3", "verdict": "unrun" },
+        {
+          "row": "RT4",
+          "verdict": "partial",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "A nearby NPC fight was seen through voice.requested."
+        },
+        {
+          "row": "DA2",
+          "verdict": "pass",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "The full subtitle chain, attributed to the stand-in."
+        },
+        { "row": "B318-5", "verdict": "unrun", "note": "The ellipsis came through garbled in Borg 3; the CLI prints ASCII JSON since 0.8.18." }
+      ],
+      "tests": ["tools/test/subtitles.test.ts"]
+    },
+    "limits": ["No audible-silence claim; Wwise hooks are a separate follow-up."],
+    "docs": ["knowledge/runtime-access.md#source-recording-source"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "recorder.taps-face",
+    "title": "Face submission tap",
+    "summary": "The face channel records script face submissions, resets and the bridge's resends for actors and passers-by.",
+    "area": "recorder",
+    "parent": "recorder.source-recorder",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.8.14",
+    "verification": {
+      "rows": [
+        {
+          "row": "RT5",
+          "verdict": "partial",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "Passers-by's face.submitted and face.reset_submitted recorded."
+        }
+      ]
+    },
+    "limits": ["Submissions only: no evaluated-face reader is claimed (R3's applied-input probe is a follow-up)."],
+    "docs": ["knowledge/npc-face-state.md#2-what-can-be-read-and-what-it-means"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "recorder.taps-ui",
+    "title": "UI channel",
+    "summary": "The ui channel records the panel and CET consumers' state and per-area outfit identities, on change plus a 2 s heartbeat.",
+    "area": "recorder",
+    "parent": "recorder.source-recorder",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.8.14",
+    "changed_in": "0.8.18",
+    "verification": {
+      "rows": [
+        { "row": "RT6", "verdict": "unrun" },
+        { "row": "RT7", "verdict": "unrun" },
+        {
+          "row": "B217-1",
+          "verdict": "partial",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "The CET surfaces logged change then heartbeats, but 237 ui records were counted while 22 were listed."
+        }
+      ]
+    },
+    "quirks": ["Owning-window rects do not claim output-pixel transforms or occlusion."],
+    "docs": ["knowledge/hud-and-occlusion.md#4-bounds-pixel-transforms-and-visibility-limits"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "recorder.catchup",
+    "title": "Catch-up",
+    "summary": "game.catchup reads everything since a cursor in one call (recorder channels, session events, the digest), with a summary line, the newest V sample, a backlog when behind, alerts and counts that reconcile with the lists.",
+    "area": "recorder",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.8.14",
+    "changed_in": "0.8.22",
+    "depends_on": ["recorder.source-recorder", "recorder.session-events"],
+    "surface": { "commands": ["game.catchup"], "code": ["tools/testing/timeline.ts", "tools/testing/recording-replay.ts"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "TL1",
+          "verdict": "partial",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "Worked, but with the ui channel on each page fell behind real time and 'V latest' was minutes stale."
+        },
+        {
+          "row": "B217-2",
+          "verdict": "pass",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "Behind real time by 392 records with backlog; live V position; caught up in three calls."
+        },
+        { "row": "B217-5", "verdict": "pass", "session": "borg-3", "build": "0.8.17 356f04c4", "date": "2026-10-25" }
+      ],
+      "tests": ["tools/test/borg2-0817-timeline.test.ts", "tools/test/timeline.test.ts"]
+    },
+    "known_issues": [
+      {
+        "summary": "Review of 0.8.22 (Medium): a cursor with history but no supervisor totals (0.8.21's shape) read as complete zeros. Fixed in 2ff42305: it carries supervisor_totals_partial, run_totals_complete and history_complete are false, and the message says the totals are incomplete. Unverified in game.",
+        "severity": "medium",
+        "status": "fixed-unverified",
+        "since": "2026-10-26",
+        "ref": "2ff42305"
+      }
+    ],
+    "improvements": [
+      {
+        "summary": "The full output is too long to read every turn; a compact summary client (Borg 2 used its own script).",
+        "value": "medium",
+        "effort": "small"
+      }
+    ],
+    "docs": ["projects/xf-runtime-bridge/docs/mcp.md#timeline-between-coordinator-turns-0814-autonomous-candidate"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "recorder.game-events-probe",
+    "title": "Game-events probe",
+    "summary": "test.events records the hooks the game-events research recommends (deaths, combat, heat, district, vehicles, journal, dialogue, calls, time) log-only, in a ring of their own; test.save.identity and test.companion.probe are the other session-15 probes.",
+    "area": "recorder",
+    "kind": "research",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.8.7",
+    "changed_in": "0.8.10",
+    "surface": {
+      "commands": ["test.events", "test.save.identity", "test.companion.probe"],
+      "config": ["[bridge] allow_test_hooks"],
+      "code": ["native/src/core/Probes.cpp", "redscript-probes/XFRuntimeBridgeProbeEvents.reds"]
+    },
+    "known_issues": [
+      {
+        "summary": "The probes are compiled into every package's DLL (refused there without allow_test_hooks); remove them or move them into XF Lab once XF Core lands.",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "RB-203"
+      },
+      {
+        "summary": "The delayed listener on dialogue choice hubs never delivered a record for the game's own hubs; 0.8.10 polls instead, cause unknown.",
+        "severity": "low",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "RB-215"
+      }
+    ],
+    "docs": ["knowledge/game-events.md#questions-only-the-game-can-answer", "knowledge/save-identity.md#session-15-results"],
+    "notes": "Session 15 answered most of the event and save-identity rows (game events' questions-only-the-game-can-answer).",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "recorder.world-event-feed",
+    "title": "World event feed",
+    "summary": "A subscribable feed of what happens in the world: V's district and interior changes, combat, kills and knockdowns, crimes and heat, vehicle use and purchases, calls and dialogue choices, fact changes, time, weather and loads.",
+    "area": "recorder",
+    "kind": "sense",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["recorder.game-events-probe"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S1",
+        "milestone": "M4",
+        "note": "A world event feed; the graded hooks and a minimal set of twelve event kinds are designed. Gaps: interior entry is polled, no 'any fact changed' hook, dialogue picks inferred.",
+        "since": "2026-10-26"
+      }
+    ],
+    "docs": [
+      "knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed",
+      "knowledge/game-events.md#11-what-the-bridge-has-and-what-it-should-add"
+    ],
+    "updated": "2026-10-26"
+  }
+]

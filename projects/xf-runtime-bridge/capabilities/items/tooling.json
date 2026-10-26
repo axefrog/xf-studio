@@ -1,0 +1,243 @@
+[
+  {
+    "id": "tooling.command-api",
+    "title": "The command API library",
+    "summary": "CommandApi validates a command against its schema, audits writes, calls the bridge or a local handler and returns a plain result or refusal; the MCP server, the CLI, the session runner and the Story Engine's adapter all go through it.",
+    "area": "tooling",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.2.0",
+    "changed_in": "0.8.15",
+    "depends_on": ["link.catalogue"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "H1",
+        "milestone": "M4",
+        "note": "A host-side route: the engine runs beside the game and drives it with catalogue commands, importing the command API in place, pinned to a bridge version.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "code": ["tools/api/command-api.ts", "tools/bridge-lib.ts"] },
+    "verification": { "tests": ["tools/test/catalogue.test.ts", "tools/test/mcp.test.ts"] },
+    "quirks": ["One persistent CommandApi keeps the source connection across thinking turns (0.8.14)."],
+    "docs": ["projects/xf-runtime-bridge/README.md#one-command-api-many-frontends", "projects/xf-runtime-bridge/docs/mcp.md"],
+    "notes": "Every session since the first drove the game through it.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "tooling.mcp-server",
+    "title": "The MCP server",
+    "summary": "A stdio MCP server on the official TypeScript SDK exposes the catalogue as tools (dots as underscores) with plain descriptions, permission and undo notes, --read-only and --allow class lists; its tool reference is generated from the catalogue.",
+    "area": "tooling",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.22",
+    "depends_on": ["tooling.command-api"],
+    "demand": [
+      {
+        "consumer": "studio",
+        "level": "wants",
+        "note": "MCP as an optional, off-by-default XF Studio capability: the desktop app hosts the same tools behind a switch.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "code": ["tools/mcp/server.ts", "tools/mcp-server.ts", "tools/docs/mcp-reference.ts", "docs/mcp-reference.md"] },
+    "verification": { "tests": ["tools/test/mcp.test.ts", "tools/test/mcp-reference.test.ts"] },
+    "quirks": [
+      "The server loads the catalogue at start: after a merge it must be reloaded, or newer inputs are refused (Borg 4: fighter_melee refused by a 0.8.16-era catalogue).",
+      "It keeps the pipe only while commands flow (closes after 3 s idle); while a scripted session holds its lock, every bridge tool answers that a session is driving the game."
+    ],
+    "docs": ["projects/xf-runtime-bridge/docs/mcp.md", "projects/xf-runtime-bridge/README.md#mcp-server"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "tooling.cli",
+    "title": "The command line",
+    "summary": "bun tools/bridge-client.ts lists the catalogue and runs any command through the command API, plus the raw protocol (ping, smoke, call, discover, kill); a PowerShell client speaks the raw protocol.",
+    "area": "tooling",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.18",
+    "depends_on": ["tooling.command-api"],
+    "surface": { "code": ["tools/bridge-client.ts", "tools/bridge-client.ps1", "tools/api/json-ascii.ts"] },
+    "quirks": ["Prints ASCII JSON so no console code page garbles a subtitle's ellipsis (0.8.18)."],
+    "docs": ["projects/xf-runtime-bridge/README.md#command-line"],
+    "notes": "Borg 1 drove the DM toolkit through it while the MCP server's catalogue was stale.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "tooling.session-runner",
+    "title": "Scripted sessions",
+    "summary": "bun tools/session.ts runs a JSON session script through the command API (camera, light, creator, frame, capture, burst, wait, note, ask, any command) with a restore list that always runs, the session lock and a report manifest.",
+    "area": "tooling",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.2.0",
+    "changed_in": "0.8.14",
+    "depends_on": ["tooling.command-api"],
+    "surface": { "code": ["tools/session.ts", "tools/session-lock.ts", "tools/sessions", "tools/testing/script.ts"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "IC0",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13 306fa3c4",
+          "date": "2026-10-24",
+          "note": "The input-and-choices fixture's build and log gate."
+        }
+      ],
+      "tests": ["tools/test/session.test.ts"]
+    },
+    "quirks": [
+      "Its asks are echoed to the in-game surface, where in an autonomous run they read as instructions to the maintainer; --setup-asks-private keeps setup asks in the coordinator's output."
+    ],
+    "docs": ["projects/xf-runtime-bridge/README.md#scripted-sessions", "research/runtime/autonomous-testing.md#first-sprint-seven-implementation-briefs"],
+    "notes": "Session 2 ran semi-manually through it; schema-2 fixtures drove Borg 1's IC rows.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "tooling.batch-runner",
+    "title": "Batches of rows with verdicts",
+    "summary": "Schema-3 session scripts: each row ends PASS, FAIL, PARTIAL or SKIP with its evidence, one row's failure never stalls the batch; the runner sets the config.ini keys a row needs and restarts the game through MO2, keeps telemetry on every channel, halts fast on a significant bug and resumes.",
+    "area": "tooling",
+    "kind": "tool",
+    "stage": "built",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P1",
+    "priority_reason": "The next session is the ST styling batch (st-styling.json, 34 rows in nine config groups) and the Borg 4 regression smoke, both generated for this runner.",
+    "branch": "claude/bridge-runner",
+    "depends_on": ["tooling.session-runner", "supervisor.plan-module"],
+    "surface": {
+      "code": [
+        "tools/testing/batch.ts",
+        "tools/testing/config-ini.ts",
+        "tools/testing/telemetry.ts",
+        "tools/testing/loop.ts",
+        "tools/sessions/st-styling.json",
+        "tools/sessions/borg4-smoke.json"
+      ]
+    },
+    "verification": { "tests": ["tools/test/batch.test.ts", "tools/test/batch-halt.test.ts", "tools/test/review-0826.test.ts"] },
+    "quirks": [
+      "One persistent writer connection; handed_over or the commit tripwire stops the batch cleanly and the teardown always runs.",
+      "Key presses are guarded: only while the game is the foreground window, refusals recorded."
+    ],
+    "docs": ["research/runtime/autonomous-testing.md#tier-6--one-yes-then-hands-off-session-orchestration"],
+    "notes": "Reviewed (H1 to H3, M4 to M15 fixed on the branch).",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "tooling.preflight",
+    "title": "Session preflight",
+    "summary": "--preflight checks offline the staged build and its manifest, the DLL's methods and write classes, the config fixes and restarts, CET's packed key bindings, free commit, the writer seat and frame generation, before any game time.",
+    "area": "tooling",
+    "parent": "tooling.batch-runner",
+    "kind": "tool",
+    "stage": "built",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P1",
+    "priority_reason": "Borg 4 lost time to a disabled overlay in the staged config and a stale MCP catalogue; the preflight checks both before the ST session.",
+    "branch": "claude/bridge-runner",
+    "surface": { "code": ["tools/testing/preflight.ts"] },
+    "verification": { "tests": ["tools/test/batch.test.ts"] },
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "tooling.packaging",
+    "title": "Packages",
+    "summary": "tools/package.ts writes the default, -diagnostic and -writes zips from a clean build of HEAD, each with a manifest; only -writes carries the test probes, the DM script and the actor records, and only an explicit autonomous candidate carries the test hooks.",
+    "area": "tooling",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.13",
+    "surface": { "code": ["tools/package.ts", "tools/packaging.ts"] },
+    "verification": { "tests": ["tools/test/package.test.ts"] },
+    "limits": ["Refuses a dirty tree or a DLL not built cleanly from HEAD (0.8.2, after the stale-object crash)."],
+    "docs": ["projects/xf-runtime-bridge/README.md#build-and-check", "knowledge/game-crashes.md#25-a-stale-object-file-in-the-plugin-bridge-081"],
+    "notes": "Every session stages from it; nothing is ever installed outside the dedicated test profile.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "tooling.selftest",
+    "title": "Self-test host and unit checks",
+    "summary": "xfb_selftest hosts the bridge core with a simulated game thread and every method's simulated version, and runs the native unit checks; the tools' tests run against it.",
+    "area": "tooling",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.22",
+    "surface": { "code": ["tools/selftest.ts"] },
+    "docs": ["projects/xf-runtime-bridge/README.md#build-and-check"],
+    "notes": "0.8.19 after its review: 1,528 native checks and 771 tool tests passed.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "tooling.lint",
+    "title": "Lints and contracts",
+    "summary": "redscript lint against the game's bundle (with and without Codeware, Equipment-EX and TweakXL), the Lua lint (no tail calls into ImGui), the native-globals contract per package, the world-object lint and the theme, fact-preset and tool-reference checks.",
+    "area": "tooling",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.3.0",
+    "changed_in": "0.8.22",
+    "surface": { "code": ["tools/lint-redscript.ts", "tools/lint-lua.ts", "tools/lint-world-objects.ts", "tools/redscript-natives.ts"] },
+    "verification": { "tests": ["tools/test/redscript-natives.test.ts"] },
+    "quirks": ["redscript-cli 0.5.31 exits 0 on errors, so the wrapper fails on any ERROR line; it doesn't check @wrapMethod parameter lists for cb methods."],
+    "docs": ["projects/xf-runtime-bridge/README.md#build-and-check"],
+    "notes": "The native-globals lint exists because Borg 1's first launch failed on a module-prefixed native the DLL didn't register.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "tooling.capability-registry",
+    "title": "The capability registry",
+    "summary": "This registry: structured items with stage, evidence and health kept apart, consumer demand, verification and a changelog, checked by a validator and rendered to a page and an HTML view.",
+    "area": "tooling",
+    "kind": "tool",
+    "stage": "built",
+    "evidence": "offline",
+    "health": "works",
+    "priority": "P2",
+    "branch": "claude/bridge-capabilities",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "wants",
+        "note": "Its requirements page asks the bridge chat to mark the bridge's status per row at each milestone; the registry carries that as demand.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "code": ["capabilities", "tools/capabilities.ts"] },
+    "verification": { "tests": ["tools/test/capabilities.test.ts"] },
+    "docs": ["projects/xf-runtime-bridge/capabilities/README.md"],
+    "updated": "2026-10-26"
+  }
+]

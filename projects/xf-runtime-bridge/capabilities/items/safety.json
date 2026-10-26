@@ -1,0 +1,516 @@
+[
+  {
+    "id": "safety.write-gate",
+    "title": "Write gate, write classes and pause",
+    "summary": "Every write is refused unless the plugin's config.ini allows writes and lists the command's write class; the in-game panel can pause changes, which only takes access away.",
+    "area": "safety",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.12",
+    "depends_on": ["link.catalogue"],
+    "surface": {
+      "config": ["[bridge] allow_writes", "[bridge] allow_write_classes", "[bridge] allow_creator_leave", "[bridge] allow_live_pose", "[bridge] allow_test_hooks"],
+      "code": ["native/src/core/Dispatcher.cpp", "native/src/core/Config.cpp"]
+    },
+    "verification": { "tests": ["tools/test/batch4.test.ts", "tools/test/batch5.test.ts", "tools/test/mcp.test.ts"] },
+    "limits": [
+      "inventory, save, showroom, player and act must be listed by name; inventory stays off in every package until the maintainer approves writes to V's inventory.",
+      "Release packages ship with the bridge off and every switch off; only the dedicated test profile's -writes package allows writes."
+    ],
+    "quirks": ["Paused writes answer writes_paused; resuming gives back exactly what config.ini allows, never more."],
+    "docs": [
+      "projects/xf-runtime-bridge/README.md#one-command-api-many-frontends",
+      "projects/xf-runtime-bridge/README.md#configuration",
+      "projects/xf-runtime-bridge/README.md#test-build-only-features"
+    ],
+    "notes": "Exercised in every session that wrote to the game since the first (26 September); row-level verdicts are in the session write-ups, not mirrored here yet.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.save-lock",
+    "title": "The save lock",
+    "summary": "Every write first takes a save lock that blocks the game's own saves until a save loads, so a test change never goes into a save by accident; game.save refuses while it is held unless told otherwise.",
+    "area": "safety",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.2.0",
+    "changed_in": "0.8.7",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "P4",
+        "milestone": "M5",
+        "note": "Story writes without the save lock: a save-safe route for everything the Story Engine changes. Planned in XF Core as play mode (core.play-mode).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "code": ["native/src/core/Writes.cpp", "redscript/XFRuntimeBridgeGame.reds"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "S6",
+          "verdict": "pass",
+          "session": "script-call check",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "The first write took the lock (saving_locked true)."
+        },
+        {
+          "row": "IC4",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13 306fa3c4",
+          "date": "2026-10-24",
+          "note": "Save anyway saved once and the lock came back; the checker's save_delta failed falsely (see quirks)."
+        }
+      ]
+    },
+    "limits": ["The lock is released only by loading a save; the kill switch keeps it, since other changes may still be live."],
+    "quirks": [
+      "game.save refuses first, with or without override_lock, while the bridge holds anything on V a save would keep (bridge_effects_active).",
+      "The refusal's headline lists every possible cause; only its detail names the real holders (Borg 1 friction)."
+    ],
+    "known_issues": [
+      {
+        "summary": "Fine for test sessions, not for a campaign: every bridge write blocks the game's saves until a load (Story Engine P4, DS-39).",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "research/story-engine/runtime-requirements.md"
+      }
+    ],
+    "docs": [
+      "projects/xf-runtime-bridge/README.md#bridge-in-one-paragraph",
+      "research/runtime/runtime-bridge-test-card.md#b-the-save-lock-and-save-anyway-5-min",
+      "research/runtime/runtime-bridge-test-card.md#input-and-choices-borg-mode-session"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.save-anyway",
+    "title": "Save anyway",
+    "summary": "When the bridge's lock refuses the player's own save, the status surface says why and the XF Runtime Bridge window offers Save anyway, which saves once and takes the lock back.",
+    "area": "safety",
+    "parent": "safety.save-lock",
+    "kind": "surface",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.7",
+    "changed_in": "0.8.13",
+    "depends_on": ["safety.save-lock", "surfaces.cet-window"],
+    "surface": { "commands": ["test.ui.activate"], "config": ["[bridge] allow_writes"], "code": ["cet/xf_runtime_bridge/init.lua", "native/src/core/InputChoices.cpp"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "IC4",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13 306fa3c4",
+          "date": "2026-10-24",
+          "note": "The rendered button path ran once each step and relocked."
+        },
+        { "row": "SA18", "verdict": "unrun", "note": "UI-221 fix 2: the reason line, its own row and plain failure copy." }
+      ]
+    },
+    "limits": ["Only in the -writes package (save class); test.ui.activate needs the explicit autonomous candidate, CET already open and a visible settled button."],
+    "docs": ["knowledge/input-and-choices.md#4-save-anyway-keep-the-cet-button-path", "research/runtime/runtime-bridge-test-card.md#session-18-checks-bridge-0811"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.kill-switch",
+    "title": "The kill switch",
+    "summary": "The bridge's stop key, the CET hotkey, the window's Stop button, bridge.kill or a KILL file stop the bridge, cancel queued writes and put back what it left on (freeze, hidden menu, pending creator, behaviours, status effects, outfits, rewrites, pins, spawned things).",
+    "area": "safety",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.12",
+    "surface": {
+      "commands": ["bridge.kill"],
+      "config": ["[ui] kill_key"],
+      "code": ["native/src/core/Bridge.cpp", "native/src/core/KillKey.cpp", "cet/xf_runtime_bridge/init.lua"]
+    },
+    "verification": {
+      "rows": [
+        {
+          "row": "S7",
+          "verdict": "pass",
+          "session": "script-call check",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "RestoreAfterKill ran once (world unfrozen, save lock kept)."
+        },
+        {
+          "row": "C4",
+          "verdict": "pass",
+          "session": "session 10",
+          "build": "0.8.2",
+          "date": "2026-10-22",
+          "note": "The bound key stopped the bridge; Reconnect restarted it."
+        },
+        {
+          "row": "DR4",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13",
+          "date": "2026-10-24",
+          "note": "The kill removed the DM toolkit's crate and tracker."
+        },
+        { "row": "NE3", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23" }
+      ]
+    },
+    "quirks": [
+      "The kill keeps the save lock: only loading a save releases it.",
+      "The CET hotkey has no key until it is bound in CET's Bindings; the bridge's own stop key (Ctrl+Shift+End by default) works without CET."
+    ],
+    "docs": [
+      "projects/xf-runtime-bridge/README.md#bridge-in-one-paragraph",
+      "research/runtime/runtime-bridge-test-card.md#script-call-check-first",
+      "research/runtime/runtime-bridge-test-card.md#session-10-checks-bridge-082"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.reconnect",
+    "title": "Reconnect after the kill switch",
+    "summary": "In the test builds the window's Reconnect starts the bridge again without restarting the game, with a new token, pipe name and session id; only a player's action in the game re-arms, never a pipe method.",
+    "area": "safety",
+    "parent": "safety.kill-switch",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.3.0",
+    "surface": { "code": ["native/src/core/Bridge.cpp", "cet/xf_runtime_bridge/panel.lua"] },
+    "verification": {
+      "rows": [
+        { "row": "C4", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" }
+      ],
+      "tests": ["tools/test/batch4.test.ts"]
+    },
+    "docs": ["projects/xf-runtime-bridge/README.md#bridge-in-one-paragraph"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.emergency-controls",
+    "title": "Emergency control pipe",
+    "summary": "bridge.kill, behave.stop, player.stop and session.handover go on a second pipe served on its own thread, so they never wait behind other commands; kill and handover cancel what was sent before them.",
+    "area": "safety",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.1",
+    "changed_in": "0.8.3",
+    "depends_on": ["link.pipe"],
+    "surface": { "commands": ["bridge.kill", "behave.stop", "player.stop", "session.handover"], "code": ["native/src/core/PipeServer.cpp", "tools/api/command-api.ts"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "D1",
+          "verdict": "pass",
+          "session": "session 10",
+          "build": "0.8.2",
+          "date": "2026-10-22",
+          "note": "behave_stop during a five-second look took 205 ms; the kill during a forced save 206 ms."
+        },
+        {
+          "row": "L2",
+          "verdict": "fail",
+          "session": "session 10",
+          "build": "0.8.2",
+          "date": "2026-10-22",
+          "note": "Emergency calls from a second process stuck (L2c); reworked in 0.8.3."
+        }
+      ]
+    },
+    "quirks": ["A coalesced reader cancellation receipt is not completion proof."],
+    "docs": [
+      "research/runtime/runtime-bridge-design.md#39-bridge-081-the-wave-4-reviews-safety-fixes",
+      "research/runtime/runtime-bridge-design.md#311-bridge-083-session-10s-findings"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.handover",
+    "title": "Handover and resume",
+    "summary": "session.handover gives the game to the player: behaviours stop, V is given back, photo mode's menu shows, and every write is refused handed_over until session.resume.",
+    "area": "safety",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.6.0",
+    "changed_in": "0.8.22",
+    "surface": {
+      "commands": ["session.handover", "session.resume"],
+      "events": ["handover", "resume"],
+      "code": ["native/src/core/Dispatcher.cpp", "native/src/core/Session.cpp"]
+    },
+    "verification": {
+      "rows": [
+        { "row": "NE1", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23" },
+        {
+          "row": "DR1",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13",
+          "date": "2026-10-24",
+          "note": "Removed the crate and tracker; spawns refused handed_over; resume lifted it. Its report said spawned_removed 0 although it removed one."
+        }
+      ],
+      "tests": ["tools/test/batch10.test.ts", "tools/test/borg4-0822.test.ts"]
+    },
+    "known_issues": [
+      {
+        "summary": "When the commit tripwire handed over, nothing told the agent in-band; the first sign was a refused write. 0.8.22 (2949a677) puts the handover's reason in every handed_over refusal and its event.",
+        "severity": "medium",
+        "status": "fixed-unverified",
+        "since": "2026-10-26",
+        "ref": "2949a677"
+      }
+    ],
+    "docs": [
+      "projects/xf-runtime-bridge/README.md#one-command-api-many-frontends",
+      "research/runtime/runtime-bridge-test-card.md#f-the-end-kill-on-close-the-main-menu-reads-and-the-persistent-probe-6-min-one-relaunch"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.busy-refusals",
+    "title": "Refusals in unsafe states",
+    "summary": "Writes that move V, open menus or direct NPCs are refused in combat, vehicles, story scenes (tier 3 and above), dialogue, Johnny sections, loading and busy player states, naming the state.",
+    "area": "safety",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.3.0",
+    "changed_in": "0.8.9",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "C1",
+        "milestone": "M4",
+        "note": "Never break vanilla quests: refusals in combat, vehicles, scenes, dialogue and busy states exist; the reservation check does not (safety.quest-reservation).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "code": ["native/src/core/Player.cpp", "redscript/XFRuntimeBridgePlayer.reds"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "NB6b",
+          "verdict": "pass",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "Found an in-world device screen is not an interaction prompt; 0.8.9 treats it as busy (passed in session 16)."
+        }
+      ],
+      "tests": ["tools/test/batch11.test.ts"]
+    },
+    "quirks": [
+      "V's busy state comes from the player state machine's scene tiers and dialogue; the scene system counted V as in a scene in her apartment and on a walkway (session 7)."
+    ],
+    "docs": [
+      "research/runtime/runtime-bridge-design.md#37-bridge-07-more-hooks-in-game-answers-and-the-overlay-host",
+      "knowledge/npc-direction.md#9-session-16-on-bridge-089-23-october-2026"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.quest-reservation",
+    "title": "Quest reservation check",
+    "summary": "Detect people and places a vanilla quest has reserved, so directed scenes and substitutions avoid them.",
+    "area": "safety",
+    "kind": "research",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "C1",
+        "milestone": "M4",
+        "note": "Detect people and places a vanilla quest has reserved, and avoid them.",
+        "since": "2026-10-26"
+      }
+    ],
+    "unknowns": [
+      {
+        "question": "Is there a safe way to tell that a quest reserves a person? IsQuest() sees only a quest mark or quest items, and a quest can use an unmarked community NPC.",
+        "settle_by": "Research brief on the quest system's reservation data",
+        "needs_game": false
+      }
+    ],
+    "docs": [
+      "knowledge/npc-direction.md#12-crowd-substitution-bridge-0819",
+      "research/runtime/npc-direction-design.md#54-staging-for-the-story-engine-v15-v16-v13-not-built"
+    ],
+    "notes": "Today the bridge plans around it: npc.substitute refuses community NPCs (community_npc) because a reservation can't be detected safely.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.player-settings",
+    "title": "Respect the player's settings",
+    "summary": "Follow the player's own settings, such as subtitles or crowd chatter turned off, in whatever the bridge shows or plays.",
+    "area": "safety",
+    "kind": "safety",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "C2",
+        "milestone": "M5",
+        "note": "Respect the player's settings, such as subtitles and crowd chatter turned off.",
+        "since": "2026-10-26"
+      }
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.commit-tripwire",
+    "title": "The commit tripwire",
+    "summary": "A host tool watches the machine's free commit during heavy session rows and, under its floor, runs the row's off switch or hands the game back, so a memory squeeze stops the bridge before the game crashes.",
+    "area": "safety",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.8.10",
+    "changed_in": "0.8.22",
+    "surface": { "code": ["tools/commit-tripwire.ts"] },
+    "verification": {
+      "rows": [
+        { "row": "G9r2", "verdict": "unrun", "note": "The stim tap beside the tripwire." }
+      ]
+    },
+    "quirks": ["The floor is 4 GB of free commit; a trip exits 3 and means memory ran short, not that the row failed."],
+    "improvements": [
+      {
+        "summary": "Drop a stop-reason file the session driver prints on every later reply, so a trip is seen at once (Borg 4 friction).",
+        "value": "medium",
+        "effort": "small"
+      }
+    ],
+    "docs": [
+      "research/runtime/runtime-bridge-test-card.md#process-notes-for-every-session",
+      "research/runtime/runtime-bridge-design.md#318-bridge-0810-session-16s-findings"
+    ],
+    "notes": "Borg 4 (26 Oct): free commit fell to 3.4 GB at 08:10 and the tripwire called session.handover; later writes were refused handed_over and the game did not crash.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.road-safe-placement",
+    "title": "Road-safe placement",
+    "summary": "Teleports and placements of V, NPCs, props and vehicles classify the target's traffic risk; only a positive road refuses without allow_road, unknown proceeds with a plain warning and a catch-up note.",
+    "area": "safety",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.8.15",
+    "depends_on": ["world.probe"],
+    "surface": { "commands": ["player.teleport", "world.probe"], "code": ["redscript/XFRuntimeBridgeNavigation.reds"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "SN1",
+          "verdict": "pass",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "A teleport with unknown risk went ahead with the warning and a placement.traffic alert in the catch-up."
+        },
+        { "row": "SN2", "verdict": "unrun" },
+        { "row": "SN3", "verdict": "unrun" }
+      ],
+      "tests": ["tools/test/safety0815.test.ts"]
+    },
+    "known_issues": [
+      {
+        "summary": "No commissioned live lane snapshot: memberships come back unknown and nearest pavement null; road-specific refusal, CrossWalk allowance and real pavement suggestions are unavailable.",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-24",
+        "ref": "RB-232"
+      }
+    ],
+    "docs": [
+      "knowledge/navigation-and-safety.md#3-road-space-lane-semantics-are-separate-from-walkability",
+      "research/runtime/runtime-bridge-test-card.md#safety-and-navigation-0815"
+    ],
+    "notes": "Built after Borg 1, when V was placed in a road with nobody steering and carried about 130 m by traffic.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "safety.contact-alerts",
+    "title": "Contact alerts",
+    "summary": "The recorder's contacts channel catches car hits on V and the controller's landing and wall reports, and the catch-up raises contact alerts; it never claims there was no contact.",
+    "area": "safety",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.8.15",
+    "depends_on": ["recorder.source-recorder"],
+    "surface": { "code": ["redscript/XFRuntimeBridgeRecording.reds"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "SN4",
+          "verdict": "inconclusive",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "V walked into a parked car's side: no receipt on any covered path, as the card expects for stationary vehicle contact."
+        },
+        { "row": "SN5", "verdict": "unrun" },
+        { "row": "SN7", "verdict": "unrun" }
+      ]
+    },
+    "limits": ["OnCarHitPlayer covers moving vehicles only; a parked car's contact is a coverage gap."],
+    "known_issues": [
+      {
+        "summary": "No continuous physics producer coverage or other-body identity: car-hit entry and landing/wall reports only; no_contact_proof is always false.",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-24",
+        "ref": "RB-233"
+      }
+    ],
+    "docs": [
+      "knowledge/navigation-and-safety.md#4-contact-positive-car-hit-evidence-incomplete-no-contact-proof",
+      "research/runtime/runtime-bridge-test-card.md#safety-and-navigation-0815"
+    ],
+    "updated": "2026-10-26"
+  }
+]

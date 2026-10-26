@@ -1,0 +1,175 @@
+[
+  {
+    "id": "incidents.witness-reports",
+    "title": "What V witnessed",
+    "summary": "The bridge groups what the game's own systems raise (stimuli, deaths, combat targets, reprimands, vehicle thefts, combat and fear barks) into incidents and sends one passive witness.report per incident V saw or heard, with its id, kind, people, place and times.",
+    "area": "incidents",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P1",
+    "priority_reason": "Story Engine S7 (M4): layer 3's gates need incidents linked to V. Borg 4 passed WI; the remaining WI rows run next.",
+    "since": "0.8.20",
+    "changed_in": "0.8.21",
+    "depends_on": ["recorder.source-recorder"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S7",
+        "milestone": "M4",
+        "note": "One passive report per incident V saw, heard or was told of, carrying the incident's identity, who took part, where, when and how V perceived it.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S1",
+        "milestone": "M4",
+        "note": "Part of the world event feed: combat, deaths and crimes near V, grouped.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": {
+      "commands": ["incidents.list"],
+      "events": ["witness.report", "witness.gap"],
+      "code": ["native/src/core/Incidents.cpp", "native/src/plugin/HandlersIncidents.cpp"]
+    },
+    "verification": {
+      "rows": [
+        { "row": "WI1", "verdict": "unrun" },
+        { "row": "WI2", "verdict": "unrun" },
+        { "row": "WI6", "verdict": "unrun" },
+        { "row": "WI10", "verdict": "unrun" },
+        { "row": "WI14", "verdict": "unrun" }
+      ],
+      "tests": ["tools/test/incidents0820.test.ts"]
+    },
+    "limits": [
+      "32 open incidents, 64 kept; 24 observations built a second (12 weak, 2 of one kind from one entity) and 40 accepted.",
+      "20 reports a minute with a queue of 64; a witness.gap event when even that is full; a 160 m gate before any work.",
+      "Saw: a person other than V in the active camera's view within 80 m with no static geometry on the ray; heard: V inside the stimulus' own radius."
+    ],
+    "quirks": [
+      "Was told is never sensed and never reported.",
+      "The game raises almost none of the Story Engine's incident kinds (no NPC theft, no stall collection); its only theft is V's own vehicle theft, so most incidents must be staged and declared."
+    ],
+    "unknowns": [
+      {
+        "question": "Which WI rows did Borg 4's PASS cover? The findings record WI as passed without naming rows.",
+        "settle_by": "Name the rows in the next session's write-up",
+        "needs_game": false
+      }
+    ],
+    "docs": ["knowledge/game-events.md#13-incidents-what-v-witnessed-bridge-0820", "research/runtime/runtime-bridge-test-card.md#witnessed-incidents-0820"],
+    "notes": "Autonomous build only; passive and read-only (nothing is sent into the game).",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "incidents.taps",
+    "title": "Observation taps",
+    "summary": "Taps on the game's own producing systems (stimulus broadcasts, deaths and defeats, combat targets, reprimands, vehicle thefts, combat and fear barks) hand small observations to the plugin's incident core.",
+    "area": "incidents",
+    "parent": "incidents.witness-reports",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.8.20",
+    "surface": { "commands": ["incidents.list"], "code": ["native/src/core/Incidents.cpp"] },
+    "verification": {
+      "rows": [
+        { "row": "WI1", "verdict": "unrun", "note": "The tap is live and quiet." },
+        { "row": "WI11b", "verdict": "unrun", "note": "The bounds show." }
+      ]
+    },
+    "docs": ["knowledge/game-events.md#grouping-and-perception-rules", "knowledge/npc-reactions.md"],
+    "notes": "Located in the 2.31 scripts; the prevention system reacts only to V's crimes and is not a source.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "incidents.declared",
+    "title": "Declared incidents",
+    "summary": "incidents.declare opens an incident the Story Engine stages with its own XF actors, carrying the engine's id, kind and roles; V's sight of its actors is sampled while it is open, and closing gives exactly one witness.report, witness.unwitnessed or witness.gap.",
+    "area": "incidents",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P1",
+    "priority_reason": "Story Engine S7 (M4) and the scene layer's one declared incident per scene; DI2 and DI3 passed in Borg 4, DI1 and DI4 to DI12 are next.",
+    "since": "0.8.21",
+    "depends_on": ["incidents.witness-reports", "npc.actors"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S7",
+        "milestone": "M4",
+        "note": "Declared incidents: the engine's own id, kind and actor roles at staging start; exactly one outcome when it closes.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "runtime-requirements.md#4-failure-semantics",
+        "milestone": "M4",
+        "note": "Closed bookkeeping: a scene that gives up closes its declared incident, so it ends in exactly one report, unwitnessed outcome or gap.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": {
+      "commands": ["incidents.declare", "incidents.close", "incidents.list"],
+      "events": ["witness.report", "witness.unwitnessed", "witness.gap"],
+      "code": ["native/src/core/Incidents.cpp"]
+    },
+    "verification": {
+      "rows": [
+        { "row": "DI1", "verdict": "unrun" },
+        { "row": "DI2", "verdict": "pass", "session": "borg-4", "build": "0.8.22 1cd681c3", "date": "2026-10-26", "note": "The pickpocketing, seen." },
+        { "row": "DI3", "verdict": "pass", "session": "borg-4", "build": "0.8.22 1cd681c3", "date": "2026-10-26", "note": "V turned away." },
+        { "row": "DI4", "verdict": "unrun" },
+        { "row": "DI5", "verdict": "unrun" },
+        { "row": "DI6", "verdict": "unrun" },
+        { "row": "DI8", "verdict": "unrun" },
+        { "row": "DI9", "verdict": "unrun" },
+        { "row": "DI10", "verdict": "unrun" },
+        { "row": "DI11", "verdict": "unrun" },
+        { "row": "DI12", "verdict": "unrun" }
+      ],
+      "tests": ["tools/test/incidents0821.test.ts"]
+    },
+    "limits": [
+      "At most four declared incidents at once; V's sight sampled twice a second, at most three samples a second accepted.",
+      "Only XF actors (a1 …) are named; V and picked passers-by are refused."
+    ],
+    "quirks": ["Ordinary incidents that share people merge into a declared one and keep its id and kind; strangers nearby do not join."],
+    "docs": ["knowledge/game-events.md#declared-incidents-bridge-0821", "research/runtime/runtime-bridge-test-card.md#declared-incidents-0821"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "incidents.spawn-link",
+    "title": "Actors joining an incident",
+    "summary": "npc.spawn and npc.substitute take incident and incident_role, so a new actor joins a declared incident before anything is sent to the game.",
+    "area": "incidents",
+    "parent": "incidents.declared",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P2",
+    "since": "0.8.21",
+    "depends_on": ["incidents.declared", "npc.crowd-substitution"],
+    "surface": { "commands": ["npc.spawn", "npc.substitute"] },
+    "verification": {
+      "rows": [
+        { "row": "DI7", "verdict": "unrun", "note": "The spawn link." }
+      ],
+      "tests": ["tools/test/incidents0821.test.ts"]
+    },
+    "docs": ["knowledge/game-events.md#declared-incidents-bridge-0821"],
+    "updated": "2026-10-26"
+  }
+]

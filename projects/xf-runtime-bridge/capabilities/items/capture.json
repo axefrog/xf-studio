@@ -1,0 +1,191 @@
+[
+  {
+    "id": "capture.screenshot",
+    "title": "Window captures",
+    "summary": "capture.screenshot captures the game window (what is on screen, after ReShade and overlays) with a named or pixel region, a preview of at most 1280 px and the full-resolution file; capture.recrop cuts a tighter area from a saved file.",
+    "area": "capture",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.1",
+    "surface": { "commands": ["capture.screenshot", "capture.recrop"], "code": ["tools/capture/capture.ts", "tools/capture/regions.ts", "tools/capture/win32.ts"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "S6",
+          "verdict": "pass",
+          "session": "script-call check",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "printwindow on the 3840×1600 window."
+        },
+        {
+          "row": "L8",
+          "verdict": "pass",
+          "session": "session 10",
+          "build": "0.8.2",
+          "date": "2026-10-22",
+          "note": "Captures refused while another window was in front."
+        }
+      ],
+      "tests": ["tools/test/capture.test.ts"]
+    },
+    "limits": ["8-bit, after post effects; reads only while the game is the front window (capture_not_foreground); exclusive fullscreen is likely black."],
+    "quirks": ["The XF overlay is cleared for the moment of every capture (clear_overlay, default true)."],
+    "docs": ["research/runtime/runtime-bridge-design.md#71-capture", "projects/xf-runtime-bridge/README.md#one-command-api-many-frontends"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "capture.expectations",
+    "title": "Pre-capture checks",
+    "summary": "capture.screenshot's expect judges the subject from the scene report before the capture (in frame, unoccluded, lit by) and its region after it (luminance, clipping), refusing or warning; a check that couldn't run is never passed.",
+    "area": "capture",
+    "parent": "capture.screenshot",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P3",
+    "since": "0.6.0",
+    "changed_in": "0.6.1",
+    "depends_on": ["world.scene-report"],
+    "surface": { "commands": ["capture.screenshot"], "code": ["tools/scene/report.ts"] },
+    "verification": { "tests": ["tools/test/batch10.test.ts", "tools/test/batch11.test.ts"] },
+    "docs": ["research/runtime/runtime-bridge-test-card.md#061-additions-to-the-session-7-checks"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "capture.burst",
+    "title": "Bursts and contact sheets",
+    "summary": "capture.burst takes 2 to 120 captures of one area at an interval with frame-to-frame differences (flicker and motion checks); capture.sheet lays earlier and new captures out in a labelled grid with a manifest.",
+    "area": "capture",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.6.1",
+    "surface": { "commands": ["capture.burst", "capture.sheet"], "code": ["tools/capture/sheet.ts"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "ST8",
+          "verdict": "pass",
+          "session": "borg-4",
+          "build": "0.8.22 1cd681c3",
+          "date": "2026-10-26",
+          "note": "A 6 × 240 ms burst of the CET line showed a still dot under reduced motion."
+        }
+      ]
+    },
+    "limits": ["A burst that would hold more than 256 MB of pictures is refused."],
+    "docs": ["projects/xf-runtime-bridge/README.md#one-command-api-many-frontends"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "capture.event-armed",
+    "title": "Event-armed captures",
+    "summary": "capture.arm arms a capture on a session event or recorder event (a toast, a line, an arrival, a quest change) so the picture is taken when it happens, between the coordinator's turns, with a receipt of the latency.",
+    "area": "capture",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "none",
+    "health": "caveats",
+    "priority": "P1",
+    "priority_reason": "Failed in Borg 2, 3 and 4 (TL3); the fix in 2949a677 is the next session's row.",
+    "since": "0.8.14",
+    "changed_in": "0.8.22",
+    "depends_on": ["recorder.source-recorder", "recorder.session-events"],
+    "surface": { "commands": ["capture.arm", "capture.armed", "capture.disarm"], "code": ["tools/testing/event-captures.ts"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "TL3",
+          "verdict": "fail",
+          "session": "borg-4",
+          "build": "0.8.22 1cd681c3",
+          "date": "2026-10-26",
+          "note": "The arm on dm.quest was cancelled source_coverage_incomplete by recorder deadlines and drops after arming."
+        },
+        {
+          "row": "B217-3",
+          "verdict": "fail",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "Invalid samples kept arriving during play."
+        }
+      ],
+      "tests": ["tools/test/timeline.test.ts", "tools/test/borg4-0822.test.ts"]
+    },
+    "known_issues": [
+      {
+        "summary": "A session-feed arm was cancelled by recorder sample loss it doesn't depend on. 0.8.22 (2949a677): what cancels an arm follows its trigger's feed; a session-feed arm is cancelled only by session-feed loss.",
+        "severity": "medium",
+        "status": "fixed-unverified",
+        "since": "2026-10-25",
+        "ref": "2949a677"
+      },
+      {
+        "summary": "Review of 0.8.22 (Medium): an arm on an incident event (witness.*, incident.*, the incidents channel) was not cancelled by a lost witness report or dropped incident evidence. Fixed in fb1daaaa: such a loss cancels it, naming the incident; other arms ignore it. Unverified in game.",
+        "severity": "medium",
+        "status": "fixed-unverified",
+        "since": "2026-10-26",
+        "ref": "fb1daaaa"
+      },
+      {
+        "summary": "Review of 0.8.22 (Low): recorder loss found by the recheck after a capture's delay was missing from its receipt. Fixed in bf861224, unverified in game.",
+        "severity": "low",
+        "status": "fixed-unverified",
+        "since": "2026-10-26",
+        "ref": "bf861224"
+      }
+    ],
+    "docs": [
+      "projects/xf-runtime-bridge/docs/mcp.md#timeline-between-coordinator-turns-0814-autonomous-candidate",
+      "research/runtime/runtime-bridge-test-card.md#recorder-and-taps-borg-mode-session"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "capture.showroom",
+    "title": "XF Finish Showroom",
+    "summary": "showroom.spawn, showroom.light, showroom.rotate, showroom.clear and showroom.state set XF Finish Showroom's mannequin heads (one per makeup preset) in front of the camera or V, light each with the creator's own rig, turn them for highlight sweeps and remove them.",
+    "area": "capture",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.5.0",
+    "changed_in": "0.8.3",
+    "demand": [
+      { "consumer": "studio", "level": "wants", "note": "Finish verdicts in game for the eye-makeup finishes (beta blocker lane).", "since": "2026-10-26" }
+    ],
+    "surface": {
+      "commands": ["showroom.spawn", "showroom.light", "showroom.rotate", "showroom.clear", "showroom.state", "behave.turntable"],
+      "code": ["redscript/XFRuntimeBridgeShowroom.reds", "native/src/core/Showroom.cpp", "tools/showroom"]
+    },
+    "verification": {
+      "rows": [
+        {
+          "row": "G1",
+          "verdict": "fail",
+          "session": "session 10",
+          "build": "0.8.2",
+          "date": "2026-10-22",
+          "note": "showroom_manifest_missing; the staged showroom is found through archive/pc/mod since 0.8.3."
+        }
+      ],
+      "tests": ["tools/test/showroom.test.ts"]
+    },
+    "limits": ["At most 24 heads within 30 m of V; needs Codeware; the showroom write class ships in the -writes build only."],
+    "docs": ["research/runtime/runtime-bridge-test-card.md#finish-showroom-checks-bridge-050", "knowledge/skin-on-spawned-objects.md"],
+    "notes": "Sessions 5 and 6 spawned, lit, turned and cleared the heads; the maintainer judged the heads' materials to match V's.",
+    "updated": "2026-10-26"
+  }
+]

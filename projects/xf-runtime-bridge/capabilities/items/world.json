@@ -1,0 +1,598 @@
+[
+  {
+    "id": "world.scene-read",
+    "title": "The raw scene",
+    "summary": "scene.read gives the active camera with calibration points through the game's projection, V, the NPCs near her (with their record's affiliation, type, archetype and crowd flags on request), showroom heads, photo-mode lights, sight-line rays, time, rain, menus and the HUD's choices.",
+    "area": "world",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.6.0",
+    "changed_in": "0.8.8",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S3",
+        "milestone": "M4",
+        "note": "The people around V: record, archetype, faction, appearance, current activity or workspot, and crowd density. Wanted next: the entity template path.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["scene.read"], "code": ["redscript/XFRuntimeBridgeScene.reds", "native/src/core/Scene.cpp"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "SN1",
+          "verdict": "pass",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "npc_detail: NCPD officers read NCPD, vendors Civilian with crowd true (this card's SN1 in the session 15 section, not the safety row)."
+        }
+      ],
+      "tests": ["tools/test/batch10.test.ts", "tools/test/senses.test.ts"]
+    },
+    "quirks": [
+      "Every read of a world object follows the world-object rule: entity-level natives only, the record name after a cast (session 7's crash).",
+      "The weather's name and photo-mode lights' own values aren't script-readable in vanilla."
+    ],
+    "improvements": [
+      {
+        "summary": "The NPC's entity template path: script can't turn a resource reference into a path or hash; it needs a native read of the record's resource flat.",
+        "value": "medium",
+        "effort": "medium"
+      }
+    ],
+    "docs": ["projects/xf-runtime-bridge/README.md#one-command-api-many-frontends", "knowledge/population-and-affiliations.md"],
+    "notes": "npc_detail was proven in session 15 (NCPD officers read NCPD, vendors Civilian with crowd true), per the Story Engine's requirements page.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.scene-report",
+    "title": "The scene report",
+    "summary": "scene.report is an agent's own view of the shot without a screenshot: where each subject sits in frame, whether static geometry blocks its face, which lights reach it, and the luminance of its region.",
+    "area": "world",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.6.0",
+    "changed_in": "0.6.1",
+    "depends_on": ["world.scene-read"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S2",
+        "milestone": "M4",
+        "note": "Perception: what V can see now (people and props in view, line of sight), what V looked at, and how close V came.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["scene.report"], "code": ["tools/scene/report.ts", "tools/scene/camera.ts"] },
+    "verification": { "tests": ["tools/test/batch10.test.ts", "tools/test/batch11.test.ts"] },
+    "quirks": [
+      "A check that couldn't run is not_checked (ok null), never passed.",
+      "The occlusion ray tests static geometry only; devices, moving objects and glass aren't covered."
+    ],
+    "docs": ["knowledge/hud-and-occlusion.md#limits-of-the-existing-scene-report", "projects/xf-runtime-bridge/README.md#one-command-api-many-frontends"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.probe",
+    "title": "World probe",
+    "summary": "world.probe observes at points or a ring around V whether the navmesh is streamed in, the nearest walkable point, the ground and the ceiling, and (0.8.15) the traffic memberships and road boundary.",
+    "area": "world",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.7.0",
+    "changed_in": "0.8.15",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S4",
+        "milestone": "M4",
+        "note": "Whether a point is reachable on foot or by car; nearby workspots and AI spots are wanted next.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["world.probe"], "code": ["redscript/XFRuntimeBridgeWorld.reds", "redscript/XFRuntimeBridgeNavigation.reds"] },
+    "known_issues": [
+      {
+        "summary": "Traffic memberships come back unknown and the nearest pavement null until a live lane snapshot is commissioned.",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-24",
+        "ref": "RB-232"
+      }
+    ],
+    "improvements": [
+      { "summary": "Workspot and AI-spot queries (not built).", "value": "medium", "effort": "medium" }
+    ],
+    "docs": ["knowledge/navigation-and-safety.md#2-located-answers-at-a-glance"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.district",
+    "title": "District and place",
+    "summary": "world.district reads the game's own district system: the innermost area and its parents, name, type, crime multiplier, gangs, the police preset, the Dogtown and Badlands flags and the map's location string.",
+    "area": "world",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.8",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S4",
+        "milestone": "M4",
+        "note": "The places around V: district and subdistrict, interiors, points of interest.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["world.district"], "code": ["redscript/XFRuntimeBridgeSenses.reds"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "SD1",
+          "verdict": "pass",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "V's district and subdistrict agreed with the map in Kabuki."
+        },
+        {
+          "row": "SD2",
+          "verdict": "pass",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "Inside and outside a clinic; agreed with the map in four interiors and never stale after a fast travel."
+        }
+      ],
+      "tests": ["tools/test/senses.test.ts"]
+    },
+    "docs": ["research/runtime/runtime-bridge-test-card.md#session-15-checks-bridge-088"],
+    "notes": "Session 15: agreed with the map in Little China, Kabuki and four interiors, never stale after a fast travel (per the Story Engine's requirements page).",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.facts",
+    "title": "Quest facts",
+    "summary": "world.facts reads up to 128 named quest facts in one call, or a preset: main_story (93 facts) or final_boards (the 29 the game's final boards read).",
+    "area": "world",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.8",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S5",
+        "milestone": "M4",
+        "note": "Quest state: facts; journal entries, active quests and gigs, fixer standing and reservations are not read.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V7",
+        "milestone": "M5",
+        "note": "Read and set quest facts; keep XF's own. Read only today (story.fact-writes).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["world.facts"], "code": ["tools/api/fact-presets.ts", "tools/gen-fact-presets.ts"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "SF1",
+          "verdict": "pass",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "main_story: 93 facts in one call, about 340 ms with the round trip."
+        },
+        { "row": "SF2", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23", "note": "final_boards: 29 facts." }
+      ],
+      "tests": ["tools/test/senses.test.ts"]
+    },
+    "limits": ["Names are letters, digits, _ and ., at most 96 characters."],
+    "improvements": [
+      { "summary": "Journal entries, active quests and gigs and fixer standing (S5's unread parts).", "value": "high", "effort": "medium" }
+    ],
+    "docs": ["knowledge/main-story-state.md"],
+    "notes": "Session 15: 93 facts in about 340 ms with the round trip.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.state",
+    "title": "World state",
+    "summary": "world.state reads the clock, the rain, the weather state and the world's states (Codeware), named quest facts and photo mode's scene rows.",
+    "area": "world",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.7.0",
+    "surface": { "commands": ["world.state"], "code": ["redscript/XFRuntimeBridgeWorld.reds"] },
+    "docs": ["research/runtime/runtime-bridge-test-card.md#session-8-checks-bridge-07"],
+    "notes": "Ran in session 8's checks.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.time",
+    "title": "Time of day",
+    "summary": "world.time.set sets or restores the clock in normal play or with the creator open, and in photo mode moves photo mode's own time-of-day slider, naming which clock it changed.",
+    "area": "world",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.5.1",
+    "demand": [
+      { "consumer": "story-engine", "level": "needs", "ref": "V11", "milestone": "M5", "note": "World nudges: time (on main).", "since": "2026-10-26" }
+    ],
+    "surface": { "commands": ["world.time.set"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "S6",
+          "verdict": "pass",
+          "session": "script-call check",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "21:00, then the exact earlier second."
+        }
+      ]
+    },
+    "quirks": ["Can trigger quest time events, so test on a disposable save."],
+    "docs": ["research/runtime/runtime-bridge-design.md#75-world-and-player"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.pause",
+    "title": "Freezing the world",
+    "summary": "world.pause freezes the world (and V) the way the mirror screen does, in normal play only; the kill switch unfreezes it.",
+    "area": "world",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "surface": { "commands": ["world.pause"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "S7",
+          "verdict": "partial",
+          "session": "script-call check",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "Reported frozen and unfrozen by the kill switch's restore; the freeze itself wasn't visible indoors."
+        }
+      ]
+    },
+    "docs": ["research/runtime/runtime-bridge-test-card.md#script-call-check-first"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.weather",
+    "title": "Weather",
+    "summary": "world.weather.set holds a weather state through Codeware or gives it back to the cycle; the undo and the kill switch restore the earlier state.",
+    "area": "world",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.7.0",
+    "demand": [
+      { "consumer": "story-engine", "level": "needs", "ref": "V11", "milestone": "M5", "note": "World nudges: weather.", "since": "2026-10-26" }
+    ],
+    "surface": { "commands": ["world.weather.set"] },
+    "limits": ["Needs Codeware; refused quest_scene in a story scene; game.save refuses while it is held."],
+    "docs": ["research/runtime/runtime-bridge-design.md#75-world-and-player"],
+    "notes": "Ran in session 8's checks.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.crowd-density",
+    "title": "Crowd and traffic density",
+    "summary": "Thin the crowd near a scene with the community system's density modifier, or clear a box of dynamic crowd, so a scene reads right; more people come only from XF actors.",
+    "area": "world",
+    "kind": "verb",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V11",
+        "milestone": "M5",
+        "note": "Crowd and traffic density near a scene.",
+        "since": "2026-10-26"
+      }
+    ],
+    "limits": ["ChangeDensityModifier is clamped to 0.01 to 1.0 and never raises the crowd; no TweakDB or static route."],
+    "unknowns": [
+      {
+        "question": "Do the run-time density levers behave as the source says?",
+        "settle_by": "Session rows CA8 to CA10 (crowd adoption and identity §6)",
+        "needs_game": true
+      }
+    ],
+    "docs": ["knowledge/crowd-adoption-and-identity.md#5-q3-density-hour-of-day-and-faction-shares"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.marks-and-ambience",
+    "title": "Marks and ambient sound",
+    "summary": "Decals, stains, scorch and damage that persist for a set time and survive a reload, and ambience or named sound cues at a place.",
+    "area": "world",
+    "kind": "verb",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V14",
+        "milestone": "M5",
+        "note": "Marks and ambient sound, with a fallback; no route known, a research request.",
+        "since": "2026-10-26"
+      }
+    ],
+    "notes": "A sound at a world point is also left out of the DM toolkit (it needs an empty emitter entity template; RB-224).",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.props",
+    "title": "Props and vehicles brought in",
+    "summary": "world.spawn brings a prop from an entity template or a vehicle from its record through Codeware, never saved, near V; world.despawn removes it and world.spawned lists them.",
+    "area": "world",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.8.12",
+    "changed_in": "0.8.14",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V6",
+        "milestone": "M4",
+        "note": "Spawn props, containers and shards with our own text; no shards or containers yet.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["world.spawn", "world.despawn", "world.spawned"], "code": ["redscript-dm/XFRuntimeBridgeDm.reds", "native/src/core/DmService.cpp"] },
+    "verification": {
+      "rows": [
+        { "row": "DW1", "verdict": "pass", "session": "borg-1", "build": "0.8.13", "date": "2026-10-24", "note": "A crate grounded 3 m ahead." },
+        { "row": "DW2", "verdict": "pass", "session": "borg-1", "build": "0.8.13", "date": "2026-10-24" },
+        {
+          "row": "TL2",
+          "verdict": "pass",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "world_spawn with when vehicle:true on foot refused precondition_failed and spawned nothing (the findings file labels it TL1)."
+        }
+      ],
+      "tests": ["tools/test/dm.test.ts"]
+    },
+    "limits": ["At most 24 things in all (8 lights), within 60 m of V; needs Codeware."],
+    "docs": ["knowledge/player-channels.md#5-the-bridges-live-direction-toolkit-0812-what-each-command-drives-and-what-was-left-out"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.doors",
+    "title": "Doors",
+    "summary": "world.door opens, closes, locks or seals a door through the door's own quest actions.",
+    "area": "world",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "unknown",
+    "priority": "P3",
+    "since": "0.8.12",
+    "demand": [
+      { "consumer": "story-engine", "level": "needs", "ref": "V6", "milestone": "M4", "note": "Lock and unlock doors.", "since": "2026-10-26" }
+    ],
+    "surface": { "commands": ["world.door"] },
+    "verification": {
+      "rows": [
+        { "row": "DD1", "verdict": "unrun", "note": "No door in reach in Borg 1." },
+        { "row": "DD2", "verdict": "unrun" }
+      ],
+      "tests": ["tools/test/dm.test.ts"]
+    },
+    "docs": ["knowledge/player-channels.md#5-the-bridges-live-direction-toolkit-0812-what-each-command-drives-and-what-was-left-out"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.lights",
+    "title": "Lights brought in",
+    "summary": "light.spawn, light.set and light.remove place and change world lights (colour, intensity, radius, angles, and the patterns pulse, strobe, broken and candle).",
+    "area": "world",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.8.12",
+    "demand": [
+      { "consumer": "story-engine", "level": "needs", "ref": "V6", "milestone": "M4", "note": "Place lights.", "since": "2026-10-26" }
+    ],
+    "surface": { "commands": ["light.spawn", "light.set", "light.remove"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "DL1",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13",
+          "date": "2026-10-24",
+          "note": "Warm to blue over 1 s; the pulse visible as frame differences."
+        },
+        {
+          "row": "DL2",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13",
+          "date": "2026-10-24",
+          "note": "carrier_missing; a crate as a lamp failed configuration and its entry was removed."
+        },
+        { "row": "BR7", "verdict": "unrun" },
+        { "row": "BR8", "verdict": "unrun" }
+      ]
+    },
+    "quirks": ["A light answers components 0 until its component resolves (Borg 1; pending light components fixed in 0.8.14, BR7)."],
+    "known_issues": [
+      {
+        "summary": "light.spawn needs a template that already holds a light component: the dedicated carrier is not built, so a lit scene depends on a depot lamp.",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "RB-222"
+      }
+    ],
+    "docs": ["knowledge/player-channels.md#5-the-bridges-live-direction-toolkit-0812-what-each-command-drives-and-what-was-left-out"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.vehicles",
+    "title": "Vehicle controls",
+    "summary": "vehicle.set switches a vehicle's engine and lights and opens or closes each door; vehicles themselves come from world.spawn.",
+    "area": "world",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.8.12",
+    "depends_on": ["world.props"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V10",
+        "milestone": "M6",
+        "note": "Spawn vehicles, drive routes, run chases; only vehicle.set and spawning exist.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["vehicle.set"] },
+    "verification": {
+      "rows": [
+        { "row": "DV1", "verdict": "pass", "session": "borg-1", "build": "0.8.13", "date": "2026-10-24", "note": "Boot open, tail lights on, engine running." },
+        { "row": "BR10", "verdict": "unrun", "note": "Vehicle read-back (vehicle_set gave before but no after)." }
+      ]
+    },
+    "known_issues": [
+      {
+        "summary": "A door's lock baseline can't be read back, so a lock change keeps its save hold until a save loads.",
+        "severity": "low",
+        "status": "wontfix",
+        "since": "2026-10-23",
+        "ref": "RB-225"
+      }
+    ],
+    "improvements": [
+      { "summary": "Driving routes and chases (V10).", "value": "medium", "effort": "large" }
+    ],
+    "docs": ["knowledge/player-channels.md#5-the-bridges-live-direction-toolkit-0812-what-each-command-drives-and-what-was-left-out"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.audio",
+    "title": "Sounds, radio and voice lines",
+    "summary": "audio.play and audio.stop play the game's sound events, audio.radio sets a vehicle's station by name, and audio.voice plays a voiceset line from the person V looks at.",
+    "area": "world",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.8.12",
+    "surface": { "commands": ["audio.play", "audio.stop", "audio.radio", "audio.voice"] },
+    "verification": {
+      "rows": [
+        { "row": "DA1", "verdict": "inconclusive", "session": "borg-1", "build": "0.8.13", "date": "2026-10-24", "note": "Posted; audibility unverified." },
+        {
+          "row": "DA2",
+          "verdict": "pass",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "Via the taps: the stand-in's greeting ran the full subtitle chain; the script-voice channel didn't see audio.voice."
+        },
+        {
+          "row": "DV2",
+          "verdict": "partial",
+          "session": "borg-1",
+          "build": "0.8.13",
+          "date": "2026-10-24",
+          "note": "The station held through repeated on and off; audible music unverified."
+        }
+      ]
+    },
+    "limits": ["An exact station only on a vehicle's radio; a sound at a world point is not built (RB-224)."],
+    "unknowns": [
+      {
+        "question": "Is anything the bridge plays actually audible?",
+        "settle_by": "An audio-output tap or the maintainer's ear (autonomous testing tier 3)",
+        "needs_game": true
+      }
+    ],
+    "docs": ["knowledge/game-audio.md", "research/runtime/autonomous-testing.md#tier-3--audible-output-cross-checks-after-voiceaudio-dispatch-taps"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "world.hud-geometry",
+    "title": "Live HUD geometry",
+    "summary": "Read the real rectangles of the game's HUD blocks (minimap, quest tracker, status bars) from their own controllers instead of a measured template, so XF surfaces and pin marks keep clear of them on any layout.",
+    "area": "world",
+    "kind": "sense",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "known_issues": [
+      {
+        "summary": "The HUD blocks the pin mark avoids are measured once (3840 by 1600, default HUD) and scaled; a longer quest tracker, a moved minimap or a HUD mod puts a block elsewhere.",
+        "severity": "low",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "RB-216"
+      }
+    ],
+    "docs": ["knowledge/hud-and-occlusion.md#6-bounded-bridge-reader-design"],
+    "updated": "2026-10-26"
+  }
+]

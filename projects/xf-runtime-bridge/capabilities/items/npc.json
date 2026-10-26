@@ -1,0 +1,651 @@
+[
+  {
+    "id": "npc.list-pick",
+    "title": "NPCs near V and picks",
+    "summary": "npc.list reads the people near V and who may be directed (protected and busy ones named); npc.pick adopts an ordinary passer-by for look, face and speech; npc.status lists the session's actors, picks, lines, hub and casts.",
+    "area": "npc",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.8",
+    "changed_in": "0.8.19",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S3",
+        "milestone": "M4",
+        "note": "The people around V up to 40 m with crowd, protected and busy flags.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": {
+      "commands": ["npc.list", "npc.pick", "npc.status"],
+      "code": ["redscript/XFRuntimeBridgeNpc.reds", "native/src/core/Npc.cpp", "native/src/plugin/HandlersNpc.cpp"]
+    },
+    "verification": {
+      "rows": [
+        {
+          "row": "NB8",
+          "verdict": "partial",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "A released pick stood about 20 s at a crossing before walking on; 0.8.9 sends it on at its normal pace."
+        }
+      ],
+      "tests": ["tools/test/npc.test.ts"]
+    },
+    "limits": ["npc.pick needs the writer seat, because it reserves shared pick slots."],
+    "docs": ["knowledge/npc-direction.md#2-spawning-and-choosing"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.actors",
+    "title": "XF actors",
+    "summary": "npc.spawn brings in XF actors: TweakXL clones of base-game civilians, never saved, friendly and immortal unless asked, at a point or relative to V with a sight line from her head.",
+    "area": "npc",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.8.8",
+    "changed_in": "0.8.21",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V1",
+        "milestone": "M4",
+        "note": "Spawn and despawn people with any record and appearance, friendly or hostile, at a chosen place, with an identity that survives streaming, at crowd scale.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": {
+      "commands": ["npc.spawn", "npc.release"],
+      "events": ["npc.spawned", "npc.released"],
+      "config": ["[bridge] allow_write_classes"],
+      "code": ["redscript/XFRuntimeBridgeNpc.reds", "native/src/core/Npc.cpp"]
+    },
+    "verification": {
+      "rows": [
+        { "row": "NA1", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23", "note": "Spawned 8.25 m ahead facing V." },
+        {
+          "row": "N4",
+          "verdict": "pass",
+          "session": "session 17",
+          "build": "0.8.10 c53a965b",
+          "date": "2026-10-23",
+          "note": "A spawn at a vending machine was visible (in session 16 it stood unseen; 0.8.10 needs a sight line)."
+        }
+      ],
+      "tests": ["tools/test/npc.test.ts"]
+    },
+    "limits": ["At most five XF actors (three before 0.8.19), within 30 m.", "The npc write class and the XF actor records ship in the -writes package only."],
+    "known_issues": [
+      {
+        "summary": "The sight-line check rays against the Static collision group only; a device may not be in it, so an actor can still stand inside one unseen.",
+        "severity": "low",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "RB-214"
+      }
+    ],
+    "improvements": [
+      { "summary": "Any record and appearance at crowd scale (V1): today ten cloned casts and five actors.", "value": "high", "effort": "large" }
+    ],
+    "docs": ["knowledge/npc-direction.md#8-session-15-on-bridge-088-23-october-2026", "research/runtime/npc-direction-design.md#4-the-08-command-set"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.direct",
+    "title": "Directing movement",
+    "summary": "npc.move, npc.follow, npc.turn, npc.place and npc.stop walk, follow, turn and place actors and picks through the game's own AI commands; a walk more than 80 degrees off the actor's facing begins with a turn on the spot.",
+    "area": "npc",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.8.8",
+    "changed_in": "0.8.11",
+    "depends_on": ["npc.actors"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V2",
+        "milestone": "M4",
+        "note": "Direct people: walk or drive, use a workspot, follow or flee; set their attitude; fight in a group or surrender. Move, follow, turn and place are proven; no workspots, fleeing or fighting.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["npc.move", "npc.follow", "npc.turn", "npc.place", "npc.stop"], "events": ["npc.arrived"] },
+    "verification": {
+      "rows": [
+        { "row": "NA2", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23" },
+        { "row": "NA3", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23", "note": "Walked to V and arrived 2.13 m away." },
+        { "row": "NA4", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23" },
+        { "row": "NA5", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23" },
+        {
+          "row": "N1",
+          "verdict": "fail",
+          "session": "session 17",
+          "build": "0.8.10 c53a965b",
+          "date": "2026-10-23",
+          "note": "Backwards after a walk to V: the facing target the move handler never clears. Fixed in 0.8.11, unverified."
+        },
+        {
+          "row": "N2",
+          "verdict": "pass",
+          "session": "session 17",
+          "build": "0.8.10 c53a965b",
+          "date": "2026-10-23",
+          "note": "The dissolve walked away forwards."
+        }
+      ]
+    },
+    "known_issues": [
+      {
+        "summary": "The turn-first walk rests on a hypothesis; close when N1 and N2 pass or the cause is named.",
+        "severity": "medium",
+        "status": "fixed-unverified",
+        "since": "2026-10-23",
+        "ref": "RB-213"
+      },
+      {
+        "summary": "The facing-target argument's name is the behaviour tree's own; 0.8.11 clears FacingTarget by analogy, which does nothing if the name is wrong.",
+        "severity": "low",
+        "status": "fixed-unverified",
+        "since": "2026-10-23",
+        "ref": "RB-218"
+      }
+    ],
+    "improvements": [
+      { "summary": "Workspots, fleeing and group fights (V2).", "value": "high", "effort": "large" }
+    ],
+    "docs": ["knowledge/npc-direction.md#10-session-17-on-bridge-0810-23-october-2026", "research/runtime/runtime-bridge-test-card.md#session-18-checks-bridge-0811"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.speech",
+    "title": "NPC lines",
+    "summary": "npc.say gives an actor or pick a subtitle, an overhead line, a caller's subtitle (call_subtitle), a vanilla voice line in its own voice, or a voice with no body.",
+    "area": "npc",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.8.8",
+    "changed_in": "0.8.10",
+    "depends_on": ["npc.actors"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V3",
+        "milestone": "M4",
+        "note": "Overhead text, subtitles and holocalls; the game's own lines by voice and by line. No chosen lines.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["npc.say"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "NB2",
+          "verdict": "partial",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "The subtitle showed; the voiced greeting was the voice's own curt line."
+        },
+        { "row": "NB3", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23" },
+        { "row": "N7", "verdict": "pass", "session": "session 16", "build": "0.8.9", "date": "2026-10-23", "note": "call_subtitle shows as 'Caller: …'." }
+      ]
+    },
+    "limits": ["A line given near_m is refused unless the NPC stands that close."],
+    "known_issues": [
+      {
+        "summary": "A voiceset's greeting is the voice's own line and can't be chosen (warm in one call, curt in the next); scenes speak subtitles, and a spoken chosen line has no route.",
+        "severity": "low",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "RB-217"
+      }
+    ],
+    "docs": ["knowledge/npc-direction.md#4-speech", "knowledge/npc-direction.md#9-session-16-on-bridge-089-23-october-2026"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.choices",
+    "title": "Dialogue choices with V",
+    "summary": "npc.choices offers V two to four lines in the game's own dialogue widget, attached to an actor or pick; the pick comes back as npc.choice, and the hub is withdrawn when V leaves or a device screen takes over.",
+    "area": "npc",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.8",
+    "changed_in": "0.8.13",
+    "depends_on": ["npc.actors"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V3",
+        "milestone": "M4",
+        "note": "Dialogue choices with V (2-4 choices in the game's widget, the pick returned: proven).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["npc.choices", "session.wait", "test.npc.choice"], "events": ["npc.choice"] },
+    "verification": {
+      "rows": [
+        { "row": "NB5", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23" },
+        { "row": "NB6", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23" },
+        { "row": "NB6b", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23" },
+        {
+          "row": "IC1",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13 306fa3c4",
+          "date": "2026-10-24",
+          "note": "Bridge-hub pick through the game's action handler without the player: highlight gave none, commit exactly one (20/20)."
+        }
+      ]
+    },
+    "docs": ["knowledge/npc-direction.md#5-dialogue-choices", "knowledge/input-and-choices.md#bridge-owned-hubs-a-contained-route-already-has-an-owner"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.face-gaze",
+    "title": "Face and gaze",
+    "summary": "npc.look and npc.face set where an actor or pick looks and its expression; while the bridge directs it, the game's own look-at reaction (the angry face, the curt bark, the chest twist) is held back.",
+    "area": "npc",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.8.8",
+    "changed_in": "0.8.11",
+    "depends_on": ["npc.actors"],
+    "demand": [
+      { "consumer": "story-engine", "level": "needs", "ref": "V2", "milestone": "M4", "note": "Look at and change expression.", "since": "2026-10-26" }
+    ],
+    "surface": { "commands": ["npc.look", "npc.face"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "NB1",
+          "verdict": "fail",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "The actor's own reactions won over the smile; 0.8.9 wraps the reaction system."
+        },
+        {
+          "row": "N1",
+          "verdict": "pass",
+          "session": "session 16",
+          "build": "0.8.9",
+          "date": "2026-10-23",
+          "note": "The reaction wraps held: a smile stayed 20 s face to face."
+        },
+        {
+          "row": "N3",
+          "verdict": "fail",
+          "session": "session 17",
+          "build": "0.8.10 c53a965b",
+          "date": "2026-10-23",
+          "note": "The scene's smile did not show; cause unresolved."
+        }
+      ]
+    },
+    "known_issues": [
+      {
+        "summary": "A held face is sent again (0.8 s, 2.5 s, then every 5 s) because session 17's smile didn't show and nothing says what took it; the resend may blip.",
+        "severity": "low",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "RB-219"
+      }
+    ],
+    "unknowns": [
+      {
+        "question": "What took session 17's smile: early delivery before the graph was ready, a later write, or downstream blending?",
+        "settle_by": "R3's discriminating probe (NPC face state §6) and RT5",
+        "needs_game": true
+      }
+    ],
+    "docs": ["knowledge/npc-face-state.md#6-session-17-explanation-and-discriminating-probe", "knowledge/npc-reactions.md"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.gestures",
+    "title": "Gestures",
+    "summary": "npc.act plays a gesture (talk, wave, shrug, nod, arms crossed, facepalm, check phone) on an actor through an XF animation carrier.",
+    "area": "npc",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "offline",
+    "health": "broken",
+    "priority": "P3",
+    "since": "0.8.8",
+    "demand": [
+      { "consumer": "story-engine", "level": "needs", "ref": "V2", "milestone": "M4", "note": "Gesture: needs a carrier archive.", "since": "2026-10-26" }
+    ],
+    "surface": { "commands": ["npc.act"] },
+    "verification": {
+      "rows": [
+        { "row": "NB7", "verdict": "unrun", "session": "session 15" }
+      ]
+    },
+    "known_issues": [
+      {
+        "summary": "The XF gesture carrier isn't built, so in the game every gesture answers carrier_missing.",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "research/runtime/npc-direction-design.md"
+      }
+    ],
+    "docs": ["knowledge/npc-direction.md#6-face-gaze-and-gestures"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.stand-ins",
+    "title": "Mortal and hostile stand-ins",
+    "summary": "npc.spawn with attitude, immortal and reactions makes a stand-in that can be shot and turn hostile; a fight hands it back to its own AI instead of removing it, and a body stays until released.",
+    "area": "npc",
+    "parent": "npc.actors",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.8",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V15",
+        "milestone": "M4",
+        "note": "Mortal and hostile stand-ins that can be hurt and killed, turn hostile or hand back to AI, and keep the game's reaction presets.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["npc.spawn"], "events": ["npc.handed_back"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "ND3",
+          "verdict": "pass",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "Handed back in the fight, died and kept its body; the police answered the shooting."
+        }
+      ]
+    },
+    "quirks": ["A civilian stand-in's death counts as a civilian's (the police respond); its death record says civilian true."],
+    "docs": ["knowledge/npc-direction.md#8-session-15-on-bridge-088-23-october-2026"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.fighters",
+    "title": "Combat stand-ins",
+    "summary": "Two casts cloned from tier-1 gang grunts (fighter_melee with bare fists, fighter_pistol with a handgun) fight V with their own AI; engage:true puts V in the actor's threat list through the game's own route; they sit in an isolated attitude group.",
+    "area": "npc",
+    "parent": "npc.stand-ins",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P2",
+    "since": "0.8.18",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V15",
+        "milestone": "M4",
+        "note": "Hostile stand-ins that actually start a fight (civilian casts never did).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["npc.spawn"] },
+    "verification": {
+      "rows": [
+        { "row": "CS8181", "verdict": "pass", "session": "borg-4", "build": "0.8.22 1cd681c3", "date": "2026-10-26" },
+        { "row": "CS8182", "verdict": "unrun" },
+        { "row": "CS8183", "verdict": "unrun" },
+        { "row": "CS8184", "verdict": "unrun" },
+        { "row": "CS8185", "verdict": "unrun" },
+        { "row": "CS8187", "verdict": "unrun" },
+        { "row": "CS8186", "verdict": "unrun", "note": "Optional." }
+      ],
+      "tests": ["tools/test/combat-standin.test.ts"]
+    },
+    "limits": ["Immortal by default; never saved; -writes package only."],
+    "unknowns": [
+      {
+        "question": "Can the aggressive reaction preset turn a fighter hostile to whoever fires near it, despite the isolated group?",
+        "settle_by": "CS8187",
+        "needs_game": true
+      }
+    ],
+    "docs": ["knowledge/npc-direction.md#11-combat-stand-ins-bridge-0818", "research/runtime/runtime-bridge-test-card.md#combat-stand-in-0818"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.out-of-sight",
+    "title": "Out-of-sight staging",
+    "summary": "npc.spawn with out_of_sight picks a walkable spot V can't see; npc.release with dissolve removes an actor only once it is out of her sight.",
+    "area": "npc",
+    "parent": "npc.actors",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.8",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V16",
+        "milestone": "M5",
+        "note": "Spawn outside V's view and hearing; dissolve by walking away and despawning out of sight; join a scene mid-phase, posed, with no visible fast-forward (not built).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["npc.spawn", "npc.release"], "events": ["npc.dissolved"] },
+    "verification": {
+      "rows": [
+        { "row": "ND1", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23", "note": "Landed 12 m behind V unseen." },
+        { "row": "ND2", "verdict": "pass", "session": "session 15", "build": "0.8.8", "date": "2026-10-23", "note": "The dissolve waited until V looked away." }
+      ]
+    },
+    "improvements": [
+      { "summary": "Join a scene mid-phase, posed, with no visible fast-forward (V16's last part).", "value": "medium", "effort": "large" }
+    ],
+    "docs": ["research/runtime/npc-direction-design.md#54-staging-for-the-story-engine-v15-v16-v13-not-built"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.crowd-substitution",
+    "title": "Crowd substitution",
+    "summary": "npc.substitute replaces a plain passer-by of the street crowd with an XF actor of the same look, unseen: it holds the original still, spawns the actor at its spot once V can't see it, and hides the original only when the actor stands there; every failed swap gives the original back.",
+    "area": "npc",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.8.19",
+    "depends_on": ["npc.actors"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V17",
+        "milestone": "M5",
+        "note": "Adopt crowd people into the simulation (route a: substitution with the same look), keep identity across reloads through the resident key and respawn parameters, release cleanly.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": {
+      "commands": ["npc.substitute", "npc.release"],
+      "events": ["npc.substitute_started", "npc.substituted", "npc.substitute_failed", "npc.restored", "npc.original_returned", "npc.original_unreturned"],
+      "code": ["native/src/core/NpcSubstitute.cpp"]
+    },
+    "verification": {
+      "rows": [
+        { "row": "CRS1", "verdict": "unrun" },
+        { "row": "CRS2", "verdict": "unrun", "note": "Borg 4's swap fell back on the look (asked creole_11, got a king_of_the_stoop appearance)." },
+        {
+          "row": "CRS3",
+          "verdict": "pass",
+          "session": "borg-4",
+          "build": "0.8.22 1cd681c3",
+          "date": "2026-10-26",
+          "note": "Swapped 19 m away out of V's view within 0.8 s; the maintainer saw nothing odd."
+        },
+        {
+          "row": "CRS7",
+          "verdict": "partial",
+          "session": "borg-4",
+          "build": "0.8.22 1cd681c3",
+          "date": "2026-10-26",
+          "note": "Released with restore as a despawn (not a dissolve); a fresh crowd person came 2.9 s later rather than the original."
+        },
+        { "row": "CRS12", "verdict": "unrun", "note": "Borg 4 saw the npc_busy, npc_protected and too_far refusals right, not the community refusal." }
+      ],
+      "tests": ["tools/test/crowd-substitute.test.ts"]
+    },
+    "limits": ["Lane-crowd walkers only: community NPCs are refused (community_npc), because a quest reservation can't be detected and the removal can't be undone."],
+    "quirks": [
+      "restore leaves a fresh crowd person, not the original; acceptable for crowds.",
+      "resident.key is ours (a hash of record, appearance and spawn spot), not the game's."
+    ],
+    "unknowns": [
+      {
+        "question": "Which of HideIrreversibly's effects remain until recycling; does AIJoinCrowdCommand return a spawned crowd person to the lanes; does the clone flee gunfire?",
+        "settle_by": "CRS6, CRS7, CRS14",
+        "needs_game": true
+      }
+    ],
+    "improvements": [
+      { "summary": "Count look fall-backs and widen the candidate appearance search (Borg 4).", "value": "medium", "effort": "small" }
+    ],
+    "docs": ["knowledge/npc-direction.md#12-crowd-substitution-bridge-0819", "research/runtime/runtime-bridge-test-card.md#crowd-substitution-0819"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.crowd-adoption",
+    "title": "Adopting the game's own crowd people",
+    "summary": "Take over a person the crowd system spawned (hold or replace their AI), run them on the engine's routine and release them back to the lanes, keeping a stable identity for community people.",
+    "area": "npc",
+    "kind": "research",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V17",
+        "milestone": "M5",
+        "note": "Route (b): adopt, direct, release the game's crowd body; key stability across a reload (CA1 to CA7).",
+        "since": "2026-10-26"
+      }
+    ],
+    "unknowns": [
+      {
+        "question": "Does a move command work on a live lane walker, does release return it to the lane, and is the community key stable across a reload?",
+        "settle_by": "Session rows CA1 to CA7",
+        "needs_game": true
+      }
+    ],
+    "docs": ["knowledge/crowd-adoption-and-identity.md#34-a-bounded-design-for-the-bridge-adopt-direct-release"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.protected-people",
+    "title": "Directing protected people",
+    "summary": "Direct people the game protects (vendors, police, quest-adjacent people) for a staged moment, or stand them in with a clone in their look and place while the original is hidden.",
+    "area": "npc",
+    "kind": "verb",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "depends_on": ["safety.quest-reservation"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V13",
+        "milestone": "M5",
+        "note": "Not built; plan around stand-ins. Hiding and restoring someone else's NPC and holding a crowd NPC's AI are unproven, and quest reservation can't be detected safely.",
+        "since": "2026-10-26"
+      }
+    ],
+    "docs": ["research/runtime/npc-direction-design.md#54-staging-for-the-story-engine-v15-v16-v13-not-built"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "npc.scenario",
+    "title": "Scenes written as data",
+    "summary": "npc.scenario runs a scene written as data (the first is 'a stranger with a question'), releasing every actor it brought in however it ends.",
+    "area": "npc",
+    "kind": "tool",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.8.8",
+    "changed_in": "0.8.10",
+    "depends_on": ["npc.direct", "npc.speech", "npc.choices"],
+    "surface": { "commands": ["npc.scenario"], "code": ["tools/npc/scenario.ts", "tools/npc/scenarios"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "NC1",
+          "verdict": "fail",
+          "session": "session 15",
+          "build": "0.8.8",
+          "date": "2026-10-23",
+          "note": "Walked backwards and spoke before arriving."
+        },
+        {
+          "row": "N5",
+          "verdict": "partial",
+          "session": "session 16",
+          "build": "0.8.9",
+          "date": "2026-10-23",
+          "note": "The bark was its own greeting step; still a backwards walk away."
+        },
+        {
+          "row": "N3",
+          "verdict": "fail",
+          "session": "session 17",
+          "build": "0.8.10 c53a965b",
+          "date": "2026-10-23",
+          "note": "The smile didn't show; the walk away went backwards."
+        }
+      ]
+    },
+    "docs": ["research/runtime/npc-direction-design.md#6-the-first-scenario"],
+    "notes": "The plan module (supervisor.plan-module) is the general successor for scenes; npc.scenario stays the tools-side scene runner until then.",
+    "updated": "2026-10-26"
+  }
+]

@@ -1,0 +1,239 @@
+[
+  {
+    "id": "link.pipe",
+    "title": "Local pipe and protocol 1",
+    "summary": "A local-only named pipe the game opens when the bridge is enabled, with a per-session token, a user-only access list, newline-delimited JSON and an allowlist of methods, so host tools can talk to the running game.",
+    "area": "link",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.15",
+    "surface": {
+      "commands": ["bridge.ping", "bridge.info"],
+      "config": ["[bridge] enabled", "[bridge] request_timeout_ms", "[bridge] max_requests_per_second", "[bridge] idle_disconnect_seconds"],
+      "code": ["native/src/core/PipeServer.cpp", "native/src/core/Bridge.cpp", "tools/bridge-lib.ts", "tools/bridge-client.ps1"]
+    },
+    "verification": {
+      "rows": [
+        {
+          "row": "S2",
+          "verdict": "pass",
+          "session": "script-call check",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "First in-game run of the pipe and the script-call context."
+        },
+        { "row": "S3", "verdict": "pass", "session": "script-call check", "build": "0.2.0 c31156a", "date": "2026-09-26" }
+      ],
+      "tests": ["tools/test/mcp.test.ts", "tools/test/catalogue.test.ts"]
+    },
+    "limits": [
+      "Requests are capped at 64 KiB and 32 levels of nesting.",
+      "A rate limit covers every request (20 a second, bursts of 40 by default); the tools pace themselves at 18 a second in bursts of 36 and retry a rate_limited refusal for up to 4 s.",
+      "A connection that sends five malformed or unauthenticated requests is dropped; a client silent for 120 s is disconnected."
+    ],
+    "quirks": [
+      "The security boundary is the Windows user at medium integrity: any process running as the same user can read the token and connect.",
+      "Clients open the pipe at the Identification impersonation level and check the server's PID against session.json before sending the token."
+    ],
+    "docs": [
+      "projects/xf-runtime-bridge/README.md#bridge-in-one-paragraph",
+      "research/runtime/runtime-bridge-design.md#32-protocol-1",
+      "research/runtime/runtime-bridge-design.md#4-safety-model",
+      "research/runtime/runtime-bridge-test-card.md#script-call-check-first"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "link.script-calls",
+    "title": "Game and script calls from native code",
+    "summary": "Every game or script function is called the way script code calls it, with a caller frame and a context that is never null, on the game thread, so native reads and writes don't crash the game.",
+    "area": "link",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "depends_on": ["link.pipe"],
+    "surface": { "code": ["native/src/plugin/ScriptCall.cpp", "native/src/core/ScriptFrame.cpp", "native/src/core/GameThreadQueue.cpp"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "S3",
+          "verdict": "pass",
+          "session": "script-call check",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "The call that crashed before the fix returned with tweak_marker 1."
+        },
+        { "row": "S5", "verdict": "pass", "session": "script-call check", "build": "0.2.0 c31156a", "date": "2026-09-26" }
+      ]
+    },
+    "limits": [
+      "Engine addresses the call needs are resolved at load; if the address library lacks one, every game method is refused for the session (script_calls_unavailable)."
+    ],
+    "unknowns": [
+      {
+        "question": "Is the script_calls_unavailable refusal path right when an engine address is really missing?",
+        "settle_by": "Only a game build whose address library lacks an address can show it; knowledge/runtime-access.md lists it as built, not confirmed.",
+        "needs_game": true
+      }
+    ],
+    "docs": [
+      "research/runtime/runtime-bridge-design.md#35-calling-game-and-script-functions-from-native-code",
+      "knowledge/runtime-access.md#6-what-agents-can-and-cannot-do-yet"
+    ],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "link.script-gate",
+    "title": "Script-layer gate across loads",
+    "summary": "The bridge makes no script call between the scripts detaching for a load and the next session's player attaching; while the gate is closed game.status answers loading from the plugin and other game calls are refused game_loading.",
+    "area": "link",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.5.2",
+    "depends_on": ["link.script-calls"],
+    "surface": { "code": ["native/src/core/ScriptLayer.cpp", "native/src/core/Dispatcher.cpp"] },
+    "verification": {
+      "rows": [
+        { "row": "I2", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22", "note": "game.load through the gate." },
+        { "row": "I3", "verdict": "pass", "session": "session 10", "build": "0.8.2", "date": "2026-10-22" }
+      ],
+      "tests": ["tools/test/batch8.test.ts"]
+    },
+    "quirks": ["Calls after a new attach but before the player attaches are never made; whether they would be safe is untested."],
+    "docs": [
+      "knowledge/game-crashes.md#23-calling-scripts-while-a-save-loads",
+      "research/runtime/runtime-bridge-design.md#10-open-questions",
+      "research/runtime/runtime-bridge-test-card.md#session-10-checks-bridge-082"
+    ],
+    "notes": "Built after session 5's crash, when game.wait polled game.status just after game.load detached the scripts. Session 6 passed its load checks.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "link.observers",
+    "title": "One writer and read-only observers",
+    "summary": "One exclusive writer connection plus a bounded pool of independent read-only connections, so a watcher or catch-up reader can follow the game while another tool drives it.",
+    "area": "link",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.8.15",
+    "changed_in": "0.8.16",
+    "depends_on": ["link.pipe"],
+    "surface": { "config": ["[bridge] max_read_only_connections"], "code": ["native/src/core/PipeServer.cpp", "tools/api/command-api.ts"] },
+    "verification": {
+      "rows": [
+        { "row": "MC1", "verdict": "unrun" },
+        {
+          "row": "MC2",
+          "verdict": "partial",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "In practice: a read-only catch-up client ran beside the MCP writer all session with no bridge_busy and no effect on the writer; the row was not run as written."
+        },
+        { "row": "MC3", "verdict": "unrun" },
+        { "row": "MC4", "verdict": "unrun" },
+        { "row": "MC5", "verdict": "unrun" },
+        { "row": "MC6", "verdict": "unrun" }
+      ],
+      "tests": ["tools/test/multiclient.test.ts"]
+    },
+    "limits": [
+      "0 to 8 read-only connections (3 by default); a second writer gets bridge_busy.",
+      "npc.pick, starting the recorder, game.saves, game.options.read and test.events with stims stay writer-only (read_only_connection).",
+      "Half the shared rate bucket's burst is reserved for the writer; readers can't fill the last slot of the 16-slot game-thread queue."
+    ],
+    "quirks": [
+      "Recorder, supervisor and input leases follow the writer: an MCP connection holding them keeps the writer seat, so a CLI writer gets bridge_busy (Borg 4).",
+      "Scheduling bounds are established offline, not measured game latency."
+    ],
+    "docs": ["projects/xf-runtime-bridge/README.md#concurrent-observers-0815-candidate", "research/runtime/runtime-bridge-test-card.md#concurrent-readers-0815"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "link.catalogue",
+    "title": "One command catalogue",
+    "summary": "Every command is defined once (name, plain text, input schema, permission class, undo note, refusals) and appears in the MCP server, the CLI and the session runner alike; errors are plain sentences with one next step.",
+    "area": "link",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.22",
+    "surface": { "code": ["tools/api/catalogue.ts", "tools/api/command-api.ts", "tools/api/errors.ts", "tools/api/schema.ts"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "16",
+          "verdict": "pass",
+          "session": "first session",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "cc.apply refused in photo mode in plain words, nothing changed."
+        }
+      ],
+      "tests": ["tools/test/catalogue.test.ts", "tools/test/mcp-reference.test.ts"]
+    },
+    "quirks": [
+      "Permission classes are data, ready for a consent screen; the game-side gate is separate and final.",
+      "Write and control commands are appended to logs/commands-<day>.jsonl (ignored) with their input and undo note."
+    ],
+    "docs": ["projects/xf-runtime-bridge/README.md#one-command-api-many-frontends", "projects/xf-runtime-bridge/docs/mcp-reference.md"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "link.undo",
+    "title": "Undo on every write",
+    "summary": "Each write logs what it changed with its reversal and returns a machine-readable undo the caller can send back to put the game as it was.",
+    "area": "link",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.2.0",
+    "changed_in": "0.8.14",
+    "depends_on": ["link.catalogue"],
+    "surface": { "events": ["write"], "code": ["native/src/core/Writes.cpp"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "S6",
+          "verdict": "pass",
+          "session": "script-call check",
+          "build": "0.2.0 c31156a",
+          "date": "2026-09-26",
+          "note": "world.time.set's undo restored the clock to the exact second."
+        },
+        { "row": "11", "verdict": "pass", "session": "first session", "build": "0.2.0 c31156a", "date": "2026-09-26" },
+        { "row": "BR2", "verdict": "unrun", "note": "DM undos after the debug-id validation fix." }
+      ]
+    },
+    "quirks": ["A vehicle door's lock can't be read back, so a lock change keeps its save hold until a save loads (RB-225)."],
+    "known_issues": [
+      {
+        "summary": "Undos returned by the DM toolkit named spawned things by a dynamic id that the same commands' input validation refused, so they could not be replayed (Borg 1, DV2). Fixed in 0.8.14 (debug-id undo validation), unverified.",
+        "severity": "low",
+        "status": "fixed-unverified",
+        "since": "2026-10-24",
+        "ref": "BR2"
+      }
+    ],
+    "docs": ["projects/xf-runtime-bridge/README.md#bridge-in-one-paragraph", "research/runtime/runtime-bridge-test-card.md#recorder-and-taps-borg-mode-session"],
+    "updated": "2026-10-26"
+  }
+]

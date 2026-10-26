@@ -1,0 +1,367 @@
+[
+  {
+    "id": "story.phone",
+    "title": "Phone messages and calls",
+    "summary": "phone.text shows a message toast from a contact; phone.call places a real incoming call from an active journal contact with timed subtitle lines, a ring time and optional auto-answer; phone.end and phone.state end and read it.",
+    "area": "story",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P2",
+    "since": "0.8.12",
+    "changed_in": "0.8.18",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V4",
+        "milestone": "M5",
+        "note": "Messages and calls from contacts, including new XF contacts; script can't create journal entries.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["phone.text", "phone.call", "phone.end", "phone.state"], "events": ["dm.phone"], "code": ["redscript-dm/XFRuntimeBridgeDm.reds"] },
+    "verification": {
+      "rows": [
+        { "row": "DP1", "verdict": "pass", "session": "borg-1", "build": "0.8.13", "date": "2026-10-24" },
+        { "row": "DP2", "verdict": "pass", "session": "borg-1", "build": "0.8.13", "date": "2026-10-24", "note": "An unknown contact refused, nothing rang." },
+        {
+          "row": "DP3",
+          "verdict": "pass",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "Answered with T; ring_s was ignored then (fixed in 0.8.18)."
+        },
+        { "row": "DP4", "verdict": "unrun" },
+        { "row": "B318-3", "verdict": "pass", "session": "borg-4", "build": "0.8.22 1cd681c3", "date": "2026-10-26", "note": "ring_s and auto_answer." },
+        { "row": "B318-3b", "verdict": "unrun" },
+        { "row": "B318-6", "verdict": "unrun", "note": "The speaker is the contact's name, not its id." }
+      ],
+      "tests": ["tools/test/dm.test.ts", "tools/test/borg3-0818.test.ts"]
+    },
+    "limits": ["Only an active journal contact can call; an unknown caller is refused. A journal-free caller card is left out (RB-224)."],
+    "quirks": ["Contact names in phone.state were unresolved LocKeys in Borg 1."],
+    "known_issues": [
+      {
+        "summary": "The call route (questTriggerCallRequest with its state polled from a fact) and the journal-free message toast are source and offline only beyond Borg 1 and 3's rows.",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "RB-223"
+      }
+    ],
+    "docs": ["knowledge/player-channels.md#31-phone-messages-and-contacts", "research/runtime/runtime-bridge-test-card.md#borg-3-regressions-0818"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "story.quest-tracker",
+    "title": "An XF quest in the tracker",
+    "summary": "quest.set, quest.objective and quest.clear put an XF quest with objectives in the game's own tracker, never the journal, with areas that complete an objective; quest.state reads it.",
+    "area": "story",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "proven",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.12",
+    "changed_in": "0.8.14",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V5",
+        "milestone": "M5",
+        "note": "Objectives in the journal or an XF tracker (a journal-free tracker).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["quest.set", "quest.objective", "quest.clear", "quest.state"], "events": ["dm.quest"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "DQ1",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13",
+          "date": "2026-10-24",
+          "note": "The objectives showed in reverse order; fixed in 0.8.14."
+        },
+        { "row": "DQ2", "verdict": "pass", "session": "borg-1", "build": "0.8.13", "date": "2026-10-24" },
+        { "row": "DQ3", "verdict": "pass", "session": "borg-1", "build": "0.8.13", "date": "2026-10-24" },
+        {
+          "row": "BR3",
+          "verdict": "pass",
+          "session": "borg-2",
+          "build": "0.8.16 c96779ee",
+          "date": "2026-10-25",
+          "note": "Two objectives in order, and the order held after one was done."
+        }
+      ]
+    },
+    "docs": ["knowledge/player-channels.md#37-the-journal-and-a-journal-free-tracker"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "story.map-pins",
+    "title": "XF map pins",
+    "summary": "world.pin places an XF map pin (world map, minimap and in the world) at a point, above a showroom head or above V, with an ink-drawn XF mark that stays at the screen's edge when the pin is off screen; world.pin.clear removes them.",
+    "area": "story",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.5.3",
+    "changed_in": "0.8.11",
+    "demand": [
+      { "consumer": "story-engine", "level": "needs", "ref": "V5", "milestone": "M5", "note": "Map pins and areas: a test pin today.", "since": "2026-10-26" }
+    ],
+    "surface": { "commands": ["world.pin", "world.pin.clear"], "code": ["redscript/XFRuntimeBridgePins.reds", "redscript/XFRuntimeBridgeInk.reds"] },
+    "verification": {
+      "rows": [
+        { "row": "F1", "verdict": "fail", "session": "session 10", "build": "0.8.2", "date": "2026-10-22", "note": "No XF mark in the world; fixed in 0.8.3." },
+        {
+          "row": "D1r2",
+          "verdict": "pass",
+          "session": "session 17",
+          "build": "0.8.10 c53a965b",
+          "date": "2026-10-23",
+          "note": "The mark at the side edges, by the coordinator's captures."
+        },
+        { "row": "D18", "verdict": "unrun", "note": "UI-221 fix 8: the outward chevron." }
+      ]
+    },
+    "limits": ["At most 8 pins; a temporary test feature."],
+    "known_issues": [
+      {
+        "summary": "Pin entries' mark fields are written from the UI's worker threads while the game thread may change the registry.",
+        "severity": "medium",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "RB-212"
+      },
+      {
+        "summary": "The HUD blocks the mark avoids are a measured template, not the live HUD.",
+        "severity": "low",
+        "status": "open",
+        "since": "2026-10-23",
+        "ref": "RB-216"
+      }
+    ],
+    "docs": ["knowledge/player-channels.md#38-map-pins", "knowledge/ink-ui.md#6-map-pins-markers-and-the-compass"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "story.notifications",
+    "title": "Notifications",
+    "summary": "notify.show and notify.hide put up the game's warning banner, the centred message, the quest toasts and a subtitle line, removable by the bridge.",
+    "area": "story",
+    "kind": "verb",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.12",
+    "changed_in": "0.8.14",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V12",
+        "milestone": "M4",
+        "note": "Messages to the player (notifications in the DM toolkit).",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["notify.show", "notify.hide"], "events": ["dm.notify"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "DN1",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13",
+          "date": "2026-10-24",
+          "note": "All four shown; onscreen drew at the left edge, moved to the cinematic message position in 0.8.14."
+        },
+        { "row": "BR4", "verdict": "unrun", "note": "The onscreen wording and position." }
+      ]
+    },
+    "limits": ["The shard popup and the experience toast are left out (RB-224)."],
+    "docs": ["knowledge/player-channels.md#36-notifications"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "story.watchers",
+    "title": "In-game watchers",
+    "summary": "watch.arm arms watchers polled in the game (enter, leave, gaze, weapon, combat, vehicle, interact, choice, timer, clock), each firing up to eight micro-actions through the dispatcher's own gates, without the agent.",
+    "area": "story",
+    "kind": "service",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.12",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "S1",
+        "milestone": "M4",
+        "note": "DM watchers for V's own state are part of the event feed.",
+        "since": "2026-10-26"
+      }
+    ],
+    "surface": { "commands": ["watch.arm", "watch.disarm", "watch.list"], "events": ["dm.watch", "dm.micro"], "code": ["native/src/core/DmMicro.cpp"] },
+    "verification": {
+      "rows": [
+        {
+          "row": "DK1",
+          "verdict": "pass",
+          "session": "borg-3",
+          "build": "0.8.17 356f04c4",
+          "date": "2026-10-25",
+          "note": "A weapon watcher fired on weapon.draw and ran both micro-actions."
+        },
+        { "row": "DK2", "verdict": "unrun" },
+        { "row": "DK3", "verdict": "unrun" }
+      ]
+    },
+    "docs": ["knowledge/player-channels.md#5-the-bridges-live-direction-toolkit-0812-what-each-command-drives-and-what-was-left-out"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "story.digest",
+    "title": "The game digest",
+    "summary": "game.digest reads V, the world, what the bridge placed and changed, watchers, quests, the phone and recent events in one call.",
+    "area": "story",
+    "kind": "sense",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "works",
+    "priority": "P3",
+    "since": "0.8.12",
+    "surface": { "commands": ["game.digest"] },
+    "docs": ["knowledge/player-channels.md#5-the-bridges-live-direction-toolkit-0812-what-each-command-drives-and-what-was-left-out"],
+    "notes": "Borg 1 used it throughout in place of DK1 to DK3, and a 2 s digest poller was the first watcher before the recorder.",
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "story.dm-release",
+    "title": "The DM toolkit's release",
+    "summary": "Everything the live-direction toolkit brings in or changes is put back by the kill switch, the pause, a handover or loading a save; a door or vehicle changed and changed back by hand holds nothing.",
+    "area": "story",
+    "kind": "safety",
+    "stage": "merged",
+    "evidence": "partial",
+    "health": "caveats",
+    "priority": "P3",
+    "since": "0.8.12",
+    "surface": { "events": ["dm.released"], "code": ["native/src/core/DmService.cpp"] },
+    "verification": {
+      "rows": [
+        { "row": "DR1", "verdict": "pass", "session": "borg-1", "build": "0.8.13", "date": "2026-10-24" },
+        { "row": "DR2", "verdict": "unrun" },
+        {
+          "row": "DR3",
+          "verdict": "pass",
+          "session": "borg-1",
+          "build": "0.8.13",
+          "date": "2026-10-24",
+          "note": "After a load with a crate, tracker and a ringing call, everything released."
+        },
+        { "row": "DR4", "verdict": "pass", "session": "borg-1", "build": "0.8.13", "date": "2026-10-24" },
+        { "row": "BR6", "verdict": "unrun", "note": "Release counts across automatic cleanup." }
+      ]
+    },
+    "known_issues": [
+      {
+        "summary": "Vehicle lock changes keep ownership and the save hold until a save loads, since the lock baseline can't be read back.",
+        "severity": "low",
+        "status": "wontfix",
+        "since": "2026-10-23",
+        "ref": "RB-225"
+      }
+    ],
+    "docs": ["research/runtime/runtime-bridge-test-card.md#dm-toolkit-stacked-onto-session-18"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "story.fact-writes",
+    "title": "Setting quest facts",
+    "summary": "Set quest facts, and keep XF's own facts in a namespace the game won't confuse with its own.",
+    "area": "story",
+    "kind": "verb",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "depends_on": ["world.facts"],
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V7",
+        "milestone": "M5",
+        "note": "Read and set quest facts; keep XF's own (read only today).",
+        "since": "2026-10-26"
+      }
+    ],
+    "unknowns": [
+      {
+        "question": "May the bridge write vanilla state at all in release builds?",
+        "settle_by": "The maintainer's decision O5 (XF Core owned scope)",
+        "needs_game": false
+      }
+    ],
+    "docs": ["research/runtime/xf-core-architecture.md#43-access-classes"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "story.scanner-entries",
+    "title": "Scanner text",
+    "summary": "Our own scanner entries for people and props, so V's scan of a staged person or object reads a line the director wrote.",
+    "area": "story",
+    "kind": "verb",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V8",
+        "milestone": "M4",
+        "note": "Three routes known offline (TweakXL records with a scanning component, run-time events, rewriting chunks), none seen in game.",
+        "since": "2026-10-26"
+      }
+    ],
+    "docs": ["knowledge/player-channels.md#33-the-kiroshi-scanner"],
+    "updated": "2026-10-26"
+  },
+  {
+    "id": "story.rewards",
+    "title": "Rewards and costs",
+    "summary": "Give or take money, items, street cred and fixer standing as a story's outcome.",
+    "area": "story",
+    "kind": "verb",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "V9",
+        "milestone": "M5",
+        "note": "Money, items, street cred and fixer standing.",
+        "since": "2026-10-26"
+      }
+    ],
+    "updated": "2026-10-26"
+  }
+]
