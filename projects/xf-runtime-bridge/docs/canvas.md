@@ -171,10 +171,14 @@ Malformed batches are refused `bad_batch` with the first JSON path at fault.
 ## Showing and hiding
 
 - **Two keys** go through the bridge's own key route, the same one as its stop key, and are rebindable in CET:
-  - `canvas.toggle` shows and hides the canvas (default **Ctrl + Shift + Insert**);
-  - `canvas.mode` switches between radar only and radar with world markers (default **Ctrl + Shift + Delete**).
+  - `canvas.toggle` shows and hides the canvas (default **Insert**);
+  - `canvas.mode` switches between radar only and radar with world markers (default **Delete**).
 
-  Both are toggles, never holds. The defaults follow the stop key's rule (Ctrl + Shift + End): the game's 2.31 default bindings use neither Insert nor Delete. Of the 23 mods in the study library, one HUD editor lists both bare in its key table and one photo-mode mod uses bare Delete inside a text field. None uses either with Ctrl + Shift. Page Up and Page Down were rejected because a photo-mode mod and a HUD mod use them bare. CET's overlay key is chosen by each player, so the load log warns if a canvas key matches it.
+  Both are toggles, never holds. Each is one bare key, so a player can press it mid-play without stopping. Modifiers are avoided because Ctrl and Shift are game keys on their own (crouch, sprint and dodge), so a Ctrl + Shift combination would make V crouch and sprint for a moment. The game's 2.31 default bindings use neither Insert nor Delete; they do use Home, which ruled it out. Among the 23 mods in the study library:
+  - a HUD editor maps both keys, along with nearly every other key, as raw inputs for its own editor;
+  - a photo-mode mod reads Delete only inside its text field.
+
+  Neither conflicts during play. Page Up and Page Down were rejected because two of those mods use them. CET's overlay key is chosen by each player, so the load log warns if a canvas key matches it.
 
   `canvas.state` reports both bindings.
 - **`canvas.visible {visible, mode}`** is a session event each time either changes, so producers can subscribe.
