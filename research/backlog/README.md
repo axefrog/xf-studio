@@ -14,7 +14,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 
 ### In flight
 - **Open High findings:** 1, CORE-03; feature merges run. The core review follows profiles phase 2. *22 Oct*
-- **Profiles phase 2: tabs and contributed defaults** (the single primary focus, next): `ProfileSessions` operations with history, fragments and substitution, feature defaults, Save as default, the tab strip, tab menu and substitution menu, and the **Choose…** routes ([design §9.2](../authoring/profiles-views-layouts-design.md#92-phases)). Phase 1 merged on 22 Oct (`35e3c5b6`); phase 4a, scene runtimes, merged on 24 Oct (`5b315f9b`): one renderer device, runtimes prepared hidden with progress, residency and superseding switches, lighting changes prepared ahead, single-output programs, routing by named view (experiment 043). *24 Oct*
+- **Profiles phase 3: the binding selector, several instances per panel type, the panel picker and every empty state** (the single primary focus). Its plan is being written as experiment 047. Phase 2 (tabs and contributed defaults) is built and on `main`, and its G4 tab-switch gate passes on real data, warm and fresh ([experiment 044](../../experiments/044-profile-tabs/README.md)). Earlier: phase 1 (`35e3c5b6`, 22 Oct) and phase 4a, scene runtimes (`5b315f9b`, 24 Oct). *26 Oct*
 
 ### Beta blockers
 - **Profiles, views and layouts: the whole proposal is pre-beta** (decided 21 Oct; [design](../authoring/profiles-views-layouts-design.md)). Order:
