@@ -1737,6 +1737,8 @@ Roles are cast in **topological order** of their role references. A cycle is a l
    - `limit: 'all'`.
 
    A preferred identity is added to the candidates if it satisfies the effective `must`.
+
+   **A nominal kind** (one with no structural members of its own, such as `core:actor`, S0 §3) can't be found by a structural query. For such a role, run the query once for each structural kind that is compatible with it (`isCompatibleKind`, S0 v4.14), in ascending kind id, and concatenate the results in that order, each in the query's own order. The keyed draw then sees one stable pool across runs and reloads. The kernel query itself is unchanged. (Decided 27 October 2026; built with the M3 run-3 harness; adopted in this spec's next version pass.)
 4. **Source filters.** For an instance the director sowed, every role's candidates exclude:
    - main-story (spine) characters;
    - NPCs on the player's exclusion lists.

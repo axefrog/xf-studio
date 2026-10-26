@@ -314,6 +314,7 @@ core:person      facets: actor
                                    mirrored from the game's child flag for mirrored people; declared for pack people.
                                    Floor checks treat a missing reading as minor)
 core:group       facets: actor, group   slots: name (node core:name), drives (many node core:drive-state)
+core:actor       abstract (decided 27 October 2026, for the next version pass): no slots and no structural members. core:person and core:group (and every kind that classifies as either) classify as core:actor, so a role meaning "any person or group" uses kind core:actor through isCompatibleKind. Generic queries stay structural; the seed kind, which also carries the actor facet, does not classify as core:actor.
 core:place       facets: place          slots: position (vec 3), district (ref core:place), public (enum)
 core:event       facets: event          (§9.2)
 core:summary     facets: summary        (§9.3)
