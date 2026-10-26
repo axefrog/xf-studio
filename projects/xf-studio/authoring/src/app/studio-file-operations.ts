@@ -61,10 +61,13 @@ export type StudioFileState = { workspaceFile?: boolean; busy?: StudioFileAction
   recovery: { available: boolean; reason?: string } };
 export type InputCapture = { check(): Capability; release(): void };
 export type FileWriterCapture = InputCapture & { writer: FileWriter };
-export type FileWriter = Omit<FileSources, "capture">;
+type CollectionOperationPort = Pick<CollectionService, "summary" | "activity" | "cancel" | "subscribe" | "capability">;
+export type FileWriter = Omit<FileSources, "capture" | "operations"> & { operations(): CollectionOperationPort };
 type FileSources = {
   /** Freeze the destination/revisions when a workflow starts; validate again after every asynchronous return. */
   capture?(): FileWriterCapture | undefined;
+  /** Execution, progress notifications and Stop must belong to the same concrete service. */
+  operations?(): CollectionOperationPort;
   message?(): string | undefined;
   collection?(): string | undefined;
   recipe(): ReadonlyDeep<Recipe>;
@@ -101,51 +104,87 @@ export class StudioFileOperations {
   private disposed = false;
   private collection?: CollectionService;
   private collectionUnsubscribe?: () => void;
-  private busy?: { kind: StudioFileAction["kind"]; owner: symbol; id: number; startedAt: number };
+  private busy?: { kind: StudioFileAction["kind"]; owner: symbol; id: number; startedAt: number; collection?: CollectionOperationPort };
+  private operations = new Set<{ id: number; collection: CollectionOperationPort; unsubscribe(): void }>();
+  private completedProgress?: CollectionProgress;
   private sequence = 0;
   private last?: StudioFileState["last"];
   private package?: PackageResult;
   private listeners = new Set<() => void>();
   constructor(private port: StudioFilePort, private sources: FileSources) {}
-  dispose() { this.disposed = true; this.collectionUnsubscribe?.(); this.listeners.clear(); }
+  dispose() { this.disposed = true; this.collectionUnsubscribe?.(); for (const operation of this.operations) operation.unsubscribe(); this.listeners.clear(); }
   attachCollection(collection: CollectionService) {
     this.collectionUnsubscribe?.(); this.collection = collection;
     this.collectionUnsubscribe = collection.subscribe(() => this.notify()); this.notify();
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   private notify() { for (const listener of this.listeners) listener(); }
+  private observe(sources: FileSources) {
+    const collection = sources.operations?.() ?? this.collection;
+    this.completedProgress = undefined;
+    if (!collection) return { collection, release: () => {} };
+    const operation = { id: ++this.sequence, collection,
+      unsubscribe: collection === this.collection ? () => {} : collection.subscribe(() => this.notify()) };
+    this.operations.add(operation);
+    return { collection, release: () => {
+      // Keep the terminal line as plain data; the captured facade may be disposed immediately after this.
+      if (collection !== this.collection) this.completedProgress = collection.summary().progress;
+      operation.unsubscribe(); this.operations.delete(operation);
+      if (collection !== this.collection) this.notify();
+    } };
+  }
+  private operationSources() {
+    const sources = new Map<CollectionOperationPort, number>();
+    if (this.collection) sources.set(this.collection, 0);
+    for (const operation of this.operations) if (!sources.has(operation.collection)) sources.set(operation.collection, operation.id);
+    return sources;
+  }
+  private progressSource() {
+    const sources = [...this.operationSources().keys()];
+    return sources.find(source => source.activity()?.action === "build") ?? sources.find(source => source.activity()) ??
+      this.busy?.collection ?? [...this.operations].at(-1)?.collection;
+  }
   snapshot(): ReadonlyDeep<StudioFileState> {
     // The primitive summary carries busy/progress without cloning every preset's Undo history.
-    const collection = this.collection?.summary(), progress = collection?.progress;
+    const source = this.progressSource(), progress = source ? source.summary().progress : this.completedProgress ?? this.collection?.summary().progress;
+    const collectionBusy = [...this.operationSources().keys()].some(source => source.summary().busy);
     const shown = this.collection?.draftIdentity()?.collectionId ?? "";
     const recovery = this.collection?.actionCapability({ kind: "collection.undoOpen", collection: shown }) ??
       { available: false, reason: "Collection is still loading." };
-    return structuredClone({ workspaceFile: !!this.port.revealWorkspace, busy: this.busy?.kind, collectionBusy: collection?.busy ?? false,
+    return structuredClone({ workspaceFile: !!this.port.revealWorkspace, busy: this.busy?.kind, collectionBusy,
       last: this.last, package: this.package && { ...this.package,
         freshness: this.collection?.lastPackageIsCurrent() ? "current" : "stale" },
       progress, activity: this.activity(), recovery });
   }
   /** Current file and collection work as one list; the collection request is folded into its file workflow. */
   activity(): StudioActivity[] {
-    const request = this.collection?.activity(), list: StudioActivity[] = [];
+    return this.activityOwners().map(item => item.entry);
+  }
+  private activityOwners(): { entry: StudioActivity; collection?: CollectionOperationPort }[] {
+    const list: { entry: StudioActivity; collection?: CollectionOperationPort }[] = [];
     const scopeOf = (kind: string) => kind.startsWith("package") ? "package" as const :
       kind.startsWith("collection") || kind === "initialize" || kind === "refresh" || kind === "open" ||
       kind === "save" || kind === "saveCopy" || kind === "import" || kind.startsWith("export") ? "collection" as const : "file" as const;
+    const request = this.busy?.collection?.activity();
     // A Build started through the collection port may run beside a file picker. It keeps its own Stop.
     const separateBuild = request?.kind === "package" && request.action === "build" && this.busy?.kind !== "package.build";
-    if (this.busy) list.push({ id: `file-${this.busy.id}`, scope: scopeOf(this.busy.kind), kind: this.busy.kind,
-      startedAt: this.busy.startedAt, ...(request && !separateBuild ? { requestId: request.requestId } : {}), cancellable: !separateBuild && (request?.cancellable ?? false) });
-    if (request && (!this.busy || separateBuild)) list.push({ id: `request-${request.requestId}`, scope: request.kind === "package" ? "package" : "collection",
-      kind: request.kind === "package" ? `package.${request.action}` : request.kind, startedAt: request.startedAt,
-      requestId: request.requestId, cancellable: request.cancellable });
+    if (this.busy) list.push({ collection: this.busy.collection, entry: { id: `file-${this.busy.id}`, scope: scopeOf(this.busy.kind), kind: this.busy.kind,
+      startedAt: this.busy.startedAt, ...(request && !separateBuild ? { requestId: request.requestId } : {}), cancellable: !separateBuild && (request?.cancellable ?? false) } });
+    for (const [collection, id] of this.operationSources()) {
+      const running = collection.activity();
+      if (!running || (this.busy?.collection === collection && !separateBuild)) continue;
+      list.push({ collection, entry: { id: id ? `request-${id}-${running.requestId}` : `request-${running.requestId}`,
+        scope: running.kind === "package" ? "package" : "collection",
+        kind: running.kind === "package" ? `package.${running.action}` : running.kind, startedAt: running.startedAt,
+        requestId: running.requestId, cancellable: running.cancellable } });
+    }
     return list;
   }
   /** Build delegates cancellation to its collection owner; other accepted work finishes. */
   cancel(id: string): CancelResult {
-    const entry = this.activity().find(entry => entry.id === id);
-    if (entry?.cancellable && entry.requestId !== undefined) return this.collection!.cancel(entry.requestId);
-    const known = this.activity().some(entry => entry.id === id);
-    return { accepted: false, reason: known
+    const owner = this.activityOwners().find(item => item.entry.id === id), entry = owner?.entry;
+    if (entry?.cancellable && entry.requestId !== undefined) return owner!.collection!.cancel(entry.requestId);
+    return { accepted: false, reason: entry
       ? "This work cannot be cancelled once started; its result will still arrive and can be retried after it completes."
       : "Nothing with that ID is running." };
   }
@@ -156,7 +195,7 @@ export class StudioFileOperations {
       return build?.cancellable ? { available: true } : { available: false, reason: build
         ? "Waiting for the host to finish stopping or completing the Build." : "No Build is running." };
     }
-    if (this.busy) return { available: false, reason: this.busy.kind === "package.build" && this.collection?.activity()?.cancellable === false
+    if (this.busy) return { available: false, reason: this.busy.kind === "package.build" && this.busy.collection?.activity()?.cancellable === false
       ? "The Build is stopping. Wait for the host to finish cleanup." : "Another file operation is in progress." };
     // What a picker's file goes to is named when it is asked (profiles design §3.3), never decided when the file arrives.
     if (action.kind === "recipe.import" && !action.collection) return refusal("missing_target", "Open a collection first.");
@@ -181,7 +220,7 @@ export class StudioFileOperations {
         ...(action.draft !== undefined ? { draft: action.draft } : {}) }) ??
         { available: false, reason: "Collection is still loading." };
       case "package.build": {
-        const base = this.collection?.capability(collectionRequest(action.kind)) ??
+        const base = (this.progressSource() ?? this.collection)?.capability(collectionRequest(action.kind)) ??
           { available: false, reason: "Collection is still loading." };
         if (!base.available) return base;
         const build = this.sources.buildReadiness?.();
@@ -193,7 +232,7 @@ export class StudioFileOperations {
       }
       default: {
         const request = collectionRequest(action.kind);
-        return this.collection?.capability(request) ??
+        return (this.progressSource() ?? this.collection)?.capability(request) ??
           { available: false, reason: "Collection is still loading." };
       }
     }
@@ -210,6 +249,7 @@ export class StudioFileOperations {
     }
     const captured = this.sources.capture?.();
     const sources = captured?.writer ?? this.sources;
+    const operation = this.observe(sources);
     const check = () => {
       const allowed = this.disposed ? refusal("missing_target", "This file destination was released.") : captured?.check();
       if (allowed && !allowed.available) throw new FileOperationError(allowed.code ?? "missing_target", allowed.reason ?? "This file destination changed.");
@@ -218,7 +258,7 @@ export class StudioFileOperations {
     };
     if (action.kind === "package.check" || action.kind === "package.build") this.clearPackageOutcome();
     const owner = Symbol(action.kind);
-    this.busy = { kind: action.kind, owner, id: ++this.sequence, startedAt: Date.now() }; this.notify();
+    this.busy = { kind: action.kind, owner, id: ++this.sequence, startedAt: Date.now(), collection: operation.collection }; this.notify();
     try {
       check();
       let outcome: StudioFileOutcome;
@@ -310,7 +350,7 @@ export class StudioFileOperations {
           if (result.result.kind === "packageCheck" || result.result.kind === "packageBuild")
             this.package = structuredClone(result.result);
           outcome = { ok: true, code: result.result.kind,
-            message: sources.message?.() ?? this.collection?.view().progress?.message ?? "Collection operation completed.", result: result.result };
+            message: sources.message?.() ?? operation.collection?.summary().progress?.message ?? "Collection operation completed.", result: result.result };
         }
       }
       return this.finish(owner, action.kind, outcome);
@@ -321,11 +361,12 @@ export class StudioFileOperations {
       if (action.kind === "characterPreset.import" && error instanceof SyntaxError)
         return this.finish(owner, action.kind, { ok: false, code: "invalid_json", message: "This character preset can't be read: it is not valid JSON." });
       return this.finish(owner, action.kind, { ok: false, code, message: prefix + (error as Error).message });
-    } finally { captured?.release(); }
+    } finally { operation.release(); captured?.release(); }
   }
   /** Existing save/open/refresh requests share the same result/download state port. */
   async executeCollection(request: CollectionRequest): Promise<CollectionOutcome> {
     const captured = this.sources.capture?.(), sources = captured?.writer ?? this.sources;
+    const operation = this.observe(sources);
     const current = () => this.disposed ? refusal("missing_target", "This file destination was released.") : captured?.check();
     try {
       const allowed = current();
@@ -340,10 +381,10 @@ export class StudioFileOperations {
         request.kind === "exportCollection" ? "collection.export" : request.kind === "exportPlan" ? "collection.plan" :
         request.kind === "import" ? "collection.import" : request.kind,
         ok: result.ok, code: result.ok ? result.result.kind : result.code,
-        message: result.ok ? sources.message?.() ?? this.collection?.view().progress?.message ?? "Collection operation completed." : result.message, at: Date.now() };
+        message: result.ok ? sources.message?.() ?? operation.collection?.summary().progress?.message ?? "Collection operation completed." : result.message, at: Date.now() };
       this.notify();
       return result;
-    } finally { captured?.release(); }
+    } finally { operation.release(); captured?.release(); }
   }
   private clearPackageOutcome(): void {
     this.package = undefined;

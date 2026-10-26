@@ -8,6 +8,9 @@ import type { Layer } from "../src/engines/layered-makeup/recipe";
 import type { GenericFeatureFacade } from "../src/app/studio-presentation";
 import { STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { initialRecipe } from "./fixtures/eye-region";
+import { CollectionServiceError } from "../src/library/collection-service";
+import type { PackageBuildProgress } from "../src/platform/api";
+import { eyeCheck } from "./fixtures/package-results";
 
 async function until(ready: () => boolean) {
   const deadline = Date.now() + 4000;
@@ -23,20 +26,99 @@ test("review High / rule A: a root collection picker holds A's writer through a 
   let answer!: (file: StudioPickedFile) => void;
   const w = await profileContextStudio({ pick: () => new Promise(done => { answer = done; }) });
   try {
+    const progress: string[] = [], off = w.port.subscribe(() => {
+      const line = w.port.files.snapshot().progress; if (line) progress.push(`${line.phase}:${line.code}`);
+    });
     const scenes = w.session.session().views.scenes, other = structuredClone(w.session.scene(scenes[1]!.id));
     const file = picked({ schema: "xfs/collection-2", id: crypto.randomUUID(), name: "Imported into A", presets: [
       { id: crypto.randomUUID(), name: "Captured", revision: 1, parts: w.services.collections.look(w.looks[0]!)!.parts }] });
     const pending = w.port.files.execute({ kind: "collection.import" });
+    expect(w.port.files.activity()).toMatchObject([{ kind: "collection.import", cancellable: false }]);
     w.draw((w.session.session().views.views as readonly ViewRecord[])[1]!.id);
     expect(w.authoring.contexts.held().some(entry => entry.ref.look === w.looks[0]!.look && entry.wants > 0)).toBe(true);
     answer(file);
     expect(await pending).toMatchObject({ ok: true, code: "imported" });
+    expect(progress).toContain("working:import"); expect(progress).toContain("success:imported"); off();
+    expect(w.port.files.snapshot()).toMatchObject({ collectionBusy: false, activity: [], progress: { code: "imported", phase: "success" } });
     expect(w.session.scene(scenes[0]!.id).look!.collection).not.toBe(w.looks[0]!.collection);
     expect(w.services.collections.collection(w.session.scene(scenes[0]!.id).look!.collection)!.name).toBe("Imported into A");
     expect(w.session.scene(scenes[1]!.id)).toEqual(other);
     expect(w.authoring.drawn.ref()).toEqual(w.looks[1]); expect(w.targets.held()).toBe(0);
   } finally { await w.dispose(); }
 });
+
+for (const target of ["root", "pinned"] as const) for (const entry of ["files", "library", "authoring"] as const) {
+  test(`rule A / PIPE-131: ${target} Build keeps observable progress and Stop on its captured service (${entry})`, async () => {
+    const w = await profileContextStudio();
+    let acknowledge: (() => void) | undefined, off = () => {};
+    try {
+      await w.settle();
+      const port = target === "root" ? w.port : w.bind("presets--scene2").context.current();
+      const ref = w.looks[target === "root" ? 0 : 2]!, before = JSON.stringify(w.services.collections.list());
+      let signal: AbortSignal | undefined, input: unknown;
+      let stage: PackageBuildProgress = { stage: "convert", step: 3, steps: 5, looks: 2 };
+      w.collectionTransport.packageProgress = async () => stage;
+      w.collectionTransport.package = (_action, value, abort) => new Promise((_resolve, reject) => {
+        input = value; signal = abort;
+        acknowledge = () => reject(new CollectionServiceError("package_build_cancelled", "Build stopped. Your mod files weren't changed."));
+      });
+      const lines: string[] = [];
+      off = port.subscribe(() => { const line = port.files.snapshot().progress; if (line) lines.push(line.message); });
+      const pending = entry === "files" ? port.files.execute({ kind: "package.build" }) : port[entry].execute({ kind: "package", action: "build" });
+      await until(() => !!signal && port.files.snapshot().progress?.fraction === .5);
+      expect(input).toMatchObject({ id: ref.collection, presets: expect.arrayContaining([expect.objectContaining({ id: ref.look })]) });
+      expect(port.files.snapshot()).toMatchObject({ collectionBusy: true, progress: {
+        phase: "working", message: "Step 3 of 5: Converting 2 looks…", fraction: .5 } });
+      const activity = port.files.activity();
+      expect(activity).toHaveLength(1); expect(activity[0]).toMatchObject({ kind: "package.build", cancellable: true, requestId: expect.any(Number) });
+      const other = (w.session.session().views.views as readonly ViewRecord[])[1]!;
+      w.history.focus.focusView(other.id); w.draw(other.id);
+      stage = { stage: "verify", step: 5, steps: 5, looks: 2 };
+      await until(() => port.files.snapshot().progress?.fraction === .9);
+      expect(lines).toContain("Step 5 of 5: Checking the mod files…");
+      expect(port.files.activity()[0]!.id).toBe(activity[0]!.id);
+      expect(port.files.capability({ kind: "package.stop" }).available).toBe(true);
+      expect(await port.files.execute({ kind: "package.stop" })).toMatchObject({ ok: true, code: "stopping" });
+      expect(signal!.aborted).toBe(true);
+      expect(port.files.snapshot()).toMatchObject({ collectionBusy: true, progress: { phase: "working", message: "Stopping…" },
+        activity: [{ kind: "package.build", cancellable: false }] });
+      expect(port.files.capability({ kind: "package.stop" }).available).toBe(false);
+      expect(port.files.capability({ kind: "package.build" }).available).toBe(false);
+      acknowledge!();
+      expect(await pending).toMatchObject({ ok: false, code: "package_build_cancelled" });
+      expect(port.files.snapshot()).toMatchObject({ collectionBusy: false, activity: [],
+        last: { kind: "package.build", code: "package_build_cancelled" }, progress: { phase: "error", code: "package_build_cancelled" } });
+      expect(port.files.snapshot().package).toBeUndefined();
+      expect(w.targets.held()).toBe(0); expect(JSON.stringify(w.services.collections.list())).toBe(before);
+      expect(w.authoring.drawn.ref()).toEqual(w.looks[1]);
+    } finally { acknowledge?.(); off(); await w.dispose(); }
+  });
+}
+
+for (const target of ["root", "pinned"] as const) for (const entry of ["files", "library"] as const) {
+  test(`rule A: ${target} Check exposes its captured request without advertising cancellation (${entry})`, async () => {
+    const w = await profileContextStudio(); let finish: (() => void) | undefined;
+    try {
+      await w.settle();
+      const port = target === "root" ? w.port : w.bind("presets--scene2").context.current();
+      w.collectionTransport.package = async (_action, input, signal) => {
+        expect(signal).toBeUndefined(); await new Promise<void>(done => { finish = done; });
+        return eyeCheck(input as { id: string }, { presets: [] });
+      };
+      const pending = entry === "files" ? port.files.execute({ kind: "package.check" }) : port.library.execute({ kind: "package", action: "check" });
+      await until(() => !!finish);
+      const other = (w.session.session().views.views as readonly ViewRecord[])[1]!;
+      w.history.focus.focusView(other.id); w.draw(other.id);
+      expect(port.files.snapshot()).toMatchObject({ collectionBusy: true, progress: { phase: "working", code: "package" },
+        activity: [{ kind: "package.check", cancellable: false, requestId: expect.any(Number) }] });
+      expect(port.files.cancel(port.files.activity()[0]!.id).accepted).toBe(false);
+      expect(port.files.capability({ kind: "package.stop" }).available).toBe(false);
+      finish!(); expect(await pending).toMatchObject({ ok: true });
+      expect(port.files.snapshot()).toMatchObject({ collectionBusy: false, activity: [], progress: { phase: "success", code: "packageCheck" } });
+      expect(w.targets.held()).toBe(0);
+    } finally { finish?.(); await w.dispose(); }
+  });
+}
 
 for (const entry of ["library", "authoring"] as const) test(`review Medium 3 / rule A: accepted follow-focus saveCopy retains its writer (${entry} entry)`, async () => {
   const w = await profileContextStudio();

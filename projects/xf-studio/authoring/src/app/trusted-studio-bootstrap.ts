@@ -97,6 +97,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   if (options.signal?.aborted) life.abort();
   let collection: CollectionApplication, editing: PanelEditingContexts<Slot> | undefined;
   const writer: FileWriter = {
+    operations: () => collection.service,
     message: () => collection.service.view().progress?.message,
     collection: () => collection.service.draftIdentity()?.collectionId,
     recipe: () => core.presentation.recipe(), selectedLayer: () => core.presentation.layer(),
