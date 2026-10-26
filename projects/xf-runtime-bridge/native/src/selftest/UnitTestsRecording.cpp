@@ -85,7 +85,7 @@ int RecordingUnitTests()
         early.Start({{"channels", {"subtitles", "voice"}}}, 50, 1, 1, "not-ready");
         int controllers = 0;
         Ops tap; tap.guard = [] {}; tap.sample = [&](const std::string&, const std::vector<std::string>&) {
-            return json{{"event", "tap.coverage"}, {"valid", controllers == 2}, {"controller_count", controllers}}; };
+            return json{{"event", "tap.coverage"}, {"valid", controllers == 2}, {"controller_count", controllers}, {"source_listeners", 3}, {"registry_overflow", false}}; };
         early.Tick(50.0, 1, 1, true, 1, tap);  // the first heartbeat, no controllers: not ready
         controllers = 2;
         early.Tick(51.0, 1, 1, true, 2, tap);  // ready
@@ -104,6 +104,40 @@ int RecordingUnitTests()
         late.Tick(63.0, 1, 1, true, 1, tap); // past the window: invalid
         Check(late.Read({{"run", 1}}, 63.1)["invalid"] == 1, "0.8.22: no controllers past the not-ready window is invalid");
         late.Stop("test", 63.2);
+        // Review (Low 7): ready on the first heartbeat, then the controllers go at 1 s, inside the window: invalid, no not_ready.
+        Service lost;
+        lost.Start({{"channels", {"subtitles"}}}, 70, 1, 1, "lost");
+        controllers = 2;
+        lost.Tick(70.0, 1, 1, true, 1, tap);
+        controllers = 0;
+        lost.Tick(71.0, 1, 1, true, 2, tap);
+        const auto lostPage = lost.Read({{"run", 1}}, 71.1);
+        Check(lostPage["invalid"] == 1 && lostPage["not_ready"] == 0 && lostPage["records"][1]["valid"] == false,
+              "0.8.22 review: controllers lost after the tap was ready are invalid even inside the start-up window");
+        lost.Stop("test", 71.2);
+        // Review (Medium 5): the exception covers only an otherwise healthy tap (all listeners, no overflow), and a run whose tap
+        // never became ready says so: the channel is not ready and the run is not complete.
+        Service unhealthy;
+        unhealthy.Start({{"channels", {"voice"}}}, 80, 1, 1, "unhealthy");
+        Ops broken; broken.guard = [] {}; broken.sample = [](const std::string&, const std::vector<std::string>&) {
+            return json{{"event", "tap.coverage"}, {"valid", false}, {"controller_count", 0}, {"source_listeners", 2}, {"registry_overflow", false}}; };
+        unhealthy.Tick(80.0, 1, 1, true, 1, broken);
+        const auto unhealthyPage = unhealthy.Read({{"run", 1}}, 80.1);
+        Check(unhealthyPage["invalid"] == 1 && unhealthyPage["not_ready"] == 0, "0.8.22 review: a missing source listener is invalid even at start-up");
+        unhealthy.Stop("test", 80.2);
+        Service never;
+        never.Start({{"channels", {"subtitles", "v"}}}, 90, 1, 1, "never");
+        controllers = 0;
+        never.Tick(90.0, 1, 1, true, 1, tap);
+        const auto neverPage = never.Read({{"run", 1}}, 90.1);
+        Check(neverPage["not_ready"] == 1 && neverPage["channel_stats"]["subtitles"]["ready"] == false && neverPage["tap_not_ready"] == json::array({"subtitles"}) &&
+                  neverPage["complete_coverage"] == false,
+              "0.8.22 review: a run whose tap never became ready shows the channel not ready and its coverage incomplete");
+        controllers = 2;
+        never.Tick(91.0, 1, 1, true, 2, tap);
+        const auto readyPage = never.Read({{"run", 1}}, 91.1);
+        Check(readyPage["channel_stats"]["subtitles"]["ready"] == true && readyPage["tap_not_ready"].empty(), "0.8.22 review: readiness once the tap is ready");
+        never.Stop("test", 91.2);
     }
     {
         Service replay;

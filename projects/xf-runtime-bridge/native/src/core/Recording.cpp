@@ -75,7 +75,8 @@ void Service::WriteFiles()
                 auto manifest = Read({{"run", m_run}, {"since", cursor}}, Now());
                 manifest.erase("records"); manifest["chunks"] = chunks; manifest["file_bytes"] = total;
                 manifest["writer_pending"] = false; manifest["file_lost"] = lost;
-                manifest["complete"] = lost == 0 && manifest.at("sample_ticks") > 0 && manifest.at("dropped") == 0 && manifest.at("missed_deadlines") == 0 && manifest.at("invalid") == 0;
+                manifest["complete"] = lost == 0 && manifest.at("sample_ticks") > 0 && manifest.at("dropped") == 0 && manifest.at("missed_deadlines") == 0 && manifest.at("invalid") == 0 &&
+                                       manifest.value("complete_coverage", true);
                 std::ofstream out(m_output / "manifest.json.tmp", std::ios::binary);
                 out << SerializeJson(manifest) << '\n'; out.flush();
                 if (!out) throw std::runtime_error("manifest write failed");
@@ -105,12 +106,17 @@ json Service::Status(double now) const
         counts[channel] = {{"attempts", n[0]}, {"valid", n[1]}, {"actual_hz", elapsed > 0 ? static_cast<double>(n[0]) / elapsed : 0},
                            {"valid_hz", elapsed > 0 ? static_cast<double>(n[1]) / elapsed : 0}};
         if (const auto it = m_notReadyCounts.find(channel); it != m_notReadyCounts.end()) counts[channel]["not_ready"] = it->second;
+        if (channel == "subtitles" || channel == "voice") counts[channel]["ready"] = m_tapReady.count(channel) > 0;
     }
+    // Review (Medium 5): the selected tap channels that have not once been ready in this run.
+    json tapNotReady = json::array();
+    for (const auto& channel : m_channels)
+        if ((channel == "subtitles" || channel == "voice") && !m_tapReady.count(channel)) tapNotReady.push_back(channel);
     return {{"schema", "xfb/recording-1"}, {"plugin_version", XFB_VERSION_STRING}, {"run", m_run}, {"session", m_session}, {"pid", GetCurrentProcessId()},
         {"world_generation", m_world}, {"connection", m_connection}, {"active", m_active}, {"reason", m_reason},
         {"clock", "QueryPerformanceCounter_seconds"}, {"source_now_s", now}, {"start_s", m_start}, {"end_s", m_active ? json(nullptr) : json(m_end)},
         {"requested_hz", 10}, {"actual_hz", elapsed > 0 ? static_cast<double>(m_samples) / elapsed : 0}, {"channel_stats", counts},
-        {"sample_ticks", m_samples}, {"missed_deadlines", m_missed}, {"dropped", m_dropped + m_ingressDropped.load()}, {"invalid", m_invalid}, {"not_ready", m_notReady}, {"bytes", m_bytes},
+        {"sample_ticks", m_samples}, {"missed_deadlines", m_missed}, {"dropped", m_dropped + m_ingressDropped.load()}, {"invalid", m_invalid}, {"not_ready", m_notReady}, {"tap_not_ready", tapNotReady}, {"complete_coverage", tapNotReady.empty()}, {"bytes", m_bytes},
         {"largest_gap_s", m_gap}, {"age_s", m_samples ? json(std::max(0.0, now - m_last)) : json(nullptr)},
         {"latest", m_latest}, {"channels", m_channels}, {"actors", m_actors}, {"capacity", kCapacity},
         {"output", m_output.string()}, {"writer_pending", m_writerBusy}, {"file_error", m_fileError},
@@ -207,7 +213,8 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
         if ((channel == "subtitles" || channel == "voice") && payload.is_object())
         {
             if (valid) m_tapReady.insert(channel);
-            else if (!m_tapReady.count(channel) && now - m_start < kTapNotReadyS && payload.value("controller_count", -1) == 0)
+            else if (!m_tapReady.count(channel) && now - m_start < kTapNotReadyS && payload.value("controller_count", -1) == 0 &&
+                     payload.value("source_listeners", -1) == 3 && payload.value("registry_overflow", true) == false)
             {
                 // Not invalid: the HUD's subtitle controllers haven't been created yet after the world started.
                 payload["reason"] = "not_ready";
