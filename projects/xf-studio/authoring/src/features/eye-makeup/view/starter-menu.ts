@@ -62,7 +62,8 @@ export function renameCommand(ctx: EyeMakeupViewContext, listing: StarterListing
 }
 /** Rename an own starter in the value popover (1 to 60 characters). */
 function rename(ctx: EyeMakeupViewContext, item: StarterView, anchor: MenuAnchor) {
-  openValuePopover({ kind: "text", label: "Name", value: item.name, maxLength: 61 }, anchor, { title: "Rename starter", apply: "Rename",
+  const held = ctx.capture?.(); ctx = held?.context ?? ctx;
+  openValuePopover({ kind: "text", label: "Name", value: item.name, maxLength: 61 }, anchor, { title: "Rename starter", apply: "Rename", signal: held?.signal, onClose: held?.release,
     validate: value => ctx.starters.capability({ kind: "starters.rename", starter: item.id, name: String(value) }),
     commit: value => { ctx.platform({ kind: "starters.rename", starter: item.id, name: String(value) }); } });
 }
@@ -75,9 +76,10 @@ function remove(ctx: EyeMakeupViewContext, item: StarterView) {
 
 /** Save a layer's shape as the person's own starter: its name in the value popover (1 to 60 characters, the layer's name to start). */
 export function saveStarter(ctx: EyeMakeupViewContext, layerId: string, anchor: MenuAnchor, look = ctx.starters.look()) {
+  const held = ctx.capture?.(); ctx = held?.context ?? ctx;
   const layer = ctx.facade.view().recipe().layers.find(item => item.id === layerId);
-  if (!layer || !look) return;
-  openValuePopover({ kind: "text", label: "Name", value: layer.name.slice(0, 60), maxLength: 61 }, anchor, { title: "Save shape as starter", apply: "Save",
+  if (!layer || !look) { held?.release(); return; }
+  openValuePopover({ kind: "text", label: "Name", value: layer.name.slice(0, 60), maxLength: 61 }, anchor, { title: "Save shape as starter", apply: "Save", signal: held?.signal, onClose: held?.release,
     hint: "Saves this layer's shape, softness and opacity as a starter of yours. Eye makeup's starters stay available.",
     validate: value => ctx.starters.capability({ kind: "starters.save", look, layerId, name: String(value) }),
     commit: value => { if (ctx.platform({ kind: "starters.save", look, layerId, name: String(value) }))

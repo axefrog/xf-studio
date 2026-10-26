@@ -73,17 +73,35 @@ export type AnchorState = "visible" | "hidden" | "missing";
  */
 export class AnchorRegistry<T extends AnchorTarget = HTMLElement> {
   private elements = new Map<AnchorId, T>();
+  private instances = new Map<AnchorId, Map<string, T>>();
+  /** Instance registrations are independent; a type-level tour chooses the first visible survivor. */
+  scoped(instance: string, signal: AbortSignal): AnchorRegistry<T> {
+    const releases = new Set<() => void>();
+    signal.addEventListener("abort", () => { for (const off of releases) off(); releases.clear(); }, { once: true });
+    return new Proxy(this, { get: (target, key) => key === "register" ? (id: AnchorId, element: T) => {
+      if (!isAnchorId(id)) throw Error(`Unknown guidance anchor ${id}`);
+      if (signal.aborted) return () => {};
+      let group = this.instances.get(id); if (!group) this.instances.set(id, group = new Map());
+      group.set(instance, element);
+      const off = () => { if (group!.get(instance) === element) group!.delete(instance); if (!group!.size && this.instances.get(id) === group) this.instances.delete(id); releases.delete(off); };
+      releases.add(off); return off;
+    } : typeof Reflect.get(target, key) === "function" ? (Reflect.get(target, key) as Function).bind(target) : Reflect.get(target, key) });
+  }
   /** Register (or replace) an anchor's element. Returns an unregister function. */
   register(id: AnchorId, element: T): () => void {
     if (!isAnchorId(id)) throw Error(`Unknown guidance anchor ${id}`);
     this.elements.set(id, element);
     return () => { if (this.elements.get(id) === element) this.elements.delete(id); };
   }
-  element(id: AnchorId): T | undefined { return this.elements.get(id); }
-  registered(): AnchorId[] { return [...this.elements.keys()]; }
+  element(id: AnchorId): T | undefined {
+    const choices = [...(this.instances.get(id)?.values() ?? [])];
+    return choices.find(element => { const box = element.getBoundingClientRect(); return element.isConnected && box.width > 0 && box.height > 0; })
+      ?? choices.find(element => element.isConnected) ?? this.elements.get(id);
+  }
+  registered(): AnchorId[] { return [...new Set([...this.elements.keys(), ...this.instances.keys()])]; }
   /** The anchor's box, cut to what its scrolling panels actually show (a long list lights only its visible part). */
   rect(id: AnchorId): AnchorRect | undefined {
-    const element = this.elements.get(id);
+    const element = this.element(id);
     if (!element?.isConnected) return undefined;
     const box = element.getBoundingClientRect();
     let left = box.left, top = box.top, right = box.left + box.width, bottom = box.top + box.height;
@@ -99,7 +117,7 @@ export class AnchorRegistry<T extends AnchorTarget = HTMLElement> {
     return right - left > 0 && bottom - top > 0 ? { x: left, y: top, w: right - left, h: bottom - top } : undefined;
   }
   state(id: AnchorId): AnchorState {
-    const element = this.elements.get(id);
+    const element = this.element(id);
     if (!element?.isConnected) return "missing";
     return this.rect(id) ? "visible" : "hidden";
   }

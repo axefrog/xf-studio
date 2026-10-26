@@ -105,3 +105,14 @@ export class RememberedSet {
   /** The open ones among `ids` (the set a tree's `update` takes). */
   of(ids: Iterable<string>): Set<string> { return new Set([...ids].filter(id => this.has(id))); }
 }
+
+/** A controller keeps a fixed namespace even when a callback runs after another instance painted. */
+export function scopedViewState(instance: string | undefined): ViewStateStore {
+  const store = viewState();
+  if (!instance) return store;
+  const key = (value: string) => `${instance}:${value}`;
+  return { expanded: value => store.expanded(key(value)), setExpanded: (values, open) => store.setExpanded(values.map(key), open),
+    folded: prefix => store.folded(key(prefix)).map(value => value.slice(instance.length + 1)),
+    anchor: value => store.anchor(key(value)), setAnchor: (value, anchor) => store.setAnchor(key(value), anchor),
+    size: value => store.size(key(value)), setSize: (value, height) => store.setSize(key(value), height) };
+}

@@ -181,6 +181,7 @@ export type InstallDetectionSnapshot = ReturnType<InstallDetectionActions["snaps
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
   /** Data/facade acquisition only. Controller composition consumes it in P3-iii. */
+  readonly capture?: (signal: AbortSignal) => StudioPresentationPort<Slot>;
   readonly editing?: { acquire(instance: string, signal: AbortSignal): import("./profiles/panel-editing-contexts").PanelEditingPort<Slot> | undefined };
   readonly experiments?: ExperimentPort;
   readonly authoring: PresentationAuthoring;
@@ -311,6 +312,9 @@ export type StudioPresentationPort<Slot> = {
   readonly starters?: StartersPort;
   readonly emptyChoices?: EmptyChoicesPort;
   readonly panels: {
+    capture?(instance: string): () => StudioCapability;
+    target?(instance: string): import("./profiles/profile-sessions").PanelTarget;
+    tabTarget?(tab: string): import("./profiles/profile-sessions").PanelTabTarget;
     instance(panel: string, tab?: string): string;
     /**
      * The history scope Ctrl+Z acts on while focus is in a panel: a 3D view's is the look its scene shows (`look:<collection>/<look>`,
@@ -424,6 +428,8 @@ export function createStudioPresentation<Slot>(sources: {
   outbox?: DocumentOutbox;
   /** A panel's instance in the tab shown (the session's); without it (fixtures, tools) each panel is one instance, `<panel>--local`. */
   panelInstance?: (panel: string, tab?: string) => string;
+  capturePort?: (signal: AbortSignal) => StudioPresentationPort<Slot>;
+  panelTargets?: Pick<StudioPresentationPort<Slot>["panels"], "target" | "tabTarget" | "capture">;
   tabs?: LayoutTabsPort;
   starters?: StartersPort;
   emptyChoices?: EmptyChoicesPort;
@@ -710,7 +716,8 @@ export function createStudioPresentation<Slot>(sources: {
     ...(sources.tabs ? { tabs: sources.tabs } : {}), ...(sources.starters ? { starters: sources.starters } : {}),
     ...(sources.emptyChoices ? { emptyChoices: Object.freeze({ ...sources.emptyChoices,
       capability: (request: EmptyChoiceRequest) => a.emptyChoiceCapability(request), execute: (request: EmptyChoiceRequest) => a.executeEmptyChoice(request) }) } : {}),
-    panels: Object.freeze({ instance: (panel: string, tab?: string) => sources.panelInstance?.(panel, tab) ?? `${panel}--local`,
+    capture: sources.capturePort,
+    panels: Object.freeze({ ...sources.panelTargets, instance: (panel: string, tab?: string) => sources.panelInstance?.(panel, tab) ?? `${panel}--local`,
       historyScope: (panel: string | undefined) => resolver?.undoScope(panel === undefined ? undefined : sources.panelInstance?.(panel)) }),
     focus: Object.freeze({
       view: (view: ViewId) => sources.focus?.focusView(view),

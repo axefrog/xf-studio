@@ -260,7 +260,7 @@ test("feature focus derives per tab from docked instances, including collapsed a
   const focused = (tab: LayoutTab, size: "wide" | "compact" = "wide") => activeModules(tab, (tab.dock?.state as unknown as import("../src/studio-ui/dock/layout").DockState | undefined)?.[size], STUDIO_MODULE_REGISTRATION.modules, STUDIO_CATALOGUE);
   expect(focused(eye)).toEqual(["eye-makeup"]);
   expect(focused(library)).toEqual(["eye-makeup"]);
-  expect(activeModules(eye, { root: group(["presets"]), floating: [], closed: [] }, STUDIO_MODULE_REGISTRATION.modules, STUDIO_CATALOGUE)).toEqual(["eye-makeup"]);
+  expect(activeModules(eye, { root: group(["presets"]), floating: [], closed: [] }, STUDIO_MODULE_REGISTRATION.modules, STUDIO_CATALOGUE)).toEqual([]);
   expect(activeModules(eye, { root: null, floating: [], closed: ["presets"] }, STUDIO_MODULE_REGISTRATION.modules, STUDIO_CATALOGUE)).toEqual([]);
   expect(focused(poses)).toEqual(["poses"]);
   const closed = structuredClone(eye), state = closed.dock!.state as unknown as import("../src/studio-ui/dock/layout").DockState;

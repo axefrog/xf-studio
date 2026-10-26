@@ -1,3 +1,4 @@
+import { capturedItems } from "../captured-runtime";
 import { keyBinding, panelModifiersHeld } from "../../app/input-bindings";
 import { button } from "../controls";
 import { clamp, firstControl, h, setAttr } from "../dom";
@@ -42,6 +43,9 @@ export type DockViewOptions = {
   /** The shell may supply its own empty state when there is no layout to reset. */
   emptyState?(): HTMLElement | undefined;
   /** Someone asked to open a panel this dock doesn't hold now (its module is hidden): the shell offers to show it. */
+  /** Membership is a recorded session operation; floating/collapse/navigation remain local. U4 presentation seam. */
+  capture?(id: PanelId): () => { available: boolean; reason?: string };
+  semantic?(kind: "show" | "remove", id: PanelId): boolean;
   withdrawn?(id: PanelId): void;
 };
 const sideNames: Record<Side, string> = { left: "left", right: "right", top: "above", bottom: "below" };
@@ -513,6 +517,7 @@ export class DockView {
    * group. Focus moves to its tab, unless the caller focuses something inside the panel (`focus: false`, as Help focuses its search).
    */
   reveal(id: PanelId, focus = true) {
+    if ((!this.panels.has(id) || !this.isOpen(id)) && this.options.semantic?.("show", id)) return;
     if (!this.panels.has(id)) { this.options.withdrawn?.(id); return; }
     const before = locate(this.tree, id);
     const tree = summonPanel(this.tree, id, this.options.defaults(this.sizeClass), this.floatRect(undefined, true));
@@ -544,6 +549,7 @@ export class DockView {
     return { x: clamp(area.w / 2 - w / 2 + offset, 8, Math.max(8, area.w - w - 8)), y: clamp(80 + offset, 8, Math.max(8, area.h - hgt - 8)), w, h: hgt };
   }
   close(id: PanelId) {
+    if (this.options.semantic?.("remove", id)) return;
     if (!this.panels.has(id)) return;
     const at = locate(this.tree, id);
     if (!at) return;
@@ -573,6 +579,11 @@ export class DockView {
 
   /** Keyboard-accessible alternatives to every drag operation. */
   panelMenuItems(id: PanelId): MenuItem[] {
+    const check = this.options.capture?.(id);
+    const items = this.layoutMenuItems(id);
+    return check ? capturedItems(items, () => { const allowed = check(); if (!allowed.available) this.options.announce(allowed.reason ?? "That panel changed. Open the menu again."); return allowed.available; }) : items;
+  }
+  private layoutMenuItems(id: PanelId): MenuItem[] {
     const tree = this.tree, at = locate(tree, id);
     if (!at) return [{ kind: "action", label: `Open ${this.title(id)}`, icon: "plus", run: () => this.reveal(id) }];
     const others = allGroups(tree).filter(entry => entry.group.id !== at.group.id);

@@ -67,6 +67,8 @@ export function menuSections(items: readonly MenuItem[]): { label?: string; item
 type OpenMenu = { element: HTMLElement; parent?: OpenMenu; child?: OpenMenu; invoker?: Element | null; close(restore: boolean): void };
 let root: OpenMenu | undefined;
 let layer: HTMLElement | undefined;
+let popover: { close(restore: boolean): void } | undefined;
+export function closePopovers(restoreFocus = false) { popover?.close(restoreFocus); }
 function menuLayer() {
   // Made again if the page's body was replaced since (a test's fresh document), so a popover never opens out of the page.
   if (!layer?.isConnected) { layer = h("div", { class: "menu-layer" }); document.body.append(layer); }
@@ -111,9 +113,9 @@ export const menuCapability = (items: readonly MenuItem[], reason: string): Capa
  * actionable, never informational, so the owner disables its trigger with the reason instead (`hasCommands` asks first). Returns the
  * open menu, or undefined when it didn't open.
  */
-export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label: string; invoker?: Element | null; onClose?(): void; focusLabel?: string; placement?: "below" } = { label: "Menu" }) {
-  if (!hasCommands(items)) return undefined;
-  closeMenus(false);
+export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label: string; invoker?: Element | null; signal?: AbortSignal; onClose?(): void; focusLabel?: string; placement?: "below" } = { label: "Menu" }) {
+  if (options.signal?.aborted || !hasCommands(items)) return undefined;
+  closeMenus(false); closePopovers(false);
   const invoker = options.invoker ?? (document.activeElement instanceof Element ? document.activeElement : null);
   root = build(items, anchor, options.label, undefined, invoker, options.onClose, options.focusLabel, options.placement);
   const outside = (event: PointerEvent) => {
@@ -126,7 +128,9 @@ export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label
   document.addEventListener("pointerdown", outside, { capture: true });
   const detach = () => document.removeEventListener("pointerdown", outside, { capture: true });
   const previous = root.close;
-  root.close = restore => { detach(); previous(restore); };
+  const abort = () => menu.close(false), menu = root;
+  options.signal?.addEventListener("abort", abort, { once: true });
+  root.close = restore => { options.signal?.removeEventListener("abort", abort); detach(); previous(restore); };
   return root;
 }
 
@@ -134,11 +138,13 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
   invoker: Element | null, onClose?: () => void, focusLabel?: string, placement?: "below"): OpenMenu {
   const element = h("div", { class: "menu", role: "menu", "aria-label": label, tabindex: "-1" });
   const entries: HTMLElement[] = [];
+  let closed = false;
   const self: OpenMenu = { element, parent, invoker, close(restore) {
+    if (closed) return; closed = true;
     self.child?.close(false);
     element.remove();
     if (parent) { parent.child = undefined; if (restore) (invoker as HTMLElement | null)?.focus?.(); }
-    else { root = undefined; onClose?.(); if (restore && invoker instanceof HTMLElement && invoker.isConnected) invoker.focus(); }
+    else { if (root === self) root = undefined; onClose?.(); if (restore && invoker instanceof HTMLElement && invoker.isConnected) invoker.focus(); }
   } };
   for (const item of items) {
     if (item.kind === "separator") { element.append(h("div", { class: "menu-sep", role: "separator" })); continue; }
@@ -165,10 +171,11 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
       item.kind === "action" && item.shortcut ? h("kbd", { text: item.shortcut }) : null,
       item.kind === "submenu" ? h("span", { class: "menu-sub" }, icon("chevronRight")) : null);
     const activate = () => {
+      if (closed) return;
       if (!available) return;
       if (item.kind === "submenu") { openChild(entry, item); return; }
-      closeMenus(true);
-      item.run();
+      const opened = root;
+      try { item.run(); } finally { if (root === opened) closeMenus(true); }
     };
     entry.addEventListener("click", activate);
     entry.addEventListener("pointerenter", () => {
@@ -181,7 +188,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
         event.preventDefault(); event.stopPropagation();
         const all = Array.isArray(item.secondary) ? item.secondary as readonly MenuSecondary[] : [item.secondary as MenuSecondary];
         const remove = all.find(action => (action.tone ?? "danger") === "danger");
-        if (remove && remove.capability?.available !== false) { closeMenus(true); remove.run(); }
+        if (remove && remove.capability?.available !== false) { const opened = root; try { remove.run(); } finally { if (root === opened) closeMenus(true); } }
       }
       if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(); }
       if (event.key === "ArrowRight" && item.kind === "submenu") { event.preventDefault(); if (available) openChild(entry, item, true); }
@@ -189,7 +196,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
     entries.push(entry);
     if (item.kind === "action" && item.secondary) {
       const all = Array.isArray(item.secondary) ? item.secondary as readonly MenuSecondary[] : [item.secondary as MenuSecondary];
-      const row = menuSecondaryRow(entry, all.map(action => ({ ...action, run: () => { closeMenus(true); action.run(); } })));
+      const row = menuSecondaryRow(entry, all.map(action => ({ ...action, run: () => { const opened = root; try { action.run(); } finally { if (root === opened) closeMenus(true); } } })));
       entries.push(...row.actions); element.append(row.element);
     } else element.append(entry);
   }
@@ -248,14 +255,14 @@ export type ValueOption = { label: string; checked: boolean; help?: string };
  * states in order.
  */
 export function openValuePopover(field: ValueField, anchor: MenuAnchor, options: {
-  title: string; apply: string; validate?(value: string | number): Capability; commit(value: string | number, options: boolean[]): void;
+  signal?: AbortSignal; title: string; apply: string; validate?(value: string | number): Capability; commit(value: string | number, options: boolean[]): void;
   options?: readonly ValueOption[];
   /** What the value is used for, muted on the note line while the value is accepted; a refusal takes its place (UI-143). */
   hint?: string;
   invoker?: HTMLElement;
   onClose?(): void;
 }) {
-  closeMenus(false);
+  closeMenus(false); closePopovers(false);
   const invoker = options.invoker ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const inputId = uid("value");
   const input = field.kind === "text"
@@ -283,7 +290,7 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
     return result.available;
   };
   input.addEventListener("input", check);
-  form.addEventListener("submit", event => { event.preventDefault(); if (!check()) return; close(false); options.commit(read(), switches.map(toggle => toggle.input.checked)); });
+  form.addEventListener("submit", event => { event.preventDefault(); if (closed || !check()) return; try { options.commit(read(), switches.map(toggle => toggle.input.checked)); } finally { close(false); } });
   form.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } });
   const outside = (event: PointerEvent) => { if (!event.composedPath().includes(form)) close(false); };
   let closed = false;
@@ -291,10 +298,14 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
     if (closed) return;
     closed = true;
     document.removeEventListener("pointerdown", outside, { capture: true });
-    form.remove();
-    options.onClose?.();
+    form.remove(); if (popover?.close === close) popover = undefined;
+    options.signal?.removeEventListener("abort", abort); options.onClose?.();
     if (restore && invoker?.isConnected) invoker.focus();
   }
+  popover = { close };
+  const abort = () => close(false);
+  options.signal?.addEventListener("abort", abort, { once: true });
+  if (options.signal?.aborted) { close(false); return { close }; }
   menuLayer().append(form);
   place(form, anchor);
   check();
@@ -310,8 +321,8 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
  * (danger styled when `danger`). Focus starts on Cancel, so a stray Enter never destroys anything; Escape, Cancel or a click outside
  * closes it and returns focus to the invoker; the action closes it and then runs.
  */
-export function openConfirmPopover(anchor: MenuAnchor, options: { title: string; message: string; confirm: string; danger?: boolean; onConfirm(): void }) {
-  closeMenus(false);
+export function openConfirmPopover(anchor: MenuAnchor, options: { signal?: AbortSignal; onClose?(): void; title: string; message: string; confirm: string; danger?: boolean; onConfirm(): void }) {
+  closeMenus(false); closePopovers(false);
   const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const messageId = uid("confirm");
   const cancel = h("button", { class: "btn", type: "button", text: "Cancel" });
@@ -320,16 +331,21 @@ export function openConfirmPopover(anchor: MenuAnchor, options: { title: string;
     h("div", { class: "popover-title", text: options.title }), h("p", { class: "popover-message", id: messageId, text: options.message }),
     h("div", { class: "popover-actions" }, cancel, confirm));
   cancel.addEventListener("click", () => close(true));
-  form.addEventListener("submit", event => { event.preventDefault(); close(true); options.onConfirm(); });
+  form.addEventListener("submit", event => { event.preventDefault(); if (closed) return; try { options.onConfirm(); } finally { close(true); } });
   form.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } });
   const outside = (event: PointerEvent) => { if (!event.composedPath().includes(form)) close(false); };
   let closed = false;
   function close(restore: boolean) {
-    closed = true;
+    if (closed) return; closed = true;
+    options.signal?.removeEventListener("abort", abort); options.onClose?.();
     document.removeEventListener("pointerdown", outside, { capture: true });
-    form.remove();
+    form.remove(); if (popover?.close === close) popover = undefined;
     if (restore && invoker?.isConnected) invoker.focus();
   }
+  popover = { close };
+  const abort = () => close(false);
+  options.signal?.addEventListener("abort", abort, { once: true });
+  if (options.signal?.aborted) { close(false); return { close }; }
   menuLayer().append(form);
   place(form, anchor);
   requestAnimationFrame(() => cancel.focus());

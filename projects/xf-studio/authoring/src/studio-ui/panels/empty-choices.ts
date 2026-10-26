@@ -13,8 +13,14 @@ export function panelEmptyChoices(rt: StudioRuntime, panel: string, layout: "pan
   const element = h("div", { class: "panel-empty-target", hidden: true }, component.element, pointer.element);
   return { element, dispose: () => component.dispose(), update() {
     const state = rt.port.emptyChoices?.snapshot(panel);
-    const primary = state?.choices[0]?.action.destination.route === "view" ? rt.views?.primary(panel) : undefined;
-    const declaredOwner = primary ? { panel: primary.id, label: primary.title, prompt: "No 3D view in this tab. Open one in" } : state?.owner;
+    const primary = state?.choices[0]?.action.destination.route === "view" ? rt.views?.primary(rt.instance?.type ?? panel) : undefined;
+    const snapshot = rt.port.tabs?.snapshot(), tab = snapshot?.tabs.find(tab => tab.id === snapshot.shown);
+    const primaryInstance = primary && tab?.panels.filter(instance => instance.type === primary.id).find(instance => {
+      if (!rt.dock.isOpen(instance.id)) return false;
+      const candidate = rt.port.emptyChoices?.snapshot(instance.id);
+      return candidate?.choices[0]?.action.destination.route === "view";
+    });
+    const declaredOwner = !rt.port.tabs && primary ? { panel: primary.id, label: primary.title, prompt: "No 3D view in this tab. Open one in" } : primaryInstance ? { panel: primaryInstance.id, label: primary!.title, prompt: "No 3D view in this tab. Open one in" } : state?.owner;
     const owner = declaredOwner && panel !== declaredOwner.panel ? declaredOwner : null;
     element.hidden = !state; pointer.update(owner);
     component.update(state && !owner ? { ...state, choices: state.choices.map(choice => ({ ...choice, choose: () => {

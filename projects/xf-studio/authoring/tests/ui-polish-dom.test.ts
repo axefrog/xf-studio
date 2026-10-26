@@ -170,7 +170,7 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
   for (const service of [setup, detection, install, updates]) service.subscribe(() => { for (const listener of listeners) listener(); });
   const feedback = new Feedback();
   const dispatched: unknown[] = [];
-  const rt = { port, feedback, finishes: [], anchors: { register() {} }, dock: { reveal() {} }, request: async () => {}, dispatch: (action: unknown) => { dispatched.push(action); return true; },
+  const rt = { port, feedback, key: (key: string) => key, finishes: [], anchors: { register() {} }, dock: { reveal() {} }, request: async () => {}, dispatch: (action: unknown) => { dispatched.push(action); return true; },
     changed: () => paint(), report: () => true, settings: { open: (section?: string, part?: string) => { opened.push(section); openedParts.push(part); } } };
   const panel = make(rt);
   lightDocument.body.append(panel.spec.element as never);

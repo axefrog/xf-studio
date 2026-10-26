@@ -136,9 +136,14 @@ const subjectAvailable = (services: Pick<ProfileServices, "characters">) => (ref
  * binding and palette command acts on, and the captures gestures and menus hold. `contexts`: each panel type's context (§3.1, §5).
  */
 export function createTargetResolver(deps: { state: ProfileSessions; history: Pick<HistoryService, "acting">;
-  services: Pick<ProfileServices, "characters" | "collections" | "looks">; contexts: (type: string) => PanelContext; collection?: () => string | undefined }): TargetResolver {
+  services: Pick<ProfileServices, "characters" | "collections" | "looks">; contexts: (type: string) => PanelContext; available?: (type: string) => boolean; generation?: (type: string) => number; collection?: () => string | undefined }): TargetResolver {
   const { state, services } = deps, graph = state.graph;
   return new TargetResolver({
+    origin: (instance, tab = state.tabId()) => {
+      if (!instance) return tab && state.tab(tab) ? state.panelTabTarget(tab) : null;
+      const panel = state.panel(instance);
+      return panel ? [state.panelTarget(instance), deps.available?.(panel.type) ?? true, deps.generation?.(panel.type) ?? 0] : null;
+    },
     session: {
       tab: () => state.tabId(),
       views: () => graph.viewIds().map(id => ({ id, scene: graph.node(id, "scene").id, tab: state.viewTab(id) })),

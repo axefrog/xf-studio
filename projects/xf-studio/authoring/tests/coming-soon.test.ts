@@ -84,7 +84,7 @@ test("module views show no Coming soon placeholders", () => {
 test("U8: Panels owns the folded Coming soon menu, only with research tools on", () => {
   const calls: string[] = [];
   const rt = { views: STUDIO_CATALOGUE,
-    port: { views: { modules: () => STUDIO_MODULES, titles: () => [], plannedModules: () => PLANNED_MODULES } },
+    port: { panels: { instance: () => "head" }, views: { modules: () => STUDIO_MODULES, titles: () => [], plannedModules: () => PLANNED_MODULES } },
     dock: { panel: () => ({}), panelState: (id: string) => id === "presets" ? "open" : id === "layers" ? "collapsed" : "closed",
       toggle: (id: string) => calls.push(`toggle:${id}`), reveal: (id: string) => calls.push(`reveal:${id}`) },
     settings: { open: () => calls.push("settings") } };

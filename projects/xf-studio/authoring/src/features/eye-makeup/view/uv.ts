@@ -37,6 +37,11 @@ export function uvPanel(ctx: EyeMakeupViewContext): PanelController {
     else if (binding?.action.kind === "view") uv.command(binding.action.id.slice(3) as "both" | "single" | "other" | "fit");
   });
   return {
+    // U4 seam: the UI track supplies target-readable palette titles; IDs and adapters already belong to the instance.
+    commands: () => (["both", "single", "other", "fit"] as const).map(command => ({ id: `uv.${command}`,
+      title: `UV view: ${{ both: "Both eyes", single: "Single eye", other: "Other eye", fit: "Fit shape" }[command]}`, group: "View", icon: "uv" as const,
+      capability: () => uv.commandCapability(command), run: () => { uv.command(command); } })),
+    dispose: () => hints.dispose(),
     spec: { id: "uv", ...EYE_MAKEUP_PANEL_META.uv, element,
       visibility: visible => { if (visible) requestAnimationFrame(() => uv.resize()); } },
     update(frame) {

@@ -625,7 +625,7 @@ describe("one history over the session and the graph", () => {
     expect(core.app.dispatch({ kind: "tabs.close", tab })).toMatchObject({ ok: true });
     expect(core.app.dispatch({ kind: "tabs.reopen" })).toMatchObject({ ok: true });
     expect(core.app.dispatch({ kind: "tabs.show", tab })).toMatchObject({ ok: true });
-    expect(core.app.dispatch({ kind: "tabs.arrange", tab, layout: dockOf(["presets"]) })).toMatchObject({ ok: true });
+    expect(core.app.dispatch({ kind: "tabs.arrange", tab, layout: dockOf([s.instance("presets", tab)]) })).toMatchObject({ ok: true });
     expect(s.legacyDock(tab)).toEqual(dockOf(["presets"]));
     // The dock reset to its default arrangement.
     expect(core.app.dispatch({ kind: "tabs.arrange", tab, layout: null })).toMatchObject({ ok: true });

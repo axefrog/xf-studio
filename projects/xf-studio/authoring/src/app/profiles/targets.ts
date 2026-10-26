@@ -33,6 +33,8 @@ export type TargetResolverDeps = {
     scene(id: string): { readonly kind: string; readonly subject?: SubjectRef; readonly look?: LookRef; readonly gen: number } | undefined;
     panel(instance: string): { readonly type: string; readonly binding?: PanelBinding; readonly tab?: TabId } | undefined;
   };
+  /** Session versions and live availability fence shell captures, including rebind-away-and-back. */
+  origin?(instance?: string, tab?: string): unknown;
   readonly focus: Pick<FocusService, "viewOrder" | "recent" | "focusedPanel">;
   /** The first editing context that can act now (the history service's `acting`), by scope ID. */
   acting(scopes: readonly string[]): string | undefined;
@@ -116,6 +118,12 @@ export class TargetResolver {
     return nameTargets(action, descriptor, from.capture ? from.capture.named : this.named(from.instance));
   }
 
+  /** Structural shell navigation has no document-revision dependency. */
+  structural(instance: string): () => Capability {
+    const panel = this.deps.session.panel(instance), tab = panel?.tab, origin = JSON.stringify(this.deps.origin?.(instance, tab));
+    return () => !panel || !this.deps.session.panel(instance) || origin !== JSON.stringify(this.deps.origin?.(instance, tab))
+      ? refusal("missing_target", "That panel changed. Open the command again.") : { available: true };
+  }
   // ----- Captures -----
   /** Freeze what `instance` resolves to now (§3.3) until `signal` is aborted. */
   capture(instance: string | undefined, signal: AbortSignal): Capture {
@@ -131,7 +139,8 @@ export class TargetResolver {
       ...(look ? { look } : {}), ...(character ? { subject: { kind: CHARACTER_KIND, id: character } } : {}) }, signal, instance);
   }
   private captureTarget(target: Target, signal: AbortSignal, instance?: string): Capture {
-    const id = ++this.next;
+    const id = ++this.next, tab = instance ? this.deps.session.panel(instance)?.tab : target.view ? this.world().views[target.view]?.tab : this.deps.session.tab(),
+      origin = JSON.stringify(this.deps.origin?.(instance, tab));
     let released = signal.aborted;
     if (!released) {
       this.captures.add(id);
@@ -139,7 +148,7 @@ export class TargetResolver {
     }
     return Object.freeze({ id, ...(instance !== undefined ? { instance } : {}), data: Object.freeze({ target, revisions: this.deps.revisions?.(target) ?? {} }),
       named: Object.freeze(this.namedOf(target, instance === undefined ? target.view === undefined ? undefined : this.world().views[target.view]?.tab
-        : this.deps.session.panel(instance)?.tab, instance === undefined)), released: () => released });
+        : this.deps.session.panel(instance)?.tab, instance === undefined)), released: () => released || origin !== JSON.stringify(this.deps.origin?.(instance, tab)) });
   }
   /** Whether a capture still names what it named (refused with `missing_target`, saying what changed), and was not released. */
   current(capture: Capture): Capability {

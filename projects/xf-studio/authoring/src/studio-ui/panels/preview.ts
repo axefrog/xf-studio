@@ -179,7 +179,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const grade = new Segmented<SetupDisplay>({ label: "Colour grade", help: GRADE_HELP, options: [
     { value: "aces", label: "Studio", title: "The Studio's tone mapping (ACES)" }, { value: "game", label: "Game grade", title: "The game's colour grade from your game files" }],
   onSelect: value => rt.dispatch({ kind: "preview.setDisplayTransform", display: value }) });
-  const surroundings = new GroupSection({ title: "Surroundings", key: "lighting.surroundings", level: "subsection", expanded: true });
+  const surroundings = new GroupSection({ title: "Surroundings", key: rt.key("lighting.surroundings"), level: "subsection", expanded: true });
   surroundings.body.append(exposure.element, room.element, backdrop.element, grade.element);
 
   // The shown setup's lights: the list, then the chosen light's controls.
@@ -231,7 +231,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   const shadows = new Toggle({ label: "Casts shadows", reserveNote: true, onChange: enabled => rt.dispatch({ kind: "preview.setLightShadows", light: lightId(), enabled }) });
   // The chosen light's controls in titled subgroups (UI-126): where it is, what it gives, and the spot light's cone.
   const lightGroup = (title: string, key: string, ...controls: HTMLElement[]) => {
-    const group = new GroupSection({ title, key: `lighting.light.${key}`, level: "row", heading: 5, expanded: true });
+    const group = new GroupSection({ title, key: rt.key(`lighting.light.${key}`), level: "row", heading: 5, expanded: true });
     group.body.append(...controls);
     return group.element;
   };
@@ -240,7 +240,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     lightGroup("Output", "output", strength.element, colour.element, shadows.element),
     lightGroup("Spot cone", "cone", coneSlider.element, softness.element));
   const noLights = emptyState("No lights", "Add a light to light your V directly; the room light still shows her.");
-  const lightsGroup = new GroupSection({ title: "Lights", key: "lighting.lights", level: "subsection", expanded: true });
+  const lightsGroup = new GroupSection({ title: "Lights", key: rt.key("lighting.lights"), level: "subsection", expanded: true });
   lightsGroup.body.append(lights.element, h("div", { class: "row" }, addLight), noLights, lightControls);
   let lastFrame: Frame | undefined;
   /** Paint the chosen light's controls from the last frame (also straight after a selection, before the next frame). */

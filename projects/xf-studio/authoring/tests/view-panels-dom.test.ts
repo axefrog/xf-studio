@@ -53,7 +53,7 @@ test.each(["wide", "compact"] as const)("registered experiment panels resume in 
       expect(dock.panelState(panel.id)).toBe("open");
       expect((dock.element as unknown as LightElement).querySelector(`[data-panel="${panel.id}"]`)).not.toBeNull();
     }
-    const rt = { dock, views: on, port: { views: { titles: () => [], modules: () => [HOLOTABLE_MODULE], plannedModules: () => [] } } };
+    const rt = { dock, views: on, port: { panels: { instance: (id: string) => id }, views: { titles: () => [], modules: () => [HOLOTABLE_MODULE], plannedModules: () => [] } } };
     const rows = panelMenuItems(rt as never, false).filter(item => item.kind === "action");
     for (const panel of HOLOTABLE_VIEW.panels) expect(rows.some(row => row.label === panel.title && row.checked)).toBe(true);
   } finally { life.abort(); }
@@ -96,10 +96,12 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
     catalogue.panels.splice(0, catalogue.panels.length, ...base.panels.flatMap(panel => panel.id === "head" ? viewPanelEntries(head, panels) : [panel]));
     catalogue.ids.splice(0, catalogue.ids.length, ...catalogue.panels.map(panel => panel.id));
   };
-  // P3-i D1 / 044 D2: this still mounts the phase-2 dock. Exercise its real presentation
-  // projection rather than feeding raw instance IDs to controllers keyed by type/view aliases.
-  // Only snapshot/dock are used; the defaults/library methods are outside this harness.
-  const tabs = session && layoutTabsPort(session, undefined as never, {} as never);
+  // Historical type-keyed dock evidence uses an explicit legacy adapter. Production ports now
+  // expose exact instance IDs; the P3-iii real-controller tests exercise that composition.
+  const instanceTabs = session && layoutTabsPort(session, undefined as never, {} as never);
+  const tabs = session && instanceTabs && { ...instanceTabs, dock: (tab?: string) => session.legacyDock(tab), snapshot: () => {
+    const state = instanceTabs.snapshot(); return { ...state, opening: state.opening && { ...state.opening, arrangement: session.legacyDock(state.opening.tab, state.opening.arrangement) } };
+  } };
   const state = { views: [...initial], drawn: { ...drawn } };
   const readViews = () => session ? tabViews(session.graph.snapshot().views, session.tabId()) : shownOf(state.views);
   const preferences = new UIPreferenceActions({ ...freshWorkspace().uiPreferences, ...(tabs?.dock() ? { layout: tabs.dock()! } : {}) });
@@ -110,7 +112,7 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
     arrangement: () => ({ tab: session?.tabId(), layout: tabs ? tabs.dock() : preferences.snapshot().layout ?? null }),
     opening: () => tabs?.snapshot().opening, openView: (panel, arrangement, focus) => dock.openView(panel, arrangement, focus),
     save: (tab, next) => { saves.push(next);
-      if (session && tab !== undefined) session.dispatch({ kind: "tabs.arrange", tab, layout: serializeDockState(next) }); },
+      if (session && tab !== undefined) session.arrange(tab, serializeDockState(next)); },
     make: panel => { const pane = fakePane(panel); made.set(panel, pane); return pane; },
     catalogue: setViews,
     dock: { addPanels: specs => dock.addPanels(specs), removePanels: (ids, options) => dock.removePanels(ids, options), get dockState() { return dock.dockState; } },
@@ -273,7 +275,7 @@ describe("a pane per view", () => {
       const views = session.graph.snapshot().views, titles = viewTitles(views);
       const entries = views.map((view, index) => ({ panel: view.panel, title: titles[index]! }));
       for (const entry of entries) h.dock.retitle(entry.panel, entry.title, "");
-      const rt = { dock: h.dock, views: h.catalogue, port: { views: { titles: () => entries, modules: () => [], plannedModules: () => [] } } };
+      const rt = { dock: h.dock, views: h.catalogue, port: { panels: { instance: (id: string) => id }, views: { titles: () => entries, modules: () => [], plannedModules: () => [] } } };
       return { entries, rows: panelMenuItems(rt as never, false).filter(item => item.kind === "action" && (item.label.startsWith("3D view") || item.label === "Side view")) };
     };
     expect(paint().rows.map(row => "label" in row ? row.label : "")).toEqual(["3D view"]);
@@ -486,7 +488,7 @@ describe("the not-drawn state (U7)", () => {
     const { AnchorRegistry } = await import("../src/studio-ui/guidance/anchors");
     const focused: string[] = [];
     const rt = { anchors: new AnchorRegistry(), feedback: { toast() {} }, toolFilter: () => ({ modules: [], research: false }), changed() {},
-      port: { viewport: { input: () => ({ modifiers: { ctrl: false, alt: false, shift: false }, head: { editable: false }, uv: { editable: false } }),
+      port: { panels: { instance: (id: string) => id }, viewport: { input: () => ({ modifiers: { ctrl: false, alt: false, shift: false }, head: { editable: false }, uv: { editable: false } }),
         subscribeInput: () => () => {}, resize() {} },
         previewSetup: { dispatch: async () => ({ ok: true }), capability: () => ({ available: true }) },
         views: { tools: () => [], shows: (view: string) => view === "v2" ? { v: "Valerie", look: "Smoky" } : { v: "Valerie" } },

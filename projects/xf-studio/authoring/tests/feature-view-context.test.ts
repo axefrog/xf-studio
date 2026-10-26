@@ -34,8 +34,8 @@ const shown = (item: MenuItem): unknown => item.kind === "action"
 test("a feature view's context is its facade and the shell's services: no port, runtime or other facade", () => {
   const { shell, ctx, toasts } = fixture();
   expect(ctx.facade).toBe(shell.feature("eye-makeup"));
-  expect(Object.keys(ctx).sort()).toEqual(["anchors", "changed", "collection", "dispatch", "easing", "facade", "facial", "feedback", "links", "modInstall", "openSettings", "platform", "presets", "range", "readiness",
-    "research", "reveal", "starters", "targetMenu", "targetSections", "undoAction", "uv"]);
+  expect(Object.keys(ctx).sort()).toEqual(["anchors", "capture", "changed", "collection", "dispatch", "easing", "facade", "facial", "feedback", "links", "modInstall", "openSettings", "platform", "presets", "range", "readiness",
+    "research", "reveal", "starters", "targetMenu", "targetSections", "undoAction", "uv", "viewKey"]);
   expect(Object.isFrozen(ctx)).toBe(true);
   // Eye makeup's Presets and Library panels (P2-v): the library's presentation operations only, frozen, no port.
   expect(Object.keys(ctx.collection).sort()).toEqual(["capability", "file", "fileCapability", "import", "menu", "menuCapability", "presetMenu", "refresh",

@@ -8,11 +8,12 @@ import type { StudioDispatchResult } from "../studio-application";
 import { EMPTY_CHOICE_DESCRIPTORS } from "../studio-action-descriptors";
 import { captureCurrent, type Target } from "./bindings";
 import type { ProfileServices } from "./profile-window";
-import type { ProfileSessions } from "./profile-sessions";
+import { TabRefusal, type PanelTarget, type ProfileSessions } from "./profile-sessions";
+import { openIn } from "./panel-dock";
 import type { SceneAction } from "./scene-commands";
 import type { TargetResolver } from "./targets";
 
-export type EmptyDestination = { readonly instance: string; readonly tab: string; readonly route: "subject" | "look" | "view"; readonly target: Target };
+export type EmptyDestination = { readonly instance: string; readonly tab: string; readonly route: "subject" | "look" | "view"; readonly target: Target; readonly origin?: PanelTarget };
 export type EmptyChoiceValue = { readonly subject: SubjectRef } | { readonly look: LookRef } | { readonly defaultV: "female" | "male" } | { readonly createLook: true };
 export type EmptyChoiceRequest = { readonly kind: "empty.choose"; readonly destination: EmptyDestination; readonly choice: EmptyChoiceValue };
 export type EmptyChoiceSnapshot = { readonly title: string; readonly body: string; readonly capability: Capability;
@@ -38,6 +39,8 @@ export function emptyChoicesPort(deps: Deps): EmptyChoicesPort {
   const looks = () => (profile()?.collections ?? []).flatMap(collection => (services.collections.collection(collection)?.looks ?? [])
     .map(look => ({ collection, look }))).filter(ref => services.collections.look(ref)?.state === "live");
   function current(destination: EmptyDestination): Capability {
+    if (destination.origin) try { session.checkPanelTarget(destination.origin); }
+    catch (error) { if (error instanceof TabRefusal) return refusal("missing_target", error.message); throw error; }
     const panel = session.panel(destination.instance);
     if (!panel || panel.tab !== destination.tab) return refusal("missing_target", "That panel's tab changed or closed. Choose again.");
     const chain = captureCurrent(resolver.world(), { target: destination.target, revisions: {} }, () => undefined);
@@ -73,7 +76,7 @@ export function emptyChoicesPort(deps: Deps): EmptyChoicesPort {
     if (resolved.state !== "empty" || !resolved.missing || !["subject", "look", "view"].includes(resolved.missing)) return null;
     const route = resolved.missing as EmptyDestination["route"], tab = session.panel(instance)?.tab;
     if (!tab) return null;
-    const destination: EmptyDestination = { instance, tab, route, target: structuredClone(resolved.target ?? {}) };
+    const destination: EmptyDestination = { instance, tab, route, origin: session.panelTarget(instance), target: structuredClone(resolved.target ?? {}) };
     const choices: EmptyChoiceSnapshot["choices"][number][] = [];
     const add = (id: string, label: string, name: string, choice: EmptyChoiceValue) => choices.push({ id, label, name, action: { kind: "empty.choose", destination, choice } });
     let body: string;
@@ -93,8 +96,13 @@ export function emptyChoicesPort(deps: Deps): EmptyChoicesPort {
       if (!empty || route === "subject") add("default-male", "Default V (masculine)",
         route === "view" ? "Open a 3D view showing the default masculine V in this tab" : "Show the default masculine V in this 3D view", { defaultV: "male" });
     }
+    const owner = route === "look" ? session.instances("presets", tab).find(peer => {
+      if (!(openIn(session.dock(tab), peer.id, "wide") || openIn(session.dock(tab), peer.id, "compact"))) return false;
+      const result = resolver.resolve(peer.id);
+      return result.state === "empty" && result.missing === route && result.target?.scene === destination.target.scene;
+    }) : undefined;
     return { title: route === "view" ? "Open a 3D view" : route === "look" ? "Show which look?" : "Show which V?", body, choices, capability: choices.length === 1 && "createLook" in choices[0]!.action.choice ? capability(choices[0]!.action) : deps.access(),
-      ...(route === "look" ? { owner: { panel: "presets", label: "Presets", prompt: "No look in this scene. Choose one in" } } : {}) };
+      ...((owner || !session.panel(panel) && route === "look") ? { owner: { panel: owner && session.panel(panel) ? owner.id : "presets", label: "Presets", prompt: "No look in this scene. Choose one in" } } : {}) };
   }
   async function execute(action: EmptyChoiceRequest): Promise<StudioDispatchResult> {
     const allowed = capability(action); if (!allowed.available) return failed(allowed);

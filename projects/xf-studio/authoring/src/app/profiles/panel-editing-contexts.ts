@@ -1,7 +1,7 @@
 import type { NamedTargets } from "../action-targets";
 import type { StudioPresentationPort } from "../studio-presentation";
 import type { StudioAction } from "../studio-application";
-import type { FileWriter, FileWriterCapture, InputCapture } from "../studio-file-operations";
+import type { StudioFileOperations, FileWriter, FileWriterCapture, InputCapture } from "../studio-file-operations";
 import type { LookRef } from "../../library/collection-documents";
 import type { createTrustedAuthoringCore } from "../trusted-authoring-core";
 import type { CollectionScenePort } from "../../library/collection-service";
@@ -27,14 +27,16 @@ export class PanelEditingContexts<Slot> {
   constructor(private readonly deps: {
     session: ProfileSessions; targets: TargetResolver; looks: LookEditContexts; empty: Core;
     context(type: string): PanelContext;
+    available?(type: string): boolean;
     character(id: string): CharacterContextActions | undefined;
     create(input: { core: Core; instance: string; named: NamedTargets; scene: CollectionScenePort; choose(ref: LookRef): StudioAction; check(): Capability;
-      capture(): InputCapture; signal: AbortSignal }): { port: StudioPresentationPort<Slot>; writer: FileWriter; dispose(): void };
+      fileOwner?: StudioFileOperations; captured: boolean; capture(): InputCapture | FileWriterCapture; capturePort(signal: AbortSignal, fileOwner?: StudioFileOperations): StudioPresentationPort<Slot>; signal: AbortSignal }): { port: StudioPresentationPort<Slot>; writer: FileWriter; files: StudioFileOperations; dispose(): void };
   }) {}
   acquire(instance: string, signal: AbortSignal): PanelEditingPort<Slot> | undefined {
     if (signal.aborted || !this.deps.session.panel(instance)) return undefined;
     const listeners = new Set<() => void>();
     let live: { key: string; port: StudioPresentationPort<Slot>; dispose(): void } | undefined;
+    let fileOwner: StudioFileOperations | undefined;
     let reconciling = false;
     const refresh = () => {
       if (signal.aborted || reconciling) return;
@@ -50,7 +52,11 @@ export class PanelEditingContexts<Slot> {
         // Focus/history navigation is not an edit-context identity change. Binding generations and scene changes are.
         const key = JSON.stringify([destination, target]);
         if (live?.key === key) return;
-        const next = this.bind(target, this.deps.context(panel.type), signal, instance, destination);
+        const next = this.bind(target, panel.type === "view" ? { kind: "view" } : this.deps.context(panel.type), signal, instance, destination, undefined, fileOwner);
+        // The instance keeps one operation/result owner when its input follows another scene or V.
+        // New preflight reads the new collection; accepted work retains its captured dependency bundle.
+        fileOwner ??= next.files;
+        fileOwner.observeInput(next.files);
         const old = live;
         live = { key, port: next.port, dispose: next.retire };
         old?.dispose();
@@ -64,6 +70,10 @@ export class PanelEditingContexts<Slot> {
     signal.addEventListener("abort", release, { once: true });
     return { current: () => live!.port, subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } };
   }
+  capturePort(view: string | undefined, signal: AbortSignal, fileOwner?: StudioFileOperations): StudioPresentationPort<Slot> {
+    const captured = this.deps.targets.captureView(view, signal);
+    return this.bind(captured.named, { kind: "view" }, signal, undefined, undefined, () => this.deps.targets.current(captured), fileOwner).port;
+  }
   /** The drawn compatibility input accepts work against one explicit view, with the same writer/lifetime rules as a panel. */
   captureView(view: string | undefined, signal: AbortSignal): FileWriterCapture {
     const scope = this.bind(this.deps.targets.namedView(view), { kind: "view" }, signal);
@@ -72,12 +82,14 @@ export class PanelEditingContexts<Slot> {
     return { ...held, writer: scope.writer };
   }
   private bind(target: NamedTargets, context: PanelContext, signal: AbortSignal, instance?: string,
-    destination?: ReturnType<ProfileSessions["panelTarget"]>) {
+    destination?: ReturnType<ProfileSessions["panelTarget"]>, extraCheck?: () => Capability, fileOwner?: StudioFileOperations) {
     const { session, targets } = this.deps, life = new AbortController();
     const named: NamedTargets = { ...target, scope: context.kind === "subject" && target.character ? characterScope(target.character)
       : target.look ? lookScope(target.look) : undefined };
     const check = (): Capability => {
       if (signal.aborted || life.signal.aborted) return refusal("missing_target", "This editing context was released.");
+      if (extraCheck) { const allowed = extraCheck(); if (!allowed.available) return allowed; }
+      if (instance && this.deps.available && !this.deps.available(session.panel(instance)?.type ?? "")) return refusal("missing_target", "This panel was withdrawn.");
       if (destination) try { session.checkPanelTarget(destination); }
       catch (error) { if (error instanceof TabRefusal) return refusal("missing_target", error.message); throw error; }
       return targets.check(named);
@@ -96,7 +108,7 @@ export class PanelEditingContexts<Slot> {
       if (!ref) return;
       const result = app.dispatch(choose(ref)); if (!result.ok) throw Error(result.message);
     } };
-    let made: { port: StudioPresentationPort<Slot>; writer: FileWriter; dispose(): void };
+    let made: { port: StudioPresentationPort<Slot>; writer: FileWriter; files: StudioFileOperations; dispose(): void };
     let captures = 0, retired = false, finished = false;
     const destroy = () => {
       if (finished) return;
@@ -104,19 +116,43 @@ export class PanelEditingContexts<Slot> {
       made?.dispose(); app.dispose(); life.abort();
     };
     const retire = () => { retired = true; if (!captures) destroy(); };
-    const capture = (): InputCapture => {
+    const capture = (): InputCapture | FileWriterCapture => {
+      const accepted = check();
+      if (!accepted.available) return { check: () => accepted, release() {} };
+      if (extraCheck) {
+        // Acceptance transfers out of the shell surface's signal before that menu or palette closes.
+        const request = new AbortController(), captured = targets.captureNamed(named, request.signal, instance);
+        const current = () => accepted.available ? targets.current(captured) : accepted;
+        const operation = this.bind(named, context, request.signal, instance, destination, current);
+        return { writer: operation.writer, check: () => {
+          if (destination) try { session.checkPanelTarget(destination); }
+          catch (error) { if (error instanceof TabRefusal) return refusal("missing_target", error.message); throw error; }
+          return current();
+        }, release: () => request.abort() };
+      }
       captures++;
       const request = new AbortController(), captured = targets.captureNamed(named, request.signal, instance);
       let released = false;
-      return { check: () => { const allowed = check(); return allowed.available ? targets.current(captured) : allowed; }, release: () => {
+      return { check: () => {
+        if (!accepted.available) return accepted;
+        const allowed = check(); if (!allowed.available) return allowed;
+        if (destination) try { session.checkPanelTarget(destination); }
+        catch (error) { if (error instanceof TabRefusal) return refusal("missing_target", error.message); throw error; }
+        if (instance && this.deps.available && !this.deps.available(session.panel(instance)?.type ?? "")) return refusal("missing_target", "This panel was withdrawn.");
+        return targets.current(captured);
+      }, release: () => {
         if (released) return; released = true; request.abort(); if (!--captures && retired) destroy();
       } };
     };
-    try { made = this.deps.create({ core, instance: instance ?? "", named, scene, choose, check, signal: life.signal, capture }); }
+    try { made = this.deps.create({ core, instance: instance ?? "", named, scene, choose, check, signal: life.signal, capture, fileOwner, captured: !!extraCheck,
+      capturePort: (signal, fileOwner) => {
+        const allowed = check(), captured = targets.captureNamed(named, signal, instance);
+        return this.bind(named, context, signal, instance, destination, () => allowed.available ? targets.current(captured) : allowed, fileOwner).port;
+      } }); }
     catch (error) { app.dispose(); life.abort(); throw error; }
     signal.addEventListener("abort", retire, { once: true });
     if (signal.aborted) retire();
-    return { port: made.port, writer: made.writer, capture, retire };
+    return { port: made.port, writer: made.writer, files: made.files, capture, retire };
   }
 
 }

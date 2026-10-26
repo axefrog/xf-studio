@@ -154,7 +154,7 @@ type Start = { kind: "saved"; id: string } | { kind: "sample"; id: string } | { 
 const startKey = (start: Start) => `${start.kind}:${start.id}`;
 /** Session memory of the Start from tree's open groups (saved and natural open at first). */
 /** The Start from tree's open groups, remembered across reloads (Saved and Natural open by default). */
-const openStartGroups = new RememberedSet("expressions:start/", group => group === "saved" || group === "natural");
+
 /** Search-match ranges of `query` in `label`. */
 const matches = (label: string, query: string): [number, number][] => {
   if (!query) return [];
@@ -163,6 +163,7 @@ const matches = (label: string, query: string): [number, number][] => {
 };
 
 export function expressionDrawer(ctx: Ctx): PanelController {
+  const openStartGroups = new RememberedSet(ctx.viewKey?.("expressions:start/") ?? "expressions:start/", group => group === "saved" || group === "natural");
   // A problem with the live preview (and its one next step) shows at the top; nothing shows while all is well.
   const status = note("", "warning"); status.classList.add("expr-status"); status.setAttribute("role", "status"); status.setAttribute("aria-live", "polite");
   const next = button({ label: "Try again", small: true, onClick: () => runNext() });
@@ -176,7 +177,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
   let startQuery = "";
   const startSearch = new SearchField({ label: "Find an expression to start from", placeholder: "Find an expression", onFilter: query => { startQuery = query.toLowerCase(); paintStart(); },
     onArrowDown: () => tree.focus() });
-  const tree: TreeView = new TreeView({ label: "Start from", emptyText: "No expression matches.", maxRows: 6, minRows: 3, sizeBar: { key: "expressions:start-from" },
+  const tree: TreeView = new TreeView({ label: "Start from", emptyText: "No expression matches.", maxRows: 6, minRows: 3, sizeBar: { key: ctx.viewKey?.("expressions:start-from") ?? "expressions:start-from" },
     onActivate: key => begin(key),
     onToggle: (group, open) => { openStartGroups.set(group, open); paintStart(); },
     onKey: (event, item) => {
@@ -465,7 +466,7 @@ export function expressionDrawer(ctx: Ctx): PanelController {
         onClick: () => ctx.dispatch({ kind: "expression.setLinks", links: Object.fromEntries(keys.map(key => [key, mirror!.getAttribute("aria-pressed") !== "true"])) } as ExpressionAction) })
         : undefined;
       const sides = mirror ? h("span", { class: "expr-sides mirrored", text: "Separate" }) : undefined;
-      const section = new GroupSection({ title: group.label, key: `expressions.${group.id}`, expanded: group.id === "mouth" || group.id === "brows",
+      const section = new GroupSection({ title: group.label, key: ctx.viewKey?.(`expressions.${group.id}`) ?? `expressions.${group.id}`, expanded: group.id === "mouth" || group.id === "brows",
         className: "expr-group", level: "subsection", actions: mirror && sides ? [sides, mirror] : [], onReset: () => ctx.dispatch({ kind: "expression.reset", scope: "group", target: group.id } as ExpressionAction) });
       section.element.dataset.group = group.id;
       section.body.append(...own.map(entry => entry.element));

@@ -78,6 +78,8 @@ export type UvViewportSlot = {
 
 /** Everything a feature's view may reach: its own facade and the shell's presentation services. */
 export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
+  viewKey?(key: string): string;
+  capture?(): { context: FeatureViewContext<F>; signal: AbortSignal; release(): void };
   /** The feature's facade: its actions, capabilities, limits, choices and read-only view. */
   readonly facade: F;
   /** The facade's dispatch, with the shell's feedback (a refusal toasts its reason unless quiet). */
@@ -130,7 +132,7 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
   /** The easing curve remembered for a multi-control operation (`scope`, e.g. `expression-intensity`): a UI preference, never Undo. */
   readonly easing: { get(scope: string): EasingId | undefined; set(scope: string, easing: EasingId): void };
   /** Open a target's menu: the application-bound entries for the target, then the feature's items. */
-  targetMenu(target: MenuTarget, menu: FeatureTargetMenu<FacadeAction<F>>, anchor: MenuAnchor, invoker?: Element): void;
+  targetMenu(target: MenuTarget, menu: FeatureTargetMenu<FacadeAction<F>> | ((context: FeatureViewContext<F>) => FeatureTargetMenu<FacadeAction<F>>), anchor: MenuAnchor, invoker?: Element): void;
   /** The sections `targetMenu` shows (for tests and the style guide). */
   targetSections(target: MenuTarget, menu: FeatureTargetMenu<FacadeAction<F>>, anchor: MenuAnchor): MenuSection[];
   readonly uv: UvViewportSlot;
@@ -209,6 +211,7 @@ export function featureView<V extends ViewContribution,
  * module's service, as for feature views.
  */
 export type ModuleViewContext<F extends ModuleService = ModuleService> = {
+  viewKey?(key: string): string;
   readonly facade: F;
   /** A panel's instance (`<panel>--<base36>`, profiles design §1.1): what names its own session in the module's service. */
   instance(panel: string): string;

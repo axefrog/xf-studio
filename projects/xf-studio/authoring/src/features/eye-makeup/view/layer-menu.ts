@@ -54,5 +54,5 @@ export function layerSections(ctx: EyeMakeupViewContext, layerId: string, anchor
 /** Open a layer's menu at `anchor`. */
 export function openLayerMenu(ctx: EyeMakeupViewContext, layerId: string, anchor: MenuAnchor, invoker?: Element) {
   const menu = layerMenu(ctx, layerId);
-  if (menu) ctx.targetMenu({ kind: "layer", id: layerId }, menu, anchor, invoker);
+  if (menu) ctx.targetMenu({ kind: "layer", id: layerId }, captured => layerMenu(captured, layerId) ?? menu, anchor, invoker);
 }

@@ -287,7 +287,7 @@ export function expressionSets(ctx: Ctx): PanelController {
     const rows: string[] = [...(facts.guidance ?? [])];
     if (facts.carried) rows.push(`Photo mode's list: ${plural(facts.carried.rows, "expression")} from ${facts.carried.provider}, then these.`);
     if (facts.filler) rows.push(`Empty places ${facts.filler.from} to ${facts.filler.to - 1} show a neutral face, so these always sit at the same place.`);
-    const group = new GroupSection({ title: "Details", key: "expressions.set-result-details", level: "subsection", heading: 5, expanded: false });
+    const group = new GroupSection({ title: "Details", key: ctx.viewKey?.("expressions.set-result-details") ?? "expressions.set-result-details", level: "subsection", heading: 5, expanded: false });
     group.body.append(...rows.map(text => h("p", { class: "muted small", text })));
     return group.element;
   }

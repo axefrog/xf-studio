@@ -227,8 +227,8 @@ export function headPanel(rt: StudioRuntime, view: ViewContext, id = "head"): Vi
       visibility: visible => { if (visible && holds()) requestAnimationFrame(() => port.viewport.resize("head")); } },
     dispose() { releaseAnchor?.(); releaseAnchor = undefined; clearTimeout(lineTimer); hints.dispose(); idle.dispose(); empty.dispose(); },
     update(frame) {
-      paneView = frame.views?.views.find(entry => entry.panel === id)?.id;
-      const state = frame.viewport.head, title = frame.viewTitles.find(entry => entry.panel === id)?.title ?? "3D view";
+      paneView = frame.views?.views.find(entry => port.panels.instance(entry.panel) === id)?.id;
+      const state = frame.viewport.head, title = frame.viewTitles.find(entry => port.panels.instance(entry.panel) === id)?.title ?? "3D view";
       const was = paneState;
       paneState = viewPaneState(paneView, state);
       const missing = empty.update();

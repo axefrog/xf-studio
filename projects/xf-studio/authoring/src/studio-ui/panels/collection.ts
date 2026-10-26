@@ -1,3 +1,4 @@
+import { captureRuntime, capturedItems } from "../captured-runtime";
 import type { PackageBuildResult, PackageCheckResult } from "../../platform/api";
 import { EYE_MAKEUP_MOD, MOD_NAME_HINT } from "../../legacy/eye-makeup/mod-branding";
 import type { ReadonlyDeep } from "../../platform/api/read-only";
@@ -120,25 +121,26 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   // collection has more than one exportable feature, move a feature into a mod of its own (feature-module platform §6).
   const mods = h("ul", { class: "result-list package-mods", "aria-label": "Mods this collection builds" });
   let modsSignature = "";
-  const renameMod = (product: PackageProductSummary, anchor: Element) => {
+  const renameMod = (product: PackageProductSummary, anchor: Element, input = rt) => {
+    const held = captureRuntime(input), captured = held.runtime;
     const make = (modName: string) => ({ kind: "package.rename" as const, productId: product.id, modName });
     openValuePopover({ kind: "text", label: "Mod name", value: product.modName, maxLength: 80 }, anchor,
-      { title: "Rename mod", apply: "Rename", hint: MOD_NAME_HINT, validate: value => port.authoring.capability(make(String(value))),
-        commit: value => { if (rt.dispatch(make(String(value)))) rt.feedback.announce(`Mod renamed to ${String(value).trim() || "its default name"}`); } });
+      { title: "Rename mod", apply: "Rename", hint: MOD_NAME_HINT, signal: held.signal, onClose: held.release, validate: value => captured.port.authoring.capability(make(String(value))),
+        commit: value => { if (captured.dispatch(make(String(value)))) rt.feedback.announce(`Mod renamed to ${String(value).trim() || "its default name"}`); } });
   };
   /** The mod's menu; while it would hold only Rename… (a default name, one feature, one mod), its button renames directly (UI-143). */
-  const modItems = (product: PackageProductSummary, products: readonly PackageProductSummary[], anchor: Element) => {
-    const items: MenuItem[] = [{ kind: "action", label: "Rename…", icon: "rename", run: () => renameMod(product, anchor) }];
+  const modItems = (product: PackageProductSummary, products: readonly PackageProductSummary[], anchor: Element, input = rt) => {
+    const items: MenuItem[] = [{ kind: "action", label: "Rename…", icon: "rename", run: () => renameMod(product, anchor, input) }];
     if (product.nameSource === "plan") items.push({ kind: "action", label: "Use the default name", icon: "reset",
-      capability: port.authoring.capability({ kind: "package.rename", productId: product.id, modName: "" }),
-      run: () => { rt.dispatch({ kind: "package.rename", productId: product.id, modName: "" }); } });
+      capability: input.port.authoring.capability({ kind: "package.rename", productId: product.id, modName: "" }),
+      run: () => { input.dispatch({ kind: "package.rename", productId: product.id, modName: "" }); } });
     // Moving features between mods is offered only where there is something to move.
     if (product.features.length > 1) for (const feature of product.features) items.push({ kind: "action", label: `Make ${feature.label.toLowerCase()} a mod of its own`,
-      icon: "export", capability: port.authoring.capability({ kind: "package.split", feature: feature.id }),
-      run: () => { rt.dispatch({ kind: "package.split", feature: feature.id }); } });
+      icon: "export", capability: input.port.authoring.capability({ kind: "package.split", feature: feature.id }),
+      run: () => { input.dispatch({ kind: "package.split", feature: feature.id }); } });
     for (const other of products) if (other.id !== product.id) items.push({ kind: "action", label: `Merge into “${other.modName}”`, icon: "import",
-      capability: port.authoring.capability({ kind: "package.merge", productId: product.id, intoId: other.id }),
-      run: () => { rt.dispatch({ kind: "package.merge", productId: product.id, intoId: other.id }); } });
+      capability: input.port.authoring.capability({ kind: "package.merge", productId: product.id, intoId: other.id }),
+      run: () => { input.dispatch({ kind: "package.merge", productId: product.id, intoId: other.id }); } });
     return items;
   };
   const onlyRename = (product: PackageProductSummary, products: readonly PackageProductSummary[]) =>
@@ -155,7 +157,9 @@ export function packagePanel(rt: StudioRuntime): PanelController {
         ? button({ label: `Rename ${product.modName}…`, icon: "rename", iconOnly: true, variant: "ghost", small: true,
           onClick: event => renameMod(product, event.currentTarget as Element) })
         : button({ label: `${product.modName} options`, icon: "more", iconOnly: true, variant: "ghost", small: true, menu: true,
-          onClick: event => { const anchor = event.currentTarget as Element; openMenu(modItems(product, products, anchor), anchor, { label: `${product.modName} options`, invoker: anchor }); } }) })));
+          onClick: event => { const anchor = event.currentTarget as Element, held = captureRuntime(rt);
+            if (!openMenu(capturedItems(modItems(product, products, anchor, held.runtime), held.active), anchor,
+              { label: `${product.modName} options`, invoker: anchor, signal: held.signal, onClose: held.release })) held.release(); } }) })));
     mods.hidden = !products.length && !planIssue;
   };
   // After Build, each mod offers "Add to my mod manager…" (a reviewed plan, then consent) and "Show in folder" (UI-82). The rows
@@ -180,14 +184,15 @@ export function packagePanel(rt: StudioRuntime): PanelController {
     }
     return row;
   };
-  async function runPackage(action: "check" | "build") {
-    await rt.request({ kind: "package", action }, { quietSuccess: false });
+  async function runPackage(action: "check" | "build", input = rt) {
+    await input.request({ kind: "package", action }, { quietSuccess: false });
   }
   function confirmBuild(anchor: Element) {
-    openMenu([{ kind: "heading", label: "Build your mod files?", detail: "Uses this collection as it is now, your latest edits included. Can take a minute or two. Use Stop beside the progress to stop the Build. Nothing is added to your game or mod manager until you choose to." },
-      { kind: "action", label: "Build now", icon: "package", capability: buildCapability(), run: () => void runPackage("build") },
-      { kind: "action", label: "Check first", icon: "check", capability: port.files.capability({ kind: "package.check" }), run: () => void runPackage("check") }],
-    anchor, { label: "Confirm build", invoker: anchor });
+    const held = captureRuntime(rt), captured = held.runtime;
+    if (!openMenu(capturedItems([{ kind: "heading", label: "Build your mod files?", detail: "Uses this collection as it is now, your latest edits included. Can take a minute or two. Use Stop beside the progress to stop the Build. Nothing is added to your game or mod manager until you choose to." },
+      { kind: "action", label: "Build now", icon: "package", capability: captured.port.files.capability({ kind: "package.build" }), run: () => void runPackage("build", captured) },
+      { kind: "action", label: "Check first", icon: "check", capability: captured.port.files.capability({ kind: "package.check" }), run: () => void runPackage("check", captured) }], held.active),
+    anchor, { label: "Confirm build", invoker: anchor, signal: held.signal, onClose: held.release })) held.release();
   }
   // Build readiness (including the host's Build setup) is part of the file capability.
   const buildCapability = () => port.files.capability({ kind: "package.build" });

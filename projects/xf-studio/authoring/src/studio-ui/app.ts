@@ -1,3 +1,6 @@
+import { instanceViewPane } from "./panels/instance-view-pane";
+import { captureRuntime } from "./captured-runtime";
+import { InstancePanels } from "./panels/instance-panels";
 import { viewCatalogue } from "./views/contribution";
 import { withEmptyChoices } from "./panels/empty-choices";
 import { tabViews, viewPanelEntries, viewPanelIds, ViewPanels } from "./panels/view-panels";
@@ -14,7 +17,7 @@ import { applyCapability, badge, button } from "./controls";
 import { installReasonTips } from "./reason-tip";
 import { installHelpTips } from "./help-tip";
 import { DockView } from "./dock/dock-view";
-import type { PanelId } from "./dock/layout";
+import { allGroups, type PanelId } from "./dock/layout";
 import { defaultDockStateFor, restoreDockPreference, serializeDockState } from "./dock/persist";
 import type { StudioModule } from "../platform/api";
 import { h, isTextInput, setAttr, setText } from "./dom";
@@ -23,7 +26,7 @@ import { Feedback } from "./feedback";
 import { icon, isIconName } from "./icons";
 import { sizeClassFor } from "./layout-defaults";
 import { layoutTabs } from "./layout-tabs";
-import { closeMenus, openMenu, type Capability, type MenuItem } from "./menu";
+import { closeMenus, closePopovers, openMenu, type Capability, type MenuItem } from "./menu";
 import { importCollection, libraryState, type PanelController } from "./panels/collection";
 import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle } from "./history-model";
 import { previewSetupCard } from "./preview-setup-card";
@@ -61,7 +64,11 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   window.addEventListener("pagehide", flushScrollMemories, { capture: true });
   document.addEventListener("visibilitychange", () => { if (document.hidden) flushScrollMemories(); }, { capture: true });
   const catalogue = { ...views.catalogue, panels: [...views.catalogue.panels], ids: [...views.catalogue.ids], meta: { ...views.catalogue.meta } };
-  const rt = new StudioRuntime(port, feedback, catalogue);
+  let optionalViews = views.optional?.() ?? [];
+  let optionalGeneration = views.optionalGeneration?.();
+  const typeCatalogue = { ...views.catalogue, panels: [...views.catalogue.panels], ids: [...views.catalogue.ids], meta: { ...views.catalogue.meta } };
+  typeCatalogue.context = type => typeCatalogue.panels.find(panel => panel.id === type)?.context ?? { kind: "profile" };
+  const rt = new StudioRuntime(port, feedback, typeCatalogue);
   const theme = themeController(port, feedback);
   const view = viewPreferences(port, feedback);
   // Guidance (tours, spotlights, Help) is created once the dock exists; the Help panel reaches it lazily.
@@ -69,7 +76,6 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   // Each feature's view gets one context over its own facade, never the runtime or the port (UI-73).
   const featureViews = views.features.map(binding => ({ binding, ctx: featureViewContext(rt, binding.owner) as FeatureViewContext }));
   // Each part-less module's view gets one context over its own service (view-graph-design.md §5).
-  const moduleViews = (views.modules ?? []).map(binding => ({ binding, ctx: moduleViewContext(rt, binding.owner) }));
   // Studio modules (view-graph-design.md §4): a panel belongs to the module presenting its view's feature; the shell's belong to none.
   const modules = [...port.views.modules()];
   const moduleOfOwner = (owner: string) => modules.find(module => (module.feature ?? module.id) === owner);
@@ -102,33 +108,54 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
    * restore and factory home read it, so a view's panel is placed where its arrangement keeps it, or beside the other 3D views.
    */
   const headEntry = views.catalogue.panels.find(panel => panel.id === "head");
-  let viewEntries: typeof catalogue.panels = [], extraEntries: typeof catalogue.panels = [];
-  const rebuildCatalogue = () => {
-    catalogue.panels.splice(0, catalogue.panels.length, ...views.catalogue.panels.flatMap(panel => panel.id === "head" ? viewEntries : [panel]), ...extraEntries);
-    catalogue.ids.splice(0, catalogue.ids.length, ...catalogue.panels.map(panel => panel.id));
-    for (const id of Object.keys(catalogue.meta)) if (!catalogue.ids.includes(id)) delete catalogue.meta[id];
-    for (const panel of catalogue.panels) catalogue.meta[panel.id] ??= { title: panel.title, icon: panel.icon, description: panel.description };
+  let viewEntries: typeof catalogue.panels = [];
+  const panels: PanelController[] = [], byId = new Map<string, PanelController>();
+  let instanceDirty = false, instanceSignature = "";
+  const instanceKey = () => {
+    const snapshot = port.tabs?.snapshot(), tab = snapshot?.tabs.find(tab => tab.id === snapshot.shown);
+    const state = tab?.dock?.state as unknown as import("./dock/layout").DockState | undefined;
+    const open = state ? [...new Set([state.wide, state.compact].flatMap(tree => [
+      ...allGroups(tree).flatMap(({ group }) => group.panels), ...Object.keys(tree.parked ?? {}),
+    ]))].sort() : [];
+    // Geometry, active dock tabs and focus are navigation; none starts a controller/dock reconciliation.
+    return JSON.stringify([tab?.id, tab?.panels.map(({ id, type, binding }) => ({ id, type, binding })), open, views.optionalGeneration?.()]);
   };
-  const isViewPane = (id: PanelId) => id === "head" || viewEntries.some(entry => entry.id === id);
-  // Every panel comes from a view contribution (the shell's and each feature's), in catalogue order; the 3D views' panes come from the
-  // view panes' owner below.
-  const panels: PanelController[] = catalogue.panels.filter(({ id }) => !isViewPane(id)).map(({ id, owner }) => {
-    if (owner === "shell") {
-      const factory = views.shell[id];
-      if (!factory) throw Error(`Panel ${id} has no factory.`);
-      return factory(rt, context);
+  const makeInstance: ConstructorParameters<typeof InstancePanels>[1]["make"] = (instance, child) => {
+    const owner = typeCatalogue.panels.find(panel => panel.id === instance.type)!.owner;
+    let panel: PanelController;
+    if (owner === "shell") panel = views.shell[instance.type]!(child, context);
+    else {
+      const module = [...(views.modules ?? []), ...optionalViews.map(entry => entry.binding)].find(entry => entry.owner === owner);
+      if (module) panel = (module.panels[instance.type] as (ctx: ModuleViewContext) => PanelController)(moduleViewContext(child, owner));
+      else {
+        const feature = views.features.find(entry => entry.owner === owner)!;
+        panel = (feature.panels[instance.type] as (ctx: FeatureViewContext) => PanelController)(featureViewContext(child, owner));
+      }
     }
-    const moduleView = moduleViews.find(entry => entry.binding.owner === owner), moduleFactory = moduleView?.binding.panels[id];
-    if (moduleView && moduleFactory) return (moduleFactory as (ctx: ModuleViewContext) => PanelController)(moduleView.ctx);
-    const view = featureViews.find(entry => entry.binding.owner === owner), factory = view?.binding.panels[id];
-    if (!view || !factory) throw Error(`Panel ${id} has no factory.`);
-    return (factory as (ctx: FeatureViewContext) => PanelController)(view.ctx);
-  }).map(panel => catalogue.context(panel.spec.id).kind === "profile" ? panel : withEmptyChoices(rt, panel));
-  const byId = new Map(panels.map(panel => [panel.spec.id, panel]));
-  const help = byId.get("help") as PanelController & { focusSearch?(): void; openTopic?(id: string): void };
-  // A view's panel ID (`view.<id>`) need not be an anchor's form; only the panels a tour can name are anchors.
-  const anchorPanel = (panel: PanelController) => isAnchorId(panelAnchor(panel.spec.id)) ? rt.anchors.register(panelAnchor(panel.spec.id), panel.spec.element) : () => {};
-  for (const panel of panels) anchorPanel(panel);
+    // U4 seam: the UI track supplies instance/target title presentation; existing controls remain.
+    panel = { ...panel, spec: { ...panel.spec, id: instance.id } };
+    return typeCatalogue.context(instance.type).kind === "profile" ? panel : withEmptyChoices(child, panel);
+  };
+  const instancePanels = new InstancePanels(rt, { catalogue: () => typeCatalogue, make: makeInstance,
+    generation: type => views.catalogue.ids.includes(type) ? 0 : optionalGeneration,
+    changed: () => { instanceDirty = true; rt.changed(); } });
+  const rebuildCatalogue = () => {
+    const state = port.tabs?.snapshot(), tab = state?.tabs.find(tab => tab.id === state.shown);
+    catalogue.panels.splice(0, catalogue.panels.length, ...(tab?.panels ?? []).flatMap(instance => {
+      const entry = typeCatalogue.panels.find(entry => entry.id === instance.type);
+      return entry ? [{ ...entry, id: instance.id }] : [];
+    }), ...viewEntries);
+    catalogue.ids.splice(0, catalogue.ids.length, ...catalogue.panels.map(panel => panel.id));
+    for (const id of Object.keys(catalogue.meta)) delete catalogue.meta[id];
+    for (const panel of catalogue.panels) catalogue.meta[panel.id] = { title: panel.title, icon: panel.icon, description: panel.description };
+  };
+  instancePanels.sync();
+  panels.push(...instancePanels.controllers());
+  for (const panel of panels) byId.set(panel.spec.id, panel);
+  const anchorPanel = (panel: PanelController) => {
+    const anchor = panelAnchor(panel.spec.id); return isAnchorId(anchor) ? rt.anchors.register(anchor, panel.spec.element) : () => {};
+  };
+  rebuildCatalogue();
   /**
    * A pane per 3D view of the shown tab (panels/view-panels.ts): made and withdrawn as the tab's views change, the canvas in the pane that
    * holds the picture. The dock is made below, so the panes' owner reaches it late.
@@ -136,7 +163,6 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let dockRef: DockView | undefined;
   const paneAnchors = new Map<PanelController, () => void>();
   const viewPanes = new ViewPanels({
-    instances: { controllers: () => panels, instance: (panel, tab) => port.panels.instance(panel, tab) },
     contributions: { pending: () => queueOptional(), reconcile: () => syncOptional() },
     arrangement: () => ({ tab: port.focus.targets().tab || undefined, layout: port.tabs?.dock() ?? null }),
     opening: () => port.tabs?.snapshot().opening,
@@ -153,9 +179,12 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       } else feedback.toast("warning", "Layout", allowed.reason ?? "This layout could not be saved.");
     },
     restore: layout => dock.load(restoreDockPreference(layout, dock.area(), catalogue, [], viewPanelIds(port.views.snapshot()), !!port.tabs).state, panels.map(specOf)),
-    views: () => { const graph = port.views.snapshot(); return graph ? tabViews(graph.views, port.focus.targets().tab) : []; },
+    views: () => { const graph = port.views.snapshot(); return graph && headEntry ? tabViews(graph.views, port.focus.targets().tab).flatMap(view => {
+      const panel = port.panels.instance(view.panel), state = port.tabs?.dock()?.state as unknown as import("./dock/layout").DockState | undefined;
+      return panel && state && ([state.wide, state.compact].some(tree => allGroups(tree).some(({ group }) => group.panels.includes(panel)))) ? [{ ...view, panel }] : [];
+    }) : []; },
     drawn: () => port.viewport.snapshot().head,
-    make: panel => (views.shell.head as ViewPaneFactory)(rt, context, panel),
+    make: panel => instanceViewPane(rt, context, panel, views.shell.head as ViewPaneFactory),
     catalogue: shown => { viewEntries = headEntry ? viewPanelEntries(headEntry, shown) : []; rebuildCatalogue(); },
     dock: { addPanels: specs => dockRef?.addPanels(specs), removePanels: (ids, options) => dockRef?.removePanels(ids, options), cancelDrag: () => dockRef?.cancelDrag(),
       get dockState() { return dockRef!.dockState; } },
@@ -164,7 +193,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     added: pane => { panels.push(pane); byId.set(pane.spec.id, pane); paneAnchors.set(pane, anchorPanel(pane)); },
     removed: pane => { panels.splice(panels.indexOf(pane), 1); byId.delete(pane.spec.id); paneAnchors.get(pane)?.(); paneAnchors.delete(pane); },
   });
-  if (headEntry) viewPanes.start();
+  viewPanes.start();
   const restored = restoreDockPreference(port.tabs?.dock(),
     { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) }, catalogue, [], viewPanelIds(port.views.snapshot()), !!port.tabs);
   // A preview module's panels carry its stage on their tabs (components/stage-tag.ts).
@@ -176,6 +205,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let placeSetupCard = () => {};
   const dock = new DockView({
     panels: panels.map(specOf),
+    semantic: (kind, id) => panelSemantic(kind, id),
+    capture: id => port.panels.capture?.(id) ?? (() => ({ available: true })),
     state: restored.state,
     sizeClass: () => sizeClassFor(window.innerWidth),
     defaults: size => { const defaults = defaultDockStateFor(catalogue); return size === "wide" ? defaults.wide : defaults.compact; },
@@ -188,6 +219,21 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     // it is placed again then, not only on the next paint (UI-164).
     afterLayout: () => requestAnimationFrame(() => { port.viewport.resize(); placeSetupCard(); }),
   });
+  function panelSemantic(kind: "show" | "remove", id: string) {
+    const state = port.tabs?.snapshot(), tab = state?.tabs.find(tab => tab.id === state.shown);
+    if (!tab || !port.panels.target || !port.panels.tabTarget) return false;
+    const exact = tab.panels.find(panel => panel.id === id);
+    const instance = exact ?? tab.panels.find(panel => panel.type === id && dock.isOpen(panel.id)) ?? tab.panels.find(panel => panel.type === id);
+    if (kind === "show" && instance && dock.isOpen(instance.id)) { dock.reveal(instance.id); return true; }
+    const action = instance ? { kind: kind === "show" ? "panels.show" as const : "panels.remove" as const, destination: port.panels.target(instance.id) }
+      : { kind: "panels.add" as const, destination: port.panels.tabTarget(tab.id), type: id };
+    if (rt.dispatch(action)) { viewPanes.sync(); if (kind === "show") {
+      const updated = port.tabs!.snapshot().tabs.find(item => item.id === tab.id)?.panels;
+      const target = instance?.id ?? updated?.filter(item => item.type === id).at(-1)?.id;
+      if (target) dock.reveal(target);
+    } }
+    return true;
+  }
   rt.dock = dock;
   dockRef = dock;
   /**
@@ -208,16 +254,18 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     port.views.withdraw(all.filter(id => !offered.has(id)));
   };
   withdrawUnoffered();
-  const openHelp = (topic?: string) => { dock.reveal("help", false); requestAnimationFrame(() => topic ? help.openTopic?.(topic) : help.focusSearch?.()); };
+  const openHelp = (topic?: string) => { dock.reveal("help", false); requestAnimationFrame(() => {
+    const help = panels.find(panel => port.tabs?.snapshot().tabs.flatMap(tab => tab.panels).some(instance => instance.id === panel.spec.id && instance.type === "help")) as PanelController & { openTopic?(id: string): void; focusSearch?(): void };
+    if (topic) help?.openTopic?.(topic); else help?.focusSearch?.(); }); };
   /**
    * Settings (UI-109) is summoned like any panel (`reveal`, dock/layout.ts `summonPanel`): with no home among the docked groups a closed
    * Settings opens floating, or where the person last had it; one already open is brought forward where it is, its group expanded if
    * collapsed. Then the group asked for is shown and focused.
    */
-  const settingsPanel = byId.get(SETTINGS_PANEL);
+  const settingsPanel = () => panels.find(panel => port.tabs?.snapshot().tabs.flatMap(tab => tab.panels).some(instance => instance.id === panel.spec.id && instance.type === SETTINGS_PANEL));
   rt.settings = { open: (section?: SettingsSection, part?: SettingsPart) => {
     dock.reveal(SETTINGS_PANEL, false);
-    requestAnimationFrame(() => settingsPanel?.show?.(section, part));
+    requestAnimationFrame(() => settingsPanel()?.show?.(section, part));
   } };
   guidance = mountGuidance(rt, { openHelp });
   const header = shellHeader(rt, theme, view, () => openHelp());
@@ -245,7 +293,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const reportFocus = (target: EventTarget | null, keyboard: boolean) => {
     const node = target instanceof Node ? target : null;
     const panel = node ? [...byId.keys()].find(id => byId.get(id)!.spec.element.contains(node)) : undefined;
-    const view = panel === undefined ? undefined : port.views.snapshot()?.views.find(entry => entry.panel === panel)?.id;
+    const view = panel === undefined ? undefined : port.views.snapshot()?.views.find(entry => port.panels.instance(entry.panel) === panel)?.id;
     if (view !== undefined) port.focus.view(view);
     if (keyboard) port.focus.panel(panel);
   };
@@ -294,44 +342,27 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   };
   let lastNotice = port.diagnostics.snapshot().notice?.id ?? 0;
   let setupRequests = port.previewSetup.snapshot().setupRequests;
-  let optionalViews: ReturnType<NonNullable<ViewComposition["optional"]>> = [];
-  let optionalGeneration: number | undefined;
-  let queuedOptional: { generation: number | undefined; views: typeof optionalViews } | undefined;
-  const optionalAnchors = new Map<PanelController, () => void>();
   let experimentFocus = "";
   function queueOptional() {
-    const generation = views.optionalGeneration?.();
-    if (generation !== undefined && generation === optionalGeneration) return false;
-    const optional = views.optional?.() ?? [];
-    if (generation === undefined && optional.length === optionalViews.length && optional.every((item, i) => item === optionalViews[i])) return false;
-    queuedOptional = { generation, views: optional }; return true;
+    return instanceDirty || instanceKey() !== instanceSignature;
   }
   function syncOptional() {
-    const { generation, views: optional } = queuedOptional!;
-    queuedOptional = undefined;
-    const owners = new Map(optional.map(item => [item.contribution.owner, item]));
-    const gone = panels.filter(panel => { const entry = catalogue.panels.find(item => item.id === panel.spec.id);
-      return entry && !isViewPane(entry.id) && !views.catalogue.ids.includes(entry.id)
-        && owners.get(entry.owner) !== optionalViews.find(item => item.contribution.owner === entry.owner); });
-    for (const panel of gone) {
-      optionalAnchors.get(panel)?.(); optionalAnchors.delete(panel);
-      byId.delete(panel.spec.id); panels.splice(panels.indexOf(panel), 1);
+    instanceDirty = false;
+    flushScrollMemories();
+    const next = views.optional?.() ?? [];
+    if (views.optionalGeneration?.() !== optionalGeneration || next.some((entry, i) => entry !== optionalViews[i]) || next.length !== optionalViews.length) {
+      optionalViews = next; optionalGeneration = views.optionalGeneration?.();
     }
-    const extra = viewCatalogue(optional.map(item => item.contribution));
-    extraEntries = extra.panels;
-    rebuildCatalogue();
-    Object.assign(catalogue.meta, extra.meta);
+    const extra = viewCatalogue(optionalViews.map(entry => entry.contribution));
+    typeCatalogue.panels.splice(0, typeCatalogue.panels.length, ...views.catalogue.panels, ...extra.panels);
+    typeCatalogue.ids.splice(0, typeCatalogue.ids.length, ...typeCatalogue.panels.map(entry => entry.id));
+    Object.assign(typeCatalogue.meta, extra.meta);
     modules.splice(0, modules.length, ...port.views.modules());
-    for (const { contribution, binding } of optional) {
-      const ctx = moduleViewContext(rt, contribution.owner, () => viewPanes.tabId());
-      for (const entry of contribution.panels) if (!byId.has(entry.id)) {
-        const panel = (binding.panels[entry.id] as (ctx: ModuleViewContext) => PanelController)(ctx);
-        panels.push(panel); byId.set(entry.id, panel); optionalAnchors.set(panel, anchorPanel(panel));
-      }
-    }
-    optionalViews = optional; optionalGeneration = generation; withdrawnKey = ""; experimentFocus = "";
-    // The view/session owner loads its captured destination once, swaps specs, then releases the old controllers.
-    return () => { for (const panel of gone) panel.dispose?.(); };
+    instancePanels.sync();
+    const panes = viewPanes.controllers(); panels.splice(0, panels.length, ...instancePanels.controllers(), ...panes);
+    byId.clear(); for (const panel of panels) byId.set(panel.spec.id, panel);
+    rebuildCatalogue(); withdrawnKey = ""; experimentFocus = "";
+    instanceSignature = instanceKey();
   }
   const paint = () => {
     queued = false;
@@ -343,7 +374,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     upgrade.update(pendingMigration ? { title: "Workspace needs updating", body: "This workspace is open in an older XF Studio window. Reload that window, or choose Use it here above.",
       choices: [] } : null);
     // The shown tab's 3D views each have their pane, and the canvas is in the one holding the picture.
-    if (headEntry) viewPanes.sync();
+    viewPanes.sync();
     const focused = rt.shownModules(), focusKey = JSON.stringify(focused);
     if (experimentFocus !== focusKey) {
       experimentFocus = focusKey;
@@ -375,7 +406,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     else { setupCard.update(frame); dockSetupCard(frame.previewSetup.card.open); }
     guidance.update(frame);
     // A view's tab is titled from the view graph (its name, numbered when there are several) with what it shows as context.
-    for (const view of frame.viewTitles) dock.retitle(view.panel, view.title, view.subject);
+    for (const view of frame.viewTitles) dock.retitle(port.panels.instance(view.panel), view.title, view.subject);
     // The preview setup asked for the game folder or WolvenKit on a host without its own setup form: Settings › Game.
     if (frame.previewSetup.setupRequests !== setupRequests) {
       setupRequests = frame.previewSetup.setupRequests;
@@ -389,12 +420,13 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       panel.update(frame);
     }
     if (readOnly) for (const panel of panels)
-      if (!READ_SAFE_PANELS.has(panel.spec.id) && dock.isVisible(panel.spec.id)) markReadOnly(panel.spec.element, lease!.refusal);
+      if (!READ_SAFE_PANELS.has(port.tabs?.snapshot().tabs.flatMap(tab => tab.panels).find(instance => instance.id === panel.spec.id)?.type ?? panel.spec.id) && dock.isVisible(panel.spec.id)) markReadOnly(panel.spec.element, lease!.refusal);
   };
   // Library and Mod package read file-operation capabilities that re-validate the whole
   // draft (~30 ms with long Undo histories). Never repaint them mid-gesture, and otherwise
   // at most every 400 ms unless the library's busy/progress state changes.
-  const heavy = new Set<PanelId>(catalogue.heavy);
+  const heavy = { has: (id: string) => !!catalogue.panels.find(panel => panel.id === id)?.heavy,
+    *[Symbol.iterator]() { yield* catalogue.panels.filter(panel => panel.heavy).map(panel => panel.id); } };
   let heavyAt = 0, heavyKey = "", heavyTimer: ReturnType<typeof setTimeout> | undefined;
   const heavyDue = (frame: Frame) => {
     const library = frame.library, key = JSON.stringify([library.busy, library.progress, library.summaries.length, library.draft?.revision, library.draft?.previous?.id]);
@@ -404,12 +436,12 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     return false;
   };
   const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(paint); } };
-  port.subscribe(() => {
+  const offPort = port.subscribe(() => {
     // A preservation notice must reach feedback before another adapter message can replace it while a paint is queued.
     const message = port.status.snapshot().message;
     if (message?.source === "layout-default") showMessage(message);
     schedule();
-  }); rt.subscribe(schedule); feedback.subscribe(schedule);
+  }); const offRuntime = rt.subscribe(schedule), offFeedback = feedback.subscribe(schedule);
   paint();
   let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   window.addEventListener("resize", () => {
@@ -424,8 +456,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     }, 120);
   });
 
-  const commands = () => withPreviewSetup(rt, [...buildCommands(rt, theme, view, byId,
-    featureViews.flatMap(({ binding, ctx }) => featureCommands(binding, ctx))), ...panels.flatMap(panel => panel.commands?.() ?? []), ...(tabs?.commands() ?? []), ...guidance.commands()]);
+  const commands = (input = rt) => withPreviewSetup(input, [...buildCommands(input, theme, view, byId,
+    featureViews.flatMap(({ binding }) => featureCommands(binding, featureViewContext(input, binding.owner)))), ...panels.flatMap(panel => panel.commands?.() ?? []), ...(tabs?.commands() ?? []), ...guidance.commands()]);
+  const palette = () => { const held = captureRuntime(rt); openPalette(() => commands(held.runtime), { onClose: held.release, signal: held.signal }); };
   // Native menus stay in text fields; custom menus are opened by their targets.
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {
@@ -434,7 +467,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     const shortcut = studioShortcut(event, { textInput: isTextInput(event.target), modalOpen });
     if (!shortcut) return;
     event.preventDefault();
-    if (shortcut === "palette") { if (!modalOpen) { closeMenus(false); openPalette(commands); } }
+    if (shortcut === "palette") { if (!modalOpen) { closeMenus(false); palette(); } }
     else if (shortcut === "save") void rt.request({ kind: "save" });
     else if (shortcut === "undo" || shortcut === "redo") {
       // An editor adapter cancels its own active gesture; never undo an earlier edit underneath it.
@@ -442,7 +475,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       if (state.gesture || state.control) { feedback.announce("Finish or cancel the current adjustment first (Esc)."); return; }
       // Undo follows focus (view-graph-design.md §3.6): in Camera & light and Preview quality (its Rendering options) it steps the View
       // and lighting history, not the look's.
-      if (["lighting", "quality"].some(id => byId.get(id)?.spec.element.contains(document.activeElement))) { rt.dispatch({ kind: shortcut === "redo" ? "view.redo" : "view.undo" }); return; }
+      if (panels.some(panel => ["lighting", "quality"].includes(port.tabs?.snapshot().tabs.flatMap(tab => tab.panels).find(instance => instance.id === panel.spec.id)?.type ?? "") && panel.spec.element.contains(document.activeElement))) { rt.dispatch({ kind: shortcut === "redo" ? "view.redo" : "view.undo" }); return; }
       // A focused panel's own history comes first: in the 3D view Ctrl+Z undoes the look it shows, even when a creator choice was changed
       // last (the Character panel steps its V's history itself). Elsewhere Undo follows the editing context, as the header's and History's do.
       const focusedPanel = [...byId.keys()].find(id => byId.get(id)!.spec.element.contains(document.activeElement));
@@ -452,12 +485,15 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     else if (shortcut === "guide") { closeMenus(false); openHelp(); }
     else view.openReference();
   });
-  header.bindPalette(() => openPalette(commands));
+  header.bindPalette(palette);
   // The check at start (the host skips it when Settings › Updates turns it off); the service waits until after first paint.
   startupUpdateCheck(rt);
   if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, tabs, panelsMenu: () => panelMenuItems(rt, view.research()), preferences: () => port.preferences.snapshot(),
     guidance: { start: guidance.start, reach: guidance.reach, verifyFacts: guidance.verifyFacts, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port, catalogue, dockRef?.tree)) } } });
-  return { dock, runtime: rt };
+  const dispose = () => { clearTimeout(heavyTimer); clearTimeout(resizeTimer); closeMenus(false); closePopovers(false);
+    offPort(); offRuntime(); offFeedback(); tabs?.dispose(); instancePanels.dispose(); viewPanes.dispose(); };
+  window.addEventListener("pagehide", dispose, { once: true });
+  return { dock, runtime: rt, dispose };
 }
 
 const verificationMode = (port: Port) => port.status.snapshot().verification;
@@ -730,21 +766,30 @@ export function panelMenuItems(rt: StudioRuntime, research: boolean): MenuItem[]
   const dock = rt.dock, modules = rt.port.views.modules();
   const titles = new Map(rt.port.views.titles().map(entry => [entry.panel, entry.title]));
   const row = (id: string): MenuItem => {
-    const meta = rt.views.meta[id], state = dock.panelState(id);
+    const meta = rt.views.meta[id];
+    const snapshot = rt.port.tabs?.snapshot(), tab = snapshot?.tabs.find(tab => tab.id === snapshot.shown);
+    const members = tab?.panels.filter(panel => panel.type === (id === "head" ? "view" : id)) ?? [];
+    const opened = members.filter(panel => dock.isOpen(panel.id));
+    const state = tab ? opened.length ? dock.panelState(opened[0]!.id) : "closed" : dock.panelState(id);
+    const destination = tab && rt.port.panels.tabTarget?.(tab.id);
+    const action = destination && { kind: "panels.setTypeVisible" as const, destination, type: id === "head" ? "view" : id,
+      visible: !opened.length, instances: members.map(panel => rt.port.panels.target!(panel.id)) };
     const owner = rt.views.panels.find(panel => panel.id === id)?.owner;
     return { kind: "action", label: titles.get(id) ?? meta?.title ?? id, icon: meta?.icon ?? "dot",
       checked: state === "open" || state === "collapsed", tip: meta?.description, stage: modules.find(module => (module.feature ?? module.id) === owner)?.stage,
       ...(state === "collapsed" ? { hint: "Collapsed" } : {}),
+      ...(action ? { capability: rt.port.authoring.capability(action) } : {}),
       run: () => {
+        if (action) { rt.dispatch(action); rt.changed(); return; }
         if (state === "collapsed") dock.reveal(id);
         else if (id === SETTINGS_PANEL && state === "closed") rt.settings.open();
         else dock.toggle(id);
       } };
   };
   const items: MenuItem[] = [{ kind: "heading", label: "Panels", detail: "In this tab" },
-    ...rt.views.panels.filter(panel => panel.owner === "shell" && !!dock.panel(panel.id)).map(panel => row(panel.id))];
+    ...rt.views.panels.filter(panel => panel.owner === "shell" && (panel.id !== "head" || !!rt.port.panels.instance("head"))).map(panel => row(panel.id))];
   for (const module of modules) {
-    const panels = rt.views.panels.filter(panel => panel.owner === (module.feature ?? module.id) && !!dock.panel(panel.id));
+    const panels = rt.views.panels.filter(panel => panel.owner === (module.feature ?? module.id));
     if (!panels.length) continue;
     items.push({ kind: "separator" }, { kind: "heading", label: module.label }, ...panels.map(panel => row(panel.id)));
   }
@@ -802,13 +847,15 @@ export function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, 
     id, title, group, ...extra, capability: () => port.files.capability(action), run: () => void rt.file(action) });
   const request = (id: string, title: string, group: string, value: Parameters<StudioRuntime["request"]>[0], extra: Partial<Command> = {}): Command => ({
     id, title, group, ...extra, capability: () => port.authoring.requestCapability(value), run: () => void rt.request(value) });
+  const openedTab = port.tabs?.snapshot().shown;
+  const structural = new Map([...panels.keys()].map(id => [id, port.panels.capture?.(id) ?? (() => ({ available: true }))]));
   const always = { capability: () => ({ available: true }) };
   const preview = port.authoring.previewState(), motion = preview.motion, history = port.authoring.history(), character = preview.character;
-  const characterScope = port.panels.historyScope("character");
+  const characterId = port.focus.targets().character, characterScope = characterId ? `character:${characterId}` : undefined;
   const views = port.views.snapshot() ?? { history: { depth: 0, redoDepth: 0 } as { undo?: string; redo?: string; depth: number; redoDepth: number } };
   // Research tools (UI-85) are offered only once the person turns them on.
   const research = (commands: Command[]) => view.research() ? commands : [];
-  return [
+  const commands: Command[] = [
     act("undo", historyCommandLabel("undo", port.authoring.capability({ kind: "history.undo" }), history.undo?.label), "Edit", { kind: "history.undo" },
       { icon: "undo", shortcut: shortcutLabel("shell.undo"), keywords: "undo back" }),
     act("redo", historyCommandLabel("redo", port.authoring.capability({ kind: "history.redo" }), history.redo?.label), "Edit", { kind: "history.redo" },
@@ -876,9 +923,6 @@ export function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, 
     act("preview.hair", preview.preview?.hair ? "Hide hair" : "Show hair", "View", { kind: "preview.setHair", enabled: !preview.preview?.hair }, { icon: "eye", keywords: "3d view visibility hair" }),
     act("preview.piercings", preview.preview?.piercings ? "Hide piercings" : "Show piercings", "View", { kind: "preview.setPiercings", enabled: !preview.preview?.piercings },
       { icon: "eye", keywords: "3d view visibility piercings earrings" }),
-    ...(["both", "single", "other", "fit"] as const).map(command => ({ id: `uv.${command}`, title: `UV: ${{ both: "Both eyes", single: "Single eye", other: "Other eye", fit: "Fit shape" }[command]}`,
-      group: "View", icon: "uv" as const, shortcut: `${shortcutLabel(`uv.${command}`)} in UV`,
-      capability: () => port.viewport.uvCommandCapability(command), run: () => { port.viewport.uvCommand(command); } })),
     // One entry per lighting setup (the one flat list), and the shown setup's own actions: a new setup from it, and Reset for the person's own.
     ...(preview.lightingSetups?.setups ?? []).map(entry => act(`lighting.setup.${entry.id}`, `Lighting: ${entry.label}`, "View",
       { kind: "preview.selectLightingSetup", setup: entry.id }, { icon: "lighting",
@@ -960,4 +1004,14 @@ export function buildCommands(rt: StudioRuntime, theme: Theme, view: ViewPrefs, 
       run: () => void port.diagnostics.dispatch({ kind: "diagnostics.setMode", mode }).then(result =>
         result.ok ? rt.feedback.record("info", "Diagnostics", result.message) : rt.feedback.toast("warning", "Diagnostics", result.message)) })),
   ];
+  return commands.map((command): Command => {
+    const id = command.id.startsWith("panel.collapse.") ? command.id.slice(15) : command.id.startsWith("panel.float.") ? command.id.slice(12)
+      : command.id.startsWith("panel.") ? command.id.slice(6) : undefined;
+    const check = id ? structural.get(id) : command.id === "history.open" ? port.tabs?.capture?.(openedTab) : undefined;
+    if (!check) return command as Command;
+    const current = (): Capability => port.tabs && port.tabs.snapshot().shown !== openedTab
+      ? { available: false, reason: "The shown tab changed. Open the command again." } : check();
+    return { ...command, capability: () => { const allowed = current(); return allowed.available ? command.capability() : allowed; },
+      run: () => { const allowed = current(); if (allowed.available) command.run(); else rt.feedback.announce(allowed.reason ?? "That panel changed."); } } as Command;
+  });
 }

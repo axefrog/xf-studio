@@ -38,6 +38,11 @@ export class LightElement extends LightNode {
       set: (_target, key, value) => { self.setAttribute(`data-${kebab(String(key))}`, String(value)); return true; },
     });
   }
+  scrollIntoView(_options?: unknown) {}
+  after(node: LightNode) {
+    const parent = this.parentNode; if (!parent) return;
+    parent.insertBefore(node, parent.childNodes[parent.childNodes.indexOf(this) + 1] ?? null);
+  }
   get children(): LightElement[] { return this.childNodes.filter((node): node is LightElement => node instanceof LightElement); }
   get childElementCount() { return this.children.length; }
   get parentElement(): LightElement | null { return this.parentNode; }

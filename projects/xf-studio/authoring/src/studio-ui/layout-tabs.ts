@@ -1,3 +1,4 @@
+import { capturedItems } from "./captured-runtime";
 import type { LayoutTabsPort } from "../app/profiles/tab-presentation";
 import type { LayoutTabAction } from "../app/profiles/tab-defaults";
 import type { LayoutDefaultView } from "../app/profiles/layout-defaults";
@@ -82,18 +83,20 @@ export function layoutTabs(deps: TabsDeps) {
     choiceForm?.refresh();
   }
   function fit() { if (strip.element.clientWidth) strip.fit(strip.element.clientWidth); }
-  if (typeof ResizeObserver === "function") new ResizeObserver(fit).observe(strip.element);
+  const observer = typeof ResizeObserver === "function" ? new ResizeObserver(fit) : undefined;
+  observer?.observe(strip.element);
   function rename(id: string, invoker: HTMLElement = strip.tab(id) ?? add, save = false) {
     const tab = tabs.snapshot().tabs.find(tab => tab.id === id);
     if (!tab) return;
+    const captured = tabs.capture?.(id) ?? (() => allowed);
     const action = (name: string): LayoutTabAction => save ? { kind: "tabs.saveAsDefault", tab: id, name } : { kind: "tabs.rename", tab: id, name };
     if (!cap(action(tab.name)).available) { feedback.announce(cap(action(tab.name)).reason ?? "This tab can't be renamed here."); return; }
     naming = id; signature = ""; sync();
     openValuePopover({ kind: "text", label: "Name", value: tab.name, maxLength: 61 }, invoker, {
       title: save ? "Save tab as default" : "Rename tab", apply: save ? "Save" : "Rename", invoker,
       hint: save ? "Saves a default of yours. Feature defaults stay available." : undefined,
-      validate: value => cap(action(String(value))),
-      commit: value => { run(action(String(value))); invoker.focus(); }, onClose: () => { naming = undefined; signature = ""; sync(); },
+      validate: value => captured().available ? cap(action(String(value))) : captured(),
+      commit: value => { if (!captured().available) return; run(action(String(value))); invoker.focus(); }, onClose: () => { naming = undefined; signature = ""; sync(); },
     });
   }
   function deleteDefault(view: LayoutDefaultView) {
@@ -148,7 +151,8 @@ export function layoutTabs(deps: TabsDeps) {
     const items = defaultItems(invoker), last = tabs.snapshot().lastDefault;
     const view = last && tabs.defaults().find(view => view.id === last), plan = view && tabs.substitution(view.id);
     const focusLabel = view ? `${view.name}${plan && "subjects" in plan && plan.oneClick ? (summary(plan) ? ` — ${summary(plan)}` : "") : "…"}` : undefined;
-    openMenu(items, invoker, { label: "New tab", invoker, focusLabel });
+    const captured = tabs.capture?.() ?? (() => allowed);
+    openMenu(capturedItems(items, () => captured().available), invoker, { label: "New tab", invoker, focusLabel });
   }
   function menuItems(id: string, invoker: HTMLElement): MenuItem[] {
     const state = tabs.snapshot(), tab = state.tabs.find(tab => tab.id === id);
@@ -168,13 +172,16 @@ export function layoutTabs(deps: TabsDeps) {
     return items;
   }
   function menu(id: string, invoker: HTMLElement, anchor: HTMLElement | { x: number; y: number } = invoker) {
-    openMenu(menuItems(id, invoker), anchor, { label: tabs.snapshot().tabs.find(tab => tab.id === id)?.name ?? "Tab", invoker });
+    const captured = tabs.capture?.(id) ?? (() => allowed);
+    openMenu(capturedItems(menuItems(id, invoker), () => { const current = captured(); if (!current.available) feedback.announce(current.reason ?? "That tab changed."); return current.available; }), anchor, { label: tabs.snapshot().tabs.find(tab => tab.id === id)?.name ?? "Tab", invoker });
   }
   function substitution(view: LayoutDefaultView, invoker: HTMLElement, reset?: string) {
     choiceForm?.close(false);
-    let choice: SubstitutionChoice = {}, note = "";
+    let choice: SubstitutionChoice = {}, note = "", active = true;
+    const captured = tabs.capture?.(reset) ?? (() => allowed);
     const action = () => ({ ...defaultAction(view, reset), choice });
     const snapshot = () => {
+      if (!active || !captured().available) return { fields: [], capability: { available: false, reason: "That tab changed. Open the command again." } };
       // Re-read candidates, dropping choices removed by another edit while this form was open.
       let plan = tabs.substitution(view.id, choice);
       if (!("subjects" in plan)) {
@@ -206,7 +213,7 @@ export function layoutTabs(deps: TabsDeps) {
         if (kind === "subject") choice = { ...choice, subjects: { ...choice.subjects, [slot]: value ? JSON.parse(value) as SubjectRef : null }, scenes: {} };
         else if (kind === "look") choice = { ...choice, looks: { ...choice.looks, [slot]: value ? JSON.parse(value) as LookRef : null } };
         else choice = { ...choice, scenes: { ...choice.scenes, [slot]: value || null } };
-      }, commit: () => { run(action()); }, onClose: () => { choiceForm = undefined; } });
+      }, commit: () => { if (captured().available) run(action()); }, onClose: () => { active = false; choiceForm = undefined; } });
   }
   function key(event: KeyboardEvent, id: string, tab: HTMLButtonElement) {
     const binding = keyBinding("tabs", event), ids = tabs.snapshot().tabs.map(tab => tab.id), at = ids.indexOf(id);
@@ -252,15 +259,17 @@ export function layoutTabs(deps: TabsDeps) {
   }
   function commands(): Command[] {
     const state = tabs.snapshot(), current = state.tabs.find(tab => tab.id === state.shown), defaults = tabs.defaults();
-    const command = (id: string, title: string, action: LayoutTabAction): Command => ({ id, title, group: "Layout tabs", icon: "layouts", capability: () => cap(action), run: () => { run(action); } });
+    const captured = tabs.capture?.() ?? (() => allowed);
+    const command = (id: string, title: string, action: LayoutTabAction): Command => ({ id, title, group: "Layout tabs", icon: "layouts", capability: () => captured().available ? cap(action) : captured(), run: () => { if (captured().available) run(action); } });
     return [...state.tabs.map(tab => command(`tab.${tab.id}`, `Tab: ${tab.name}`, { kind: "tabs.show", tab: tab.id })),
-      ...defaults.map(view => ({ ...command(`tab.new.${view.id}`, `New tab: ${view.name}`, { kind: "tabs.new", default: view.id }), run: () => choose(view, add) })),
-      ...(current ? [...defaults.map(view => ({ ...command(`tab.reset.${view.id}`, `Reset tab to ${view.name}`, { kind: "tabs.reset", tab: current.id, default: view.id }), run: () => choose(view, strip.tab(current.id) ?? add, current.id) })),
-        { ...command("tab.saveDefault", "Save tab as default…", { kind: "tabs.saveAsDefault", tab: current.id, name: current.name }), run: () => rename(current.id, strip.tab(current.id) ?? add, true) },
+      ...defaults.map(view => ({ ...command(`tab.new.${view.id}`, `New tab: ${view.name}`, { kind: "tabs.new", default: view.id }), run: () => { if (captured().available) choose(view, add); } })),
+      ...(current ? [...defaults.map(view => ({ ...command(`tab.reset.${view.id}`, `Reset tab to ${view.name}`, { kind: "tabs.reset", tab: current.id, default: view.id }), run: () => { if (captured().available) choose(view, strip.tab(current.id) ?? add, current.id); } })),
+        { ...command("tab.saveDefault", "Save tab as default…", { kind: "tabs.saveAsDefault", tab: current.id, name: current.name }), run: () => { if (captured().available) rename(current.id, strip.tab(current.id) ?? add, true); } },
         command("tab.close", "Close tab", { kind: "tabs.close", tab: current.id })] : []),
       ...(state.closed.length ? [command("tab.reopen", "Reopen closed tab", { kind: "tabs.reopen" })] : []),
       { id: "tab.new", title: "New tab…", group: "Layout tabs", icon: "plus", capability: () => defaults.some(view => cap({ kind: "tabs.new", default: view.id }).available) ? allowed : { available: false, reason: "No tab can be created here." }, run: () => newMenu() }];
   }
-  tabs.subscribe(sync); sync();
-  return { element, strip, add, sync, fit, menu, menuItems, newMenu, rename, commands, globalKey };
+  const off = tabs.subscribe(sync); sync();
+  const dispose = () => { off(); observer?.disconnect(); choiceForm?.close(false); };
+  return { dispose, element, strip, add, sync, fit, menu, menuItems, newMenu, rename, commands, globalKey };
 }

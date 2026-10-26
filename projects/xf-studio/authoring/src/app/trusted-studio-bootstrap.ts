@@ -6,7 +6,7 @@ import type { CollectionServiceDeps } from "../library/collection-service";
 import type { SavedAppearanceState } from "../character/saved-appearance-actions";
 import type { SavedV } from "../saves/save-reader";
 import { readSavedV } from "../saves/save-reader";
-import { StudioFileOperations, type StudioFilePort, type FileWriter, type InputCapture } from "./studio-file-operations";
+import { StudioFileOperations, type StudioFilePort, type FileWriter, type InputCapture, type FileWriterCapture } from "./studio-file-operations";
 import { createStudioPresentation, type ProjectLinkPort, type StudioPresentationPort } from "./studio-presentation";
 import type { PresentationStatusSource } from "./presentation-status";
 import type { createTrustedAuthoringCore } from "./trusted-authoring-core";
@@ -30,9 +30,11 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   core: Core;
   naming?: () => NamedTargets;
   lookSelection?: (ref: import("../library/collection-documents").LookRef) => import("./studio-application").StudioAction;
-  fileCapture?: () => InputCapture;
+  fileCapture?: () => InputCapture | FileWriterCapture;
+  fileOwner?: StudioFileOperations;
+  retireFiles?: boolean;
   signal?: AbortSignal;
-  bound?: Pick<ConstructorParameters<typeof PanelEditingContexts<Slot>>[0], "session" | "targets" | "looks" | "empty" | "character" | "context">;
+  bound?: Pick<ConstructorParameters<typeof PanelEditingContexts<Slot>>[0], "session" | "targets" | "looks" | "empty" | "character" | "context" | "available">;
   preferences: UIPreferenceActions;
   viewport: ViewportAttachment<Slot>;
   previewReadiness: Pick<AuthoringPreviewCoordinator, "readiness" | "subscribe">;
@@ -70,6 +72,9 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   outbox?: import("../platform/core/document-outbox").DocumentOutbox;
   /** A panel's instance in the tab shown (the profile session's). */
   panelInstance?: (panel: string, tab?: string) => string;
+  capturePort?: (signal: AbortSignal) => StudioPresentationPort<Slot>;
+  panelViewport?: (input: { core: Core; named: NamedTargets; instance: string; signal: AbortSignal; check(): Capability }) => ViewportAttachment<Slot>;
+  panelTargets?: Pick<StudioPresentationPort<Slot>["panels"], "target" | "tabTarget" | "capture">;
   tabs?: import("./profiles/tab-presentation").LayoutTabsPort;
   starters?: import("./starters/starter-actions").StartersPort;
   emptyChoices?: import("./profiles/empty-choices").EmptyChoicesPort;
@@ -135,13 +140,16 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     capture: options.bound || options.fileCapture ? () => {
     if (editing) return editing.captureView(options.naming?.().view, life.signal);
     const held = options.fileCapture?.();
-    return held && { ...held, writer };
-  } : undefined });
+    return held && { ...held, writer: "writer" in held ? held.writer : writer };
+  } : undefined }, options.fileOwner);
   collection = new CollectionApplication({ ...options.collections, model: core.documents }, core.document, core.app, files);
   editing = options.bound ? new PanelEditingContexts<Slot>({ ...options.bound, create: input => {
-    const scoped = createTrustedStudioBootstrap<Slot>({ ...options, core: input.core, bound: undefined, naming: () => input.named,
+    let childPort: StudioPresentationPort<Slot>, childFiles: StudioFileOperations;
+    const scoped = createTrustedStudioBootstrap<Slot>({ ...options, core: input.core, bound: undefined, fileOwner: input.fileOwner, retireFiles: true, naming: () => input.named,
+      viewport: !input.captured ? options.panelViewport?.(input) ?? options.viewport : options.viewport, panelViewport: undefined, capturePort: signal => ({ ...input.capturePort(signal, childFiles), viewport: childPort.viewport }),
       lookSelection: input.choose, signal: input.signal,
-      fileCapture: input.capture, panelInstance: () => input.instance, onRecipeImported: () => {},
+      fileCapture: input.capture, panelInstance: (panel, tab) => panel === input.instance || panel === options.bound!.session.panel(input.instance)?.type
+        ? input.instance : options.panelInstance?.(panel, tab) ?? "", onRecipeImported: () => {},
       collections: { ...options.collections, current: input.check, preserveEmpty: true, scene: input.scene, flushLook: () => options.bound!.looks.commit() },
       savedAppearance: { has: () => !!input.core.app.characterSavedV(), read: () => input.core.app.characterSavedV(), ready: character => character === input.named.character && !!input.core.app.characterPanel(),
         load: (bytes, character) => {
@@ -149,10 +157,13 @@ export function createTrustedStudioBootstrap<Slot>(options: {
           if (!done.ok) throw Error(done.message);
           return { savedV: value };
         } } });
-    return { port: scoped.mount(port => port), writer: scoped.writer, dispose: scoped.dispose };
+    childFiles = scoped.files;
+    childPort = scoped.mount(port => port);
+    return { port: childPort, writer: scoped.writer, files: scoped.files, dispose: scoped.dispose };
   } }) : undefined;
   const port = createStudioPresentation({ authoring: core.app, library: collection,
-    naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal,
+    capturePort: options.capturePort ?? (editing ? signal => editing!.capturePort(options.naming?.().view, signal, files) : undefined),
+    panelTargets: options.panelTargets, naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal,
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
     localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts,
@@ -167,7 +178,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
     files, collection, writer,
-    dispose() { options.signal?.removeEventListener("abort", abort); life.abort(); files.dispose(); collection.dispose(); },
+    dispose() { options.signal?.removeEventListener("abort", abort); life.abort(); if (options.retireFiles) files.retire(); else files.dispose(); collection.dispose(); },
     mount<T>(mountPresentation: (presentation: StudioPresentationPort<Slot>) => T): T {
       return mountPresentation(port);
     },

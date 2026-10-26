@@ -193,6 +193,10 @@ export class ViewPanels {
       this.reconciling = false;
     }
   }
+  dispose() {
+    for (const pane of this.panes.values()) { this.deps.removed?.(pane); pane.spec.visibility?.(false); pane.dispose?.(); }
+    this.panes.clear(); this.placed = undefined;
+  }
   private rememberArrangement() {
     const { tab, layout } = this.deps.arrangement();
     this.tab = tab; this.layout = JSON.stringify(layout);

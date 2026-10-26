@@ -382,3 +382,9 @@ if (parentPort) {
   catch (error) { parentPort.postMessage({ error: error instanceof Error ? error.message : String(error) }); }
   finally { parentPort.close(); }
 }
+
+/** P3-iii controller commands. The expected open/available set is maintained by the caller's independent account. */
+export function generateInstanceCommands(seed: number, length = 48) {
+  const random = seededRandom(seed), operations = ["show", "park", "withdraw", "resume", "focus", "capture", "abort"] as const;
+  return Array.from({ length }, () => ({ op: operations[Math.floor(random() * operations.length)]!, panel: Math.floor(random() * 3) }));
+}

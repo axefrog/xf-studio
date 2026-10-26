@@ -29,7 +29,7 @@ export function frameworkNote(frame: Frame): string | null {
  */
 export function frameworkGroup(rt: StudioRuntime) {
   const port = rt.port;
-  const status = new FrameworkStatus({ label: "Mod frameworks", help: FRAMEWORKS_HELP, key: "settings.frameworks",
+  const status = new FrameworkStatus({ label: "Mod frameworks", help: FRAMEWORKS_HELP, key: rt.key("settings.frameworks"),
     onCheckAgain: () => void checkAgain(), onRetryRequirements: () => void port.installDetection.retryRequirements().then(() => rt.changed()),
     onOpenLink: id => void openPage(id as ProjectLink) });
   // Checking and opening a page change nothing, so a read-only window keeps them (style guide t-read-only-window).

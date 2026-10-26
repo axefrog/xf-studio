@@ -297,6 +297,16 @@ export class ProfileSessions {
     this.changed();
   }
 
+  /** Instance presentation memory is unrecorded and cannot write through a replaced binding or tab. */
+  rememberPanelState(destination: PanelTarget, state: unknown) {
+    this.checkPanelTarget(destination);
+    const at = this.index(destination.tab), current = this.tabs[at]!, value = clone(state);
+    const panel = current.panels.find(panel => panel.id === destination.instance)!;
+    if (same(panel.state, value)) return;
+    this.tabs[at] = { ...current, panels: current.panels.map(panel => panel.id === destination.instance ? { ...panel, state: value } : panel) };
+    this.rememberContent(this.tabs[at]!); this.changed();
+  }
+
   /** Closed tabs may still name a live shared scene. Their stored copies follow its unrecorded target edits immediately. */
   private setSceneTarget(scene: string, target: SceneTarget) {
     this.targets.set(scene, target);
@@ -606,7 +616,7 @@ export class ProfileSessions {
       case "tabs.close": this.close(action.tab); break;
       case "tabs.reopen": this.reopen(action.closed); break;
       case "tabs.duplicate": this.duplicate(action.tab); break;
-      case "tabs.arrange": this.arrange(action.tab, action.layout); break;
+      case "tabs.arrange": this.arrangeInstances(action.tab, action.layout); break;
     }
     return undefined;
   }

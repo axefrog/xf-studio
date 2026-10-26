@@ -1,3 +1,5 @@
+import { STUDIO_CATALOGUE } from "./views";
+import { createPanelUVFactory } from "../preview/browser/panel-uv";
 import { EXPRESSION_FRAMEWORK_REQUIREMENTS } from "../features/expressions/requirements";
 import { polish5Verification } from "./polish5-verification";
 import { startersFixtures } from "./starters-verification";
@@ -270,7 +272,6 @@ async function start(host: StudioHost, root: HTMLElement) {
   /** Stops waiting for the page to be quiet before the installed expressions are read ahead (facial-prefetch.ts). */
   let stopPrefetch: (() => void) | undefined;
   let bootstrap: ReturnType<typeof createTrustedStudioBootstrap<HTMLElement>>;
-  let uvEditor: ReturnType<ReturnType<typeof createBrowserViewportDevice>["mountUV"]> | undefined;
 
   /**
    * The head shown now: the scene runtime owner's (`heads`, made below), read by what is wired before it. Several of those read it at once
@@ -328,7 +329,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   core.app.attach({ scenes: sceneCommands(sessionState, services), tabs: layoutTabs });
   const starterActions = new StarterActions({ starters: starterShapes, feature: region.id, label: region.label, thumbnail: region.thumbnail });
   core.app.attach({ starters: starterActions, starterShapes });
-  const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, contexts: type => layouts.catalogue().context(type),
+  const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, generation: type => type === "view" || STUDIO_CATALOGUE.ids.includes(type) ? 0 : experiments.registrationGeneration(), available: type => type === "view" || layouts.catalogue().ids.includes(type), contexts: type => layouts.catalogue().context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
   core.app.attach({ targetCheck: targets, panels: panelCommands(sessionState, targets, layouts.catalogue) });
@@ -348,7 +349,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     reserved: () => documents.outbox.storedSize(),
     capture: {
       editor: () => frozenEditor,
-      uvView: () => uvEditor?.snapshot() ?? workspace.uvView,
+      uvView: () => workspace.uvView,
       savedV: () => workspace.savedV,
       collections: () => workspace.collections,
       quality: () => previewDevice?.coordinator.quality.snapshot().size ?? workspace.preview.textureSize,
@@ -382,7 +383,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     });
   }
   const persist = () => session.request();
-  const drawUV = () => viewportDevice.drawUV();
+  let panelUV: ReturnType<typeof createPanelUVFactory> | undefined;
+  const drawUV = () => { viewportDevice.drawUV(); panelUV?.draw(); };
   previewDevice = createBrowserPreviewDevice({
     document: core.document, region: rasterRegion(region), initialSize: workspace.preview.textureSize,
     // The look the document shows: a warm head's surface keeps that look's makeup, given back when the document shows it again (D3).
@@ -424,11 +426,6 @@ async function start(host: StudioHost, root: HTMLElement) {
     naming: { look: view => targets.named(panelOf(view)).look,
       complete: (action, view) => targets.complete(action, core.app.descriptor(action.kind as StudioAction["kind"]), { instance: panelOf(view) }) as StudioAction },
     drawn: () => drawnView(), viewport: viewportDevice, attach: services => core.app.attach(services), message: adapterMessage });
-  uvEditor = viewportDevice.mountUV(byId<HTMLCanvasElement>("device-uv-canvas"), undefined, {
-    ...editors.uvHooks(), canvases: () => previewDevice.canvases,
-    albedo: () => shownHead()?.scene.albedo.image as HTMLImageElement | undefined,
-    persist: () => { persist(); viewportDevice.attachment.viewChanged(); },
-  }, workspace.uvView);
   // The drawn scene's heads (profiles phase 4a-iv): the head of the V it shows, built hidden and shown once ready, with one more kept warm.
   // A change of the scene's V or of the V's body supersedes any earlier one; the V's context outlives the heads. What follows the shown
   // head (the live face, the poses stage, prefetching) is connected here as each one is shown.
@@ -484,11 +481,15 @@ async function start(host: StudioHost, root: HTMLElement) {
   });
   const packageTransport = collectionTransport(`${base}/collections`);
   const polish5 = verification ? polish5Verification(packageTransport) : undefined;
+  panelUV = createPanelUVFactory({ session: sessionState, fallback: viewportDevice.attachment, region, initial: workspace.uvView,
+    canvases: named => named.look && lookEditor.ref() && sameLook(named.look, lookEditor.ref()!) ? previewDevice.canvases : [],
+    albedo: named => named.character && named.character === targets.namedView(drawnView()).character ? shownHead()?.scene.albedo.image as HTMLImageElement | undefined : undefined });
   bootstrap = createTrustedStudioBootstrap({
     core, preferences, localSetup, installDetection,
     naming: () => targets.namedView(drawnView()),
 
-    bound: { session: sessionState, targets, looks: profileAuthoring.contexts, empty: profileAuthoring.empty, context: type => layouts.catalogue().context(type),
+    panelViewport: input => panelUV!.acquire(input),
+    bound: { available: type => type === "view" || layouts.catalogue().ids.includes(type), session: sessionState, targets, looks: profileAuthoring.contexts, empty: profileAuthoring.empty, context: type => layouts.catalogue().context(type),
       character: id => services.characters.character(id) ? heads.context(id) : undefined },
     frameworkProducts: [{ feature: "expressions", name: "expression sets", requirements: EXPRESSION_FRAMEWORK_REQUIREMENTS }],
     modInstall, previewSetup, viewport: viewportDevice.attachment,
@@ -526,7 +527,11 @@ async function start(host: StudioHost, root: HTMLElement) {
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
     fileDevice: workspaceFiles, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
-    panelInstance: (panel, tab) => sessionState.inputInstance(panel, tab),
+    panelInstance: (panel, tab) => sessionState.instance(panel, tab),
+    panelTargets: { target: id => sessionState.panelTarget(id), tabTarget: id => sessionState.panelTabTarget(id), capture: id => {
+      const structural = targets.structural(id), destination = sessionState.panelTarget(id);
+      return () => { const current = structural(); return current.available ? core.app.capability({ kind: "panels.show", destination }) : current; };
+    } },
     tabs: layoutTabsPort(sessionState, layoutTabs, services), starters: starterActions.port(),
     emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
       createLookCapability: collection => core.app.capability({ kind: "preset.edit", collection, command: { kind: "add" } }),

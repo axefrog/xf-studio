@@ -47,7 +47,7 @@ import type { Command } from "../commands";
 import { allSections, CHARACTER_CONTRIBUTIONS, characterPanelTree, type CharacterPanelGroup, type CharacterPanelSection, type CharacterSectionContribution,
   type CharacterToggle, type CharacterToggleState } from "../../character/character-panel-sections";
 import { icon } from "../icons";
-import { viewState } from "../view-state";
+import { scopedViewState } from "../view-state";
 import { VIEW_KEY } from "../scroll-anchor";
 import type { Frame, Port, StudioRuntime } from "../runtime";
 import type { PanelController } from "./collection";
@@ -125,7 +125,7 @@ export const characterPanel = (rt: StudioRuntime): PanelController => characterP
 /** The Character panel with a module's contributions and the controls they name (beside the panel's own). */
 export function characterPanelWith(rt: StudioRuntime, contributions: readonly CharacterSectionContribution[] = CHARACTER_CONTRIBUTIONS,
   moduleControls: CharacterControls = {}): PanelController {
-  const port = rt.port;
+  const port = rt.port, memory = scopedViewState(rt.instance?.id);
   const dispatch = (action: Parameters<StudioRuntime["dispatch"]>[0]) => rt.dispatch(action);
 
   // ---- The V and its source ----
@@ -157,7 +157,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const setupWolvenKit = wolvenKitStepButton(rt);
   const detailsToggle = button({ label: "Details", small: true, variant: "quiet", className: "cc-details-toggle",
     onClick: () => { showMessages = !showMessages; rt.changed(); } });
-  detailsToggle.setAttribute("aria-expanded", "false"); detailsToggle.setAttribute("aria-controls", "cc-messages");
+  detailsToggle.setAttribute("aria-expanded", "false"); detailsToggle.setAttribute("aria-controls", rt.key("cc-messages"));
   const status = h("div", { class: "cc-status" }, statusText, retry, setupWolvenKit.element, keep, detailsToggle);
   // Changed in another window (t-conflict): first in "Your V" while a conflict waits, with the three ways out.
   const conflictNotice = new ConflictNotice({ onResolve: keep => dispatch({ kind: "character.resolveConflict", keep }),
@@ -167,7 +167,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const elsewhere = note("");
   elsewhere.setAttribute("role", "status");
   elsewhere.setAttribute("aria-live", "polite");
-  const messages = h("div", { class: "cc-messages", id: "cc-messages", hidden: true });
+  const messages = h("div", { class: rt.key("cc-messages"), id: rt.key("cc-messages"), hidden: true });
   let showMessages = false;
   // The library's search field (icon, clear button, Escape clears; the same as Poses): the panel filters on its pause, and each paint
   // reads the query from its input.
@@ -284,7 +284,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   /** A row's view key: its open state is remembered (closed by default), and a scroll position can anchor on it. */
   const rowFold = (view: RowView) => `character:row:${rowKey(view)}`;
   const rowOpen = (view: RowView) => {
-    const open = viewState().expanded(rowFold(view)) ?? false;
+    const open = memory.expanded(rowFold(view)) ?? false;
     if (open) openRows.add(rowKey(view));
     return open;
   };
@@ -301,7 +301,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
     if (!keys.length) return;
     for (const key of keys) if (fold) folded.add(key); else folded.delete(key);
     // Presentation state: the fold shows at once; remembering it is best effort.
-    viewState().setExpanded(keys, !fold);
+    memory.setExpanded(keys, !fold);
     paintFolds(search.value.trim().toLowerCase());
     rt.changed();
   }
@@ -357,7 +357,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
           rowsHost.append(controls.element);
           rows.push(controls); own.push(controls);
         }
-        const bodyId = `cc-section-${++serial}`, fold = `${FOLD}${entry.key}`;
+        const bodyId = rt.key(`cc-section-${++serial}`), fold = `${FOLD}${entry.key}`;
         const extras = entry.controls.flatMap(id => controls_[id] ? [controls_[id]!] : []);
         const body = h("div", { class: "cc-section-body", id: bodyId }, ...extras, rowsHost);
         const controls: SectionControls = { element: body, heading: null!, rows: own, own, fixed: extras.length > 0 || entry.toggles.length > 0, fold, body,
@@ -376,7 +376,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       };
       const top = group.sections.map(entry => buildSection(entry, null));
       const sections = flat;
-      const bodyId = `cc-group-${group.id}`, fold = `${FOLD}group/${group.id}`;
+      const bodyId = rt.key(`cc-group-${group.id}`), fold = `${FOLD}group/${group.id}`;
       const extras = group.controls.flatMap(id => controls_[id] ? [controls_[id]!] : []);
       const body = h("div", { class: "cc-group-body", id: bodyId }, ...extras, h("div", { class: "cc-sections" }, ...top.map(section => section.element)));
       const head = heading("group", group.title, group.toggles, bodyId, () => setFolds([fold], !folded.has(fold)), null);
@@ -468,7 +468,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
     const key = rowKey(controls.view);
     if (controls.open) { openRows.add(key); aheadRow = key; }
     else { openRows.delete(key); stopPrefetch(controls); if (aheadRow === key) aheadRow = [...openRows].at(-1) ?? null; }
-    viewState().setExpanded([rowFold(controls.view)], controls.open);
+    memory.setExpanded([rowFold(controls.view)], controls.open);
     // The chevron turns at once; the list follows on the next paint.
     setExpanded(controls.main, controls.open);
     if (paint) rt.changed();
@@ -650,7 +650,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       }
       group.element.hidden = !any && !!query;
     }
-    readFolds(viewState().folded(FOLD));
+    readFolds(memory.folded(FOLD));
     paintFolds(query);
     updateHeadings(frame);
     noMatch.hidden = !query || visibleRows > 0 || !!found?.loading;

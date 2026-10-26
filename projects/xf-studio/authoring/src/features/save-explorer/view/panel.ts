@@ -76,7 +76,7 @@ export function explorerPanel(ctx: Ctx): PanelController {
     actions: [tabs.element], className: "save-header" });
   const tree = h("ul", { class: "save-tree", role: "tree", "aria-label": "Nodes of this save" });
   // Its height is the person's, with the bar under it: it fits its rows up to that (60 % of the window by default), kept across reloads.
-  const treeBar = new SizeBar({ label: "Nodes of this save", target: tree, key: "save-explorer:tree", fit: true, step: SAVE_ROW, snap: { step: SAVE_ROW, offset: 2 },
+  const treeBar = new SizeBar({ label: "Nodes of this save", target: tree, key: ctx.viewKey?.("save-explorer:tree") ?? "save-explorer:tree", fit: true, step: SAVE_ROW, snap: { step: SAVE_ROW, offset: 2 },
     // The default, 60 % of the window, is snapped to whole rows like every drag, so it never ends partway through a row (UI-155).
     minHeight: 4 * SAVE_ROW + 2, defaultHeight: () => snapHeight(Math.round((typeof innerHeight === "number" && innerHeight > 0 ? innerHeight : 900) * .6), { step: SAVE_ROW, offset: 2 }),
     valueText: (height, isDefault) => rowWords(height, SAVE_ROW, isDefault) });
@@ -84,7 +84,7 @@ export function explorerPanel(ctx: Ctx): PanelController {
   const objectPane = h("div", { class: "save-object" });
   const modsPane = h("div", { class: "save-mods" });
   const treeHelp = note(`${chordsLabel(keyBindingById("rows.focus"))} move, ${chordsLabel(keyBindingById("rows.expand"))} open and close, Enter shows the node.`);
-  const nodesView = new SplitView({ label: "the node tree and the inspector", key: "save-explorer.nodes", initial: .42, min: 220, className: "save-explorer-body",
+  const nodesView = new SplitView({ label: "the node tree and the inspector", key: ctx.viewKey?.("save-explorer.nodes") ?? "save-explorer.nodes", initial: .42, min: 220, className: "save-explorer-body",
     start: stack({ className: "save-tree-pane" }, treeBar.region, treeHelp), end: stack({ gap: "loose", className: "save-inspect-pane" }, nodePane, objectPane) }).element;
   const loading = h("p", { class: "note info", role: "status" });
   const failed = h("div", { hidden: true });

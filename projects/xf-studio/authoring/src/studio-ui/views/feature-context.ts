@@ -1,3 +1,4 @@
+import { captureRuntime, capturedItems } from "../captured-runtime";
 /**
  * The shell's side of feature views (UI-73): it builds each feature view's `FeatureViewContext` from the
  * feature's facade and its own presentation services, and renders what the view contributes (target menus,
@@ -43,6 +44,8 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
     { label: menu.label, detail: menu.detail, items: contextItems(rt, port.authoring.contextQuery(target), anchor) },
     { items: menu.items.map(item => render(target, item, anchor)) }];
   return Object.freeze({
+    viewKey: (key: string) => rt.key(key),
+    capture: () => { const held = captureRuntime(rt); return { context: context(held.runtime, owner), signal: held.signal, release: held.release }; },
     facade,
     dispatch,
     range: (kind, field, variant) => rt.range(kind as PresentationAction["kind"], field, variant),
@@ -84,17 +87,20 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
     changed: () => rt.changed(),
     research: () => !!port.preferences.snapshot().researchTools,
     easing: Object.freeze({
-      get: (scope: string) => port.preferences.snapshot().easings?.[scope],
+      get: (scope: string) => port.preferences.snapshot().easings?.[rt.key(scope)],
       set: (scope: string, easing: EasingId) => {
-        const action = { kind: "easing.set" as const, scope, easing };
+        const action = { kind: "easing.set" as const, scope: rt.key(scope), easing };
         if (!port.preferences.capability(action).available) return;
         port.preferences.dispatch(action);
         rt.changed();
       },
     }),
     targetSections,
-    targetMenu: (target, menu, anchor, invoker) =>
-      openMenu(menuFromSections(targetSections(target, menu, anchor)), anchor, { label: menu.title, invoker }),
+    targetMenu: (target, menu, anchor, invoker) => {
+      const held = captureRuntime(rt), captured = context(held.runtime, owner), definition = typeof menu === "function" ? menu(captured) : menu;
+      const items = capturedItems(menuFromSections(captured.targetSections(target, definition, anchor)), held.active);
+      if (!openMenu(items, anchor, { label: definition.title, invoker, signal: held.signal, onClose: held.release })) held.release();
+    },
     uv: Object.freeze({
       attach: (slot: HTMLElement) => port.viewport.attach("uv", slot),
       resize: () => port.viewport.resize("uv"),
@@ -139,13 +145,16 @@ export function moduleViewContext(rt: StudioRuntime, owner: string, tab?: () => 
   const facade = rt.port.module(owner);
   if (!facade) throw Error(`The ${owner} view has no registered module service.`);
   return Object.freeze({
+    viewKey: (key: string) => rt.key(key),
     facade,
-    instance: (panel: string) => rt.port.panels.instance(panel, tab?.()),
+    instance: (panel: string) => rt.instance?.id ?? rt.port.panels.instance(panel, tab?.()),
     targets: () => rt.port.focus.targets(),
     dispatch: async (action: { kind: string }, options?: Parameters<StudioRuntime["report"]>[2]) => {
+      if (rt.instance?.signal.aborted) return false;
       let outcome: Awaited<ReturnType<typeof facade.dispatch>>;
       try { outcome = await facade.dispatch(action); }
       catch { outcome = { ok: false, code: "unavailable", message: "That didn't work. Try again." }; }
+      if (rt.instance?.signal.aborted) return false;
       const ok = rt.report(action.kind, outcome.ok ? { ok: true as const }
         : { ok: false as const, code: outcome.code ?? "invalid_value", message: outcome.message ?? "That can't be done now." }, options);
       rt.changed();

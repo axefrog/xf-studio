@@ -1,3 +1,5 @@
+import { TabRefusal } from "./profile-sessions";
+import type { Capability } from "../../platform/api";
 import type { DockLayout } from "../ui-preferences";
 import type { LayoutTab, ClosedTab } from "./profile-session";
 import type { LayoutDefaultView } from "./layout-defaults";
@@ -12,6 +14,8 @@ import type { LookRef } from "../../library/collection-documents";
 export type LayoutTabsPort = {
   snapshot(): { tabs: readonly LayoutTab[]; shown: string; closed: readonly ClosedTab[]; lastDefault?: string; opening?: ViewOpening };
   dock(tab?: string): DockLayout | null;
+  /** Detached structural capture: navigation/progress do not invalidate it; replacement and reset do. */
+  capture?(tab?: string): () => Capability;
   defaults(): readonly LayoutDefaultView[];
   substitution(id: string, choice?: SubstitutionChoice): ReturnType<TabDefaults["substitution"]>;
   subject(ref: SubjectRef): string;
@@ -25,10 +29,17 @@ export function layoutTabsPort(session: ProfileSessions, defaults: TabDefaults,
     snapshot: () => {
       const opening = session.viewOpening();
       return { tabs: session.tabList(), shown: session.tabId(), closed: session.closedTabs(), lastDefault: session.lastDefault(),
-        // P3-i D1: the phase-2 dock consumes aliases on every path, including a captured opening slot.
-        opening: opening && { ...opening, arrangement: session.legacyDock(opening.tab, opening.arrangement) } };
+        opening };
     },
-    dock: (tab?: string) => session.legacyDock(tab), defaults: () => services.defaults.list(),
+    capture: (tab = session.tabId()) => {
+      const destination = tab ? session.panelTabTarget(tab) : undefined;
+      return () => {
+        try { if (destination) session.checkPanelTarget(destination); else if (session.tabId()) return { available: false, reason: "The tab list changed. Open the command again." };
+          return { available: true }; }
+        catch (error) { if (error instanceof TabRefusal) return { available: false, reason: error.message }; throw error; }
+      };
+    },
+    dock: (tab?: string) => session.dock(tab), defaults: () => services.defaults.list(),
     substitution: (id: string, choice?: SubstitutionChoice) => defaults.substitution(id, choice),
     subject: (ref: SubjectRef) => ref.kind === "character" ? services.characters.character(ref.id)?.label ?? "Unnamed V" : ref.kind,
     look: (ref: LookRef) => services.collections.look(ref)?.name ?? "Unnamed look",

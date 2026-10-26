@@ -23,7 +23,7 @@ test("a view names its V and look without History's V kind prefix", () => {
 
 test("replacement presentation can perform current cross-surface workflows without trusted objects", async () => {
   const { shell, packageInput, downloads, locations } = trustedFixture();
-  expect(Object.keys(shell).sort()).toEqual(["about", "authoring", "desktopApp", "diagnostics", "documents", "experiments", "facial", "feature", "features", "files", "focus", "installDetection", "library", "links", "localSetup", "modInstall", "module", "panels", "preferences",
+  expect(Object.keys(shell).sort()).toEqual(["about", "authoring", "capture", "desktopApp", "diagnostics", "documents", "experiments", "facial", "feature", "features", "files", "focus", "installDetection", "library", "links", "localSetup", "modInstall", "module", "panels", "preferences",
     "presets", "previewReadiness", "previewSetup", "snapshot", "status", "subscribe", "updates", "viewport", "views", "workspace"]);
   expect("document" in shell.authoring).toBe(false);
   // Without a session (fixtures) each panel is one instance; a panel that isn't a session's 3D view steps the editing context.

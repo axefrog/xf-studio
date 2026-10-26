@@ -22,9 +22,9 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
   // The starters beside Add layer (the New tab menu's layout): a layer from any starter, and which one Add layer and new looks use.
   const starters = button({ label: "Add a layer from a starter shape", icon: "chevronDown", iconOnly: true, small: true, variant: "ghost", menu: true,
     onClick: event => {
-      const listing = ctx.starters.list(), invoker = event.currentTarget as HTMLElement;
-      if (listing) openMenu(starterItems(ctx, listing), invoker, { label: "Starter shapes", invoker,
-        focusLabel: listing.starters.find(item => item.isDefault)?.name });
+      const held = ctx.capture?.(), input = held?.context ?? ctx, listing = input.starters.list(), invoker = event.currentTarget as HTMLElement;
+      if (!listing || !openMenu(starterItems(input, listing), invoker, { label: "Starter shapes", invoker, signal: held?.signal, onClose: held?.release,
+        focusLabel: listing.starters.find(item => item.isDefault)?.name })) held?.release();
     } });
   const duplicate = button({ label: "Duplicate selected layer", icon: "duplicate", iconOnly: true, small: true, variant: "ghost", onClick: () => {
     const layer = view.layer(); if (layer) ctx.dispatch({ kind: "layer.edit", command: { kind: "duplicate", id: layer.id } });

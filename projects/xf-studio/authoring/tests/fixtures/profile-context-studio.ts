@@ -1,3 +1,6 @@
+import { layoutTabsPort } from "../../src/app/profiles/tab-presentation";
+import { tabDefaults } from "../../src/app/profiles/profile-window";
+import type { ModuleService } from "../../src/platform/api";
 /** Asset-free real composition for P3-ii: the production context owner, application registry, collection/file facades and resolver. */
 import { ShapeStarters } from "../../src/app/starters/shape-starters";
 import { StarterActions } from "../../src/app/starters/starter-actions";
@@ -34,7 +37,7 @@ import { openTestLibrary, type TestLibrary } from "./library-file";
 import { libraryPort, libraryVersions, storedLook } from "./profile-studio";
 
 export type ContextRestart = { library: TestLibrary; session: ProfileSessionData; profile: string; looks: LookRef[]; vs: string[] };
-export async function profileContextStudio(options: { restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"]; diagnostics?: DiagnosticsActions; starters?: boolean; recipe?: () => Recipe; modInstall?: ModInstallActions; presets?: PartPresetService } = {}) {
+export async function profileContextStudio(options: { restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"]; diagnostics?: DiagnosticsActions; starters?: boolean; recipe?: () => Recipe; modInstall?: ModInstallActions; presets?: PartPresetService; modules?: readonly ModuleService[]; viewPanels?: boolean; available?: (type: string) => boolean; panelViewport?: Parameters<typeof createTrustedStudioBootstrap<HTMLElement>>[0]["panelViewport"] } = {}) {
   const library = options.restart?.library ?? openTestLibrary(), transport = libraryPort(library), storage = memoryOutboxStorage();
   const outbox = new DocumentOutbox(transport, storage, { retryMs: 5 }); outbox.open();
   const history = createHistoryService(), workspace = freshWorkspace(), host = await fixtureHost();
@@ -63,6 +66,7 @@ export async function profileContextStudio(options: { restart?: ContextRestart; 
     graph.addView(MAIN_VIEW, {}, { title: "Second" }); graph.addView(MAIN_VIEW, {}, { title: "Third" });
     const raw = sessionViewGraph(graph), views = raw.views as readonly ViewRecord[], tab = seed.tabs[0]!.id;
     data = { ...seed, tabs: [{ ...seed.tabs[0]!, dock: null, panels: [
+      ...(options.viewPanels ? views.map((view, i) => ({ id: `view--scene${i}`, type: "view", binding: { policy: "pinned" as const, target: { view: view.id } } })) : []),
       ...views.map((view, i) => ({ id: `presets--scene${i}`, type: "presets", binding: { policy: "pinned" as const, target: { scene: view.scene } } })),
       { id: "presets--shared", type: "presets", binding: { policy: "pinned", target: { look: looks[0]! } } },
       { id: "presets--unseen", type: "presets", binding: { policy: "pinned", target: { look: looks[2]! } } },
@@ -77,11 +81,11 @@ export async function profileContextStudio(options: { restart?: ContextRestart; 
   let resets = 0, shows = 0;
   const authoring = createProfileAuthoring(workspace, { history, views: session.graph, selectedCollection: () => "fixture", resetStack: () => { resets++; } },
     STUDIO_COMPOSITION, { owner: services.collections, sessions: services.looks, outbox, note: text => notes.push(text), report: error => failures.push(error), shown: () => { shows++; } });
-  const core = authoring.core, targets = createTargetResolver({ state: session, history, services, contexts: type => STUDIO_CATALOGUE.context(type) });
+  const core = authoring.core, targets = createTargetResolver({ state: session, history, services, available: options.available, contexts: type => STUDIO_CATALOGUE.context(type) });
   if (options.presets) core.app.attach({ presets: options.presets });
   core.app.attach({ scenes: sceneCommands(session, services), panels: panelCommands(session, targets), targetCheck: targets });
   let drawn = session.session().views.views[0]!.id;
-  const scene = session.graph.node(drawn, "scene").id, sceneOf = () => session.graph.node(drawn, "scene").id;
+  const scene = session.graph.node(drawn, "scene").id, sceneOf = () => session.graph.viewIds().includes(drawn) ? session.graph.node(drawn, "scene").id : undefined;
   let starters: ShapeStarters | undefined;
   if (options.starters) {
     const region = STUDIO_COMPOSITION.region;
@@ -93,23 +97,27 @@ export async function profileContextStudio(options: { restart?: ContextRestart; 
   const collectionTransport: CollectionTransport = { list: async () => library.collections.list(), get: async id => library.collections.get(id),
     package: options.package ?? (async () => { throw Error("Not used"); }) };
   const fileDevice: StudioFilePort = { pick: options.pick ?? (async () => undefined), download: () => {}, bakeMask: async () => new Blob() };
-  const viewport = new ViewportAttachment<string>({ moveHost: () => {}, measure: () => ({ width: 300, height: 600 }), resize: () => {},
+  const viewport = new ViewportAttachment<HTMLElement>({ moveHost: () => {}, measure: () => ({ width: 300, height: 600 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => false,
     hitAt: () => undefined, queryContext: hit => core.app.contextQuery(hit) });
   const boot = createTrustedStudioBootstrap({ core, diagnostics: options.diagnostics, modInstall: options.modInstall, preferences: new UIPreferenceActions(workspace.uiPreferences), viewport,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 512, pending: 0, waiting: false, estimatedBytes: 0, layers: [] }), subscribe: () => () => {} },
     fileDevice,
-    collections: { owner: services.collections, scene: { look: () => session.scene(sceneOf()).look, setLook: ref => session.setLook(sceneOf(), ref), subscribe: listener => session.subscribe(listener) },
+    collections: { owner: services.collections, scene: { look: () => { const id = sceneOf(); return id ? session.knownScene(id)?.look : undefined; }, setLook: ref => { const id = sceneOf(); if (id) session.setLook(id, ref); }, subscribe: listener => session.subscribe(listener) },
       transport: collectionTransport, flushLook: () => authoring.contexts.commit() },
     naming: () => targets.namedView(drawn),
-    targets, bound: { session, targets, looks: authoring.contexts, empty: authoring.empty, context: type => STUDIO_CATALOGUE.context(type), character: id => {
+    modules: options.modules, panelViewport: options.panelViewport,
+    panelInstance: (panel, tab) => session.instance(panel, tab),
+    panelTargets: { target: id => session.panelTarget(id), tabTarget: id => session.panelTabTarget(id), capture: id => targets.structural(id) },
+    tabs: layoutTabsPort(session, tabDefaults(session, services), services),
+    targets, bound: { available: options.available, session, targets, looks: authoring.contexts, empty: authoring.empty, context: type => STUDIO_CATALOGUE.context(type), character: id => {
       if (!services.characters.character(id)) return undefined;
       const context = services.characters.context(id, { showSave: () => {} }); context.start(); return context;
     } },
     savedAppearance: { has: () => false, read: () => undefined, load: () => ({}), ready: () => false }, onRecipeImported: () => {} });
   authoring.drawn.show(session.scene(scene).look);
-  const draw = (view: string) => { drawn = view; authoring.drawn.show(session.scene(sceneOf()).look); };
-  const off = session.subscribe(() => authoring.drawn.show(session.scene(sceneOf()).look));
+  const draw = (view: string) => { drawn = view; authoring.drawn.show(sceneOf() ? session.knownScene(sceneOf()!)?.look : undefined); };
+  const off = session.subscribe(() => authoring.drawn.show(sceneOf() ? session.knownScene(sceneOf()!)?.look : undefined));
   const port = boot.mount(port => port), lives: AbortController[] = [];
   const bind = (id: string) => { const life = new AbortController(); lives.push(life); return { life, context: port.editing!.acquire(id, life.signal)! }; };
   const settle = async () => { authoring.contexts.commit(); return outbox.settle(); };

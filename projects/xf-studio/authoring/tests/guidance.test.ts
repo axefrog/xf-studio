@@ -90,7 +90,6 @@ test("every control anchor is registered by a panel or the shell, and every pane
   expect(Object.keys(CONTROL_ANCHORS).filter(id => !registered.has(id))).toEqual([]);
   // Nothing registers an anchor the catalogue doesn't know.
   expect([...registered].filter(id => !isAnchorId(id))).toEqual([]);
-  expect(readFileSync(join(root, "studio-ui", "app.ts"), "utf8")).toContain("rt.anchors.register(panelAnchor(panel.spec.id");
   for (const panel of PANEL_IDS) expect(anchorInfo(`panel.${panel}`)?.panel).toBe(panel);
   // Every control anchor inside a panel names a real panel.
   for (const info of anchorCatalogue(PANEL_IDS)) if (info.panel) expect(PANEL_IDS as readonly string[]).toContain(info.panel);
@@ -98,6 +97,18 @@ test("every control anchor is registered by a panel or the shell, and every pane
   expect(anchorInfo("panel.hair.strands")?.panel).toBe("hair.strands");
   expect(isAnchorId("panel.")).toBe(false);
   expect(isAnchorId("layers.bogus")).toBe(false);
+});
+
+test("instance anchors select a visible survivor and release independently", () => {
+  const first = new AbortController(), second = new AbortController();
+  const hidden = { isConnected: true, getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 }) };
+  const visible = { isConnected: true, getBoundingClientRect: () => ({ left: 0, top: 0, width: 50, height: 50 }) };
+  const scoped = new AnchorRegistry<typeof hidden>();
+  scoped.scoped("a", first.signal).register("panel.presets", hidden);
+  scoped.scoped("b", second.signal).register("panel.presets", visible);
+  expect(scoped.element("panel.presets")).toBe(visible);
+  first.abort(); expect(scoped.element("panel.presets")).toBe(visible);
+  second.abort(); expect(scoped.registered()).toEqual([]);
 });
 
 test("the registry reports visible, hidden and missing anchors from layout boxes only", () => {

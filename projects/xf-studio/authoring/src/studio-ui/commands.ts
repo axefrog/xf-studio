@@ -3,7 +3,7 @@ import { Toggle } from "./controls";
 import { iconButton } from "./components/icon-button";
 import { h, uid } from "./dom";
 import { icon, type IconName } from "./icons";
-import type { Capability } from "./menu";
+import { closeMenus, closePopovers, type Capability } from "./menu";
 
 /** A presentation command wraps exactly one application action, file request or layout change. */
 export type Command = { id: string; title: string; group: string; icon?: IconName; shortcut?: string; keywords?: string;
@@ -23,7 +23,9 @@ export function matchCommands<T extends Pick<Command, "title" | "group" | "keywo
 }
 
 /** Keyboard-first command palette. Disabled commands stay listed with their reason. */
-export function openPalette(commands: () => Command[], options: { onClose?(): void } = {}) {
+export function openPalette(commands: () => Command[], options: { onClose?(): void; signal?: AbortSignal } = {}) {
+  if (options.signal?.aborted) return;
+  closeMenus(false); closePopovers(false);
   const invoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const listId = uid("palette-list");
   const input = h("input", { class: "palette-input", type: "text", role: "combobox", "aria-expanded": "true", "aria-controls": listId,
@@ -64,10 +66,13 @@ export function openPalette(commands: () => Command[], options: { onClose?(): vo
     const command = items[index];
     // Dispatch revalidates: the command's availability is asked again at the moment it runs.
     if (!command || !command.capability().available) return;
-    close(true);
-    command.run();
+    if (closed) return;
+    try { command.run(); } finally { close(true); }
   };
+  let closed = false;
+  const abort = () => close(false);
   const close = (restore = true) => {
+    if (closed) return; closed = true; options.signal?.removeEventListener("abort", abort);
     dialog.close(); dialog.remove(); options.onClose?.();
     if (restore && invoker?.isConnected) invoker.focus();
   };
@@ -79,6 +84,7 @@ export function openPalette(commands: () => Command[], options: { onClose?(): vo
   });
   dialog.addEventListener("cancel", event => { event.preventDefault(); close(true); });
   dialog.addEventListener("click", event => { if (event.target === dialog) close(true); });
+  options.signal?.addEventListener("abort", abort, { once: true });
   document.body.append(dialog);
   dialog.showModal();
   render();

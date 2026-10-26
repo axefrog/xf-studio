@@ -21,9 +21,8 @@ export type Port = StudioPresentationPort<HTMLElement>;
 /** Feature focus follows actual docked instances, including floating and collapsed groups; closed instances activate nothing. */
 export function activeModules(tab: LayoutTab | undefined, tree: DockTree | undefined, modules: readonly StudioModule[], catalogue: ViewCatalogue): string[] {
   if (!tree || !tab) return [];
-  // The rendered dock uses type aliases in phase 2; resolve them to this tab's instances. Always read the recovered, current tree.
-  const instances = new Map(tab.panels.map(panel => [panel.type, panel.id]));
-  const docked = new Set(allGroups(tree).flatMap(({ group }) => group.panels.map(id => instances.get(id) ?? id)));
+  // The rendered dock and the shown tab share exact instance IDs. Read the recovered, current tree.
+  const docked = new Set(allGroups(tree).flatMap(({ group }) => group.panels));
   const owners = new Set(tab.panels.filter(panel => docked.has(panel.id))
     .map(panel => catalogue.panels.find(entry => entry.id === panel.type)?.owner));
   return modules.filter(module => owners.has(module.feature ?? module.id)).map(module => module.id);
@@ -88,7 +87,8 @@ const SHELL_CATALOGUE = viewCatalogue([SHELL_VIEW]);
 export class StudioRuntime {
   dock!: DockView;
   /** Named guidance anchors that panels and the shell register as they build their controls. */
-  readonly anchors = new AnchorRegistry();
+  readonly anchors: AnchorRegistry;
+  key(key: string) { return this.instance ? `${this.instance.id}:${key}` : key; }
   readonly descriptors: Ret<Port["authoring"]["actionDescriptors"]>;
   /**
    * Eye makeup's facade and finish catalogue, for the shell's remaining eye-makeup reads (context-menu values,
@@ -108,7 +108,9 @@ export class StudioRuntime {
    * @param views the catalogue of every contributed panel (the shell's and each feature's) that the
    *   composition root handed `mountStudio`.
    */
-  constructor(readonly port: Port, readonly feedback: Feedback, readonly views: ViewCatalogue = SHELL_CATALOGUE) {
+  constructor(readonly port: Port, readonly feedback: Feedback, readonly views: ViewCatalogue = SHELL_CATALOGUE,
+    readonly instance?: { id: string; type: string; signal: AbortSignal; captureSignal?: AbortSignal }, anchors?: AnchorRegistry) {
+    this.anchors = anchors ?? new AnchorRegistry();
     this.descriptors = port.authoring.actionDescriptors();
     this.eyeMakeup = port.feature("eye-makeup");
     this.finishes = this.eyeMakeup.finishCatalogue();

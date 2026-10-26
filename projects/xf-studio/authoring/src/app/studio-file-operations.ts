@@ -111,15 +111,37 @@ export class StudioFileOperations {
   private packageOwner?: AcceptedStudioOperation;
   private sequence = 0;
   private listeners = new Set<() => void>();
-  constructor(private port: StudioFilePort, private sources: FileSources) {}
+  private retired = false;
+  private inputs = 0;
+  private readonly executionOwner: StudioFileOperations;
+  /** Captured shell inputs preflight locally; the initiating operation owner keeps progress, Stop and outcomes. */
+  constructor(private port: StudioFilePort, private sources: FileSources, owner?: StudioFileOperations) {
+    this.executionOwner = owner?.executionOwner ?? this;
+    if (this.executionOwner !== this) {
+      const held = this.executionOwner; held.inputs++;
+      this.life.signal.addEventListener("abort", () => { held.inputs--; held.finishRetired(); }, { once: true });
+    }
+  }
+  private finishRetired() { if (this.retired && !this.inputs && !this.running().length) this.dispose(); }
+  /** An instance input can leave while its accepted operation still owns a concrete writer. */
+  retire() {
+    this.retired = true;
+    if (this.executionOwner !== this) this.dispose(); else this.finishRetired();
+  }
   dispose() { this.life.abort(); this.collectionUnsubscribe?.(); for (const [operation, off] of this.operations) { off(); operation.dispose(); } this.operations.clear(); this.listeners.clear(); }
   attachCollection(collection: CollectionService) {
     this.collectionUnsubscribe?.(); this.liveCollection = collection;
     this.collectionUnsubscribe = collection.subscribe(() => this.notify()); this.notify();
   }
-  subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  /** An instance's replacement input changes idle observation, never an accepted dependency bundle. */
+  observeInput(input: StudioFileOperations) { if (input !== this && input.liveCollection) this.attachCollection(input.liveCollection); }
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+    const off = this.executionOwner !== this ? this.executionOwner.subscribe(listener) : () => {};
+    return () => { off(); this.listeners.delete(listener); };
+  }
   private notify() { for (const listener of this.listeners) listener(); }
-  private running() { return [...this.operations.keys()].filter(operation => operation.isRunning()); }
+  private running(): AcceptedStudioOperation[] { if (this.executionOwner !== this) return this.executionOwner.running(); return [...this.operations.keys()].filter(operation => operation.isRunning()); }
   private progressOwner() {
     const running = this.running();
     return running.find(operation => operation.kind === "package.build") ?? running.find(operation => operation.snapshot().collectionBusy) ?? this.busy ?? this.last;
@@ -129,6 +151,7 @@ export class StudioFileOperations {
     return operation && { capability: (request: CollectionRequest) => operation.collectionCapability(request)! };
   }
   snapshot(): ReadonlyDeep<StudioFileState> {
+    if (this.executionOwner !== this) return this.executionOwner.snapshot();
     // Each operation's snapshot is taken once per read: an operation can be the progress owner, the last result and the package
     // owner at once, and its package freshness is a key comparison that needn't run three times.
     const snapshots = new Map<AcceptedStudioOperation, ReturnType<AcceptedStudioOperation["snapshot"]>>();
@@ -153,13 +176,14 @@ export class StudioFileOperations {
     return operation?.cancel(id) ?? { accepted: false, reason: "Nothing with that ID is running." };
   }
   capability(action: StudioFileAction): { available: boolean; reason?: string; code?: ReasonCode } {
-    if (this.life.signal.aborted) return refusal("missing_target", "This file destination was released.");
+    if (this.retired || this.life.signal.aborted || this.executionOwner.life.signal.aborted) return refusal("missing_target", "This file destination was released.");
     if (action.kind === "package.stop") {
       const build = this.activity().find(entry => entry.kind === "package.build");
       return build?.cancellable ? { available: true } : { available: false, reason: build
         ? "Waiting for the host to finish stopping or completing the Build." : "No Build is running." };
     }
-    if (this.busy) return { available: false, reason: this.busy.kind === "package.build" && this.busy.activity()[0]?.cancellable === false
+    const busy = this.executionOwner.busy;
+    if (busy) return { available: false, reason: busy.kind === "package.build" && busy.activity()[0]?.cancellable === false
       ? "The Build is stopping. Wait for the host to finish cleanup." : "Another file operation is in progress." };
     // What a picker's file goes to is named when it is asked (profiles design §3.3), never decided when the file arrives.
     if (action.kind === "recipe.import" && !action.collection) return refusal("missing_target", "Open a collection first.");
@@ -209,16 +233,17 @@ export class StudioFileOperations {
     const sources = captured ? boundSources : liveSources;
     const collection = captured ? captured.writer.operations() : resolve?.() ??
       (this.liveCollection ? { service: this.liveCollection, execute: executeCollection } : undefined);
-    const operation = new AcceptedStudioOperation(++this.sequence, kind, file,
-      { sources, collection, device: { ...this.port }, capture: captured, signal: this.life.signal }, !!captured);
+    const owner = this.executionOwner;
+    const operation = new AcceptedStudioOperation(++owner.sequence, kind, file,
+      { sources, collection, device: { ...this.port }, capture: captured, signal: owner.life.signal }, !!captured);
     let completionHandled = false;
-    this.operations.set(operation, operation.subscribe(() => {
+    owner.operations.set(operation, operation.subscribe(() => {
       if (!completionHandled && !operation.isRunning()) {
         completionHandled = true;
-        this.completed(operation);
+        owner.completed(operation);
       }
       // Retained package subscriptions repaint freshness without publishing the outcome again.
-      this.notify();
+      owner.notify();
     }));
     return operation;
   }
@@ -237,11 +262,12 @@ export class StudioFileOperations {
     this.last = operation;
     if (operation.snapshot().package) this.packageOwner = operation;
     this.prune();
+    if (this.retired && !this.inputs && !this.running().length) queueMicrotask(() => this.finishRetired());
   }
   async execute(action: StudioFileAction): Promise<StudioFileOutcome> {
     action = structuredClone(action);
     const allowed = this.capability(action);
-    if (!allowed.available) return { ok: false, code: allowed.code === "missing_target" ? "missing_target" : this.busy ? "busy" : "unavailable", message: allowed.reason! };
+    if (!allowed.available) return { ok: false, code: allowed.code === "missing_target" ? "missing_target" : this.executionOwner.busy ? "busy" : "unavailable", message: allowed.reason! };
     if (action.kind === "package.stop") {
       const entry = this.activity().find(entry => entry.kind === "package.build" && entry.cancellable)!;
       const answer = this.cancel(entry.id);
@@ -249,19 +275,19 @@ export class StudioFileOperations {
     }
     const operation = this.accept(action.kind, true);
     if (!operation) return { ok: false, code: "missing_target", message: "This file destination was released." };
-    if (action.kind === "package.check" || action.kind === "package.build") this.clearPackageOutcome();
-    this.busy = operation; this.notify();
+    if (action.kind === "package.check" || action.kind === "package.build") this.executionOwner.clearPackageOutcome();
+    this.executionOwner.busy = operation; this.executionOwner.notify();
     return operation.runFile(action);
   }
   async executeCollection(request: CollectionRequest): Promise<CollectionOutcome> {
     request = structuredClone(request);
-    if (this.life.signal.aborted) return { ok: false, code: "missing_target", message: "This collection destination was released." };
+    if (this.retired || this.life.signal.aborted || this.executionOwner.life.signal.aborted) return { ok: false, code: "missing_target", message: "This collection destination was released." };
     const kind = request.kind === "package" ? request.action === "check" ? "package.check" : "package.build" :
       request.kind === "exportCollection" ? "collection.export" : request.kind === "exportPlan" ? "collection.plan" :
       request.kind === "import" ? "collection.import" : request.kind;
     const operation = this.accept(kind, false);
     if (!operation) return { ok: false, code: "missing_target", message: "This collection destination was released." };
-    if (request.kind === "package") this.clearPackageOutcome();
+    if (request.kind === "package") this.executionOwner.clearPackageOutcome();
     return operation.runCollection(request);
   }
 }

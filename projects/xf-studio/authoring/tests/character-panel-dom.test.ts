@@ -61,6 +61,7 @@ async function harness(stored?: unknown, document?: CharacterDocumentPort) {
   const preferences = new UIPreferenceActions(stored);
   bindViewState(new PreferenceViewState(preferences));
   const rt = {
+    key: (key: string) => key,
     port: {
       preferences,
       authoring: { characterPanel: () => context.panel(), characterView: () => context.view(),

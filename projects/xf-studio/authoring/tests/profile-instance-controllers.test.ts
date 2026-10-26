@@ -1,0 +1,313 @@
+import type { Recipe } from "../src/engines/layered-makeup/recipe";
+import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
+import type { StudioPickedFile } from "../src/app/studio-file-operations";
+import { presetMenu } from "../src/studio-ui/target-menus";
+import { closeMenus } from "../src/studio-ui/menu";
+import { openPalette } from "../src/studio-ui/commands";
+import { generateInstanceCommands } from "./fixtures/profile-session-generator";
+import { SaveExplorerSessions, saveExplorerFacade } from "../src/features/save-explorer";
+import { explorerPanel } from "../src/features/save-explorer/view/panel";
+import { moduleViewContext } from "../src/studio-ui/views/feature-context";
+import { syntheticSave } from "./fixtures/synthetic-explorer-save";
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { installLightDom, uninstallLightDom, lightEvent, type LightElement } from "./light-dom";
+import { profileContextStudio } from "./fixtures/profile-context-studio";
+import { StudioRuntime, Frame, type Port } from "../src/studio-ui/runtime";
+import { InstancePanels } from "../src/studio-ui/panels/instance-panels";
+import { instanceViewPane } from "../src/studio-ui/panels/instance-view-pane";
+import { headPanel } from "../src/studio-ui/panels/viewports";
+import { presetsPanel } from "../src/features/eye-makeup/view/collection";
+import { uvPanel } from "../src/features/eye-makeup/view/uv";
+import { characterPanel } from "../src/studio-ui/panels/character";
+import { featureViewContext } from "../src/studio-ui/views/feature-context";
+import { STUDIO_CATALOGUE } from "../src/compose/views";
+import { serializeDockState } from "../src/studio-ui/dock/persist";
+import { captureRuntime } from "../src/studio-ui/captured-runtime";
+import { viewScope } from "../src/platform/core/history-service";
+import { MemoryViewState, bindViewState, scopedViewState } from "../src/studio-ui/view-state";
+import { createPanelUV } from "../src/preview/browser/panel-uv";
+import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import type { Feedback } from "../src/studio-ui/feedback";
+import type { createUVEditor } from "../src/legacy/eye-makeup/browser/uv-editor";
+
+beforeAll(() => installLightDom());
+afterAll(() => uninstallLightDom());
+const toasts: string[] = [];
+const feedback = { toast(_tone: string, _source: string, message: string) { toasts.push(message); }, record() {}, announce() {} } as unknown as Feedback;
+const node = (value: Element) => value as unknown as LightElement;
+function arrange(s: Awaited<ReturnType<typeof profileContextStudio>>, ids: string[]) {
+  const tree = { root: ids.length ? { kind: "group" as const, id: "controllers", panels: ids, active: ids[0]! } : null, floating: [], closed: [] };
+  s.session.arrangeInstances(s.session.tabId(), serializeDockState({ wide: tree, compact: tree }));
+}
+function owner(s: Awaited<ReturnType<typeof profileContextStudio>>, available = () => true, generation?: (type: string) => unknown) {
+  const root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE);
+  const catalogue = { ...STUDIO_CATALOGUE, get ids() { return available() ? STUDIO_CATALOGUE.ids : []; } };
+  const panels = new InstancePanels(root, { catalogue: () => catalogue, generation, changed() {}, make: (instance, rt) => instance.type === "character" ? characterPanel(rt)
+    : instance.type === "save-explorer.explorer" ? explorerPanel(moduleViewContext(rt, "save-explorer") as never)
+    : instance.type === "uv" ? uvPanel(featureViewContext(rt, "eye-makeup")) : presetsPanel(featureViewContext(rt, "eye-makeup")) });
+  const paint = () => { panels.sync(); for (const panel of panels.controllers()) { document.body.append(panel.spec.element); panel.update(new Frame(s.port)); } };
+  return { panels, root, paint };
+}
+
+test("G1/G1b: three real Presets and Character controllers retain their separate writers, histories and DOM IDs", async () => {
+  const s = await profileContextStudio(), ids = [0, 1, 2].flatMap(i => [`presets--scene${i}`, `character--target${i}`]);
+  arrange(s, ids); const ui = owner(s);
+  try {
+    ui.paint(); expect(ui.panels.controllers()).toHaveLength(6);
+    for (const i of [0, 1, 2]) {
+      s.session.focus.focusView(s.session.session().views.views[(i + 1) % 3]!.id); ui.paint();
+      const panel = ui.panels.controllers().find(panel => panel.spec.id === `presets--scene${i}`)!;
+      const name = node(panel.spec.element).querySelector('input[aria-label="Collection name"]')!;
+      name.value = `Controller ${i}`; name.dispatchEvent(lightEvent("change"));
+      const port = ui.panels.runtime(panel.spec.id)!;
+      expect(port.library.summary().draft?.name).toBe(`Controller ${i}`);
+      const layer = port.feature("eye-makeup").view().layer()!;
+      expect(port.feature("eye-makeup").dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .21 + i * .1 }).ok).toBe(true);
+      const before = s.vs.map(id => s.services.characters.document(id));
+      const character = ui.panels.controllers().find(panel => panel.spec.id === `character--target${i}`)!;
+      const toggle = node(character.spec.element).querySelector('input[type="checkbox"]');
+      expect(toggle).toBeTruthy(); toggle!.checked = false; toggle!.dispatchEvent(lightEvent("change"));
+      for (const peer of [0, 1, 2].filter(n => n !== i)) expect(s.services.characters.document(s.vs[peer]!)).toEqual(before[peer]);
+      expect(ui.panels.runtime(character.spec.id)!.panels.historyScope(character.spec.id)).toBe(`character:${s.vs[i]}`);
+    }
+    const allIds = ui.panels.controllers().flatMap(panel => node(panel.spec.element).querySelectorAll("[id]").map(element => element.id));
+    expect(new Set(allIds).size).toBe(allIds.length);
+    const snapshot = s.stored(); ui.panels.dispose(); await s.dispose();
+    const restarted = await profileContextStudio({ restart: snapshot }); const again = owner(restarted);
+    try { again.paint(); expect(again.panels.controllers().map(panel => panel.spec.id).sort()).toEqual([...ids].sort()); }
+    finally { again.panels.dispose(); await restarted.dispose(); }
+  } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("G2: captured shell input keeps focus-moved target and refuses rebind-away/back, removal/Undo and release without a history step", async () => {
+  const s = await profileContextStudio(); arrange(s, ["presets--scene0"]); const ui = owner(s);
+  try {
+    ui.paint(); const origin = new StudioRuntime(ui.panels.runtime("presets--scene0")!, feedback, STUDIO_CATALOGUE);
+    const held = captureRuntime(origin), layer = held.runtime.editor.layer()!;
+    s.session.focus.focusView(s.session.session().views.views[1]!.id);
+    expect(held.runtime.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .32 })).toBe(true);
+    const scope = s.history.scope(viewScope(s.session.profile))!;
+    const dest = s.session.panelTarget("presets--scene0"), binding = s.session.panel(dest.instance)!.binding!;
+    s.session.setPanelBinding(dest.tab, dest.instance, { policy: "pinned", target: { look: s.looks[1]! } });
+    s.session.setPanelBinding(dest.tab, dest.instance, binding);
+    const before = JSON.stringify(s.session.session()), count = scope.timeline().steps.length;
+    expect(held.runtime.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .99 })).toBe(false);
+    expect(JSON.stringify(s.session.session())).toBe(before); expect(scope.timeline().steps).toHaveLength(count);
+    held.release(); expect(s.targets.held()).toBe(0);
+    ui.paint(); const removed = captureRuntime(new StudioRuntime(ui.panels.runtime(dest.instance)!, feedback, STUDIO_CATALOGUE));
+    s.session.setPanelsOpen(dest.tab, [dest.instance], false, () => null); scope.undo();
+    const revision = removed.runtime.editor.revision();
+    expect(removed.runtime.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .99 })).toBe(false);
+    expect(removed.runtime.editor.revision()).toBe(revision); removed.release();
+    const released = captureRuntime(origin); released.release();
+    expect(released.runtime.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .99 })).toBe(false);
+  } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("controllers release on empty tab, park and contribution withdrawal; re-enable preserves identities and memory", async () => {
+  let available = true; const s = await profileContextStudio({ available: () => available }); arrange(s, ["presets--scene0", "character--target1"]);
+  const ui = owner(s, () => available);
+  try {
+    ui.paint(); const baseline = s.authoring.contexts.held().length;
+    bindViewState(new MemoryViewState()); scopedViewState("a").setExpanded(["row"], true);
+    expect(scopedViewState("b").expanded("row")).toBeUndefined();
+    const session = JSON.stringify(s.session.session()); available = false; ui.paint();
+    expect(ui.panels.controllers()).toHaveLength(0); expect(JSON.stringify(s.session.session())).toBe(session);
+    available = true; ui.paint(); expect(ui.panels.controllers()).toHaveLength(2);
+    expect(s.authoring.contexts.held().length).toBe(baseline);
+    arrange(s, []); ui.paint(); expect(ui.panels.controllers()).toHaveLength(0); expect(s.targets.held()).toBe(0);
+  } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); bindViewState(); }
+});
+
+test("registration replacement retires only that contribution's controllers and captures", async () => {
+  const s = await profileContextStudio(); arrange(s, ["presets--scene0", "character--target0"]);
+  let generation = 1; const ui = owner(s, () => true, type => type === "presets" ? generation : 0);
+  try {
+    ui.paint(); const character = ui.panels.controllers().find(panel => panel.spec.id === "character--target0")!;
+    const original = ui.panels.controllerRuntime("presets--scene0")!, held = captureRuntime(original);
+    generation++; ui.paint();
+    expect(ui.panels.controllers().find(panel => panel.spec.id === "character--target0")).toBe(character);
+    expect(ui.panels.controllerRuntime("presets--scene0")).not.toBe(original);
+    expect(held.active()).toBe(false); expect(s.targets.held()).toBe(0);
+    const command = character.commands!()[0]!; ui.panels.dispose();
+    const preferences = s.port.preferences.snapshot(); command.run();
+    expect(command.capability().available).toBe(false); expect(s.port.preferences.snapshot()).toEqual(preferences);
+  } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("real head panes bind their own view and look while the renderer attachment stays shared", async () => {
+  const s = await profileContextStudio({ viewPanels: true }), root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE), runtimes: StudioRuntime[] = [];
+  const context = { view: { summaries: () => [], badge: () => undefined }, guidance: {} as never, appearance: {} as never };
+  const panes = s.session.graph.snapshot().views.slice(0, 2).map(view => instanceViewPane(root, context, s.session.instance(view.panel), (rt, ctx, id) => {
+    runtimes.push(rt); return headPanel(rt, ctx, id);
+  }));
+  try {
+    for (let i = 0; i < panes.length; i++) {
+      panes[i]!.update(new Frame(s.port));
+      expect(runtimes[i]!.port.focus.targets().look).toEqual(s.looks[i]);
+      const layer = runtimes[i]!.editor.layer()!;
+      expect(runtimes[i]!.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .4 + i * .1 })).toBe(true);
+    }
+    s.session.focus.focusView(s.session.session().views.views[2]!.id);
+    expect(runtimes[0]!.port.focus.targets().look).toEqual(s.looks[0]);
+    expect(runtimes[1]!.port.focus.targets().look).toEqual(s.looks[1]);
+  } finally { for (const pane of panes) pane.dispose?.(); await s.dispose(); s.library.close(); }
+});
+
+test("two real UV controllers have separate canvases, navigation and bound gesture input, with no shared scheduler", async () => {
+  const adapters: { canvas: HTMLCanvasElement; hooks: Parameters<typeof createUVEditor>[2]; disposed: boolean }[] = [];
+  const factory = ((canvas: Parameters<typeof createUVEditor>[0], _controls: Parameters<typeof createUVEditor>[1], hooks: Parameters<typeof createUVEditor>[2], initial: Parameters<typeof createUVEditor>[3]) => {
+    const adapter = { canvas, hooks, disposed: false }; adapters.push(adapter); let view = initial;
+    return { snapshot: () => view, draw() {}, resize() {}, inputCapture: () => false, selection: () => undefined,
+      viewCommand: (command: string) => { view = { ...view, mode: command === "single" ? "single" : "both" }; return true; }, navigate: () => true,
+      cancelInput: () => hooks.cancel(), dispose: () => { adapter.disposed = true; }, hitAt: () => undefined };
+  }) as unknown as typeof createUVEditor;
+  const s = await profileContextStudio({ panelViewport: input => createPanelUV(input, { region: STUDIO_COMPOSITION.region, canvases: () => [], albedo: () => undefined, factory }) });
+  const ids = [0, 1].map(i => s.session.addPanel(s.session.tabId(), "uv", { binding: { policy: "pinned", target: { look: s.looks[i]! } } }));
+  arrange(s, ids); const ui = owner(s);
+  try {
+    ui.paint(); expect(ui.panels.controllers()).toHaveLength(2); expect(adapters).toHaveLength(2);
+    expect(adapters[0]!.canvas).not.toBe(adapters[1]!.canvas);
+    ui.panels.runtime(ids[0]!)!.viewport.uvCommand("single");
+    expect(ui.panels.runtime(ids[1]!)!.viewport.snapshot().uv.view?.mode).toBe("both");
+    const before = ui.panels.runtime(ids[1]!)!.feature("eye-makeup").view().selected();
+    adapters[0]!.hooks.select(1);
+    expect(ui.panels.runtime(ids[0]!)!.feature("eye-makeup").view().selected()).toBe(1);
+    expect(ui.panels.runtime(ids[1]!)!.feature("eye-makeup").view().selected()).toBe(before);
+    ui.panels.dispose(); expect(adapters.every(adapter => adapter.disposed)).toBe(true);
+  } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("two Save Explorer controllers own separate sessions and a removed controller cannot recreate its session", async () => {
+  const sessions = new SaveExplorerSessions({ list: async () => ({ available: true, saves: [{ folder: "ManualSave-7", kind: "manual", savedAt: "2026-09-20T10:00:00.000Z", location: "Watson", level: 3, lifePath: "Nomad", gameVersion: "2.31", saveVersion: 269, bytes: 100, screenshot: false, modded: false }] }),
+    read: async () => syntheticSave(), pick: async () => undefined, thumbnail: () => null,
+    names: async () => ({ engine: { enums: [], bitfields: [], classes: [], properties: [] }, scripts: { available: true, names: [] } }) }, () => Promise.resolve());
+  const s = await profileContextStudio({ modules: [saveExplorerFacade(sessions)] });
+  const ids = [0, 1].map(() => s.session.addPanel(s.session.tabId(), "save-explorer.explorer")); arrange(s, ids); const ui = owner(s);
+  try {
+    ui.paint(); for (const panel of ui.panels.controllers()) panel.spec.visibility?.(true);
+    await Bun.sleep(10); ui.paint();
+    const open = node(ui.panels.controllers()[0]!.spec.element).querySelector("button.save-row")!; open.click();
+    await Bun.sleep(20); ui.paint();
+    expect(sessions.snapshot(ids[0]!).open.phase).toBe("ready"); expect(sessions.snapshot(ids[1]!).open.phase).toBe("none");
+    s.session.setPanelsOpen(s.session.tabId(), [ids[0]!], false, () => null); ui.paint(); open.click(); await Bun.sleep(5);
+    expect(sessions.instances()).not.toContain(ids[0]!);
+    const tab = s.session.tabId(), copy = s.session.duplicate(tab); ui.paint();
+    expect(ui.panels.controllers().every(panel => !ids.includes(panel.spec.id))).toBe(true);
+    s.session.show(tab); ui.paint(); expect(ui.panels.controllers().map(panel => panel.spec.id)).toEqual([ids[1]!]);
+    s.session.close(tab); s.session.close(copy); ui.paint(); expect(ui.panels.controllers()).toHaveLength(0);
+    expect(sessions.instances()).toHaveLength(0);
+  } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("P3-iii generator: 16 seeds of membership, capture, focus and live withdrawal return controllers/handles to baseline", async () => {
+  let total = 0;
+  for (let seed = 1; seed <= 16; seed++) {
+    let available = true; const s = await profileContextStudio({ available: () => available }), ids = [0, 1, 2].map(i => `presets--scene${i}`);
+    arrange(s, ids); const open = new Set(ids), ui = owner(s, () => available), captures: ReturnType<typeof captureRuntime>[] = [];
+    try {
+      for (const command of generateInstanceCommands(seed)) {
+        const id = ids[command.panel]!;
+        if (command.op === "park" || command.op === "show") { s.session.setPanelsOpen(s.session.tabId(), [id], command.op === "show", () => null); if (command.op === "show") open.add(id); else open.delete(id); }
+        else if (command.op === "withdraw") available = false;
+        else if (command.op === "resume") available = true;
+        else if (command.op === "focus") s.session.focus.focusView(s.session.session().views.views[command.panel]!.id);
+        else if (command.op === "capture") { const port = ui.panels.runtime(id); if (port) captures.push(captureRuntime(new StudioRuntime(port, feedback, STUDIO_CATALOGUE))); }
+        else captures.pop()?.release();
+        ui.paint();
+        expect(ui.panels.controllers().map(panel => panel.spec.id).sort()).toEqual(available ? [...open].sort() : []); total++;
+      }
+    } finally { for (const held of captures) held.release(); ui.panels.dispose(); expect(s.targets.held()).toBe(0); await s.dispose(); s.library.close(); }
+  }
+  expect(total).toBe(768);
+});
+
+test("G2 real shell menu → naming popover transfers one capture; focus movement keeps A and dismissal refuses retained callbacks", async () => {
+  const previous = globalThis.window;
+  Object.assign(globalThis, { window: { innerWidth: 1400, innerHeight: 900, addEventListener() {}, removeEventListener() {} } });
+  const s = await profileContextStudio(); arrange(s, ["presets--follow"]); const ui = owner(s);
+  try {
+    s.session.focus.focusView(s.session.session().views.views[0]!.id); ui.paint();
+    const rt = ui.panels.controllerRuntime("presets--follow")!, preset = rt.port.library.summary().draft!.selected!;
+    const anchor = document.createElement("button"); document.body.append(anchor);
+    presetMenu(rt, preset, anchor);
+    expect(s.targets.held()).toBe(1);
+    const rename = node(document.body).querySelectorAll(".menu-item").find(item => item.querySelector(".menu-label")?.textContent === "Rename…")!;
+    rename.click(); expect(s.targets.held()).toBe(1);
+    s.session.focus.focusView(s.session.session().views.views[1]!.id); ui.paint();
+    const form = node(document.body).querySelector("form.popover")!, input = form.querySelector("input")!;
+    input.value = "Captured original"; form.dispatchEvent(lightEvent("submit"));
+    expect(s.services.collections.look(s.looks[0]!)?.name).toBe("Captured original");
+    expect(s.services.collections.look(s.looks[1]!)?.name).not.toBe("Captured original"); expect(s.targets.held()).toBe(0);
+    const before = JSON.stringify(s.session.session()), steps = s.history.scope(viewScope(s.session.profile))!.timeline().steps.length;
+    input.value = "Late mutation"; form.dispatchEvent(lightEvent("submit")); rename.click();
+    expect(s.services.collections.look(s.looks[0]!)?.name).toBe("Captured original");
+    expect(JSON.stringify(s.session.session())).toBe(before); expect(s.history.scope(viewScope(s.session.profile))!.timeline().steps).toHaveLength(steps);
+    const current = ui.panels.controllerRuntime("presets--follow")!, own = current.port.library.summary().draft!.selected!;
+    presetMenu(current, own, anchor); expect(s.targets.held()).toBe(1);
+    closeMenus(false); expect(s.targets.held()).toBe(0);
+  } finally { closeMenus(false); ui.panels.dispose(); await s.dispose(); s.library.close(); Object.assign(globalThis, { window: previous }); }
+});
+
+test("G2 palette dismissal releases its capture and retained callbacks leave no Undo step", async () => {
+  const s = await profileContextStudio(); arrange(s, ["presets--scene0"]); const ui = owner(s);
+  try {
+    ui.paint(); const held = captureRuntime(ui.panels.controllerRuntime("presets--scene0")!), layer = held.runtime.editor.layer()!;
+    openPalette(() => [{ id: "test.opacity", title: "Opacity", group: "Edit", capability: () => held.runtime.port.authoring.capability({ kind: "layer.setOpacity", layerId: layer.id, opacity: .4 }),
+      run: () => { held.runtime.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .4 }); } }], { onClose: held.release });
+    const dialog = node(document.body).querySelector("dialog.palette")!, option = dialog.querySelector(".palette-item")!;
+    dialog.dispatchEvent(lightEvent("cancel")); expect(s.targets.held()).toBe(0);
+    const revision = ui.panels.runtime("presets--scene0")!.feature("eye-makeup").view().revision();
+    option.click(); expect(ui.panels.runtime("presets--scene0")!.feature("eye-makeup").view().revision()).toBe(revision);
+  } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("G2 a palette-selected file request transfers its concrete writer before the palette closes", async () => {
+  let answer!: (file: StudioPickedFile | undefined) => void;
+  const s = await profileContextStudio({ pick: () => new Promise(done => { answer = done; }) }); arrange(s, ["presets--follow"]); const ui = owner(s);
+  let pending: ReturnType<StudioRuntime["file"]> | undefined;
+  try {
+    s.session.focus.focusView(s.session.session().views.views[0]!.id); ui.paint();
+    const origin = ui.panels.runtime("presets--follow")!, held = captureRuntime(ui.panels.controllerRuntime("presets--follow")!);
+    const recipe = structuredClone(held.runtime.editor.recipe()) as unknown as Recipe; recipe.layers[0]!.opacity = .61;
+    openPalette(() => [{ id: "test.import", title: "Import recipe", group: "File", capability: () => held.runtime.port.files.capability({ kind: "recipe.import" }),
+      run: () => { pending = held.runtime.file({ kind: "recipe.import" }); } }], { onClose: held.release });
+    s.session.focus.focusView(s.session.session().views.views[1]!.id); ui.paint();
+    node(document.body).querySelector(".palette-item")!.click();
+    expect(origin.files.snapshot().busy).toBe("recipe.import");
+    expect(ui.panels.runtime("presets--follow")!.files.snapshot().busy).toBe("recipe.import");
+    expect(held.active()).toBe(false); expect(pending).toBeDefined();
+    s.session.focus.focusView(s.session.session().views.views[1]!.id); ui.paint();
+    answer({ name: "palette.json", size: 1, text: async () => JSON.stringify(recipeFile(recipe)), bytes: async () => new Uint8Array() });
+    expect(await pending).toMatchObject({ ok: true });
+    const a = s.bind("presets--scene0");
+    expect(a.context.current().feature("eye-makeup").view().layer()!.opacity).toBe(.61); a.life.abort();
+    expect(s.targets.held()).toBe(0);
+  } finally { answer?.(undefined); await pending; ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("G1 real Presets rows add, rename, remove, restore and choose only their named scene after every focus move", async () => {
+  const s = await profileContextStudio(), ids = [0, 1, 2].map(i => `presets--scene${i}`); arrange(s, ids); const ui = owner(s);
+  try {
+    let next = 0;
+    const focus = () => { s.session.focus.focusView(s.session.session().views.views[++next % 3]!.id); ui.paint(); };
+    const element = (id: string) => node(ui.panels.controllers().find(panel => panel.spec.id === id)!.spec.element);
+    for (let i = 0; i < 3; i++) {
+      const id = ids[i]!, scenes = s.session.graph.viewIds().map(view => s.session.graph.node(view, "scene").id), before = scenes.map(scene => s.session.knownScene(scene));
+      focus(); element(id).querySelectorAll("button").find(button => button.textContent === "Add preset")!.click(); ui.paint();
+      const added = ui.panels.runtime(id)!.library.summary().draft!.selected!;
+      expect(s.session.knownScene(scenes[i]!)!.look?.look).toBe(added);
+      focus(); const main = element(id).querySelector(`li[data-id="${added}"]`)!.querySelector("button.item-main")!;
+      main.dispatchEvent(lightEvent("dblclick")); const input = element(id).querySelector("input.item-rename")!;
+      input.value = `Pane ${i}`; input.dispatchEvent(lightEvent("keydown", { key: "Enter" })); ui.paint();
+      expect(ui.panels.runtime(id)!.library.summary().draft!.presets.find(preset => preset.id === added)!.name).toBe(`Pane ${i}`);
+      focus(); element(id).querySelector(`li[data-id="${added}"]`)!.querySelector("button.item-main")!.dispatchEvent(lightEvent("keydown", { key: "Delete" })); ui.paint();
+      expect(ui.panels.runtime(id)!.library.summary().draft!.removed.at(-1)?.id).toBe(added);
+      focus(); element(id).querySelectorAll("button").find(button => button.textContent === `Restore “Pane ${i}”`)!.click(); ui.paint();
+      expect(ui.panels.runtime(id)!.library.summary().draft!.presets.some(preset => preset.id === added)).toBe(true);
+      focus(); element(id).querySelector(`li[data-id="${s.looks[i]!.look}"]`)!.querySelector("button.item-main")!.click(); ui.paint();
+      expect(s.session.knownScene(scenes[i]!)!.look).toEqual(s.looks[i]);
+      for (const peer of [0, 1, 2].filter(peer => peer !== i)) expect(s.session.knownScene(scenes[peer]!)).toEqual(before[peer]);
+    }
+  } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
