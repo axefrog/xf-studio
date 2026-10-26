@@ -804,16 +804,14 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .shortcut-list.wide { grid-template-columns: minmax(150px, max-content) 1fr; align-items: center; }
 
 /* Library, package, activity */
-/* Record list (components/record-list.ts): the name and its badge keep one line, the meta line wraps only between facts (C-30, UI-162). */
+/* Record list (components/record-list.ts): the name keeps its line, the state badge and the action share the row's end column, the meta line wraps only between facts (C-30, UI-162). */
 .record-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--line); background: var(--line-soft); }
 .record-list:empty { display: none; }
-.record-row { display: flex; align-items: center; gap: var(--sp-4); min-height: 32px; padding: var(--sp-3) var(--sp-4); background: var(--bg-panel); }
+.record-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3) var(--sp-4); min-height: 32px; padding: var(--sp-3) var(--sp-4); background: var(--bg-panel); }
 .record-row.current { background: var(--signal-bg); }
-.record-row > .btn { flex: none; }
-.record-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
-.record-name-line { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+.record-main { flex: 1 1 0; min-width: 12ch; display: flex; flex-direction: column; gap: var(--sp-1); }
 .record-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.record-name-line .badge { flex: none; }
+.record-end { flex: none; margin-left: auto; display: flex; align-items: center; gap: var(--sp-3); }
 .record-meta { margin: 0; font-size: var(--fs-xs); line-height: 1.4; color: var(--text-muted); }
 .record-fact { white-space: nowrap; }
 .progress { position: relative; height: 3px; background: var(--line); overflow: hidden; }

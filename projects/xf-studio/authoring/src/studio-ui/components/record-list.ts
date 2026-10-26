@@ -3,14 +3,17 @@ import { badge } from "../controls";
 
 /**
  * Record list (style guide "Record list"): things saved on this computer, one row each: the Library's saved collections and its recent
- * drafts (UI-162). A row is its name, one meta line of facts, a state badge where one applies ("Open now"), and one action.
+ * drafts (UI-162). A row is its name, one meta line of facts, and an end column holding its state badge ("Open now") and its one action.
  *
- * - **The name keeps its line:** it ends with an ellipsis (its full text as the row's tooltip) and the badge stays beside it, never
- *   pushed under it or cut off (C-30).
+ * - **The name has the whole line:** it ends with an ellipsis (its full text as the row's tooltip); nothing sits beside it (C-30). It
+ *   keeps a minimum width: the end column wraps under it, right-aligned, before squeezing it further.
+ * - **The end column** is vertically centred and right-aligned, lined up with the other rows' buttons. A row with nothing to do (the
+ *   collection open now) shows its state badge there instead of an unavailable button; a row with both puts the badge immediately
+ *   before the action.
  * - **The meta line wraps only between facts:** each fact ("1 preset", "version 3", a date) keeps its words together, so a narrow
  *   panel breaks the line at a "·", never inside a date.
- * - **One action**, at the row's end, vertically centred; the owner builds it (a Button) so its capability and reason are its own. A row
- *   with nothing to do (the collection open now) has none, rather than an unavailable button.
+ * - **One action**, in the end column; the owner builds it (a Button) so its capability and reason are its own. A row with nothing to
+ *   do has none, rather than an unavailable button.
  * - **An optional thumbnail** sits before the name, vertically centred: a small drawing that tells rows apart at a glance (a Shape thumbnail).
  *   Its size is the owner's; the row keeps its height and the name keeps its line. It is decorative: the name is the row's name.
  * - The current row (the one open now) has the signal background.
@@ -21,7 +24,7 @@ export type RecordRow = {
   id: string; name: string;
   /** The meta line's facts, in order ("2 presets", "version 3", "29 Sep 2026, 6:02 pm"). */
   meta: readonly string[];
-  /** A state from the fixed vocabulary, beside the name ("Open now"). */
+  /** A state from the fixed vocabulary, in the row's end column, before the action if there is one ("Open now"). */
   badge?: { text: string; tone: "neutral" | "accent" | "info" | "success" | "warning" | "error" };
   /** The row open now: the signal background. */
   current?: boolean;
@@ -44,10 +47,9 @@ export class RecordList {
       return h("li", { class: `record-row${record.current ? " current" : ""}`, "data-view-key": `record:${record.id}` },
         record.thumbnail ? h("span", { class: "record-thumb", "aria-hidden": "true" }, record.thumbnail) : null,
         h("div", { class: "record-main" },
-          h("div", { class: "record-name-line" }, h("strong", { class: "record-name", title: record.name, text: record.name }),
-            record.badge ? badge(record.badge.text, record.badge.tone) : null),
+          h("strong", { class: "record-name", title: record.name, text: record.name }),
           meta.length ? h("p", { class: "record-meta" }, ...meta) : null),
-        record.action ?? null);
+        record.badge || record.action ? h("div", { class: "record-end" }, record.badge ? badge(record.badge.text, record.badge.tone) : null, record.action ?? null) : null);
     }));
   }
 }

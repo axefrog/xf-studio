@@ -1090,14 +1090,19 @@ test("menu capability (UI-139): a menu button whose menu holds nothing to act on
   expect(menuCapability([{ kind: "action", label: "Rename…", run: () => {} }], "unused")).toEqual({ available: true });
 });
 
-test("record list (C-30, UI-162): the name keeps its line with its badge, the meta line breaks only between facts, one action per row", async () => {
+test("record list (C-30, UI-162): the name has its line, the badge and the action share the end column (badge first), the meta line breaks only between facts", async () => {
   const { RecordList, recordTime } = await lib();
   const list = new RecordList({ label: "Saved collections" });
   const open = document.createElement("button");
   list.update([{ id: "a", name: "My collection", meta: ["3 presets", "version 5", recordTime(new Date(2026, 8, 29, 18, 2, 49))], badge: { text: "Open now", tone: "info" }, current: true, action: open }]);
   const row = (list.element as unknown as LightElement).querySelector(".record-row")!;
-  expect([row.classList.contains("current"), row.querySelector(".record-name-line")!.textContent, row.querySelectorAll(".record-fact").length, row.querySelectorAll("button").length])
-    .toEqual([true, "My collectionOpen now", 3, 1]);
+  expect([row.classList.contains("current"), row.querySelector(".record-name")!.textContent, row.querySelector(".record-main")!.querySelectorAll(".badge").length,
+    row.querySelector(".record-end")!.children.map(child => child.className.split(" ")[0]), row.querySelectorAll(".record-fact").length, row.querySelectorAll("button").length])
+    .toEqual([true, "My collection", 0, ["badge", ""], 3, 1]);
+  // A row with nothing to do shows its state alone in the end column; a row with neither has no end column.
+  list.update([{ id: "b", name: "Open one", meta: ["1 preset"], badge: { text: "Open now", tone: "info" }, current: true }, { id: "c", name: "Other", meta: ["1 preset"] }]);
+  const rows = (list.element as unknown as LightElement).querySelectorAll(".record-row");
+  expect([rows[0]!.querySelector(".record-end")!.textContent, rows[1]!.querySelector(".record-end")]).toEqual(["Open now", null]);
   // The time is the date and the minute, never the seconds.
   expect(row.querySelectorAll(".record-fact")[2]!.textContent).not.toContain(":49");
 });
