@@ -140,6 +140,7 @@ export class EventCaptures {
         if (!after.source.active) { this.cancel("recorder_stopped"); return; }
         const lost = this.lossSinceArm(arm, after);
         if (lost.length) throw new Error(`Timeline coverage gap before the capture: ${lost.join("; ")}`);
+        if (!arm.input.channel) this.noteRecorderLoss(arm, after); // loss during the delay belongs in this capture's receipt
         const began = this.clock.now();
         const args = { ...(arm.input.capture === "recrop" ? {} : { clear_overlay: false }), ...arm.input.args };
         // Serialised with every other command on the existing API/connection. No second bridge client.

@@ -177,3 +177,16 @@ test("the commit tripwire's handover carries why, so the refusals and the sessio
   expect(offSwitch('test.events {"stims":false}', 2, 4)).toEqual({ command: "test.events", input: '{"stims":false}' });
   expect(() => offSwitch("session.handover [1]", 2, 4)).toThrow("JSON object");
 });
+
+// Review of 3365edc2..83431583 (Sol): four findings, each reproduced here first.
+
+test("review 4: recorder loss found by the recheck after the delay is in the capture's receipt", async () => {
+  const f = recorder({ rows: 30, sourceNow: 7 });
+  const calls: string[] = [], c = clock();
+  const arms = new EventCaptures(catchupApi(f, calls), { now: c.now, sleep: async ms => { c.t += ms; f.state.dropped = 2; } });
+  await arms.arm({ run: 1, event: "dm.quest", capture: "screenshot", delay_ms: 400 }, f.api);
+  f.state.events.push({ seq: 1, kind: "dm.quest", source_s: 7, data: { quest: "tl3" } });
+  await arms.poll();
+  expect(calls).toContain("capture.screenshot");
+  expect(arms.status().receipts.at(-1).recorder_loss_while_armed).toEqual({ dropped: 2, invalid: 0, missed_deadlines: 0, file_error: false });
+});
