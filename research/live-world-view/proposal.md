@@ -16,7 +16,7 @@
 8. [The Story Engine's contribution and the spoiler switch](#8-the-story-engines-contribution-and-the-spoiler-switch)
 9. [Coordination](#9-coordination)
 10. [What else matters](#10-what-else-matters)
-11. [Phased plan](#11-phased-plan)
+11. [Phase 2 requirements from review](#11a-phase-2-requirements-from-review) and the [phased plan](#11-phased-plan)
 12. [Open questions for the maintainer](#12-open-questions-for-the-maintainer)
 
 ## 1. The value
@@ -29,7 +29,7 @@ What Holotable gives that nothing else does today is **one place where every bel
 | The maintainer, after a session | **Replay and diagnose.** Scrub to the moment something went wrong and see who was where, what V's camera could see, which event fired | The whole session on a timeline, every item clickable with "why": the record ids it came from |
 | The bridge chat | **Debug the bridge's own work.** Placement choices, sight lines, contact alerts, coverage gaps, where the recorder lost samples | Bridge layers: probes, sight rays, road boundaries, safe points, recorder gaps drawn as gaps in the trail |
 | The Story Engine chat | **See the simulation against the game.** Heat bands per cell, regimes, presence, declared incidents and whether V witnessed them, plans and their reports | Story layers over the same base, with **drift** marked: where the engine's mirror disagrees with what the bridge observed |
-| Agents | **Their own view of the game.** Ask "who is within 20 m of V and unseen by her?" or "what changed in the last 30 s?" without a screenshot | A text and JSON projection of the same model, plus rendered stills for vision checks |
+| Agents | **Their own view of the game.** Ask "who is within 20 m of V and outside her view?" (answered with its coverage limits, §11a) or "what changed in the last 30 s?" without a screenshot | A text and JSON projection of the same model, plus rendered stills for vision checks |
 | Test design | **Plan before playing.** Lay out where a scene will run, check sight lines and spawn points against geometry offline | The base layer with candidate points, before any game time is booked |
 
 The strongest single case is **post-mortem replay**. Session 15 ended in a watchdog crash after about twelve minutes of district reads; Borg sessions produce thousands of records per run. A scrubbable picture of those minutes, with every item citing its record, turns an evening of log reading into a few minutes of looking.
@@ -172,8 +172,10 @@ The split of the in-game work is agreed in outline with XF · Runtime bridge (§
 **How the overlay works: the bridge draws, Holotable decides what** (agreed in outline with XF · Runtime bridge, 26 October; the schema follows in phase 2):
 
 - **The bridge owns a world-space canvas (`canvas@1`) in its native host.** Its content is plain primitives (line, polyline, point, box, circle, label, and a screen-space panel), each anchored at a world position, at an entity id (resolved on the game thread each tick, capped) or on the screen, with a layer id, colour tokens, an opacity and a time to live. The bridge snapshots the camera on the game thread each tick and projects on the render thread, so nothing makes game calls per frame. Hard caps on primitives, anchors and bytes are the bridge's to enforce. It also owns the two keys (through the same route as its stop key, rebindable in CET) and a `canvas.visible` event.
+- **The radar is a canvas view, not a second feed.** Each layer declares `views: world`, `radar` or both. The radar is a canvas-owned screen panel (position, size, range in metres, heading-up or north-up, set from Holotable's CET window) that transforms world primitives top-down around V and clips them, so a producer sends each primitive once; labels and chips stay world-only unless a layer asks. Primitive notes from the bridge: dashes are split into segments by the host, ground rings are projected polylines at the anchor's ground height, filled ground polygons have at most 8 vertices, points are screen-sized dots, styling is by colour token only, and an entity bracket is sized from the entity's bounds where the game gives them (unproven until a session checks it).
+- **Caps** (agreed): per producer 256 primitives, 4,096 vertices and 64 KB per snapshot; across all producers about 1,024 primitives and 16,384 vertices, refused with the cap named; at most 64 entity anchors resolved per tick, the rest holding their last position for a short time.
 - **Holotable owns the content.** Its projection specs, and the interpreter that turns observations into canvas primitives, are Holotable's. **Standalone in game**, Holotable's own CET module runs that interpreter a few times a second (in CET's update, not its draw), reading a read-only snapshot the bridge exposes to Lua (V, XF actors, incidents, supervisor holds, recorder gaps), and submits primitives to the canvas. The external app runs the same specs in 3D. Nothing of Holotable's lives in the bridge's module, and nothing of the bridge's in Holotable's.
-- **Other producers feed the canvas directly.** A new `display` access class changes only XF's own drawing, never the game, so read-only connections may use it: `canvas.feed {layer, items, ttl}` takes bounded batches per producer, is dropped while the canvas is hidden (producers subscribe to `canvas.visible`), and tells a backlogged producer to resend a snapshot rather than queueing.
+- **Other producers may also feed the canvas directly**, but only as a projection of items they also publish to Holotable's model under the same contract, so nothing appears in game that replay, the external window and agents can't see (§11a, requirement 1). A new `display` access class changes only XF's own drawing, never the game, so read-only connections may use it: `canvas.feed {layer, items, ttl}` takes bounded batches per producer, is dropped while the canvas is hidden (producers subscribe to `canvas.visible`), and tells a backlogged producer to resend a snapshot rather than queueing.
 - **The projection specs are the shared language.** An item kind's style token, label template, priority and content level are one table, read by the external app's renderer, by Holotable's in-game interpreter and by the agent report. A new producer's layer appears everywhere without new drawing code.
 - **Later**, when XF Core exists, the canvas becomes a core service and Holotable's module a plugin of it; only the manifest changes.
 - **One design question for the UI component track**: the canvas plate is translucent (the mock-up shows 72 %), where the XF box's plate is 97 %. That is a new value for the in-game token table, so it is specified here and decided there, not invented in Holotable's code.
@@ -225,7 +227,7 @@ The [mock-up](mockup.html) is interactive and data-driven itself: one small mode
 
 ## 6. The performance constraint
 
-Session 15's watchdog crash is the hard rule: **Holotable adds no game-thread work of its own.** It observes what the recorder and the session already produce. Concretely:
+Session 15's watchdog crash is the hard rule: **Holotable adds no polling of its own, and every piece of in-game work it causes is bounded and measured.** It observes what the recorder and the session already produce; the canvas does real per-tick work (a camera snapshot, capped anchor resolution, Holotable's CET interpreter), so that whole path, hidden state included, gets a budget and a measurement, not a promise. Concretely:
 
 - **No timers against the game.** No `scene_read`, `world_probe`, `world_district` or `player_state` on an interval, ever. A watchdog-safe design is one where the view's refresh rate and the game's work are unrelated.
 - **Ride the recorder.** The recorder already samples on its own bounded deadlines. Holotable reads its ring and chunks through a reader slot with `game_catchup {cursor, now: false, detail: true}`, so its reads cost what the recorder's pages cost and no more. Until a push stream exists (§7, want 1), the reader asks at most once a second, backs off when `more` is false, and stops when the view is hidden.
@@ -255,24 +257,39 @@ Ranked by value to Holotable. "Native" means RED4ext or plugin work, not only to
 | 12 | **A read-only Lua snapshot** for Holotable's CET module (bridge proposal B): V, XF actors, incidents, supervisor holds, recorder gaps | The overlay working with no other XF program running | a few Hz | Partly |
 | 13 | **The `display` access class and `canvas.feed`** (bridge proposal C), usable from read-only connections | Story Engine and other producers drawing in game | 1–4 Hz, bounded batches | Partly |
 | 14 | **A desktop app as a read-only observer**: confirmed possible today through `command-api.ts` with `readOnly: true`; the bridge plans to raise the default observer slots from 3 to 6 after measuring, since the runner, the Story Engine and Holotable each want one | The external window without setup | n/a | No (tools) |
-| 15 | **Published probe and scene results**: an opt-in event carrying the results of `world_probe`, `scene_read` and `world_district` when a writer calls them, so observers can draw sight lines, ground hits and districts without asking the game again | Drawing what sessions already asked, at no extra game cost | on call | Partly |
+| 15 | **Published probe and scene results**: an `observe.result` session event (bounded, with the command, the caller's cid and the result) whenever a writer calls `world_probe`, `scene_read` or `world_district`; agreed by the bridge, adding no game-thread work since the results already exist | Drawing what sessions already asked, at no extra game cost | on call | No (tools and plugin event) |
 
 ## 8. The Story Engine's contribution and the spoiler switch
 
-From the Story Engine's public specification, these concepts have a place in space or time and would render ([S1 §9](../story-engine/spec/simulation.md#9-what-s1-exposes)). The engine's core concepts are its own; Holotable only draws what it publishes.
+These concepts have a place in space or time and would render. The list comes from the Story Engine's public specification ([S1 §9](../story-engine/spec/simulation.md#9-what-s1-exposes)) and was checked and extended by XF · Story Engine on 26 October. The engine's core concepts are its own; Holotable only draws what it publishes.
 
-| Engine concept | Anchor | Drawn as |
-|---|---|---|
-| Heat bands per cell (`band(cell)`: quiet, elevated, hot, flashpoint) | Cell region | Ground tint and a low extrusion, height by band |
-| Regimes over a scope | District or cell | Hatched overlay with its kind |
-| Faction presence per leaf (`presence`) | Area polygon | Stacked colour bars at the area's centroid |
-| Refuge (`refuge(leaf)`) | Area polygon | Outline style: solid, dashed, none |
-| Declared and witnessed incidents | Position | Ring at the place, filled when V saw it, dashed when heard, grey when unwitnessed with its reason |
-| Actors' roles and plans | Entity | Role label and current plan step on the actor |
-| Divergence (a belief that differs from the mirror) | Entity pair | A line between believer and subject, only at content level full |
-| Drift between the engine's mirror and the bridge's observation | Entity | A small offset marker from where the engine thinks someone is to where they are |
+| Engine concept | Anchor | Drawn as | `structure` shows |
+|---|---|---|---|
+| **Level of detail**: what is open at which detail around the vantage (the engine's core principle, never visible until now) | Nested regions, each with a detail level | Nested translucent volumes, finer detail brighter | Everything |
+| Heat bands per cell (`band(cell)`: quiet, elevated, hot, flashpoint) | Cell region | Ground tint and a low extrusion, height by band | Everything |
+| Regimes over a scope | District or cell | Hatched overlay with its kind | Everything |
+| Faction presence per leaf (`presence`) | Area polygon | Stacked bars at the area's centroid | Everything |
+| Refuge (`refuge(leaf)`) | Area polygon | Outline style: solid, dashed, none | Everything |
+| Declared and witnessed incidents | Position | Ring at the place: solid when V saw it, dashed when heard, faint when unwitnessed with its reason | Rings by kind |
+| **People**: residents (bound ones on their entity, coarse ones in their region), ties as links, groups with leader seats, goals as arrows to their targets | Entity or region; pairs | Marks, links and arrows | Counts per area, group shapes and seat counts |
+| **Norms**: compliance and refusal per group and stall | Group, place | Small gauges at the place | Compliance |
+| **Intentions against the protagonist**: rung, warned, presented | Group, protagonist | A ladder marker on the group | Only once the warning has been presented to the player |
+| **Rumours**: beliefs spreading across ties | Ties, areas | Spread over time along links | Believer counts per area |
+| **Record events with cause links** | Position, time | Arcs between events over the timeline | Events and arcs without content |
+| **Stories**: live pattern instances (each juncture matched, ready or pending, bound to people and places), threads, the director's candidates and its gate decisions ("why this wasn't sown") | The places and people bound | A marker with juncture counts by state; threads as linked markers | Markers and counts, no pattern name |
+| **Scene bindings**: each scene's role bindings, phase and rung, joined to the bridge's plan steps by scene id (the plan layer itself is the bridge's) | Entities | Phase and rung on the actors the bridge's plan layer already marks | Phase and rung |
+| **Divergence**: a belief that differs from the engine's own record (its perspectives) | Believer and subject | A line between them | Nothing |
+| **Drift**: where the engine's mirror places someone against where the bridge observed them | Entity | An offset mark from the mirrored to the observed position | Everything |
 
-**Content levels.** Every layer declares `structure` (shapes, counts, bands, kinds, ids) or `full` (names, roles, lines, goals, beliefs). Structure shows the engine working without telling the story; full is for analysis.
+**Content levels.** Every layer declares `structure` or `full`, and the right-hand column above is the Story Engine's own split. `full` adds names, roles, goals, kinds of ties, beliefs and divergence, pattern ids and bindings, candidates and gate reasons, and every state of an intention. Structure shows the engine working without telling the story; full is for analysis.
+
+**How the engine publishes.** Typed items, never drawing: Holotable's projection specs draw them, so the engine has no drawing code. In play the engine is one producer to Holotable's host; in game its layers reach the canvas through Holotable's CET module, not through `canvas.feed` (how its typed items reach that module when the external app isn't running is a phase 2 question for the three chats). Offline, the reference model's harness can write the same items to a spool file from an M3 run, giving the proof of concept real engine data before anything runs in game.
+
+**Citations** take the form `se:<kind>:<id>`, the kind being `event`, `node`, `edge`, `frame` (goals and intentions), `belief`, `seed`, `inst` (a pattern instance), `sow` (a sowing decision) or `stage`. A selection asks the engine "why?" with the id, and it answers in the world's terms or, for analysis, with its draw trace.
+
+**Time and saves.** Engine items carry game time (the record's clock), the engine's window index and cumulative play time in their branch, and a branch id equal to the save's identity. On a load the engine replays to the saved state and continues on a new branch, so **Holotable forks the timeline at the save point, not at the moment of loading**; the bridge's world generation marks the load and maps onto the engine's branch id.
+
+**Drift is Holotable's to compute**, since it holds both streams and the engine stays off the bridge's samples: the engine publishes its mirror's positions with the observation time each rests on, so the comparison lines up. When game truth overrides the simulation, the engine also publishes that reconciliation as an event, so drift the engine noticed shows beside drift Holotable measured.
 
 **The switch** (the brief makes it optional; this proposes it because the Story Engine asks for a content level per layer anyway):
 
@@ -296,7 +313,7 @@ It is not a bridge track, because its most valuable parts (the model, the contra
 
 - **Truth versus belief is the real subject.** The most useful thing Holotable can show is disagreement: the engine's mirror against the bridge's observation, the runner's expectation against the recorder, the supervisor's last safe point against where V is. Make drift a first-class item kind, not an afterthought.
 - **Time is three clocks.** QPC source time, game time and the engine's simulation time differ, pause differently and reset on loads. The store keeps all three where known and the timeline says which it shows.
-- **Loads branch the timeline.** A save load starts a new world generation. Replays show branches side by side rather than splicing them.
+- **Loads branch the timeline, at the save point.** A save load starts a new world generation and a new engine branch; the fork is drawn where the save was made, not where it was loaded, and branches show side by side rather than spliced.
 - **Gaps are data.** Recorder drops, missed deadlines and reader drops are drawn as gaps in trails and as shaded spans on the timeline, so absence is never read as proof.
 - **The test-card companion.** A session's card rows (expected positions, regions, sight conditions) can be loaded as a layer and checked against the replay automatically: green where the observation matched, red where it didn't.
 - **Guiding the maintainer in game.** The overlay can show "walk to the marked spot" as a world marker and on the radar, drawn from the same layers, replacing typed coordinates in session questions.
@@ -307,13 +324,37 @@ It is not a bridge track, because its most valuable parts (the model, the contra
 - **Size.** A 30-minute run at 10 Hz with 16 actors is tens of thousands of samples, small for the store; the spool keeps snapshots so opening a long replay is instant.
 - **Later write-back.** Dropping a pin to ask the engine "what would happen here?" or nudging a seed is attractive, but it is a producer's action, routed to that producer with its own permission, and out of scope for version 1.
 
+## 11a. Phase 2 requirements from review
+
+An independent review (GPT-6.1 Sol, high effort) of this proposal found gaps that phase 2's design must close. Each is a requirement on the spec, not yet a design:
+
+1. **One semantic publishing contract.** Every producer publishes typed items to Holotable's model; game-side drawing is a projection of those items. A direct `canvas.feed` without the matching items is not allowed, so replay, agents and the external window never miss what the game showed.
+2. **Feed ownership.** Canvas content is scoped by connection, producer, world generation and sequence, with atomic replacement, withdrawal on disconnect and a bounded time to live, so two producers can't collide on a layer and a late batch can't restore an obsolete drawing.
+3. **Separate lifecycles.** Transport (the pipe), source (the recorder) and canvas each have their own states. A load, the kill switch or the writer leaving stops the recorder, and reconnecting an observer never restarts it silently; the external window says "waiting for a recording" rather than looking connected and empty. Handover invalidates actors and incidents explicitly.
+4. **Whole-path budget.** The frame cost covers parsing, allocation, label formatting and dash expansion, not only primitive counts, and is measured with the overlay shown and hidden.
+5. **Anchor lifetimes.** Entity mappings are scoped to a world generation and time-bounded, with explicit unresolved, stale and removed states, and fair scheduling when more than 64 anchors compete. A held last position fades as it ages, so it never looks current.
+6. **A versioned spec language.** The projection specs are a small, bounded language with a version; the Lua and TypeScript interpreters negotiate it, recordings pin the spec hash they were made with, and a shared set of conformance fixtures runs against both interpreters.
+7. **Comparable times.** Items keep occurrence, acquisition and publication times, the mappings between clocks and their uncertainty. Drift compares only observations that are compatible and fresh enough, since the engine may publish with a lag.
+8. **Epochs and baselines.** A producer's stream has epochs, snapshot baselines and deletions; when a delta batch is dropped, dependent state is marked incomplete until the next snapshot, instead of drawn as if whole.
+9. **Fail-closed content levels.** `structure` is a schema, not a filter: ids, kinds, citations, fallback labels and cached draw lists carry only what that level allows, the effective level is enforced on every output, and a per-layer override can never leave a "Story hidden" chip showing story.
+10. **Categorical reads drawn as categories.** The engine's reads are categories with `maybe`, not quantities: presence never draws as a percentage bar, and unknown, stale, unavailable and hidden each look different from a "no".
+11. **Evidence that outlives the record.** "Why" keeps bounded evidence beside each citation and says when it was resolved, is unavailable, or has aged out of the engine's ring.
+12. **A named owner of the model.** The store runs headless (beside the bridge's tools, not inside the external window), so agent tools work with no window open. Each client has its own query context: the external window can scrub; **the in-game overlay is always live** and never follows a scrub.
+13. **Honest agent answers.** Questions such as "unseen by V" answer in bounded claims (outside the view cone, seen unobstructed, unknown) with the coverage limits and citations, never a bare yes or no.
+14. **Observer slots are finite.** Running out of read slots, or being paced behind writer work, shows as its own waiting state, never as "the game isn't running"; reconnection backs off within a bound; the pipe's credentials stay in the app's data side, never in its web view.
+15. **Audit the fixture first.** The proof of concept names its recording and lists which channels it actually has (incidents are optional; session events are a separate feed; a crashed run may lack its manifest) before promising layers.
+16. **Offline geometry is an estimate.** Variants, installed mods and doors change the world; offline geometry records which installation and profile it came from, and scene pre-flight results are labelled as estimates.
+17. **Privacy beyond paths.** Recordings hold dialogue, comments and story content; they get a retention and deletion rule, exports get content-aware redaction, and agent tools follow the bridge's disclosure rule that their results leave the machine through the AI client.
+
+The [mock-up](mockup.html) already follows several of these: one evaluated snapshot per render, the in-game overlay pinned to the live moment, trails broken at missing samples, and a keyboard route for every action.
+
 ## 11. Phased plan
 
 | Phase | Delivers | Rough size | Needs |
 |---|---|---|---|
 | **1. Proposal** (this document) | Value, presentation, architecture, data, wants, coordination | done | — |
 | **2. Design and spec** | The item and manifest schemas (`xfh/item-1`, `xfh/layer-1`), the projection spec format, the store's snapshot and spool format, the adapter interface, the agent tools' shapes, the replay file format; confirmed bridge wants filed in the capability registry; Story Engine checks the contract against its needs | 3–5 days of design | Bridge and Story Engine reviews |
-| **3. Proof of concept: offline replay** | Load one recorded Borg run in the external window; draw V's trail, the actors, the camera frustum, incidents, supervisor events and gaps over district polygons; scrub; select any item and see its citations; the same model answers `holo_report` as text | 1–2 weeks | Want 2 (findable chunks); no game time |
+| **3. Proof of concept: offline replay** | Load one recorded Borg run, and a spool of engine items from a reference-model run, in the external window; draw V's trail, the actors, the camera frustum, incidents, supervisor events and gaps over district polygons; scrub; select any item and see its citations; the same model answers `holo_report` as text | 1–2 weeks | Want 2 (findable chunks); no game time |
 | **4. Live, in game** | The in-game overlay (radar first, then world markers) with its show/hide and mode keys and its CET settings window, fed live through a reader slot; the external window follows the same session; reader and overlay frame cost measured | 1–2 weeks | Wants 1 (or a rate-limited catch-up), 7, 10–12; one booked session |
 | **5. Base geometry and story layers** | Collision primitives and proxies near V; the Story Engine's structure layers in both surfaces; drift markers | 2–4 weeks | W0 reader; the engine's publisher |
 | **6. More** | Test-card overlay; scene pre-flight on offline geometry; later a Studio view | 1–2 weeks each | Studio 1.0 for its view |
