@@ -61,7 +61,7 @@ export type StudioFileState = { workspaceFile?: boolean; busy?: StudioFileAction
   recovery: { available: boolean; reason?: string } };
 type FileSources = {
   /** Freeze the destination/revisions when a workflow starts; validate again after every asynchronous return. */
-  capture?(): () => Capability;
+  capture?(): { check(): Capability; release(): void };
   recipe(): ReadonlyDeep<Recipe>;
   selectedLayer(): ReadonlyDeep<Layer> | undefined;
   /** Import a recipe as a new preset of `collection` (the one the request named when it was asked). */
@@ -196,18 +196,20 @@ export class StudioFileOperations {
   async execute(action: StudioFileAction): Promise<StudioFileOutcome> {
     const allowed = this.capability(action);
     // A refused call never acquired the transaction, so it must not release or replace its result.
-    if (!allowed.available) return { ok: false, code: allowed.code ?? (this.busy ? "busy" : "unavailable"), message: allowed.reason! };
-    const captured = this.sources.capture?.();
-    const check = () => {
-      const allowed = this.disposed ? refusal("missing_target", "This file destination was released.") : captured?.();
-      if (allowed && !allowed.available) throw new FileOperationError(allowed.code ?? "missing_target", allowed.reason ?? "This file destination changed.");
-    };
+    if (!allowed.available) return { ok: false, code: allowed.code === "missing_target" ? "missing_target" : this.busy ? "busy" : "unavailable", message: allowed.reason! };
     if (action.kind === "package.stop") {
       const entry = this.activity().find(entry => entry.kind === "package.build" && entry.cancellable)!;
       const answer = this.cancel(entry.id);
       return answer.accepted ? { ok: true, code: "stopping", message: "Stopping Build…" }
         : { ok: false, code: "unavailable", message: answer.reason! };
     }
+    const captured = this.sources.capture?.();
+    const check = () => {
+      const allowed = this.disposed ? refusal("missing_target", "This file destination was released.") : captured?.check();
+      if (allowed && !allowed.available) throw new FileOperationError(allowed.code ?? "missing_target", allowed.reason ?? "This file destination changed.");
+      if (captured && action.kind === "recipe.import" && this.collection?.draftIdentity()?.collectionId !== action.collection)
+        throw new FileOperationError("missing_target", "The collection this file was going to is no longer available.");
+    };
     if (action.kind === "package.check" || action.kind === "package.build") this.clearPackageOutcome();
     const owner = Symbol(action.kind);
     this.busy = { kind: action.kind, owner, id: ++this.sequence, startedAt: Date.now() }; this.notify();
@@ -294,7 +296,8 @@ export class StudioFileOperations {
             check();
           } else request = collectionRequest(action.kind);
           const result = await this.sources.executeCollection(request);
-          check();
+          // Import publishes its new binding in the same accepted command. That intentional transition is its successful result.
+          if (action.kind !== "collection.import") check();
           if (!result.ok) { outcome = result; break; }
           if (result.result.kind === "export")
             this.port.download(new Blob([result.result.json], { type: "application/json" }), result.result.name);
@@ -312,7 +315,7 @@ export class StudioFileOperations {
       if (action.kind === "characterPreset.import" && error instanceof SyntaxError)
         return this.finish(owner, action.kind, { ok: false, code: "invalid_json", message: "This character preset can't be read: it is not valid JSON." });
       return this.finish(owner, action.kind, { ok: false, code, message: prefix + (error as Error).message });
-    }
+    } finally { captured?.release(); }
   }
   /** Existing save/open/refresh requests share the same result/download state port. */
   async executeCollection(request: CollectionRequest): Promise<CollectionOutcome> {

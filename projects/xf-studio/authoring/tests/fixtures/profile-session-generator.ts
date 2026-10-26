@@ -8,7 +8,7 @@ import { applyDrop, group, locate, allGroups, setCollapsed, setSizes, setWindowR
 import { VIEW_GRAPH_1, VIEW_SLOTS, SLOT_COLLECTIONS, type ViewGraphData, type ViewGraphRules, type ViewRecord, type ViewSlot } from "../../src/platform/api/view-graph";
 import { ViewGraph } from "../../src/platform/core/view-graph";
 import { PanelActions } from "../../src/app/profiles/panel-actions";
-import { SessionModel, sessionAccount } from "./profile-session-model";
+import { EditContextModel, SessionModel, sessionAccount } from "./profile-session-model";
 import { seededRandom } from "./profile-sessions";
 
 const KINDS = ["add", "show", "park", "bind", "drag", "new", "reset", "close", "reopen", "duplicate", "undo", "redo", "start", "end", "point", "switch", "focus", "scene", "addView", "closeView", "link", "hide", "collapse", "resize", "split", "activate", "readonly", "withdraw"] as const;
@@ -48,7 +48,15 @@ function content(s: ProfileSessions, n: number): TabContent {
 }
 const clone = <T>(value: T): T => structuredClone(value);
 const look = (n: number) => ({ collection: "crew", look: `look-${n % 5}` });
-const binding = (n: number) => n % 3 ? { policy: "pinned" as const, target: { look: look(n) } } : { policy: "follow-focus" as const };
+const binding = (n: number): import("../../src/app/profiles/profile-session").PanelBinding => {
+  switch (n % 5) {
+    case 0: return { policy: "follow-focus" };
+    case 1: return { policy: "pinned", target: { look: look(n) } };
+    case 2: return { policy: "pinned", target: { view: "main" } };
+    case 3: return { policy: "pinned", target: { scene: "s1" } };
+    default: return { policy: "pinned", target: { subject: { kind: "location", id: `place-${n % 3}` } } };
+  }
+};
 function check(s: ProfileSessions, m: SessionModel) {
   const data = s.session(); invariants(data);
   equal(sessionAccount(data), m.account(), "reference recorded state");
@@ -227,6 +235,52 @@ export function generateSeeds(first: number, last: number) {
       throw Error(`G3 failing seed ${seed}; shrunk sequence ${JSON.stringify(reduced)}\n${error instanceof Error ? error.message : String(error)}`); }
   }
   return count;
+}
+
+/** Extend the same seeded harness through the production bound application path. Persistence restarts use a new outbox/history/core. */
+export async function generateContextSeeds(first: number, last: number) {
+  const { profileContextStudio } = await import("./profile-context-studio");
+  let count = 0, restarts = 0;
+  for (let seed = first; seed <= last; seed++) {
+    let w = await profileContextStudio();
+    const random = seededRandom(seed + 33000), models = [new EditContextModel(), new EditContextModel(), new EditContextModel()];
+    let panels = [0, 1, 2].map(i => w.bind(`presets--scene${i}`).context);
+    const commands: { look: number; op: string; value: number }[] = [];
+    const verify = () => {
+      for (let i = 0; i < 3; i++) {
+        const port = panels[i]!.current(), doc = port.authoring.snapshot().document, timeline = port.authoring.historyTimeline();
+        equal({ opacity: doc.recipe.layers[0]!.opacity, selected: doc.selected, depth: timeline.current + 1,
+          redoDepth: timeline.redoCount, trimmed: timeline.trimmed }, models[i]!.account(), "independent editable context");
+      }
+    };
+    try {
+      // Every seed crosses 80 real steps on every look; this is not left to the random distribution.
+      for (let n = 0; n < 90; n++) for (let i = 0; i < 3; i++) {
+        const opacity = ((n * 37 + seed * 11 + i * 3) % 99 + 1) / 100, port = panels[i]!.current();
+        const command = { kind: "layer.setOpacity" as const, layerId: port.feature("eye-makeup").view().recipe().layers[0]!.id, opacity };
+        commands.push({ look: i, op: "edit", value: opacity });
+        const result = port.feature("eye-makeup").dispatch(command);
+        equal(result.ok, true, "valid context command"); models[i]!.edit(opacity); verify(); count++;
+      }
+      for (let n = 0; n < 60; n++) {
+        const i = Math.floor(random() * 3), value = Math.floor(random() * 100), model = models[i]!, port = panels[i]!.current(), op = value % 4;
+        commands.push({ look: i, op: ["edit", "select", "undo", "redo"][op]!, value });
+        if (op === 0) { const opacity = (value % 98 + 1) / 100; equal(port.feature("eye-makeup").dispatch({ kind: "layer.setOpacity", layerId: "layer-1", opacity }).ok, true, "valid generated edit"); model.edit(opacity); }
+        if (op === 1) { const selected = value % 6; equal(port.feature("eye-makeup").dispatch({ kind: "point.select", layerId: "layer-1", index: selected }).ok, true, "valid generated selection"); model.selected = selected; }
+        if (op === 2 || op === 3) { const moved = op === 2 ? model.undo() : model.redo(); equal(port.authoring.dispatch({ kind: op === 2 ? "history.undo" : "history.redo" }).ok, moved, "generated history availability"); }
+        verify(); count++;
+        if (n === 19 || n === 39 || n === 59) {
+          await w.settle(); const persisted = w.stored(), before = JSON.stringify(persisted.session);
+          await w.dispose(); w = await profileContextStudio({ restart: persisted });
+          equal(JSON.stringify(w.stored().session), before, "persisted session restart");
+          for (const model of models) model.restart();
+          panels = [0, 1, 2].map(i => w.bind(`presets--scene${i}`).context); verify(); restarts++;
+        }
+      }
+    } catch (error) { throw Error(`P3-ii context seed ${seed}; commands ${JSON.stringify(commands)}\n${error instanceof Error ? error.message : String(error)}`); }
+    finally { await w.dispose(); }
+  }
+  return { seeds: last - first + 1, count, restarts };
 }
 
 if (parentPort) {

@@ -302,7 +302,8 @@ describe("three Vs of both bodies, three looks, five views in two tabs, three pi
     w.focus.focusView(w.ids[3]!);
     w.state.show(w.t2);
     expect(w.targets.named("presets--second")).toMatchObject({ view: w.ids[3], look: w.L[1], character: w.vs[0], tab: w.t2 });
-    expect(w.targets.named("presets--follow")).toMatchObject({ view: w.ids[0], tab: w.t2 });
+    // A retained instance resolves in its own tab even while another tab is shown (P3-ii's scoped input).
+    expect(w.targets.named("presets--follow")).toMatchObject({ view: w.ids[0], tab: w.t1 });
     // Close tab 1 (three views, three pinned Character panels): its views and scenes go; Undo brings all of it back.
     w.state.close(w.t1);
     expect(w.state.tabList().map(tab => tab.id)).toEqual([w.t2]);

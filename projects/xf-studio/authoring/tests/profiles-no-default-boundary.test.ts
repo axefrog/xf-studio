@@ -100,7 +100,7 @@ describe("no application service reads focus (§3.6)", () => {
    * and the composition root that wires them; the history service only records the editing context, and answers an experiment which of its
    * documents is it (`DocumentHistory.selected`).
    */
-  const READERS = [/^platform\/core\/focus\.ts$/, /^platform\/core\/history-service\.ts$/, /^app\/profiles\/(targets|bindings|profile-sessions|profile-window)\.ts$/,
+  const READERS = [/^platform\/core\/focus\.ts$/, /^platform\/core\/history-service\.ts$/, /^app\/profiles\/(targets|bindings|profile-sessions|profile-window|panel-editing-contexts)\.ts$/,
     /^app\/studio-presentation\.ts$/, /^app\/trusted-studio-bootstrap\.ts$/, /^studio-ui\//, /^compose\//];
   // `acting` over the editing contexts (`acting(focus.recent())`) is the input layer's; an owner asking whether one named scope can act isn't.
   const READS = /\.(topView|viewOrder|focusedPanel)\(|\.acting\([^)]*(focus|recent)|focus\.(recent|editing)\(|targets\.(named|resolve|editing|undoScope|complete|capture)\(/;

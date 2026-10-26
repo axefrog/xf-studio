@@ -194,10 +194,15 @@ type EditingState = {
   featureControl?: { feature: string; id: string; transaction: HistoryTransaction<HistoryEntryId> };
   ended: Set<string>;
   look?: { features: readonly string[] };
+  controlOwner?: StudioApplication;
+  featureOwner?: StudioApplication;
+  gestureOwner?: StudioApplication;
 };
+let nextContextIdentity = 0;
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
+  private readonly contextIdentity = ++nextContextIdentity;
   private services: Services;
   private listeners = new Set<() => void>();
   private unsubs: (() => void)[] = [];
@@ -269,11 +274,15 @@ export class StudioApplication {
     const services = { ...this.services, ...overrides };
     const shared = editing?.edits ?? (services.document === this.services.document ? this.edits : undefined);
     const app = new StudioApplication(services, this.routes, shared);
+    app.previewUnavailable = this.previewUnavailable;
     this.forks.set(app, new Set(Object.keys(overrides) as (keyof Services)[]));
     app.parentOff = () => this.forks.delete(app);
     return app;
   }
   dispose() {
+    if (this.edits.controlOwner === this) { const control = this.services.controls.snapshot(); if (control) { this.ended.add(`control:${control.id}`); this.controlCommit(control.id); } }
+    if (this.edits.featureOwner === this && this.featureControl) { this.ended.add(`feature:${this.featureControl.id}`); this.featureControlCommit(this.featureControl.id); }
+    if (this.edits.gestureOwner === this && this.gesture) this.endGesture(this.gesture.source);
     this.disposed = true;
     this.parentOff?.(); this.replacingOff();
     for (const child of [...this.forks.keys()]) child.dispose();
@@ -281,7 +290,7 @@ export class StudioApplication {
     this.unsubs = []; this.listeners.clear();
   }
   /** A device failure is terminal for this page load; edits and mask work remain available. */
-  setPreviewUnavailable(reason: string) { this.previewUnavailable = reason; this.notify(); }
+  setPreviewUnavailable(reason: string) { this.previewUnavailable = reason; for (const app of this.forks.keys()) app.setPreviewUnavailable(reason); this.notify(); }
   private notify() { for (const listener of this.listeners) listener(); }
   private subscribeSources() {
     for (const unsub of this.unsubs) unsub();
@@ -299,6 +308,8 @@ export class StudioApplication {
       if (source?.subscribe) this.unsubs.push(source.subscribe(() => this.notify()));
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  /** The input layer freezes this facade for a continuous run; a drawn-context attachment must not retarget its continuation. */
+  captureInput(): StudioApplication { return this; }
   /** Exact command IDs; nested preset/layer command variants retain their typed payloads. */
   actionKinds() { return [...this.routes.kinds()] as StudioAction["kind"][]; }
   /** Library request kinds (the registered `library` family). */
@@ -453,11 +464,15 @@ export class StudioApplication {
   contextFor(hit: StudioContextHit, named: NamedTargets = {}): StudioBoundContext {
     const draft = this.services.collection?.draftIdentity();
     return Object.freeze({ hit: Object.freeze(structuredClone(hit)), named: Object.freeze({ ...named }), collectionId: draft?.collectionId,
+      contextIdentity: this.contextIdentity,
       selectedPresetId: draft?.selected,
       collectionRevision: this.collectionRevision,
       geometryRevision: this.services.document.geometryVersion.revision });
   }
   private boundContextCapability(context: StudioBoundContext): StudioCapability {
+    if (context.contextIdentity !== this.contextIdentity) return missingTarget("This editing context changed after the menu opened.");
+    const current = this.services.targetCheck?.check(context.named);
+    if (current && !current.available) return current;
     const draft = this.services.collection?.draftIdentity();
     if (context.collectionRevision !== this.collectionRevision)
       return missingTarget("The collection changed after this menu opened.");
@@ -557,6 +572,7 @@ export class StudioApplication {
    * per paint; undefined until the 3D preview is ready.
    */
   characterPanel() { return this.services.characterContext?.panel() ?? null; }
+  characterSavedV() { const save = this.services.characterContext?.shownSave(); return save ? structuredClone(save) : undefined; }
   characterView() { return this.services.characterContext?.view() ?? null; }
   characterChoices(option: string, want?: number, query?: string) { return this.services.characterContext?.choices(option, want, query) ?? null; }
   /** A colour row's swatches and icons derived from what wins for each choice (asking loads them); null until they arrive. */
@@ -727,10 +743,10 @@ export class StudioApplication {
   /** The runtime holding the view an action names (view-routes.ts); undefined without runtimes or a view (the attached services answer). */
   private route(view: unknown) { return typeof view === "string" ? this.services.runtimes?.route(view) : undefined; }
   /** The workspace lease's refusal while another page holds this workspace; undefined while this page may write. */
-  private denied() {
+  private denied(skipAccess = false) {
     if (this.disposed) return refusal("missing_target", "This editing context was released.");
     const input = this.services.input?.check();
-    return input && !input.available ? input : this.services.access?.refusal();
+    return input && !input.available ? input : skipAccess ? undefined : this.services.access?.refusal();
   }
   /** A request that only reads (the library list) stays available in a read-only page; `open` replaces the draft, so it doesn't. */
   private readOnlyRequest(kind: string) {
@@ -746,7 +762,7 @@ export class StudioApplication {
   capability(action: StudioAction): StudioCapability {
     const s = this.services, route = this.routes.route(action.kind);
     if (!route.ok) return unknownCommand();
-    const denied = action.kind === "tabs.show" ? undefined : this.denied();
+    const denied = this.denied(action.kind === "tabs.show");
     if (denied) return denied;
     // With a loaded collection but no selected preset the editor shows an empty recipe no
     // preset owns; content written there would be discarded at the next preset switch.
@@ -1086,7 +1102,7 @@ export class StudioApplication {
     if (!look || !this.editsLook(look)) return false;
     if (this.denied() || this.gesture || this.look || this.featureControl || this.unowned() || this.services.document.locked) return false;
     const begun = this.services.controls.begin(id, layerId);
-    if (begun) { this.ended.delete(`control:${id}`); this.notify(); }
+    if (begun) { this.edits.controlOwner = this; this.ended.delete(`control:${id}`); this.notify(); }
     return begun;
   }
   /**
@@ -1105,13 +1121,15 @@ export class StudioApplication {
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
     try {
+      const hadControl = this.services.controls.snapshot();
       const outcome = this.services.controls.edit(id, action.layerId, action);
+      if (!hadControl && this.services.controls.snapshot()) this.edits.controlOwner = this;
       if (outcome === "stale") return { ok: false, code: "missing_target",
         message: "That layer changed while you were adjusting it; the edit was not applied." };
       return { ok: true, result: outcome === "changed" };
     } catch (error) { return { ok: false, ...failure(undefined, error) }; }
   }
-  controlCommit(id: string) { this.services.controls.commit(id); this.notify(); }
+  controlCommit(id: string) { if (this.services.controls.snapshot()?.id === id) this.edits.controlOwner = undefined; this.services.controls.commit(id); this.notify(); }
   /**
    * Ends any open pointer gesture or form-control run, committing it as releasing the pointer or finishing the drag would: one Undo
    * step each, as usual. The workspace lease's release runs it first, so the page's last write holds the edit whole (profiles §2.3).
@@ -1122,7 +1140,7 @@ export class StudioApplication {
     if (control) this.controlCommit(control.id);
     if (this.featureControl) this.featureControlCommit(this.featureControl.id);
   }
-  controlCancel(id: string) { this.services.controls.cancel(id); this.notify(); }
+  controlCancel(id: string) { if (this.services.controls.snapshot()?.id === id) this.edits.controlOwner = undefined; this.services.controls.cancel(id); this.notify(); }
   /**
    * A form control's run of edits on a feature bound by the generic handler (a slider drag), as one Undo step (feature-module platform
    * section 3): the platform's `HistoryTransaction` with the form-control policy over that feature's part. Refused inside a gesture,
@@ -1137,6 +1155,7 @@ export class StudioApplication {
     if (this.denied() || this.gesture || this.look || this.services.controls.snapshot() || this.unowned() || this.services.document.locked
       || !this.featureHandlers.has(feature)) return false;
     this.featureControl = { feature, id, transaction: this.services.document.history.begin([feature], CONTROL_TRANSACTION) };
+    this.edits.featureOwner = this;
     this.ended.delete(`feature:${id}`);
     this.notify();
     return true;
@@ -1170,11 +1189,13 @@ export class StudioApplication {
   featureControlCommit(id: string) {
     if (this.featureControl?.id !== id) return;
     const control = this.featureControl; this.featureControl = undefined;
+    this.edits.featureOwner = undefined;
     control.transaction.commit(); this.notify();
   }
   featureControlCancel(id: string) {
     if (this.featureControl?.id !== id) return;
     const control = this.featureControl; this.featureControl = undefined;
+    this.edits.featureOwner = undefined;
     control.transaction.cancel(); this.notify();
   }
   /** The open generic feature control, if any. */
@@ -1191,12 +1212,12 @@ export class StudioApplication {
   }
   /** A part preset request's capability, routed by the registry to the `presets` family. */
   presetCapability(request: PartPresetRequest): StudioCapability {
-    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    const denied = this.denied(this.readOnlyRequest(request.kind));
     if (denied) return denied;
     return this.ownsAsync("presets", request.kind) ? this.asyncHandlers.presets.capability(request) : unknownCommand();
   }
   async executePreset(request: PartPresetRequest): Promise<PartPresetOutcome> {
-    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    const denied = this.denied(this.readOnlyRequest(request.kind));
     if (denied) return { ok: false, code: denied.code!, message: denied.reason! };
     return this.ownsAsync("presets", request.kind) ? this.asyncHandlers.presets.execute(request)
       : { ok: false, code: "invalid_value", message: "Unknown command." };
@@ -1219,12 +1240,12 @@ export class StudioApplication {
   facialInstalled() { this.services.facial?.installed(); }
   /** A library request's capability, routed by the registry to the `library` family. */
   requestCapability(request: CollectionRequest): StudioCapability {
-    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    const denied = this.denied(this.readOnlyRequest(request.kind));
     if (denied) return denied;
     return this.ownsAsync("library", request.kind) ? this.asyncHandlers.library.capability(request) : unknownCommand();
   }
   async execute(request: CollectionRequest) {
-    const denied = this.readOnlyRequest(request.kind) ? undefined : this.denied();
+    const denied = this.denied(this.readOnlyRequest(request.kind));
     if (denied) return { ok: false as const, code: denied.code!, message: denied.reason! };
     return this.ownsAsync("library", request.kind) ? this.asyncHandlers.library.execute(request)
       : { ok: false as const, code: "invalid_value", message: "Unknown command." };
@@ -1233,12 +1254,12 @@ export class StudioApplication {
   fileDescriptor(kind: string) { return this.routes.asyncDescriptors("files")[kind] as FileDescriptor | undefined; }
   /** A file workflow's capability, routed by the registry to the `files` family (the workflow's own answer). */
   fileCapability(action: StudioFileAction): { available: boolean; reason?: string; code?: ReasonCode } {
-    const denied = this.readOnlyFile(action.kind) ? undefined : this.denied();
+    const denied = this.denied(this.readOnlyFile(action.kind));
     if (denied) return denied;
     return this.ownsAsync("files", action.kind) ? this.asyncHandlers.files.capability(action) : unknownCommand();
   }
   executeFile(action: StudioFileAction): Promise<StudioFileOutcome> {
-    const denied = this.readOnlyFile(action.kind) ? undefined : this.denied();
+    const denied = this.denied(this.readOnlyFile(action.kind));
     if (denied) return Promise.resolve({ ok: false, code: denied.code!, message: denied.reason! });
     return this.ownsAsync("files", action.kind) ? this.asyncHandlers.files.execute(action)
       : Promise.resolve({ ok: false, code: "invalid_value", message: "Unknown command." });
@@ -1287,7 +1308,7 @@ export class StudioApplication {
     if (control) this.services.controls.commit(control.id);
     if (!this.services.gestures.begin(source, layer)) return false;
     this.gesture = { source: gestureSource(source), scope: this.services.document.scopeId, layer, points: [...layer.points],
-      fields: new Map(layer.fields.map(field => [field.id, field])) }; this.notify(); return true;
+      fields: new Map(layer.fields.map(field => [field.id, field])) }; this.edits.gestureOwner = this; this.notify(); return true;
   }
   applyGesture(source: GestureOrigin, proposal: StudioGestureProposal) {
     const session = this.gesture;
@@ -1309,7 +1330,7 @@ export class StudioApplication {
   endGesture(source: GestureOrigin, cancel = false) {
     if (this.gesture?.source.view !== gestureSource(source).view) return;
     if (cancel) this.services.gestures.cancel(source); else this.services.gestures.commit(source);
-    this.gesture = undefined; this.notify();
+    this.gesture = undefined; this.edits.gestureOwner = undefined; this.notify();
   }
 }
 /** Descriptor payload check for a concrete action: top-level fields, then its command/key variant. */

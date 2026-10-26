@@ -5,6 +5,7 @@ import type { AuthoringPreviewCoordinator } from "../legacy/eye-makeup/preview/a
 import type { CollectionServiceDeps } from "../library/collection-service";
 import type { SavedAppearanceState } from "../character/saved-appearance-actions";
 import type { SavedV } from "../saves/save-reader";
+import { readSavedV } from "../saves/save-reader";
 import { StudioFileOperations, type StudioFilePort } from "./studio-file-operations";
 import { createStudioPresentation, type ProjectLinkPort, type StudioPresentationPort } from "./studio-presentation";
 import type { PresentationStatusSource } from "./presentation-status";
@@ -17,12 +18,19 @@ import type { ModInstallActions } from "../installation/mod-install-actions";
 import type { PreviewSetupActions } from "../preview/preview-setup";
 import type { DiagnosticsActions } from "../diagnostics/actions";
 import type { ModuleService } from "../platform/api";
+import type { NamedTargets } from "./action-targets";
+import type { Capability } from "../platform/api";
+import { PanelEditingContexts } from "./profiles/panel-editing-contexts";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
 /** Compose trusted services before mounting any presentation. No page control IDs are read here. */
 export function createTrustedStudioBootstrap<Slot>(options: {
   core: Core;
+  naming?: () => NamedTargets;
+  lookSelection?: (ref: import("../library/collection-documents").LookRef) => import("./studio-application").StudioAction;
+  fileCapture?: () => { check(): Capability; release(): void };
+  bound?: Pick<ConstructorParameters<typeof PanelEditingContexts<Slot>>[0], "session" | "targets" | "looks" | "empty" | "character" | "context">;
   preferences: UIPreferenceActions;
   viewport: ViewportAttachment<Slot>;
   previewReadiness: Pick<AuthoringPreviewCoordinator, "readiness" | "subscribe">;
@@ -84,6 +92,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   if (options.emptyChoices) core.app.attach({ emptyChoices: options.emptyChoices });
   let collection: CollectionApplication;
   const files = new StudioFileOperations(options.fileDevice, {
+    capture: options.fileCapture,
     recipe: () => core.presentation.recipe(), selectedLayer: () => core.presentation.layer(),
     importRecipe: (recipe, name, into) => {
       collection.importRecipe(recipe, name, into);
@@ -116,7 +125,21 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     }),
   });
   collection = new CollectionApplication({ ...options.collections, model: core.documents }, core.document, core.app, files);
+  const editing = options.bound ? new PanelEditingContexts<Slot>({ ...options.bound, create: input => {
+    const scoped = createTrustedStudioBootstrap<Slot>({ ...options, core: input.core, bound: undefined, naming: () => input.named,
+      lookSelection: input.choose,
+      fileCapture: input.capture, panelInstance: () => input.instance, onRecipeImported: () => {},
+      collections: { ...options.collections, current: input.check, preserveEmpty: true, scene: input.scene, flushLook: () => options.bound!.looks.commit() },
+      savedAppearance: { has: () => !!input.core.app.characterSavedV(), read: () => input.core.app.characterSavedV(), ready: character => character === input.named.character && !!input.core.app.characterPanel(),
+        load: (bytes, character) => {
+          const value = readSavedV(bytes), done = input.core.app.dispatch({ kind: "character.setSource", character, source: { kind: "save", value } });
+          if (!done.ok) throw Error(done.message);
+          return { savedV: value };
+        } } });
+    return { port: scoped.mount(port => port), dispose: () => { scoped.files.dispose(); scoped.collection.dispose(); } };
+  } }) : undefined;
   const port = createStudioPresentation({ authoring: core.app, library: collection,
+    naming: options.naming, lookSelection: options.lookSelection, editing,
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
     localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts, modInstall: options.modInstall, previewSetup: options.previewSetup,

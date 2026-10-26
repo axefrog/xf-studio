@@ -23,6 +23,7 @@ export type StudioContextHit =
  * opened (`named`, profiles design §3.3): every command it offers names them.
  */
 export type StudioBoundContext = Readonly<{
+  contextIdentity: number;
   hit: Readonly<StudioContextHit>;
   named: Readonly<NamedTargets>;
   collectionId?: string;

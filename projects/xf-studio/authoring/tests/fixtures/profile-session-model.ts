@@ -130,3 +130,35 @@ export function sessionAccount(data: ProfileSessionData) {
   return { tabs: data.tabs.map(tab), closed: data.closed.map(item => ({ tab: tab(item.tab), at: item.at, views: item.views })),
     views: data.views.views, shown: data.focus.tab ?? null };
 }
+
+/** Independent P3-ii command account. Whole before/after numeric values, deliberately no production history/chunk helpers. */
+export class EditContextModel {
+  opacity = 0.85;
+  selected = 0;
+  private readonly done: { before: number; after: number }[] = [];
+  private readonly undone: { before: number; after: number }[] = [];
+  private displaced?: { step: { before: number; after: number }; trimmed: boolean };
+  trimmed = false;
+  private push(step: { before: number; after: number }) {
+    this.done.push(step);
+    const dropped = this.done.length > 80 ? this.done.shift() : undefined;
+    this.displaced = dropped && { step: dropped, trimmed: this.trimmed };
+    if (dropped) this.trimmed = true;
+  }
+  edit(opacity: number) {
+    if (opacity === this.opacity) return false;
+    this.undone.length = 0;
+    this.push({ before: this.opacity, after: opacity }); this.opacity = opacity;
+    return true;
+  }
+  undo() {
+    const step = this.done.pop(); if (!step) return false;
+    // The immediately displaced oldest step returns when Undo removes the edit that displaced it (history-limit's contract).
+    if (this.displaced) { this.done.unshift(this.displaced.step); this.trimmed = this.displaced.trimmed; this.displaced = undefined; }
+    this.undone.push(step); this.opacity = step.before; return true;
+  }
+  redo() { const step = this.undone.pop(); if (!step) return false; this.push(step); this.opacity = step.after; return true; }
+  /** Persisted look history keeps completed before-values, with no session-only Redo or displaced-step grace entry. */
+  restart() { this.undone.length = 0; this.displaced = undefined; }
+  account() { return { opacity: this.opacity, selected: this.selected, depth: this.done.length, redoDepth: this.undone.length, trimmed: this.trimmed }; }
+}

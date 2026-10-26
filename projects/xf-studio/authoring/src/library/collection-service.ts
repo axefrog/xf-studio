@@ -119,6 +119,10 @@ export type CollectionScenePort = {
   subscribe(listener: () => void): () => void;
 };
 export type CollectionServiceDeps = {
+  /** A scoped input's semantic/lifetime check, revalidated before a delayed request creates or selects data. */
+  readonly current?: () => Capability;
+  /** A bound inspector keeps its exact empty/missing/removed destination; initialization never chooses a replacement for it. */
+  readonly preserveEmpty?: boolean;
   readonly model: DocumentModel;
   readonly owner: CollectionOwner;
   readonly scene: CollectionScenePort;
@@ -211,8 +215,8 @@ export class CollectionService {
     return ref && view?.looks.includes(ref.look) ? ref.look : undefined;
   }
   /** The shown collection as looks (parsed, cached by revision): what products, summaries and comparisons read. */
-  private collection(): LookCollection | undefined {
-    const view = this.shown();
+  private collection(id?: string): LookCollection | undefined {
+    const view = id === undefined ? this.shown() : this.deps.owner.collection(id);
     if (!view) return undefined;
     const looks = this.deps.owner.looksOf(view.id);
     const key = JSON.stringify([view.id, view.revision, looks.map(look => [look.id, look.revision])]);
@@ -383,6 +387,7 @@ export class CollectionService {
   // Capabilities
 
   capability(request: CollectionRequest): Capability {
+    const current = this.deps.current?.(); if (current && !current.available) return current;
     if (this.busy) return refusal("busy", "Another collection request is in progress.");
     if (request.kind === "initialize") return { available: true };
     const collection = this.collection();
@@ -678,7 +683,7 @@ export class CollectionService {
     else this.unread(`${id}@${saved.version.revision}`);
     await this.list().catch(() => undefined);
     return stored && stored.revision === saved.version.revision ? stored
-      : { collection: this.collection() ?? { schema: COLLECTION_2, id, name: "", presets: [] }, revision: saved.version.revision, updatedAt: saved.version.updatedAt };
+      : { collection: this.collection(id) ?? { schema: COLLECTION_2, id, name: "", presets: [] }, revision: saved.version.revision, updatedAt: saved.version.updatedAt };
   }
   /**
    * Make a working copy from looks (in their stored form), listed in the profile, in as few commands as the write limit allows; answers
@@ -713,18 +718,20 @@ export class CollectionService {
 
   async execute(request: CollectionRequest): Promise<CollectionOutcome> {
     const allowed = this.capability(request);
-    if (!allowed.available) return { ok: false, code: "unavailable", message: allowed.reason! };
+    if (!allowed.available) return { ok: false, code: this.deps.current && allowed.code === "missing_target" ? "missing_target" : "unavailable", message: allowed.reason! };
+    const check = () => { const current = this.deps.current?.(); if (current && !current.available) throw new CollectionServiceError(current.code ?? "missing_target", current.reason ?? "This collection destination changed."); };
     // Reading the saved list is quiet: it never marks the library busy or replaces the progress line (release-readiness-audit.md item 13).
     if (request.kind === "refresh") {
       const requestId = ++this.requestSeq, seq = ++this.listSeq;
       try {
         const summaries = await this.deps.transport.list();
+        check();
         if (seq === this.listSeq && JSON.stringify(summaries) !== JSON.stringify(this.summaries)) { this.summaries = summaries; this.notify(); }
         // A saved version that couldn't be read back to compare with is read again now.
         void this.loadBaseline(this.summaries);
         return { ok: true, result: { kind: "list", summaries: this.summaries }, requestId };
       } catch (error) {
-        return { ok: false, code: "request_failed", message: (error as Error).message, requestId };
+        return { ok: false, code: error instanceof CollectionServiceError ? error.code : "request_failed", message: (error as Error).message, requestId };
       }
     }
     this.busy = true;
@@ -740,6 +747,7 @@ export class CollectionService {
       switch (request.kind) {
         case "initialize": {
           const summaries = await this.list();
+          check();
           this.ensureShown();
           await this.loadBaseline(summaries);
           message = "Your collection is back as you left it.";
@@ -750,6 +758,7 @@ export class CollectionService {
           let stored: StoredCollection;
           if (!owner.collection(id)) {
             stored = await this.deps.transport.get(id);
+            check();
             const collection = this.deps.model.parts.readCollection(stored.collection, true, "keep");
             this.remembered();
             const refs = this.create({ id, name: collection.name, looks: this.storedLooks(collection, true),
@@ -759,7 +768,7 @@ export class CollectionService {
           } else {
             this.open(id);
             const view = owner.collection(id)!;
-            stored = { collection: this.collection()!, revision: view.saved?.revision ?? 0, updatedAt: "" };
+            stored = { collection: this.collection(id)!, revision: view.saved?.revision ?? 0, updatedAt: "" };
             void this.loadBaseline(this.summaries);
           }
           result = { kind: "opened", collection: stored };
@@ -768,7 +777,7 @@ export class CollectionService {
         case "resolveConflict": {
           // What waits in the editor joins this window's version first: Keep mine keeps it, Use theirs lets it go with the rest.
           this.deps.flushLook?.();
-          const answer = await this.deps.owner.resolve(request.conflict, request.keep);
+          const answer = await this.deps.owner.resolve(request.conflict, request.keep, this.deps.current);
           if (!answer.available) throw new CollectionServiceError(answer.code ?? "unavailable", answer.reason ?? "That couldn't be resolved right now.");
           this.ensureShown();
           result = { kind: "resolved" };
@@ -785,6 +794,7 @@ export class CollectionService {
             // A copy never takes a name already in the library ("My collection" becomes "My collection 2", CORE-124, CORE-141).
             let names = [...this.summaries.map(item => item.name), ...this.deps.owner.list().map(item => item.name)];
             try { names = [...(await this.list()).map(item => item.name), ...this.deps.owner.list().map(item => item.name)]; } catch { /* The list as last read. */ }
+            check();
             const name = uniqueCollectionName(source.name, names);
             // The copy's mods are the copy's own (PIPE-89).
             const plan = copyPackagePlan(source.packagePlan, source.id, id, () => this.newId());
@@ -883,6 +893,7 @@ export class CollectionService {
    * presets can be restored); else the first look of the first collection with any; else a new collection with one starter look.
    */
   private ensureShown() {
+    if (this.deps.preserveEmpty) return;
     const owner = this.deps.owner, ref = this.deps.scene.look();
     if (ref && owner.look(ref)?.state === "live" && owner.collection(ref.collection)?.looks.includes(ref.look)) return;
     // A collection whose presets were all removed stays shown, named by its removed look (Restore brings it back).

@@ -59,7 +59,7 @@ import { emptyPresentationStatus, PresentationStatusSource, type AdapterMessage 
 import type { Layer } from "../engines/layered-makeup/recipe";
 import type { StudioPresentationPort } from "../app/studio-presentation";
 import { mountStudio } from "../studio-ui/app";
-import { createTrustedAuthoringCore } from "../app/trusted-authoring-core";
+import { createProfileAuthoring } from "../app/profiles/profile-authoring";
 import { createTrustedStudioBootstrap } from "../app/trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
 import { STUDIO_COMPOSITION } from "./studio-registry";
@@ -86,18 +86,15 @@ import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-s
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
-import { createProfileServices, createTargetResolver, drawnScene, drawnView as drawnViewOf, historyScopeName, openProfileSession,
+import { createProfileServices, createTargetResolver, drawnView as drawnViewOf, historyScopeName, openProfileSession,
   sceneHeadTargets, sceneCommands, tabDefaults } from "../app/profiles/profile-window";
 import { starterParts } from "../app/workspace/collection-workspace";
 import { printDefault } from "../app/profiles/layout-fragment";
 import { keepsStateInDefaults, STUDIO_INITIAL_LAYOUT, studioLayoutDefaults } from "./layout-defaults";
 import { viewPanel } from "../app/profiles/profile-sessions";
 import { createStudioSubjects } from "./subjects";
-import { LookEditor, lookContent } from "../library/look-editor";
-import { lookRef, sameLook, type LookRef } from "../library/collection-documents";
+import { sameLook, type LookRef } from "../library/collection-documents";
 import { lookScope } from "../platform/core/history-service";
-import { emptyLookHistory } from "../platform/core/look-history";
-import { emptyRecipe } from "../engines/layered-makeup/recipe";
 
 export type StudioHost = {
   /** Optional host capability; the desktop omits experimental modules until their assets are supported. */
@@ -305,23 +302,16 @@ async function start(host: StudioHost, root: HTMLElement) {
   const adapterMessage = (source: AdapterMessage["source"], text: string) => {
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
-  // The look the drawn view's scene shows, read from its working copy: what the editor document starts with (the look editor keeps it).
-  const firstScene = drawnScene(sessionState), firstLook = firstScene ? sessionState.scene(firstScene).look : undefined;
-  const firstView = firstLook ? services.collections.look(firstLook) : null;
-  let first: ReturnType<typeof lookContent> | null = null;
-  if (firstView?.state === "live") {
-    try { first = lookContent(firstView, STUDIO_COMPOSITION.documents); }
-    catch (error) { pageFailure("library", "look_unreadable", "A look couldn't be read.", error); }
-  }
-  const shownState = first?.state ?? { recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() };
-  const core = createTrustedAuthoringCore({ ...workspace, recipe: shownState.recipe, active: shownState.active,
-    selected: shownState.selected, fieldSelection: shownState.fieldSelection, history: shownState.history, historyTrimmed: shownState.historyTrimmed,
-    liveFeatures: shownState.liveFeatures, liveLocked: shownState.liveLocked }, {
-    history: historyService, ...(first && firstLook ? { scope: lookScope(firstLook) } : {}), views: sessionState.graph,
+  let lookShown: (() => void) | undefined;
+  const profileAuthoring = createProfileAuthoring(workspace, {
+    history: historyService, views: sessionState.graph,
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
-  }, STUDIO_COMPOSITION);
+  }, STUDIO_COMPOSITION, { owner: services.collections, sessions: services.looks, outbox: documents.outbox,
+    shown: () => lookShown?.(), note: text => adapterMessage("preview", text),
+    report: error => diagnostics.failure("library", "look_write_failed", "Your latest look change couldn't be recorded yet; it will be tried again.", error, { level: "warn" }) });
+  const core = profileAuthoring.core, lookEditor = profileAuthoring.drawn;
   // One writer per workspace: while another window holds it, every action, request, control and gesture is refused here.
   if (lease) core.app.attach({ access: lease });
   // The session's view graph (view-graph-design.md §3.3), which the core acts on: the head restores and follows its main view.
@@ -374,19 +364,14 @@ async function start(host: StudioHost, root: HTMLElement) {
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
     canWrite: lease ? () => lease.draining() : undefined,
   });
-  // The shown look's edits are written through its session (the outbox); anything that needs them now writes them first.
-  let lookShown: (() => void) | undefined;
-  const lookEditor = new LookEditor({ model: STUDIO_COMPOSITION.documents, sessions: services.looks, document: core.document,
-    store: () => documents.outbox.store(),
-    restoring: ref => documents.outbox.recovering(lookRef(ref)), shown: () => lookShown?.(), note: text => adapterMessage("preview", text),
-    report: error => diagnostics.failure("library", "look_write_failed", "Your latest look change couldn't be recorded yet; it will be tried again.", error, { level: "warn" }) });
+  // Flush every wanted look, including unseen pinned inspectors, through the single context owner.
   host.onFlushRequest?.(() => { lookEditor.commit(); session.flush(); });
   window.addEventListener("pagehide", () => lookEditor.commit());
   document.addEventListener("visibilitychange", () => { if (document.hidden) lookEditor.commit(); });
   if (lease) {
     // Releasing to another window: after the pending document saves drain (a step the host registered first), the workspace is
     // written a last time and its timers stop (§2.3 release steps 3 to 5).
-    lease.onReleaseStart(() => { core.app.settleEdits(); lookEditor.commit(); });
+    lease.onReleaseStart(() => { profileAuthoring.contexts.settleEdits(); lookEditor.commit(); });
     // Every experiment document stored (an unsaved one written again), then the last workspace write: both must succeed, and
     // autosave retires only once the lease is released and confirmed.
     lease.onRelease(async () => await (experiments as ExperimentPort).settle?.() ?? true);
@@ -503,6 +488,13 @@ async function start(host: StudioHost, root: HTMLElement) {
   const polish5 = verification ? polish5Verification(packageTransport) : undefined;
   bootstrap = createTrustedStudioBootstrap({
     core, preferences, localSetup, installDetection,
+    naming: () => targets.namedView(drawnView()),
+    fileCapture: () => {
+      const life = new AbortController(), captured = targets.captureView(drawnView(), life.signal);
+      return { check: () => targets.current(captured), release: () => life.abort() };
+    },
+    bound: { session: sessionState, targets, looks: profileAuthoring.contexts, empty: profileAuthoring.empty, context: type => STUDIO_CATALOGUE.context(type),
+      character: id => services.characters.character(id) ? heads.context(id) : undefined },
     frameworkProducts: [{ feature: "expressions", name: "expression sets", requirements: EXPRESSION_FRAMEWORK_REQUIREMENTS }],
     modInstall, previewSetup, viewport: viewportDevice.attachment,
     links: { open: async link => {

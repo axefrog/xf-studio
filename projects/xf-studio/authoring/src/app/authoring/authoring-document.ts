@@ -47,7 +47,9 @@ type LookRestore = { recipe?: Recipe; features: string[] };
  * first (`look:<collection>/<look>`, profiles design §3.7; default: a look of its own, for fixtures), and how a restored recipe resets
  * the preview's layer resources (the trusted core's port).
  */
-export type DocumentHistoryOptions = { readonly history?: HistoryService; readonly scope?: string; readonly resetStack?: (previous: Recipe) => void };
+export type DocumentHistoryOptions = { readonly history?: HistoryService; readonly scope?: string; readonly resetStack?: (previous: Recipe) => void;
+  /** Opening/restoring an unseen context is not an editing interaction. Actual commands still activate their history. */
+  readonly activate?: boolean };
 /** The scope a document without a look of the profile's shows (fixtures and tools). */
 export const LOCAL_LOOK_SCOPE = lookScope({ collection: "local", look: "local" });
 
@@ -83,8 +85,10 @@ export class AuthoringDocument {
   private geometryRevision = 0;
   private changedLayerIndex: number | undefined;
   private changedGestureKind: string | undefined;
+  private readonly activateOnRestore: boolean;
   /** `parts` names the feature this document edits and how its look history chunks parts (default: eye makeup's recipe). */
   constructor(initial: DocumentState, private readonly parts: DocumentParts = RECIPE_HISTORY, options: DocumentHistoryOptions = {}) {
+    this.activateOnRestore = options.activate !== false;
     const recipe = parseRecipe(initial.recipe);
     this.state = { recipe, active: clamp(initial.active, recipe.layers.length),
       selected: clamp(initial.selected, recipe.layers[clamp(initial.active, recipe.layers.length)]?.points.length ?? 0),
@@ -97,7 +101,7 @@ export class AuthoringDocument {
     const stack = lookHistory(initial.history, initial.historyTrimmed === true, parts);
     this.scope = this.openScope(options.scope ?? LOCAL_LOOK_SCOPE, stack);
     // The look shown is the editing context until something else is edited (profiles design §3.7: Undo in a view undoes its look).
-    this.scope.replace(stack);
+    this.scope.replace(stack, this.activateOnRestore);
     parts.others?.load(initial.liveFeatures);
     this.lockedReason = initial.liveLocked;
   }
@@ -276,8 +280,8 @@ export class AuthoringDocument {
         this.service.close(this.scope.id);
         this.scope = this.openScope(scope, history);
         // Showing a look is an editing interaction with it (§3.7): announced like a replaced stack.
-        this.scope.replace(history);
-      } else this.scope.replace(history);
+        this.scope.replace(history, this.activateOnRestore);
+      } else this.scope.replace(history, this.activateOnRestore);
     } finally { this.restoring = false; }
     this.notify("restore");
   }

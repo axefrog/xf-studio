@@ -96,13 +96,20 @@ export class TargetResolver {
   /** What a resolution names, by target field (`bindings.ts` `Target` to the actions' fields), with the editing context as `scope`. */
   named(instance?: string): NamedTargets {
     const resolved = this.resolve(instance);
-    return this.namedOf(resolved.state === "resolved" || resolved.state === "empty" ? resolved.target ?? {} : {});
+    return this.namedOf(resolved.state === "resolved" || resolved.state === "empty" ? resolved.target ?? {} : {},
+      instance === undefined ? undefined : this.deps.session.panel(instance)?.tab, instance === undefined);
   }
-  private namedOf(target: Target): NamedTargets {
-    const scope = this.editing(), collection = target.look?.collection ?? this.deps.collection?.();
+  /** The drawn compatibility input names a view explicitly, even before its pane exists. */
+  namedView(view: ViewId | undefined): NamedTargets { return this.namedOf(this.viewTarget(view), view === undefined ? undefined : this.world().views[view]?.tab, false); }
+  private viewTarget(view: ViewId | undefined): Target {
+    const world = this.world(), found = view === undefined ? undefined : world.views[view], scene = found && world.scenes[found.scene];
+    return found && scene ? { view, scene: found.scene, sceneGen: scene.gen, ...(scene.subject ? { subject: scene.subject } : {}), ...(scene.look ? { look: scene.look } : {}) } : {};
+  }
+  private namedOf(target: Target, tab?: TabId, fallback = true): NamedTargets {
+    const scope = this.editing(), collection = target.look?.collection ?? (fallback ? this.deps.collection?.() : undefined);
     return { ...(target.view !== undefined ? { view: target.view } : {}), ...(target.scene !== undefined ? { scene: target.scene, sceneGen: target.sceneGen } : {}),
       ...(target.subject?.kind === CHARACTER_KIND ? { character: target.subject.id } : {}), ...(target.look ? { look: target.look } : {}),
-      ...(collection ? { collection } : {}), ...(scope ? { scope } : {}), tab: this.deps.session.tab() };
+      ...(collection ? { collection } : {}), ...(scope ? { scope } : {}), tab: tab ?? this.deps.session.tab() };
   }
   /** `action` with the targets its descriptor declares and it leaves out named: from a capture when given, else from `instance`'s resolution. */
   complete<A extends object>(action: A, descriptor: Pick<ActionDescriptor, "payload"> | undefined, from: { instance?: string; capture?: Capture } = {}): A {
@@ -113,6 +120,11 @@ export class TargetResolver {
   /** Freeze what `instance` resolves to now (§3.3) until `signal` is aborted. */
   capture(instance: string | undefined, signal: AbortSignal): Capture {
     const resolved = this.resolve(instance), target = resolved.state === "resolved" || resolved.state === "empty" ? resolved.target ?? {} : {};
+    return this.captureTarget(target, signal, instance);
+  }
+  /** File requests at the root retain the explicitly drawn semantic chain, independently of focus. */
+  captureView(view: ViewId | undefined, signal: AbortSignal): Capture { return this.captureTarget(this.viewTarget(view), signal); }
+  private captureTarget(target: Target, signal: AbortSignal, instance?: string): Capture {
     const id = ++this.next;
     let released = signal.aborted;
     if (!released) {
@@ -120,7 +132,8 @@ export class TargetResolver {
       signal.addEventListener("abort", () => { released = true; this.captures.delete(id); }, { once: true });
     }
     return Object.freeze({ id, ...(instance !== undefined ? { instance } : {}), data: Object.freeze({ target, revisions: this.deps.revisions?.(target) ?? {} }),
-      named: Object.freeze(this.namedOf(target)), released: () => released });
+      named: Object.freeze(this.namedOf(target, instance === undefined ? target.view === undefined ? undefined : this.world().views[target.view]?.tab
+        : this.deps.session.panel(instance)?.tab, instance === undefined)), released: () => released });
   }
   /** Whether a capture still names what it named (refused with `missing_target`, saying what changed), and was not released. */
   current(capture: Capture): Capability {

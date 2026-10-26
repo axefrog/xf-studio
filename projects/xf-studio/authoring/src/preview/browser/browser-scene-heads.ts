@@ -357,6 +357,8 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     shown(): AttachedHead | undefined { return residency.shown(); },
     /** The head showing `character` now, if any (what a loader that names the V applies through). */
     showing,
+    /** Acquire the existing keyed character data without requesting or drawing a head. */
+    context: contextOf,
     /** The want being built or prepared, and how far it is (null: none). */
     preparation(): PreparationState | null { return residency.preparation(); },
     /** The resident heads and the build in flight, as evidence. */

@@ -38,6 +38,7 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   history?: HistoryService;
   /** The history scope of the look the document shows first (`look:<collection>/<look>`); default: a look of its own (fixtures). */
   scope?: string;
+  activate?: boolean;
   /**
    * The session's view graph (`ProfileSessions.graph`, which records in the session's View and lighting scope, profiles design §4.1);
    * default: one made from the workspace, in a scope no session holds (fixtures).
@@ -59,6 +60,7 @@ export function createAuthoringEditing(workspace: DocumentState & Pick<Workspace
   newId?(): string;
   history: HistoryService;
   scope?: string;
+  activate?: boolean;
 }, composition: StudioComposition) {
   const { registry, documents } = composition;
   if (composition.region.id !== documents.live) throw Error(`The composition's layered-makeup region is not the live feature's (${documents.live}).`);
@@ -81,7 +83,7 @@ export function createAuthoringEditing(workspace: DocumentState & Pick<Workspace
     ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}),
     ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}),
     ...(workspace.liveLocked ? { liveLocked: workspace.liveLocked } : {}) }, { feature: documents.live, parts: documents.parts, others },
-    { history, ...(ports.scope ? { scope: ports.scope } : {}), resetStack: previous => ports.resetStack(previous) });
+    { history, activate: ports.activate, ...(ports.scope ? { scope: ports.scope } : {}), resetStack: previous => ports.resetStack(previous) });
   const geometry = new AuthoringGeometry(document);
   const presentation = new AuthoringPresentation(document, geometry);
   const recipe = new RecipeActions(

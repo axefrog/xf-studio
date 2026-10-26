@@ -25,6 +25,8 @@
 
 The binding rules are in the [architecture contract](architecture-contract.md). This document records where the code actually stands against them.
 
+**P3-ii scoped input (27 October 2026, local implementation).** `app/profiles/panel-editing-contexts.ts` joins the input layer: it resolves an instance's binding before acquiring its existing look/character owner and composing a presentation facade. Its captured semantic and structural targets feed reads, capabilities, commands and file completions. It is explicitly included in the input-reader boundary scan; collection, look and character owners still read no focus. The root compatibility attachment follows the drawn look explicitly. No UI import exception or new control is involved; see [047 P3-ii](../../experiments/047-profile-bindings/README.md#p3-ii-keyed-edit-contexts-and-routing).
+
 ## Hair Lab experiment boundaries
 
 The optional experiment is switched by an experiment flag, held in the library's `experiment-flags` document (id `preferences`) in the document store. The platform's generic loader (`platform/core/experiments.ts`) reads the flag and registers the feature's contributions only while it is on, and withdraws them when it goes off. The feature reaches the platform only through the platform API; it does not construct platform internals itself.

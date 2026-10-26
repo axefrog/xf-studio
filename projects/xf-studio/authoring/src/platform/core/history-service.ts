@@ -117,7 +117,7 @@ export interface HistoryScope {
   readonly recording: boolean;
   withoutHistory<T>(apply: () => T): T;
   /** Replace the steps (a preset switch or restore); Redo goes with them. */
-  replace(stack: HistoryStack): void;
+  replace(stack: HistoryStack, activate?: boolean): void;
   readonly trimmed: boolean;
   /** Plain data of the kept steps (only the look's is persisted). */
   data(): LookHistoryData;
@@ -178,7 +178,7 @@ class Scope implements HistoryScope {
   discard(step: HistoryEntryId) { const removed = this.stack.discard(step); if (removed) this.changed(); return removed; }
   seal() { this.stack.seal(); }
   clear() { this.stack.clear(); this.expected = undefined; this.changed(); }
-  replace(stack: HistoryStack) { this.stack = stack; this.expected = undefined; this.changed(true); }
+  replace(stack: HistoryStack, activate = true) { this.stack = stack; this.expected = undefined; this.changed(activate); }
   top() { return this.stack.topId; }
   data() { return this.stack.data(); }
   stats() { return this.stack.stats(); }

@@ -348,7 +348,8 @@ export class CollectionOwner {
    * (as `both` does); `both` needs one. A fork is added to its collection as the library holds it now: a revision check first takes any
    * newer revision of a collection this window holds no change of (were it older, the fork would only go stale against it).
    */
-  async resolve(conflictId: string, keep: "mine" | "theirs" | "both"): Promise<Capability> {
+  async resolve(conflictId: string, keep: "mine" | "theirs" | "both", current?: () => Capability): Promise<Capability> {
+    const allowed = current?.(); if (allowed && !allowed.available) return allowed;
     const find = () => this.conflicts().find(entry => entry.id === conflictId);
     const conflict = find();
     if (!conflict) return refusal("invalid_value", "That was already resolved.");
@@ -375,6 +376,7 @@ export class CollectionOwner {
       if (!find()) return refusal("invalid_value", "That was already resolved.");
     }
     try {
+      const allowed = current?.(); if (allowed && !allowed.available) return allowed;
       if (keep === "mine") this.deps.outbox.keepMine(conflict.id, collections ? mine => this.wholeMine(mine, conflict, read) : undefined);
       else if (!forks) this.deps.outbox.useTheirs(conflict.id);
       else this.deps.outbox.keepBoth(conflict.id, mine => this.forkOf(mine));

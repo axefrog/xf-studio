@@ -433,6 +433,7 @@ export function createStudioPresentation<Slot>(sources: {
   targets?: TargetResolver;
   /** Explicit input target for the drawn compatibility port or a bound instance; never inferred by an owner. */
   naming?: () => NamedTargets;
+  lookSelection?: (ref: import("../library/collection-documents").LookRef) => StudioAction;
   editing?: StudioPresentationPort<Slot>["editing"];
   focus?: Pick<FocusService, "focusView" | "focusPanel">;
   /** A history scope's name for people ("Look 3"); without it the scope ID. */
@@ -460,14 +461,19 @@ export function createStudioPresentation<Slot>(sources: {
   // The input layer (profiles design §3.6): what the shown tab's focused view resolves to, and the editing context, named in each action.
   const resolver = sources.targets;
   const named = (): NamedTargets => sources.naming?.() ?? resolver?.named() ?? {};
-  const name = <A extends { kind: string }>(action: A | Unnamed<A>): A => nameTargets(action as A, a.descriptor(action.kind), named());
+  const name = <A extends { kind: string }>(action: A | Unnamed<A>): A => {
+    const look = (action as { look?: import("../library/collection-documents").LookRef }).look;
+    if (action.kind === "scene.setLook" && look && (action as { scene?: string }).scene === undefined && sources.lookSelection) return sources.lookSelection(look) as unknown as A;
+    return nameTargets(action as A, a.descriptor(action.kind), named());
+  };
   const editingScope = () => sources.naming ? named().scope : resolver?.editing();
   // A control run (a slider drag) captures what it acts on when it begins (§3.3): its edits name that, never what focus resolves to later,
   // so a run that outlives its look is refused instead of landing on the next one.
-  const runs = new Map<string, NamedTargets>();
-  const beginRun = (id: string) => { const targets = named(); runs.set(id, targets); return targets; };
+  const runs = new Map<string, { targets: NamedTargets; app: StudioApplication }>();
+  const beginRun = (id: string) => { const targets = named(); runs.set(id, { targets, app: a.captureInput() }); return targets; };
+  const runApp = (id: string) => runs.get(id)?.app ?? a;
   const nameRun = <A extends { kind: string }>(id: string, action: A | Unnamed<A>): A =>
-    nameTargets(action as A, a.descriptor(action.kind), runs.get(id) ?? named());
+    nameTargets(action as A, a.descriptor(action.kind), runs.get(id)?.targets ?? named());
   const endRun = (id: string) => { runs.delete(id); };
   // A picker's request names what its file goes to now, when it is asked (§3.3), not when the file arrives.
   const nameFile = (action: Unnamed<StudioFileAction>): StudioFileAction => nameTargets(action, a.fileDescriptor(action.kind), named()) as StudioFileAction;
@@ -490,8 +496,8 @@ export function createStudioPresentation<Slot>(sources: {
     actionsFor: target => a.actionsFor(target, named()),
     dispatch: action => a.dispatch(name<StudioAction>(action)),
     controlBegin: (id, layerId) => a.controlBegin(id, layerId, beginRun(id).look),
-    controlEdit: (id, action) => a.controlEdit(id, nameRun<RecipeAction>(id, action) as Parameters<StudioApplication["controlEdit"]>[1]),
-    controlCommit: id => { endRun(id); a.controlCommit(id); }, controlCancel: id => { endRun(id); a.controlCancel(id); },
+    controlEdit: (id, action) => runApp(id).controlEdit(id, nameRun<RecipeAction>(id, action) as Parameters<StudioApplication["controlEdit"]>[1]),
+    controlCommit: id => { runApp(id).controlCommit(id); endRun(id); }, controlCancel: id => { runApp(id).controlCancel(id); endRun(id); },
     requestCapability: request => a.requestCapability(request), execute: request => a.execute(request),
     // A gesture captures the look the shown tab's focused view shows when it begins (profiles design §3.3).
     canBeginGesture: (source, layerId) => a.canBeginGesture(source, layerId, named().look),
@@ -542,12 +548,12 @@ export function createStudioPresentation<Slot>(sources: {
     const base = facade(info);
     if (info.id !== "eye-makeup") return [info.id, Object.freeze({ ...base, view: () => a.featureState(info.id),
       controlBegin: (id: string) => a.featureControlBegin(info.id, id, beginRun(id).look),
-      controlEdit: (id: string, action: { kind: string }) => a.featureControlEdit(info.id, id, nameRun(id, action)),
-      controlCommit: (id: string) => { endRun(id); a.featureControlCommit(id); }, controlCancel: (id: string) => { endRun(id); a.featureControlCancel(id); } }) as GenericFeatureFacade];
+      controlEdit: (id: string, action: { kind: string }) => runApp(id).featureControlEdit(info.id, id, nameRun(id, action)),
+      controlCommit: (id: string) => { runApp(id).featureControlCommit(id); endRun(id); }, controlCancel: (id: string) => { runApp(id).featureControlCancel(id); endRun(id); } }) as GenericFeatureFacade];
     const eye: EyeMakeupFacade = { ...(base as FeatureFacade<EyeMakeupAction>), view: () => editor,
       controlBegin: (id, layerId) => a.controlBegin(id, layerId, beginRun(id).look),
-      controlEdit: (id, action) => a.controlEdit(id, nameRun<RecipeAction>(id, action) as Parameters<StudioApplication["controlEdit"]>[1]),
-      controlCommit: id => { endRun(id); a.controlCommit(id); }, controlCancel: id => { endRun(id); a.controlCancel(id); },
+      controlEdit: (id, action) => runApp(id).controlEdit(id, nameRun<RecipeAction>(id, action) as Parameters<StudioApplication["controlEdit"]>[1]),
+      controlCommit: id => { runApp(id).controlCommit(id); endRun(id); }, controlCancel: id => { runApp(id).controlCancel(id); endRun(id); },
       layerExport: layerId => a.layerExport(layerId), layerSurfaceEdge: layerId => a.layerSurfaceEdge(layerId), finishCatalogue: () => a.finishCatalogue(),
       glitterModelCatalogue: () => a.glitterModelCatalogue(), mottleCatalogue: () => a.mottleCatalogue() };
     return [info.id, Object.freeze(eye)];

@@ -13,7 +13,7 @@ type Core = ReturnType<Factory>;
 export function createProfileAuthoring(workspace: Parameters<Factory>[0], ports: Parameters<Factory>[1], composition: StudioComposition,
   deps: Omit<ConstructorParameters<typeof LookEditContexts>[0], "core" | "workspace" | "composition" | "resetStack" | "shown"> & { shown?(): void }) {
   const base = createTrustedAuthoringCore({ ...workspace, recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {},
-    history: emptyLookHistory(), liveFeatures: undefined, liveLocked: undefined }, { ...ports, scope: NO_LOOK_SCOPE }, composition);
+    history: emptyLookHistory(), liveFeatures: undefined, liveLocked: undefined }, { ...ports, scope: NO_LOOK_SCOPE, activate: false }, composition);
   base.document.setBlocked(REMOVED_LOOK);
   let handle: LookEditHandle | undefined, life: AbortController | undefined;
   let current: Pick<Core, "document" | "geometry" | "presentation" | "recipe" | "eyeMakeup" | "gestures" | "controls" | "app"> = base;
@@ -25,7 +25,11 @@ export function createProfileAuthoring(workspace: Parameters<Factory>[0], ports:
   const presentation = authoringAttachment(() => current.presentation, { subscribe: ["restore"] });
   const application = authoringAttachment(() => current.app, { subscribe: [] });
   // Attach belongs to composition and is shared with keyed contexts. Collection/file/character overrides remain bound locally.
-  const app = new Proxy(application.port, { get(target, key) { return key === "attach" ? base.app.attach.bind(base.app) : Reflect.get(target, key); } });
+  const app = new Proxy(application.port, { get(target, key) {
+    if (key === "attach") return base.app.attach.bind(base.app);
+    if (key === "setPreviewUnavailable") return base.app.setPreviewUnavailable.bind(base.app);
+    return Reflect.get(target, key);
+  } });
   const core: Core = { ...base, document: document.port, presentation: presentation.port, app,
     geometry: authoringAttachment(() => current.geometry).port, recipe: authoringAttachment(() => current.recipe).port,
     eyeMakeup: authoringAttachment(() => current.eyeMakeup).port, gestures: authoringAttachment(() => current.gestures).port,
@@ -59,5 +63,5 @@ export function createProfileAuthoring(workspace: Parameters<Factory>[0], ports:
       compatibility?.dispose(); life?.abort(); contexts.dispose(); base.app.dispose(); base.document.dispose();
     },
   };
-  return { core, contexts, drawn };
+  return { core, contexts, drawn, empty: base };
 }

@@ -75,6 +75,25 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 5));
 
+test("P3-ii: acquiring and editing an unseen V's data requests no head or preview device", async () => {
+  let devices = 0;
+  const o = owner({ v1: "female", v2: "male", v3: "female" }, [], () => { devices++; throw Error("No preview device was requested."); });
+  try {
+    const v2 = o.heads.context("v2"), v3 = o.heads.context("v3");
+    expect(o.heads.context("v2")).toBe(v2);
+    v2.dispatch({ kind: "character.useDefault", bodyGender: "female" });
+    await settle();
+    expect(o.h.builds).toBe(0); expect(o.h.host.canvases).toBe(0); expect(devices).toBe(0);
+    await o.heads.load();
+    const shown = o.heads.shown(), residents = o.heads.snapshot(), builds = o.h.builds;
+    v2.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+    v3.dispatch({ kind: "character.useDefault", bodyGender: "male" });
+    await settle();
+    expect(o.heads.shown()).toBe(shown); expect(o.heads.shownView()).toBe("main");
+    expect(o.heads.snapshot()).toEqual(residents); expect(o.h.builds).toBe(builds); expect(devices).toBe(0);
+  } finally { o.heads.dispose(); }
+});
+
 test("an explicitly empty scene loads without creating a V or building a head, then follows U6's choice", async () => {
   const o = owner({ v1: "female" });
   delete (o.scene as { subject?: string }).subject;

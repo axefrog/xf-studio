@@ -40,11 +40,13 @@ export class LookEditContexts {
     if (!entry) {
       const view = this.deps.owner.look(ref);
       if (!view || !this.deps.owner.collection(ref.collection)) return undefined;
-      const seed = view.state === "live" ? lookContent(view, this.deps.composition.documents).state : undefined;
+      let seed: ReturnType<typeof lookContent>["state"] | undefined;
+      try { seed = view.state === "live" ? lookContent(view, this.deps.composition.documents).state : undefined; }
+      catch (error) { this.deps.report?.(error); return undefined; }
       // The empty document is only an input seed; LookEditor immediately displays the removed state and blocks it.
       const state = seed ?? this.deps.core.document.export();
       const editing = createAuthoringEditing({ ...this.deps.workspace, ...state }, {
-        history: this.deps.core.history, scope: key, selectedCollection: () => ref.look,
+        history: this.deps.core.history, scope: key, activate: false, selectedCollection: () => ref.look,
         resetStack: previous => this.deps.resetStack(ref, previous),
       }, this.deps.composition);
       const app = this.deps.core.app.fork({ ...editing, collection: undefined, files: undefined,
@@ -76,11 +78,12 @@ export class LookEditContexts {
   }
   commit(): boolean {
     let ok = true;
-    for (const entry of this.entries.values()) { entry.context.app.settleEdits(); if (!entry.context.writer.commit()) ok = false; }
+    for (const entry of this.entries.values()) if (!entry.context.writer.commit()) ok = false;
     return ok;
   }
+  settleEdits() { for (const entry of this.entries.values()) entry.context.app.settleEdits(); }
   held(): readonly { ref: LookRef; wants: number; dirty: boolean }[] {
     return [...this.entries.values()].map(({ context, wants }) => ({ ref: { ...context.ref }, wants, dirty: context.writer.dirty() }));
   }
-  dispose() { this.commit(); this.off(); for (const [key, entry] of this.entries) { entry.wants = 0; this.retire(key, entry); } }
+  dispose() { this.settleEdits(); this.commit(); this.off(); for (const [key, entry] of this.entries) { entry.wants = 0; this.retire(key, entry); } }
 }
