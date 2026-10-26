@@ -24,8 +24,9 @@ export function instanceViewPane(root: StudioRuntime, context: ViewContext, inst
   const rt = new StudioRuntime(port, root.feedback, root.views, { id: instance, type: "view", signal: life.signal, captureSignal: life.signal }, root.anchors.scoped(instance, life.signal));
   Object.defineProperty(rt, "dock", { get: () => root.dock }); Object.defineProperty(rt, "settings", { get: () => root.settings });
   rt.subscribe(() => root.changed());
-  const off = input?.subscribe(() => root.changed()), pane = make(rt, context, instance);
+  let portOff = current().subscribe(() => root.changed());
+  const off = input?.subscribe(() => { portOff(); portOff = current().subscribe(() => root.changed()); root.changed(); }), pane = make(rt, context, instance);
   rt.anchors.register("panel.head", pane.spec.element);
   return { ...pane, update: () => pane.update(new Frame(current(), root.views, root.dock?.tree)),
-    dispose() { life.abort(); off?.(); pane.dispose?.(); } };
+    dispose() { off?.(); portOff(); life.abort(); pane.dispose?.(); } };
 }

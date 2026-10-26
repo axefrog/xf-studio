@@ -40,13 +40,14 @@ function arrange(s: Awaited<ReturnType<typeof profileContextStudio>>, ids: strin
   s.session.arrangeInstances(s.session.tabId(), serializeDockState({ wide: tree, compact: tree }));
 }
 function owner(s: Awaited<ReturnType<typeof profileContextStudio>>, available = () => true, generation?: (type: string) => unknown) {
+  let changes = 0;
   const root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE);
   const catalogue = { ...STUDIO_CATALOGUE, get ids() { return available() ? STUDIO_CATALOGUE.ids : []; } };
-  const panels = new InstancePanels(root, { catalogue: () => catalogue, generation, changed() {}, make: (instance, rt) => instance.type === "character" ? characterPanel(rt)
+  const panels = new InstancePanels(root, { catalogue: () => catalogue, generation, changed() { changes++; }, make: (instance, rt) => instance.type === "character" ? characterPanel(rt)
     : instance.type === "save-explorer.explorer" ? explorerPanel(moduleViewContext(rt, "save-explorer") as never)
     : instance.type === "uv" ? uvPanel(featureViewContext(rt, "eye-makeup")) : presetsPanel(featureViewContext(rt, "eye-makeup")) });
   const paint = () => { panels.sync(); for (const panel of panels.controllers()) { document.body.append(panel.spec.element); panel.update(new Frame(s.port)); } };
-  return { panels, root, paint };
+  return { panels, root, paint, get changes() { return changes; } };
 }
 
 test("G1/G1b: three real Presets and Character controllers retain their separate writers, histories and DOM IDs", async () => {
@@ -260,6 +261,18 @@ test("G2 palette dismissal releases its capture and retained callbacks leave no 
     const revision = ui.panels.runtime("presets--scene0")!.feature("eye-makeup").view().revision();
     option.click(); expect(ui.panels.runtime("presets--scene0")!.feature("eye-makeup").view().revision()).toBe(revision);
   } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("an instance observes asynchronous file-owner transitions and releases its source subscription", async () => {
+  let answer!: (file: StudioPickedFile | undefined) => void;
+  const s = await profileContextStudio({ pick: () => new Promise(done => { answer = done; }) }); arrange(s, ["presets--scene0"]); const ui = owner(s);
+  try {
+    ui.paint(); const port = ui.panels.runtime("presets--scene0")!, before = ui.changes;
+    const pending = port.files.execute({ kind: "recipe.import" });
+    expect(ui.changes).toBeGreaterThan(before);
+    ui.panels.dispose(); const released = ui.changes; answer(undefined); await pending;
+    expect(ui.changes).toBe(released); expect(s.targets.held()).toBe(0);
+  } finally { answer?.(undefined); ui.panels.dispose(); await s.dispose(); s.library.close(); }
 });
 
 test("G2 a palette-selected file request transfers its concrete writer before the palette closes", async () => {

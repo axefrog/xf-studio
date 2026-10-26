@@ -7,7 +7,7 @@ import type { ViewCatalogue } from "../views/contribution";
 import { allGroups, type DockState } from "../dock/layout";
 
 type Mounted = { panel: PanelController; port: Port; life: AbortController; inputLife: AbortController; captureLife: AbortController; destination: string; generation: unknown;
-  current(): Port; runtime?: StudioRuntime; off(): void };
+  current(): Port; runtime?: StudioRuntime; off(): void; portOff(): void };
 export class InstancePanels {
   private mounted = new Map<string, Mounted>();
   constructor(private readonly root: StudioRuntime, private readonly deps: {
@@ -36,13 +36,14 @@ export class InstancePanels {
       if (!entry) {
         const inputLife = new AbortController(), input = catalogue.context(instance.type).kind === "profile" ? undefined : port.editing?.acquire(instance.id, inputLife.signal);
         const current = () => input?.current() ?? port;
-        entry = { inputLife, captureLife: new AbortController(), destination: JSON.stringify(port.panels.target?.(instance.id)), generation, current, off: input?.subscribe(this.deps.changed) ?? (() => {}), port: current(),
+        entry = { inputLife, captureLife: new AbortController(), destination: JSON.stringify(port.panels.target?.(instance.id)), generation, current, off: input?.subscribe(this.deps.changed) ?? (() => {}), portOff: () => {}, port: current(),
           life: new AbortController(), panel: undefined! };
         this.mounted.set(instance.id, entry);
       } else if (entry.port === entry.current()) continue;
       else { const destination = JSON.stringify(port.panels.target?.(instance.id));
         if (destination !== entry.destination) { entry.captureLife.abort(); entry.captureLife = new AbortController(); entry.destination = destination; }
-        entry.life.abort(); entry.panel.dispose?.(); entry.panel.spec.element.remove(); entry.port = entry.current(); entry.life = new AbortController(); }
+        entry.portOff(); entry.life.abort(); entry.panel.dispose?.(); entry.panel.spec.element.remove(); entry.port = entry.current(); entry.life = new AbortController(); }
+      entry.portOff = entry.port === port ? () => {} : entry.port.subscribe(this.deps.changed);
       const rt = new Runtime(entry.port, this.root.feedback, catalogue, { id: instance.id, type: instance.type, signal: entry.life.signal, captureSignal: entry.captureLife.signal },
         this.root.anchors.scoped(instance.id, entry.life.signal));
       Object.defineProperty(rt, "dock", { get: () => this.root.dock });
@@ -51,7 +52,7 @@ export class InstancePanels {
       entry.runtime = rt;
       let panel: PanelController;
       try { panel = this.deps.make(instance, rt); panel.bind?.(instance.id); }
-      catch (error) { entry.off(); entry.life.abort(); entry.captureLife.abort(); entry.inputLife.abort(); this.mounted.delete(instance.id); throw error; }
+      catch (error) { entry.off(); entry.portOff(); entry.life.abort(); entry.captureLife.abort(); entry.inputLife.abort(); this.mounted.delete(instance.id); throw error; }
       const signal = entry.life.signal;
       entry.panel = { ...panel, commands: panel.commands ? () => panel.commands!().map(command => ({ ...command, id: `${instance.id}:${command.id}`,
         capability: () => signal.aborted ? { available: false, reason: "This panel changed. Open the command again." } : command.capability(),
@@ -62,6 +63,6 @@ export class InstancePanels {
     }
     return changed;
   }
-  private release(entry: Mounted) { entry.off(); entry.captureLife.abort(); entry.life.abort(); entry.panel.spec.visibility?.(false); entry.panel.dispose?.(); entry.panel.bind?.(undefined); entry.inputLife.abort(); entry.panel.spec.element.remove(); }
+  private release(entry: Mounted) { entry.off(); entry.portOff(); entry.captureLife.abort(); entry.life.abort(); entry.panel.spec.visibility?.(false); entry.panel.dispose?.(); entry.panel.bind?.(undefined); entry.inputLife.abort(); entry.panel.spec.element.remove(); }
   dispose() { for (const entry of this.mounted.values()) this.release(entry); this.mounted.clear(); }
 }
