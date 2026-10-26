@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { camera, clipSegment, clipToRect, ORBITS, project } from "../src/features/holotable/view/projection";
-import { solidDrawing, SOLID_DRAW_CAP } from "../src/features/holotable/view/solid-projection";
+import { solidDrawing, solidGeometry, SOLID_DRAW_CAP } from "../src/features/holotable/view/solid-projection";
 import type { HoloSession, HoloSolid } from "../src/features/holotable/types";
 
 const box = (id: string, center: HoloSolid["center"], kind: HoloSolid["kind"] = "box"): HoloSolid => ({ id, center, kind,
@@ -72,4 +72,18 @@ test("the Canvas scalar clipper agrees with the polyline oracle for crossing, pa
     expect(actual.length).toBe(expected.length);
     for (let j = 0; j < actual.length; j++) for (let k = 0; k < 2; k++) expect(actual[j][k]).toBeCloseTo(expected[j][k], 9);
   }
+});
+
+test("significance's cheap bound never rejects visible geometry and exact reuse follows target and camera", () => {
+  for (const orbit of Object.values(ORBITS)) for (let i = 0; i < 150; i++) {
+    const shape = { ...box(String(i), [Math.sin(i) * 300, Math.cos(i * 2) * 300, Math.sin(i * 3) * 200]), size: [1 + i % 45, 3, 8] as const };
+    const C = camera([0, 0, 0], orbit, 772, 580), g = solidGeometry(shape), exact = C.extent(g.corners), bound = C.boundExtent(shape.center, g.radius);
+    if (!bound) { const drawing = solidDrawing(shape, C, 1); expect(drawing.lines.length + drawing.faces.length).toBe(0); }
+    else if (g.corners.every(p => C.point(p))) expect(bound + 1e-8).toBeGreaterThanOrEqual(exact);
+  }
+  const world = { provenance: null, areas: [], cells: [], solids: [box("kept", [0, 0, 0])] }, first = project(s, world, 0, layers, ORBITS.tilt, 800, 480, null);
+  expect(project(s, world, 1, layers, ORBITS.tilt, 800, 480, null).solids).toBe(first.solids);
+  expect(project(s, world, 0, layers, { ...ORBITS.tilt, yaw: 1 }, 800, 480, null).solids).not.toBe(first.solids);
+  const moved = { ...s, v: [{ ...s.v[0], position: [1000, 0, 0] as const }] };
+  expect(project(moved, world, 0, layers, ORBITS.tilt, 800, 480, null).solids).toHaveLength(0);
 });

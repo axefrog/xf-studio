@@ -10,7 +10,7 @@ import { NativeBudgetError, NativeMalformedError, NativeUnsupportedError } from 
 export interface SourceStamp { path: string; size: number; mtimeMs: number }
 import { decodeSector, type CachedSector } from "./sector-data.ts";
 export { COLLIDER_STRIDE, type CachedSector } from "./sector-data.ts";
-export const SECTOR_CACHE_VERSION = 3;
+export const SECTOR_CACHE_VERSION = 4;
 export interface SectorRequest { root: string; source: SourceStamp; resource: string }
 export function sectorCacheKey(source: SourceStamp, resource: string, version = SECTOR_CACHE_VERSION): string {
   return createHash("sha256").update(JSON.stringify({ source, resource, version, nativeSector: SECTOR_READER_VERSION, native: NATIVE_READER_VERSION })).digest("hex");
@@ -72,8 +72,10 @@ export function createSectorCache(dir: string, reader: (r: SectorRequest, s: Abo
   const jobs = new Map<string, Job>(), memory = new Map<string, Uint8Array>(); let held = 0, leases = 0, transaction = false, db: Database | undefined;
   const database = () => {
     if (!db) {
-      mkdirSync(dir, { recursive: true }); db = new Database(join(dir, "sectors.sqlite"));
-      db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; CREATE TABLE IF NOT EXISTS sectors (key TEXT PRIMARY KEY, bytes BLOB NOT NULL, size INTEGER NOT NULL, written INTEGER NOT NULL) WITHOUT ROWID");
+      mkdirSync(dir, { recursive: true }); const opened = new Database(join(dir, "sectors-v4.sqlite"));
+      // Keep the key index separate from large blobs; WITHOUT ROWID made even cache probes read blob pages.
+      try { opened.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-32768; PRAGMA mmap_size=536870912; CREATE TABLE IF NOT EXISTS sectors (key TEXT PRIMARY KEY, bytes BLOB NOT NULL, size INTEGER NOT NULL, written INTEGER NOT NULL)"); db = opened; }
+      catch (error) { opened.close(); throw error; }
     }
     return db;
   };

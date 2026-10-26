@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { encodeSector, decodeSector } from "../src/sector-data.ts";
 import { COLLIDER_STRIDE, createSectorCache, sectorCacheKey, type SectorRequest } from "../src/sector-cache.ts";
@@ -13,6 +13,8 @@ function scratch() {
 }
 test("typed cache windows refuse corrupt lengths before allocating and preserve exact affine doubles", () => {
   const b = bytes(), decoded = decodeSector(b); expect(decoded.rows.length).toBe(COLLIDER_STRIDE); expect(decoded.persistentNodeIndex).toBe(-1);
+  decoded.rows[5] = 1234.123456789; decoded.rows[8] = -0.000000000123456789;
+  expect(Array.from(decodeSector(encodeSector(decoded)).rows)).toEqual(Array.from(decoded.rows));
   expect(() => decodeSector(b.subarray(0, b.length - 1))).toThrow();
   new DataView(b.buffer).setUint32(16, 0xffffffff, true); expect(() => decodeSector(b)).toThrow();
 });

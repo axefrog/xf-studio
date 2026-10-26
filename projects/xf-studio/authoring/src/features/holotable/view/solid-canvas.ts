@@ -56,7 +56,8 @@ export function solidCanvas(canvas: HTMLCanvasElement, changed: () => void) {
             if (inside) {
               ctx.moveTo(xy[f.ids[0] * 2], xy[f.ids[0] * 2 + 1]);
               for (let j = 1; j < f.ids.length; j++) ctx.lineTo(xy[f.ids[j] * 2], xy[f.ids[j] * 2 + 1]); ctx.closePath();
-            } else path(C.polygon(f.ids.map(j => g.corners[j])), true);
+            } else if (f.ids.every(j => depths[j] >= 1)) path(C.clipPolygon(f.ids.map(j => [xy[j * 2], xy[j * 2 + 1]])), true);
+            else path(C.polygon(f.ids.map(j => g.corners[j])), true);
           }
           if (any) { ctx.globalAlpha = instance.opacity * (top ? 0.06 : 0.04); ctx.fill(); }
         }

@@ -109,10 +109,14 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
     return inside;
   };
   /** Conservative projected cube around a sphere: safe upper bound for rejecting insignificant candidates. */
+  const horizontalPlane = Math.hypot(focal, width / 2 + MARGIN), verticalPlane = Math.hypot(focal, height / 2 + MARGIN);
   const boundExtent = (p: Vec3, radius: number) => {
     const x = p[0] - c[0], y = p[1] - c[1], z = p[2] - c[2], depth = x * f[0] + y * f[1] + z * f[2];
+    const horizontal = x * r[0] + y * r[1] + z * r[2], vertical = x * u[0] + y * u[1] + z * u[2];
+    if (depth + radius < NEAR || (width / 2 + MARGIN) * depth - Math.abs(horizontal) * focal < -radius * horizontalPlane ||
+      (height / 2 + MARGIN) * depth - Math.abs(vertical) * focal < -radius * verticalPlane) return 0;
     if (depth <= radius + NEAR) return Infinity;
-    const across = Math.max(radius, Math.abs(x * r[0] + y * r[1] + z * r[2]), Math.abs(x * u[0] + y * u[1] + z * u[2]));
+    const across = Math.max(radius, Math.abs(horizontal), Math.abs(vertical));
     return 2 * radius * focal * (depth + across) / (depth * depth - radius * radius);
   };
   return { point, line, polygon, clipPolygon, extent, boundExtent, projectInto, scale, position: c, width, height };
@@ -122,7 +126,9 @@ export interface Scene { primitives: Primitive[]; solids: readonly SolidInstance
 const EMPTY_SOLIDS: readonly HoloSolid[] = [];
 // Two recent camera states per immutable world snapshot; yaw changes in the recorded data do not change the city camera.
 const solidViews = new WeakMap<readonly HoloSolid[], Map<string, { instances: SolidInstance[]; cut: number }>>();
-const sizeOrder = new WeakMap<readonly HoloSolid[], readonly HoloSolid[]>();
+type PreparedSolid = { solid: HoloSolid; geometry: ReturnType<typeof solidGeometry> };
+const sizeOrder = new WeakMap<readonly HoloSolid[], readonly PreparedSolid[]>();
+const distanceViews = new WeakMap<readonly HoloSolid[], { target: string; eligible: { prepared: PreparedSolid; distance: number }[] }>();
 
 /** The model at moment t, projected for an orbit around V (or the first sample, before V's first sample). */
 export function project(s: HoloSession, world: HoloWorld, t: number, layers: Readonly<Record<HoloLayer, boolean>>, orbit: Orbit,
@@ -152,7 +158,7 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
   if (!geometry) {
     const nearby = significantVisible(source, target, C);
     const visible = nearby.kept.sort((a, b) => distance2(b.solid.center, C.position) - distance2(a.solid.center, C.position));
-    geometry = { instances: visible.map(({ solid }) => ({ kind: "solid", id: solid.id, source: solid, opacity: fade(solid.center) })), cut: Math.max(0, nearby.total - SOLID_DRAW_CAP) };
+    geometry = { instances: visible.map(({ solid }) => ({ kind: "solid", id: solid.id, source: solid, opacity: fade(solid.center) })), cut: nearby.total - visible.length };
     views.set(key, geometry); if (views.size > 2) views.delete(views.keys().next().value!);
   }
   out.push(...geometry.instances);
@@ -191,16 +197,22 @@ const distance2 = (a: Vec3, b: Vec3) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 
 /** Bounded min heap: retain the largest screen extents, with stable identities as ties. */
 function significantVisible(solids: readonly HoloSolid[], target: Vec3, C: ReturnType<typeof camera>) {
   type Significant = { solid: HoloSolid; extent: number };
-  const kept: Significant[] = []; let total = 0;
+  const kept: Significant[] = [];
   const smaller = (a: Significant, b: Significant) => a.extent < b.extent || a.extent === b.extent && a.solid.id > b.solid.id;
   let ordered = sizeOrder.get(solids);
-  if (!ordered) sizeOrder.set(solids, ordered = [...solids].sort((a, b) => solidGeometry(b).radius - solidGeometry(a).radius));
-  for (const solid of ordered) {
-    const d = distance2(solid.center, target); if (d > 350 * 350) continue;
-    // A conservative affine bound keeps every drawn point within 350 m, including large shapes crossing the boundary.
-    const geometry = solidGeometry(solid);
-    if (Math.sqrt(d) + geometry.radius > 350) continue;
-    total++;
+  if (!ordered) sizeOrder.set(solids, ordered = solids.map(solid => ({ solid, geometry: solidGeometry(solid) })).sort((a, b) => b.geometry.radius - a.geometry.radius));
+  const targetKey = JSON.stringify(target);
+  let distanceView = distanceViews.get(solids);
+  if (distanceView?.target !== targetKey) {
+    const eligible = [];
+    for (const prepared of ordered) {
+      const d = distance2(prepared.solid.center, target);
+      // A conservative affine bound keeps every drawn point within 350 m, including large shapes crossing the boundary.
+      if (d <= 350 * 350 && Math.sqrt(d) + prepared.geometry.radius <= 350) eligible.push({ prepared, distance: d });
+    }
+    distanceViews.set(solids, distanceView = { target: targetKey, eligible });
+  }
+  for (const { prepared: { solid, geometry }, distance: d } of distanceView.eligible) {
     const upper = C.boundExtent(solid.center, geometry.radius);
     if (upper < 4 && d > 30 * 30 || kept.length === SOLID_DRAW_CAP && upper < kept[0].extent) continue;
     const extent = C.extent(geometry.corners);
@@ -219,7 +231,7 @@ function significantVisible(solids: readonly HoloSolid[], target: Vec3, C: Retur
       }
     }
   }
-  return { kept, total };
+  return { kept, total: distanceView.eligible.length };
 }
 function cutPolygon(ps: number[][], plane: (p: number[]) => number): number[][] {
   if (ps.every(p => plane(p) >= 0)) return ps;
