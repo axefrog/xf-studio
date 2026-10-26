@@ -1,0 +1,16 @@
+{
+  "name": "xf-holotable",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test tests",
+    "check": "tsc --noEmit",
+    "service": "bun src/service.ts",
+    "report": "bun tools/holo.ts report"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.2",
+    "typescript": "7.0.2"
+  }
+}
