@@ -126,7 +126,7 @@ These are manual owner decisions, not performed by any script here:
 - deployments time out after 10 minutes;
 - soft limits of 100 GB bandwidth per month and 10 builds per hour.
 
-Pages must not be used for commercial transactions, SaaS or sensitive data. The hand-written pages and assets use under 100 KiB, the published style guide about 1.05 MiB and the generated knowledge pages (about 3.8 MiB for 52 pages; the largest, photo mode, about 180 KiB) grow with the knowledge base, within the 6 MiB total budget. Release downloads are hosted by GitHub Releases, never by Pages.
+Pages must not be used for commercial transactions, SaaS or sensitive data. The hand-written pages and assets use under 100 KiB, the published style guide about 1.05 MiB and the generated knowledge pages (about 3.8 MiB for 52 pages; the largest, photo mode, about 180 KiB) grow with the knowledge base. Each page has its own budget, which is what a visitor pays for; the 12 MiB total is a tripwire against an accidental dump (assets, game data), not a size target, so ordinary knowledge growth stays well inside it. Release downloads are hosted by GitHub Releases, never by Pages.
 
 **Troubleshooting.**
 
