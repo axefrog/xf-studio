@@ -59,7 +59,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   /** The page's outbox (profiles design §2.2). */
   outbox?: import("../platform/core/document-outbox").DocumentOutbox;
   /** A panel's instance in the tab shown (the profile session's). */
-  panelInstance?: (panel: string) => string;
+  panelInstance?: (panel: string, tab?: string) => string;
   tabs?: import("./profiles/tab-presentation").LayoutTabsPort;
   starters?: import("./starters/starter-actions").StartersPort;
   emptyChoices?: import("./profiles/empty-choices").EmptyChoicesPort;

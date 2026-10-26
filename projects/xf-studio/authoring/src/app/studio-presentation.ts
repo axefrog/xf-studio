@@ -309,7 +309,7 @@ export type StudioPresentationPort<Slot> = {
   readonly starters?: StartersPort;
   readonly emptyChoices?: EmptyChoicesPort;
   readonly panels: {
-    instance(panel: string): string;
+    instance(panel: string, tab?: string): string;
     /**
      * The history scope Ctrl+Z acts on while focus is in a panel: a 3D view's is the look its scene shows (`look:<collection>/<look>`,
      * decided, §3.7); the Character panel's is its V's (`character:<id>`; undefined while it shows none); any other panel's is the editing
@@ -420,7 +420,7 @@ export function createStudioPresentation<Slot>(sources: {
   /** The page's outbox; without it (fixtures, tools) nothing is recorded there. */
   outbox?: DocumentOutbox;
   /** A panel's instance in the tab shown (the session's); without it (fixtures, tools) each panel is one instance, `<panel>--local`. */
-  panelInstance?: (panel: string) => string;
+  panelInstance?: (panel: string, tab?: string) => string;
   tabs?: LayoutTabsPort;
   starters?: StartersPort;
   emptyChoices?: EmptyChoicesPort;
@@ -698,7 +698,7 @@ export function createStudioPresentation<Slot>(sources: {
     ...(sources.tabs ? { tabs: sources.tabs } : {}), ...(sources.starters ? { starters: sources.starters } : {}),
     ...(sources.emptyChoices ? { emptyChoices: Object.freeze({ ...sources.emptyChoices,
       capability: (request: EmptyChoiceRequest) => a.emptyChoiceCapability(request), execute: (request: EmptyChoiceRequest) => a.executeEmptyChoice(request) }) } : {}),
-    panels: Object.freeze({ instance: (panel: string) => sources.panelInstance?.(panel) ?? `${panel}--local`,
+    panels: Object.freeze({ instance: (panel: string, tab?: string) => sources.panelInstance?.(panel, tab) ?? `${panel}--local`,
       historyScope: (panel: string | undefined) => resolver?.undoScope(panel === undefined ? undefined : sources.panelInstance?.(panel)) }),
     focus: Object.freeze({
       view: (view: ViewId) => sources.focus?.focusView(view),

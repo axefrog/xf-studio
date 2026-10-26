@@ -10,14 +10,18 @@ export type GroupNode = { kind: "group"; id: string; panels: PanelId[]; active: 
 export type SplitNode = { kind: "split"; id: string; axis: "row" | "column"; children: DockNode[]; sizes: number[] };
 export type DockNode = GroupNode | SplitNode;
 export type FloatingWindow = { id: string; x: number; y: number; w: number; h: number; node: DockNode };
+/** Root to leaf. Group identities also identify a sibling whose split collapsed while panels were absent. */
+export type PlacePath = { id: string; axis: SplitNode["axis"]; child: string;
+  siblings: { id: string; groups: string[]; share: number }[] }[];
 /**
  * Where a withdrawn panel was (view-graph-design.md §4.3): a hidden module's panels leave the dock and come back to the same place.
  * `group` is its tab group's panels in order (it returns into the group once a member is back), `index` its tab position and
- * `active` whether it was the shown tab; `anchor` a surviving neighbour to come back beside (side and share) when its whole group
- * left; `window` the floating window it filled alone; `closed` that it was closed.
+ * `active` whether it was the shown tab; `path` the ancestors and sibling identities of a withdrawn group. `anchor` is retained for
+ * legacy places and semantic Close/Remove replay; `window` the floating window; `closed` that it was closed.
  */
 export type ParkedPlace = { group: PanelId[]; index: number; active: boolean; collapsed?: boolean; window?: Rect;
   groupId?: string; windowId?: string; windowIndex?: number; docked?: true;
+  path?: PlacePath;
   anchor?: { panel: PanelId; side: Side; share: number; splitId?: string; shares?: Record<string, number> } } | { closed: true };
 export type DockTree = {
   root: DockNode | null;
@@ -576,14 +580,19 @@ function placeOf(tree: DockTree, panel: PanelId, leaving: ReadonlySet<PanelId>, 
   const floatingWindow = at.windowId ? tree.floating.find(item => item.id === at.windowId) : undefined;
   // A departing group remembers a neighbour in its dock or floating composite, on the same side and at the same share.
   const root = floatingWindow?.node ?? tree.root;
-  // Withdrawal can take an entire layout away. Remember a departing sibling when none survives, so the groups can reconstruct
-  // their split as they return; semantic Close/Remove keeps its existing surviving-neighbour policy.
-  const anchor = anchorFor(root, at.group.id, new Set([...leaving, ...at.group.panels]))
-    ?? (withdrawal ? anchorFor(root, at.group.id, new Set(at.group.panels)) : undefined);
+  const anchor = withdrawal ? undefined : anchorFor(root, at.group.id, new Set([...leaving, ...at.group.panels]));
   return { group: [...at.group.panels], index: at.index, active: at.group.active === panel, groupId: at.group.id, ...(at.group.collapsed ? { collapsed: true } : {}),
     ...(!floatingWindow ? { docked: true as const } : {}),
     ...(floatingWindow ? { window: { x: floatingWindow.x, y: floatingWindow.y, w: floatingWindow.w, h: floatingWindow.h }, windowId: floatingWindow.id, windowIndex: tree.floating.indexOf(floatingWindow) } : {}),
-    ...(anchor ? { anchor: floatingWindow || withdrawal ? anchor : { panel: anchor.panel, side: anchor.side, share: anchor.share, splitId: anchor.splitId } } : {}) };
+    ...(withdrawal ? { path: placePath(root, at.group.id) } : {}),
+    ...(anchor ? { anchor: floatingWindow ? anchor : { panel: anchor.panel, side: anchor.side, share: anchor.share, splitId: anchor.splitId } } : {}) };
+}
+function placePath(root: DockNode | null, groupId: string): PlacePath {
+  if (!root || root.kind === "group") return [];
+  for (const child of root.children) if ([...groups(child)].some(group => group.id === groupId))
+    return [{ id: root.id, axis: root.axis, child: child.id, siblings: root.children.map((sibling, i) => ({ id: sibling.id,
+      groups: [...groups(sibling)].map(group => group.id), share: root.sizes[i]! })) }, ...placePath(child, groupId)];
+  return [];
 }
 /** Read a panel's current or remembered closed place without closing it or cloning its whole tree. */
 export function panelPlace(tree: DockTree, panel: PanelId): Exclude<ParkedPlace, { closed: true }> | undefined {
@@ -644,18 +653,7 @@ export function parkPanels(tree: DockTree, panels: readonly PanelId[]): DockTree
 export function unparkPanels(tree: DockTree, panels: readonly PanelId[], fallback: DockTree, area: Rect): DockTree {
   let next = clone(tree);
   const parked = { ...next.parked };
-  // Restore an anchor before the group that needs it. A wholly withdrawn layout can contain cycles (two neighbouring groups);
-  // visiting each panel once breaks those cycles while keeping inner splits together before their outer neighbours return.
-  const wanted = new Set(panels), visited = new Set<PanelId>(), ordered: PanelId[] = [];
-  const visit = (panel: PanelId) => {
-    if (visited.has(panel)) return;
-    visited.add(panel);
-    const place = parked[panel], anchor = place && !("closed" in place) ? place.anchor?.panel : undefined;
-    if (anchor && wanted.has(anchor)) visit(anchor);
-    ordered.push(panel);
-  };
-  for (const panel of panels) visit(panel);
-  for (const panel of ordered) {
+  for (const panel of panels) {
     const place = parked[panel];
     delete parked[panel];
     if (locate(next, panel) || next.closed.includes(panel)) continue;
@@ -691,6 +689,7 @@ function restorePlace(tree: DockTree, panel: PanelId, place: Exclude<ParkedPlace
     const next = insertNode(tree, group([panel]), { kind: "tab", groupId: member.group.id, index });
     return place.active ? next : activate(next, member.group.active);
   }
+  if (place.path) return restorePath(tree, panel, place);
   let remembered = place.anchor;
   let anchor = remembered && locate(tree, remembered.panel);
   // Several departing groups can refer to a neighbour that has not returned yet. Any surviving
@@ -717,34 +716,8 @@ function restorePlace(tree: DockTree, panel: PanelId, place: Exclude<ParkedPlace
       };
       return { ...tree, root: visit(tree.root), floating: tree.floating.map(floatingWindow => ({ ...floatingWindow, node: visit(floatingWindow.node)! })) };
     };
-    if (!anchor.windowId) {
-      // A remembered direct sibling can itself be a split (an entire column). Rejoin the original split when it survives, or
-      // rebuild around one of its remembered child subtrees; never split one of that child's leaves instead.
-      const shares = beside.shares, order = Object.keys(shares ?? {}), incoming = order.indexOf(created.id);
-      const node = place.collapsed ? { ...created, collapsed: true } : created;
-      let inserted = false;
-      const rejoin = (root: DockNode | null): DockNode | null => {
-        if (!root || root.kind === "group") return root;
-        if (incoming >= 0 && root.id === beside.splitId && root.children.every(child => order.includes(child.id))) {
-          inserted = true;
-          const children = [...root.children, node].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
-          return { ...root, children, sizes: normalizeSizes(children.map(child => shares![child.id]!), children.length) };
-        }
-        return { ...root, children: root.children.map(child => rejoin(child)!) };
-      };
-      const joined = rejoin(tree.root);
-      if (inserted) return { ...clone(tree), root: joined };
-      const sibling = (node: DockNode | null): DockNode | undefined => !node ? undefined : beside.shares?.[node.id] !== undefined ? node
-        : node.kind === "split" ? node.children.map(sibling).find(Boolean) : undefined;
-      const branch = sibling(tree.root);
-      if (branch && incoming >= 0 && beside.splitId !== branch.id) {
-        const before = incoming < order.indexOf(branch.id), children = before ? [node, branch] : [branch, node];
-        return restoreShares({ ...clone(tree), root: replaceNode(tree.root!, branch.id,
-          split(beside.side === "left" || beside.side === "right" ? "row" : "column", children, children.map(child => shares![child.id]!), beside.splitId)) });
-      }
-      return restoreShares(insertNode(tree, place.collapsed ? { ...created, collapsed: true } : created,
-        { kind: "split", groupId: anchor.group.id, side: beside.side }, undefined, beside.share, true, beside.splitId));
-    }
+    if (!anchor.windowId) return restoreShares(insertNode(tree, place.collapsed ? { ...created, collapsed: true } : created,
+      { kind: "split", groupId: anchor.group.id, side: beside.side }, undefined, beside.share, true, beside.splitId));
     const floatingWindow = tree.floating.find(item => item.id === anchor!.windowId)!;
     const row = beside.side === "left" || beside.side === "right";
     const children = floatingWindow.node.kind === "split" && floatingWindow.node.id === beside.splitId ? floatingWindow.node.children : [floatingWindow.node];
@@ -777,6 +750,84 @@ function restorePlace(tree: DockTree, panel: PanelId, place: Exclude<ParkedPlace
   }
   if (place.docked && !tree.root) { const created = group([panel], panel, place.groupId); return { ...clone(tree), root: place.collapsed ? { ...created, collapsed: true } : created }; }
   return undefined;
+}
+
+/** Restore against live ancestors, without rewinding the geometry of any survivor. */
+function restorePath(tree: DockTree, panel: PanelId, place: Exclude<ParkedPlace, { closed: true }>): DockTree {
+  const created: DockNode = { ...group([panel], panel, place.groupId), ...(place.collapsed ? { collapsed: true } : {}) };
+  const container = place.windowId ? tree.floating.find(floatingWindow => floatingWindow.id === place.windowId) : undefined;
+  const root = place.windowId ? container?.node ?? null : tree.root;
+  const find = (node: DockNode | null, id: string): DockNode | undefined => !node ? undefined : node.id === id ? node
+    : node.kind === "split" ? node.children.map(child => find(child, id)).find(Boolean) : undefined;
+  const matches = (node: DockNode, sibling: PlacePath[number]["siblings"][number]) => node.id === sibling.id
+    || [...groups(node)].every(group => sibling.groups.includes(group.id));
+  const representative = (node: DockNode | null, sibling: PlacePath[number]["siblings"][number]): DockNode | undefined => {
+    const exact = find(node, sibling.id);
+    if (exact) return exact;
+    if (!node) return undefined;
+    if (matches(node, sibling)) return node;
+    return node.kind === "split" ? node.children.map(child => representative(child, sibling)).find(Boolean) : undefined;
+  };
+  let restored: DockNode | undefined;
+  let growth: { axis: SplitNode["axis"]; take: number; before: number; after: number } | undefined;
+  const rememberGrowth = (step: PlacePath[number], take: number, mass: number) => {
+    const prefix = place.path!.slice(0, place.path!.indexOf(step)).filter(parent => parent.axis === step.axis)
+      .reduce((share, parent) => share * parent.siblings.find(sibling => sibling.id === parent.child)!.share, 1);
+    growth = { axis: step.axis, take, before: prefix * mass,
+      after: prefix * (mass + step.siblings.find(sibling => sibling.id === step.child)!.share) };
+  };
+  for (const step of [...place.path!].reverse()) {
+    const incoming = step.siblings.findIndex(sibling => sibling.id === step.child), own = step.siblings[incoming]!;
+    const ancestor = find(root, step.id);
+    if (ancestor?.kind === "split") {
+      const records = ancestor.children.map(child => step.siblings.find(sibling => matches(child, sibling)));
+      const mass = step.siblings.filter(sibling => sibling.id !== own.id && records.includes(sibling)).reduce((sum, sibling) => sum + sibling.share, 0);
+      const take = own.share / (own.share + (mass || 1 - own.share));
+      // Keep the live ordering and ratios. Only the incoming slot is inserted relative to its surviving siblings.
+      const before = records.findIndex(record => record && step.siblings.indexOf(record) > incoming);
+      const at = before < 0 ? ancestor.children.length : before;
+      const children = [...ancestor.children], sizes = ancestor.sizes.map(share => Number((share * (1 - take)).toPrecision(12)));
+      children.splice(at, 0, created); sizes.splice(at, 0, Number(take.toPrecision(12)));
+      restored = replaceNode(root!, ancestor.id, { ...ancestor, children, sizes });
+      if (ancestor === root) rememberGrowth(step, take, mass || 1 - own.share);
+      break;
+    }
+    const peer = step.siblings.map((sibling, index) => ({ sibling, index, node: sibling.id === own.id ? undefined : representative(root, sibling) })).find(item => item.node);
+    if (peer?.node) {
+      const before = incoming < peer.index, children = before ? [created, peer.node] : [peer.node, created];
+      const take = own.share / (own.share + peer.sibling.share);
+      restored = replaceNode(root!, peer.node.id, { kind: "split", id: step.id, axis: step.axis, children,
+        sizes: before ? [Number(take.toPrecision(12)), rest(take)] : [rest(take), Number(take.toPrecision(12))] });
+      if (peer.node === root) rememberGrowth(step, take, peer.sibling.share);
+      break;
+    }
+  }
+  // With no surviving path, the returning group establishes the root; later returns rebuild its ancestors from their own paths.
+  restored ??= root ? split("row", [root, created]) : created;
+  const next = clone(tree);
+  if (place.windowId) {
+    if (container) next.floating = next.floating.map(floatingWindow => {
+      if (floatingWindow.id !== container.id) return floatingWindow;
+      const rect = { ...floatingWindow, node: restored! };
+      if (growth) {
+        const dimension = growth.axis === "row" ? "w" : "h", minimum = growth.axis === "row" ? MIN_WINDOW.w : MIN_WINDOW.h;
+        const original = place.window?.[dimension];
+        rect[dimension] = original && Math.abs(floatingWindow[dimension] - Math.max(minimum, Math.round(original * growth.before))) < 1
+          ? Math.max(minimum, Math.round(original * growth.after)) : floatingWindow[dimension] / (1 - growth.take);
+      }
+      return rect;
+    });
+    else {
+      const rect = { ...(place.window ?? { x: 40, y: 40, w: 400, h: 560 }) };
+      for (const axis of ["row", "column"] as const) {
+        const fraction = place.path!.filter(step => step.axis === axis).reduce((share, step) => share * step.siblings.find(sibling => sibling.id === step.child)!.share, 1);
+        const dimension = axis === "row" ? "w" : "h";
+        rect[dimension] = Math.max(axis === "row" ? MIN_WINDOW.w : MIN_WINDOW.h, Math.round(rect[dimension] * fraction));
+      }
+      next.floating.splice(Math.min(place.windowIndex ?? next.floating.length, next.floating.length), 0, { id: place.windowId, ...rect, node: restored });
+    }
+  } else next.root = restored;
+  return next;
 }
 
 export function setSizes(tree: DockTree, splitId: string, sizes: number[]): DockTree {
@@ -940,9 +991,36 @@ function parsePlace(value: unknown, validId: (id: unknown) => id is string, fini
       ...(anchor.shares && typeof anchor.shares === "object" && !Array.isArray(anchor.shares)
         && Object.entries(anchor.shares).length <= 64 && Object.entries(anchor.shares).every(([id, share]) => validId(id) && finite(share) && share > 0 && share < 1)
         ? { shares: { ...anchor.shares } as Record<string, number> } : {}) } : undefined;
+  const parsedPath = parsePlacePath(place.path, validId, finite);
+  const path = parsedPath && (!parsedPath.length || parsedPath.at(-1)!.child === place.groupId) ? parsedPath : undefined;
   return { group: [...place.group] as string[], index: place.index as number, active: place.active,
+    ...(path ? { path } : {}),
     ...(validId(place.groupId) ? { groupId: place.groupId } : {}), ...(place.docked === true ? { docked: true as const } : {}),
     ...(place.collapsed === true ? { collapsed: true } : {}), ...(rect ? { window: rect,
       ...(validId(place.windowId) ? { windowId: place.windowId } : {}), ...(Number.isSafeInteger(place.windowIndex) && (place.windowIndex as number) >= 0 ? { windowIndex: place.windowIndex as number } : {}) } : {}),
     ...(beside ? { anchor: beside } : {}) };
+}
+
+function parsePlacePath(value: unknown, validId: (id: unknown) => id is string, finite: (n: unknown) => n is number): PlacePath | undefined {
+  if (!Array.isArray(value) || value.length > 12) return undefined;
+  const path: PlacePath = [];
+  for (const input of value) {
+    if (!input || typeof input !== "object") return undefined;
+    const step = input as Record<string, unknown>;
+    if (!validId(step.id) || !validId(step.child) || (step.axis !== "row" && step.axis !== "column") || !Array.isArray(step.siblings)
+      || step.siblings.length < 2 || step.siblings.length > 16) return undefined;
+    const siblings: PlacePath[number]["siblings"] = [];
+    for (const input of step.siblings) {
+      if (!input || typeof input !== "object") return undefined;
+      const sibling = input as Record<string, unknown>;
+      if (!validId(sibling.id) || siblings.some(item => item.id === sibling.id) || !finite(sibling.share) || sibling.share <= 0 || sibling.share >= 1
+        || !Array.isArray(sibling.groups) || !sibling.groups.length || sibling.groups.length > 1024 || !sibling.groups.every(validId)) return undefined;
+      siblings.push({ id: sibling.id, groups: [...sibling.groups], share: sibling.share });
+    }
+    if (!siblings.some(sibling => sibling.id === step.child) || path.some(parent => parent.id === step.id)
+      || Math.abs(siblings.reduce((sum, sibling) => sum + sibling.share, 0) - 1) > 1e-9) return undefined;
+    path.push({ id: step.id, axis: step.axis, child: step.child, siblings });
+  }
+  if (path.some((step, index) => index > 0 && path[index - 1]!.child !== step.id)) return undefined;
+  return path;
 }

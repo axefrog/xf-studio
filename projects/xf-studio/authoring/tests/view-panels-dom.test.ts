@@ -5,10 +5,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 import type { DrawnViews } from "../src/app/viewport-attachment";
-import { group, split, locate, MIN_GROUP, type DockNode, type DockTree, type GroupNode } from "../src/studio-ui/dock/layout";
-import { serializeDockState } from "../src/studio-ui/dock/persist";
+import { allGroups, applyDrop, setSizes, group, split, locate, MIN_GROUP, type DockState, type SplitNode, type DockNode, type DockTree, type GroupNode } from "../src/studio-ui/dock/layout";
+import { restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
+import { DockView, type PanelSpec } from "../src/studio-ui/dock/dock-view";
 import { canvasView, tabViews, viewPaneState, ViewPanels, viewPanelEntries, viewPanelIds, type ShownView, type ViewPaneController } from "../src/studio-ui/panels/view-panels";
-import { viewCatalogue } from "../src/studio-ui/views/contribution";
+import { viewCatalogue, type ViewContribution } from "../src/studio-ui/views/contribution";
 import { SHELL_VIEW } from "../src/studio-ui/views/shell";
 import { UIPreferenceActions } from "../src/app/ui-preferences";
 import { layoutTabsPort } from "../src/app/profiles/tab-presentation";
@@ -533,3 +534,203 @@ describe("the not-drawn state (U7)", () => {
     side.dispose?.(); main.dispose?.();
   });
 });
+
+// Contribution registration shares the view/session owner and its save relay.
+const registrationContribution = (ids: string[]): ViewContribution => ({ owner: "test", activity: [], panels: ids.map((id, order) => ({ id, title: id,
+  icon: "layers", description: id, slot: "stage", order })) });
+const registrationArea = { x: 0, y: 0, w: 800, h: 600 };
+const registrationInitial = (ratio: number): DockTree => ({ root: split("row", [group(["experiment.panel"], "experiment.panel", "ga"),
+  group(["b"], "b", "gb"), group(["c"], "c", "gc")], [.2, .8 * ratio, .8 * (1 - ratio)], "row"), floating: [], closed: [] });
+
+function registrationHarness(writable = true) {
+  const life = new AbortController(), s = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "A" }, seededRandom(91)));
+  const a = s.tabId(); s.arrange(a, serializeDockState({ wide: registrationInitial(.375), compact: registrationInitial(.375) }));
+  const b = s.duplicate(a); s.arrange(b, serializeDockState({ wide: registrationInitial(.8), compact: registrationInitial(.8) })); s.show(a);
+  let generation = 0, applied = 0, enabled = true, serial = 0;
+  let catalogue = viewCatalogue([registrationContribution(["experiment.panel", "b", "c"])]);
+  const disposed: number[] = [], replacements: { serial: number; spec: PanelSpec; instance?: string }[] = [];
+  const make = (id: string) => {
+    const item = { serial: serial++, spec: { id, title: `${id} ${serial}`, icon: "layers" as const, description: id, element: document.createElement("div") },
+      instance: undefined as string | undefined, update() {}, bind(instance: string | undefined) { item.instance = instance; } };
+    item.spec.element.textContent = item.spec.title; return item;
+  };
+  let controllers = [make("experiment.panel"), make("b"), make("c")];
+  const saves: string[] = [], destinations: (string | undefined)[] = [];
+  let dock!: DockView;
+  const owner = new ViewPanels({
+    arrangement: () => ({ tab: s.tabId(), layout: s.legacyDock(s.tabId()) }),
+    instances: { controllers: () => controllers, instance: (panel, tab) => s.inputInstance(panel, tab) },
+    contributions: { pending: () => generation !== applied, reconcile: tab => {
+      destinations.push(tab);
+      const old = controllers.filter(controller => controller.spec.id === "experiment.panel");
+      controllers = controllers.filter(controller => controller.spec.id !== "experiment.panel");
+      if (enabled) { const made = make("experiment.panel"); controllers.push(made); replacements.push(made); }
+      catalogue = viewCatalogue([registrationContribution(enabled ? ["experiment.panel", "b", "c"] : ["b", "c"])]);
+      applied = generation;
+      return () => { for (const item of old) {
+        expect(dock.panel(item.spec.id)?.element).not.toBe(item.spec.element);
+        expect(item.spec.element.isConnected).toBe(false); disposed.push(item.serial);
+      } };
+    } },
+    views: () => [], drawn: () => ({}), make: () => { throw Error("No 3D pane in this fixture"); }, catalogue() {}, attach() {}, spec: panel => panel.spec,
+    restore: (layout, tab) => {
+      destinations.push(tab);
+      dock.load(restoreDockPreference(layout, registrationArea, catalogue, [], [], true).state, controllers.map(controller => controller.spec));
+    },
+    save: (tab, state) => { if (!tab) throw Error("Save must name its destination"); if (writable) { saves.push(tab); s.arrange(tab, serializeDockState(state)); } },
+    dock: { addPanels: specs => dock.addPanels(specs), removePanels: (ids, options) => dock.removePanels(ids, options),
+      cancelDrag: () => dock.cancelDrag(), get dockState() { return dock.dockState; } },
+  });
+  owner.start();
+  const state = restoreDockPreference(s.legacyDock(a), registrationArea, catalogue, [], [], true).state;
+  dock = new DockView({ signal: life.signal, panels: controllers.map(controller => controller.spec), state, sizeClass: () => "wide", defaults: () => registrationInitial(.375),
+    save: state => owner.save(state), announce() {} });
+  dock.element.getBoundingClientRect = () => ({ ...registrationArea, width: registrationArea.w, height: registrationArea.h, left: 0, top: 0, right: registrationArea.w, bottom: registrationArea.h, toJSON() {} });
+  lightDocument.body.append(dock.element as unknown as LightElement); dock.render();
+  return { s, a, b, dock, owner, saves, destinations, disposed, replacements, initialController: controllers[0]!,
+    flag(on: boolean) { enabled = on; generation++; }, stop: () => life.abort() };
+}
+
+test("review H1: queued registration and A→B share one destination transaction; A is never overwritten", () => {
+  const h = registrationHarness();
+  try {
+    const a = h.s.dock(h.a), b = h.s.dock(h.b), history = h.s.graph.history(), instances = h.s.tab(h.b)!.panels;
+    h.s.show(h.b); h.flag(false); h.owner.sync();
+    expect(h.destinations).toEqual([h.b, h.b]); expect(h.saves).toEqual([h.b]);
+    expect(h.s.dock(h.a)).toEqual(a);
+    expect(h.s.tab(h.b)!.panels).toEqual(instances);
+    expect(h.s.dock(h.b)).not.toEqual(b); expect(h.s.graph.history()).toEqual(history);
+    expect(h.dock.panel("experiment.panel")).toBeUndefined();
+  } finally { h.stop(); }
+});
+
+test("review M2: off/on before a paint replaces the spec and controller together, before old-controller disposal", () => {
+  const h = registrationHarness();
+  try {
+    const old = h.initialController, instance = h.s.instance("experiment.panel"), history = h.s.graph.history();
+    h.flag(false); h.flag(true); h.owner.sync();
+    const next = h.replacements.at(-1)!;
+    expect(h.disposed).toEqual([old.serial]); expect(next.instance).toBe(instance);
+    expect(h.dock.panel("experiment.panel")).toBe(next.spec);
+    expect(next.spec.element.isConnected).toBe(true); expect(old.spec.element.isConnected).toBe(false);
+    expect(h.dock.element.textContent).toContain(next.spec.title); expect(h.s.graph.history()).toEqual(history);
+  } finally { h.stop(); }
+});
+
+test("a retained module context reads instances from the rendered owner before and after tab synchronization", async () => {
+  const { moduleViewContext } = await import("../src/studio-ui/views/feature-context");
+  const h = registrationHarness();
+  try {
+    const context = moduleViewContext({ port: { module: () => ({}),
+      panels: { instance: (panel: string, tab?: string) => h.s.inputInstance(panel, tab) } } } as never, "test", () => h.owner.tabId());
+    const a = h.s.inputInstance("experiment.panel", h.a), b = h.s.inputInstance("experiment.panel", h.b);
+    expect(a).not.toBe(b);
+    h.s.show(h.b); expect(context.instance("experiment.panel")).toBe(a);
+    h.owner.sync(); expect(context.instance("experiment.panel")).toBe(b);
+    h.s.show(h.a); h.owner.sync(); expect(context.instance("experiment.panel")).toBe(a);
+    expect(h.disposed).toEqual([]);
+  } finally { h.stop(); }
+});
+
+test("registration-only reconciliation keeps read-only local resizes while leaving the stored session unchanged", () => {
+  const h = registrationHarness(false);
+  try {
+    const before = h.s.session(); h.flag(false); h.owner.sync();
+    const root = h.dock.tree.root as SplitNode;
+    h.dock.update(setSizes(h.dock.tree, root.id, [.8, .2]));
+    h.flag(true); h.owner.sync();
+    expect((h.dock.tree.root as SplitNode).sizes).toEqual([.2, .64, .16]);
+    expect(h.s.session()).toEqual(before); expect(h.saves).toEqual([]);
+  } finally { h.stop(); }
+});
+
+function withWindow(run: () => void) {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: lightDocument });
+  try { run(); } finally {
+    if (descriptor) Object.defineProperty(globalThis, "window", descriptor); else Reflect.deleteProperty(globalThis, "window");
+  }
+}
+function startDrag(dock: DockView) {
+  const tab = (dock.element as unknown as LightElement).querySelector('[data-panel="experiment.panel"]')!;
+  tab.dispatchEvent(lightEvent("pointerdown", { button: 0, pointerId: 1, clientX: 50, clientY: 50 }));
+  lightDocument.dispatchEvent(lightEvent("pointermove", { pointerId: 1, clientX: 70, clientY: 70 }));
+  expect(dock.dragging()).toBe(true);
+}
+test.each([false, true])("review M3: withdrawal cancels a pending/active drag before replacing specs; active=%s", active => withWindow(() => {
+  const h = registrationHarness();
+  try {
+    if (active) startDrag(h.dock);
+    else (h.dock.element as unknown as LightElement).querySelector('[data-panel="experiment.panel"]')!
+      .dispatchEvent(lightEvent("pointerdown", { button: 0, pointerId: 1, clientX: 50, clientY: 50 }));
+    h.flag(false); h.owner.sync();
+    expect(h.dock.dragging()).toBe(false);
+    const after = h.dock.dockState, saves = h.saves.length;
+    lightDocument.dispatchEvent(lightEvent("pointermove", { pointerId: 1, clientX: 90, clientY: 90 }));
+    expect(() => lightDocument.dispatchEvent(lightEvent("pointerup", { pointerId: 1, clientX: 160, clientY: 100 }))).not.toThrow();
+    expect(h.dock.dockState).toEqual(after); expect(h.saves).toHaveLength(saves);
+    expect(locate(h.dock.tree, "experiment.panel")).toBeUndefined(); expect(h.dock.tree.parked?.["experiment.panel"]).toBeDefined();
+    expect(h.dock.panel("experiment.panel")).toBeUndefined();
+  } finally { h.stop(); }
+}));
+
+test("registration model: withdrawal/return interleaved with tab switches, drags and resizes preserves authored geometry and identities", () => withWindow(() => {
+  const deadline = performance.now() + 15_000;
+  for (let seed = 1; seed <= 24; seed++) {
+    const random = seededRandom(seed), h = registrationHarness();
+    // This account is independent of dock restoration: commands update authored ratio, float coordinates and visibility directly.
+    const model = new Map([h.a, h.b].map((tab, index) => [tab, { ratio: index ? .8 : .375, share: .2, floating: false, x: 40, y: 50, available: true }]));
+    const identities = h.s.tabList().map(tab => tab.panels.filter(panel => panel.type === "experiment.panel").map(panel => panel.id));
+    const timeline = h.s.graph.history();
+    let shown = h.a, enabled = true;
+    try {
+      for (let step = 0; step < 60; step++) {
+        if (performance.now() > deadline) throw Error("Registration model exceeded 15-second deadline");
+        const op = step < 7 ? step : Math.floor(random() * 7);
+        if (op === 0) { shown = shown === h.a ? h.b : h.a; h.s.show(shown); }
+        if (op === 1 || op === 5) { enabled = !enabled; h.flag(enabled); }
+        if (op === 2) { h.flag(false); h.flag(true); enabled = true; }
+        h.owner.sync(); model.get(shown)!.available = enabled;
+        const current = model.get(shown)!;
+        if (op === 3) {
+          current.ratio = .1 + random() * .8;
+          const root = h.dock.tree.root as SplitNode;
+          const sizes = root.children.map(child => allGroups({ root: child, floating: [], closed: [] }).some(({ group }) => group.panels.includes("experiment.panel")) ? current.share
+            : (allGroups({ root: child, floating: [], closed: [] }).some(({ group }) => group.panels.includes("b")) ? current.ratio : 1 - current.ratio)
+              * (enabled && !current.floating ? 1 - current.share : 1));
+          h.dock.update(setSizes(h.dock.tree, root.id, sizes));
+        }
+        if (op === 4 && enabled) {
+          if (current.floating) { h.dock.update(applyDrop(h.dock.tree, { kind: "panel", panelId: "experiment.panel" }, { kind: "edge", side: "left" })); current.share = .24; }
+          else { current.x = 40 + seed; current.y = 50 + seed; h.dock.update(applyDrop(h.dock.tree, { kind: "panel", panelId: "experiment.panel" },
+            { kind: "float", x: current.x, y: current.y, w: 320, h: 360 })); }
+          current.floating = !current.floating;
+        }
+        if (op === 6 && enabled) {
+          startDrag(h.dock);
+          if (random() < .5) { shown = shown === h.a ? h.b : h.a; h.s.show(shown); }
+          enabled = false; h.flag(false); h.owner.sync(); model.get(shown)!.available = false;
+          lightDocument.dispatchEvent(lightEvent("pointerup", { clientX: 200, clientY: 100, pointerId: 1 }));
+        }
+        expect(h.s.tabId()).toBe(shown);
+        expect(h.s.graph.history()).toEqual(timeline);
+        expect(h.s.tabList().map(tab => tab.panels.filter(panel => panel.type === "experiment.panel").map(panel => panel.id))).toEqual(identities);
+        for (const [tab, expected] of model) {
+          const tree = (h.s.legacyDock(tab)!.state as unknown as DockState).wide;
+          const a = locate(tree, "experiment.panel");
+          expect(!!a).toBe(expected.available);
+          if (a) {
+            expect(!!a.windowId).toBe(expected.floating);
+            if (expected.floating) expect(tree.floating.find(window => window.id === a.windowId)).toMatchObject({ x: expected.x, y: expected.y });
+          }
+          const root = tree.root as SplitNode;
+          const shares = root.children.map(child => ({ id: allGroups({ root: child, floating: [], closed: [] })[0]!.group.panels[0]!, share: root.sizes[root.children.indexOf(child)]! }));
+          const b = shares.find(item => item.id === "b")!.share, c = shares.find(item => item.id === "c")!.share;
+          expect(b / (b + c)).toBeCloseTo(expected.ratio, 9);
+          if (a && !expected.floating) expect(shares.find(item => item.id === "experiment.panel")!.share).toBeCloseTo(expected.share, 9);
+        }
+      }
+    } catch (error) { throw Error(`Registration model seed ${seed}`, { cause: error }); }
+    finally { h.stop(); }
+  }
+}), 20_000);

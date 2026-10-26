@@ -58,7 +58,9 @@ export class DockView {
   private state: DockState;
   private visible = new Set<PanelId>();
   private drag?: DragSession;
-  private moveMode?: { windowId: string; cleanup(): void };
+  private pendingDrag?: () => void;
+  private cancelResize?: () => void;
+  private moveMode?: { windowId: string; cleanup(cancel?: boolean): void };
   /** The folded nodes of the tree being rendered and the axis each folded along (`foldAxes`). */
   private folds = new Map<string, "row" | "column">();
   /** Each rendered group's header (its tab strip condenses to fit, components/panel-header.ts). */
@@ -151,12 +153,17 @@ export class DockView {
    * ones join. Renders, persists and announces once.
    */
   load(state: DockState, panels: readonly PanelSpec[], message?: string) {
-    const ids = new Set(panels.map(spec => spec.id));
-    for (const spec of panels) if (!this.panels.has(spec.id)) { this.panels.set(spec.id, spec); this.parking.append(spec.element); }
+    this.cancelDrag();
+    const specs = new Map(panels.map(spec => [spec.id, spec]));
+    for (const [id, old] of this.panels) if (specs.get(id)?.element !== old.element) {
+      if (this.visible.delete(id)) old.visibility?.(false);
+      old.element.remove();
+    }
+    this.panels.clear();
+    for (const spec of specs.values()) { this.panels.set(spec.id, spec); this.parking.append(spec.element); }
     const next = structuredClone(state), area = this.area(), fit = (tree: DockTree) => keepDockExpanded(area.w > 40 && area.h > 40 ? recoverWindows(tree, area) : tree);
     this.state = { wide: fit(next.wide), compact: fit(next.compact) };
     this.render();
-    for (const [id, spec] of [...this.panels]) if (!ids.has(id)) { spec.element.remove(); this.panels.delete(id); }
     this.options.save(this.dockState);
     if (message) this.options.announce(message);
   }
@@ -398,6 +405,7 @@ export class DockView {
     setValue(sizes());
     element.addEventListener("pointerdown", event => {
       if (event.button !== 0) return;
+      this.cancelDrag();
       event.preventDefault();
       element.setPointerCapture(event.pointerId);
       const parent = element.parentElement!, cells = [...parent.children].filter(child => child.classList.contains("dock-cell")) as HTMLElement[];
@@ -421,11 +429,22 @@ export class DockView {
         latest = next; setValue(next);
         this.options.afterLayout?.();
       };
-      const up = () => {
+      const clean = () => {
         element.removeEventListener("pointermove", move); element.removeEventListener("pointerup", up);
         element.removeEventListener("pointercancel", up); element.classList.remove("active");
+        if (this.cancelResize === cancel) this.cancelResize = undefined;
+      };
+      const cancel = () => {
+        clean();
+        const shares = openShares(values, folded);
+        before.style.flex = `${shares[a]} 1 0`; after.style.flex = `${shares[b]} 1 0`; setValue(values);
+      };
+      const up = () => {
+        if (this.cancelResize !== cancel) return;
+        clean();
         commit(latest);
       };
+      this.cancelResize = cancel;
       element.addEventListener("pointermove", move); element.addEventListener("pointerup", up);
       element.addEventListener("pointercancel", up);
     });
@@ -614,6 +633,7 @@ export class DockView {
     this.moveMode?.cleanup();
     const element = this.element.querySelector<HTMLElement>(`[data-window="${windowId}"]`);
     if (!element) return;
+    const original = this.tree.floating.find(window => window.id === windowId)!;
     element.classList.add("moving");
     element.tabIndex = -1; element.focus();
     this.options.announce("Move mode: arrow keys move, Shift with arrows resizes, Enter or Escape finishes.");
@@ -633,9 +653,13 @@ export class DockView {
         this.options.afterLayout?.();
       } else if (event.key === "Enter" || event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cleanup(); }
     };
-    const cleanup = () => {
+    const cleanup = (cancel = false) => {
       element.removeEventListener("keydown", key, true); element.classList.remove("moving");
-      this.moveMode = undefined; this.options.save(this.dockState); this.options.announce("Window position saved");
+      this.moveMode = undefined;
+      if (cancel) {
+        this.state = { ...this.state, [this.sizeClass]: setWindowRect(this.tree, windowId, original) };
+        Object.assign(element.style, rectStyle(original));
+      } else { this.options.save(this.dockState); this.options.announce("Window position saved"); }
       element.querySelector<HTMLElement>(".dock-tab[aria-selected=true]")?.focus();
     };
     element.addEventListener("keydown", key, true);
@@ -645,6 +669,7 @@ export class DockView {
 
   private resizeWindow(event: PointerEvent, windowId: string, edge: string) {
     if (event.button !== 0) return;
+    this.cancelDrag();
     event.preventDefault(); event.stopPropagation();
     const handle = event.currentTarget as HTMLElement, element = handle.parentElement!;
     handle.setPointerCapture(event.pointerId);
@@ -660,16 +685,25 @@ export class DockView {
       Object.assign(element.style, { left: `${next.x}px`, top: `${next.y}px`, width: `${next.w}px`, height: `${next.h}px` });
       this.options.afterLayout?.();
     };
-    const up = () => {
+    const clean = () => {
       handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); handle.removeEventListener("pointercancel", up);
+      if (this.cancelResize === cancel) this.cancelResize = undefined;
+    };
+    const cancel = () => { clean(); Object.assign(element.style, rectStyle(window)); };
+    const up = () => {
+      if (this.cancelResize !== cancel) return;
+      clean();
       this.update(recoverWindows(setWindowRect(this.tree, windowId, rect), this.area()));
     };
+    this.cancelResize = cancel;
     handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", up); handle.addEventListener("pointercancel", up);
   }
 
   // ----- Pointer drag with cursor-position snapping -----
   private pointerDown(event: PointerEvent, source: DragSource, handle: HTMLElement) {
     if (event.button !== 0 || this.drag) return;
+    this.pendingDrag?.();
+    this.cancelResize?.();
     const start = { x: event.clientX, y: event.clientY };
     const pending = (e: PointerEvent) => {
       if (Math.hypot(e.clientX - start.x, e.clientY - start.y) < 5) return;
@@ -677,7 +711,8 @@ export class DockView {
       this.beginDrag(e, source, handle, start);
     };
     const stop = () => { window.removeEventListener("pointermove", pending); window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop); };
+      window.removeEventListener("pointercancel", stop); if (this.pendingDrag === stop) this.pendingDrag = undefined; };
+    this.pendingDrag = stop;
     window.addEventListener("pointermove", pending);
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
@@ -764,6 +799,7 @@ export class DockView {
     };
     const up = () => finish(false);
     const finish = (cancel: boolean) => {
+      if (this.drag !== session) return;
       window_.removeEventListener("pointermove", move, true); window_.removeEventListener("pointerup", up, true);
       window_.removeEventListener("pointercancel", cancelDrag, true);
       window_.removeEventListener("keydown", key, true); window_.removeEventListener("keyup", key, true);
@@ -807,7 +843,7 @@ export class DockView {
       this.overlay.append(element);
     }
   }
-  cancelDrag() { this.drag?.cancel(); }
+  cancelDrag() { this.pendingDrag?.(); this.drag?.cancel(); this.cancelResize?.(); this.moveMode?.cleanup(true); }
   dragging() { return !!this.drag; }
 }
 

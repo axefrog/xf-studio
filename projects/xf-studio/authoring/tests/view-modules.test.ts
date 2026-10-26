@@ -166,7 +166,7 @@ test("hiding a module parks its panels per size class, and showing it puts each 
   // P3-i D2: remembered places retain the actual group/window identities and order too.
   const home = locate(parsed, "uv")!;
   expect(hidden.parked?.uv).toEqual({ group: ["uv"], index: 0, active: true, groupId: home.group.id,
-    window: { x: 400, y: 120, w: 500, h: 260 }, windowId: home.windowId, windowIndex: 0 });
+    window: { x: 400, y: 120, w: 500, h: 260 }, windowId: home.windowId, windowIndex: 0, path: [] });
   expect(hidden.parked?.warp).toEqual({ closed: true });
   const shown = unparkPanels(hidden, eye, defaultWide(STUDIO_CATALOGUE), { x: 0, y: 0, w: 1600, h: 900 });
   expect(shape(shown)).toEqual(shape(parsed));

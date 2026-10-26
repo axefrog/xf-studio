@@ -56,14 +56,16 @@ export type ViewPaneController = PanelController & { readonly slot: HTMLElement 
 
 export type ViewPanelsDeps = {
   /** Bind the other reusable panel controllers before the destination dock can show or update them. */
-  instances?: { controllers(): readonly PanelController[]; instance(panel: PanelId): string };
+  instances?: { controllers(): readonly PanelController[]; instance(panel: PanelId, tab?: string): string };
+  /** Registration changes wait for this owner's destination transaction. Cleanup runs after the dock swaps all specs. */
+  contributions?: { pending(): boolean; reconcile(tab: string | undefined): (() => void) | void };
   /** The shown tab and its saved arrangement. A tab switch or an external arrangement restore is one dock load, never incremental saves. */
   arrangement(): { readonly tab?: string; readonly layout: unknown };
   /** The session's initial/replayed opening intent, consumed once after its pane exists. */
   opening?(): ViewOpening | undefined;
   openView?(panel: PanelId, arrangement: unknown, focus: boolean): void;
   /** Load the captured destination arrangement with the reconciled controllers and catalogue. Saves once, after the whole load. */
-  restore(layout: unknown): void;
+  restore(layout: unknown, tab?: string): void;
   /** Persist to the tab the dock actually renders, which can lag behind the shown tab until the next paint. */
   save(tab: string | undefined, state: DockState): void;
   /** The shown tab's 3D views and their panels, in graph order. */
@@ -75,7 +77,7 @@ export type ViewPanelsDeps = {
   /** The panel catalogue now knows these view panels (before the dock places them, so its factory home includes them). */
   catalogue(panels: readonly PanelId[]): void;
   /** The dock: an added pane goes where the arrangement parked it, else to the 3D view's home; a withdrawn one leaves no place behind. */
-  dock: Pick<DockView, "addPanels" | "removePanels" | "dockState">;
+  dock: Pick<DockView, "addPanels" | "removePanels" | "dockState"> & Partial<Pick<DockView, "cancelDrag">>;
   /** A pane as the dock holds it. */
   spec(controller: ViewPaneController): PanelSpec;
   /** Put the canvas into a pane's slot (`viewport.attach("head", slot)`). */
@@ -96,10 +98,12 @@ export class ViewPanels {
   private pendingSave: DockState | undefined;
   private openingRevision: number | undefined;
   constructor(private readonly deps: ViewPanelsDeps) {}
+  /** The explicit destination owned by the dock, including while a reconciliation holds its saves. */
+  tabId(): string | undefined { return this.tab; }
   private bind(tab: string | undefined) {
     const instances = this.deps.instances;
     for (const panel of instances?.controllers() ?? []) if (panel.bind)
-      panel.bind(tab === undefined ? undefined : instances!.instance(panel.spec.id));
+      panel.bind(tab === undefined ? undefined : instances!.instance(panel.spec.id, tab));
   }
 
   /** The panel IDs the shown tab's views need, in graph order. */
@@ -137,13 +141,23 @@ export class ViewPanels {
   sync(): boolean {
     if (this.reconciling) return false;
     const destination = this.deps.arrangement(), layout = JSON.stringify(destination.layout);
+    const contributions = this.deps.contributions?.pending() ?? false;
     // A dock drag has already placed and saved this tree; only an external restore needs loading again. Compare the tree only when the
     // preference changed, rather than cloning the dock on every paint. Capture the destination before any dock operation can save.
-    const restore = destination.tab !== this.tab || (layout !== this.layout && layout !== JSON.stringify(serializeDockState(this.deps.dock.dockState)));
+    const externalRestore = destination.tab !== this.tab || (layout !== this.layout && layout !== JSON.stringify(serializeDockState(this.deps.dock.dockState)));
+    const restore = contributions || externalRestore;
     const wanted = this.wanted(), want = new Set(wanted);
     const gone = [...this.panes.keys()].filter(panel => !want.has(panel)), fresh = wanted.filter(panel => !this.panes.has(panel));
+    // A pending drag belongs to the previously rendered tab and specs. End it before changing either identity.
+    if (restore || gone.length || fresh.length) this.deps.dock.cancelDrag?.();
+    // Registration alone changes availability, not arrangement. Read-only windows can have a newer local arrangement than storage.
+    const arrangement = contributions && !externalRestore ? serializeDockState(this.deps.dock.dockState) : destination.layout;
     this.reconciling = true;
+    let releaseContributions: (() => void) | void = undefined;
     try {
+      // Resolve queued navigation first. The captured destination owns every reconciliation below; its saves stay held until load.
+      this.tab = destination.tab;
+      if (contributions) releaseContributions = this.deps.contributions!.reconcile(destination.tab);
       this.bind(destination.tab);
       if (gone.length || fresh.length || restore) {
         this.deps.catalogue(wanted);
@@ -157,23 +171,24 @@ export class ViewPanels {
           for (const pane of leaving) { this.panes.delete(pane.spec.id); this.deps.removed?.(pane); }
         }
         const specs = fresh.map(panel => this.deps.spec(this.make(panel)));
-        if (restore) this.deps.restore(destination.layout);
+        if (restore) this.deps.restore(arrangement, destination.tab);
         else if (specs.length) this.deps.dock.addPanels(specs);
         for (const pane of leaving) { pane.spec.visibility?.(false); pane.dispose?.(); }
       }
-      this.tab = destination.tab;
+      releaseContributions?.(); releaseContributions = undefined;
       const opening = this.deps.opening?.();
       if (opening && opening.revision !== this.openingRevision) {
         this.openingRevision = opening.revision;
         const pane = opening.tab === this.tab && this.deps.views().find(view => view.view === opening.view);
         if (pane) this.deps.openView?.(pane.panel, opening.arrangement, opening.focus);
       }
-      if (this.pendingSave) this.deps.save(this.tab, this.pendingSave);
+      if (this.pendingSave) this.deps.save(destination.tab, this.pendingSave);
       const settled = this.deps.arrangement();
       this.layout = JSON.stringify(settled.tab === this.tab ? settled.layout : destination.layout);
       this.place();
-      return gone.length > 0 || fresh.length > 0;
+      return contributions || gone.length > 0 || fresh.length > 0;
     } finally {
+      releaseContributions?.();
       this.pendingSave = undefined;
       this.reconciling = false;
     }

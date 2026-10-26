@@ -136,7 +136,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let dockRef: DockView | undefined;
   const paneAnchors = new Map<PanelController, () => void>();
   const viewPanes = new ViewPanels({
-    instances: { controllers: () => panels, instance: panel => port.panels.instance(panel) },
+    instances: { controllers: () => panels, instance: (panel, tab) => port.panels.instance(panel, tab) },
+    contributions: { pending: () => queueOptional(), reconcile: () => syncOptional() },
     arrangement: () => ({ tab: port.focus.targets().tab || undefined, layout: port.tabs?.dock() ?? null }),
     opening: () => port.tabs?.snapshot().opening,
     openView: (panel, arrangement, focus) => dock.openView(panel, arrangement, focus),
@@ -156,7 +157,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     drawn: () => port.viewport.snapshot().head,
     make: panel => (views.shell.head as ViewPaneFactory)(rt, context, panel),
     catalogue: shown => { viewEntries = headEntry ? viewPanelEntries(headEntry, shown) : []; rebuildCatalogue(); },
-    dock: { addPanels: specs => dockRef?.addPanels(specs), removePanels: (ids, options) => dockRef?.removePanels(ids, options),
+    dock: { addPanels: specs => dockRef?.addPanels(specs), removePanels: (ids, options) => dockRef?.removePanels(ids, options), cancelDrag: () => dockRef?.cancelDrag(),
       get dockState() { return dockRef!.dockState; } },
     spec: pane => specOf(pane),
     attach: slot => port.viewport.attach("head", slot),
@@ -295,19 +296,25 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let setupRequests = port.previewSetup.snapshot().setupRequests;
   let optionalViews: ReturnType<NonNullable<ViewComposition["optional"]>> = [];
   let optionalGeneration: number | undefined;
+  let queuedOptional: { generation: number | undefined; views: typeof optionalViews } | undefined;
   const optionalAnchors = new Map<PanelController, () => void>();
   let experimentFocus = "";
-  function syncOptional() {
+  function queueOptional() {
     const generation = views.optionalGeneration?.();
-    if (generation !== undefined && generation === optionalGeneration) return;
+    if (generation !== undefined && generation === optionalGeneration) return false;
     const optional = views.optional?.() ?? [];
-    if (generation === undefined && optional.length === optionalViews.length && optional.every((item, i) => item === optionalViews[i])) return;
+    if (generation === undefined && optional.length === optionalViews.length && optional.every((item, i) => item === optionalViews[i])) return false;
+    queuedOptional = { generation, views: optional }; return true;
+  }
+  function syncOptional() {
+    const { generation, views: optional } = queuedOptional!;
+    queuedOptional = undefined;
     const owners = new Map(optional.map(item => [item.contribution.owner, item]));
     const gone = panels.filter(panel => { const entry = catalogue.panels.find(item => item.id === panel.spec.id);
       return entry && !isViewPane(entry.id) && !views.catalogue.ids.includes(entry.id)
         && owners.get(entry.owner) !== optionalViews.find(item => item.contribution.owner === entry.owner); });
     for (const panel of gone) {
-      panel.spec.visibility?.(false); panel.dispose?.(); optionalAnchors.get(panel)?.(); optionalAnchors.delete(panel);
+      optionalAnchors.get(panel)?.(); optionalAnchors.delete(panel);
       byId.delete(panel.spec.id); panels.splice(panels.indexOf(panel), 1);
     }
     const extra = viewCatalogue(optional.map(item => item.contribution));
@@ -316,17 +323,15 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     Object.assign(catalogue.meta, extra.meta);
     modules.splice(0, modules.length, ...port.views.modules());
     for (const { contribution, binding } of optional) {
-      const ctx = moduleViewContext(rt, contribution.owner);
+      const ctx = moduleViewContext(rt, contribution.owner, () => viewPanes.tabId());
       for (const entry of contribution.panels) if (!byId.has(entry.id)) {
         const panel = (binding.panels[entry.id] as (ctx: ModuleViewContext) => PanelController)(ctx);
-        panel.bind?.(port.panels.instance(entry.id));
         panels.push(panel); byId.set(entry.id, panel); optionalAnchors.set(panel, anchorPanel(panel));
       }
     }
     optionalViews = optional; optionalGeneration = generation; withdrawnKey = ""; experimentFocus = "";
-    // One restore from the destination tab, without an intermediate withdrawal save into a possibly newly shown tab. Unknown types
-    // park on withdrawal and known types resume their remembered places, even in a read-only window (only persistence needs a lease).
-    dock.load(restoreDockPreference(port.tabs?.dock(), dock.area(), catalogue, [], viewPanelIds(port.views.snapshot()), !!port.tabs).state, panels.map(specOf));
+    // The view/session owner loads its captured destination once, swaps specs, then releases the old controllers.
+    return () => { for (const panel of gone) panel.dispose?.(); };
   }
   const paint = () => {
     queued = false;
@@ -337,7 +342,6 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     root.classList.toggle("workspace-upgrade-open", pendingMigration);
     upgrade.update(pendingMigration ? { title: "Workspace needs updating", body: "This workspace is open in an older XF Studio window. Reload that window, or choose Use it here above.",
       choices: [] } : null);
-    syncOptional();
     // The shown tab's 3D views each have their pane, and the canvas is in the one holding the picture.
     if (headEntry) viewPanes.sync();
     const focused = rt.shownModules(), focusKey = JSON.stringify(focused);

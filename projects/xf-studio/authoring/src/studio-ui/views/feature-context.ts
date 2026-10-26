@@ -135,12 +135,12 @@ export function featureCommands(binding: FeatureViewBinding, ctx: FeatureViewCon
 }
 
 /** A module view's context over `port.module(owner)`. Refuses an owner the composition registered no service for. */
-export function moduleViewContext(rt: StudioRuntime, owner: string): ModuleViewContext {
+export function moduleViewContext(rt: StudioRuntime, owner: string, tab?: () => string | undefined): ModuleViewContext {
   const facade = rt.port.module(owner);
   if (!facade) throw Error(`The ${owner} view has no registered module service.`);
   return Object.freeze({
     facade,
-    instance: (panel: string) => rt.port.panels.instance(panel),
+    instance: (panel: string) => rt.port.panels.instance(panel, tab?.()),
     targets: () => rt.port.focus.targets(),
     dispatch: async (action: { kind: string }, options?: Parameters<StudioRuntime["report"]>[2]) => {
       let outcome: Awaited<ReturnType<typeof facade.dispatch>>;

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { allCollapsed, allGroups, applyDrop, closePanel, foldAxes, group, lastExpandedDocked, locate, openPanel, panelsIn, parseTree, recoverWindows,
-  isStripStack, keepDockExpanded, parkPanels, revealPanel, setCollapsed, setMaximized, split, splitShares, splitterPair, unparkPanels, type DockNode, type DockTree, type Rect, type SplitNode } from "../src/studio-ui/dock/layout";
+  isStripStack, keepDockExpanded, parkPanels, revealPanel, setCollapsed, setMaximized, setSizes, split, splitShares, splitterPair, unparkPanels, type DockNode, type DockTree, type Rect, type SplitNode } from "../src/studio-ui/dock/layout";
 import { compassGuides, edgeGuides, resolveDrop, type DropGeometry } from "../src/studio-ui/dock/snap";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
 import { PANEL_IDS, STUDIO_CATALOGUE } from "../src/compose/views";
@@ -393,5 +393,54 @@ test("a wholly withdrawn dock reconstructs every split and tab from persisted pl
     const parked = parkPanels(tree, order);
     const saved = parseTree(JSON.parse(JSON.stringify(parked)), [], { root: null, floating: [], closed: [] }, order)!;
     expect(unparkPanels(saved, order, { root: null, floating: [], closed: order }, area)).toEqual(tree);
+  }
+});
+
+test("review M4: withdrawal paths retain both columns and partial-column ancestry through persistence", () => {
+  const left = split("column", [group(["a"], "a", "ga"), group(["b"], "b", "gb")], [.6, .4], "left");
+  const right = split("column", [group(["c"], "c", "gc"), group(["d"], "d", "gd")], [.3, .7], "right");
+  for (const [second, returning] of [[right, ["a", "b", "c", "d"]], [group(["c"], "c", "gc"), ["a", "b"]]] as const) {
+    const original: DockTree = { root: split("row", [left, second], [.35, .65], "outer"), floating: [], closed: [] };
+    const floating: DockTree = { root: null, floating: [{ id: "window", x: 40, y: 50, w: 1000, h: 600, node: original.root! }], closed: [] };
+    for (const source of [original, floating]) for (const order of [returning, [...returning].reverse()]) {
+      const held = parkPanels(source, order), saved = parseTree(JSON.parse(JSON.stringify(held)), returning.length === 2 ? ["c"] : [], source, order)!;
+      expect(saved.parked).toEqual(held.parked);
+      expect(unparkPanels(saved, order, source, area)).toEqual(source);
+    }
+  }
+});
+
+test("review M5: a returning panel takes its share without rewinding the resized survivors", () => {
+  const original: DockTree = { root: split("row", [group(["a"], "a", "ga"), group(["b"], "b", "gb"), group(["c"], "c", "gc")], [.2, .3, .5], "row"), floating: [], closed: [] };
+  const held = setSizes(parkPanels(original, ["a"]), "row", [.8, .2]);
+  const saved = parseTree(JSON.parse(JSON.stringify(held)), ["b", "c"], original, ["a"])!;
+  const restored = unparkPanels(saved, ["a"], original, area).root as SplitNode;
+  expect(restored.children.map(child => child.id)).toEqual(["ga", "gb", "gc"]);
+  expect(restored.sizes).toEqual([.2, .64, .16]);
+  expect(restored.sizes[1]! / restored.sizes[2]!).toBeCloseTo(4, 12);
+});
+
+test("withdrawal paths preserve resizing of a surviving floating composite instead of restoring its old rectangle", () => {
+  const original: DockTree = { root: null, closed: [], floating: [{ id: "window", x: 40, y: 50, w: 1000, h: 600,
+    node: split("row", [group(["a"], "a", "ga"), group(["b"], "b", "gb")], [.42, .58], "row") }] };
+  const held = parkPanels(original, ["a"]); held.floating[0]!.w = 700; held.floating[0]!.x = 123;
+  const restored = unparkPanels(held, ["a"], original, area).floating[0]!;
+  expect(restored.x).toBe(123); expect(restored.w).toBeCloseTo(700 / .58, 9);
+  expect((restored.node as SplitNode).sizes).toEqual([.42, .58]);
+});
+
+test("persisted withdrawal paths are bounded and validated before being used", () => {
+  const original: DockTree = { root: split("row", [group(["a"], "a", "ga"), group(["b"], "b", "gb")], [.4, .6], "row"), closed: [], floating: [] };
+  const held = parkPanels(original, ["a"]), place = held.parked!.a!;
+  if ("closed" in place) throw Error("Expected an open remembered place");
+  for (const change of [
+    () => { place.path![0]!.child = "missing"; },
+    () => { place.path![0]!.siblings[0]!.share = Number.POSITIVE_INFINITY; },
+    () => { place.path = Array.from({ length: 13 }, () => structuredClone(place.path![0]!)); },
+  ]) {
+    const valid = structuredClone(place.path!); change();
+    const saved = parseTree(held, ["b"], original, ["a"])!, remembered = saved.parked!.a!;
+    expect("closed" in remembered ? undefined : remembered.path).toBeUndefined();
+    place.path = valid;
   }
 });

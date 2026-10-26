@@ -539,7 +539,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
     fileDevice: workspaceFiles, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
-    panelInstance: panel => sessionState.inputInstance(panel),
+    panelInstance: (panel, tab) => sessionState.inputInstance(panel, tab),
     tabs: layoutTabsPort(sessionState, layoutTabs, services), starters: starterActions.port(),
     emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
       createLookCapability: collection => core.app.capability({ kind: "preset.edit", collection, command: { kind: "add" } }),
