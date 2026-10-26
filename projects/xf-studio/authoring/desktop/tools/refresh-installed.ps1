@@ -82,7 +82,7 @@ function Invoke-Refresh {
   $bun = (Get-Command bun -ErrorAction Stop).Source
 
   # Already built for this commit (and the setup is still there)?
-  $records = Read-Log
+  $records = @(Read-Log)
   $last = if ($records.Count) { $records[-1] } else { $null }
   if ($last -and $last.Commit -eq $head -and $last.Outcome -ne "failed" -and (Test-Path -LiteralPath $setup) -and (Test-Path -LiteralPath $update) -and
       ((Get-Content -LiteralPath $update -Raw | ConvertFrom-Json).hash -eq $last.Hash)) {
