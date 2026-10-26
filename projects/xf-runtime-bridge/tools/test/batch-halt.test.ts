@@ -436,3 +436,33 @@ describe("refusals that say to wait are waited through (DI2's npc_not_spawned)",
     }
   });
 });
+
+describe("CRS re-picks a fresh walker when the one it chose has moved on", () => {
+  test("npc_not_found: up to three fresh picks of different eligible walkers, then the swap", async () => {
+    const clock = new FakeClock();
+    const dir = tempDir("xfb-batch-");
+    const walkers = [
+      { id: "w-protected", crowd: true, dead: false, protected: true, distance: 12 },
+      { id: "w1", crowd: true, dead: false, protected: false, distance: 14 },
+      { id: "w-busy", crowd: true, dead: false, protected: false, busy: "workspot", distance: 15 },
+      { id: "w2", crowd: true, dead: false, protected: false, distance: 18 },
+      { id: "w-near", crowd: true, dead: false, protected: false, distance: 3 },
+    ];
+    const tried: unknown[] = [];
+    const api = fakeApi(clock, {
+      "npc.list": () => ({ ok: true, result: { npcs: walkers } }),
+      "npc.substitute": (input) => {
+        tried.push(input.id ?? "look_at");
+        if (input.id !== "w2") return { ok: false, code: "npc_not_found", message: "That NPC isn't near V any more. Run npc_list again." };
+        api.push("npc.substituted", { who: "a5" });
+        return { ok: true, result: { who: "a5" } };
+      },
+    });
+    const smoke = JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "borg4-smoke.json"), "utf8"));
+    const result = await go(smoke, api, fakeHost(), clock, dir, { rows: ["CRS"], fixtures: { staged_mod: stagedMod(dir) } });
+    const row = result.rows.find((r) => r.id === "CRS")!;
+    expect(row.verdict).toBe("PASS");
+    // look_at, look_at after a turn, then the first and second eligible walkers (protected, busy and too-near ones skipped).
+    expect(tried).toEqual(["look_at", "look_at", "w1", "w2"]);
+  });
+});

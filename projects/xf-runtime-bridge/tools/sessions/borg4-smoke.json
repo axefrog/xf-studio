@@ -1147,6 +1147,177 @@
                 },
                 "bind": "CRS_swap"
               }
+            ],
+            [
+              {
+                "do": "run",
+                "command": "npc.list",
+                "input": {
+                  "radius_m": 30
+                },
+                "bind": "CRS_list0"
+              },
+              {
+                "do": "pick",
+                "from": "$CRS_list0.npcs",
+                "index": 0,
+                "bind": "CRS_pick0",
+                "where": {
+                  "all": [
+                    {
+                      "path": "crowd",
+                      "equals": true
+                    },
+                    {
+                      "path": "dead",
+                      "equals": false
+                    },
+                    {
+                      "path": "protected",
+                      "equals": false
+                    },
+                    {
+                      "any": [
+                        {
+                          "path": "busy",
+                          "exists": false
+                        },
+                        {
+                          "path": "busy",
+                          "equals": ""
+                        }
+                      ]
+                    },
+                    {
+                      "path": "distance",
+                      "min": 8,
+                      "max": 30
+                    }
+                  ]
+                }
+              },
+              {
+                "do": "run",
+                "command": "npc.substitute",
+                "input": {
+                  "id": "$CRS_pick0.id"
+                },
+                "bind": "CRS_swap"
+              }
+            ],
+            [
+              {
+                "do": "run",
+                "command": "npc.list",
+                "input": {
+                  "radius_m": 30
+                },
+                "bind": "CRS_list1"
+              },
+              {
+                "do": "pick",
+                "from": "$CRS_list1.npcs",
+                "index": 1,
+                "bind": "CRS_pick1",
+                "where": {
+                  "all": [
+                    {
+                      "path": "crowd",
+                      "equals": true
+                    },
+                    {
+                      "path": "dead",
+                      "equals": false
+                    },
+                    {
+                      "path": "protected",
+                      "equals": false
+                    },
+                    {
+                      "any": [
+                        {
+                          "path": "busy",
+                          "exists": false
+                        },
+                        {
+                          "path": "busy",
+                          "equals": ""
+                        }
+                      ]
+                    },
+                    {
+                      "path": "distance",
+                      "min": 8,
+                      "max": 30
+                    }
+                  ]
+                }
+              },
+              {
+                "do": "run",
+                "command": "npc.substitute",
+                "input": {
+                  "id": "$CRS_pick1.id"
+                },
+                "bind": "CRS_swap"
+              }
+            ],
+            [
+              {
+                "do": "run",
+                "command": "npc.list",
+                "input": {
+                  "radius_m": 30
+                },
+                "bind": "CRS_list2"
+              },
+              {
+                "do": "pick",
+                "from": "$CRS_list2.npcs",
+                "index": 2,
+                "bind": "CRS_pick2",
+                "where": {
+                  "all": [
+                    {
+                      "path": "crowd",
+                      "equals": true
+                    },
+                    {
+                      "path": "dead",
+                      "equals": false
+                    },
+                    {
+                      "path": "protected",
+                      "equals": false
+                    },
+                    {
+                      "any": [
+                        {
+                          "path": "busy",
+                          "exists": false
+                        },
+                        {
+                          "path": "busy",
+                          "equals": ""
+                        }
+                      ]
+                    },
+                    {
+                      "path": "distance",
+                      "min": 8,
+                      "max": 30
+                    }
+                  ]
+                }
+              },
+              {
+                "do": "run",
+                "command": "npc.substitute",
+                "input": {
+                  "id": "$CRS_pick2.id"
+                },
+                "bind": "CRS_swap"
+              }
             ]
           ],
           "outcomes": [

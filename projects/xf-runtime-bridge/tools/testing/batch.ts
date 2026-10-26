@@ -106,6 +106,7 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   "config.read": { required: [], optional: [], help: "the staged config.ini's values" },
   "config.restore": { required: [], optional: [], help: "put config.ini back as it was before the run" },
   "actors.release_all": { required: [], optional: [], help: "release every actor the bridge directs (npc.status, then npc.release despawn)" },
+  pick: { required: ["from"], optional: ["where", "index"], help: "an element of a list (a bound result's array) that matches where, the index-th such (default 0); value the element" },
   "recorder.span": { required: ["run"], optional: [], help: "a recorder run's span from the v channel: V's distance travelled over every catch-up page" },
   "overlay.restore": { required: [], optional: [], help: "put the overlay's live look back as this game session started it (the first overlay.set's undo)" },
 };
@@ -625,6 +626,15 @@ export class SessionExecutor implements Executor {
           const restored = this.c.config?.restore() ?? { restored: false, reason: "no staged config" };
           const fine = restored.restored || restored.reason === "unchanged by this run";
           return { ok: fine, ...(fine ? {} : { code: "not_restored", message: restored.reason }), value: restored };
+        }
+        case "pick": {
+          // The list came resolved; where is a plan Match against each element (its path relative to the element).
+          if (!Array.isArray(action.from)) return { ok: false, code: "not_a_list", message: "pick's from is not a list." };
+          const where = action.where as Match | undefined;
+          const eligible = action.from.filter((element) => !where || matches(where, { ok: true, value: element }, this.bindings));
+          const index = Number(action.index ?? 0);
+          if (index >= eligible.length) return { ok: false, code: "none_eligible", message: `Only ${eligible.length} of ${action.from.length} match${index ? ` (wanted the ${index + 1}th)` : ""}.`, value: { eligible: eligible.length, of: action.from.length } };
+          return { ok: true, value: eligible[index] };
         }
         case "recorder.span": {
           const run = Number(action.run);

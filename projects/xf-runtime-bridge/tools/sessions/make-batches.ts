@@ -475,7 +475,19 @@ function smokeScript(): Json {
     steps: [inPlay(row), { label: `${row}-list`, do: "run", command: "npc.list", input: { radius_m: 30 }, bind: key(row, "crowd") },
       { label: `${row}-cursor`, do: "cursor", bind: key(row, "cursor") },
       { label: `${row}-swap`, do: "run", command: "npc.substitute", input: { look_at: true }, bind: key(row, "swap"),
-        alternatives: [[{ do: "run", command: "player.look", input: { yaw: 90, relative: true, when: quiet } }, { do: "wait", ms: 1500 }, { do: "run", command: "npc.substitute", input: { look_at: true }, bind: key(row, "swap") }]],
+        alternatives: [
+          [{ do: "run", command: "player.look", input: { yaw: 90, relative: true, when: quiet } }, { do: "wait", ms: 1500 }, { do: "run", command: "npc.substitute", input: { look_at: true }, bind: key(row, "swap") }],
+          // Walkers move on (npc_not_found: isn't near V any more): up to three fresh picks from a new list, each a
+          // different eligible walker (in the crowd, alive, not protected or busy, 8 to 30 m away).
+          ...[0, 1, 2].map((n) => [
+            { do: "run", command: "npc.list", input: { radius_m: 30 }, bind: key(row, `list${n}`) },
+            { do: "pick", from: ref(row, `list${n}`, "npcs"), index: n, bind: key(row, `pick${n}`), where: { all: [
+              { path: "crowd", equals: true }, { path: "dead", equals: false }, { path: "protected", equals: false },
+              { any: [{ path: "busy", exists: false }, { path: "busy", equals: "" }] }, { path: "distance", min: 8, max: 30 },
+            ] } },
+            { do: "run", command: "npc.substitute", input: { id: ref(row, `pick${n}`, "id") }, bind: key(row, "swap") },
+          ]),
+        ],
         outcomes: [{ name: "nobody_suitable", match: { code: ["no_target", "not_found", "too_far", "npc_busy", "npc_protected"] }, result: "fail" }] },
       { label: `${row}-swapped`, do: "await", cursor: ref(row, "cursor"), kind: "npc.substituted", subject: ref(row, "swap", "who"), timeout_s: 20, bind: key(row, "swapped"), on_fail: "fail_row" },
       { label: `${row}-release`, do: "run", command: "npc.release", input: { who: ref(row, "swap", "who"), how: "despawn", restore: true }, bind: key(row, "released") }],
