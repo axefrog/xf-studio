@@ -10,7 +10,7 @@
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 14 | 9 | 16 | 2 | 1 | 127 | 0 | 0 |
+| items | 14 | 9 | 16 | 2 | 0 | 128 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
@@ -48,7 +48,7 @@ Built, merged or released capabilities with no game evidence (none or offline): 
 | [`tooling.preflight`](#tooling.preflight) Session preflight | merged | offline | 2026-10-26 | 1 d |
 | [`tooling.selftest`](#tooling.selftest) Self-test host and unit checks | merged | offline | 2026-10-26 (0.2.0) | 1 d |
 | [`world.doors`](#world.doors) Doors | merged | offline | 2026-10-26 (0.8.12) | 1 d |
-| [`recorder.status`](#recorder.status) Read-only recorder status | built | none | 2026-10-27 | 0 d |
+| [`recorder.status`](#recorder.status) Read-only recorder status | merged | none | 2026-10-27 | 0 d |
 
 ### Open known issues
 
@@ -201,7 +201,7 @@ Per consumer, blocking first.
 |---|---|---|---|---|---|---|
 | needs | want 14 | M6 | [`link.observers`](#link.observers) | merged | partial | The headless service as a read-only observer (readOnly: true). The runner, the Story Engine and Holotable each want a slot, so please raise the default from 3 to 6 after measuring. |
 | needs | proposal 5.1 | M6 | [`recorder.catchup`](#recorder.catchup) | merged | partial | The live feed reads catch-up with detail: true and its cursor, at most once a second, backing off when there is no more. |
-| needs | milestone 6 | M6 | [`recorder.status`](#recorder.status) | built | none | Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run. |
+| needs | milestone 6 | M6 | [`recorder.status`](#recorder.status) | merged | none | Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run. |
 | needs | want 10 | M7 | [`surfaces.canvas`](#surfaces.canvas) | requested | none | Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building. |
 | needs | want 11 | M7 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) | requested | none | Show and hide while playing, without opening CET (CET blocks input). |
 | needs | want 12 | M7 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) | requested | none | Lets the overlay work with no other XF program running (bridge proposal B). |
@@ -2390,7 +2390,7 @@ Continuous channels, taps, session events and catching up on what happened betwe
 | [`recorder.catchup`](#recorder.catchup) Catch-up | service | merged | partial | works | P2 |
 | [`recorder.game-events-probe`](#recorder.game-events-probe) Game-events probe | research | merged | partial | caveats | P3 |
 | [`recorder.world-event-feed`](#recorder.world-event-feed) World event feed | sense | proposed | none | unknown | P2 |
-| [`recorder.status`](#recorder.status) Read-only recorder status | sense | built | none | unknown | P1 |
+| [`recorder.status`](#recorder.status) Read-only recorder status | sense | merged | none | unknown | P1 |
 | [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | requested | none | unknown | P3 |
 | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | service | requested | none | unknown | P3 |
 | [`recorder.game-time`](#recorder.game-time) Game time on recorder samples | sense | requested | none | unknown | P3 |
@@ -2544,12 +2544,11 @@ A subscribable feed of what happens in the world: V's district and interior chan
 
 ### Read-only recorder status
 
-`recorder.status` · sense · stage **built** · evidence **none** · health **unknown** · P1
+`recorder.status` · sense · stage **merged** · evidence **none** · health **unknown** · P1
 
 A read-only command answered on the bridge thread (no game-thread call, no lease, no ack) that reports whether the recorder is active and its current run: { active, run, session, world, channels, start, latest, stopReason }, so an observer can find the run to read with game.catchup.
 
 - **Why P1:** The maintainer: Holotable must work in realtime; its live view only waits on this. Small, bridge-thread only.
-- **Version:** branch `claude/recorder-status`
 - **Commands:** `recorder.status`
 - **Code:** `native/src/core/Recording.cpp`, `native/src/core/Recording.hpp`, `tools/api/catalogueTesting.ts`
 - **Demand (holotable, needs, milestone 6, M6):** Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run.

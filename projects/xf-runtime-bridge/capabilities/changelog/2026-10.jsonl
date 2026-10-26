@@ -60,3 +60,5 @@
 {"at":"2026-10-27T08:02:16+10:00","by":"runtime-bridge","kind":"added","items":["recorder.status"],"summary":"Promoted from holotable's ask: Read-only recorder status (stage built).","digests":{"recorder.status":"2547c468a45514e0"}}
 {"at":"2026-10-27T08:02:17+10:00","by":"runtime-bridge","kind":"detail","items":["recorder.status"],"summary":"Read-only recorder status: surface.commands changed.","digests":{"recorder.status":"0e4e606f3ecf0f30"}}
 {"at":"2026-10-27T08:02:17+10:00","by":"runtime-bridge","kind":"detail","items":["recorder.status"],"summary":"Read-only recorder status: surface.code changed.","digests":{"recorder.status":"d48a93d4637c49b8"}}
+{"at":"2026-10-27T08:24:16+10:00","by":"runtime-bridge","kind":"stage","items":["recorder.status"],"from":"built","to":"merged","summary":"Landed on main (80f380a4); RS1 confirms it in the next session.","refs":["80f380a4"],"digests":{"recorder.status":"c8b9b050875fdd67"}}
+{"at":"2026-10-27T08:24:17+10:00","by":"runtime-bridge","kind":"detail","items":["recorder.status"],"summary":"Read-only recorder status: branch changed.","digests":{"recorder.status":"7c3c19c99b4cb6de"}}

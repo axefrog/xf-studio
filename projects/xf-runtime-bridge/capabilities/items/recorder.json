@@ -316,12 +316,11 @@
     "summary": "A read-only command answered on the bridge thread (no game-thread call, no lease, no ack) that reports whether the recorder is active and its current run: { active, run, session, world, channels, start, latest, stopReason }, so an observer can find the run to read with game.catchup.",
     "area": "recorder",
     "kind": "sense",
-    "stage": "built",
+    "stage": "merged",
     "evidence": "none",
     "health": "unknown",
     "priority": "P1",
     "priority_reason": "The maintainer: Holotable must work in realtime; its live view only waits on this. Small, bridge-thread only.",
-    "branch": "claude/recorder-status",
     "demand": [
       {
         "consumer": "holotable",
