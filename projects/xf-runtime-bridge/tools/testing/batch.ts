@@ -104,6 +104,8 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   ask: { required: ["text"], optional: ["choices", "seconds"], help: "a question in the game, answered with the answer keys or the CET button; value {label, choice}" },
   set: { required: ["value"], optional: [], help: "keep a value (with bind)" },
   "capture.compare": { required: ["a", "b"], optional: ["rect", "min_changed", "max_changed"], help: "how much two captures differ in an area (diff of their full files)" },
+  "capture.surface": { required: ["plate", "text"], optional: ["capture", "rect", "name", "min_plate", "min_text", "tolerance"],
+    help: "is a themed surface in frame: the share of its plate and text colours in an area, in a capture, every frame of a burst, or a fresh probe capture (name); fails surface_missing" },
   "host.running": { required: [], optional: [], help: "is the game running; value {running, pid}" },
   "host.launch": { required: [], optional: [], help: "start the game through MO2 with the fixture's profile and arguments" },
   "host.close": { required: [], optional: [], help: "close the game's window (CloseMainWindow) and wait for the process to end" },
@@ -120,6 +122,29 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   "recorder.span": { required: ["run"], optional: [], help: "a recorder run's span from the v channel: V's distance travelled over every catch-up page" },
   "overlay.restore": { required: [], optional: [], help: "put the overlay's live look back as this game session started it (the first overlay.set's undo)" },
 };
+
+type Rgb = [number, number, number];
+
+/**
+ * How much of an area is a themed surface's plate colour and its text colour (each channel within tolerance), and
+ * whether that makes the surface present. A UI plate is a large flat area of one colour with text in another; a game
+ * scene behind an empty area is neither (the review packet's empty burst frames). The defaults (within 7 per channel,
+ * at least 15 % of the area) separate every scripted-session-1 frame with its surface (XF box 19-36 %, CET window
+ * 29-78 %) from every frame without it (at most 12 %); the CET line's crop is mostly scene, so its rows pass their own
+ * min_plate (dark 0.18, light 0.03). Text is measured and reported, and required only when min_text says so.
+ */
+export function surfaceStats(pixels: { width: number; height: number; rgb: Uint8Array }, o: { plate: Rgb; text: Rgb; tolerance?: number; minPlate?: number; minText?: number }) {
+  const tol = o.tolerance ?? 7, textTol = tol * 2;
+  let plate = 0, text = 0;
+  const n = pixels.width * pixels.height;
+  for (let i = 0; i < n; i++) {
+    const r = pixels.rgb[i * 3], g = pixels.rgb[i * 3 + 1], b = pixels.rgb[i * 3 + 2];
+    if (Math.abs(r - o.plate[0]) <= tol && Math.abs(g - o.plate[1]) <= tol && Math.abs(b - o.plate[2]) <= tol) plate++;
+    else if (Math.abs(r - o.text[0]) <= textTol && Math.abs(g - o.text[1]) <= textTol && Math.abs(b - o.text[2]) <= textTol) text++;
+  }
+  const plate_fraction = n ? plate / n : 0, text_fraction = n ? text / n : 0;
+  return { plate_fraction: Math.round(plate_fraction * 10000) / 10000, text_fraction: Math.round(text_fraction * 100000) / 100000, present: plate_fraction >= (o.minPlate ?? 0.15) && text_fraction >= (o.minText ?? 0) };
+}
 
 /** The largest game window the bursts are planned for (3840 x 1600, the maintainer's ultrawide). */
 const NOMINAL_WINDOW = { width: 3840, height: 1600 };
@@ -598,6 +623,8 @@ export class SessionExecutor implements Executor {
           return await this.ask(action, context);
         case "capture.compare":
           return this.compare(action);
+        case "capture.surface":
+          return await this.surface(action, context);
         case "host.running": {
           const pid = await this.gamePid();
           // MO2's own error dialog while nothing runs: the launch was blocked (an antivirus), so waiting is pointless.
@@ -782,6 +809,43 @@ export class SessionExecutor implements Executor {
       return { ok: false, code: "wait_ended_early", message: "The question went before anyone answered (withdrawn, or the wait refused).", value: { message_id: id, missing: window.cursor.missing } };
     }
     return { ok: true, value: { message_id: id, label: answer.data?.label, choice: answer.data?.choice, via: answer.data?.via } };
+  }
+
+  /**
+   * Whether a themed surface (the XF box, the CET window or line: each a plate in the theme's WindowBg with text in its
+   * Text colour) is in frame: in a capture, in every frame of a burst, or in a fresh small probe capture (name, rect).
+   * A frame shows it when at least min_plate of the area is the plate colour and min_text the text colour.
+   */
+  private async surface(action: Action, context: ExecContext): Promise<Outcome> {
+    const rect = action.rect as { x: number; y: number; width: number; height: number } | undefined;
+    let subject = action.capture as unknown;
+    let cropped = false;
+    if (subject === undefined) {
+      if (typeof action.name !== "string") return { ok: false, code: "bad_input", message: "capture.surface needs a capture or a probe name." };
+      const probe = await this.runCommand("capture.screenshot", { name: action.name, clear_overlay: false, ...(rect ? { rect } : {}) }, undefined, context);
+      if (!probe.ok) return probe;
+      subject = probe.value;
+      cropped = true;
+    }
+    type Shot = { full?: { path?: string }; crop?: { region?: string } };
+    const burst = subject as { frames?: { record?: Shot }[]; crop?: { region?: string } };
+    const shot = subject as Shot;
+    const files = Array.isArray(burst?.frames) ? burst.frames.map((f) => f.record?.full?.path) : [typeof subject === "string" ? subject : shot?.full?.path];
+    // A burst or capture taken with a rect (or a named region) is already the area: the rect applies to full windows only.
+    const region = Array.isArray(burst?.frames) ? burst.crop?.region : shot?.crop?.region;
+    if (region && region !== "full") cropped = true;
+    if (!files.length || files.some((f) => typeof f !== "string" || !existsSync(f))) return { ok: false, code: "no_capture", message: "The capture's files are needed." };
+    const options = { plate: action.plate as Rgb, text: action.text as Rgb, tolerance: Number(action.tolerance ?? 7), minPlate: Number(action.min_plate ?? 0.15), minText: Number(action.min_text ?? 0) };
+    const per = files.map((file) => {
+      let pixels = decodePng(readFileSync(file as string));
+      if (rect && !cropped) pixels = crop(pixels, { x: Math.max(0, rect.x), y: Math.max(0, rect.y), width: Math.min(rect.width, pixels.width - Math.max(0, rect.x)), height: Math.min(rect.height, pixels.height - Math.max(0, rect.y)) });
+      return surfaceStats(pixels, options);
+    });
+    const absent = per.flatMap((p, i) => (p.present ? [] : [i + 1]));
+    const value = { present: !absent.length, frames: per.length, absent, plate_fraction: Math.min(...per.map((p) => p.plate_fraction)), text_fraction: Math.min(...per.map((p) => p.text_fraction)), per };
+    if (!absent.length) return { ok: true, value };
+    const worst = per[absent[0] - 1];
+    return { ok: false, code: "surface_missing", message: `The surface isn't in frame${per.length > 1 ? ` in frame${absent.length > 1 ? "s" : ""} ${absent.join(", ")} of ${per.length}` : ""} (plate ${(worst.plate_fraction * 100).toFixed(1)} % of the area, text ${(worst.text_fraction * 100).toFixed(2)} %).`, value };
   }
 
   /** How much two captures differ (mean and changed share) inside an area of their full-resolution files. */

@@ -76,3 +76,50 @@ describe("a row judged by the UI review is never PASS on a capture's existence",
     expect(verdictOf(close, [{ label: "x", result: "pass" } as never], new Set(), "review").verdict).toBe("CAPTURED");
   });
 });
+
+describe("the surface is in frame (capture.surface)", () => {
+  const DARK = { plate: [27, 30, 35] as [number, number, number], text: [236, 239, 242] as [number, number, number] };
+  // A 40 x 20 picture: the plate over its left half with a line of text, or a noisy scene.
+  const picture = (withPlate: boolean, seed = 1) => {
+    const rgb = new Uint8Array(40 * 20 * 3);
+    let x = seed;
+    for (let i = 0; i < 40 * 20; i++) {
+      x = (x * 1103515245 + 12345) & 0x7fffffff;
+      const px = i % 40, py = Math.floor(i / 40);
+      const colour = withPlate && px < 20 ? (py === 10 && px > 2 && px < 17 ? DARK.text : DARK.plate) : [x % 200, (x >> 8) % 200, (x >> 16) % 200];
+      rgb.set(colour, i * 3);
+    }
+    return { width: 40, height: 20, rgb };
+  };
+  test("surfaceStats: a plate is present, a scene isn't", async () => {
+    const { surfaceStats } = await import("../testing/batch.ts");
+    expect(surfaceStats(picture(true), DARK).present).toBe(true);
+    expect(surfaceStats(picture(false), DARK).present).toBe(false);
+  });
+
+  test("a burst whose first frames show no surface fails with the frames it lacks; a probe waits for the surface", async () => {
+    const { writeFileSync, mkdirSync } = await import("node:fs");
+    const { encodePng } = await import("../capture/image.ts");
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
+    const dir = tempDir("xfb-str-");
+    mkdirSync(join(dir, "pics"), { recursive: true });
+    const file = (name: string, plate: boolean) => { const path = join(dir, "pics", `${name}.png`); writeFileSync(path, encodePng(picture(plate, name.length))); return path; };
+    const clock = new FakeClock();
+    let probes = 0;
+    const api = fakeApi(clock, {
+      "capture.burst": () => ({ ok: true, result: { crop: { region: "rect" }, frames: [false, false, true, true].map((p, i) => ({ index: i, record: { full: { path: file(`f${i}`, p) } } })), contact_sheet: { path: file("sheet", true) }, manifest: file("m", true) } }),
+      // The surface shows from the third probe on.
+      "capture.screenshot": () => ({ ok: true, result: { crop: { region: "rect" }, full: { path: file(`probe${++probes}`, probes >= 3) }, view: { path: file("v", true) } } }),
+    });
+    const rows = [{ id: "r", title: "r", steps: [
+      { label: "r-visible", do: "capture.surface", name: "r-probe", rect: { x: 0, y: 0, width: 40, height: 20 }, ...DARK, until: { ok: true }, interval_ms: 250, deadline_ms: 3000, on_fail: "fail_row" },
+      { label: "r-burst", do: "burst", name: "pulse", frames: 4, interval_ms: 200, clear_overlay: false, rect: { x: 0, y: 0, width: 40, height: 20 }, bind: "b" },
+      { label: "r-in-frame", do: "capture.surface", capture: "$b", ...DARK, on_fail: "fail_row" },
+    ] }];
+    const row = (await go(script(rows as never), api, fakeHost(), clock, dir)).rows[0];
+    expect(probes).toBe(3);
+    expect(row.verdict).toBe("FAIL");
+    expect(row.reason).toContain("in frames 1, 2 of 4");
+  });
+});
