@@ -579,6 +579,11 @@ function placeOf(tree: DockTree, panel: PanelId, leaving: ReadonlySet<PanelId>):
     ...(floatingWindow && floatingWindow.node.kind === "group" ? { window: { x: floatingWindow.x, y: floatingWindow.y, w: floatingWindow.w, h: floatingWindow.h }, windowId: floatingWindow.id, windowIndex: tree.floating.indexOf(floatingWindow) } : {}),
     ...(anchor ? { anchor } : {}) };
 }
+/** Read a panel's current or remembered closed place without closing it or cloning its whole tree. */
+export function panelPlace(tree: DockTree, panel: PanelId): Exclude<ParkedPlace, { closed: true }> | undefined {
+  const place = placeOf(tree, panel, new Set([panel]));
+  return place && !("closed" in place) ? place : tree.lastPlace?.[panel];
+}
 /** The nearest surviving neighbour of a node that leaves: a panel beside it in the closest split that keeps something, and its side. */
 function anchorFor(root: DockNode | null, id: string, leaving: ReadonlySet<PanelId>): { panel: PanelId; side: Side; share: number; splitId: string } | undefined {
   const survivor = (node: DockNode, last: boolean) => {

@@ -36,7 +36,7 @@ describe("upgrade a workspace written by phase 1 (3d0dabfc)", () => {
     const tab = session.tabList()[0]!;
     expect(tab.id).toBe(PHASE_ONE_TAB);
     expect(tab.origin).toBe("eye-makeup/default");
-    expect(session.dock()).toEqual(STUDIO_INITIAL_LAYOUT.dock);
+    expect(session.legacyDock()).toEqual(STUDIO_INITIAL_LAYOUT.dock);
     expect(dockPanels(tab.dock).every(id => tab.panels.some(panel => panel.id === id))).toBe(true);
     const { focused: _legacy, ...views } = workspace.profiles!.sessions[PHASE_ONE_PROFILE]!.views;
     expect(session.session().views).toEqual(views);
@@ -47,7 +47,7 @@ describe("upgrade a workspace written by phase 1 (3d0dabfc)", () => {
   test("a custom live preference is consumed before preference capture or a workspace write", () => {
     const before = phaseOneWorkspace({ layout: custom, sessionDock: null });
     const { workspace, session } = open(before);
-    expect(session.dock()).toEqual(custom);
+    expect(session.legacyDock()).toEqual(custom);
     expect(session.tabList()[0]!.origin).toBeUndefined();
     const preferences = new UIPreferenceActions(workspace.uiPreferences);
     const composer = new WorkspaceComposer(workspace, { editor: () => workspace, uvView: () => workspace.uvView,
@@ -68,7 +68,7 @@ describe("upgrade a workspace written by phase 1 (3d0dabfc)", () => {
   test("an existing phase-1 session arrangement is newer than frozen migration preferences", () => {
     const before = phaseOneWorkspace({ layout: STUDIO_INITIAL_LAYOUT.dock, sessionDock: custom });
     const { session } = open(before);
-    expect(session.dock()).toEqual(custom);
+    expect(session.legacyDock()).toEqual(custom);
     expect(session.tabList()[0]!.origin).toBeUndefined();
     expect(session.tabList()[0]).toEqual(before.profiles!.sessions[PHASE_ONE_PROFILE]!.tabs[0]);
   });
@@ -79,7 +79,7 @@ describe("upgrade a workspace written by phase 1 (3d0dabfc)", () => {
       compact: { root: null, floating: [], closed: ["save-explorer.explorer"] },
     } };
     const { session } = open(phaseOneWorkspace({ layout: empty, explorer: true }));
-    expect(session.dock()).toEqual(empty);
+    expect(session.legacyDock()).toEqual(empty);
     expect(session.tabList()[0]!.origin).toBeUndefined();
   });
 
@@ -87,9 +87,9 @@ describe("upgrade a workspace written by phase 1 (3d0dabfc)", () => {
     const { session } = open(phaseOneWorkspace({ explorer: true, instance }));
     const tab = session.tabList()[0]!;
     expect(tab.origin).toBe("eye-makeup/default");
-    expect(dockPanels(session.dock())).toContain("head");
-    expect(dockPanels(session.dock())).toContain("layers");
-    expect(dockPanels(session.dock())).toContain("save-explorer.explorer");
+    expect(dockPanels(session.legacyDock())).toContain("head");
+    expect(dockPanels(session.legacyDock())).toContain("layers");
+    expect(dockPanels(session.legacyDock())).toContain("save-explorer.explorer");
     expect(tab.panels.filter(panel => panel.type === "save-explorer.explorer")).toHaveLength(1);
     if (instance) expect(tab.panels.find(panel => panel.type === "save-explorer.explorer"))
       .toEqual({ id: "save-explorer.explorer--oldsave1", type: "save-explorer.explorer", state: { selected: "remembered" } });
@@ -97,13 +97,13 @@ describe("upgrade a workspace written by phase 1 (3d0dabfc)", () => {
 
   test("a custom arrangement with an enabled module keeps its groups and closed panels", () => {
     const { session } = open(phaseOneWorkspace({ layout: custom, explorer: true }));
-    const state = session.dock()!.state as unknown as { wide: { root: { id: string; active: string }; closed: string[] }; compact: { root: { id: string; active: string } } };
+    const state = session.legacyDock()!.state as unknown as { wide: { root: { id: string; active: string }; closed: string[] }; compact: { root: { id: string; active: string } } };
     expect(state.wide.root.id).toBe("g-custom");
     expect(state.wide.root.active).toBe("layers");
     expect(state.wide.closed).toContain("uv");
     expect(state.compact.root.id).toBe("g-small");
     expect(state.compact.root.active).toBe("uv");
-    expect(dockPanels(session.dock())).toContain("save-explorer.explorer");
+    expect(dockPanels(session.legacyDock())).toContain("save-explorer.explorer");
   });
 
   test("a disabled module's remembered places are retained without reopening it", () => {
@@ -111,7 +111,7 @@ describe("upgrade a workspace written by phase 1 (3d0dabfc)", () => {
     const state = withParked.state as unknown as { wide: { parked: Record<string, unknown> } };
     state.wide.parked["save-explorer.explorer"] = { group: ["layers", "save-explorer.explorer"], index: 1, active: false };
     const { session } = open(phaseOneWorkspace({ layout: withParked, explorer: false }));
-    expect(session.dock()).toEqual(withParked);
+    expect(session.legacyDock()).toEqual(withParked);
   });
 
   test("a stored phase-2 empty tab cannot be distinguished from the buggy upgrade: leave it alone", () => {
@@ -151,7 +151,7 @@ for (const verification of [false, true]) for (const phase of ["unsupported", "d
     expect(opened.state.tabList()).toHaveLength(1);
     if (kind === "migrated") {
       expect(opened.state.tabList()[0]!.id).toBe(PHASE_ONE_TAB);
-      expect(opened.state.dock()).toEqual(custom);
+      expect(opened.state.legacyDock()).toEqual(custom);
     } else {
       expect(opened.state.tabList()[0]!.origin).toBe("eye-makeup/default");
       expect(opened.state.tabList()[0]!.panels.some(panel => panel.type === "layers")).toBe(true);

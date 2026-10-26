@@ -54,7 +54,7 @@ import { FIRST_TAB_NAME, rewriteDock, viewOfPanel } from "./profiles-migration-d
 import { CLOSED_TAB_LIMIT, PROFILE_SESSION_SCHEMA, panelBindingOf, type PanelBinding, type ClosedTab, type LayoutTab, type PanelInstance, type ProfileSessionData, type SessionScene, type SessionView,
   type TabId, WORKSPACE_PROFILES_SCHEMA, type WorkspaceProfiles } from "./profile-session";
 import { addPanelDock, changePanelDock, dockWith, openIn, panelDock, removePanelsDock, replayPanelsDock } from "./panel-dock";
-import { activate, allGroups, closePanel, type ParkedPlace } from "../../platform/core/dock-layout";
+import { activate, allGroups, panelPlace, type DockState, type ParkedPlace } from "../../platform/core/dock-layout";
 
 /** What a scene shows. */
 export type SceneTarget = { readonly subject?: SubjectRef; readonly look?: LookRef; readonly gen: number };
@@ -708,7 +708,17 @@ export class ProfileSessions {
         closedIndex: { wide: dock.wide.closed.indexOf(instance), compact: dock.compact.closed.indexOf(instance) },
         parked: Object.fromEntries((["wide", "compact"] as const).flatMap(size => dock[size].parked?.[instance] ? [[size, dock[size].parked[instance]]] : [])),
         places: Object.fromEntries((["wide", "compact"] as const).flatMap(size => {
-          const place = closePanel(dock[size], instance).lastPlace?.[instance]; return place ? [[size, place]] : [];
+          const place = panelPlace(dock[size], instance);
+          if (!place) return [];
+          // A later park must not erase the ordering reference of an earlier Add's Redo snapshot.
+          const group = [...place.group];
+          for (const [id, peer] of Object.entries(dock[size].closed.includes(instance) ? {} : dock[size].lastPlace ?? {})) {
+            if (peer.groupId !== place.groupId || (!place.groupId && !peer.group.includes(instance)) || group.includes(id)) continue;
+            const at = peer.group.indexOf(id), after = peer.group.slice(at + 1).find(id => group.includes(id));
+            const before = peer.group.slice(0, at).reverse().find(id => group.includes(id));
+            group.splice(after ? group.indexOf(after) : before ? group.indexOf(before) + 1 : group.length, 0, id);
+          }
+          return [[size, { ...place, group, index: group.indexOf(instance) }]];
         })) } satisfies PanelMembership);
     }
     if (key.startsWith(VIEW_PLACEMENT)) {
@@ -791,7 +801,22 @@ export class ProfileSessions {
                 open: wanted.open, closed: wanted.closed, closedIndex: wanted.closedIndex, parked: wanted.parked, places: wanted.places,
                 latest: this.latestPlaces.get(identity)?.get(field.instance) }); }
           }
-          states.set(identity, { ...content, panels, dock: members.length ? replayPanelsDock(dock, members) : dock });
+          if (members.length) dock = replayPanelsDock(dock, members);
+          // Absent members can shift every window index; restore the order of the latest external arrangement as a set.
+          const latest = this.latestPlaces.get(identity);
+          if (dock && latest) {
+            const state = panelDock(dock);
+            for (const size of ["wide", "compact"] as const) {
+              const order = new Map([...latest.values()].flatMap(places => {
+                const place = places[size];
+                return place && !("closed" in place) && place.windowId !== undefined && place.windowIndex !== undefined
+                  ? [[place.windowId, place.windowIndex] as const] : [];
+              }));
+              state[size].floating.sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
+            }
+            dock = dockWith(dock, state);
+          }
+          states.set(identity, { ...content, panels, dock });
         }
         for (const { key, identity, instance, binding } of fields) if (binding) {
           const content = states.get(identity)!;
@@ -918,7 +943,7 @@ export class ProfileSessions {
     const identity = tab[CONTENT_ID], dock = panelDock(tab.dock), latest = this.latestPlaces.get(identity) ?? new Map();
     this.placementVersions.set(identity, (this.placementVersions.get(identity) ?? 0) + 1);
     for (const panel of tab.panels) latest.set(panel.id, Object.fromEntries((["wide", "compact"] as const).flatMap(size => {
-      const place = closePanel(dock[size], panel.id).lastPlace?.[panel.id]; return place ? [[size, place]] : [];
+      const place = panelPlace(dock[size], panel.id); return place ? [[size, place]] : [];
     })));
     this.latestPlaces.set(identity, latest); this.rememberContent(tab); this.rememberNavigation();
   }
@@ -935,9 +960,11 @@ export class ProfileSessions {
     if (!this.scope || this.replaying) return;
     const { views, panel, tab } = this.focus.snapshot();
     const groups = new Map([...this.tabs, ...this.closed.map(fragment => fragment.tab)].map(content => {
-      const dock = panelDock(content.dock);
+      const dock = content.dock?.state as Partial<DockState> | undefined;
+      const activeTabs = (size: keyof DockState) => allGroups({ root: dock?.[size]?.root ?? null,
+        floating: dock?.[size]?.floating ?? [], closed: [] }).map(item => item.group.active);
       return [content[CONTENT_ID], { version: this.placementVersions.get(content[CONTENT_ID]) ?? 0,
-        wide: allGroups(dock.wide).map(item => item.group.active), compact: allGroups(dock.compact).map(item => item.group.active) }] as const;
+        wide: activeTabs("wide"), compact: activeTabs("compact") }] as const;
     }));
     this.navigation.set(this.scope.top(), { views, groups, ...(panel ? { panel } : {}), ...(tab ? { tab } : {}) });
   }

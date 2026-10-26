@@ -33,7 +33,8 @@ test("not in the layout and without a home (Help): it opens floating, and the co
 test("not in the layout, closed by the person from a group: it goes back into that group at its tab, and the group expands", () => {
   let tree = factory();
   tree = closePanel(tree, "shape");
-  expect(tree.lastPlace?.shape).toEqual({ group: ["finish", "shape", "edge"], index: 1, active: false, groupId: "g-inspect", docked: true });
+  expect(tree.lastPlace?.shape).toEqual({ group: ["finish", "shape", "edge"], index: 1, active: false, groupId: "g-inspect", docked: true,
+    anchor: { panel: "uv", share: .58, side: "bottom", splitId: "s-right" } });
   tree = setCollapsed(tree, "g-inspect", true);
   const next = summonPanel(tree, "shape", factory(), float);
   expect(locate(next, "shape")!.group).toEqual(g("g-inspect", ["finish", "shape", "edge"], false, "shape"));

@@ -513,8 +513,8 @@ test("Review A design 1: a fresh workspace migrates the default arrangement in b
   expect(outcome).toBe("done");
   const data = Object.values(state.profiles!.sessions)[0]!, session = openSession(data);
   expect(data.tabs[0]!.origin).toBe("eye-makeup/default");
-  expect(session.dock()).toEqual(STUDIO_INITIAL_LAYOUT.dock);
-  expect(dockPanels(session.dock())).toContain("head");
+  expect(session.legacyDock()).toEqual(STUDIO_INITIAL_LAYOUT.dock);
+  expect(dockPanels(session.legacyDock())).toContain("head");
   expect(state.uiPreferences).toEqual(legacy);
   const empty = structuredClone(state);
   empty.uiPreferences.layout = { format: "xfs/dock", version: 1, state: { wide: { root: null, floating: [], closed: [] }, compact: { root: null, floating: [], closed: [] } } };

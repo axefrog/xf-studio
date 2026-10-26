@@ -1,110 +1,45 @@
-/** G3 state-machine generator: exact serialization laws, stable identities and atomic refusals under arbitrary history passages. */
-import { test } from "bun:test";
-import { ProfileSessions, TabRefusal, type TabContent } from "../src/app/profiles/profile-sessions";
-import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
-import { createHistoryService, viewScope, type HistoryScope } from "../src/platform/core/history-service";
-import { panelDock, dockWith } from "../src/app/profiles/panel-dock";
-import { applyDrop, group } from "../src/platform/core/dock-layout";
-import { VIEW_SLOTS, SLOT_COLLECTIONS, type ViewRecord, type ViewSlot } from "../src/platform/api/view-graph";
-import { defaultViewGraph } from "../src/preview/preview-view-graph";
-import { freshWorkspace } from "./fixtures/eye-region";
-import { openSession, seededRandom } from "./fixtures/profile-sessions";
+import { expect, test } from "bun:test";
+import { Worker } from "node:worker_threads";
+import { run } from "./fixtures/profile-session-generator";
 
-const KINDS = ["add", "show", "park", "bind", "drag", "new", "reset", "close", "reopen", "duplicate", "undo", "redo", "start", "end", "point"] as const;
-type Command = { op: typeof KINDS[number]; tab: number; panel: number; value: number };
-const blueprint = defaultViewGraph(freshWorkspace().preview);
-const initial = sessionOfWorkspace(freshWorkspace(), { tab: "Initial", character: "c-1", look: { collection: "crew", look: "initial" } }, seededRandom(123));
-class LawFailure extends Error { constructor(readonly law: string, detail: string) { super(`${law}: ${detail}`); } }
-function equal(actual: unknown, expected: unknown, law: string) {
-  const a = typeof actual === "string" ? actual : JSON.stringify(actual), b = typeof expected === "string" ? expected : JSON.stringify(expected);
-  if (a !== b) { let at = 0; while (at < Math.min(a.length, b.length) && a[at] === b[at]) at++;
-    throw new LawFailure(law, `byte ${at}; actual ${a.slice(Math.max(0, at - 60), at + 150)}; expected ${b.slice(Math.max(0, at - 60), at + 150)}`); }
-}
-const serial = (s: ProfileSessions) => JSON.stringify(s.session());
-function invariants(s: ProfileSessions) {
-  const data = s.session(), instances = [...data.tabs, ...data.closed.map(fragment => fragment.tab)].flatMap(tab => tab.panels.map(panel => panel.id));
-  if (new Set(instances).size !== instances.length) throw new LawFailure("identities", "duplicate panel instance ID");
-  const tabs = new Set(data.tabs.map(tab => tab.id));
-  if (data.views.views.some(view => !tabs.has(view.tab))) throw new LawFailure("views", "orphaned view");
-}
-function content(s: ProfileSessions, n: number): TabContent {
-  const panel = s.freshInstance("presets"), view = s.freshId("view"), source = blueprint.views[0]! as ViewRecord, refs = Object.fromEntries(VIEW_SLOTS.map(slot => [slot, s.freshId(slot)])) as Record<ViewSlot, string>;
-  const tree = { root: group([panel], panel, `g-${panel}`), floating: [], closed: [] };
-  return { name: `Made ${n}`, dock: dockWith(null, { wide: tree, compact: tree }), panels: [{ id: panel, type: "presets" }],
-    views: [{ ...source, ...refs, id: view }], nodes: VIEW_SLOTS.map(slot => ({ slot,
-      node: { ...structuredClone(blueprint[SLOT_COLLECTIONS[slot]].find(node => node.id === source[slot])!), id: refs[slot]! } })) };
-}
-function execute(s: ProfileSessions, scope: HistoryScope, cmd: Command) {
-  const tabs = s.tabList(), tab = tabs[cmd.tab % Math.max(1, tabs.length)]?.id ?? "missing-tab";
-  const panels = s.tab(tab)?.panels.filter(panel => panel.type !== "view") ?? [], panel = panels[cmd.panel % Math.max(1, panels.length)]?.id ?? "missing-panel";
-  switch (cmd.op) {
-    case "add": s.addPanel(tab, "presets"); break;
-    case "show": s.setPanelsOpen(tab, [panel], true); break;
-    case "park": s.setPanelsOpen(tab, [panel], false); break;
-    case "bind": s.setPanelBinding(tab, panel, cmd.value % 3 ? { policy: "pinned", target: { look: { collection: "crew", look: `look-${cmd.value % 5}` } } } : { policy: "follow-focus" }); break;
-    case "drag": {
-      if (!s.panel(panel)) throw new TabRefusal("missing_target", "No panel to drag.");
-      const state = panelDock(s.dock(tab));
-      for (const size of ["wide", "compact"] as const) state[size] = applyDrop(state[size], { kind: "panel", panelId: panel }, { kind: "float", x: cmd.value % 300, y: cmd.value % 170, w: 320, h: 410 });
-      s.arrangeInstances(tab, dockWith(s.dock(tab), state)); break;
-    }
-    case "new": s.newTab(content(s, cmd.value)); break;
-    case "reset": if (!s.tab(tab)) throw new TabRefusal("missing_target", "No tab to reset."); s.reset(tab, content(s, cmd.value)); break;
-    case "close": s.close(tab); break;
-    case "reopen": { const closed = s.closedTabs(); s.reopen(closed[cmd.tab % Math.max(1, closed.length)]?.id ?? "missing-fragment"); break; }
-    case "duplicate": s.duplicate(tab); break;
-    case "undo": return scope.undo();
-    case "redo": return scope.redo();
-    case "start": return scope.jumpTo(scope.timeline().startId);
-    case "end": return scope.jumpTo(scope.timeline().steps.at(-1)?.id ?? scope.timeline().startId);
-    case "point": { const t = scope.timeline(), at = cmd.value % (t.steps.length + 1); return scope.jumpTo(at ? t.steps[at - 1]!.id : t.startId); }
-  }
-  return true;
-}
-function move(scope: HistoryScope, to: string) {
-  if (scope.plan(to)?.direction !== "none" && !scope.jumpTo(to)) throw new LawFailure("jump refusal", "valid timeline destination refused");
-}
-function laws(s: ProfileSessions, scope: HistoryScope) {
-  invariants(s);
-  const before = serial(s), timeline = scope.timeline(), at = timeline.current < 0 ? timeline.startId : timeline.steps[timeline.current]!.id;
-  // Check the current checkpoint even if the sequence is on a redo branch, and return there after the complete start/end passage.
-  move(scope, timeline.startId); move(scope, timeline.steps.at(-1)?.id ?? timeline.startId); move(scope, at);
-  equal(serial(s), before, "start/end exact serialization");
-  if (scope.canUndo()) { if (!scope.undo() || !scope.redo()) throw new LawFailure("undo/redo refusal", "available move refused");
-    equal(serial(s), before, "undo/redo exact serialization"); }
-  equal(scope.timeline(), timeline, "history passage identity"); invariants(s);
-}
-function run(seed: number, commands: readonly Command[]) {
-  const history = createHistoryService(), s = openSession(initial, { history, random: seededRandom(seed + 10000) }), scope = history.scope(viewScope(s.profile))!;
-  for (const cmd of commands) {
-    const before = serial(s), timeline = scope.timeline();
-    try { if (!execute(s, scope, cmd)) { equal(serial(s), before, "refused mutation"); equal(scope.timeline(), timeline, "refused history"); } }
-    catch (error) { if (!(error instanceof TabRefusal)) throw error;
-      equal(serial(s), before, "refused mutation"); equal(scope.timeline(), timeline, "refused history"); }
-    laws(s, scope);
-  }
-}
-function shrink(seed: number, commands: Command[], law: string): Command[] {
-  let result = commands, chunk = Math.ceil(result.length / 2), attempts = 0;
-  while (chunk >= 1 && attempts < 300) {
-    let reduced = false;
-    for (let at = 0; at < result.length && attempts++ < 300; at += chunk) {
-      const candidate = [...result.slice(0, at), ...result.slice(at + chunk)];
-      try { run(seed, candidate); } catch (error) { if ((error instanceof LawFailure ? error.law : "unexpected") === law) { result = candidate; reduced = true; break; } }
-    }
-    if (!reduced) chunk = Math.floor(chunk / 2);
-  }
-  return result;
-}
-test("G3 generator: 2,000 seeds of 20–60 operations, with exact history round trips and atomic refusals", () => {
-  let count = 0;
-  for (let seed = 1; seed <= 2000; seed++) {
-    const random = seededRandom(seed), commands = Array.from({ length: 20 + Math.floor(random() * 41) }, (): Command => ({
-      op: KINDS[Math.floor(random() * KINDS.length)]!, tab: Math.floor(random() * 16), panel: Math.floor(random() * 16), value: Math.floor(random() * 10000) }));
-    try { run(seed, commands); count += commands.length; }
-    catch (error) { const reduced = shrink(seed, commands, error instanceof LawFailure ? error.law : "unexpected");
-      try { run(seed, reduced); } catch (shrunk) { error = shrunk; }
-      throw Error(`G3 failing seed ${seed}; shrunk sequence ${JSON.stringify(reduced)}\n${error instanceof Error ? error.message : String(error)}`); }
-  }
-  console.log(`G3 generator: 2000 seeds, ${count} generated operations, every-step start/end and Undo/Redo probes.`);
-}, 300_000);
+test("G3 generator: 2,000 seeds of 20–60 operations, with exact history round trips and atomic refusals", async () => {
+  // Independent seeds share no state. Six bounded workers keep the every-step laws within the responsiveness budget.
+  const workers: Worker[] = [];
+  try {
+    const shards = 6;
+    const counts = await Promise.all(Array.from({ length: shards }, (_, shard) => new Promise<number>((resolve, reject) => {
+      const worker = new Worker(new URL("./fixtures/profile-session-generator.ts", import.meta.url), {
+        workerData: { first: Math.floor(shard * 2000 / shards) + 1, last: Math.floor((shard + 1) * 2000 / shards) },
+      });
+      workers.push(worker);
+      const deadline = setTimeout(() => reject(new Error(`G3 worker ${shard} exceeded its 120-second deadline`)), 120_000);
+      let replied = false;
+      worker.once("message", (message: { count: number; error?: string }) => {
+        clearTimeout(deadline);
+        replied = true;
+        if (message.error) reject(new Error(message.error)); else resolve(message.count);
+      });
+      worker.once("error", error => { clearTimeout(deadline); reject(error); });
+      worker.once("exit", code => { clearTimeout(deadline); if (!replied) reject(new Error(`G3 worker exited without a result (${code})`)); });
+    })));
+    expect(counts.reduce((sum, count) => sum + count, 0)).toBe(79676);
+    console.log("G3 generator: 2000 seeds, 79676 generated operations, every-step start/end and Undo/Redo probes.");
+  } finally { await Promise.all(workers.map(worker => worker.terminate())); }
+}, 130_000);
+
+test("G3 seed 717: a parked peer remains an ordering reference across Add/Reset/Duplicate and partial jumps", () => {
+  run(717, [
+    { op: "add", tab: 14, panel: 15, value: 6156 }, { op: "reset", tab: 3, panel: 8, value: 7877 },
+    { op: "add", tab: 8, panel: 8, value: 3620 }, { op: "duplicate", tab: 12, panel: 3, value: 1210 },
+    { op: "bind", tab: 9, panel: 4, value: 1544 }, { op: "park", tab: 0, panel: 14, value: 3660 },
+    { op: "start", tab: 6, panel: 10, value: 931 }, { op: "point", tab: 6, panel: 13, value: 7789 },
+  ]);
+});
+
+test("G3 seed 1284: later drags retain floating-window order while several Add steps replay together", () => {
+  run(1284, [
+    { op: "reset", tab: 3, panel: 0, value: 7799 }, { op: "add", tab: 5, panel: 7, value: 7073 },
+    { op: "drag", tab: 5, panel: 8, value: 8334 }, { op: "drag", tab: 7, panel: 1, value: 7354 },
+    { op: "add", tab: 15, panel: 3, value: 8085 }, { op: "drag", tab: 2, panel: 12, value: 8516 },
+  ]);
+});

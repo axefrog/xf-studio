@@ -16,7 +16,8 @@ export function dockWith(layout: DockLayout | null, state: DockState): DockLayou
   return { format: layout?.format ?? "xfs/dock", version: layout?.version ?? 1, state: state as unknown as JsonValue };
 }
 export function openIn(layout: DockLayout | null, instance: string, size: keyof DockState): boolean {
-  return !!locate(panelDock(layout)[size], instance);
+  const tree = (layout?.state as Partial<DockState> | undefined)?.[size];
+  return !!tree && !!locate({ ...empty(), ...tree }, instance);
 }
 export function changePanelDock(layout: DockLayout | null, instance: string, mode: "show" | "remove" | "reveal" | "erase",
   factory: DockLayout | null = null): DockLayout {
