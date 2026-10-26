@@ -101,13 +101,16 @@ json Service::Status(double now) const
     const double elapsed = std::max(0.0, (m_active ? now : m_end) - m_start);
     json counts = json::object();
     for (const auto& [channel, n] : m_counts)
+    {
         counts[channel] = {{"attempts", n[0]}, {"valid", n[1]}, {"actual_hz", elapsed > 0 ? static_cast<double>(n[0]) / elapsed : 0},
                            {"valid_hz", elapsed > 0 ? static_cast<double>(n[1]) / elapsed : 0}};
+        if (const auto it = m_notReadyCounts.find(channel); it != m_notReadyCounts.end()) counts[channel]["not_ready"] = it->second;
+    }
     return {{"schema", "xfb/recording-1"}, {"plugin_version", XFB_VERSION_STRING}, {"run", m_run}, {"session", m_session}, {"pid", GetCurrentProcessId()},
         {"world_generation", m_world}, {"connection", m_connection}, {"active", m_active}, {"reason", m_reason},
         {"clock", "QueryPerformanceCounter_seconds"}, {"source_now_s", now}, {"start_s", m_start}, {"end_s", m_active ? json(nullptr) : json(m_end)},
         {"requested_hz", 10}, {"actual_hz", elapsed > 0 ? static_cast<double>(m_samples) / elapsed : 0}, {"channel_stats", counts},
-        {"sample_ticks", m_samples}, {"missed_deadlines", m_missed}, {"dropped", m_dropped + m_ingressDropped.load()}, {"invalid", m_invalid}, {"bytes", m_bytes},
+        {"sample_ticks", m_samples}, {"missed_deadlines", m_missed}, {"dropped", m_dropped + m_ingressDropped.load()}, {"invalid", m_invalid}, {"not_ready", m_notReady}, {"bytes", m_bytes},
         {"largest_gap_s", m_gap}, {"age_s", m_samples ? json(std::max(0.0, now - m_last)) : json(nullptr)},
         {"latest", m_latest}, {"channels", m_channels}, {"actors", m_actors}, {"capacity", kCapacity},
         {"output", m_output.string()}, {"writer_pending", m_writerBusy}, {"file_error", m_fileError},
@@ -146,7 +149,7 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
         whos.push_back(s);
     }
     m_channels = std::move(selected); m_actors = std::move(whos);
-    m_counts.clear();
+    m_counts.clear(); m_notReadyCounts.clear(); m_tapReady.clear(); m_notReady = 0;
     ++m_run; m_world = world; m_connection = connection; m_session = session;
     m_latest = m_ack = m_dropped = m_missed = m_samples = m_bytes = m_invalid = 0;
     m_start = m_next = now; m_until = now + static_cast<double>(duration); m_last = m_gap = m_end = 0;
@@ -201,6 +204,17 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
         catch (const MethodError& e) { payload = {{"error", e.code}, {"message", std::string(e.what()).substr(0, 200)}}; }
         catch (...) { payload = {{"error", "sample_failed"}}; }
         const double end = Now();
+        if ((channel == "subtitles" || channel == "voice") && payload.is_object())
+        {
+            if (valid) m_tapReady.insert(channel);
+            else if (!m_tapReady.count(channel) && now - m_start < kTapNotReadyS && payload.value("controller_count", -1) == 0)
+            {
+                // Not invalid: the HUD's subtitle controllers haven't been created yet after the world started.
+                payload["reason"] = "not_ready";
+                valid = true;
+                ++m_notReady; ++m_notReadyCounts[channel];
+            }
+        }
         if (channel == "ui" && valid && payload.is_object())
         {
             // The polled UI snapshot is recorded when it changes, plus a heartbeat every kUiHeartbeat seconds that

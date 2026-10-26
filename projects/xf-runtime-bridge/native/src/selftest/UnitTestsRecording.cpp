@@ -79,6 +79,33 @@ int RecordingUnitTests()
         Check(answer["ok"] == false && answer["error"]["code"] == "interrupted", "queued native start cannot overwrite emergency stop");
     }
     {
+        // 0.8.22 (B318-1 tripped on a load): a subtitle or voice coverage sample with no controllers yet, in the run's first
+        // seconds before the tap has been ready, is not_ready, not invalid; later, or once ready, it is invalid as before.
+        Service early;
+        early.Start({{"channels", {"subtitles", "voice"}}}, 50, 1, 1, "not-ready");
+        int controllers = 0;
+        Ops tap; tap.guard = [] {}; tap.sample = [&](const std::string&, const std::vector<std::string>&) {
+            return json{{"event", "tap.coverage"}, {"valid", controllers == 2}, {"controller_count", controllers}}; };
+        early.Tick(50.0, 1, 1, true, 1, tap);  // the first heartbeat, no controllers: not ready
+        controllers = 2;
+        early.Tick(51.0, 1, 1, true, 2, tap);  // ready
+        controllers = 0;
+        early.Tick(52.0, 1, 1, true, 3, tap);  // gone after being ready: invalid
+        auto page = early.Read({{"run", 1}}, 52.1);
+        const auto& rows = page["records"];
+        Check(page["invalid"] == 2 && page["not_ready"] == 2 && rows.size() == 5 && rows[0]["valid"] == true && rows[0]["data"]["reason"] == "not_ready" &&
+                  rows[1]["data"]["reason"] == "not_ready" && rows[2]["valid"] == true && !rows[2]["data"].contains("reason") && page["channel_stats"]["subtitles"]["not_ready"] == 1,
+              "0.8.22: tap coverage with no controllers early in a run is not_ready, not invalid");
+        early.Stop("test", 52.2);
+        early.Read({{"run", 1}, {"since", 6}}, 52.3);
+        Service late;
+        late.Start({{"channels", {"voice"}}}, 60, 1, 1, "late");
+        controllers = 0;
+        late.Tick(63.0, 1, 1, true, 1, tap); // past the window: invalid
+        Check(late.Read({{"run", 1}}, 63.1)["invalid"] == 1, "0.8.22: no controllers past the not-ready window is invalid");
+        late.Stop("test", 63.2);
+    }
+    {
         Service replay;
         replay.Start({{"channels", {"v"}}}, 10, 1, 1, "reader-ack");
         Ops sample; sample.guard = [] {}; sample.sample = [](const auto&, const auto&) { return json{{"valid", true}}; };

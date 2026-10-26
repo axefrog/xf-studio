@@ -1,6 +1,8 @@
 #pragma once
 #include "core/Dispatcher.hpp"
 #include <array>
+#include <map>
+#include <set>
 #include <memory>
 #include <vector>
 #include <filesystem>
@@ -13,6 +15,10 @@ using json = nlohmann::json;
 // One bounded owner. Producers copy bounded payloads; only Read encodes wire records.
 inline constexpr size_t kCapacity = 512, kPayload = 8192;
 inline constexpr double kUiHeartbeat = 2.0; // seconds between records of an unchanged UI snapshot
+// 0.8.22 (B318-1 tripped on a load): the subtitle and voice taps find the HUD's subtitle controllers a moment after the world
+// starts. Until a channel's tap has once been ready, a coverage sample with no controllers in a run's first kTapNotReadyS
+// seconds is recorded as not_ready (a valid record with reason not_ready, counted apart), not as an invalid sample.
+inline constexpr double kTapNotReadyS = 2.0;
 double Now(); // QueryPerformanceCounter seconds, shared with tools via recorded calibration bounds.
 struct Ops
 {
@@ -56,6 +62,9 @@ private:
     std::unique_ptr<std::array<Record, kCapacity>> m_ring;
     std::vector<std::string> m_channels, m_actors;
     std::map<std::string, std::array<uint64_t, 2>> m_counts;
+    std::map<std::string, uint64_t> m_notReadyCounts; // 0.8.22: per channel
+    std::set<std::string> m_tapReady;                 // the tap channels that have answered ready in this run
+    uint64_t m_notReady = 0;
     std::string m_session, m_reason;
     uint64_t m_run = 0, m_world = 0, m_connection = 0, m_latest = 0, m_ack = 0;
     uint64_t m_dropped = 0, m_missed = 0, m_samples = 0, m_bytes = 0, m_cap = 0, m_invalid = 0;
