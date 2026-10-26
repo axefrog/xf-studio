@@ -75,7 +75,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
         const p = item.place!; if (!agentInRange(item, C.target, radius)) continue;
         const rule = answer.specs.kinds[item.kind]; if (!rule) continue;
         const area = item.resolvedAnchor ?? item.anchor;
-        const extended = ["polyline", "volume", "grid", "curve", "arrow"].includes(rule.draw) || "box" in area || "zone" in area || "sphere" in area;
+        const extended = ["polyline", "volume", "grid", "curve", "arrow"].includes(rule.draw) || rule.draw === "crosshair" && !!item.to || "box" in area || "zone" in area || "sphere" in area;
         const clipped = item.to ? C.line([p,item.to]) : [];
         const markerXY = positions.get(item.links?.from ?? item.key);
         const xy = markerXY ?? clipped[0]?.points[0] ?? (extended ? C.point(C.target) : null); if (!xy) continue;
@@ -104,6 +104,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
         const a = item.resolvedAnchor ?? item.anchor;
         if (item.region && selected === item.key && !["actor", "zone"].includes(item.kind)) volume(a, false);
         if (item.toRegion && item.toResolvedAnchor && selected === item.key) volume(item.toResolvedAnchor, false);
+        if (rule.draw === "crosshair" && item.to) { ctx.setLineDash([4, 4]); stroke([p, item.to], 0.7); ctx.setLineDash([]); }
         if (rule.draw === "polyline" && "path" in a) stroke(a.path);
         else if (rule.draw === "volume") volume(a, true);
         else if (rule.draw === "grid" && "grid" in a) {
@@ -130,11 +131,10 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
             if (label) addLabel(label, [points[8][0] + 4, points[8][1] - 4]); label = "";
           } else { ctx.beginPath(); path([xy, to]); ctx.stroke(); hit([xy, to]); arrow(xy, to); }
         } else {
-          if (!markerXY) { if (rule.draw === "diamond") volume(area, false); continue; }
+          if (!markerXY) { if (rule.draw === "diamond") volume(area, false); if (rule.draw === "crosshair" && item.to) drawn++; continue; }
           if (rule.draw === "diamond") { volume(a, false); ctx.beginPath(); path([[xy[0], xy[1]-size], [xy[0]+size,xy[1]], [xy[0],xy[1]+size], [xy[0]-size,xy[1]]], true); ctx.stroke(); }
           else if (rule.draw === "ring") { ctx.beginPath(); ctx.arc(...xy, size, 0, Math.PI*2); ctx.stroke(); }
           else if (rule.draw === "crosshair") {
-            if (item.to) { ctx.setLineDash([4, 4]); stroke([p, item.to], 0.7); ctx.setLineDash([]); }
             ctx.beginPath(); ctx.moveTo(xy[0]-size,xy[1]); ctx.lineTo(xy[0]+size,xy[1]); ctx.moveTo(xy[0],xy[1]-size); ctx.lineTo(xy[0],xy[1]+size); ctx.stroke();
           }
           hit([[xy[0]-size-3,xy[1]-size-3], [xy[0]+Math.max(size+3, rule.draw === "text" ? label.length*7 : size+3),xy[1]-size-3], [xy[0]+size+3,xy[1]+size+3], [xy[0]-size-3,xy[1]+size+3]], true, 3);

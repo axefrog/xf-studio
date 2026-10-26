@@ -5,6 +5,7 @@ import { createHash, randomUUID, type Hash } from "node:crypto";
 import { LAYER_BOUNDS, type LayerData, type LayerManifest, type LayerRecord } from "./layers.ts";
 import { admitId, ITEM_LIMIT_REASON, layerLine } from "./layer-line.ts";
 import { setConflict } from "./layer-timelines.ts";
+import { acquireSetPublishLock, SetPublishBusy } from "./set-publish-lock.ts";
 
 type FileState = { offset: number; size: number; tail: Buffer; ino: number; birth: number; data?: LayerData; refused: number; reason: string; dropping: boolean; overBudget: boolean; modified: number; hash: Hash; ids: Set<string>; publishedRefused: number; publishedReason: string };
 export interface PublishResult { accepted: number; refused: number; reasons: string[] }
@@ -102,12 +103,21 @@ export function createLayerSpool(root: string, options: { now?: () => number; in
     const path = join(root, id + ".jsonl"), folder = join(root, id.split("/")[0]), lock = path + ".lock";
     mkdirSync(folder, { recursive: true });
     try { mkdirSync(lock); } catch { return { accepted: 0, refused: lines.length, reasons: ["Another batch is publishing this layer; try again."] }; }
+    let releaseSet: (() => void) | undefined;
     try {
       let recent: number[] = []; try { recent = JSON.parse(readFileSync(path + ".rate", "utf8")); } catch {}
       recent = recent.filter(t => now() - t < 1000 && now() >= t);
       if (recent.length >= 2) { const reasons = lines.map(() => "Layer accepts at most 2 batches a second."); remember(path, reasons); return { accepted: 0, refused: lines.length, reasons }; }
       writeFileSync(path + ".rate", JSON.stringify([...recent, now()]));
       await scan();
+      const lockSet = async (manifest?: LayerManifest) => {
+        if (!manifest?.standalone) return;
+        releaseSet = await acquireSetPublishLock(join(folder, `.set-${manifest.standalone.set}.publish.lock`), lifetime.signal);
+        // A scan already in flight may predate the previous publisher's append.
+        if (running) await running;
+        await scan();
+      };
+      await lockSet(files.get(id)?.data?.manifest);
       const old = files.get(id), data = old?.data;
       let manifest = data?.manifest, ids = new Set(old?.ids), bytes = existsSync(path) ? statSync(path).size : 0;
       const accepted: string[] = [], reasons: string[] = [];
@@ -118,9 +128,13 @@ export function createLayerSpool(root: string, options: { now?: () => number; in
         if (parsed.reason) { reasons.push(parsed.reason); continue; }
         if (parsed.blank) continue;
         row = parsed.row!;
-        if (isManifest) { const conflict = setConflict(row as LayerManifest, [...files.values()].flatMap(f => f.data ? [f.data] : [])); if (conflict) { reasons.push(conflict); continue; } }
+        if (isManifest) {
+          await lockSet(row as LayerManifest);
+          const conflict = setConflict(row as LayerManifest, [...files.values()].flatMap(f => f.data ? [f.data] : []));
+          if (conflict) { releaseSet?.(); releaseSet = undefined; reasons.push(conflict); continue; }
+        }
         const text = parsed.text! + "\n", size = Buffer.byteLength(text);
-        if (bytes + size > LAYER_BOUNDS.bytes) { reasons.push("Spool exceeds 16 MB; rotate it before publishing more."); continue; }
+        if (bytes + size > LAYER_BOUNDS.bytes) { if (isManifest) { releaseSet?.(); releaseSet = undefined; } reasons.push("Spool exceeds 16 MB; rotate it before publishing more."); continue; }
         if (isManifest) manifest = row as LayerManifest;
         else if (!admitId(row as LayerRecord, ids)) { reasons.push(ITEM_LIMIT_REASON); continue; }
         accepted.push(text); bytes += size;
@@ -128,7 +142,10 @@ export function createLayerSpool(root: string, options: { now?: () => number; in
       if (accepted.length) appendFileSync(path, accepted.join(""));
       else if (!existsSync(path) && reasons.length) writeFileSync(path, "");
       remember(path, reasons); if (running) await running; await scan(); return { accepted: accepted.length, refused: reasons.length, reasons };
-    } finally { rmdirSync(lock); }
+    } catch (error) {
+      if (!(error instanceof SetPublishBusy)) throw error;
+      const reasons = lines.map(() => error.message); remember(path, reasons); return { accepted: 0, refused: lines.length, reasons };
+    } finally { try { releaseSet?.(); } finally { rmdirSync(lock); } }
   }
   const snapshot = () => [...files.entries()].map(([id, f]): LayerData => f.data ?? { manifest: { schema: "xfh/layer-1", producer: id.split("/")[0], layer: id.split("/")[1], title: id.split("/")[1], content: "structure", clock: "recording", kinds: [] }, records: [], refused: f.refused + f.publishedRefused, reason: f.reason || f.publishedReason });
   const expire = () => { for (const [id, until] of leases) if (now() >= until) leases.delete(id); if (!leases.size) { stop?.(); stop = undefined; } };

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync, appendFileSync, renameSync, statSync, truncateSync, utimesSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, renameSync, statSync, truncateSync, utimesSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { tempDir } from "../../xf-studio/authoring/tests/temp-dir.ts";
 import { KINDS, evaluateLayers, validateManifest, validateRecord, whatsHere, NO_WALL_CLOCK, recordingTime, type LayerManifest, type LayerItem, type LayerData } from "../src/layers.ts";
 import { createLayerSpool } from "../src/layer-spool.ts";
@@ -158,6 +159,38 @@ test("watch leases stop polling and publish enforces rate, set consistency and s
  expect((await spool.publish("test/another",[{...m,layer:"another",standalone:{...m.standalone,to:3}}])).reasons[0]).toContain("must agree");
  expect((await spool.publish("test/bad",[{}])).refused).toBe(1);expect(spool.snapshot().find(d=>d.manifest.layer==="bad")?.refused).toBe(1);
  (await spool.watch()); now+=15001;for(const job of jobs)job();expect(jobs.size).toBe(0);spool.close();
+});
+
+test("concurrent layers cannot admit conflicting spans into one standalone set",async()=>{
+ const root=tempDir("holo-set-admission-"),spool=createLayerSpool(root);
+ try {
+  const results=await Promise.all(["a","b"].map((layer,i)=>spool.publish(`test/${layer}`,[manifest({layer,standalone:{set:"week",from:0,to:10+i,clock:"recording"}}),item()])));
+  expect(results.map(r=>r.accepted).sort()).toEqual([0,2]);expect(results.find(r=>r.refused)?.reasons[0]).toContain("must agree");
+  expect((await spool.read()).filter(d=>d.manifest.standalone).length).toBe(1);
+ }finally{spool.close();}
+});
+
+test("separate processes serialize conflicting standalone-set admission",async()=>{
+ const root=tempDir("holo-set-processes-"),source=pathToFileURL(resolve(import.meta.dir,"../src/layer-spool.ts")).href;
+ const children=["a","b"].map((layer,i)=>{
+   const m=manifest({layer,standalone:{set:"week",from:0,to:10+i,clock:"recording"}});
+   const code=`import {createLayerSpool} from ${JSON.stringify(source)};import {existsSync,writeFileSync} from 'node:fs';
+     const spool=createLayerSpool(${JSON.stringify(root)});writeFileSync(${JSON.stringify(join(root,layer+".ready"))},'');
+     try{const deadline=Date.now()+5000;while(!existsSync(${JSON.stringify(join(root,"go"))})){if(Date.now()>deadline)throw Error('Start barrier timed out');await Bun.sleep(2);}
+     const result=await spool.publish(${JSON.stringify("test/"+layer)},[${JSON.stringify(m)},...Array.from({length:8000},()=>(${JSON.stringify(item())}))]);console.log(JSON.stringify({accepted:result.accepted,refused:result.refused,reason:result.reasons[0]}));}finally{spool.close();}`;
+   return Bun.spawn([process.execPath,"-e",code],{stdout:"pipe",stderr:"pipe"});
+ });
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ try{
+   const deadline=performance.now()+5000;
+   while(!["a","b"].every(layer=>existsSync(join(root,layer+".ready")))){if(performance.now()>deadline)throw Error("Publishers did not reach the start barrier.");await Bun.sleep(2);}
+   writeFileSync(join(root,"go"),"");
+   const completed=Promise.all(children.map(async child=>({code:await child.exited,out:JSON.parse(await new Response(child.stdout).text()),err:await new Response(child.stderr).text()})));
+   const results=await Promise.race([completed,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error("Set publishers timed out.")),5000);})]);
+   for(const result of results){expect(result.err).toBe("");expect(result.code).toBe(0);}
+   expect(results.map(r=>r.out.accepted).sort((a,b)=>a-b)).toEqual([0,8001]);expect(results.find(r=>r.out.refused)?.out.reason).toContain("must agree");
+   expect(existsSync(join(root,"test/.set-week.publish.lock"))).toBe(false);
+ }finally{if(timer)clearTimeout(timer);for(const child of children)if(child.exitCode===null)child.kill();await Promise.all(children.map(child=>child.exited));}
 });
 
 test("5,000 distinct ids bounds history even after retraction; replacements retain their id",async()=>{

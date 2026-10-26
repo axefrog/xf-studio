@@ -1,6 +1,17 @@
 # Agent layers implementation checkpoint
 
-The real-data fixes and all seven review findings against `fddbbe41` landed in the maintainer's checkpoint `83cf0655`. This follow-up adds the three Kabuki design fixes and finishes verification; its edits remain uncommitted for the dispatching chat. Optional `glyph` and `badge` metadata remains accepted at both content levels and draws nothing new. The dispatch brief and [glyph specification](glyphs.md) were left unchanged. No game, runtime-bridge tool, commit or merge was run by this agent.
+The real-data review fixes landed in `83cf0655`, and the three Kabuki design fixes landed in the maintainer's `70209e77`. The re-review's two Medium findings are now fixed and left uncommitted for the dispatching chat. Optional `glyph` and `badge` metadata remains accepted at both content levels and draws nothing new. The dispatch brief and [glyph specification](glyphs.md) were left unchanged. No game, runtime-bridge tool, commit or merge was run by this agent.
+
+## Re-review fixes against 70209e77
+
+- **Off-screen targets:** [agent-canvas.ts](../../projects/xf-studio/authoring/src/features/holotable/view/agent-canvas.ts) treats a target with a from-line as extended geometry. Its clipped dashed segment and pick target survive even when the crosshair is outside the viewport or behind the camera. [The renderer regression](../../projects/xf-studio/authoring/tests/holotable-agent-canvas.test.ts) failed before the fix (zero strokes) and now verifies drawing and picking in both cases.
+- **Concurrent standalone admission:** [layer-spool.ts](../../projects/xf-holotable/src/layer-spool.ts) holds a producer/set lock around a fresh consistency check, admission and append, releasing it in `finally`. New [set-publish-lock.ts](../../projects/xf-holotable/src/set-publish-lock.ts) shares an in-process queue across spool owners and an exclusive file beside the spools across processes. Waiting cancels or refuses after five seconds; abandoned files older than 30 seconds are recovered, while active owners remain protected. Existing per-layer publication locks remain in place. A refused candidate manifest releases its set lock before another candidate is considered.
+
+The concurrent-publication regression in [layers.test.ts](../../projects/xf-holotable/tests/layers.test.ts) failed before the fix: both conflicting spans were accepted. It now accepts exactly one. Another regression starts two separate Bun processes together and verifies the losing span is refused and the lock file is removed. [Lock lifetime tests](../../projects/xf-holotable/tests/set-publish-lock.test.ts) cover abandoned-file recovery, cancellation while a live owner holds an aged lock, and cancellation of an in-process waiter without letting the next writer bypass the holder. README documents the operational lock bounds.
+
+**Follow-up checks:** 35 targeted tests passed across layer validation/spool/CLI integration, set-lock lifetime and the real canvas interpreter. Both headless Holotable and Studio typechecks passed under 3 GiB memory guards; targeted tests used a 2 GiB guard (observed peak 0.5 GiB). Both requested regressions were observed failing on the original code before implementation. No captures or frame-performance runs were added for these geometry/concurrency fixes; the accepted captures and rendering allowance below remain unchanged.
+
+The follow-up link scan passed across 480 Markdown files, privacy checking passed for all eight changed/new files, `git diff --check` passed, and the mechanical UI detector returned no findings. The temporary test publishers exited and their scratch was cleaned; no command remains running.
 
 Layers-only sets open independently of optional solid context. Their context loads in the background within 350 m of the camera's orbit target, refreshed after the target moves more than 150 m. Recordings retain their path-based region, with context failures also tolerated. Failed session opens retain their title and plain reason in the view, with the library's Try again button. Layers-only rows appear beneath Live game and above recorder runs. Details includes the requested limits sentence.
 
@@ -66,7 +77,7 @@ The maintainer simplified the contract to **at most 5,000 distinct item ids**. R
 
 ## Checks
 
-- **171 tests passed**, zero failures: 125 Holotable/Studio feature tests plus 46 architecture/UI boundary tests, across 17 files. This includes all headless Holotable tests and the targeted Studio Holotable module/live/agents/budget/labels/context/canvas files.
+- At checkpoint `70209e77`, **171 tests passed**, zero failures: 125 Holotable/Studio feature tests plus 46 architecture/UI boundary tests, across 17 files. This included all headless Holotable tests and the targeted Studio Holotable module/live/agents/budget/labels/context/canvas files. The current re-review follow-up's 35 targeted tests are listed above.
 - **Studio and headless Holotable typechecks passed.** Studio used `bun x tsc --noEmit -p .`; headless used the installed authoring compiler/type roots.
 - Heavy checks/captures used 2–3 GB memory guards, below their limits. The full Studio suite remains the landing chat's responsibility. No heavy run or browser capture started during the 06:45–07:15 quiet window.
 - Link checking passed across 480 Markdown files; the full tracked privacy scan found no private paths; `git diff --check` passed. The mechanical UI detector returned no findings for all three changed view modules. This follow-up adds no untracked source; only the unchanged private dispatch brief is untracked.
@@ -79,7 +90,7 @@ Every capture shows **12 layers, 369 active items, zero refusals, no V and no op
 
 All four refreshed captures were inspected together in light/dark at both days, beside the existing library reference. The Show rows and item readout match the requested design. Earlier accepted synthetic evidence remains under `local/holotable/evidence/agent-layers/` (24 PNGs, about 12 MiB) for its design review. Current real-data evidence totals 910,291 bytes. The capture command exited successfully and closed its browser, service and local fixture server. Only canonical ignored evidence, the private spool and reusable cache are retained after scratch cleanup.
 
-The empty task scratch directory was removed. The wrap-up disk-footprint check reports 300.6 GiB free on C and no owned folder above 5 GiB; unrelated projects' retained outputs were left alone. No command started by this agent remains running.
+The empty task scratch directory was removed. The wrap-up disk-footprint check reports 300.5 GiB free on C and no owned folder above 5 GiB; unrelated projects' retained outputs were left alone. No command started by this agent remains running.
 
 ## Handoff limits
 
@@ -87,6 +98,6 @@ The earlier design PASS and accepted frame sample remain the prior round's evide
 
 The dispatching chat owns independent review of this follow-up, any new UI review and the full Studio suite before integration. This round makes no new independent design-PASS claim and no in-game commissioning claim. MCP publication, the in-game interpreter and drawing glyphs/badges remain outside this slice.
 
-The three Kabuki fixes build on `83cf0655` and remain ready for the maintainer's commit. No additional feature or rendering-performance work is planned. Any input requiring item anchors must be republished by its producer; this implementation never guesses a replacement for an unknown region.
+The two re-review fixes build on `70209e77` and remain ready for the maintainer's commit. No additional feature or rendering-performance work is planned. Any input requiring item anchors must be republished by its producer; this implementation never guesses a replacement for an unknown region.
 
 Knowledge used: [places](../../knowledge/places.md), [world and streaming](../../knowledge/world-and-streaming.md), [layer proposal](proposal.md), [agent-layer specification](agent-layers.md), [glyph specification](glyphs.md), [architecture contract](../authoring/architecture-contract.md), [visual QA checklist](../authoring/ui-visual-qa-checklist.md). No game-knowledge page was contradicted; the findings concern implementation bounds, disclosure and async lifetime.
