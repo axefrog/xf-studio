@@ -2,7 +2,7 @@
  * The Recordings panel: the game sessions the recorder kept on this computer, newest first, with the one open now marked. Opening one
  * shows it in the Holotable view. States: looking, none yet, couldn't be read (with Try again), not available in this copy.
  */
-import { button, emptyState, note, RecordList, type RecordRow } from "../../../studio-ui/components";
+import { applyCapability, button, emptyState, note, RecordList, type RecordRow } from "../../../studio-ui/components";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
@@ -26,7 +26,7 @@ export function holotableRecordingsPanel(ctx: Ctx): PanelController {
       const state = facade.snapshot();
       setText(status, state.phase === "ready" || state.phase === "unavailable" || state.phase === "failed" ? "" : state.message);
       status.hidden = !status.textContent;
-      const k = JSON.stringify([state.phase, state.message, state.runs.map(r => r.dir), state.open?.dir]);
+      const k = JSON.stringify([state.phase, state.message, state.runs.map(r => r.dir), state.open?.dir, state.live.available, state.live.recording, state.live.watching]);
       if (k === key) return;
       key = k;
       if (state.phase === "unavailable" || state.phase === "failed") {
@@ -35,12 +35,19 @@ export function holotableRecordingsPanel(ctx: Ctx): PanelController {
         return;
       }
       if (!body.contains(runs.element)) body.replaceChildren(runs.element);
-      runs.update(state.runs.map((r): RecordRow => ({
+      const rows: RecordRow[] = state.runs.map((r): RecordRow => ({
         id: r.dir, name: `Session ${r.session.slice(0, 8)} · run ${r.run}`, current: state.open?.dir === r.dir,
         meta: [`${Math.round(r.end - r.start)} s`, `${(r.bytes / 1e6).toFixed(1)} MB`],
         badge: state.open?.dir === r.dir ? { text: "Open now", tone: "info" } : undefined,
         action: state.open?.dir === r.dir ? undefined : button({ label: "Open", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.open", dir: r.dir }); } }),
-      })));
+      }));
+      if (state.live.available) {
+        const watch = button({ label: "Watch", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.watch" }); } });
+        applyCapability(watch, facade.capability({ kind: "holo.watch" }));
+        rows.unshift({ id: "live", name: "Live game", meta: [state.live.recording ? "Recording now" : "Not recording"], current: state.live.watching,
+          badge: state.live.watching ? { text: "Watching", tone: "info" } : undefined, action: state.live.watching ? undefined : watch });
+      }
+      runs.update(rows);
     },
   };
 }

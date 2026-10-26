@@ -100,7 +100,7 @@ function* parseRun(dir: string, signal?: AbortSignal): Generator<void, Session> 
   return session;
 }
 
-function ingest(row: Json, s: Session, cite: (seq: number) => Cite, lines: Map<string, Json>) {
+export function ingest(row: Json, s: Session, cite: (seq: number) => Cite, lines: Map<string, Json>) {
   const d = row.data ?? {}, t = row.source_s as number, seq = row.seq as number;
   switch (row.channel) {
     case "v": {

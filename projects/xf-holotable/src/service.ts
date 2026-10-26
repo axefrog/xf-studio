@@ -9,13 +9,16 @@ import { sessionAtLevel } from "./query.ts";
 import { report } from "./report.ts";
 import { boxOf, loadWorldPack, region } from "./world.ts";
 import type { ContentLevel, Session, WorldPack } from "./model.ts";
-import { createGameSolidSource, type SolidPort } from "./solid-source.ts";
+import type { SolidPort } from "./solid-source.ts";
+import { createSolidWorkerPort } from "./solid-worker-port.ts";
+import { createLiveBridge, type LiveBridge } from "./live-bridge.ts";
+import { createLiveSource, type LiveClock, type LiveCursor } from "./live.ts";
 
 export const PROTOCOL = "xfh/service-1";
 /** The longest request line accepted; a longer one is refused and dropped without growing the buffer. */
 export const FRAME_LIMIT = 1024 * 1024;
 
-export interface ServiceOptions { recordingsRoot: string; worldPackPath: string; solidSource?: SolidPort; solidCacheDir?: string }
+export interface ServiceOptions { recordingsRoot: string; worldPackPath: string; solidSource?: SolidPort; solidCacheDir?: string; liveBridge?: LiveBridge; liveClock?: LiveClock }
 
 export function defaultOptions(env = process.env): ServiceOptions {
   const local = env.LOCALAPPDATA ?? "";
@@ -38,12 +41,43 @@ const until = <T>(p: Promise<T>, signal: AbortSignal) => new Promise<T>((resolve
 
 /** Holds sessions by folder (loaded once, shared by every requester) and the world pack. */
 export function createService(options: ServiceOptions) {
-  const solids = options.solidSource ?? createGameSolidSource(options.solidCacheDir ?? join(import.meta.dir, "..", "..", "..", "local", "holotable", "cache"));
+  const solids = options.solidSource ?? createSolidWorkerPort(options.solidCacheDir ?? join(import.meta.dir, "..", "..", "..", "local", "holotable", "cache"));
   const sessions = new Map<string, Session>();
   // One load per folder in flight, shared; it stops only when every requester waiting on it has cancelled.
   const loads = new Map<string, { promise: Promise<Session>; ctl: AbortController; waiters: number }>();
   let world: WorldPack | undefined | null = null;
   const pack = () => (world === null ? (world = loadWorldPack(options.worldPackPath)) : world);
+  let liveWorld: unknown = null, worldVersion = 0, worldPending = false, worldCold = false;
+  let worldCtl = new AbortController(), worldIdentity = "", covered: Session["v"][number]["position"][] = [];
+  let requested: Session | undefined;
+  // Source updates only enqueue a want. The retained-data poll never awaits geometry.
+  function wantWorld(s: Session) {
+    requested = s;
+    const identity = `${s.meta.session}:${s.meta.run}:${s.meta.worldGeneration}`;
+    if (worldIdentity !== identity) {
+      worldCtl.abort(); worldCtl = new AbortController(); worldIdentity = identity;
+      liveWorld = null; covered = []; worldVersion++; worldPending = false;
+    }
+    const newest = s.v.at(-1)?.position;
+    if (!newest || worldPending || covered.some(p => Math.hypot(...p.map((v, i) => v - newest[i])) < 100)) return;
+    const signal = worldCtl.signal, path = s.v.map(v => v.position);
+    worldPending = true;
+    setImmediate(() => { void (async () => {
+      try {
+        worldCold = (await solids.status?.(path, signal))?.cold ?? false;
+        const geometry = await solids.around(path, 250, signal); signal.throwIfAborted();
+        const w = pack();
+        liveWorld = { ...(w ? region(w, boxOf(path), 250) : { provenance: null, areas: [], cells: [] }), ...geometry };
+        covered = path; worldVersion++;
+      } catch { /* Keep previous geometry; the next region want can retry. */ }
+      finally {
+        if (!signal.aborted) { worldPending = false; worldCold = false; }
+      }
+      if (!signal.aborted && covered === path && requested) wantWorld(requested);
+    })(); });
+  }
+  const live = createLiveSource(options.liveBridge ?? createLiveBridge(), { clock: options.liveClock, changed: wantWorld,
+    idle() { worldCtl.abort(); worldCtl = new AbortController(); worldPending = false; } });
   async function open(dir: string, signal: AbortSignal): Promise<Session> {
     const ready = sessions.get(dir);
     if (ready) { signal.throwIfAborted(); return ready; }
@@ -67,6 +101,10 @@ export function createService(options: ServiceOptions) {
     return run.dir;
   };
   const handlers: Record<string, Handler> = {
+    "live.status": (_p, signal) => live.status(signal),
+    "live.watch": () => live.watch(),
+    "live.stop": p => { live.stop(String(p.watch)); return { stopped: true }; },
+    "live.poll": p => live.poll(String(p.watch), p.since as LiveCursor | undefined, level(p.level)),
     "service.info": () => ({ protocol: PROTOCOL, recordingsRoot: options.recordingsRoot, worldPack: Boolean(pack()) }),
     "runs.list": () => listRuns(options.recordingsRoot),
     "session.open": async (p, signal) => sessionAtLevel(await open(known(p.dir), signal), level(p.level)),
@@ -75,6 +113,11 @@ export function createService(options: ServiceOptions) {
       return solids.status ? solids.status(s.v.map(v => v.position), signal) : { cold: false };
     },
     "world.around": async (p, signal) => {
+      if (typeof p.watch === "string") {
+        // Validate and renew this watch without asking the bridge for anything.
+        live.renew(p.watch);
+        return { version: worldVersion, world: p.since === worldVersion ? null : liveWorld, pending: worldPending, cold: worldCold };
+      }
       const s = await open(known(p.dir), signal), w = pack();
       const margin = typeof p.margin === "number" ? p.margin : 250;
       if (!Number.isFinite(margin) || margin < 0 || margin > 1000) throw coded("bad_request", "Margin must be between 0 and 1000 metres.");
@@ -87,12 +130,12 @@ export function createService(options: ServiceOptions) {
       return report(await open(known(p.dir), signal), p.t, level(p.level), pack() ?? undefined);
     },
   };
-  return { handlers, sessions };
+  return { handlers, sessions, close() { live.close(); worldCtl.abort(); solids.close?.(); }, live };
 }
 
 /** Runs the service over stdin and stdout until stdin closes. */
 export async function serve(options = defaultOptions()) {
-  const { handlers } = createService(options);
+  const service = createService(options), { handlers } = service;
   const inflight = new Map<number, AbortController>();
   const write = (msg: unknown) => process.stdout.write(JSON.stringify(msg) + "\n");
   let buffer = "", dropping = false;
@@ -127,6 +170,8 @@ export async function serve(options = defaultOptions()) {
     }
     if (buffer.length > FRAME_LIMIT) { write({ id: null, ok: false, error: { code: "too_large", message: "Request line too long" } }); buffer = ""; dropping = true; }
   }
+  for (const ctl of inflight.values()) ctl.abort();
+  service.close();
 }
 
 if (import.meta.main) await serve();

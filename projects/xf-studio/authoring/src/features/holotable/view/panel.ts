@@ -52,15 +52,17 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   resized.observe(svg);
   const view = new Segmented<keyof typeof ORBITS>({ label: "View", showLabel: false, compact: true, options: [{ value: "top", label: "Top" }, { value: "tilt", label: "Tilt" }, { value: "low", label: "Low" }],
     onSelect: value => { orbit = { ...ORBITS[value] }; drawnKey = ""; ctx.changed(); } });
-  const play = button({ label: "Play", icon: "play", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.play", on: !facade.snapshot().playing }, { quiet: true }); } });
+  const play = button({ label: "Play", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.play", on: !facade.snapshot().playing }, { quiet: true }); } });
   const time = new SliderWithValue({ label: "Moment", min: 0, max: 1, step: 0.1, format: v => `${f1(v)} s`,
     transaction: { edit: v => { const s = facade.snapshot().open?.session; if (s) void ctx.dispatch({ kind: "holo.seek", t: s.meta.from + v }, { quiet: true }); } } });
   const readout = h("span", { class: "note muted mono", role: "status" });
+  const backToLive = button({ label: "Back to live", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.follow" }, { quiet: true }); } });
+  const feedMessage = h("p", { class: "note muted", role: "status" });
 
-  const controls = h("div", { class: "control-line", style: "flex:0 0 auto" }, play, view.element, readout);
+  const controls = h("div", { class: "control-line", style: "flex:0 0 auto;flex-wrap:wrap" }, play, view.element, readout, backToLive);
   time.element.style.flex = "0 0 auto"; // the drawing takes the room; the controls keep their own height
   const element = h("div", { class: "panel-content holotable-panel", style: "display:flex;flex-direction:column;height:100%;min-height:0;box-sizing:border-box;overflow:auto" },
-    empty, stage, time.element, controls);
+    empty, stage, time.element, controls, feedMessage);
 
   // Gestures: orbit, zoom, pick. The viewpoint is this view's own; the selection is the service's.
   // The mark under the pointer is read on press: pointer capture retargets the release to the drawing itself.
@@ -180,15 +182,20 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       if (ek !== emptyKey) {
         emptyKey = ek;
         const opening = state.phase === "opening";
-        empty.replaceChildren(...(s && !opening ? [] : [emptyState(opening ? "Opening recording" : "No recording open", opening ? state.message : state.runs.length ? "Open one in Recordings to replay it here." : "Recordings appear here after a test session with the recorder on.")]));
+        empty.replaceChildren(...(s && !opening ? [] : [emptyState(state.live.watching ? "Live game" : opening ? "Opening recording" : "No recording open", state.live.watching || opening ? state.message : state.runs.length ? "Open one in Recordings to replay it here." : "Recordings appear here after a test session with the recorder on.")]));
         empty.hidden = !!s && !opening; stage.style.display = s && !opening ? "block" : "none";
       }
       applyCapability(play, facade.capability({ kind: "holo.play", on: true }));
-      setButtonLabel(play, state.playing ? "Pause" : "Play");
+      setButtonLabel(play, state.live.following || state.playing ? "Pause" : "Play");
+      play.setAttribute("aria-pressed", String(state.live.following || state.playing));
+      backToLive.hidden = !state.live.watching || state.live.following;
+      applyCapability(backToLive, facade.capability({ kind: "holo.follow" }));
+      setText(feedMessage, s && state.live.watching ? state.message : "");
+      feedMessage.hidden = !feedMessage.textContent;
       time.update(s ? state.t - s.meta.from : 0, { min: 0, max: s ? Math.max(0.1, s.meta.to - s.meta.from) : 1, disabled: !s, reason: s ? undefined : "Open a recording first." });
       if (s) {
         const v = vAt(state);
-        setText(readout, `${f1(state.t - s.meta.from)} s of ${f1(s.meta.to - s.meta.from)} s${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}`);
+        setText(readout, `${state.live.following ? "Live · " : ""}${f1(state.t - s.meta.from)} s${state.live.following ? "" : ` of ${f1(s.meta.to - s.meta.from)} s`}${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}${state.live.following && state.live.behindS > 2 ? ` · ${f1(state.live.behindS)} s behind` : ""}`);
       } else setText(readout, "");
       const dk = JSON.stringify([state.revision, orbit, svg.clientWidth, svg.clientHeight]);
       if (dk !== drawnKey) { drawnKey = dk; draw(state); }

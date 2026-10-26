@@ -46,3 +46,15 @@ export interface HoloWorld {
 
 /** The host's Holotable endpoint: one service method per request. */
 export type HoloTransport = (method: string, params: Record<string, unknown>, signal: AbortSignal) => Promise<{ ok: boolean; status: number; data: unknown }>;
+
+export interface HoloLiveState {
+  readonly available: boolean; readonly recording: boolean; readonly watching: boolean; readonly following: boolean;
+  readonly phase: "idle" | "watching" | "waiting" | "disconnected" | "ended";
+  readonly behindS: number; readonly more: boolean; readonly droppedBatches: number; readonly message: string;
+}
+export interface HoloLiveCursor { readonly epoch: number; readonly v: number; readonly camera: number; readonly events: number; readonly gaps: number }
+export interface HoloLiveUpdate {
+  readonly since: HoloLiveCursor; readonly reset: boolean; readonly more: boolean; readonly state: Omit<HoloLiveState, "following">;
+  readonly meta: HoloSession["meta"] | null;
+  readonly v: HoloSession["v"]; readonly camera: HoloSession["camera"]; readonly events: HoloSession["events"]; readonly gaps: HoloSession["gaps"];
+}

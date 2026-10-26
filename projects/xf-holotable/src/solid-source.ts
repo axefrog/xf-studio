@@ -21,6 +21,7 @@ import { COLLIDER_STRIDE, createSectorCache, SectorWorkers, type SourceStamp, ty
 export interface SolidPort {
   status?(path: readonly Vec3[], signal: AbortSignal): Promise<{ cold: boolean; sectors?: number; missing?: number }>;
   around(path: readonly Vec3[], margin: number, signal: AbortSignal): Promise<SolidRegion>;
+  close?(): void;
 }
 export const SOLID_READER_VERSION = 7;
 export const SOLID_RADIUS = 350;

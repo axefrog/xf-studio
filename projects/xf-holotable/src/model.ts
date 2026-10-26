@@ -21,7 +21,7 @@ export interface CameraSample { t: number; seq: number; position: Vec3; forward:
 
 export type EventKind =
   | "supervisor.set" | "supervisor.safe_position" | "supervisor.violation" | "supervisor.action" | "supervisor.cleared"
-  | "placement.traffic" | "line" | "voice" | "face" | "contact";
+  | "placement.traffic" | "line" | "voice" | "face" | "contact" | "session";
 
 /** A point event on the timeline, anchored in the world where the record gives a place. */
 export interface TimelineEvent {
