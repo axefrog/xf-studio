@@ -181,7 +181,7 @@ export function createGameSolidSource(cacheDir: string, gameRoot = () => process
       path = compactPath(path);
       const c = getContext(signal); if (!c || !path.length) return { cold: false };
       const key = solidCacheKey(c.sources, path, SOLID_RADIUS); if (ready.has(key) || hasRegion(key)) return { cold: false };
-      cache.begin(false);
+      cache.begin();
       try { const selected = select(c, path), missing = selected.filter(d => !cache.has(request(c, d))).length;
         return { cold: missing > 0, sectors: selected.length, missing };
       } finally { cache.end(); }

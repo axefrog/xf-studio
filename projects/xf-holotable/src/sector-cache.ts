@@ -1,6 +1,6 @@
 // One owner of reusable sector decode jobs. Requester cancellation never cancels another recording's shared read.
-import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { SECTOR_READER_VERSION } from "../../xf-studio/authoring/src/native/streaming-sector";
@@ -8,7 +8,7 @@ import { NATIVE_READER_VERSION } from "../../xf-studio/authoring/src/native/reso
 import { NativeBudgetError, NativeMalformedError, NativeUnsupportedError } from "../../xf-studio/authoring/src/native/native-errors";
 
 export interface SourceStamp { path: string; size: number; mtimeMs: number }
-import { decodeSector, type CachedSector } from "./sector-data.ts";
+import { decodeSector, SECTOR_BYTES_LIMIT, type CachedSector } from "./sector-data.ts";
 export { COLLIDER_STRIDE, type CachedSector } from "./sector-data.ts";
 export const SECTOR_CACHE_VERSION = 4;
 export interface SectorRequest { root: string; source: SourceStamp; resource: string }
@@ -69,20 +69,50 @@ export class SectorWorkers {
 
 type Job = { ctl: AbortController; promise: Promise<CachedSector>; waiters: number };
 export function createSectorCache(dir: string, reader: (r: SectorRequest, s: AbortSignal) => Promise<Uint8Array>) {
-  const jobs = new Map<string, Job>(), memory = new Map<string, Uint8Array>(); let held = 0, leases = 0, transaction = false, db: Database | undefined;
+  const jobs = new Map<string, Job>(), memory = new Map<string, Uint8Array>(); let held = 0, leases = 0, unavailable = false, db: Database | undefined;
+  const file = join(dir, "sectors-v4.sqlite"), name = "sectors-v4.sqlite";
+  const discard = () => { try { db?.close(); } catch { /* A damaged connection must not fail the open. */ } db = undefined; };
   const database = () => {
     if (!db) {
-      mkdirSync(dir, { recursive: true }); const opened = new Database(join(dir, "sectors-v4.sqlite"));
+      mkdirSync(dir, { recursive: true }); const opened = new Database(file);
       // Keep the key index separate from large blobs; WITHOUT ROWID made even cache probes read blob pages.
-      try { opened.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-32768; PRAGMA mmap_size=536870912; CREATE TABLE IF NOT EXISTS sectors (key TEXT PRIMARY KEY, bytes BLOB NOT NULL, size INTEGER NOT NULL, written INTEGER NOT NULL)"); db = opened; }
-      catch (error) { opened.close(); throw error; }
+      try { opened.exec("PRAGMA busy_timeout=100; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-32768; PRAGMA mmap_size=536870912; CREATE TABLE IF NOT EXISTS sectors (key TEXT PRIMARY KEY, bytes BLOB NOT NULL, size INTEGER NOT NULL, written INTEGER NOT NULL)"); db = opened; }
+      catch (error) { try { opened.close(); } catch { /* Preserve the original error. */ } throw error; }
     }
     return db;
   };
+  const busy = (error: unknown) => /SQLITE_(BUSY|LOCKED)|database (?:is|table is|schema is) locked/i.test(String((error as Error)?.message ?? error))
+    || /SQLITE_(BUSY|LOCKED)/.test(String((error as { code?: unknown })?.code ?? ""));
+  const quarantine = () => {
+    discard();
+    try {
+      if (!existsSync(file)) return false;
+      const suffix = `.corrupt-${Date.now()}-${process.pid}-${randomUUID()}`;
+      renameSync(file, file + suffix);
+      for (const sidecar of ["-wal", "-shm"]) if (existsSync(file + sidecar)) renameSync(file + sidecar, file + suffix + sidecar);
+      try { for (const entry of readdirSync(dir)) if (entry.startsWith(`${name}.corrupt-`) && !entry.startsWith(name + suffix)) rmSync(join(dir, entry), { force: true }); }
+      catch { /* Old quarantine cleanup cannot block a fresh cache. */ }
+      return true;
+    } catch { return false; }
+  };
+  const useDisk = <T>(fallback: T, work: (connection: Database) => T): T => {
+    let retries = 0, recovered = false;
+    while (!unavailable) {
+      try { return work(database()); }
+      catch (error) {
+        if (busy(error)) {
+          if (retries++ < 2) continue;
+          unavailable = true; discard(); return fallback;
+        }
+        if (recovered || !quarantine()) { unavailable = true; return fallback; }
+        recovered = true; retries = 0;
+      }
+    }
+    return fallback;
+  };
   const close = () => {
     if (leases || jobs.size || !db) return;
-    if (transaction) { db.exec("COMMIT"); transaction = false; }
-    db.close(); db = undefined;
+    discard();
   };
   const remember = (key: string, bytes: Uint8Array) => {
     const old = memory.get(key); if (old) held -= old.byteLength;
@@ -90,17 +120,17 @@ export function createSectorCache(dir: string, reader: (r: SectorRequest, s: Abo
     while (held > 32 * 1024 * 1024 && memory.size > 1) { const first = memory.keys().next().value!; held -= memory.get(first)!.byteLength; memory.delete(first); }
   };
   return {
-    begin(write = true) { const d = database(); if (write && !transaction) { d.exec("BEGIN"); transaction = true; } leases++; },
+    begin() { if (!leases && !jobs.size) unavailable = false; leases++; },
     end() { if (!leases) throw Error("Unbalanced sector-cache lease."); leases--; close(); },
     has(request: SectorRequest) {
       const key = sectorCacheKey(request.source, request.resource); if (memory.has(key)) return true;
-      try { return Boolean(database().query("SELECT 1 FROM sectors WHERE key = ? AND size <= 67108864").get(key)); } finally { close(); }
+      try { return useDisk(false, d => Boolean(d.query("SELECT 1 FROM sectors WHERE key = ? AND length(bytes) <= ?").get(key, SECTOR_BYTES_LIMIT))); } finally { close(); }
     },
     async read(request: SectorRequest, signal: AbortSignal): Promise<CachedSector> {
       signal.throwIfAborted(); const key = sectorCacheKey(request.source, request.resource);
       const ready = memory.get(key); if (ready) return decodeSector(ready);
       try {
-        const row = database().query("SELECT bytes FROM sectors WHERE key = ? AND size <= 67108864").get(key) as { bytes: Uint8Array } | null;
+        const row = useDisk(null, d => d.query("SELECT bytes FROM sectors WHERE key = ? AND length(bytes) <= ?").get(key, SECTOR_BYTES_LIMIT) as { bytes: Uint8Array } | null);
         if (row) { try { const data = decodeSector(row.bytes); remember(key, row.bytes); return data; } catch { /* Rebuild corrupt cache data. */ } }
       } finally { close(); }
       let job = jobs.get(key);
@@ -108,7 +138,7 @@ export function createSectorCache(dir: string, reader: (r: SectorRequest, s: Abo
         const ctl = new AbortController();
         const promise = reader(request, ctl.signal).then(bytes => {
           ctl.signal.throwIfAborted(); const result = decodeSector(bytes);
-          database().query("INSERT INTO sectors (key, bytes, size, written) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET bytes=excluded.bytes, size=excluded.size, written=excluded.written").run(key, bytes, bytes.byteLength, Date.now());
+          useDisk(undefined, d => d.transaction(() => d.query("INSERT INTO sectors (key, bytes, size, written) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET bytes=excluded.bytes, size=excluded.size, written=excluded.written").run(key, bytes, bytes.byteLength, Date.now())).immediate());
           remember(key, bytes); return result;
         });
         job = { ctl, promise, waiters: 0 }; jobs.set(key, job); const mine = job;
@@ -127,9 +157,10 @@ export function createSectorCache(dir: string, reader: (r: SectorRequest, s: Abo
       });
     },
     trim() {
-      const d = database(), rows = d.query("SELECT key, size FROM sectors ORDER BY written DESC").all() as { key: string; size: number }[];
-      let held = 0; for (const row of rows) { held += row.size; if (held > 512 * 1024 * 1024) d.query("DELETE FROM sectors WHERE key = ?").run(row.key); }
-      close();
+      try { useDisk(undefined, d => {
+        const rows = d.query("SELECT key, size FROM sectors ORDER BY written DESC").all() as { key: string; size: number }[];
+        let held = 0; for (const row of rows) { held += row.size; if (held > 512 * 1024 * 1024) d.query("DELETE FROM sectors WHERE key = ?").run(row.key); }
+      }); } finally { close(); }
     },
   };
 }

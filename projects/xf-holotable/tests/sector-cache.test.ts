@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { encodeSector, decodeSector } from "../src/sector-data.ts";
+import { Database } from "bun:sqlite";
+import { encodeSector, decodeSector, SECTOR_BYTES_LIMIT } from "../src/sector-data.ts";
 import { COLLIDER_STRIDE, createSectorCache, sectorCacheKey, type SectorRequest } from "../src/sector-cache.ts";
 import { pathBounds, pathNearBox, segmentBoxDistance2 } from "../src/solids.ts";
 
@@ -44,6 +45,82 @@ test("the last cancellation aborts the sector read and prevents abandoned cache 
     const ctl = new AbortController(), pending = owner.read(request, ctl.signal);
     ctl.abort(); await expect(pending).rejects.toThrow(); expect(signal.aborted).toBe(true);
     release(bytes()); await new Promise(resolve => setImmediate(resolve)); expect(owner.has(request)).toBe(false);
+  } finally { s.dispose(); }
+});
+test("a competing writer never waits on region decoding; BUSY writes fall back to uncached sectors", async () => {
+  const s = scratch(); let release!: (b: Uint8Array) => void;
+  const owner = createSectorCache(s.dir, async () => new Promise(resolve => { release = resolve; }));
+  let other: Database | undefined;
+  try {
+    owner.begin();
+    expect(owner.has(request)).toBe(false);
+    other = new Database(join(s.dir, "sectors-v4.sqlite"));
+    expect((other.query("PRAGMA journal_mode").get() as { journal_mode: string }).journal_mode).toBe("wal");
+    const pending = owner.read(request, new AbortController().signal);
+    // This succeeds while the cache's reader is still decoding the sector.
+    other.exec("BEGIN IMMEDIATE");
+    other.exec("INSERT INTO sectors (key, bytes, size, written) VALUES ('other', x'00', 1, 0)");
+    release(bytes());
+    expect((await pending).rows.length).toBe(COLLIDER_STRIDE);
+    other.exec("COMMIT");
+    owner.end();
+    const later = createSectorCache(s.dir, async () => bytes());
+    expect(later.has(request)).toBe(false);
+    // A successful sector insert also releases its write lock before the region lease ends.
+    later.begin();
+    const next = { ...request, resource: "world/next.streamingsector" };
+    expect((await later.read(next, new AbortController().signal)).rows.length).toBe(COLLIDER_STRIDE);
+    other.exec("BEGIN IMMEDIATE");
+    other.exec("COMMIT");
+    later.end();
+  } finally {
+    try { other?.exec("ROLLBACK"); } catch { /* No open transaction. */ }
+    other?.close();
+    s.dispose();
+  }
+});
+test("damaged SQLite files and invalid schemas are quarantined and rebuilt", async () => {
+  for (const damage of ["file", "schema"] as const) {
+    const s = scratch(), file = join(s.dir, "sectors-v4.sqlite");
+    try {
+      if (damage === "file") writeFileSync(file, "not a SQLite database");
+      else { const d = new Database(file); d.exec("CREATE TABLE sectors (wrong_column TEXT)"); d.close(); }
+      writeFileSync(file + ".corrupt-older", "old quarantine");
+      let reads = 0;
+      const cache = createSectorCache(s.dir, async () => { reads++; return bytes(); });
+      expect((await cache.read(request, new AbortController().signal)).rows.length).toBe(COLLIDER_STRIDE);
+      expect(reads).toBe(1);
+      const quarantined = readdirSync(s.dir).filter(name => name.startsWith("sectors-v4.sqlite.corrupt-"));
+      expect(quarantined).toHaveLength(1);
+      expect(quarantined[0]).not.toBe("sectors-v4.sqlite.corrupt-older");
+      const later = createSectorCache(s.dir, async () => { throw Error("Fresh cache was not reused"); });
+      expect((await later.read(request, new AbortController().signal)).placements[0]).toBe(0);
+    } finally { s.dispose(); }
+  }
+});
+test("a cache path that cannot be opened or quarantined still yields decoded sectors", async () => {
+  const s = scratch(), blocked = join(s.dir, "not-a-directory");
+  try {
+    writeFileSync(blocked, "blocks the cache directory");
+    const cache = createSectorCache(blocked, async () => bytes());
+    cache.begin();
+    expect(cache.has(request)).toBe(false);
+    expect((await cache.read(request, new AbortController().signal)).rows.length).toBe(COLLIDER_STRIDE);
+    cache.end();
+  } finally { s.dispose(); }
+});
+test("SQL checks actual blob length before fetching a sector with a false small size column", async () => {
+  const s = scratch(), file = join(s.dir, "sectors-v4.sqlite");
+  try {
+    const d = new Database(file);
+    d.exec("CREATE TABLE sectors (key TEXT PRIMARY KEY, bytes BLOB NOT NULL, size INTEGER NOT NULL, written INTEGER NOT NULL)");
+    d.query("INSERT INTO sectors (key, bytes, size, written) VALUES (?, zeroblob(?), 1, 0)").run(sectorCacheKey(request.source, request.resource), SECTOR_BYTES_LIMIT + 1);
+    d.close();
+    let reads = 0;
+    const cache = createSectorCache(s.dir, async () => { reads++; return bytes(); });
+    expect(cache.has(request)).toBe(false);
+    expect((await cache.read(request, new AbortController().signal)).rows.length).toBe(COLLIDER_STRIDE);
+    expect(reads).toBe(1);
   } finally { s.dispose(); }
 });
 test("sector selection uses actual 3D path-to-box distance, including corner cases outside expanded boxes", () => {
