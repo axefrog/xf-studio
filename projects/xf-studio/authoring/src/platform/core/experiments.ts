@@ -15,6 +15,7 @@ import { createHistoryService, type HistoryService } from "./history-service";
 import { documentOwners } from "./saved-document";
 import type { DocumentOutbox } from "./document-outbox";
 import { createTask, type Task } from "./tasks";
+import { dispatchIsolated } from "./listeners";
 
 export type ExperimentDefinition<T extends ExperimentRegistration = ExperimentRegistration> = ExperimentInfo & {
   load(signal: AbortSignal): Promise<{ create(context: ExperimentContext): T | Promise<T> }>;
@@ -58,18 +59,15 @@ export async function createExperiments<T extends ExperimentRegistration>(option
       return owners.held<T>(kind);
     } });
   const context = contextFor(signal);
+  // Each listener on its own: one that throws never skips the others, nor the state change and publish that follow.
+  const report = options.report ?? ((error: unknown) => console.error(error));
   const listeners = new Set<() => void>();
-  const changed = () => { for (const listener of [...listeners]) { try { listener(); } catch (error) { report(error); } } };
+  const changed = () => dispatchIsolated(listeners, report);
   // The registration set's own generation and signal: moved only where an experiment's registration appears or goes, never for
   // settings, phases, services or history.
   let registrationGeneration = 0;
   const registrationListeners = new Set<() => void>();
-  const report = options.report ?? ((error: unknown) => console.error(error));
-  // Each listener on its own: one that throws never skips the others, nor the state change and publish that follow.
-  const registrationsChanged = () => {
-    registrationGeneration++;
-    for (const listener of [...registrationListeners]) { try { listener(); } catch (error) { report(error); } }
-  };
+  const registrationsChanged = () => { registrationGeneration++; dispatchIsolated(registrationListeners, report); };
   const phases: Record<string, { phase: ExperimentState["phase"]; message: string }> = {};
   // Per-experiment save problems, shown instead of the load message until a later save of that experiment succeeds.
   const saveErrors: Record<string, string> = {};
@@ -88,7 +86,8 @@ export async function createExperiments<T extends ExperimentRegistration>(option
           const wasRegistered = task.state().phase === "done";
           loads.delete(definition.id); task.cancel("experiment off");
           if (wasRegistered) registrationsChanged();
-          publish(definition.id, "off");
+          // A registration listener may have switched it on again: the load it started has spoken for the experiment already.
+          if (!loads.has(definition.id)) publish(definition.id, "off");
         }
         continue;
       }
@@ -106,9 +105,10 @@ export async function createExperiments<T extends ExperimentRegistration>(option
         return contribution;
       }).then(outcome => {
         // Only the load still held speaks for the experiment: a superseded one (switched off and on before it finished) publishes
-        // nothing, so it can't mark the newer load ready or failed. The set changes here, once.
+        // nothing, so it can't mark the newer load ready or failed. The set changes here, once. Ownership is checked again after the
+        // registration listeners, since one of them may switch the experiment off and on.
         if (loads.get(definition.id) !== load) return;
-        if (outcome.status === "done") { registrationsChanged(); publish(definition.id, "ready"); }
+        if (outcome.status === "done") { registrationsChanged(); if (loads.get(definition.id) === load) publish(definition.id, "ready"); }
         else if (outcome.status === "failed") publish(definition.id, "failed", `Couldn't open ${definition.label}. Turn it off and on to try again.`);
       });
     }
@@ -155,8 +155,9 @@ export const OFF_EXPERIMENTS = Object.freeze({ snapshot: () => [], registrations
 export function startExperiments<T extends ExperimentRegistration>(options: ExperimentOptions<T>) {
   const initial: ExperimentState[] = options.definitions.map(info => ({ id: info.id, label: info.label, description: info.description, enabled: false, overridden: info.id in options.overrides, phase: "off", message: "" }));
   const failed = initial.map(info => ({ ...info, phase: "failed" as const, message: "Couldn't read experimental settings. Reload Studio to try again." }));
+  const report = options.report ?? ((error: unknown) => console.error(error));
   const listeners = new Set<() => void>();
-  const changed = () => { for (const listener of [...listeners]) listener(); };
+  const changed = () => dispatchIsolated(listeners, report);
   const history = options.history ?? createHistoryService();
   const reading = createTask<Experiments<T>>({ signal: options.signal });
   reading.subscribe(changed);
@@ -166,7 +167,7 @@ export function startExperiments<T extends ExperimentRegistration>(options: Expe
   const ready = reading.run(async signal => {
     const loaded = await createExperiments({ ...options, history, signal });
     const off = loaded.subscribe(changed);
-    const offRegistrations = loaded.onRegistrationsChanged(() => { for (const listener of [...registrationListeners]) listener(); });
+    const offRegistrations = loaded.onRegistrationsChanged(() => dispatchIsolated(registrationListeners, report));
     signal.addEventListener("abort", () => { off(); offRegistrations(); }, { once: true });
     return loaded;
   }).then(outcome => outcome.status === "done");

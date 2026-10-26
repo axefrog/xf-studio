@@ -6,6 +6,7 @@
  */
 import { contributedDefaultIssues, contributedDefaults, type ContributedDefaultsSource, type ContributedLayoutDefault } from "../app/profiles/layout-defaults";
 import type { StudioModule } from "../platform/api";
+import { dispatchIsolated } from "../platform/core/listeners";
 import type { FragmentKnowledge } from "../app/profiles/layout-fragment";
 import { STUDIO_VIEW_GRAPH_RULES } from "../preview/preview-view-graph";
 import { STUDIO_MODULE_REGISTRATION, STUDIO_MODULES } from "./modules";
@@ -89,7 +90,8 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
     } finally { building = false; }
   };
   const listeners = new Set<() => void>();
-  experiments.onRegistrationsChanged(() => { for (const listener of [...listeners]) listener(); });
+  experiments.onRegistrationsChanged(() => dispatchIsolated(listeners, error =>
+    log(`A default layouts listener failed: ${String((error as Error)?.message ?? error)}.`)));
   const known: FragmentKnowledge = Object.freeze({ rules: STUDIO_VIEW_GRAPH_RULES, tool: STUDIO_FRAGMENT_KNOWLEDGE.tool,
     panel: (type: string) => panels.has(type) || snapshot().panels.has(type) });
   const contributed: ContributedDefaultsSource = { list: () => snapshot().list, generation: () => snapshot().generation,

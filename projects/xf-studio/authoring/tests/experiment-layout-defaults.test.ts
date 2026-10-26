@@ -147,6 +147,28 @@ describe("experiment-contributed default layouts", () => {
     expect(seen).toEqual([{ known: true, listed: true, generation: 1, current: 1 }, { known: false, listed: false, generation: 2, current: 2 }]);
   });
 
+  test("(a2) a registration listener that runs before the layouts hear never gets a memoised list with a withdrawn default", () => {
+    const experiments = experimentsDouble(), seen: boolean[] = [];
+    let w: ReturnType<typeof windowWith> | undefined;
+    experiments.onRegistrationsChanged(() => { if (w) seen.push(w.defaults.list().some(item => item.id === HOLO)); });
+    w = windowWith(experiments);
+    experiments.set(true);
+    expect(w.defaults.list().some(item => item.id === HOLO)).toBe(true); // memoised while on
+    experiments.set(false);
+    expect(seen).toEqual([true, false]);
+    expect(w.defaults.list().some(item => item.id === HOLO)).toBe(false);
+  });
+
+  test("a layouts listener that throws is logged, and the others still hear", () => {
+    const experiments = experimentsDouble(), log: string[] = [], w = windowWith(experiments, log);
+    let heard = 0;
+    w.layouts.contributed.subscribe(() => { throw Error("layouts listener broke"); });
+    w.layouts.contributed.subscribe(() => { heard++; });
+    experiments.set(true);
+    expect(heard).toBe(1);
+    expect(log.some(line => line.includes("layouts listener broke"))).toBe(true);
+  });
+
   test("(b) a set that won't settle publishes the built-in defaults, and they stay put on later reads until the next signal", () => {
     const experiments = experimentsDouble();
     const churning = { ...HOLOTABLE_MODULE, get defaults() { experiments.commit(experiments.registrations()); return HOLOTABLE_MODULE.defaults; } } as StudioModule;

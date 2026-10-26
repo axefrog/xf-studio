@@ -101,6 +101,57 @@ test("a superseded load's completion never publishes over the newer load (off an
   life.abort();
 });
 
+test("a registration listener that switches the experiment off and on as it registers never lets the old load mark the new one ready", async () => {
+  const life = new AbortController(), src = sources();
+  let loadsMade = 0;
+  const pending = new Promise<never>(() => {});
+  const loaded = { ...definition, load: async () => ({ create: () => (++loadsMade === 1 ? { module: { id: "sample" }, service: { subscribe: () => () => {} } } : pending) as never }) };
+  const port = await createExperiments({ definitions: [loaded], overrides: {}, ...src, signal: life.signal });
+  let flipped = false;
+  port.onRegistrationsChanged(() => { if (!flipped) { flipped = true; void port.set("sample", false); void port.set("sample", true); } });
+  await port.set("sample", true);
+  for (let i = 0; i < 50 && !flipped; i++) await new Promise(resolve => setTimeout(resolve, 2));
+  expect(flipped).toBe(true);
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  expect(loadsMade).toBe(2);
+  expect(port.snapshot()[0]!.phase).toBe("loading"); // the newer load is pending; the old continuation published nothing after it
+  expect(port.registrations()).toEqual([]);
+  life.abort();
+});
+
+test("a registration listener that switches the experiment back on as it switches off leaves the new load's phase standing", async () => {
+  const life = new AbortController(), src = sources();
+  let loadsMade = 0;
+  const loaded = { ...definition, load: async () => ({ create: () => (++loadsMade === 1 ? { module: { id: "sample" }, service: { subscribe: () => () => {} } } : new Promise(() => {})) as never }) };
+  const port = await createExperiments({ definitions: [loaded], overrides: {}, ...src, signal: life.signal });
+  await port.set("sample", true);
+  for (let i = 0; i < 50 && !port.registrations().length; i++) await new Promise(resolve => setTimeout(resolve, 2));
+  let reopened = false;
+  port.onRegistrationsChanged(() => { if (!reopened && !port.registrations().length) { reopened = true; void port.set("sample", true); } });
+  await port.set("sample", false);
+  expect(reopened).toBe(true);
+  expect(port.snapshot()[0]!.enabled).toBe(true);
+  expect(port.snapshot()[0]!.phase).toBe("loading"); // not overwritten with "off"
+  life.abort();
+});
+
+test("the started port forwards registration events to each listener on its own: a throwing one is reported, the others hear", async () => {
+  const life = new AbortController(), src = sources(), reported: unknown[] = [];
+  const loaded = { ...definition, load: async () => ({ create: () => ({ module: { id: "sample" }, service: { subscribe: () => () => {} } }) as never }) };
+  const port = startExperiments({ definitions: [loaded], overrides: {}, ...src, signal: life.signal, report: error => reported.push(error) });
+  let heard = 0;
+  port.onRegistrationsChanged(() => { throw Error("listener broke"); });
+  port.onRegistrationsChanged(() => { heard++; });
+  expect(await port.ready).toBe(true);
+  await port.set("sample", true);
+  for (let i = 0; i < 50 && !port.registrations().length; i++) await new Promise(resolve => setTimeout(resolve, 2));
+  await port.set("sample", false);
+  expect(heard).toBe(2);
+  expect(reported).toHaveLength(2);
+  expect(port.snapshot()[0]!.phase).toBe("off");
+  life.abort();
+});
+
 test("a registration listener that throws is reported, the others still hear, and switching off completes", async () => {
   const life = new AbortController(), src = sources(), reported: unknown[] = [];
   const loaded = { ...definition, load: async () => ({ create: () => ({ module: { id: "sample" }, service: { subscribe: () => () => {} } }) as never }) };

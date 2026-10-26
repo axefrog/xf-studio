@@ -115,7 +115,8 @@ export class LayoutDefaults {
   /** Every own default this window knows of (deleted ones too: restore names them). */
   private readonly ids = new Set<string>();
   private readonly listeners = new Set<() => void>();
-  private views: readonly LayoutDefaultView[] | null = null;
+  /** The memoised list, keyed on the source's generation at the read that built it. */
+  private views: { generation: number | undefined; list: readonly LayoutDefaultView[] } | null = null;
   private readonly source: ContributedDefaultsSource;
   private resolving = false;
 
@@ -158,11 +159,13 @@ export class LayoutDefaults {
   private changed() { this.views = null; notifyAll(this.listeners); }
 
   // ----- Reads -----
-  /** Every default: the modules' in module order, then the person's in the order they were made. Detached. The source's snapshot is
-   *  current whenever it is read (it rebuilds before it notifies), so the memoised list needs no retry of its own. */
+  /** Every default: the modules' in module order, then the person's in the order they were made. Detached. The memo is keyed on the
+   *  source's generation at read time, so a listener that reads before this owner hears of a change still gets the current list. */
   list(): readonly LayoutDefaultView[] {
-    this.views ??= Object.freeze([...this.source.list().map(item => this.contributedView(item)), ...this.own().map(item => this.ownView(item))]);
-    return structuredClone(this.views);
+    const generation = this.source.generation?.();
+    if (!this.views || this.views.generation !== generation) this.views = { generation,
+      list: Object.freeze([...this.source.list().map(item => this.contributedView(item)), ...this.own().map(item => this.ownView(item))]) };
+    return structuredClone(this.views.list);
   }
   get(id: string): LayoutDefaultView | undefined {
     const contributed = this.source.list().find(item => item.id === id);

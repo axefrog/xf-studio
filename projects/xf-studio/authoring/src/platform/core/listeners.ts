@@ -9,3 +9,10 @@ export function notifyAll<A extends unknown[]>(listeners: Iterable<(...args: A) 
   }
   if (failure) throw failure.error;
 }
+
+/** As `notifyAll`, for owners with a report route: every listener's failure is reported and none is rethrown, so a dispatch always completes. */
+export function dispatchIsolated<A extends unknown[]>(listeners: Iterable<(...args: A) => void>, report: (error: unknown) => void, ...args: A): void {
+  for (const listener of [...listeners]) {
+    try { listener(...args); } catch (error) { report(error); }
+  }
+}
