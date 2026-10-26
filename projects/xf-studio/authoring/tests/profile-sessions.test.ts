@@ -472,7 +472,7 @@ describe("P3-i instance operations and minimal replay", () => {
     expect(() => subjectActions.dispatch(wrongScene)).toThrow(); expect(json(s)).toBe(unchanged); expect(s.graph.history().depth).toBe(depth);
   });
   test("type hide/show is one step; pane park keeps the graph view and Add another creates a fresh graph and pane identity atomically", () => {
-    const { s, tab, actions } = setup(), second = s.addPanel(tab, "presets"), first = s.instance("presets", tab);
+    const { s, tab, actions } = setup(), first = s.instance("presets", tab), second = s.addPanel(tab, "presets");
     const depth = s.graph.history().depth;
     actions.dispatch({ kind: "panels.setTypeVisible", destination: s.panelTabTarget(tab), type: "presets", visible: false,
       instances: s.instances("presets", tab).map(panel => s.panelTarget(panel.id)) });

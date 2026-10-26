@@ -114,8 +114,8 @@ export interface HistoryTarget {
   /** The value of `key` as it is now; undefined when there is none (a part the look lacks, a node that does not exist). */
   read(key: string): unknown | undefined;
   /**
-   * Show `values` (undefined: remove), published once. False when they cannot be applied consistently (CORE-94): the scope then
-   * drops its steps, since they could never apply again, and nothing changes.
+   * Show `values` (undefined: remove), published once. False when they cannot be applied consistently (CORE-94): target and history
+   * remain unchanged, including Undo and Redo. A target must validate before mutating anything.
    */
   apply(values: Readonly<Record<string, unknown | undefined>>, cause: HistoryCause): boolean;
   /** Why the target can't move now (a V whose last session's changes are still being restored), or undefined: Undo and Redo wait. */

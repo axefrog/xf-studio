@@ -117,6 +117,22 @@ export class HistoryStack {
   constructor(private readonly parts: HistoryParts, readonly limit = HISTORY_LIMIT, store?: ValueStore) {
     this.store = store ?? jsonValues();
   }
+  /** Keep all stack state (including Redo, labels, coalescing and the displaced limit entry) if a target refuses a move. */
+  attempt(move: () => boolean): boolean {
+    const entries = this.entries.map(entry => ({ ...entry })), redo = this.redoList.map(entry => ({ ...entry })), trimmed = this.trimmedBefore;
+    const displaced = this.displaced && { ...this.displaced, entry: { ...this.displaced.entry } };
+    const refs = [...entries.map(entry => entry.before), ...redo.map(entry => entry.after), ...(displaced ? [displaced.entry.before] : [])];
+    for (const values of refs) for (const chunks of Object.values(values)) for (const id of chunks ?? []) this.store.retain(id);
+    let accepted = false;
+    try { accepted = move(); return accepted; }
+    finally {
+      if (accepted) for (const values of refs) this.releaseRefs(values);
+      else {
+        this.clear();
+        this.entries = entries; this.redoList = redo; this.displaced = displaced; this.trimmedBefore = trimmed;
+      }
+    }
+  }
 
   /** A history from a feature's whole parts, oldest first (how workspaces before the look history stored it). */
   static fromBodies(parts: HistoryParts, feature: string, bodies: readonly unknown[], trimmed = false,

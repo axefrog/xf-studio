@@ -53,7 +53,7 @@ import type { DockLayout } from "../ui-preferences";
 import { FIRST_TAB_NAME, rewriteDock, viewOfPanel } from "./profiles-migration-data";
 import { CLOSED_TAB_LIMIT, PROFILE_SESSION_SCHEMA, panelBindingOf, type PanelBinding, type ClosedTab, type LayoutTab, type PanelInstance, type ProfileSessionData, type SessionScene, type SessionView,
   type TabId, WORKSPACE_PROFILES_SCHEMA, type WorkspaceProfiles } from "./profile-session";
-import { addPanelDock, changePanelDock, dockWith, openIn, panelDock } from "./panel-dock";
+import { addPanelDock, changePanelDock, openIn, panelDock, removePanelsDock, replayPanelsDock } from "./panel-dock";
 import { closePanel, type ParkedPlace } from "../../platform/core/dock-layout";
 
 /** What a scene shows. */
@@ -102,7 +102,7 @@ export type PanelTabTarget = { readonly profile: string; readonly tab: TabId; re
 export type PanelTarget = PanelTabTarget & { readonly instance: string; readonly version: number };
 type PanelMembership = { panel: PanelInstance; open: Record<"wide" | "compact", boolean>; places: Partial<Record<"wide" | "compact", ParkedPlace>> } | undefined;
 const PANEL = "@panel:", BINDING = "@binding:";
-const panelKey = (prefix: string, tab: string, instance: string) => prefix + JSON.stringify([tab, instance]);
+const panelKey = (prefix: string, tab: HeldTab, instance: string) => prefix + JSON.stringify([tab.id, tab[CONTENT_ID], instance]);
 const TABS = "@tabs", HEADER = "@tab:", CONTENT = "@content:", CONTENT_ID = "@content", VIEW_PLACEMENT = "@viewPlacement:";
 const sessionKey = (key: string) => key === TABS || [HEADER, CONTENT, VIEW_PLACEMENT, PANEL, BINDING].some(prefix => key.startsWith(prefix));
 const STRUCTURE = "@structure";
@@ -299,19 +299,23 @@ export class ProfileSessions {
     const found = this.tabs.find(item => item.id === tab);
     if (!found?.dock) return null;
     const byInstance = new Map(found.panels.map(panel => [panel.id, panel]));
+    const aliases = new Map<string, string>();
     return rewriteDock(found.dock, id => {
       const panel = byInstance.get(id);
       if (!panel) return id;
       const target = panel.binding?.policy === "pinned" ? panel.binding.target : undefined;
-      return panel.type === "view" && target && "view" in target ? viewPanel(target.view) : panel.type;
+      const alias = panel.type === "view" && target && "view" in target ? viewPanel(target.view) : panel.type;
+      if (aliases.has(alias) && aliases.get(alias) !== id) throw new TabRefusal("incompatible_mode", "This legacy layout is ambiguous. Use panel instance IDs.");
+      aliases.set(alias, id); return alias;
     });
   }
   /** Temporary type-level input adapter, removed in P3-viii. This lookup never creates an instance. */
   instance(panel: string, tab: TabId = this.tabId()): string {
-    const view = viewOfPanel(panel), found = this.tabs.find(item => item.id === tab)?.panels.find(item => item.id === panel || (view
+    const view = viewOfPanel(panel), matches = this.tabs.find(item => item.id === tab)?.panels.filter(item => item.id === panel || (view
       ? item.type === "view" && item.binding?.policy === "pinned" && "view" in item.binding.target && item.binding.target.view === view
-      : item.type === panel));
-    return found?.id ?? "";
+      : item.type === panel)) ?? [];
+    if (matches.length > 1) throw new TabRefusal("incompatible_mode", "This panel type is ambiguous. Use a panel instance ID.");
+    return matches[0]?.id ?? "";
   }
   /** Temporary phase-2 mounting/input adapter only: explicitly creates the one instance a legacy controller requests. Remove in P3-viii. */
   inputInstance(panel: string, tab: TabId = this.tabId()): string { return this.instanceOf(panel, tab).id; }
@@ -320,9 +324,7 @@ export class ProfileSessions {
     if (index < 0) throw new TabRefusal("missing_target", "That tab is closed.");
     const exact = this.tabs[index]!.panels.find(item => item.id === panel);
     if (exact) return exact;
-    const view = viewOfPanel(panel), found = this.tabs[index]!.panels.find(item => view
-      ? item.type === "view" && item.binding?.policy === "pinned" && "view" in item.binding.target && item.binding.target.view === view
-      : item.type === panel);
+    const view = viewOfPanel(panel), id = this.instance(panel, tab), found = this.tabs[index]!.panels.find(item => item.id === id);
     if (found) return found;
     const made: PanelInstance = view ? { id: this.freshInstance("view"), type: "view", binding: { policy: "pinned", target: { view } } }
       : { id: this.freshInstance(panel), type: panel };
@@ -336,6 +338,8 @@ export class ProfileSessions {
   arrange(tab: TabId, layout: DockLayout | null) {
     const index = this.tabs.findIndex(item => item.id === tab);
     if (index < 0) throw new TabRefusal("missing_target", "That tab is closed.");
+    // Validate every alias before the adapter may allocate even the first missing instance.
+    if (layout) rewriteDock(layout, panel => { this.instance(panel, tab); return panel; });
     const panels = this.tabs[index]!.panels.length, dock = layout ? rewriteDock(layout, panel => this.instanceOf(panel, tab).id) : null;
     if (same(dock, this.tabs[index]!.dock) && this.tabs[index]!.panels.length === panels) return;
     this.tabs[index] = { ...this.tabs[index]!, dock };
@@ -356,7 +360,7 @@ export class ProfileSessions {
     const id = this.freshInstance(type), panel: PanelInstance = { id, type, ...(options.binding ? { binding: clone(options.binding) } : {}) };
     const factory = options.factory?.(id) ?? null;
     this.operate("Add panel", "panels.add", () => {
-      this.collecting!.set(panelKey(PANEL, tab, id), undefined);
+      this.collecting!.set(panelKey(PANEL, this.tabs[at]!, id), undefined);
       this.tabs[at] = { ...this.tabs[at]!, panels: [...this.tabs[at]!.panels, panel],
         dock: addPanelDock(this.tabs[at]!.dock, id, this.tabs[at]!.panels.filter(panel => panel.type === type).map(panel => panel.id), factory) };
       this.placed([id]);
@@ -371,9 +375,13 @@ export class ProfileSessions {
     if (!changing.length) return;
     const fallbacks = new Map(changing.map(id => [id, typeof factory === "function" ? factory(this.panel(id)!) : factory]));
     this.operate(open ? "Show panel" : "Remove panel", open ? "panels.show" : "panels.remove", () => {
+      // All keys are captured from the same pre-operation tree, before any member leaves its group.
       for (const id of changing) {
-        this.collecting!.set(panelKey(PANEL, tab, id), this.readKey(panelKey(PANEL, tab, id)));
-        this.tabs[at] = { ...this.tabs[at]!, dock: changePanelDock(this.tabs[at]!.dock, id, open ? "show" : "remove", fallbacks.get(id)) };
+        const key = panelKey(PANEL, this.tabs[at]!, id); this.collecting!.set(key, this.readKey(key));
+      }
+      if (!open) { this.tabs[at] = { ...this.tabs[at]!, dock: removePanelsDock(this.tabs[at]!.dock, changing) }; return; }
+      for (const id of changing) {
+        this.tabs[at] = { ...this.tabs[at]!, dock: changePanelDock(this.tabs[at]!.dock, id, "show", fallbacks.get(id)) };
       }
     });
   }
@@ -384,7 +392,7 @@ export class ProfileSessions {
     if (!panelBindingOf(binding)) throw new TabRefusal("invalid_value", "That binding can't be read.");
     if (same(panel.binding, binding)) return;
     this.operate("Change panel binding", "panels.setBinding", () => {
-      this.collecting!.set(panelKey(BINDING, tab, instance), clone(panel.binding));
+      this.collecting!.set(panelKey(BINDING, this.tabs[at]!, instance), clone(panel.binding));
       this.tabs[at] = { ...this.tabs[at]!, panels: this.tabs[at]!.panels.map(item => item.id === instance ? { ...item, binding: clone(binding) } : item) };
     });
   }
@@ -499,7 +507,11 @@ export class ProfileSessions {
   addView(from: ViewId, share: Readonly<Partial<Record<ViewSlot, boolean>>>, options: { tab?: TabId; title?: string } = {}): ViewId {
     const tab = options.tab ?? this.viewTab(from);
     this.existing(tab);
-    return this.operate("New view", "tabs.addView", () => this.graph.addView(from, share, { tab, label: "New view", ...(options.title ? { title: options.title } : {}) }));
+    return this.operate("New view", "tabs.addView", () => {
+      const view = this.graph.addView(from, share, { tab, label: "New view", ...(options.title ? { title: options.title } : {}) });
+      if (!share.scene) this.targets.set(this.graph.node(view, "scene").id, { ...clone(this.scene(this.graph.node(from, "scene").id)), gen: 0 });
+      return view;
+    });
   }
   /** D13: the graph view and its fixed-identity pane are one structural action. */
   addViewPane(tab: TabId, from: ViewId, share: Readonly<Partial<Record<ViewSlot, boolean>>>): ViewId {
@@ -507,7 +519,7 @@ export class ProfileSessions {
     if (!this.graph.has(from)) throw new TabRefusal("missing_target", "That source view is closed.");
     return this.operate("Add 3D view", "panels.add", () => {
       const view = this.addView(from, share, { tab }), at = this.index(tab), id = this.freshInstance("view");
-      this.collecting!.set(panelKey(PANEL, tab, id), undefined);
+      this.collecting!.set(panelKey(PANEL, this.tabs[at]!, id), undefined);
       this.tabs[at] = { ...this.tabs[at]!, panels: [...this.tabs[at]!.panels, { id, type: "view", binding: { policy: "pinned", target: { view } } }],
         dock: addPanelDock(this.tabs[at]!.dock, id, this.instances("view", tab).map(panel => panel.id), null) };
       this.placed([id]); return view;
@@ -590,8 +602,10 @@ export class ProfileSessions {
       if (issue) throw new TabRefusal("invalid_value", issue);
     } else if (action.kind === "tabs.move" && !Number.isSafeInteger(action.to)) throw new TabRefusal("invalid_value", "Choose a place for the tab.");
     else if (action.kind === "tabs.close") this.checkClosable(action.tab);
-    else if (action.kind === "tabs.arrange" && action.layout !== null && (typeof action.layout !== "object" || !action.layout))
-      throw new TabRefusal("invalid_value", "That arrangement can't be read.");
+    else if (action.kind === "tabs.arrange") {
+      if (action.layout !== null && (typeof action.layout !== "object" || !action.layout)) throw new TabRefusal("invalid_value", "That arrangement can't be read.");
+      if (action.layout) rewriteDock(action.layout, panel => { this.instance(panel, action.tab); return panel; });
+    }
   }
 
   // ----- Storing -----
@@ -628,7 +642,7 @@ export class ProfileSessions {
       finally { this.collecting = undefined; }
       const after = this.sessionValues();
       const panelTabs = new Set([...collected.keys()].filter(key => key.startsWith(PANEL) || key.startsWith(BINDING))
-        .map(key => (JSON.parse(key.slice(key.startsWith(PANEL) ? PANEL.length : BINDING.length)) as [string, string])[0]));
+        .map(key => (JSON.parse(key.slice(key.startsWith(PANEL) ? PANEL.length : BINDING.length)) as [string, number, string])[0]));
       const keys = [...new Set([...before.keys(), ...after.keys()])].filter(key => !same(before.get(key), after.get(key))
         && !(key.startsWith(CONTENT) && panelTabs.has(key.slice(CONTENT.length))));
       const all = [...keys, ...collected.keys()];
@@ -656,8 +670,8 @@ export class ProfileSessions {
   }
   private readKey(key: string): unknown {
     if (key.startsWith(PANEL) || key.startsWith(BINDING)) {
-      const binding = key.startsWith(BINDING), [tab, instance] = JSON.parse(key.slice(binding ? BINDING.length : PANEL.length)) as [string, string];
-      const content = this.tabs.find(item => item.id === tab), panel = content?.panels.find(item => item.id === instance);
+      const binding = key.startsWith(BINDING), [tab, identity, instance] = JSON.parse(key.slice(binding ? BINDING.length : PANEL.length)) as [string, number, string];
+      const content = this.tabs.find(item => item.id === tab && item[CONTENT_ID] === identity), panel = content?.panels.find(item => item.id === instance);
       if (binding) return clone(panel?.binding);
       if (!panel) return undefined;
       const dock = panelDock(content!.dock);
@@ -726,32 +740,34 @@ export class ProfileSessions {
         // was recorded: a tab or fragment it brings in takes that state from what it takes away, so nothing done since is lost.
         const closed = this.replayedFragments(tabs ? tabs.closed : this.closed, order, contents, key => key in values);
         // Replay only the named fields and this instance's membership/place; never restore a whole pre-drag dock.
+        const fields: { key: string; tab: string; instance: string; binding: boolean }[] = [];
         for (const key of keys) if (key.startsWith(PANEL) || key.startsWith(BINDING)) {
-          const binding = key.startsWith(BINDING), [tab, instance] = JSON.parse(key.slice(binding ? BINDING.length : PANEL.length)) as [string, string];
+          const binding = key.startsWith(BINDING), [tab, identity, instance] = JSON.parse(key.slice(binding ? BINDING.length : PANEL.length)) as [string, number, string];
           const content = contents.get(tab);
-          if (!content || !live.has(tab)) return false;
-          const current = content.panels.find(panel => panel.id === instance);
-          if (binding) {
-            if (!current || current.type === "view" || values[key] !== undefined && !panelBindingOf(values[key])) return false;
-            const { binding: _old, ...rest } = current;
-            contents.set(tab, { ...content, panels: content.panels.map(panel => panel.id === instance
-              ? { ...rest, ...(values[key] ? { binding: clone(values[key]) as PanelBinding } : {}) } : panel) });
-          } else {
-            const wanted = values[key] as PanelMembership;
-            if (wanted && wanted.panel.id !== instance) return false;
-            let dock = content.dock;
-            if (!wanted) dock = changePanelDock(dock, instance, "erase");
-            else for (const size of ["wide", "compact"] as const) {
-              if (openIn(dock, instance, size) === wanted.open[size]) continue;
-              const state = panelDock(dock), place = wanted.places[size];
-              if (wanted.open[size] && !state[size].lastPlace?.[instance] && place && !("closed" in place))
-                state[size].lastPlace = { ...state[size].lastPlace, [instance]: place };
-              const changed = panelDock(changePanelDock(dockWith(dock, state), instance, wanted.open[size] ? "show" : "remove"));
-              state[size] = changed[size]; dock = dockWith(dock, state);
-            }
-            contents.set(tab, { ...content, dock, panels: wanted ? current ? content.panels : [...content.panels, wanted.panel]
-              : content.panels.filter(panel => panel.id !== instance) });
+          // A combined jump may close/reset the entire content this field belonged to. Its whole-tab delta subsumes that field.
+          if (!content || !live.has(tab) || content[CONTENT_ID] !== identity) { if (CONTENT + tab in values) continue; return false; }
+          fields.push({ key, tab, instance, binding });
+        }
+        for (const tab of new Set(fields.filter(field => !field.binding).map(field => field.tab))) {
+          const content = contents.get(tab)!, members: Parameters<typeof replayPanelsDock>[1][number][] = [];
+          let dock = content.dock, panels = [...content.panels];
+          for (const field of fields.filter(field => field.tab === tab && !field.binding)) {
+            const wanted = values[field.key] as PanelMembership;
+            if (wanted && wanted.panel.id !== field.instance) return false;
+            if (!wanted) { dock = changePanelDock(dock, field.instance, "erase"); panels = panels.filter(panel => panel.id !== field.instance); }
+            else { if (!panels.some(panel => panel.id === field.instance)) panels.push(wanted.panel);
+              members.push({ instance: field.instance, open: wanted.open, places: wanted.places }); }
           }
+          contents.set(tab, { ...content, panels, dock: members.length ? replayPanelsDock(dock, members) : dock });
+        }
+        for (const { key, tab, instance, binding } of fields) if (binding) {
+          const content = contents.get(tab)!;
+          const current = content.panels.find(panel => panel.id === instance);
+          if (!current && fields.some(field => !field.binding && field.tab === tab && field.instance === instance && values[field.key] === undefined)) continue;
+          if (!current || current.type === "view" || values[key] !== undefined && !panelBindingOf(values[key])) return false;
+          const { binding: _old, ...rest } = current;
+          contents.set(tab, { ...content, panels: content.panels.map(panel => panel.id === instance
+            ? { ...rest, ...(values[key] ? { binding: clone(values[key]) as PanelBinding } : {}) } : panel) });
         }
         const identities = [...contents.values()].flatMap(content => content.panels.map(panel => panel.id));
         if (new Set(identities).size !== identities.length) return false;

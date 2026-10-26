@@ -115,14 +115,26 @@ test("a jump applies once, however many steps it crosses, and keeps every step r
   expect(scope.timeline().steps.map(step => step.state)).toEqual(["done", "done", "done", "undone", "undone"]);
 });
 
-test("a move the target refuses drops the scope's steps and changes nothing (CORE-94)", () => {
-  const service = createHistoryService(), view = store({ n: 0 }), scope = service.open(LOCAL_VIEW_SCOPE, view.target);
+test("a refused Undo, Redo or jump preserves steps, labels, displaced limit entries and chunks (P3-i H2)", () => {
+  const service = createHistoryService(), view = store({ n: 0 }, { content: true }), scope = service.open(LOCAL_VIEW_SCOPE, view.target, { limit: 2 });
   scope.checkpoint(["n"], label("One")); view.set("n", 1);
   scope.checkpoint(["n"], label("Two")); view.set("n", 2);
-  view.refuseNext();
-  expect(scope.undo()).toBe(false);
-  expect(view.values.n).toBe(2);
-  expect(scope.state()).toEqual({ depth: 0, redoDepth: 0 });
+  scope.checkpoint(["n"], label("Three")); view.set("n", 3);
+  let notifications = 0; service.subscribe(() => notifications++);
+  const refused = (move: () => boolean) => {
+    const timeline = scope.timeline(), state = scope.state(), data = scope.data(), stats = scope.stats(), values = { ...view.values }, heard = notifications;
+    for (let i = 0; i < 3; i++) {
+      view.refuseNext(); expect(move()).toBe(false);
+      expect(view.values).toEqual(values); expect(scope.timeline()).toEqual(timeline); expect(scope.state()).toEqual(state);
+      expect(scope.data()).toEqual(data); expect(scope.stats()).toEqual(stats); expect(notifications).toBe(heard);
+    }
+  };
+  refused(() => scope.undo());
+  expect(scope.undo()).toBe(true); expect(view.values.n).toBe(2); expect(scope.timeline().trimmed).toBe(false);
+  refused(() => scope.redo());
+  refused(() => scope.jumpTo(scope.timeline().startId));
+  expect(scope.redo()).toBe(true); expect(view.values.n).toBe(3);
+  expect(scope.jumpTo(scope.timeline().startId)).toBe(true); expect(view.values.n).toBe(1);
 });
 
 test("a slider drag coalesces into one step until it is released (CORE-95), in the view graph too", () => {

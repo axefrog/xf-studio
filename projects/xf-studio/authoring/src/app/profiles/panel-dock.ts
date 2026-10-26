@@ -1,5 +1,5 @@
 /** Instance membership changes use the shared dock model, preserving every surviving panel's current arrangement. */
-import { applyDrop, closePanel, detachPanel, locate, revealPanel, summonPanel, type DockState, type DockTree } from "../../platform/core/dock-layout";
+import { applyDrop, closePanel, closePanels, detachPanel, locate, revealPanel, summonPanel, unparkPanels, type DockState, type DockTree, type ParkedPlace } from "../../platform/core/dock-layout";
 import type { DockLayout, JsonValue } from "../ui-preferences";
 
 const empty = (): DockTree => ({ root: null, floating: [], closed: [] });
@@ -25,6 +25,28 @@ export function changePanelDock(layout: DockLayout | null, instance: string, mod
       const { [instance]: _removed, ...kept } = state[size].parked;
       if (Object.keys(kept).length) state[size].parked = kept; else delete state[size].parked;
     }
+  }
+  return dockWith(layout, state);
+}
+export function removePanelsDock(layout: DockLayout | null, instances: readonly string[]): DockLayout {
+  const state = panelDock(layout);
+  for (const size of ["wide", "compact"] as const) state[size] = closePanels(state[size], instances);
+  return dockWith(layout, state);
+}
+/** Membership replay closes the complete set before reopening any member; existing places take priority over old history places. */
+export function replayPanelsDock(layout: DockLayout | null, members: readonly { instance: string; open: Record<keyof DockState, boolean>;
+  places: Partial<Record<keyof DockState, ParkedPlace>> }[]): DockLayout {
+  const state = panelDock(layout), fallback: DockTree = { root: null, floating: [], closed: [] };
+  for (const size of ["wide", "compact"] as const) {
+    state[size] = closePanels(state[size], members.filter(member => !member.open[size]).map(member => member.instance));
+    const returning = members.filter(member => member.open[size] && !locate(state[size], member.instance));
+    for (const { instance, places } of returning) {
+      const place = state[size].lastPlace?.[instance] ?? places[size];
+      state[size] = detachPanel(state[size], instance);
+      if (place && !("closed" in place)) state[size].parked = { ...state[size].parked, [instance]: place };
+    }
+    // Unlike explicit Show, a replay restores the remembered active tab/collapse instead of revealing every returning member in turn.
+    if (returning.length) state[size] = unparkPanels(state[size], returning.map(member => member.instance), fallback, { x: 40, y: 40, w: 400, h: 560 });
   }
   return dockWith(layout, state);
 }

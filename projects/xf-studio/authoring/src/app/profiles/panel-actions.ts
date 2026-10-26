@@ -2,7 +2,7 @@
 import { refusal, type Capability } from "../../platform/api/capability";
 import type { PanelContext } from "../../platform/api/subjects";
 import type { DockLayout } from "../ui-preferences";
-import { rewriteDock } from "./profiles-migration-data";
+import { rewriteDock, viewOfPanel } from "./profiles-migration-data";
 import { panelBindingOf, type PanelBinding } from "./profile-session";
 import { TabRefusal, type PanelTabTarget, type PanelTarget, type ProfileSessions } from "./profile-sessions";
 import { resolveBinding, type BindingWorld, type ConstraintRule } from "./bindings";
@@ -33,8 +33,14 @@ export class PanelActions {
       open: { wide: openIn(dock, instance.id, "wide"), compact: openIn(dock, instance.id, "compact") } })));
   }
   private factory(tab: string, adding?: { id: string; type: string }): DockLayout | null {
-    const factory = this.deps.factory();
-    return factory ? rewriteDock(factory, type => adding?.type === type ? adding.id : this.session.instance(type, tab) || type) : null;
+    const factory = this.deps.factory(), panels = this.session.tab(tab)?.panels ?? [];
+    // Factory slots need one deterministic sibling anchor; this projection never serializes the tab's actual instance arrangement.
+    return factory ? rewriteDock(factory, type => {
+      if (adding?.type === type) return adding.id;
+      const view = viewOfPanel(type);
+      return panels.find(panel => view ? panel.type === "view" && panel.binding?.policy === "pinned" && "view" in panel.binding.target
+        && panel.binding.target.view === view : panel.type === type)?.id ?? type;
+    }) : null;
   }
   capability(action: PanelAction): Capability {
     try { this.check(action); return { available: true }; }

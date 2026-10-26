@@ -316,11 +316,16 @@ export function activate(tree: DockTree, panel: PanelId): DockTree {
 }
 /** Close a panel, remembering where it was (`lastPlace`) so summoning it again puts it back there. */
 export function closePanel(tree: DockTree, panel: PanelId): DockTree {
-  if (!locate(tree, panel)) return tree;
-  const place = placeOf(tree, panel, new Set([panel]));
-  const next = detachPanel(tree, panel);
-  next.closed = [...next.closed, panel];
-  if (place && !("closed" in place)) next.lastPlace = { ...next.lastPlace, [panel]: place };
+  return closePanels(tree, [panel]);
+}
+/** Close a set atomically: every remembered place sees the same departing set and surviving anchors. */
+export function closePanels(tree: DockTree, panels: readonly PanelId[]): DockTree {
+  const leaving = new Set(panels.filter(panel => locate(tree, panel)));
+  if (!leaving.size) return tree;
+  const places = [...leaving].map(panel => [panel, placeOf(tree, panel, leaving)] as const);
+  let next = tree;
+  for (const panel of leaving) { next = detachPanel(next, panel); next.closed = [...next.closed, panel]; }
+  for (const [panel, place] of places) if (place && !("closed" in place)) next.lastPlace = { ...next.lastPlace, [panel]: place };
   return next;
 }
 /**

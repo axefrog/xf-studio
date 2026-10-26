@@ -11,7 +11,7 @@
  *   target's content is what it left (its `revision`, else its `fingerprint`); an open transaction's checkpoint hides Redo
  *   and cancelling it brings Redo back. Otherwise the undone steps are discarded at the next move.
  * - **Moves apply once.** Undo, Redo and a jump over several steps apply the values they reach as one change. A target that
- *   refuses them (an inconsistent replay, CORE-94) makes the scope drop its steps, and nothing changes.
+ *   refuses them (an inconsistent replay, CORE-94) leaves target, Undo and Redo unchanged so the owner can repair or retry.
  * - **Transactions.** `begin` opens the platform's `HistoryTransaction` over the scope: one checkpoint, labelled by the first
  *   change, discarded when empty, reverted on cancel without Redo (CORE-42).
  * - **The editing context** (§3.7) is the focus service's (`focus`, platform/core/focus.ts), never this service's: a step kept in a look's
@@ -267,23 +267,23 @@ class Scope implements HistoryScope {
   }
 
   private move(plan: HistoryJumpPlan): boolean {
-    if (this.target.unavailable?.()) return false;
-    let moved: { parts: Record<string, unknown> } | undefined;
-    if (plan.direction === "undo") {
-      if (this.stack.depth < plan.count) return false;
-      if (!this.redoValid()) this.clearRedo();
-      moved = this.stack.undo(this.read, plan.count);
-    } else if (plan.direction === "redo") {
+    if (this.target.unavailable?.() || plan.direction === "none") return false;
+    if (plan.direction === "undo" && this.stack.depth < plan.count) return false;
+    if (plan.direction === "redo") {
+      // An externally changed target invalidates the obsolete redo branch (CORE-46); this is separate from refusing an apply.
       if (!this.redoValid()) { this.clearRedo(); return false; }
       if (this.stack.redoDepth < plan.count) return false;
-      moved = this.stack.redo(this.read, plan.count);
     }
-    if (!moved) return false;
-    if (!this.target.apply(moved.parts, plan.direction === "undo" ? "undo" : "redo")) {
-      // The steps could never apply again (CORE-94): drop them, so nothing names what no longer exists.
-      this.stack.clear(); this.expected = undefined; this.changed();
-      return false;
-    }
+    const expected = this.expected && { ...this.expected };
+    let accepted = false;
+    try {
+      accepted = this.stack.attempt(() => {
+        if (plan.direction === "undo" && !this.redoValid()) this.clearRedo();
+        const moved = plan.direction === "undo" ? this.stack.undo(this.read, plan.count) : this.stack.redo(this.read, plan.count);
+        return !!moved && this.target.apply(moved.parts, plan.direction === "undo" ? "undo" : "redo");
+      });
+    } finally { if (!accepted) this.expected = expected; }
+    if (!accepted) return false;
     this.expected = { revision: this.target.revision?.(), fingerprint: this.target.fingerprint?.() ?? "", top: this.stack.topId };
     // The target settles even when a listener throws, so it never stays half published.
     try { this.changed(true); } finally { this.target.settled?.(); }
