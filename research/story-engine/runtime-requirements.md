@@ -4,6 +4,8 @@ What the Story Engine needs from the running game. This list is decided by what 
 
 ## Current picture
 
+**Where the live status is.** The bridge's [capability registry](../../projects/xf-runtime-bridge/capabilities/README.md) is the authority on what each capability can do today: its stage, evidence and health. Every row below is recorded there as a `story-engine` demand. This page says what the Story Engine needs and why. Its status cells are a summary that can lag the registry, so check the registry before planning on a capability. Needs are added or changed only through the registry's tool (`bun tools/capabilities.ts demand … --as story-engine`).
+
 Refreshed whenever the bridge reaches a milestone; last refreshed 23 October 2026.
 
 - **Where the code is.** `main` has bridge 0.8.5. Bridge 0.8.8 (branch `claude/bridge-080a`) holds NPC direction and the read-only senses (S2 to S6), built and tested offline but never run in game; the DM toolkit (`claude/bridge-080-dm`) is work in progress.
