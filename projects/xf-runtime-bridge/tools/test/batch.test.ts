@@ -258,8 +258,8 @@ describe("batch: planning", () => {
     for (const expected of ['unknown action "dance"', "names its files", 'no command "no.such"', "host.key takes keys or binding", "on_fail is skip_row", "a fail_row step needs a label", "which no step binds", "id is used more than once"]) expect(text).toContain(expected);
   });
 
-  test("the shipped scripts are valid, follow their card, and name every ST capture ST<n>-<surface>-<state>-<theme>", () => {
-    for (const file of ["st-styling.json", "borg4-smoke.json"]) {
+  test("the shipped scripts are valid, follow their card, and name every ST capture ST<n>-<surface>-<state>-<theme>", async () => {
+    for (const file of ["st-styling.json", "st-rerun.json", "borg4-smoke.json"]) {
       const s = JSON.parse(readFileSync(join(projectDir, "tools", "sessions", file), "utf8")) as BatchScript;
       expect(planBatch(s).problems, file).toEqual([]);
       expect(existsSync(join(projectDir, "..", "..", s.card!.split("#")[0])), file).toBe(true);
@@ -268,6 +268,9 @@ describe("batch: planning", () => {
     const names: string[] = [];
     const walk = (v: unknown) => { if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === "object") { const o = v as Record<string, unknown>; if ((o.do === "capture" || o.do === "burst") && typeof o.name === "string" && /^ST\d/.test(o.name) && !/-cet-(before|check)/.test(o.name)) names.push(o.name); Object.values(o).forEach(walk); } };
     walk(st.rows);
+    // With the bridge hooks its paused, diagnostics, settle and tone rows join (the names they will capture under).
+    const { stScript } = await import("../sessions/make-batches.ts");
+    walk((stScript(false, { panel: true, cpu: true }) as BatchScript).rows);
     expect(names.length).toBeGreaterThan(40);
     for (const name of names) expect(name).toMatch(/^ST\d+-[a-z]+-[a-z0-9-]+-(dark|light)$/);
     // Every row sets its own look live first; the writes rows' dark ones come before their light ones.
