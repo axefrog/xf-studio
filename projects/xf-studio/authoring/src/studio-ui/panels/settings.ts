@@ -1,5 +1,5 @@
 import { applyCapability, button, capabilityScope, note, setButtonLabel, setButtonVariant, section, Segmented, Toggle } from "../controls";
-import { h, setText } from "../dom";
+import { firstControl, h, setText } from "../dom";
 import { openReportDialog } from "../diagnostics/report-dialog";
 import type { HelpText } from "../help-tip";
 import { PANEL_META } from "../panel-meta";
@@ -119,7 +119,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
       // While WolvenKit is the thing to do, Game lands on its step (the palette's WolvenKit entry comes here).
       if (which === "game" && !gameStep.element.hidden) requestAnimationFrame(() => gameStep.element.focus());
       else if (which === "game" || which === "saves" || which === "tools") form.focus(which);
-      else requestAnimationFrame(() => target.querySelector<HTMLElement>("button:not([hidden]), input:not([hidden])")?.focus());
+      else requestAnimationFrame(() => firstControl(target)?.focus());
     },
     update(frame: Frame) {
       showWorkspace.hidden = !frame.files.workspaceFile;

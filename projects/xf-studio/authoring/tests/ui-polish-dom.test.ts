@@ -451,6 +451,27 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
     h.panel.spec.element.remove();
   });
 
+  test("opening a group puts focus on the first thing to do, never on a help icon (whose tip would open unasked)", async () => {
+    const h = await settingsHarness({ picker: true });
+    h.panel.spec.visibility?.(true);
+    await settle(); h.paint();
+    lightDocument.activeElement = null;
+    for (const section of ["game", "saves", "tools"] as const) {
+      h.panel.show?.(section);
+      // The move is asynchronous (a frame later, once the group has painted): wait it out.
+      expect(await until(() => lightDocument.activeElement !== null, h.paint)).toBe(true);
+      const focused = lightDocument.activeElement!;
+      expect(focused.classList.contains("help-tip")).toBe(false);
+      expect(focused.closest(`[data-settings-section=${section}]`)).toBeTruthy();
+      lightDocument.activeElement = null;
+    }
+    // Game: the control is the folder setting's own button, which comes after the label's help icon in the page.
+    h.panel.show?.("game");
+    await until(() => lightDocument.activeElement !== null, h.paint);
+    expect(lightDocument.activeElement!.getAttribute("aria-label") ?? text(lightDocument.activeElement!)).not.toMatch(/^About /);
+    h.panel.spec.element.remove();
+  });
+
   test("with the desktop's folder picker, Choose a folder… picks and saves a folder", async () => {
     const h = await settingsHarness({ picker: true });
     const game = h.root.querySelector("[data-settings-section=game]")!;

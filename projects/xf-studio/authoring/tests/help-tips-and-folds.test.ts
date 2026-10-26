@@ -2,7 +2,7 @@
 // of panel headings (the `folded` UI preference).
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { foldedKeys, parseUIPreferences, UIPreferenceActions } from "../src/app/ui-preferences";
-import { installLightDom, type LightElement, uninstallLightDom } from "./light-dom";
+import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
@@ -21,6 +21,48 @@ describe("help tips", () => {
     expect(tip.classList.contains("empty")).toBe(true);
     expect(tip.tabIndex).toBe(-1);
     expect(tip.hasAttribute("aria-description")).toBe(false);
+  });
+
+  test("the tip opens for keyboard focus, hover and a click, never for focus that did not come from the keyboard", async () => {
+    const { helpTip, installHelpTips } = await import("../src/studio-ui/help-tip");
+    Object.assign(globalThis, { innerWidth: 800, innerHeight: 600 });
+    const host = new (lightDocument.body.constructor as new (tag: string) => LightElement)("div");
+    const tip = helpTip("Cyberpunk 2077 folder", "The folder the game is installed in.") as unknown as LightElement;
+    host.append(tip);
+    lightDocument.body.append(host);
+    installHelpTips(lightDocument as never);
+    const bubble = lightDocument.body.querySelector(".help-bubble")!;
+    const fire = (type: string, extra: object = {}) => lightDocument.dispatchEvent(lightEvent(type, { target: tip, ...extra }));
+    expect(bubble.hidden).toBe(true);
+
+    // A script (a panel putting focus on its first control, focus handed back after a repaint) or a click focuses the icon: no tip.
+    tip.focusVisible = false;
+    fire("focusin");
+    expect(bubble.hidden).toBe(true);
+
+    // The keyboard (Tab) reaches it: the tip shows, and leaving closes it.
+    tip.focusVisible = true;
+    fire("focusin");
+    expect(bubble.hidden).toBe(false);
+    expect(bubble.textContent).toContain("The folder the game is installed in.");
+    fire("focusout");
+    expect(bubble.hidden).toBe(true);
+
+    // Hover still shows it, and leaving closes it.
+    tip.focusVisible = false;
+    fire("pointerover");
+    expect(bubble.hidden).toBe(false);
+    fire("pointerout", { relatedTarget: null });
+    expect(bubble.hidden).toBe(true);
+
+    // A click pins it (the click's own focus does not open or close anything), a second click closes it.
+    fire("focusin");
+    expect(bubble.hidden).toBe(true);
+    fire("click");
+    expect(bubble.hidden).toBe(false);
+    fire("click");
+    expect(bubble.hidden).toBe(true);
+    host.remove();
   });
 });
 

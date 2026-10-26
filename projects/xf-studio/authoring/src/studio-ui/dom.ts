@@ -55,6 +55,11 @@ export function setUnavailable(control: HTMLElement, unavailable: boolean, reaso
 }
 /** Whether a control is unavailable (native `disabled`, or the main-action pattern's `aria-disabled`). */
 export const isUnavailable = (control: Element) => (control as HTMLButtonElement).disabled === true || control.getAttribute("aria-disabled") === "true";
+/**
+ * The first control a panel puts focus on when it is opened or asked to show a group: the first shown button or text box, never a help
+ * icon (a help tip explains; it is not something to do, and focusing it would open its tip).
+ */
+export const firstControl = (root: ParentNode) => root.querySelector<HTMLElement>("button:not([hidden]):not(.help-tip), input:not([hidden])");
 let idCounter = 0;
 export const uid = (prefix = "xfs") => `${prefix}-${++idCounter}`;
 export const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));

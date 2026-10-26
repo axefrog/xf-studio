@@ -2,7 +2,7 @@ import type { FolderField } from "../../setup/local-setup-actions";
 import type { LocalSetupFields } from "../../setup/local-settings";
 import { applyCapability, button, note, Segmented } from "../controls";
 import { ChoiceList, FolderSetting, type FolderChoice, type FolderOutcome } from "../components";
-import { h, setAttr, setText, setValue, uid } from "../dom";
+import { firstControl, h, setAttr, setText, setValue, uid } from "../dom";
 import { helpTip } from "../help-tip";
 import { icon } from "../icons";
 import type { Frame, StudioRuntime } from "../runtime";
@@ -165,10 +165,10 @@ export function gameSetupForm(rt: StudioRuntime) {
     focus(section: "game" | "saves" | "tools") {
       void detect();
       if (section === "saves") { saves.focus(); return; }
-      if (section === "tools") { requestAnimationFrame(() => wolvenKitField.querySelector<HTMLElement>("button:not([hidden])")?.focus()); return; }
+      if (section === "tools") { requestAnimationFrame(() => firstControl(wolvenKitField)?.focus()); return; }
       const view = port.localSetup.snapshot().view;
       const first = !view?.fields.gameRoot ? game.element : view.fields.launchRoute === "mo2" && !view.fields.mo2Root ? mo2.element : game.element;
-      requestAnimationFrame(() => first.querySelector<HTMLElement>("button:not([hidden]), input:not([hidden])")?.focus());
+      requestAnimationFrame(() => firstControl(first)?.focus());
     },
     update(frame: Frame) {
       const setup = frame.localSetup, view = setup.view, fields = view?.fields;

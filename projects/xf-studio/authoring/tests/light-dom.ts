@@ -93,6 +93,8 @@ export class LightElement extends LightNode {
     for (let at: LightElement | null = this; at && !event.stopped; at = at.parentNode) for (const listener of at.listeners.get(event.type) ?? []) listener(event);
     return !event.defaultPrevented;
   }
+  /** What `:focus-visible` answers (a test sets false for focus that did not come from the keyboard). */
+  focusVisible = true;
   click() { if (!this.disabled) this.dispatchEvent(lightEvent("click")); }
   focus() { lightDocument.activeElement = this; this.dispatchEvent(lightEvent("focus")); }
   /** Every descendant, depth first. */
@@ -104,6 +106,7 @@ export class LightElement extends LightNode {
   closest(selector: string): LightElement | null { for (let at: LightElement | null = this; at; at = at.parentNode) if (at.matches(selector)) return at; return null; }
 }
 function matchesWithNot(element: LightElement, selector: string): boolean {
+  if (selector.includes(":focus-visible")) return element.focusVisible && matchesWithNot(element, selector.replace(":focus-visible", ""));
   const nots = [...selector.matchAll(/:not\(([^)]*)\)/g)].map(match => match[1]!);
   const base = selector.replace(/:not\(([^)]*)\)/g, "");
   return (!base || matches(element, base)) && nots.every(not => !matches(element, not));
