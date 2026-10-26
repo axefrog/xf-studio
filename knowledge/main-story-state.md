@@ -250,7 +250,7 @@ Two cautions. A state fact can be written long after the event (Takemura's is wr
 
 The curated facts, with names, the phases and scenes that write them (with the value written: `=n` sets, `+n` adds) and where they are tested (with the comparison). It is a selection of 93 of the 3,687 distinct fact names found; the rest are puzzle, combat and content-switch flags. [main-story-facts.json](../research/story-engine/main-story-facts.json) carries the same rows with FNV-1a 32 hashes. No game text or assets are included.
 
-#### Life path and prologue
+### Life path and prologue
 
 | Fact | Reads as | Written (value) | Tested in (condition) |
 |---|---|---|---|
@@ -258,7 +258,7 @@ The curated facts, with names, the phases and scenes that write them (with the v
 | `q000_nomad_background` | V's life path is Nomad | `q000_nomad` (=1) | `lizzies_q000`; scene `q115_02b_ripperdoc_roof` (>=1) |
 | `q000_corpo_background` | V's life path is Corpo | `q000_corpo` (=1) | `lizzies_q000`; scene `q113_06_saburo_office`, `q113_07_mikoshi` +3 (>=1) |
 
-#### Progress markers (quest done and active flags)
+### Progress markers (quest done and active flags)
 
 | Fact | Reads as | Written (value) | Tested in (condition) |
 |---|---|---|---|
@@ -283,21 +283,21 @@ The curated facts, with names, the phases and scenes that write them (with the v
 | `q203_done` | Path of Glory epilogue finished | `q203_legend` (+1) | `q204_reborn` (>0) |
 | `q204_done` | New Dawn Fades epilogue finished | `q204_reborn` (=1) | `q204_reborn` (>0) |
 
-#### Turning points
+### Turning points
 
 | Fact | Reads as | Written (value) | Tested in (condition) |
 |---|---|---|---|
 | `q112_hanako_meeting_set_up` | Hanako meeting arranged (read at the PONR phase) | scene `q112_11_shotgun`  | `q115_00_hanako` (>0) |
 | `q116_smasher_defeated` | Smasher defeated | `q115_solo_smasher`, `q116_smasher` (=1) | no reader in the extracted files  |
 
-#### Point of no return
+### Point of no return
 
 | Fact | Reads as | Written (value) | Tested in (condition) |
 |---|---|---|---|
 | `q115_point_of_no_return` | The point of no return has passed | `act_1`, `q115_00_hanako`, `q307.quest` +1 (+1,=1) | `ep1_main_quests`, `q103_emmerick_routine`, `q112_text_messages` +6; scene `q307_00_pickup_holocall`, `q307_01_pickup` (>0 >=1) |
 | `q115_no_return` | Second flag, set by the rooftop decision scene, read by the Nomad route | scene `q115_02b_ripperdoc_roof`  | `q114_nomads` (>0) |
 
-#### Ending branch
+### Ending branch
 
 | Fact | Reads as | Written (value) | Tested in (condition) |
 |---|---|---|---|
@@ -312,7 +312,7 @@ The curated facts, with names, the phases and scenes that write them (with the v
 | `q115_weyland_dead` | Weyland dead (tested by the New Dawn Fades epilogue only) | not in the extracted files  | `q204_columbarium_holograms` (>0) |
 | `q115_did_it_solo` | V finished the Tower solo with Johnny | `q115_solo_the_mikoshi` (=1) | `q116_cyberspace`, `q203_afterlife`; scene `q116_05_mikoshi`, `q116_05a_ripperdoc_roof` (>0) |
 
-#### Characters: alive, dead, saved
+### Characters: alive, dead, saved
 
 | Fact | Reads as | Written (value) | Tested in (condition) |
 |---|---|---|---|
@@ -330,7 +330,7 @@ The curated facts, with names, the phases and scenes that write them (with the v
 | `sq021_river_dead` | River dead | not in the extracted files  | `final_boards`, `q201_heir`, `q204_columbarium_holograms` (==0 ==1 >0) |
 | `sq021_randy_saved` | Randy saved | not in the extracted files  | `final_boards`, `q201_heir` (==1 >=1) |
 
-#### Romance
+### Romance
 
 | Fact | Reads as | Written (value) | Tested in (condition) |
 |---|---|---|---|
@@ -343,7 +343,7 @@ The curated facts, with names, the phases and scenes that write them (with the v
 | `sq029_river_lover` | River is V's lover | not in the extracted files  | `q302`, `q307_01_pickup`, `q307_03_hospital`; scene `q103_07_ghost_town_drive`, `q115_02b_ripperdoc_roof` +4 (>0 >=1) |
 | `sq030_judy_lover` | Judy is V's lover | not in the extracted files  | `q302`, `q307_01_pickup`, `q307_03_hospital`; scene `q103_07_ghost_town_drive`, `q115_02b_ripperdoc_roof` +3 (>0 >=1) |
 
-#### Relationship flags
+### Relationship flags
 
 | Fact | Reads as | Written (value) | Tested in (condition) |
 |---|---|---|---|
@@ -361,7 +361,7 @@ The curated facts, with names, the phases and scenes that write them (with the v
 | `sq031_rogue_met_johnny` | Rogue and Johnny have met (name: 'met Johnny') | not in the extracted files  | `final_boards`; scene `q203_05_afterlife`, `q307_ending_01_rogue` (>=1) |
 | `sq031_done` | Chippin' In finished | not in the extracted files  | `final_boards`, `q112_text_messages`, `q204_00_setup`; scene `q110_14_alt`, `q115_00_johnny` +4 (>0 >=1) |
 
-#### Phantom Liberty
+### Phantom Liberty
 
 | Fact | Reads as | Written (value) | Tested in (condition) |
 |---|---|---|---|
