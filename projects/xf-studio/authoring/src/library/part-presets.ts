@@ -225,6 +225,7 @@ export class PartPresetService {
     }
     const mutate = request.kind !== "partPresetSet.list";
     if (mutate) { this.busy = true; this.notify(); }
+    else { this.setLists.set(request.feature, { phase: "loading", items: [] }); this.notify(); }
     try {
       switch (request.kind) {
         case "partPresetSet.list":

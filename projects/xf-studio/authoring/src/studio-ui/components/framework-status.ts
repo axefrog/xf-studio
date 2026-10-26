@@ -25,6 +25,8 @@ import { linkButton } from "./link-button";
  *   button ("All frameworks up to date"). The choice is remembered under `key` (view-state.ts). While anything needs attention the rows
  *   are always shown and the line is plain text.
  * - **Checking:** the previous rows stay (nothing jumps) and only the line and the button change; the first check shows just the line.
+ * - **Requirements:** while the product library loads, show “Checking what your mods need…” without rows or a readiness claim.
+ *   A failed read shows its owner's plain message and **Try again** (`onRetryRequirements`); Check again retries that read too.
  *
  * `update(state, capabilities)` repaints in place: rows are rebuilt only when they changed, so focus on a link or the fold stays.
  */
@@ -45,6 +47,8 @@ export type FrameworkStatusRow = {
   readonly links: readonly FrameworkStatusLink[];
 };
 export type FrameworkStatusState = {
+  /** Requirements could not be read: show the owner's retry beside its plain message, with no framework rows. */
+  readonly retryRequirements?: boolean;
   readonly line: string;
   readonly tone: "ready" | "attention" | "checking" | "info";
   readonly rows: readonly FrameworkStatusRow[];
@@ -59,6 +63,7 @@ export type FrameworkStatusOptions = {
   /** The view key the fold is remembered under (`settings.frameworks`). */
   key: string;
   onCheckAgain(): void;
+  onRetryRequirements?(): void;
   /** A release page's link button was pressed (its `id`). */
   onOpenLink(id: string): void;
 };
@@ -66,6 +71,7 @@ export type FrameworkStatusOptions = {
 export class FrameworkStatus {
   readonly element: HTMLElement;
   readonly checkAgain: HTMLButtonElement;
+  readonly retryRequirements: HTMLButtonElement;
   private readonly mark = h("span", { class: "framework-mark", "aria-hidden": "true" });
   private readonly text = h("span", { class: "framework-line-text" });
   private readonly fold: HTMLButtonElement;
@@ -86,6 +92,8 @@ export class FrameworkStatus {
     const listId = uid("frameworks");
     this.checkAgain = button({ label: "Check again", icon: "refresh", small: true, variant: "quiet",
       title: "Read the framework versions again (changes nothing)", onClick: () => options.onCheckAgain() });
+    this.retryRequirements = button({ label: "Try again", small: true, variant: "quiet",
+      onClick: () => options.onRetryRequirements?.() });
     this.fold = expander("row", { expanded: viewState().expanded(options.key) ?? false, controls: listId }, this.foldLabel);
     this.fold.addEventListener("click", () => {
       const open = !isExpanded(this.fold);
@@ -96,7 +104,7 @@ export class FrameworkStatus {
     this.list = h("ul", { class: "framework-list", "aria-label": options.label });
     this.element = h("div", { class: "framework-status", "data-tone": "info", hidden: true },
       h("div", { class: "framework-head" }, h("h4", { class: "framework-title" }, h("span", { text: options.label }), helpTip(options.label, options.help)), this.checkAgain),
-      h("div", { class: "framework-line", "aria-live": "polite" }, this.fold, this.plain), h("div", { id: listId, class: "framework-rows" }, this.list, this.unused));
+      h("div", { class: "framework-line", "aria-live": "polite" }, this.fold, this.plain, this.retryRequirements), h("div", { id: listId, class: "framework-rows" }, this.list, this.unused));
   }
 
   /** Whether the rows are shown now: always, except while folded under an "all up to date" line. */
@@ -104,6 +112,7 @@ export class FrameworkStatus {
 
   update(state: FrameworkStatusState | null, capabilities: { checkAgain?: Capability; open?: Capability } = {}) {
     this.element.hidden = !state;
+    this.retryRequirements.hidden = !state?.retryRequirements;
     // Even while it isn't shown, its button follows the port's answer (a window that may not read keeps it unavailable).
     setButtonLabel(this.checkAgain, state?.checking ? "Checking…" : "Check again");
     applyCapability(this.checkAgain, state?.checking ? { available: false, reason: "XF Studio is checking your frameworks now." }

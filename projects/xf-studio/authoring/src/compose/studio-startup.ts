@@ -418,7 +418,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The main view shows the held expression: the view graph's per-view scene input is the seam where another view could show another.
   const facial = new FacialPreview(createBrowserFacialDevice());
   // A set of saved expressions exports as one mod through the same package route a collection uses (never installed by Build).
-  const presets = new PartPresetService(partPresetTransport(verification ? "/api/verification/part-presets" : "/api/part-presets"),
+  const presetTransport = partPresetTransport(verification ? "/api/verification/part-presets" : "/api/part-presets");
+  const presets = new PartPresetService({ ...presetTransport,
+    listSets: feature => frameworkFixture?.listSets(feature) ?? presetTransport.listSets(feature) },
     setExportTransport(verification ? "/api/verification/mod-install" : "/api/mod-install"));
   setBuilds = () => presets.builtMods();
   core.app.attach({ facial, presets, transitions });

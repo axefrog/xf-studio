@@ -399,7 +399,7 @@ describe("Settings in a read-only window (style guide t-read-only-window)", () =
     expect(unavailable(deep)).toBe(false);
     // Refused: the game folder setup and Check for updates (local settings writes).
     const game = h.root.querySelector("[data-settings-section=game]")!;
-    const gameControls = [...game.querySelectorAll("button"), ...game.querySelectorAll("input")];
+    const gameControls = [...game.querySelectorAll("button"), ...game.querySelectorAll("input")].filter(control => !control.hidden);
     expect(gameControls.length).toBeGreaterThan(5);
     // Expanders only fold what is shown (read-safe, like help tips): the Mod frameworks fold is one.
     expect(gameControls.filter(control => !unavailable(control) && !control.matches(".help-tip, .expander")).map(control => text(control) || control.getAttribute("aria-label"))).toEqual([]);
@@ -943,6 +943,26 @@ describe("Polish batch 2: the profiles phase 1 UI follow-ups", () => {
 /** The line as shown: the fold button's words while the rows fold under it, else the plain sentence (the other is hidden). */
 const lineOf = (group: LightElement) => text(group.querySelector(".framework-line")!.children.find(child => !child.hidden)!);
 describe("Settings › Game › Mod frameworks: what the game will load, and the one next step", () => {
+  test("unresolved requirements show plain loading or failure, and Try again delegates to the owner callback", async () => {
+    const { FrameworkStatus } = await import("../src/studio-ui/components");
+    let retries = 0;
+    const status = new FrameworkStatus({ label: "Mod frameworks", help: [], key: "test.requirements",
+      onCheckAgain: () => {}, onOpenLink: () => {}, onRetryRequirements: () => { retries++; } });
+    const group = status.element as unknown as LightElement;
+    status.update(frameworkStatusView({ gameChosen: true, checking: false, check: frameworkCheckFor("expressions-missing"), requirements: { phase: "loading" } }));
+    expect(lineOf(group)).toBe("Checking what your mods need…");
+    expect(group.querySelectorAll(".framework-row")).toHaveLength(0);
+    expect(status.retryRequirements.hidden).toBe(true);
+    status.update(frameworkStatusView({ gameChosen: true, checking: false, check: frameworkCheckFor("expressions-missing"),
+      requirements: { phase: "failed", message: "Your expression sets couldn’t be read." } }));
+    expect(lineOf(group)).toBe("Your expression sets couldn’t be read.");
+    expect(status.retryRequirements.hidden).toBe(false);
+    expect(text(buttonNamed(group, "Try again")!)).toBe("Try again");
+    status.retryRequirements.click(); expect(retries).toBe(1);
+    status.update(frameworkStatusView({ gameChosen: true, checking: false, check: frameworkCheckFor("all-ok"), requirements: { phase: "ready" } }));
+    expect(lineOf(group)).toBe("All frameworks up to date");
+    expect(status.retryRequirements.hidden).toBe(true);
+  });
   const CHOSEN = VIEW({ gameRoot: "D:\\Game", mo2Root: "D:\\MO2", mo2ProfileId: "Main" });
   /** The panel after the page's own watcher asked for the check (the composition root's job; here the test does). */
   async function shown(options: HarnessOptions & { check?: (call: number) => FrameworkVersionCheck | Promise<FrameworkVersionCheck> } = {}) {

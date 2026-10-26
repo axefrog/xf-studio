@@ -1,4 +1,5 @@
 import type { PartPresetService } from "../library/part-presets";
+import type { PartPresetSet } from "../library/part-preset-sets";
 import { FRAMEWORK_SAMPLE_STATES, frameworkCheckFor, type FrameworkSampleState } from "../installation/framework-fixtures";
 import type { InstallDetectionActions, InstallDetectionTransport } from "../installation/install-detection-actions";
 import type { LocalSetupActions } from "../setup/local-setup-actions";
@@ -17,6 +18,14 @@ type Shown = Exclude<FrameworkSampleState, "no-game" | "checking" | "failed">;
  */
 export function frameworkStatusVerification(deps: { setup: Pick<LocalSetupActions, "snapshot" | "dispatch">; detection: () => Pick<InstallDetectionActions, "snapshot" | "dispatch">; presets?: () => Pick<PartPresetService, "execute"> }) {
   let state: Shown | "checking" | "no-game" | "failed" | "live" = "live", resolved: Shown = "all-ok", release: (() => void) | undefined, game: string | null = null, setId: string | undefined;
+  let releaseRequirements: (() => void) | undefined, pendingRequirements: Promise<unknown> | undefined;
+  /** Verification-only transport responses; the real library owner still owns phase changes and retries. */
+  const listSets = (feature: string): Promise<PartPresetSet[]> | undefined => {
+    if (feature !== "expressions") return undefined;
+    if (state === "requirements-failed") return Promise.reject(Error("Your expression sets couldn’t be read."));
+    if (state === "requirements-loading") return new Promise(done => { releaseRequirements = () => { releaseRequirements = undefined; done([]); }; });
+    return undefined;
+  };
   /** The detection transport's override: the framework check only, and only while a state is showing. */
   const transport = (target: Parameters<InstallDetectionTransport>[0]): ReturnType<InstallDetectionTransport> | undefined => {
     if (target !== "frameworks" || state === "live" || state === "no-game") return undefined;
@@ -32,10 +41,12 @@ export function frameworkStatusVerification(deps: { setup: Pick<LocalSetupAction
   return {
     states: FRAMEWORK_SAMPLE_STATES,
     transport,
+    listSets,
     /** Release a "checking" state's open request (it answers with the last state that showed). */
     release: () => release?.(),
     async state(name: FrameworkSampleState) {
       if (!(FRAMEWORK_SAMPLE_STATES as readonly string[]).includes(name)) throw Error(`Unknown state "${name}". Choose one of ${FRAMEWORK_SAMPLE_STATES.join(", ")}.`);
+      releaseRequirements?.(); await pendingRequirements; pendingRequirements = undefined;
       if (deps.presets) {
         const owner = deps.presets();
         if (name.startsWith("expressions-") && !setId) {
@@ -59,6 +70,11 @@ export function frameworkStatusVerification(deps: { setup: Pick<LocalSetupAction
       // The state is set before the game folder comes back, so the watcher's own check is answered by the specimen too.
       if (!current && !game) throw Error("Choose a game folder in this verification workspace first (Settings › Game).");
       state = name;
+      if (deps.presets) {
+        const read = deps.presets().execute({ kind: "partPresetSet.list", feature: "expressions" });
+        if (name === "requirements-loading") pendingRequirements = read;
+        else await read;
+      }
       if (name !== "checking" && name !== "failed") resolved = name;
       // These specimens describe the MO2 route. Set it through the disposable setup owner before binding the request's inputs.
       if (deps.setup.snapshot().view?.fields.launchRoute !== "mo2") {

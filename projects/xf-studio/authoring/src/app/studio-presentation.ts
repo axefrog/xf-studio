@@ -263,6 +263,8 @@ export type StudioPresentationPort<Slot> = {
    */
   readonly installDetection: Pick<InstallDetectionActions, "capability" | "dispatch" | "descriptors" | "discover"> & {
     snapshot(): ReadonlyDeep<InstallDetectionSnapshot>;
+    /** Retry failed product-requirement reads through the library owner (no framework detection). */
+    retryRequirements(): Promise<void>;
   };
   /**
    * 3D preview setup: the card, the WolvenKit consent and the head pane's next step, as a detached
@@ -607,13 +609,26 @@ export function createStudioPresentation<Slot>(sources: {
   // Framework detection only reads installed files and keeps its answer in memory; it needs no workspace lease.
   const detectionDenied = (action: Parameters<InstallDetectionActions["capability"]>[0]) =>
     action.kind === "detect.frameworkVersions" ? undefined : denied();
+  const requirementLists = () => (sources.frameworkProducts ?? []).map(product => ({ product, list: a.presetSets(product.feature) }));
+  const retryRequirements = async () => {
+    await Promise.all(requirementLists().filter(({ list }) => list.phase === "failed")
+      .map(({ product }) => a.executePreset({ kind: "partPresetSet.list", feature: product.feature })));
+  };
   const installDetection: StudioPresentationPort<Slot>["installDetection"] = {
     snapshot: () => {
       const read = detection.snapshot();
-      const products = (sources.frameworkProducts ?? []).filter(product => a.presetSets(product.feature).items.length > 0);
-      return { ...read, frameworkStatus: frameworkStatusForInputs(localSetup.snapshot().view?.fields, read, products) };
+      const lists = requirementLists(), failed = lists.find(({ list }) => list.phase === "failed");
+      const requirements = failed ? { phase: "failed" as const, message: failed.list.reason ?? "Saved sets are unavailable right now." }
+        : { phase: lists.some(({ list }) => list.phase === "loading") ? "loading" as const : "ready" as const };
+      const products = lists.filter(({ list }) => list.phase === "ready" && list.items.length > 0).map(({ product }) => product);
+      return { ...read, frameworkStatus: frameworkStatusForInputs(localSetup.snapshot().view?.fields, read, products, requirements) };
     }, capability: action => detectionDenied(action) ?? detection.capability(action),
-    dispatch: (action, options) => detectionDenied(action) ? refusedAsync() : detection.dispatch(action, options),
+    dispatch: async (action, options) => {
+      if (detectionDenied(action)) return refusedAsync();
+      const [outcome] = await Promise.all([detection.dispatch(action, options), action.kind === "detect.frameworkVersions" ? retryRequirements() : undefined]);
+      return outcome;
+    },
+    retryRequirements,
     discover: options => denied() ? refusedAsync() : detection.discover(options), descriptors: () => detection.descriptors(),
   };
   const install = sources.modInstall ?? new ModInstallActions(null, () => []);

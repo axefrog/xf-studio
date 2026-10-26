@@ -389,7 +389,7 @@ const MOUNTS: Record<string, Mount> = {
       { ...archive, neededFor: "Needed for XF Eye Artistry and expression sets" }, expressionTweak, red4ext, redscript, ...others.slice(1)] };
     let count = 0;
     const make = (state: FrameworkStatusState, width = 420, open = false) => {
-      const status = new FrameworkStatus({ label: "Mod frameworks", key: `style-guide.frameworks.${++count}`, onCheckAgain: () => {}, onOpenLink: () => {},
+      const status = new FrameworkStatus({ label: "Mod frameworks", key: `style-guide.frameworks.${++count}`, onCheckAgain: () => {}, onRetryRequirements: () => {}, onOpenLink: () => {},
         help: ["The tools your mods rely on in the game. XF Eye Artistry always counts, and expression sets count when your library holds any. XF Studio reads which version of each the game will load (through your Mod Organizer 2 profile, or the game folder) and tells you when one needs updating.",
           "It never installs, updates or changes them: you do that yourself, from each one's own page."] });
       status.update(state);
@@ -399,7 +399,9 @@ const MOUNTS: Record<string, Mount> = {
     return stack({ gap: "loose" }, make(attention), make(allFine), make(allFine, 420, true), make({ ...attention, line: "Checking your frameworks…", tone: "checking", checking: true }),
       make({ line: "Checking your frameworks…", tone: "checking", rows: [], foldable: false, checking: true }),
       make({ line: "Choose your Mod Organizer 2 folder and profile in Settings › Game.", tone: "info", rows: [], foldable: false, checking: false }), make(attention, 260), make(allFine, 260, true), make(expressions),
-      make({ line: "XF Studio couldn’t read your frameworks. Choose Check again to try once more.", tone: "info", rows: [], foldable: false, checking: false }));
+      make({ line: "XF Studio couldn’t read your frameworks. Choose Check again to try once more.", tone: "info", rows: [], foldable: false, checking: false }),
+      make({ line: "Checking what your mods need…", tone: "checking", rows: [], foldable: false, checking: false }),
+      make({ line: "Your expression sets couldn’t be read.", tone: "info", rows: [], foldable: false, checking: false, retryRequirements: true }, 260));
   },
   "lib-conflict-notice": () => {
     const preset = new ConflictNotice({ onResolve: () => {} }), collection = new ConflictNotice({ onResolve: () => {} });

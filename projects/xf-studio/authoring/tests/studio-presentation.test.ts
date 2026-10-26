@@ -86,7 +86,8 @@ test("replacement presentation can perform current cross-surface workflows witho
 
 // The diagnostic uses real detection and library owners; presentation cannot revive a report for older settings.
 
-async function diagnosticFixture(presets?: PartPresetService) {
+async function diagnosticFixture(presets?: PartPresetService, check = frameworkCheckFor("all-ok")) {
+  if (!presets) { presets = presetOwner(); await presets.execute({ kind: "partPresetSet.list", feature: "expressions" }); }
   let fields = { gameRoot: "C:\\Game", launchRoute: "mo2", mo2Root: "C:\\MO2", mo2ProfileId: "Play" };
   const setup = new LocalSetupActions(async (_method, body) => {
     if (body) fields = { ...fields, ...(body as { fields: typeof fields }).fields };
@@ -96,7 +97,7 @@ async function diagnosticFixture(presets?: PartPresetService) {
   let fail = false;
   const detection = new InstallDetectionActions(async () => fail
     ? { ok: false, status: 503, data: { code: "unavailable", error: "The selected game folder could not be read. Choose Check again." } }
-    : { ok: true, status: 200, data: frameworkCheckFor("all-ok") }, () => setup.snapshot().view?.fields);
+    : { ok: true, status: 200, data: check }, () => setup.snapshot().view?.fields);
   const { shell } = trustedFixture({ presets, presentation: { localSetup: setup, installDetection: detection,
     frameworkProducts: [{ feature: "expressions", name: "expression sets", requirements: EXPRESSION_FRAMEWORK_REQUIREMENTS }] } });
   return { shell, setup, detection, fail: () => { fail = true; } };
@@ -116,16 +117,51 @@ test("a failed re-check after any input change never presents the old MO2 report
   }
 });
 
-function presetOwner() {
+function presetOwner(listSets?: (feature: string) => Promise<PartPresetSet[]> | undefined) {
   let stored: PartPresetSet[] = [];
   const unused = async (): Promise<never> => { throw Error("Unexpected fixture transport call"); };
   const transport: PartPresetTransport = { list: unused, save: unused, rename: unused, delete: unused, updateSet: unused,
-    listSets: async () => structuredClone(stored),
+    listSets: async feature => listSets?.(feature) ?? structuredClone(stored),
     createSet: async input => { const set = { ...input, id: crypto.randomUUID(), revision: 1, updatedAt: "", members: [] }; stored.push(set); return set; },
     deleteSet: async id => { stored = stored.filter(set => set.id !== id); return { id }; },
   };
   return new PartPresetService(transport);
 }
+
+test("requirements loading cannot claim readiness even after successful framework detection", async () => {
+  let resolve!: (sets: PartPresetSet[]) => void;
+  const owner = presetOwner(() => new Promise(done => { resolve = done; }));
+  const h = await diagnosticFixture(owner, frameworkCheckFor("expressions-missing")), read = () => h.shell.installDetection.snapshot().frameworkStatus;
+  expect(read()).toMatchObject({ line: "Checking what your mods need…", rows: [], foldable: false });
+  await h.detection.dispatch({ kind: "detect.frameworkVersions" });
+  expect(read()).toMatchObject({ tone: "checking", line: "Checking what your mods need…", rows: [], attention: 0 });
+  resolve([]); await new Promise(done => setTimeout(done, 0));
+  expect(read()).toMatchObject({ tone: "ready", line: "All frameworks up to date" });
+  expect(read().rows.find(row => row.id === "tweakxl")?.status).toBe("not-needed");
+});
+
+test("failed requirements keep the owner's message and both retry actions reload through that owner", async () => {
+  for (const action of ["retry", "check"] as const) {
+    let calls = 0, resolve!: (sets: PartPresetSet[]) => void;
+    const message = "Your expression sets couldn’t be read.";
+    const owner = presetOwner(async () => {
+      if (++calls === 1) throw Error(message);
+      return new Promise(done => { resolve = done; });
+    });
+    const h = await diagnosticFixture(owner, frameworkCheckFor("expressions-missing")), read = () => h.shell.installDetection.snapshot().frameworkStatus;
+    read(); await h.detection.dispatch({ kind: "detect.frameworkVersions" });
+    await new Promise(done => setTimeout(done, 0));
+    expect(read()).toMatchObject({ tone: "info", line: message, rows: [], foldable: false, retryRequirements: true });
+    const retry = action === "retry" ? h.shell.installDetection.retryRequirements()
+      : h.shell.installDetection.dispatch({ kind: "detect.frameworkVersions" });
+    expect(calls).toBe(2);
+    expect(read()).toMatchObject({ tone: "checking", line: "Checking what your mods need…", rows: [] });
+    expect(read().retryRequirements).not.toBe(true);
+    resolve([{ id: "faces", feature: "expressions", name: "Faces", revision: 1, members: [], updatedAt: "" }]);
+    await retry;
+    expect(read().rows.find(row => row.id === "tweakxl")).toMatchObject({ status: "missing", neededFor: "Needed for expression sets" });
+  }
+});
 
 test("requirements follow the owner's expression-set list, including creation and deletion after the check", async () => {
   const presets = presetOwner();
@@ -157,7 +193,7 @@ test("a delayed successful report stays bound to the settings it started with", 
 });
 
 test("the capture states run through the real setup, detection, watcher and library owners without a browser", async () => {
-  const h = await diagnosticFixture(), presets = presetOwner();
+  const h = await diagnosticFixture(), presets = presetOwner(feature => hook.listSets(feature));
   let hook!: ReturnType<typeof frameworkStatusVerification>;
   const detection = new InstallDetectionActions(async target => {
     const answer = hook.transport(target);
@@ -174,6 +210,8 @@ test("the capture states run through the real setup, detection, watcher and libr
     for (const state of hook.states) {
       await hook.state(state);
       if (state === "no-game") expect(read().shown).toBe(false);
+      else if (state === "requirements-loading") expect(read()).toMatchObject({ tone: "checking", rows: [], line: "Checking what your mods need…" });
+      else if (state === "requirements-failed") expect(read()).toMatchObject({ tone: "info", rows: [], line: "Your expression sets couldn’t be read.", retryRequirements: true });
       else if (state === "failed") expect(read()).toMatchObject({ tone: "info", rows: [], line: "XF Studio couldn’t read your frameworks. Choose Check again to try once more." });
       else if (state === "checking") {
         expect(read().tone).toBe("checking"); hook.release();

@@ -463,7 +463,7 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .framework-status[hidden] { display: none; }
 .framework-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); }
 .framework-title { display: inline-flex; align-items: center; gap: var(--sp-2); margin: 0; font: 600 var(--fs-sm)/1.3 var(--font-ui); color: var(--text); }
-.framework-line { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); font-size: var(--fs-sm); overflow-wrap: anywhere;
+.framework-line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); font-size: var(--fs-sm); overflow-wrap: anywhere;
   border-left: 2px solid var(--line-strong); background: var(--bg-raised); }
 .framework-status[data-tone="ready"] .framework-line { border-color: var(--success); }
 .framework-status[data-tone="attention"] .framework-line { border-color: var(--warning); }

@@ -12,12 +12,14 @@ import { frameworkInputKey, type FrameworkInputFields } from "./framework-check-
 import type { InstallDetectionState } from "./install-detection-actions";
 
 /** Select only the report and failure belonging to these inputs. A report from another route is never a fallback. */
-export function frameworkStatusForInputs(fields: FrameworkInputFields | undefined, read: Readonly<InstallDetectionState>, products: readonly FrameworkProduct[] = []): FrameworkStatusView {
+export function frameworkStatusForInputs(fields: FrameworkInputFields | undefined, read: Readonly<InstallDetectionState>, products: readonly FrameworkProduct[] = [], requirements?: FrameworkRequirementsState): FrameworkStatusView {
   const key = fields ? frameworkInputKey(fields) : undefined;
   const attempt = read.frameworkAttempt?.inputKey === key ? read.frameworkAttempt : undefined;
   const check = key && read.frameworksInputKey === key && read.frameworks?.selectedRoute === fields?.launchRoute ? read.frameworks : undefined;
-  return frameworkStatusView({ gameChosen: !!fields?.gameRoot, check, checking: !!attempt?.pending, error: attempt?.error, products });
+  return frameworkStatusView({ gameChosen: !!fields?.gameRoot, check, checking: !!attempt?.pending, error: attempt?.error, products, requirements });
 }
+
+export type FrameworkRequirementsState = { readonly phase: "ready" | "loading" } | { readonly phase: "failed"; readonly message: string };
 
 export type FrameworkRowStatus = "ok" | "too-old" | "missing" | "unreadable" | "not-needed";
 export type FrameworkRowView = {
@@ -36,6 +38,7 @@ export type FrameworkRowView = {
   readonly links: readonly { readonly id: FrameworkLinkId; readonly label: FrameworkLink["label"]; readonly name: string }[];
 };
 export type FrameworkStatusView = {
+  readonly retryRequirements?: boolean;
   /** Shown once a game folder is chosen. */
   readonly shown: boolean;
   readonly checking: boolean;
@@ -49,6 +52,7 @@ export type FrameworkStatusView = {
   readonly foldable: boolean;
 };
 export type FrameworkStatusInput = {
+  readonly requirements?: FrameworkRequirementsState;
   readonly gameChosen: boolean;
   readonly check: FrameworkVersionCheck | undefined;
   readonly checking: boolean;
@@ -96,6 +100,8 @@ function rowsOf(route: FrameworkRouteReport, products: readonly FrameworkProduct
 export function frameworkStatusView(input: FrameworkStatusInput): FrameworkStatusView {
   const none = { checking: input.checking, rows: [] as FrameworkRowView[], attention: 0, foldable: false };
   if (!input.gameChosen) return { ...none, shown: false, tone: "info", line: "" };
+  if (input.requirements?.phase === "loading") return { ...none, shown: true, tone: "checking", line: "Checking what your mods need…" };
+  if (input.requirements?.phase === "failed") return { ...none, shown: true, tone: "info", line: input.requirements.message, retryRequirements: true };
   if (input.error && !input.checking) return { ...none, shown: true, tone: "info", line: input.error };
   const check = input.check;
   const route = check ? check.routes.find(row => row.route === check.selectedRoute) : undefined;

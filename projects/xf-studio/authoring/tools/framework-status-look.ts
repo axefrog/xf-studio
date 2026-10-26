@@ -14,6 +14,8 @@
  *   expressions-ok / expressions-too-old / expressions-missing
  *                     an expression set created through the disposable library's owner; TweakXL current, too old, or absent
  *   failed            a failed request for the current settings, with its plain message and Check again
+ *   requirements-loading / requirements-failed
+ *                     library read held open or failed, through its owner; no readiness claim, Try again on failure
  *   hidden-duplicate  a second, unused ArchiveXL in the Mod Organizer 2 list (a note under its row)
  *   checking          a check held open until released (the line and the button say so; earlier rows stay)
  *   no-game           no game folder chosen: the group is not shown
@@ -36,6 +38,16 @@ if (process.platform === "win32" && !/^C:[\\/]/i.test(out)) throw Error("Keep ca
 mkdirSync(out, { recursive: true });
 
 const WIDTHS = [900, 1600] as const, THEMES = ["light", "dark"] as const, HEIGHT = 1000;
+// These are settings captures, with masked viewports. Masking hides pixels but does not stop the automatic game-file extraction.
+// Keep the real read-only setup/discovery path (including “Use this folder”), but never start an unrelated 3D preparation job.
+const SETTINGS_ONLY = `(() => { const read = window.fetch.bind(window); window.fetch = (input, init) => {
+  const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+  if (url.origin === location.origin && url.pathname === '/api/preview-core' && (init?.method ?? (input instanceof Request ? input.method : 'GET')) === 'POST')
+    return Promise.resolve(Response.json({ schema: 'xfs/preview-core-state-1', phase: 'blocked',
+      message: '3D preparation is paused for this settings-only capture.', code: null, needs: [], progress: null,
+      lastDurationSeconds: null, canPrepare: false, canCancel: false }));
+  return read(input, init);
+}; })()`;
 /** What each state looks like once it has settled: the group's tone (or that it is hidden). */
 const SETTLED: Record<string, string> = {
   "all-ok": `q('.framework-status')?.dataset.tone === 'ready' && !q('.framework-status').hidden`,
@@ -43,6 +55,8 @@ const SETTLED: Record<string, string> = {
   "expressions-ok": `q('.framework-status')?.dataset.tone === 'ready' && !q('.framework-status').hidden`,
   "expressions-too-old": `q('.framework-status')?.dataset.tone === 'attention' && !q('.framework-status').hidden`,
   "expressions-missing": `q('.framework-status')?.dataset.tone === 'attention' && !q('.framework-status').hidden`,
+  "requirements-loading": `q('.framework-status .framework-line-text')?.textContent === 'Checking what your mods need…'`,
+  "requirements-failed": `q('.framework-status .framework-line-text')?.textContent === 'Your expression sets couldn’t be read.' && [...q('.framework-status').querySelectorAll('button')].some(b => !b.hidden && b.textContent === 'Try again')`,
   failed: `q('.framework-status')?.dataset.tone === 'info' && q('.framework-status .framework-line')?.textContent.includes('couldn’t read')`,
   missing: `q('.framework-status')?.dataset.tone === 'attention' && !q('.framework-status').hidden`,
   "hidden-duplicate": `q('.framework-status')?.dataset.tone === 'ready' && !q('.framework-status').hidden`,
@@ -68,7 +82,7 @@ const setTheme = async (page: Session, theme: "light" | "dark") => {
 const { server } = await startServer(port);
 let page: Session | undefined;
 try {
-  page = await launch(`http://127.0.0.1:${port}/?verify=1`, { width: 1600, height: HEIGHT, debugPort: port + 1000, scheme: "light" });
+  page = await launch(`http://127.0.0.1:${port}/?verify=1`, { width: 1600, height: HEIGHT, debugPort: port + 1000, scheme: "light", init: SETTINGS_ONLY });
   await page.evaluate(`window.q = s => document.querySelector(s)`);
   await page.waitFor("!!window.xfStudioShell && !!window.xfStudioFrameworkStatus && !!document.querySelector('.dock-group')", 120_000);
   await page.evaluate(`document.querySelector('button[title="Skip tour"]')?.click()`);
@@ -135,17 +149,17 @@ try {
   await page.viewport(1600, HEIGHT);
   // Isolate the live guide specimen at the document origin: CDP screenshot clips use page coordinates, whereas the guide scrolls.
   await page.evaluate(`(() => { const e = document.querySelector('#lib-framework-status .framework-status');
-    const host = e.parentElement; document.body.replaceChildren(host); document.body.style.padding = '16px';
+    const hosts = [e.parentElement, ...[...document.querySelectorAll('#lib-framework-status .framework-status')].filter(s => s.querySelector('.framework-line-text')?.textContent === 'Checking what your mods need…' || s.querySelector('.framework-line-text')?.textContent === 'Your expression sets couldn’t be read.').map(s => s.parentElement)]; document.body.replaceChildren(...hosts); document.body.style.padding = '16px';
     document.body.style.display = 'block'; document.body.style.height = 'auto'; window.scrollTo(0, 0); })()`);
-  for (const width of [260, 420]) for (const theme of THEMES) {
+  for (const [index, reference] of ["guide", "guide-requirements-loading", "guide-requirements-failed"].entries()) for (const width of [260, 420]) for (const theme of THEMES) {
     await setTheme(page, theme);
-    await page.evaluate(`(() => { const e = document.querySelector('.framework-status');
+    await page.evaluate(`(() => { const hosts = [...document.body.children]; hosts.forEach((h, i) => h.hidden = i !== ${index}); const e = hosts[${index}].querySelector('.framework-status');
       e.parentElement.style.width = '${width}px'; e.parentElement.style.maxWidth = '${width}px';
       e.style.colorScheme = '${theme}'; })()`);
     await page.wait(100);
-    const clip = await clipOf(page, "document.querySelector('.framework-status')");
+    const clip = await clipOf(page, "document.querySelector('body > :not([hidden]) .framework-status')");
     if (!clip) throw Error('No style-guide specimen to capture.');
-    await page.screenshot(resolve(out, `guide-${theme}-${width}.png`), clip);
+    await page.screenshot(resolve(out, `${reference}-${theme}-${width}.png`), clip);
   }
 } finally {
   const errors = page?.console.filter(entry => entry.type === "error" || entry.type === "exception") ?? [];
@@ -153,5 +167,5 @@ try {
   server.kill(); await server.exited;
   writeFileSync(resolve(out, "console.json"), JSON.stringify(errors, null, 2));
   writeFileSync(resolve(out, "manifest.json"), JSON.stringify(manifest, null, 2));
-  writeFileSync(resolve(out, "review.html"), `<!doctype html><meta charset="utf-8"><title>Mod frameworks review</title><style>body{font:14px system-ui;margin:24px}section{margin-bottom:32px}div{display:flex;gap:16px;flex-wrap:wrap}figure{margin:0}img{max-width:100%;border:1px solid #888}</style><h1>Settings › Game › Mod frameworks</h1><section><h2>Library reference · narrow and wide</h2><div>${[260, 420].flatMap(width => THEMES.map(theme => `<figure><figcaption>${theme} · ${width}px</figcaption><img src="guide-${theme}-${width}.png"></figure>`)).join("")}</div></section>${manifest.map(row => `<section><h2>${row.state} · ${row.theme} · ${row.width}px</h2><p>${row.line ?? "(group not shown)"}</p><div><figure><figcaption>Group</figcaption><a href="${row.file}"><img src="${row.file}"></a></figure>${row.card ? `<figure><figcaption>Mod package card</figcaption><a href="${row.card}"><img src="${row.card}"></a></figure>` : ""}</div></section>`).join("")}`);
+  writeFileSync(resolve(out, "review.html"), `<!doctype html><meta charset="utf-8"><title>Mod frameworks review</title><style>body{font:14px system-ui;margin:24px}section{margin-bottom:32px}div{display:flex;gap:16px;flex-wrap:wrap}figure{margin:0}img{max-width:100%;border:1px solid #888}</style><h1>Settings › Game › Mod frameworks</h1><section><h2>Library reference · narrow and wide</h2><div>${["guide", "guide-requirements-loading", "guide-requirements-failed"].flatMap(reference => [260, 420].flatMap(width => THEMES.map(theme => `<figure><figcaption>${reference} · ${theme} · ${width}px</figcaption><img src="${reference}-${theme}-${width}.png"></figure>`))).join("")}</div></section>${manifest.map(row => `<section><h2>${row.state} · ${row.theme} · ${row.width}px</h2><p>${row.line ?? "(group not shown)"}</p><div><figure><figcaption>Group</figcaption><a href="${row.file}"><img src="${row.file}"></a></figure>${row.card ? `<figure><figcaption>Mod package card</figcaption><a href="${row.card}"><img src="${row.card}"></a></figure>` : ""}</div></section>`).join("")}`);
 }
