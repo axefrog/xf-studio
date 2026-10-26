@@ -1,0 +1,4689 @@
+{
+  "schema": "xfb/session-script-3",
+  "name": "st-styling-0822-rerun",
+  "title": "In-game styling (0.8.22): the re-run after the review packet (the false passes, ST5, ST13 and the bursts that began early)",
+  "card": "research/runtime/runtime-bridge-test-card.md#in-game-styling-0822",
+  "requires": [
+    "The XF test profile with the bridge's autonomous -writes build staged (0.8.22 with overlay.set); the runner sets config.ini's [overlay] enabled and diagnostics once and restores the file at the end.",
+    "A private fixtures file (--fixtures): mo2 {exe, profile, executable, arguments: -skipStartScreen}, game_dir, staged_mod, save, cet_overlay_key (Ctrl+` here), commit_floor_gb.",
+    "Borderless windowed, the game window in front; Windows' Do Not Disturb on (focus-taking toasts stopped the Borg 4 key press).",
+    "Every row verifies its named state through the bridge before each capture (bridge_info's status and chip, overlay_state's cet_open and motion, ui_state's question) and checks its surface is in frame after it; bursts start only once their surface shows. A judged row ends CAPTURED, awaiting XF · Studio's UI review, never PASS.",
+    "Left out until the bridge has their hook: ST8-dark-paused (cet.panel press), ST5-dark (cet.panel press), ST6-dark-paused (cet.panel press), ST7-dark-diagnostics (cet.panel diagnostics_open), ST3-dark-settle (cet.panel press), ST8-light-paused (cet.panel press), ST2-light-tones (overlay.set diagnostics_cpu_ms), ST5-light (cet.panel press), ST6-light-paused (cet.panel press), ST7-light-diagnostics (cet.panel diagnostics_open), ST3-light-settle (cet.panel press); regenerate (bun tools/sessions/make-batches.ts) once the catalogue has it."
+  ],
+  "setup": [
+    {
+      "label": "cet-closed",
+      "do": "set",
+      "value": false,
+      "bind": "cetOpen"
+    },
+    {
+      "label": "commit",
+      "do": "host.commit",
+      "on_fail": "stop"
+    }
+  ],
+  "rows": [
+    {
+      "id": "ST8-dark-auto",
+      "title": "CET line connected with motion auto under frame generation: a still dot (the Borg 4 ST8 repeat)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST8-dark-auto-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST8-dark-auto-look",
+          "do": "run",
+          "command": "overlay.set",
+          "input": {
+            "theme": "dark",
+            "motion": "auto",
+            "enabled": false,
+            "diagnostics": true
+          },
+          "bind": "ST8_dark_auto_look",
+          "outcomes": [
+            {
+              "name": "needs_restart",
+              "match": {
+                "code": "needs_restart"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "ST8-dark-auto: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
+                },
+                {
+                  "do": "config.set",
+                  "values": {
+                    "overlay.enabled": "true",
+                    "overlay.diagnostics": "true"
+                  }
+                },
+                {
+                  "label": "close",
+                  "do": "host.close",
+                  "deadline_ms": 90000,
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Enter",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "host.wait_exit",
+                        "deadline_ms": 60000
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "launch",
+                  "do": "host.launch",
+                  "outcomes": [
+                    {
+                      "name": "already_running",
+                      "match": {
+                        "code": "already_running"
+                      },
+                      "result": "ok"
+                    }
+                  ]
+                },
+                {
+                  "label": "process",
+                  "do": "host.running",
+                  "until": {
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "label": "bridge",
+                  "do": "run",
+                  "command": "bridge.ping",
+                  "input": {},
+                  "until": {
+                    "ok": true
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 180000
+                },
+                {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "load",
+                  "do": "run",
+                  "command": "game.load",
+                  "input": {
+                    "name": "$fixture.save",
+                    "discard_unsaved": true,
+                    "continue_wait_s": 85
+                  },
+                  "bind": "load",
+                  "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
+                  "retry": {
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
+                    "on": {
+                      "code": [
+                        "game_not_running",
+                        "timeout",
+                        "busy",
+                        "bridge_busy",
+                        "game_loading",
+                        "rate_limited",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "alternatives": [
+                    [
+                      {
+                        "do": "run",
+                        "command": "game.load",
+                        "input": {
+                          "latest": true,
+                          "discard_unsaved": true,
+                          "continue_wait_s": 85
+                        },
+                        "bind": "load",
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "press-any-key",
+                  "do": "host.key",
+                  "keys": "Space",
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
+                    }
+                  },
+                  "retry": {
+                    "times": 5,
+                    "backoff_ms": 3000,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "behind",
+                      "match": {
+                        "code": "not_foreground"
+                      },
+                      "run": [
+                        {
+                          "do": "note",
+                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "continue"
+                },
+                {
+                  "label": "gameplay",
+                  "do": "run",
+                  "command": "game.wait",
+                  "input": {
+                    "phase": "gameplay",
+                    "timeout_ms": 180000
+                  },
+                  "deadline_ms": 190000
+                },
+                {
+                  "do": "run",
+                  "command": "overlay.set",
+                  "input": {
+                    "theme": "dark",
+                    "motion": "auto",
+                    "enabled": false,
+                    "diagnostics": true
+                  },
+                  "bind": "ST8_dark_auto_look"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST8-dark-auto-in-force",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "theme",
+                "equals": "dark"
+              },
+              {
+                "path": "motion.setting",
+                "equals": "auto"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 3000,
+          "bind": "ST8_dark_auto_overlay",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-auto-repaint",
+          "do": "wait",
+          "ms": 2500
+        },
+        {
+          "label": "ST8-dark-auto-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST8-dark-auto-line",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": true
+          },
+          "bind": "ST8_dark_auto_hud"
+        },
+        {
+          "label": "ST8-dark-auto-is-line",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "cet_line"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_dark_auto_is_line",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-auto-is-cet-closed",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": false
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_dark_auto_is_cet_closed",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-auto-visible-line",
+          "do": "capture.surface",
+          "name": "ST8-dark-auto-probe-line",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.18,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-auto-burst",
+          "do": "burst",
+          "name": "ST8-cetline-connected-auto-dark",
+          "frames": 6,
+          "interval_ms": 240,
+          "clear_overlay": false,
+          "rect": "$win.regions.cet_line",
+          "bind": "ST8_dark_auto_burst"
+        },
+        {
+          "label": "ST8-dark-auto-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST8_dark_auto_burst",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.18,
+          "bind": "ST8_dark_auto_frame_burst",
+          "on_fail": "fail_row"
+        }
+      ],
+      "pass": [
+        {
+          "label": "reduced by frame generation",
+          "ref": "$ST8_dark_auto_overlay.motion.reason",
+          "match": {
+            "equals": "frame_generation"
+          }
+        },
+        {
+          "label": "the still dot (6 x 240 ms)",
+          "ref": "$ST8_dark_auto_burst",
+          "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST8_dark_auto_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 1.2 s)",
+          "ref": "$ST8_dark_auto_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 1000
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST8-dark-auto-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST13-dark",
+      "title": "cet_open follows CET's overlay with the XF box off: false, true, false",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "steps": [
+        {
+          "label": "ST13-dark-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST13-dark-look",
+          "do": "run",
+          "command": "overlay.set",
+          "input": {
+            "theme": "dark",
+            "motion": "full",
+            "enabled": false,
+            "diagnostics": true
+          },
+          "bind": "ST13_dark_look",
+          "outcomes": [
+            {
+              "name": "needs_restart",
+              "match": {
+                "code": "needs_restart"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "ST13-dark: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
+                },
+                {
+                  "do": "config.set",
+                  "values": {
+                    "overlay.enabled": "true",
+                    "overlay.diagnostics": "true"
+                  }
+                },
+                {
+                  "label": "close",
+                  "do": "host.close",
+                  "deadline_ms": 90000,
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Enter",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "host.wait_exit",
+                        "deadline_ms": 60000
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "launch",
+                  "do": "host.launch",
+                  "outcomes": [
+                    {
+                      "name": "already_running",
+                      "match": {
+                        "code": "already_running"
+                      },
+                      "result": "ok"
+                    }
+                  ]
+                },
+                {
+                  "label": "process",
+                  "do": "host.running",
+                  "until": {
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "label": "bridge",
+                  "do": "run",
+                  "command": "bridge.ping",
+                  "input": {},
+                  "until": {
+                    "ok": true
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 180000
+                },
+                {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "load",
+                  "do": "run",
+                  "command": "game.load",
+                  "input": {
+                    "name": "$fixture.save",
+                    "discard_unsaved": true,
+                    "continue_wait_s": 85
+                  },
+                  "bind": "load",
+                  "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
+                  "retry": {
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
+                    "on": {
+                      "code": [
+                        "game_not_running",
+                        "timeout",
+                        "busy",
+                        "bridge_busy",
+                        "game_loading",
+                        "rate_limited",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "alternatives": [
+                    [
+                      {
+                        "do": "run",
+                        "command": "game.load",
+                        "input": {
+                          "latest": true,
+                          "discard_unsaved": true,
+                          "continue_wait_s": 85
+                        },
+                        "bind": "load",
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "press-any-key",
+                  "do": "host.key",
+                  "keys": "Space",
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
+                    }
+                  },
+                  "retry": {
+                    "times": 5,
+                    "backoff_ms": 3000,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "behind",
+                      "match": {
+                        "code": "not_foreground"
+                      },
+                      "run": [
+                        {
+                          "do": "note",
+                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "continue"
+                },
+                {
+                  "label": "gameplay",
+                  "do": "run",
+                  "command": "game.wait",
+                  "input": {
+                    "phase": "gameplay",
+                    "timeout_ms": 180000
+                  },
+                  "deadline_ms": 190000
+                },
+                {
+                  "do": "run",
+                  "command": "overlay.set",
+                  "input": {
+                    "theme": "dark",
+                    "motion": "full",
+                    "enabled": false,
+                    "diagnostics": true
+                  },
+                  "bind": "ST13_dark_look"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST13-dark-in-force",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "theme",
+                "equals": "dark"
+              },
+              {
+                "path": "motion.setting",
+                "equals": "full"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 3000,
+          "bind": "ST13_dark_overlay",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST13-dark-repaint",
+          "do": "wait",
+          "ms": 2500
+        },
+        {
+          "label": "ST13-dark-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST13-dark-closed1",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST13_dark_closed1"
+        },
+        {
+          "label": "ST13-dark-open",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "retry": {
+            "times": 2,
+            "backoff_ms": 1500,
+            "on": {
+              "code": "not_foreground"
+            }
+          },
+          "outcomes": [
+            {
+              "name": "game_behind",
+              "match": {
+                "code": "not_foreground"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "The game isn't the front window, so the runner's key press was held back: click into the game window."
+                },
+                {
+                  "do": "host.key",
+                  "keys": "$fixture.cet_overlay_key",
+                  "retry": {
+                    "times": 10,
+                    "backoff_ms": 3000,
+                    "factor": 1,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST13-dark-opened",
+          "do": "set",
+          "value": true,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST13-dark-w1",
+          "do": "wait",
+          "ms": 700
+        },
+        {
+          "label": "ST13-dark-open1",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST13_dark_open1"
+        },
+        {
+          "label": "ST13-dark-close1",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST13-dark-close1-flag",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        },
+        {
+          "label": "ST13-dark-w2",
+          "do": "wait",
+          "ms": 700
+        },
+        {
+          "label": "ST13-dark-closed2",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "bind": "ST13_dark_closed2"
+        }
+      ],
+      "pass": [
+        {
+          "label": "closed: false",
+          "ref": "$ST13_dark_closed1.cet_open",
+          "match": {
+            "equals": false
+          }
+        },
+        {
+          "label": "open: true",
+          "ref": "$ST13_dark_open1.cet_open",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "closed again: false",
+          "ref": "$ST13_dark_closed2.cet_open",
+          "match": {
+            "equals": false
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST13-dark-cet-close",
+          "do": "host.key",
+          "keys": "$fixture.cet_overlay_key",
+          "when": {
+            "match": {
+              "ref": "$cetOpen",
+              "equals": true
+            }
+          },
+          "retry": {
+            "times": 3,
+            "backoff_ms": 2000,
+            "on": {
+              "code": "not_foreground"
+            }
+          }
+        },
+        {
+          "label": "ST13-dark-cet-close-flag",
+          "do": "set",
+          "value": false,
+          "bind": "cetOpen"
+        }
+      ]
+    },
+    {
+      "id": "ST8-dark-connected",
+      "title": "CET line, connected, motion full (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST8-dark-connected-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST8-dark-connected-look",
+          "do": "run",
+          "command": "overlay.set",
+          "input": {
+            "theme": "dark",
+            "motion": "full",
+            "enabled": false,
+            "diagnostics": true
+          },
+          "bind": "ST8_dark_connected_look",
+          "outcomes": [
+            {
+              "name": "needs_restart",
+              "match": {
+                "code": "needs_restart"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "ST8-dark-connected: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
+                },
+                {
+                  "do": "config.set",
+                  "values": {
+                    "overlay.enabled": "true",
+                    "overlay.diagnostics": "true"
+                  }
+                },
+                {
+                  "label": "close",
+                  "do": "host.close",
+                  "deadline_ms": 90000,
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Enter",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "host.wait_exit",
+                        "deadline_ms": 60000
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "launch",
+                  "do": "host.launch",
+                  "outcomes": [
+                    {
+                      "name": "already_running",
+                      "match": {
+                        "code": "already_running"
+                      },
+                      "result": "ok"
+                    }
+                  ]
+                },
+                {
+                  "label": "process",
+                  "do": "host.running",
+                  "until": {
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "label": "bridge",
+                  "do": "run",
+                  "command": "bridge.ping",
+                  "input": {},
+                  "until": {
+                    "ok": true
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 180000
+                },
+                {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "load",
+                  "do": "run",
+                  "command": "game.load",
+                  "input": {
+                    "name": "$fixture.save",
+                    "discard_unsaved": true,
+                    "continue_wait_s": 85
+                  },
+                  "bind": "load",
+                  "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
+                  "retry": {
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
+                    "on": {
+                      "code": [
+                        "game_not_running",
+                        "timeout",
+                        "busy",
+                        "bridge_busy",
+                        "game_loading",
+                        "rate_limited",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "alternatives": [
+                    [
+                      {
+                        "do": "run",
+                        "command": "game.load",
+                        "input": {
+                          "latest": true,
+                          "discard_unsaved": true,
+                          "continue_wait_s": 85
+                        },
+                        "bind": "load",
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "press-any-key",
+                  "do": "host.key",
+                  "keys": "Space",
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
+                    }
+                  },
+                  "retry": {
+                    "times": 5,
+                    "backoff_ms": 3000,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "behind",
+                      "match": {
+                        "code": "not_foreground"
+                      },
+                      "run": [
+                        {
+                          "do": "note",
+                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "continue"
+                },
+                {
+                  "label": "gameplay",
+                  "do": "run",
+                  "command": "game.wait",
+                  "input": {
+                    "phase": "gameplay",
+                    "timeout_ms": 180000
+                  },
+                  "deadline_ms": 190000
+                },
+                {
+                  "do": "run",
+                  "command": "overlay.set",
+                  "input": {
+                    "theme": "dark",
+                    "motion": "full",
+                    "enabled": false,
+                    "diagnostics": true
+                  },
+                  "bind": "ST8_dark_connected_look"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST8-dark-connected-in-force",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "theme",
+                "equals": "dark"
+              },
+              {
+                "path": "motion.setting",
+                "equals": "full"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 3000,
+          "bind": "ST8_dark_connected_overlay",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-connected-repaint",
+          "do": "wait",
+          "ms": 2500
+        },
+        {
+          "label": "ST8-dark-connected-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST8-dark-connected-line",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": true
+          },
+          "bind": "ST8_dark_connected_hud"
+        },
+        {
+          "label": "ST8-dark-connected-is-line",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "cet_line"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_dark_connected_is_line",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-connected-is-cet-closed",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": false
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_dark_connected_is_cet_closed",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-connected-visible-line",
+          "do": "capture.surface",
+          "name": "ST8-dark-connected-probe-line",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.18,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-connected-burst",
+          "do": "burst",
+          "name": "ST8-cetline-connected-dark",
+          "frames": 13,
+          "interval_ms": 200,
+          "clear_overlay": false,
+          "rect": "$win.regions.cet_line",
+          "bind": "ST8_dark_connected_burst"
+        },
+        {
+          "label": "ST8-dark-connected-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST8_dark_connected_burst",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.18,
+          "bind": "ST8_dark_connected_frame_burst",
+          "on_fail": "fail_row"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full in force",
+          "ref": "$ST8_dark_connected_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the pulse burst (13 x 200 ms, one 2.4 s period)",
+          "ref": "$ST8_dark_connected_burst",
+          "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST8_dark_connected_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 2.4 s)",
+          "ref": "$ST8_dark_connected_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 2200
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST8-dark-connected-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST4-dark-changes",
+      "title": "The dot's pulse with changes allowed, motion full (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST4-dark-changes-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST4-dark-changes-look",
+          "do": "run",
+          "command": "overlay.set",
+          "input": {
+            "theme": "dark",
+            "motion": "full",
+            "enabled": true,
+            "diagnostics": true
+          },
+          "bind": "ST4_dark_changes_look",
+          "outcomes": [
+            {
+              "name": "needs_restart",
+              "match": {
+                "code": "needs_restart"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "ST4-dark-changes: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
+                },
+                {
+                  "do": "config.set",
+                  "values": {
+                    "overlay.enabled": "true",
+                    "overlay.diagnostics": "true"
+                  }
+                },
+                {
+                  "label": "close",
+                  "do": "host.close",
+                  "deadline_ms": 90000,
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Enter",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "host.wait_exit",
+                        "deadline_ms": 60000
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "launch",
+                  "do": "host.launch",
+                  "outcomes": [
+                    {
+                      "name": "already_running",
+                      "match": {
+                        "code": "already_running"
+                      },
+                      "result": "ok"
+                    }
+                  ]
+                },
+                {
+                  "label": "process",
+                  "do": "host.running",
+                  "until": {
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "label": "bridge",
+                  "do": "run",
+                  "command": "bridge.ping",
+                  "input": {},
+                  "until": {
+                    "ok": true
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 180000
+                },
+                {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "load",
+                  "do": "run",
+                  "command": "game.load",
+                  "input": {
+                    "name": "$fixture.save",
+                    "discard_unsaved": true,
+                    "continue_wait_s": 85
+                  },
+                  "bind": "load",
+                  "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
+                  "retry": {
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
+                    "on": {
+                      "code": [
+                        "game_not_running",
+                        "timeout",
+                        "busy",
+                        "bridge_busy",
+                        "game_loading",
+                        "rate_limited",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "alternatives": [
+                    [
+                      {
+                        "do": "run",
+                        "command": "game.load",
+                        "input": {
+                          "latest": true,
+                          "discard_unsaved": true,
+                          "continue_wait_s": 85
+                        },
+                        "bind": "load",
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "press-any-key",
+                  "do": "host.key",
+                  "keys": "Space",
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
+                    }
+                  },
+                  "retry": {
+                    "times": 5,
+                    "backoff_ms": 3000,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "behind",
+                      "match": {
+                        "code": "not_foreground"
+                      },
+                      "run": [
+                        {
+                          "do": "note",
+                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "continue"
+                },
+                {
+                  "label": "gameplay",
+                  "do": "run",
+                  "command": "game.wait",
+                  "input": {
+                    "phase": "gameplay",
+                    "timeout_ms": 180000
+                  },
+                  "deadline_ms": 190000
+                },
+                {
+                  "do": "run",
+                  "command": "overlay.set",
+                  "input": {
+                    "theme": "dark",
+                    "motion": "full",
+                    "enabled": true,
+                    "diagnostics": true
+                  },
+                  "bind": "ST4_dark_changes_look"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST4-dark-changes-in-force",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "theme",
+                "equals": "dark"
+              },
+              {
+                "path": "motion.setting",
+                "equals": "full"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 3000,
+          "bind": "ST4_dark_changes_overlay",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST4-dark-changes-repaint",
+          "do": "wait",
+          "ms": 2500
+        },
+        {
+          "label": "ST4-dark-changes-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST4-dark-changes-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST4_dark_changes_hud"
+        },
+        {
+          "label": "ST4-dark-changes-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST4_dark_changes_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST4-dark-changes-visible-box",
+          "do": "capture.surface",
+          "name": "ST4-dark-changes-probe-box",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST4-dark-changes-burst",
+          "do": "burst",
+          "name": "ST4-xfbox-pulse-changes-dark",
+          "frames": 13,
+          "interval_ms": 200,
+          "clear_overlay": false,
+          "rect": "$win.regions.xf_box",
+          "bind": "ST4_dark_changes_burst"
+        },
+        {
+          "label": "ST4-dark-changes-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST4_dark_changes_burst",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST4_dark_changes_frame_burst",
+          "on_fail": "fail_row"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full",
+          "ref": "$ST4_dark_changes_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the pulse burst (13 x 200 ms, one 2.4 s period)",
+          "ref": "$ST4_dark_changes_burst",
+          "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST4_dark_changes_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 2.4 s)",
+          "ref": "$ST4_dark_changes_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 2200
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST4-dark-changes-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST3-dark",
+      "title": "The XF box with motion reduced: a still dot (dark)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST3-dark-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST3-dark-look",
+          "do": "run",
+          "command": "overlay.set",
+          "input": {
+            "theme": "dark",
+            "motion": "reduced",
+            "enabled": true,
+            "diagnostics": true
+          },
+          "bind": "ST3_dark_look",
+          "outcomes": [
+            {
+              "name": "needs_restart",
+              "match": {
+                "code": "needs_restart"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "ST3-dark: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
+                },
+                {
+                  "do": "config.set",
+                  "values": {
+                    "overlay.enabled": "true",
+                    "overlay.diagnostics": "true"
+                  }
+                },
+                {
+                  "label": "close",
+                  "do": "host.close",
+                  "deadline_ms": 90000,
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Enter",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "host.wait_exit",
+                        "deadline_ms": 60000
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "launch",
+                  "do": "host.launch",
+                  "outcomes": [
+                    {
+                      "name": "already_running",
+                      "match": {
+                        "code": "already_running"
+                      },
+                      "result": "ok"
+                    }
+                  ]
+                },
+                {
+                  "label": "process",
+                  "do": "host.running",
+                  "until": {
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "label": "bridge",
+                  "do": "run",
+                  "command": "bridge.ping",
+                  "input": {},
+                  "until": {
+                    "ok": true
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 180000
+                },
+                {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "load",
+                  "do": "run",
+                  "command": "game.load",
+                  "input": {
+                    "name": "$fixture.save",
+                    "discard_unsaved": true,
+                    "continue_wait_s": 85
+                  },
+                  "bind": "load",
+                  "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
+                  "retry": {
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
+                    "on": {
+                      "code": [
+                        "game_not_running",
+                        "timeout",
+                        "busy",
+                        "bridge_busy",
+                        "game_loading",
+                        "rate_limited",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "alternatives": [
+                    [
+                      {
+                        "do": "run",
+                        "command": "game.load",
+                        "input": {
+                          "latest": true,
+                          "discard_unsaved": true,
+                          "continue_wait_s": 85
+                        },
+                        "bind": "load",
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "press-any-key",
+                  "do": "host.key",
+                  "keys": "Space",
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
+                    }
+                  },
+                  "retry": {
+                    "times": 5,
+                    "backoff_ms": 3000,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "behind",
+                      "match": {
+                        "code": "not_foreground"
+                      },
+                      "run": [
+                        {
+                          "do": "note",
+                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "continue"
+                },
+                {
+                  "label": "gameplay",
+                  "do": "run",
+                  "command": "game.wait",
+                  "input": {
+                    "phase": "gameplay",
+                    "timeout_ms": 180000
+                  },
+                  "deadline_ms": 190000
+                },
+                {
+                  "do": "run",
+                  "command": "overlay.set",
+                  "input": {
+                    "theme": "dark",
+                    "motion": "reduced",
+                    "enabled": true,
+                    "diagnostics": true
+                  },
+                  "bind": "ST3_dark_look"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST3-dark-in-force",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "theme",
+                "equals": "dark"
+              },
+              {
+                "path": "motion.setting",
+                "equals": "reduced"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 3000,
+          "bind": "ST3_dark_overlay",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST3-dark-repaint",
+          "do": "wait",
+          "ms": 2500
+        },
+        {
+          "label": "ST3-dark-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST3-dark-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST3_dark_hud"
+        },
+        {
+          "label": "ST3-dark-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST3_dark_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST3-dark-visible-box",
+          "do": "capture.surface",
+          "name": "ST3-dark-probe-box",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST3-dark-still",
+          "do": "burst",
+          "name": "ST3-xfbox-reduced-dark",
+          "frames": 6,
+          "interval_ms": 240,
+          "clear_overlay": false,
+          "rect": "$win.regions.xf_box",
+          "bind": "ST3_dark_still"
+        },
+        {
+          "label": "ST3-dark-in-frame-still",
+          "do": "capture.surface",
+          "capture": "$ST3_dark_still",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST3_dark_frame_still",
+          "on_fail": "fail_row"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion reduced",
+          "ref": "$ST3_dark_overlay.motion.effective",
+          "match": {
+            "equals": "reduced"
+          }
+        },
+        {
+          "label": "by the setting",
+          "ref": "$ST3_dark_overlay.motion.reason",
+          "match": {
+            "equals": "setting"
+          }
+        },
+        {
+          "label": "still dot (6 x 240 ms)",
+          "ref": "$ST3_dark_still",
+          "captured": true
+        },
+        {
+          "label": "still in frame",
+          "ref": "$ST3_dark_frame_still",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 1.2 s)",
+          "ref": "$ST3_dark_still.timing.first_to_last_ms",
+          "match": {
+            "min": 1000
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST3-dark-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST8-light-connected",
+      "title": "CET line, connected, motion full (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST8-light-connected-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST8-light-connected-look",
+          "do": "run",
+          "command": "overlay.set",
+          "input": {
+            "theme": "light",
+            "motion": "full",
+            "enabled": false,
+            "diagnostics": true
+          },
+          "bind": "ST8_light_connected_look",
+          "outcomes": [
+            {
+              "name": "needs_restart",
+              "match": {
+                "code": "needs_restart"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "ST8-light-connected: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
+                },
+                {
+                  "do": "config.set",
+                  "values": {
+                    "overlay.enabled": "true",
+                    "overlay.diagnostics": "true"
+                  }
+                },
+                {
+                  "label": "close",
+                  "do": "host.close",
+                  "deadline_ms": 90000,
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Enter",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "host.wait_exit",
+                        "deadline_ms": 60000
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "launch",
+                  "do": "host.launch",
+                  "outcomes": [
+                    {
+                      "name": "already_running",
+                      "match": {
+                        "code": "already_running"
+                      },
+                      "result": "ok"
+                    }
+                  ]
+                },
+                {
+                  "label": "process",
+                  "do": "host.running",
+                  "until": {
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "label": "bridge",
+                  "do": "run",
+                  "command": "bridge.ping",
+                  "input": {},
+                  "until": {
+                    "ok": true
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 180000
+                },
+                {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "load",
+                  "do": "run",
+                  "command": "game.load",
+                  "input": {
+                    "name": "$fixture.save",
+                    "discard_unsaved": true,
+                    "continue_wait_s": 85
+                  },
+                  "bind": "load",
+                  "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
+                  "retry": {
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
+                    "on": {
+                      "code": [
+                        "game_not_running",
+                        "timeout",
+                        "busy",
+                        "bridge_busy",
+                        "game_loading",
+                        "rate_limited",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "alternatives": [
+                    [
+                      {
+                        "do": "run",
+                        "command": "game.load",
+                        "input": {
+                          "latest": true,
+                          "discard_unsaved": true,
+                          "continue_wait_s": 85
+                        },
+                        "bind": "load",
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "press-any-key",
+                  "do": "host.key",
+                  "keys": "Space",
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
+                    }
+                  },
+                  "retry": {
+                    "times": 5,
+                    "backoff_ms": 3000,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "behind",
+                      "match": {
+                        "code": "not_foreground"
+                      },
+                      "run": [
+                        {
+                          "do": "note",
+                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "continue"
+                },
+                {
+                  "label": "gameplay",
+                  "do": "run",
+                  "command": "game.wait",
+                  "input": {
+                    "phase": "gameplay",
+                    "timeout_ms": 180000
+                  },
+                  "deadline_ms": 190000
+                },
+                {
+                  "do": "run",
+                  "command": "overlay.set",
+                  "input": {
+                    "theme": "light",
+                    "motion": "full",
+                    "enabled": false,
+                    "diagnostics": true
+                  },
+                  "bind": "ST8_light_connected_look"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST8-light-connected-in-force",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "theme",
+                "equals": "light"
+              },
+              {
+                "path": "motion.setting",
+                "equals": "full"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 3000,
+          "bind": "ST8_light_connected_overlay",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-light-connected-repaint",
+          "do": "wait",
+          "ms": 2500
+        },
+        {
+          "label": "ST8-light-connected-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST8-light-connected-line",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": true
+          },
+          "bind": "ST8_light_connected_hud"
+        },
+        {
+          "label": "ST8-light-connected-is-line",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "cet_line"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_light_connected_is_line",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-light-connected-is-cet-closed",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": false
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_light_connected_is_cet_closed",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-light-connected-visible-line",
+          "do": "capture.surface",
+          "name": "ST8-light-connected-probe-line",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.03,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-light-connected-burst",
+          "do": "burst",
+          "name": "ST8-cetline-connected-light",
+          "frames": 13,
+          "interval_ms": 200,
+          "clear_overlay": false,
+          "rect": "$win.regions.cet_line",
+          "bind": "ST8_light_connected_burst"
+        },
+        {
+          "label": "ST8-light-connected-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST8_light_connected_burst",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.03,
+          "bind": "ST8_light_connected_frame_burst",
+          "on_fail": "fail_row"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full in force",
+          "ref": "$ST8_light_connected_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the pulse burst (13 x 200 ms, one 2.4 s period)",
+          "ref": "$ST8_light_connected_burst",
+          "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST8_light_connected_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 2.4 s)",
+          "ref": "$ST8_light_connected_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 2200
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST8-light-connected-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST2-light",
+      "title": "The XF box with diagnostics, motion full (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST2-light-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST2-light-look",
+          "do": "run",
+          "command": "overlay.set",
+          "input": {
+            "theme": "light",
+            "motion": "full",
+            "enabled": true,
+            "diagnostics": true
+          },
+          "bind": "ST2_light_look",
+          "outcomes": [
+            {
+              "name": "needs_restart",
+              "match": {
+                "code": "needs_restart"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "ST2-light: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
+                },
+                {
+                  "do": "config.set",
+                  "values": {
+                    "overlay.enabled": "true",
+                    "overlay.diagnostics": "true"
+                  }
+                },
+                {
+                  "label": "close",
+                  "do": "host.close",
+                  "deadline_ms": 90000,
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Enter",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "host.wait_exit",
+                        "deadline_ms": 60000
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "launch",
+                  "do": "host.launch",
+                  "outcomes": [
+                    {
+                      "name": "already_running",
+                      "match": {
+                        "code": "already_running"
+                      },
+                      "result": "ok"
+                    }
+                  ]
+                },
+                {
+                  "label": "process",
+                  "do": "host.running",
+                  "until": {
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "label": "bridge",
+                  "do": "run",
+                  "command": "bridge.ping",
+                  "input": {},
+                  "until": {
+                    "ok": true
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 180000
+                },
+                {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "load",
+                  "do": "run",
+                  "command": "game.load",
+                  "input": {
+                    "name": "$fixture.save",
+                    "discard_unsaved": true,
+                    "continue_wait_s": 85
+                  },
+                  "bind": "load",
+                  "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
+                  "retry": {
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
+                    "on": {
+                      "code": [
+                        "game_not_running",
+                        "timeout",
+                        "busy",
+                        "bridge_busy",
+                        "game_loading",
+                        "rate_limited",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "alternatives": [
+                    [
+                      {
+                        "do": "run",
+                        "command": "game.load",
+                        "input": {
+                          "latest": true,
+                          "discard_unsaved": true,
+                          "continue_wait_s": 85
+                        },
+                        "bind": "load",
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "press-any-key",
+                  "do": "host.key",
+                  "keys": "Space",
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
+                    }
+                  },
+                  "retry": {
+                    "times": 5,
+                    "backoff_ms": 3000,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "behind",
+                      "match": {
+                        "code": "not_foreground"
+                      },
+                      "run": [
+                        {
+                          "do": "note",
+                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "continue"
+                },
+                {
+                  "label": "gameplay",
+                  "do": "run",
+                  "command": "game.wait",
+                  "input": {
+                    "phase": "gameplay",
+                    "timeout_ms": 180000
+                  },
+                  "deadline_ms": 190000
+                },
+                {
+                  "do": "run",
+                  "command": "overlay.set",
+                  "input": {
+                    "theme": "light",
+                    "motion": "full",
+                    "enabled": true,
+                    "diagnostics": true
+                  },
+                  "bind": "ST2_light_look"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST2-light-in-force",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "theme",
+                "equals": "light"
+              },
+              {
+                "path": "motion.setting",
+                "equals": "full"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 3000,
+          "bind": "ST2_light_overlay",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST2-light-repaint",
+          "do": "wait",
+          "ms": 2500
+        },
+        {
+          "label": "ST2-light-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST2-light-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST2_light_hud"
+        },
+        {
+          "label": "ST2-light-question",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "level": "ask",
+            "text": "ST2: a question for the capture (no answer needed).",
+            "choices": [
+              "Fully visible",
+              "Partly cut off"
+            ],
+            "seconds": 30
+          },
+          "bind": "ST2_light_q"
+        },
+        {
+          "label": "ST2-light-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST2_light_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST2-light-is-asking",
+          "do": "run",
+          "command": "ui.state",
+          "input": {},
+          "until": {
+            "path": "pending_ask.id",
+            "equals": "$ST2_light_q.id"
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST2_light_is_asking",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST2-light-visible-box",
+          "do": "capture.surface",
+          "name": "ST2-light-probe-box",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST2-light-shot",
+          "do": "capture",
+          "name": "ST2-xfbox-diagnostics-light",
+          "clear_overlay": false,
+          "bind": "ST2_light_shot"
+        },
+        {
+          "label": "ST2-light-in-frame-shot",
+          "do": "capture.surface",
+          "capture": "$ST2_light_shot",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST2_light_frame_shot",
+          "on_fail": "fail_row"
+        }
+      ],
+      "pass": [
+        {
+          "label": "the overlay draws",
+          "ref": "$ST2_light_overlay.drawing_now",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "theme light",
+          "ref": "$ST2_light_overlay.theme",
+          "match": {
+            "equals": "light"
+          }
+        },
+        {
+          "label": "motion full",
+          "ref": "$ST2_light_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the XF box",
+          "ref": "$ST2_light_shot",
+          "captured": true
+        },
+        {
+          "label": "shot in frame",
+          "ref": "$ST2_light_frame_shot",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST2-light-clear",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "clear": true
+          }
+        },
+        {
+          "label": "ST2-light-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST4-light-changes",
+      "title": "The dot's pulse with changes allowed, motion full (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST4-light-changes-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST4-light-changes-look",
+          "do": "run",
+          "command": "overlay.set",
+          "input": {
+            "theme": "light",
+            "motion": "full",
+            "enabled": true,
+            "diagnostics": true
+          },
+          "bind": "ST4_light_changes_look",
+          "outcomes": [
+            {
+              "name": "needs_restart",
+              "match": {
+                "code": "needs_restart"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "ST4-light-changes: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
+                },
+                {
+                  "do": "config.set",
+                  "values": {
+                    "overlay.enabled": "true",
+                    "overlay.diagnostics": "true"
+                  }
+                },
+                {
+                  "label": "close",
+                  "do": "host.close",
+                  "deadline_ms": 90000,
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Enter",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "host.wait_exit",
+                        "deadline_ms": 60000
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "launch",
+                  "do": "host.launch",
+                  "outcomes": [
+                    {
+                      "name": "already_running",
+                      "match": {
+                        "code": "already_running"
+                      },
+                      "result": "ok"
+                    }
+                  ]
+                },
+                {
+                  "label": "process",
+                  "do": "host.running",
+                  "until": {
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "label": "bridge",
+                  "do": "run",
+                  "command": "bridge.ping",
+                  "input": {},
+                  "until": {
+                    "ok": true
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 180000
+                },
+                {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "load",
+                  "do": "run",
+                  "command": "game.load",
+                  "input": {
+                    "name": "$fixture.save",
+                    "discard_unsaved": true,
+                    "continue_wait_s": 85
+                  },
+                  "bind": "load",
+                  "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
+                  "retry": {
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
+                    "on": {
+                      "code": [
+                        "game_not_running",
+                        "timeout",
+                        "busy",
+                        "bridge_busy",
+                        "game_loading",
+                        "rate_limited",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "alternatives": [
+                    [
+                      {
+                        "do": "run",
+                        "command": "game.load",
+                        "input": {
+                          "latest": true,
+                          "discard_unsaved": true,
+                          "continue_wait_s": 85
+                        },
+                        "bind": "load",
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "press-any-key",
+                  "do": "host.key",
+                  "keys": "Space",
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
+                    }
+                  },
+                  "retry": {
+                    "times": 5,
+                    "backoff_ms": 3000,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "behind",
+                      "match": {
+                        "code": "not_foreground"
+                      },
+                      "run": [
+                        {
+                          "do": "note",
+                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "continue"
+                },
+                {
+                  "label": "gameplay",
+                  "do": "run",
+                  "command": "game.wait",
+                  "input": {
+                    "phase": "gameplay",
+                    "timeout_ms": 180000
+                  },
+                  "deadline_ms": 190000
+                },
+                {
+                  "do": "run",
+                  "command": "overlay.set",
+                  "input": {
+                    "theme": "light",
+                    "motion": "full",
+                    "enabled": true,
+                    "diagnostics": true
+                  },
+                  "bind": "ST4_light_changes_look"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST4-light-changes-in-force",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "theme",
+                "equals": "light"
+              },
+              {
+                "path": "motion.setting",
+                "equals": "full"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 3000,
+          "bind": "ST4_light_changes_overlay",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST4-light-changes-repaint",
+          "do": "wait",
+          "ms": 2500
+        },
+        {
+          "label": "ST4-light-changes-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST4-light-changes-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST4_light_changes_hud"
+        },
+        {
+          "label": "ST4-light-changes-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST4_light_changes_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST4-light-changes-visible-box",
+          "do": "capture.surface",
+          "name": "ST4-light-changes-probe-box",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST4-light-changes-burst",
+          "do": "burst",
+          "name": "ST4-xfbox-pulse-changes-light",
+          "frames": 13,
+          "interval_ms": 200,
+          "clear_overlay": false,
+          "rect": "$win.regions.xf_box",
+          "bind": "ST4_light_changes_burst"
+        },
+        {
+          "label": "ST4-light-changes-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST4_light_changes_burst",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST4_light_changes_frame_burst",
+          "on_fail": "fail_row"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion full",
+          "ref": "$ST4_light_changes_overlay.motion.effective",
+          "match": {
+            "equals": "full"
+          }
+        },
+        {
+          "label": "the pulse burst (13 x 200 ms, one 2.4 s period)",
+          "ref": "$ST4_light_changes_burst",
+          "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST4_light_changes_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 2.4 s)",
+          "ref": "$ST4_light_changes_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 2200
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST4-light-changes-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "ST3-light",
+      "title": "The XF box with motion reduced: a still dot (light)",
+      "requires": [
+        {
+          "config": "ui.answer_keys",
+          "equals": "IK_F6"
+        },
+        {
+          "config": "overlay.scale_percent",
+          "equals": "100"
+        },
+        {
+          "config": "overlay.enabled",
+          "equals": "true"
+        },
+        {
+          "config": "overlay.diagnostics",
+          "equals": "true"
+        },
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        },
+        {
+          "binding": "cet.overlay_key",
+          "equals": "$fixture.cet_overlay_key"
+        }
+      ],
+      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
+      "steps": [
+        {
+          "label": "ST3-light-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "ST3-light-look",
+          "do": "run",
+          "command": "overlay.set",
+          "input": {
+            "theme": "light",
+            "motion": "reduced",
+            "enabled": true,
+            "diagnostics": true
+          },
+          "bind": "ST3_light_look",
+          "outcomes": [
+            {
+              "name": "needs_restart",
+              "match": {
+                "code": "needs_restart"
+              },
+              "run": [
+                {
+                  "do": "note",
+                  "text": "ST3-light: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
+                },
+                {
+                  "do": "config.set",
+                  "values": {
+                    "overlay.enabled": "true",
+                    "overlay.diagnostics": "true"
+                  }
+                },
+                {
+                  "label": "close",
+                  "do": "host.close",
+                  "deadline_ms": 90000,
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Enter",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "host.wait_exit",
+                        "deadline_ms": 60000
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "launch",
+                  "do": "host.launch",
+                  "outcomes": [
+                    {
+                      "name": "already_running",
+                      "match": {
+                        "code": "already_running"
+                      },
+                      "result": "ok"
+                    }
+                  ]
+                },
+                {
+                  "label": "process",
+                  "do": "host.running",
+                  "until": {
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "label": "bridge",
+                  "do": "run",
+                  "command": "bridge.ping",
+                  "input": {},
+                  "until": {
+                    "ok": true
+                  },
+                  "interval_ms": 2000,
+                  "deadline_ms": 180000
+                },
+                {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "load",
+                  "do": "run",
+                  "command": "game.load",
+                  "input": {
+                    "name": "$fixture.save",
+                    "discard_unsaved": true,
+                    "continue_wait_s": 85
+                  },
+                  "bind": "load",
+                  "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
+                  "retry": {
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
+                    "on": {
+                      "code": [
+                        "game_not_running",
+                        "timeout",
+                        "busy",
+                        "bridge_busy",
+                        "game_loading",
+                        "rate_limited",
+                        "not_ready"
+                      ]
+                    }
+                  },
+                  "alternatives": [
+                    [
+                      {
+                        "do": "run",
+                        "command": "game.load",
+                        "input": {
+                          "latest": true,
+                          "discard_unsaved": true,
+                          "continue_wait_s": 85
+                        },
+                        "bind": "load",
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "label": "press-any-key",
+                  "do": "host.key",
+                  "keys": "Space",
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
+                    }
+                  },
+                  "retry": {
+                    "times": 5,
+                    "backoff_ms": 3000,
+                    "on": {
+                      "code": "not_foreground"
+                    }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "behind",
+                      "match": {
+                        "code": "not_foreground"
+                      },
+                      "run": [
+                        {
+                          "do": "note",
+                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "continue"
+                },
+                {
+                  "label": "gameplay",
+                  "do": "run",
+                  "command": "game.wait",
+                  "input": {
+                    "phase": "gameplay",
+                    "timeout_ms": 180000
+                  },
+                  "deadline_ms": 190000
+                },
+                {
+                  "do": "run",
+                  "command": "overlay.set",
+                  "input": {
+                    "theme": "light",
+                    "motion": "reduced",
+                    "enabled": true,
+                    "diagnostics": true
+                  },
+                  "bind": "ST3_light_look"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "ST3-light-in-force",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "theme",
+                "equals": "light"
+              },
+              {
+                "path": "motion.setting",
+                "equals": "reduced"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 3000,
+          "bind": "ST3_light_overlay",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST3-light-repaint",
+          "do": "wait",
+          "ms": 2500
+        },
+        {
+          "label": "ST3-light-look-window",
+          "do": "host.window",
+          "bind": "win"
+        },
+        {
+          "label": "ST3-light-xfbox",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "show": false,
+            "cet_label": false
+          },
+          "bind": "ST3_light_hud"
+        },
+        {
+          "label": "ST3-light-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST3_light_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST3-light-visible-box",
+          "do": "capture.surface",
+          "name": "ST3-light-probe-box",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST3-light-still",
+          "do": "burst",
+          "name": "ST3-xfbox-reduced-light",
+          "frames": 6,
+          "interval_ms": 240,
+          "clear_overlay": false,
+          "rect": "$win.regions.xf_box",
+          "bind": "ST3_light_still"
+        },
+        {
+          "label": "ST3-light-in-frame-still",
+          "do": "capture.surface",
+          "capture": "$ST3_light_still",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST3_light_frame_still",
+          "on_fail": "fail_row"
+        }
+      ],
+      "pass": [
+        {
+          "label": "motion reduced",
+          "ref": "$ST3_light_overlay.motion.effective",
+          "match": {
+            "equals": "reduced"
+          }
+        },
+        {
+          "label": "by the setting",
+          "ref": "$ST3_light_overlay.motion.reason",
+          "match": {
+            "equals": "setting"
+          }
+        },
+        {
+          "label": "still dot (6 x 240 ms)",
+          "ref": "$ST3_light_still",
+          "captured": true
+        },
+        {
+          "label": "still in frame",
+          "ref": "$ST3_light_frame_still",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 1.2 s)",
+          "ref": "$ST3_light_still.timing.first_to_last_ms",
+          "match": {
+            "min": 1000
+          }
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "ST3-light-hud-back",
+          "do": "run",
+          "command": "ui.hud",
+          "input": {
+            "reset": true
+          }
+        }
+      ]
+    }
+  ],
+  "teardown": [
+    {
+      "label": "cet",
+      "do": "host.key",
+      "keys": "$fixture.cet_overlay_key",
+      "when": {
+        "match": {
+          "ref": "$cetOpen",
+          "equals": true
+        }
+      }
+    }
+  ]
+}

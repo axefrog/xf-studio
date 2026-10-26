@@ -126,7 +126,7 @@ describe("the surface is in frame (capture.surface)", () => {
 
 describe("plugin logs survive restarts", () => {
   test("every log written during the attempt is copied before each launch and at the end, the first even after it is deleted", async () => {
-    const { writeFileSync, mkdirSync, rmSync, existsSync, readFileSync, appendFileSync } = await import("node:fs");
+    const { writeFileSync, mkdirSync, rmSync, existsSync, readFileSync } = await import("node:fs");
     const { FakeClock } = await import("./fake-clock.ts");
     const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
     const dir = tempDir("xfb-str-");
@@ -140,12 +140,76 @@ describe("plugin logs survive restarts", () => {
     const host = fakeHost({ running: false, onLaunch: () => { rmSync(first); writeFileSync(join(logs, "xfruntimebridge-2026-10-26-12-25-00.log"), "second session\n"); } });
     const rows = [{ id: "r", title: "r", steps: [{ label: "launch", do: "host.launch" }, { label: "more", do: "wait", ms: 10 }] }];
     const result = await go(script(rows as never), fakeApi(clock), host, clock, dir, { fixtures: { logs: { plugin_dir: logs }, mo2: { exe: join(dir, "mo2", "ModOrganizer.exe"), profile: "p", executable: "e" } } });
-    appendFileSync(join(logs, "xfruntimebridge-2026-10-26-12-25-00.log"), "");
     const kept = join(dir, "out", "logs", "a1");
     expect(readFileSync(join(kept, "xfruntimebridge-2026-10-26-12-12-00.log"), "utf8")).toContain("overlay.fonts");
     expect(existsSync(join(kept, "xfruntimebridge-2026-10-26-12-25-00.log"))).toBe(true);
     expect(existsSync(join(kept, "unrelated.log"))).toBe(false);
     const resume = JSON.parse(readFileSync(result.resumePath, "utf8"));
     expect(resume.plugin_logs.length).toBe(2);
+  });
+});
+
+describe("the ST batch shows its named states", () => {
+  type Step = Record<string, unknown> & { label?: string; do?: string; together?: Step[]; sequence?: Step[] };
+  const flat = (steps: Step[] = []): Step[] => steps.flatMap((s) => [s, ...flat(s.together), ...flat(s.sequence)]);
+  const build = async (hooks: { panel: boolean; cpu: boolean }, rerun = false) => {
+    const { stScript } = await import("../sessions/make-batches.ts");
+    return stScript(rerun, hooks) as { rows: { id: string; judged_by?: string; steps: Step[]; cleanup?: Step[] }[] };
+  };
+
+  test("with the hooks, every judged row verifies its state before each capture, finds its surface after, and probes before each burst", async () => {
+    for (const hooks of [{ panel: true, cpu: true }, { panel: false, cpu: false }]) {
+      const script = await build(hooks);
+      for (const row of script.rows.filter((r) => r.judged_by)) {
+        const steps = flat(row.steps);
+        const shots = steps.filter((s) => (s.do === "capture" || s.do === "burst") && !/cet-before|cet-check/.test(String(s.name)));
+        expect(shots.length).toBeGreaterThan(0);
+        const first = steps.indexOf(shots[0]);
+        expect(steps.slice(0, first).some((s) => String(s.label).includes("-is-"))).toBe(true);
+        // The ink panel isn't a themed plate: ST11 checks its state only.
+        if (row.id.startsWith("ST11")) continue;
+        for (const shot of shots) {
+          const bind = String(shot.bind);
+          expect(steps.some((s) => s.do === "capture.surface" && s.capture === `$${bind}`)).toBe(true);
+          if (shot.do === "burst") expect(steps.slice(0, steps.indexOf(shot)).some((s) => s.do === "capture.surface" && s.name !== undefined)).toBe(true);
+        }
+      }
+    }
+  });
+
+  test("Paused is the CET window's own Pause changes, never a handover; Diagnostics opens through cet.panel", async () => {
+    const script = await build({ panel: true, cpu: true });
+    const text = JSON.stringify(script.rows);
+    expect(text).not.toContain("session.handover");
+    for (const id of ["ST6-dark-paused", "ST8-light-paused", "ST5-dark", "ST3-light-settle"]) {
+      const row = script.rows.find((r) => r.id === id)!;
+      expect(flat(row.steps).some((s) => s.command === "cet.panel" && (s.input as { press?: string }).press === "pause_changes")).toBe(true);
+      // However it ends, changes are resumed.
+      expect(flat(row.cleanup).some((s) => s.command === "cet.panel" && (s.input as { press?: string }).press === "resume_changes")).toBe(true);
+    }
+    const diag = script.rows.find((r) => r.id === "ST7-light-diagnostics")!;
+    expect(flat(diag.steps).some((s) => String(s.label).endsWith("-is-open"))).toBe(true);
+  });
+
+  test("the re-run: only the rows the packet sent back, planned clean now; with the hooks every one, short only of the hooks themselves", async () => {
+    const { planBatch } = await import("../testing/batch.ts");
+    const { RERUN } = await import("../sessions/make-batches.ts");
+    const now = await build({ panel: false, cpu: false }, true);
+    expect(now.rows.every((r) => RERUN.includes(r.id))).toBe(true);
+    expect(now.rows.map((r) => r.id)).toEqual(expect.arrayContaining(["ST2-light", "ST3-dark", "ST4-light-changes", "ST8-dark-connected", "ST8-dark-auto", "ST13-dark"]));
+    expect(planBatch(now as never).problems).toEqual([]);
+    const later = await build({ panel: true, cpu: true }, true);
+    expect(later.rows.map((r) => r.id).sort()).toEqual([...RERUN].sort());
+    expect(planBatch(later as never).problems.filter((p) => !/no command "cet.panel"|diagnostics_cpu_ms: unknown field/.test(p))).toEqual([]);
+    // No read-only row: the re-run needs no restart.
+    expect(JSON.stringify(later.rows)).not.toContain('"bridge.allow_writes","equals":"false"');
+  });
+
+  test("the generated files are current", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { stScript } = await import("../sessions/make-batches.ts");
+    const dir = join(import.meta.dir, "..", "sessions");
+    expect(JSON.parse(readFileSync(join(dir, "st-rerun.json"), "utf8"))).toEqual(JSON.parse(JSON.stringify(stScript(true))));
+    expect(JSON.parse(readFileSync(join(dir, "st-styling.json"), "utf8"))).toEqual(JSON.parse(JSON.stringify(stScript(false))));
   });
 });

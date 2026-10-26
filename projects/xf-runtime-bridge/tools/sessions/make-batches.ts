@@ -2,7 +2,7 @@
 // (setting the overlay's look live, opening the CET overlay with its capture-based check, the XF box set-up, photo
 // mode's routes) stay consistent:
 //
-//   bun tools/sessions/make-batches.ts        writes st-styling.json and borg4-smoke.json beside this file
+//   bun tools/sessions/make-batches.ts        writes st-styling.json, st-rerun.json, borg4-smoke.json and free-roam.json beside this file
 //
 // st-styling.json: the test card's "In-game styling (0.8.22)" rows ST1-ST13, dark then light, as one unattended
 // batch. What it anticipates, from what the Borg 4 session ran into and what 0.8.22 added since:
@@ -29,16 +29,23 @@
 //   - the XF box shows only while the HUD is hidden or the ink panel is off and CET is closed: its rows hide the
 //     ink panel (ui.hud show false) and keep the CET line out (cet_label false); the CET line rows switch the XF
 //     box off live (overlay.set enabled false);
-//   - Paused is session.handover (the bridge pauses its changes) and session.resume;
-//   - the Diagnostics header, CET's Reload all mods and the Windows animation setting need the player's hand: an
-//     in-game question asks; ST9b and ST10 (alt-Enter) run only when the fixtures opt in.
+//   - Paused is the CET window's own Pause changes (session.handover is not that pause: scripted session 1's
+//     "Paused" captures showed Changes allowed), and the DIAGNOSTICS header opens through the same cet.panel hook;
+//     the rows that need it (ST5, ST6 and ST8 paused, ST7 diagnostics, ST3's settle) are generated once the
+//     catalogue has it, and ST2's warning and danger tones once overlay.set has its test figure;
+//   - before each capture the row verifies its named state through the bridge, and after it that the surface is in
+//     frame (capture.surface; bursts start only once it shows): a judged row ends CAPTURED, never PASS;
+//   - no row needs the player: ST9b reads Windows' setting, ST13 leaves out CET's Reload all mods, ST10 (alt-Enter)
+//     runs only when the fixtures opt in.
 // The teardown puts the overlay's live look back (the first overlay.set's undo) and restores config.ini.
+// st-rerun.json: the rows the review packet (local/sessions/scripted-1/st-review-packet) sends back.
 // borg4-smoke.json: the Borg 4 PASS rows as a short regression smoke (B318-1, B318-3, B318-4, CS8181, DI2, DI3, CRS).
 
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { findCommand } from "../api/catalogue.ts";
 import { closeSteps, launchSteps } from "../testing/batch.ts";
+import { buildTheme, STUDIO_CSS } from "../overlay/theme.ts";
 
 type Json = Record<string, unknown>;
 const key = (row: string, name: string) => `${row.replace(/[^A-Za-z0-9]/g, "_")}_${name}`;
@@ -55,6 +62,63 @@ const common = { "ui.answer_keys": "IK_F6", "overlay.scale_percent": "100", "ove
 /** What every ST row needs at load: the overlay on (so its look can switch live), and writes on or off. */
 const atLoad = (writes = true) => cfg({ ...common, "bridge.allow_writes": String(writes) });
 const cetKey = { binding: "cet.overlay_key", equals: "$fixture.cet_overlay_key" };
+
+// ---- The bridge hooks the ST rows wait for -------------------------------------------------------------------
+//
+// The CET window's Pause changes button runs the CET layer's own action (init.lua runAction "pause":
+// XFBridge_PauseWrites, the dispatcher's write pause), which no bridge command reaches, and its DIAGNOSTICS header
+// is an ImGui CollapsingHeader only a click opens. session.handover is not that pause (scripted session 1: its
+// "Paused" captures show Changes allowed). Both wait for the bridge's cet.panel command, spec'd for the bridge chat:
+//   cet.panel {diagnostics_open?: bool, press?: "pause_changes" | "resume_changes"} (notify, so it works while paused):
+//   the CET layer applies diagnostics_open with ImGui.SetNextItemOpen before the header (once per change), and runs a
+//   press as the button's own action (queue("pause", true|false), so XFBridge_PauseWrites runs as on a click), and
+//   reports what it drew in bridge.info cet_panel {diagnostics_open, chip, tone, last_press {id, target, answer}}.
+// ST2's warning and danger tones wait for a test-only diagnostics figure: overlay.set {diagnostics_cpu_ms: number |
+// null} (autonomous builds), which the XF box's and the CET window's bar draw and overlay_state's cpu_ms reports.
+export type Hooks = { panel: boolean; cpu: boolean };
+/** Which hooks the catalogue has now. */
+export const catalogueHooks = (): Hooks => ({
+  panel: Boolean(findCommand("cet.panel")),
+  cpu: Boolean((findCommand("overlay.set")?.input as { properties?: Record<string, unknown> } | undefined)?.properties?.diagnostics_cpu_ms),
+});
+// Set by stScript for the rows it builds (the tests build them as if the hooks were there).
+let PANEL_HOOK = false;
+let CPU_OVERRIDE = false;
+/** Rows the generator leaves out until the bridge has their hook (the batch says so in its requires). */
+const waiting: { row: string; hook: string }[] = [];
+
+// ---- The surfaces' colours and the in-frame check ------------------------------------------------------------
+
+/** Each theme's plate (WindowBg) and text colours, from the same table the bridge's surfaces draw with. */
+const COLOURS = (() => {
+  const theme = buildTheme(readFileSync(STUDIO_CSS, "utf8"));
+  const rgb = (name: string, which: Theme) => theme.colors.find((c) => c.name === name)![which].slice(0, 3).map((v) => Math.round(v * 255));
+  return { dark: { plate: rgb("WindowBg", "dark"), text: rgb("Text", "dark") }, light: { plate: rgb("WindowBg", "light"), text: rgb("Text", "light") } };
+})();
+type Surface = "xf_box" | "cet_line" | "cet_window";
+/** How much of each surface's crop its plate fills when it shows (capture.surface's notes: the CET line's crop is mostly scene). */
+const MIN_PLATE: Record<Surface, Record<Theme, number>> = { xf_box: { dark: 0.15, light: 0.15 }, cet_window: { dark: 0.15, light: 0.15 }, cet_line: { dark: 0.18, light: 0.03 } };
+const surfaceOf = (surface: Surface, theme: Theme): Json => ({ ...COLOURS[theme], rect: `$win.regions.${surface}`, min_plate: MIN_PLATE[surface][theme] });
+
+/** The named state, through the bridge, before a capture: if it isn't there, the row fails with what was there instead. */
+const verify = (row: string, name: string, until: Json, command = "bridge.info"): Json =>
+  ({ label: `${row}-is-${name}`, do: "run", command, input: {}, until, interval_ms: 250, deadline_ms: 4000, bind: key(row, `is_${name.replace(/[^A-Za-z0-9]/g, "_")}`), on_fail: "fail_row" });
+/** The surface shows (a small probe capture), so a burst or capture starts only once it does. */
+const visible = (row: string, surface: Surface, theme: Theme, name: string): Json =>
+  ({ label: `${row}-visible-${name}`, do: "capture.surface", name: `${row}-probe-${name}`, ...surfaceOf(surface, theme), until: { ok: true }, interval_ms: 300, deadline_ms: 4000, on_fail: "fail_row" });
+/** After a capture: its surface is in frame (every frame of a burst), or the row fails naming the frames without it. */
+const inFrame = (row: string, bind: string, surface: Surface, theme: Theme): Json =>
+  ({ label: `${row}-in-frame-${bind}`, do: "capture.surface", capture: ref(row, bind), ...surfaceOf(surface, theme), bind: key(row, `frame_${bind}`), on_fail: "fail_row" });
+const framed = (row: string, bind: string) => ({ label: `${bind} in frame`, ref: ref(row, `frame_${bind}`), match: { path: "present", equals: true } });
+
+// The states, as bridge.info and overlay_state report them (core/InkUi.cpp Summarize; overlay/Host.cpp Snapshot).
+const onSurface = (surface: Surface | "ink_panel"): Json => ({ path: "status_surface", equals: surface });
+const chip = (label: string): Json => ({ path: "status.chip", equals: label });
+const paused: Json = { all: [{ path: "bridge.writes_paused", equals: true }, chip("Paused")] };
+const notPaused: Json = { all: [{ path: "bridge.writes_paused", equals: false }, chip("Changes allowed")] };
+const cetIs = (open: boolean): Json => ({ path: "cet_open", equals: open });
+/** What the CET window drew (the cet.panel hook's report), beside the plugin's own state. */
+const drawn = (label: string): Json[] => PANEL_HOOK ? [{ path: "cet_panel.chip", equals: label }] : [];
 
 // ---- Repeated parts ----------------------------------------------------------------------------------------
 
@@ -83,7 +147,7 @@ const look = (row: string, theme: Theme, motion: Motion, enabled = true, writes 
         { do: "run", command: "overlay.set", input, bind: key(row, "look") },
       ] }] },
     { label: `${row}-in-force`, do: "run", command: "overlay.state", input: {}, until: { all: [{ path: "theme", equals: theme }, { path: "motion.setting", equals: motion }] },
-      interval_ms: 250, deadline_ms: 3000, bind: key(row, "overlay") },
+      interval_ms: 250, deadline_ms: 3000, bind: key(row, "overlay"), on_fail: "fail_row" },
     { label: `${row}-repaint`, do: "wait", ms: 2500 },
     // The window's size, for the crops of this row's captures and bursts (regions.xf_box, cet_line, cet_window, ink_panel).
     { label: `${row}-look-window`, do: "host.window", bind: "win" },
@@ -117,10 +181,14 @@ const cetClose = (row: string, label = "cet-close"): Json[] => [
   { label: `${row}-${label}`, do: "host.key", keys: "$fixture.cet_overlay_key", when: { match: { ref: "$cetOpen", equals: true } }, retry: { times: 3, backoff_ms: 2000, on: { code: "not_foreground" } } },
   { label: `${row}-${label}-flag`, do: "set", value: false, bind: "cetOpen" },
 ];
-/** A full capture plus its crop to the CET window (both evidence). */
-const cetShot = (row: string, name: string, bind: string): Json[] => [
+/** A full capture of the CET window, then its crop (both evidence) and the check that the window is in frame. */
+const cetShot = (row: string, name: string, bind: string, theme: Theme): Json[] => [
   { label: `${row}-${name}`, do: "capture", name, clear_overlay: false, bind: key(row, bind) },
+  ...cetCrop(row, name, bind, theme),
+];
+const cetCrop = (row: string, name: string, bind: string, theme: Theme): Json[] => [
   { label: `${row}-${name}-crop`, do: "run", command: "capture.recrop", input: { path: ref(row, bind, "full.path"), rect: "$win.regions.cet_window", name: `${name}-crop` }, on_fail: "continue" },
+  inFrame(row, bind, "cet_window", theme),
 ];
 /** The XF box as the status surface: ink panel off, CET line off (CET closed). */
 const xfBox = (row: string): Json[] => [
@@ -132,11 +200,18 @@ const hudBack = (row: string): Json => ({ label: `${row}-hud-back`, do: "run", c
 const overlayState = (row: string, name = "overlay"): Json => ({ label: `${row}-${name}`, do: "run", command: "overlay.state", input: {}, bind: key(row, name) });
 const captured = (label: string, row: string, bind: string) => ({ label, ref: ref(row, bind), captured: true });
 const check = (label: string, row: string, bind: string, path: string, match: Json) => ({ label, ref: ref(row, bind, path), match });
-const resume = (row: string): Json => ({ label: `${row}-resume`, do: "run", command: "session.resume", input: {} });
+/** The CET window's own Pause changes / Resume changes, through the cet.panel hook (the button's action). */
+const panelPress = (row: string, name: string, target: "pause_changes" | "resume_changes", extra: Json = {}): Json =>
+  ({ label: `${row}-${name}`, do: "run", command: "cet.panel", input: { press: target }, ...extra });
+/** Resume changes, however the row ended (cleanup), and confirm it. */
+const resumeChanges = (row: string): Json[] => [
+  panelPress(row, "resume-always", "resume_changes", { on_fail: "continue" }),
+  { label: `${row}-resumed`, do: "run", command: "bridge.info", input: {}, until: notPaused, interval_ms: 250, deadline_ms: 3000, on_fail: "continue" },
+];
 
 // ---- The ST rows -------------------------------------------------------------------------------------------
 
-/** Motion auto against frame generation, the CET line under it, the Windows half of ST9 (opt-in), and ST13's cet_open. */
+/** Motion auto against frame generation, the CET line under it, the Windows half of ST9, and ST13's cet_open. */
 function firstRows(): Json[] {
   const requires = [...atLoad(), cetKey];
   let row = "ST9a-dark";
@@ -147,8 +222,12 @@ function firstRows(): Json[] {
   row = "ST8-dark-auto";
   rows.push({ id: row, title: "CET line connected with motion auto under frame generation: a still dot (the Borg 4 ST8 repeat)", requires, judged_by: STUDIO,
     steps: [inPlay(row), ...look(row, "dark", "auto", false), cetLine(row),
-      { label: `${row}-burst`, do: "burst", name: "ST8-cetline-connected-auto-dark", frames: 6, interval_ms: 240, clear_overlay: false, rect: "$win.regions.cet_line", bind: key(row, "burst") }],
-    pass: [captured("the still dot", row, "burst")], cleanup: [hudBack(row)] });
+      verify(row, "line", { all: [onSurface("cet_line"), chip("Changes allowed")] }), verify(row, "cet-closed", cetIs(false), "overlay.state"),
+      visible(row, "cet_line", "dark", "line"),
+      { label: `${row}-burst`, do: "burst", name: "ST8-cetline-connected-auto-dark", frames: 6, interval_ms: 240, clear_overlay: false, rect: "$win.regions.cet_line", bind: key(row, "burst") },
+      inFrame(row, "burst", "cet_line", "dark")],
+    pass: [check("reduced by frame generation", row, "overlay", "motion.reason", { equals: "frame_generation" }), captured("the still dot (6 x 240 ms)", row, "burst"), framed(row, "burst"),
+      check("spaced as planned (about 1.2 s)", row, "burst", "timing.first_to_last_ms", { min: 1000 })], cleanup: [hudBack(row)] });
   // ST9's Windows half without the player: Windows' setting is read (never changed) and the overlay must agree with it.
   row = "ST9b-dark";
   rows.push({ id: row, title: "Motion auto agrees with Windows' Animation effects as Windows reports it (ST9, the Windows half; read, not changed)", requires,
@@ -181,17 +260,27 @@ function writesRows(theme: Theme): Json[] {
   let row = `ST8-${theme}-connected`;
   rows.push({ id: row, title: `CET line, connected, motion full (${theme})`, requires, judged_by: STUDIO,
     steps: [inPlay(row), ...look(row, theme, "full", false), cetLine(row),
-      { label: `${row}-burst`, do: "burst", name: `ST8-cetline-connected-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, rect: "$win.regions.cet_line", bind: key(row, "burst") }],
-    pass: [check("motion full in force", row, "overlay", "motion.effective", { equals: "full" }), captured("the pulse burst", row, "burst")],
+      verify(row, "line", { all: [onSurface("cet_line"), chip("Changes allowed")] }), verify(row, "cet-closed", cetIs(false), "overlay.state"),
+      visible(row, "cet_line", theme, "line"),
+      { label: `${row}-burst`, do: "burst", name: `ST8-cetline-connected-${theme}`, frames: 13, interval_ms: 200, clear_overlay: false, rect: "$win.regions.cet_line", bind: key(row, "burst") },
+      inFrame(row, "burst", "cet_line", theme)],
+    pass: [check("motion full in force", row, "overlay", "motion.effective", { equals: "full" }), captured("the pulse burst (13 x 200 ms, one 2.4 s period)", row, "burst"), framed(row, "burst"),
+      check("spaced as planned (about 2.4 s)", row, "burst", "timing.first_to_last_ms", { min: 2200 })],
     cleanup: [hudBack(row)] });
   row = `ST8-${theme}-paused`;
-  rows.push({ id: row, title: `CET line, paused (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), ...look(row, theme, "full", false), cetLine(row),
-      { label: `${row}-pause`, do: "run", command: "session.handover", input: { note: `${row}: the paused CET line`, restore_ui: false } },
-      { label: `${row}-wait`, do: "wait", ms: 800 },
-      { label: `${row}-shot`, do: "capture", name: `ST8-cetline-paused-${theme}`, clear_overlay: false, bind: key(row, "shot") }],
-    pass: [captured("the paused line", row, "shot")],
-    cleanup: [resume(row), hudBack(row)] });
+  if (PANEL_HOOK) {
+    rows.push({ id: row, title: `CET line, paused through the CET window's own Pause changes: the amber ring (${theme})`, requires, judged_by: STUDIO,
+      steps: [inPlay(row), ...look(row, theme, "full", false), cetLine(row),
+        panelPress(row, "pause", "pause_changes", { on_fail: "fail_row" }),
+        verify(row, "paused", { all: [onSurface("cet_line"), paused] }), verify(row, "cet-closed", cetIs(false), "overlay.state"),
+        // The line takes the new status with its next info refresh (2 s).
+        { label: `${row}-paused-repaint`, do: "wait", ms: 2500 },
+        visible(row, "cet_line", theme, "line"),
+        { label: `${row}-shot`, do: "capture", name: `ST8-cetline-paused-${theme}`, clear_overlay: false, bind: key(row, "shot") },
+        inFrame(row, "shot", "cet_line", theme)],
+      pass: [check("the bridge's changes are paused", row, "is_paused", "bridge.writes_paused", { equals: true }), captured("the paused line", row, "shot"), framed(row, "shot")],
+      cleanup: [...resumeChanges(row), hudBack(row)] });
+  } else waiting.push({ row, hook: "cet.panel press" });
 
   const n = theme === "dark" ? "ST1" : "ST2";
   row = `${n}-${theme}`;
@@ -199,44 +288,90 @@ function writesRows(theme: Theme): Json[] {
     steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row),
       // The question shows in the box for the capture (the card's "the question and its keys"); nobody is asked to answer.
       { label: `${row}-question`, do: "run", command: "ui.message", input: { level: "ask", text: `${n}: a question for the capture (no answer needed).`, choices: ["Fully visible", "Partly cut off"], seconds: 30 }, bind: key(row, "q") },
-      { label: `${row}-settle`, do: "wait", ms: 800 },
-      { label: `${row}-shot`, do: "capture", name: `${n}-xfbox-diagnostics-${theme}`, clear_overlay: false, bind: key(row, "shot") }],
+      verify(row, "box", { all: [onSurface("xf_box"), chip("Changes allowed")] }),
+      verify(row, "asking", { path: "pending_ask.id", equals: ref(row, "q", "id") }, "ui.state"),
+      visible(row, "xf_box", theme, "box"),
+      { label: `${row}-shot`, do: "capture", name: `${n}-xfbox-diagnostics-${theme}`, clear_overlay: false, bind: key(row, "shot") },
+      inFrame(row, "shot", "xf_box", theme)],
     pass: [check("the overlay draws", row, "overlay", "drawing_now", { equals: true }), check(`theme ${theme}`, row, "overlay", "theme", { equals: theme }),
-      check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the XF box", row, "shot")],
+      check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the XF box", row, "shot"), framed(row, "shot")],
     cleanup: [{ label: `${row}-clear`, do: "run", command: "ui.message", input: { clear: true } }, hudBack(row)] });
+  // ST2's bar in its three tones (the card: the figure readable over the track, the fill, and the warning and danger
+  // tones). The overlay's own CPU time stays near 0.15 ms, so the tones need the bridge's test-only figure.
+  if (theme === "light") {
+    row = "ST2-light-tones";
+    if (CPU_OVERRIDE) {
+      const tone = (name: string, ms: number, match: Json): Json[] => [
+        { label: `${row}-${name}-figure`, do: "run", command: "overlay.set", input: { diagnostics_cpu_ms: ms }, on_fail: "fail_row" },
+        verify(row, name, { all: [onSurface("xf_box")] }),
+        verify(row, `${name}-cpu`, { path: "cpu_ms", ...match }, "overlay.state"),
+        { label: `${row}-${name}-repaint`, do: "wait", ms: 600 },
+        { label: `${row}-${name}-shot`, do: "capture", name: `ST2-xfbox-bar-${name}-light`, clear_overlay: false, bind: key(row, name) },
+        inFrame(row, name, "xf_box", "light"),
+      ];
+      rows.push({ id: row, title: "The XF box's diagnostics bar in light: the figure over the fill, and the warning and danger tones (a test figure)", requires, judged_by: STUDIO,
+        steps: [inPlay(row), ...look(row, "light", "full"), ...xfBox(row), visible(row, "xf_box", "light", "box"),
+          ...tone("fill", 0.6, { min: 0.55, max: 0.65 }), ...tone("warning", 0.8, { min: 0.76, max: 0.89 }), ...tone("danger", 0.95, { min: 0.91 })],
+        pass: [captured("over the fill (0.6 ms)", row, "fill"), captured("warning (0.8 ms)", row, "warning"), captured("danger (0.95 ms)", row, "danger"),
+          framed(row, "fill"), framed(row, "warning"), framed(row, "danger")],
+        cleanup: [{ label: `${row}-figure-off`, do: "run", command: "overlay.set", input: { diagnostics_cpu_ms: null }, on_fail: "continue" }, hudBack(row)] });
+    } else waiting.push({ row, hook: "overlay.set diagnostics_cpu_ms" });
+  }
 
   row = `ST4-${theme}-changes`;
   rows.push({ id: row, title: `The dot's pulse with changes allowed, motion full (${theme})`, requires, judged_by: STUDIO,
     steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row),
-      { label: `${row}-burst`, do: "burst", name: `ST4-xfbox-pulse-changes-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "burst") }],
-    pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the pulse burst (12 x 200 ms, one 2.4 s period)", row, "burst")],
+      verify(row, "box", { all: [onSurface("xf_box"), chip("Changes allowed")] }), visible(row, "xf_box", theme, "box"),
+      { label: `${row}-burst`, do: "burst", name: `ST4-xfbox-pulse-changes-${theme}`, frames: 13, interval_ms: 200, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "burst") },
+      inFrame(row, "burst", "xf_box", theme)],
+    pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the pulse burst (13 x 200 ms, one 2.4 s period)", row, "burst"), framed(row, "burst"),
+      check("spaced as planned (about 2.4 s)", row, "burst", "timing.first_to_last_ms", { min: 2200 })],
     cleanup: [hudBack(row)] });
 
+  // The settle needs a real change of tone inside the burst: the CET window's own Pause changes, then Resume within 2 s.
   row = `ST5-${theme}`;
-  rows.push({ id: row, title: `The settle on a change of state, and none for a second change within 2 s (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row),
-      { label: `${row}-change`, together: [
-        { do: "burst", name: `ST5-xfbox-settle-${theme}`, frames: 20, interval_ms: 100, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "burst") },
-        { sequence: [{ do: "wait", ms: 300 }, { do: "run", command: "session.handover", input: { note: `${row}: settle`, restore_ui: false } }, { do: "wait", ms: 700 }, { do: "run", command: "session.resume", input: {} }] },
-      ] }],
-    pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the settle burst (change at 0.3 s, second change at 1.0 s)", row, "burst"),
-      // The handover in the same beat must not cut the burst short: every frame, over the whole span.
-      check("all 20 frames", row, "burst", "frames.19", { exists: true }), check("over about 2 s", row, "burst", "timing.first_to_last_ms", { min: 1700 })],
-    cleanup: [resume(row), hudBack(row)] });
+  if (PANEL_HOOK) {
+    rows.push({ id: row, title: `The settle on a change of state (Pause changes), and none for a second change within 2 s (Resume) (${theme})`, requires, judged_by: STUDIO,
+      steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row),
+        verify(row, "box", { all: [onSurface("xf_box"), chip("Changes allowed")] }), visible(row, "xf_box", theme, "box"),
+        { label: `${row}-change`, together: [
+          { do: "burst", name: `ST5-xfbox-settle-${theme}`, frames: 20, interval_ms: 100, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "burst") },
+          { sequence: [{ do: "wait", ms: 300 }, panelPress(row, "pause", "pause_changes"), { do: "wait", ms: 150 }, { do: "run", command: "bridge.info", input: {}, bind: key(row, "first") },
+            { do: "wait", ms: 500 }, panelPress(row, "resume", "resume_changes"), { do: "wait", ms: 150 }, { do: "run", command: "bridge.info", input: {}, bind: key(row, "second") }] },
+        ] },
+        inFrame(row, "burst", "xf_box", theme)],
+      pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the settle burst (paused at 0.3 s, resumed at 1.0 s)", row, "burst"), framed(row, "burst"),
+        check("the first change happened inside the burst (Paused)", row, "first", "status.chip", { equals: "Paused" }),
+        check("the second change happened inside the burst (Changes allowed)", row, "second", "status.chip", { equals: "Changes allowed" }),
+        check("all 20 frames", row, "burst", "frames.19", { exists: true }), check("over about 2 s", row, "burst", "timing.first_to_last_ms", { min: 1700 })],
+      cleanup: [...resumeChanges(row), hudBack(row)] });
+  } else waiting.push({ row, hook: "cet.panel press" });
 
   row = `ST6-${theme}-chips`;
-  rows.push({ id: row, title: `The chips: Changes allowed, then Paused (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row), ...cetShot(row, `ST6-cet-chip-changes-${theme}`, "changes"),
-      { label: `${row}-pause`, do: "run", command: "session.handover", input: { note: `${row}: the Paused chip`, restore_ui: false } },
-      { label: `${row}-wait`, do: "wait", ms: 800 },
-      ...cetShot(row, `ST6-cet-chip-paused-${theme}`, "paused")],
-    pass: [captured("Changes allowed", row, "changes"), captured("Paused", row, "paused")],
-    cleanup: [resume(row), ...cetClose(row)] });
+  rows.push({ id: row, title: `The chips: Changes allowed (${theme})`, requires, judged_by: STUDIO,
+    steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
+      verify(row, "changes", { all: [chip("Changes allowed"), ...drawn("Changes allowed")] }), visible(row, "cet_window", theme, "window"),
+      ...cetShot(row, `ST6-cet-chip-changes-${theme}`, "changes", theme)],
+    pass: [captured("Changes allowed", row, "changes"), framed(row, "changes")],
+    cleanup: [...cetClose(row)] });
+  row = `ST6-${theme}-paused`;
+  if (PANEL_HOOK) {
+    rows.push({ id: row, title: `The chips: Paused, through the CET window's own Pause changes (amber outline, no fill) (${theme})`, requires, judged_by: STUDIO,
+      steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
+        panelPress(row, "pause", "pause_changes", { on_fail: "fail_row" }),
+        verify(row, "paused", { all: [paused, ...drawn("Paused")] }), verify(row, "cet-open", cetIs(true), "overlay.state"),
+        { label: `${row}-paused-repaint`, do: "wait", ms: 800 }, visible(row, "cet_window", theme, "window"),
+        ...cetShot(row, `ST6-cet-chip-paused-${theme}`, "paused", theme)],
+      pass: [check("the bridge's changes are paused", row, "is_paused", "bridge.writes_paused", { equals: true }), captured("Paused", row, "paused"), framed(row, "paused")],
+      cleanup: [...resumeChanges(row), ...cetClose(row)] });
+  } else waiting.push({ row, hook: "cet.panel press" });
 
   row = `ST7-${theme}-running`;
   rows.push({ id: row, title: `The CET window running with changes allowed, and the disabled Send (ST12) (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row), ...cetShot(row, `ST7-cet-running-${theme}`, "running")],
-    pass: [captured("the window", row, "running")],
+    steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
+      verify(row, "running", { all: [chip("Changes allowed"), ...drawn("Changes allowed")] }), visible(row, "cet_window", theme, "window"),
+      ...cetShot(row, `ST7-cet-running-${theme}`, "running", theme)],
+    pass: [captured("the window", row, "running"), framed(row, "running")],
     cleanup: [...cetClose(row)] });
 
   row = `ST7-${theme}-question`;
@@ -244,10 +379,14 @@ function writesRows(theme: Theme): Json[] {
     steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
       { label: `${row}-cursor`, do: "cursor", bind: key(row, "cursor") },
       { label: `${row}-ask`, do: "run", command: "ui.message", input: { level: "ask", text: `${row}: a waiting question (the runner answers it with F6).`, choices: ["First", "Second", "Third"], seconds: 180 }, bind: key(row, "q") },
+      verify(row, "asking", { path: "pending_ask.id", equals: ref(row, "q", "id") }, "ui.state"),
       { label: `${row}-wait1`, do: "wait", ms: 600 },
-      ...cetShot(row, `ST7-cet-question-a-${theme}`, "qa"),
+      visible(row, "cet_window", theme, "window"),
+      // The two frames 1.2 s apart, as the card asks: both captures first, their crops and checks after.
+      { label: `${row}-qa`, do: "capture", name: `ST7-cet-question-a-${theme}`, clear_overlay: false, bind: key(row, "qa") },
       { label: `${row}-wait2`, do: "wait", ms: 1200 },
-      ...cetShot(row, `ST7-cet-question-b-${theme}`, "qb"),
+      { label: `${row}-qb`, do: "capture", name: `ST7-cet-question-b-${theme}`, clear_overlay: false, bind: key(row, "qb") },
+      ...cetCrop(row, `ST7-cet-question-a-${theme}`, "qa", theme), ...cetCrop(row, `ST7-cet-question-b-${theme}`, "qb", theme),
       { label: `${row}-breathes`, do: "capture.compare", a: ref(row, "qa"), b: ref(row, "qb"), rect: "$win.regions.cet_window", bind: key(row, "breath"), on_fail: "continue" },
       ...cetClose(row),
       press(`${row}-f6`, "F6"),
@@ -259,26 +398,28 @@ function writesRows(theme: Theme): Json[] {
       { label: `${row}-window2`, do: "host.window", bind: "win" },
       press(`${row}-reopen`, "$fixture.cet_overlay_key"),
       { label: `${row}-reopened`, do: "set", value: true, bind: "cetOpen" },
+      verify(row, "reopened", cetIs(true), "overlay.state"),
       { label: `${row}-settle`, do: "wait", ms: 700 },
-      ...cetShot(row, `ST7-cet-answered-${theme}`, "answered")],
-    pass: [captured("waiting (first)", row, "qa"), captured("waiting (1.2 s later)", row, "qb"),
+      ...cetShot(row, `ST7-cet-answered-${theme}`, "answered", theme)],
+    pass: [captured("waiting (first)", row, "qa"), captured("waiting (1.2 s later)", row, "qb"), framed(row, "qa"), framed(row, "qb"),
       check("the waiting card breathes (the two frames differ in the window)", row, "breath", "changed_fraction", { min: 0.00001 }),
-      check("answered", row, "answer", "complete", { equals: true }), captured("answered", row, "answered")],
+      check("answered", row, "answer", "complete", { equals: true }), captured("answered", row, "answered"), framed(row, "answered")],
     cleanup: [{ label: `${row}-clear`, do: "run", command: "ui.message", input: { clear: true } }, ...cetClose(row)] });
 
-  // The DIAGNOSTICS header opens without a person through the bridge's cet.panel command (diagnostics_open), which the
-  // bridge chat builds (spec'd for it): until the catalogue has it, the rows are left out rather than asking the player.
-  if (findCommand("cet.panel")) {
-    row = `ST7-${theme}-diagnostics`;
+  row = `ST7-${theme}-diagnostics`;
+  if (PANEL_HOOK) {
     rows.push({ id: row, title: `The CET window with the DIAGNOSTICS header open (${theme})`, requires, judged_by: STUDIO,
       steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
-        { label: `${row}-open-header`, do: "run", command: "cet.panel", input: { diagnostics_open: true } },
-        { label: `${row}-settle`, do: "wait", ms: 2500 },
-        ...cetShot(row, `ST7-cet-diagnostics-${theme}`, "diag")],
-      pass: [captured("Diagnostics open", row, "diag")],
+        { label: `${row}-open-header`, do: "run", command: "cet.panel", input: { diagnostics_open: true }, on_fail: "fail_row" },
+        // The window drew the header open, with CET's overlay still open (scripted session 1's captures had no window).
+        verify(row, "open", { path: "cet_panel.diagnostics_open", equals: true }), verify(row, "cet-open", cetIs(true), "overlay.state"),
+        { label: `${row}-settle`, do: "wait", ms: 800 }, visible(row, "cet_window", theme, "window"),
+        ...cetShot(row, `ST7-cet-diagnostics-${theme}`, "diag", theme)],
+      pass: [captured("Diagnostics open", row, "diag"), framed(row, "diag")],
       cleanup: [{ label: `${row}-close-header`, do: "run", command: "cet.panel", input: { diagnostics_open: false }, on_fail: "continue" }, ...cetClose(row)] });
-  }
+  } else waiting.push({ row, hook: "cet.panel diagnostics_open" });
 
+  // The ink panel isn't a themed plate, so its frames have no in-frame check; its state is checked instead.
   row = `ST11-${theme}`;
   rows.push({ id: row, title: `The ink panel's answer flash in photo mode (modal, a waiting question, Esc) (${theme})`, requires, judged_by: STUDIO,
     steps: [inPlay(row), ...look(row, theme, "full"),
@@ -290,13 +431,15 @@ function writesRows(theme: Theme): Json[] {
       { label: `${row}-prefs`, do: "wait", ms: 2000 },
       { label: `${row}-modal`, do: "run", command: "ui.hud", input: { show: true, modal: true, layer: "photo_menu" }, bind: key(row, "hud") },
       { label: `${row}-ask`, do: "run", command: "ui.message", input: { level: "ask", text: `${row}: the answers flash when Esc is pressed (no answer needed).`, choices: ["Yes", "No"], seconds: 120 }, bind: key(row, "q") },
+      verify(row, "ink", onSurface("ink_panel")), verify(row, "asking", { path: "pending_ask.id", equals: ref(row, "q", "id") }, "ui.state"),
       { label: `${row}-wait`, do: "wait", ms: 600 },
       { label: `${row}-flash`, together: [
         { do: "burst", name: `ST11-ink-flash-${theme}`, frames: 14, interval_ms: 50, clear_overlay: false, rect: "$win.regions.ink_panel", bind: key(row, "burst") },
         { sequence: [{ do: "wait", ms: 150 }, press(`${row}-esc`, "Esc")] },
       ] },
       { label: `${row}-held`, do: "run", command: "game.status", input: {}, bind: key(row, "after") }],
-    pass: [captured("the flash burst (14 x 50 ms)", row, "burst"), check("modal held photo mode's exit", row, "after", "phase", { equals: "photo_mode" })],
+    pass: [captured("the flash burst (14 x 50 ms)", row, "burst"), check("modal held photo mode's exit", row, "after", "phase", { equals: "photo_mode" }),
+      check("spaced as planned (about 0.65 s)", row, "burst", "timing.first_to_last_ms", { max: 1000 })],
     cleanup: [{ label: `${row}-clear`, do: "run", command: "ui.message", input: { clear: true } }, { label: `${row}-unmodal`, do: "run", command: "ui.hud", input: { modal: false } }, hudBack(row),
       { label: `${row}-exit`, do: "run", command: "photo.exit", input: {}, when: { check: { do: "run", command: "game.status", input: {} }, match: { path: "phase", equals: "photo_mode" } } }] });
 
@@ -311,17 +454,32 @@ function writesRows(theme: Theme): Json[] {
   }
 
   row = `ST3-${theme}`;
-  rows.push({ id: row, title: `The XF box with motion reduced: a still dot, no settle (${theme})`, requires, judged_by: STUDIO,
+  rows.push({ id: row, title: `The XF box with motion reduced: a still dot (${theme})`, requires, judged_by: STUDIO,
     steps: [inPlay(row), ...look(row, theme, "reduced"), ...xfBox(row),
+      verify(row, "box", { all: [onSurface("xf_box"), chip("Changes allowed")] }), visible(row, "xf_box", theme, "box"),
       { label: `${row}-still`, do: "burst", name: `ST3-xfbox-reduced-${theme}`, frames: 6, interval_ms: 240, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "still") },
-      { label: `${row}-change`, together: [
-        { do: "burst", name: `ST3-xfbox-reduced-settle-${theme}`, frames: 10, interval_ms: 100, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "settle") },
-        { sequence: [{ do: "wait", ms: 300 }, { do: "run", command: "session.handover", input: { note: `${row}: no settle under reduced`, restore_ui: false } }, { do: "wait", ms: 400 }, { do: "run", command: "session.resume", input: {} }] },
-      ] }],
+      inFrame(row, "still", "xf_box", theme)],
     pass: [check("motion reduced", row, "overlay", "motion.effective", { equals: "reduced" }), check("by the setting", row, "overlay", "motion.reason", { equals: "setting" }),
-      captured("still dot (6 x 240 ms)", row, "still"), captured("no wash on a change", row, "settle"),
-      check("all 10 settle frames", row, "settle", "frames.9", { exists: true }), check("over about 1 s", row, "settle", "timing.first_to_last_ms", { min: 800 })],
-    cleanup: [resume(row), hudBack(row)] });
+      captured("still dot (6 x 240 ms)", row, "still"), framed(row, "still"), check("spaced as planned (about 1.2 s)", row, "still", "timing.first_to_last_ms", { min: 1000 })],
+    cleanup: [hudBack(row)] });
+  // No settle under reduced motion, on a real change of tone inside the burst (Pause changes, then Resume).
+  row = `ST3-${theme}-settle`;
+  if (PANEL_HOOK) {
+    rows.push({ id: row, title: `The XF box with motion reduced: no settle on a change of tone (Pause changes and back) (${theme})`, requires, judged_by: STUDIO,
+      steps: [inPlay(row), ...look(row, theme, "reduced"), ...xfBox(row),
+        verify(row, "box", { all: [onSurface("xf_box"), chip("Changes allowed")] }), visible(row, "xf_box", theme, "box"),
+        { label: `${row}-change`, together: [
+          { do: "burst", name: `ST3-xfbox-reduced-settle-${theme}`, frames: 10, interval_ms: 100, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "settle") },
+          { sequence: [{ do: "wait", ms: 300 }, panelPress(row, "pause", "pause_changes"), { do: "wait", ms: 150 }, { do: "run", command: "bridge.info", input: {}, bind: key(row, "first") },
+            { do: "wait", ms: 250 }, panelPress(row, "resume", "resume_changes"), { do: "wait", ms: 150 }, { do: "run", command: "bridge.info", input: {}, bind: key(row, "second") }] },
+        ] },
+        inFrame(row, "settle", "xf_box", theme)],
+      pass: [check("motion reduced", row, "overlay", "motion.effective", { equals: "reduced" }), captured("no wash on a change", row, "settle"), framed(row, "settle"),
+        check("the tone changed inside the burst (Paused)", row, "first", "status.chip", { equals: "Paused" }),
+        check("and back (Changes allowed)", row, "second", "status.chip", { equals: "Changes allowed" }),
+        check("all 10 settle frames", row, "settle", "frames.9", { exists: true }), check("over about 1 s", row, "settle", "timing.first_to_last_ms", { min: 800 })],
+      cleanup: [...resumeChanges(row), hudBack(row)] });
+  } else waiting.push({ row, hook: "cet.panel press" });
   return rows;
 }
 
@@ -331,11 +489,16 @@ function stoppedRow(theme: Theme, writes: boolean): Json {
   return { id: row, title: `Stopped (one bridge.kill): the CET window with Reconnect, the Stopped chip, the stopped CET line (ST7, ST6, ST8) (${theme})`,
     requires: [...atLoad(writes), cetKey], judged_by: STUDIO, ...(writes ? { after: "restart" } : {}),
     steps: [writes ? inPlay(row) : atMenuOrPlay(row), ...look(row, theme, "full", false, writes), cetLine(row), windowOf(row), ...cetOpen(row),
-      { label: `${row}-kill`, do: "run", command: "bridge.kill", input: {} }, { label: `${row}-wait`, do: "wait", ms: 800 },
-      ...cetShot(row, `ST7-cet-stopped-${theme}`, "stopped"), ...cetShot(row, `ST6-cet-chip-stopped-${theme}`, "chip"),
-      ...cetClose(row, "cet-close-for-line"), { label: `${row}-line-wait`, do: "wait", ms: 800 },
-      { label: `${row}-line-shot`, do: "capture", name: `ST8-cetline-stopped-${theme}`, clear_overlay: false, bind: key(row, "line") }],
-    pass: [captured("stopped, with Reconnect", row, "stopped"), captured("the Stopped chip", row, "chip"), captured("the stopped CET line", row, "line")],
+      { label: `${row}-kill`, do: "run", command: "bridge.kill", input: {} },
+      // A stopped bridge refuses everything with killed: that refusal is the named state.
+      verify(row, "stopped", { code: "killed" }),
+      { label: `${row}-wait`, do: "wait", ms: 800 }, visible(row, "cet_window", theme, "window"),
+      ...cetShot(row, `ST7-cet-stopped-${theme}`, "stopped", theme), ...cetShot(row, `ST6-cet-chip-stopped-${theme}`, "chip", theme),
+      ...cetClose(row, "cet-close-for-line"), { label: `${row}-line-wait`, do: "wait", ms: 800 }, visible(row, "cet_line", theme, "line"),
+      { label: `${row}-line-shot`, do: "capture", name: `ST8-cetline-stopped-${theme}`, clear_overlay: false, bind: key(row, "line") },
+      inFrame(row, "line", "cet_line", theme)],
+    pass: [captured("stopped, with Reconnect", row, "stopped"), captured("the Stopped chip", row, "chip"), captured("the stopped CET line", row, "line"),
+      framed(row, "stopped"), framed(row, "chip"), framed(row, "line")],
     cleanup: [...cetClose(row)] };
 }
 
@@ -344,34 +507,60 @@ function readOnlyRows(theme: Theme): Json[] {
   const requires = [...atLoad(false), cetKey];
   let row = `ST6-${theme}-readonly`;
   const rows: Json[] = [{ id: row, title: `Read-only: the chip and the CET window running read-only (ST6, ST7) (${theme}; at the menu)`, requires, judged_by: STUDIO,
-    steps: [atMenuOrPlay(row), ...look(row, theme, "full", true, false), windowOf(row), ...cetOpen(row), ...cetShot(row, `ST6-cet-chip-readonly-${theme}`, "chip"), ...cetShot(row, `ST7-cet-running-readonly-${theme}`, "running")],
-    pass: [captured("Read-only chip", row, "chip"), captured("running read-only", row, "running")],
+    steps: [atMenuOrPlay(row), ...look(row, theme, "full", true, false), windowOf(row), ...cetOpen(row),
+      verify(row, "readonly", { all: [chip("Read-only"), ...drawn("Read-only")] }), visible(row, "cet_window", theme, "window"),
+      ...cetShot(row, `ST6-cet-chip-readonly-${theme}`, "chip", theme), ...cetShot(row, `ST7-cet-running-readonly-${theme}`, "running", theme)],
+    pass: [captured("Read-only chip", row, "chip"), captured("running read-only", row, "running"), framed(row, "chip"), framed(row, "running")],
     cleanup: [...cetClose(row)] }];
   row = `ST4-${theme}-readonly`;
   rows.push({ id: row, title: `The dot's pulse, connected and read-only, motion full (${theme}; the XF box at the menu)`, requires, judged_by: STUDIO,
     steps: [atMenuOrPlay(row), ...look(row, theme, "full", true, false),
-      { label: `${row}-burst`, do: "burst", name: `ST4-xfbox-pulse-readonly-${theme}`, frames: 12, interval_ms: 200, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "burst") }],
-    pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), check("the XF box draws", row, "overlay", "drawing_now", { equals: true }), captured("the pulse burst", row, "burst")] });
+      verify(row, "box", { all: [onSurface("xf_box"), chip("Read-only")] }), visible(row, "xf_box", theme, "box"),
+      { label: `${row}-burst`, do: "burst", name: `ST4-xfbox-pulse-readonly-${theme}`, frames: 13, interval_ms: 200, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "burst") },
+      inFrame(row, "burst", "xf_box", theme)],
+    pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), check("the XF box draws", row, "overlay", "drawing_now", { equals: true }),
+      captured("the pulse burst (13 x 200 ms)", row, "burst"), framed(row, "burst"), check("spaced as planned (about 2.4 s)", row, "burst", "timing.first_to_last_ms", { min: 2200 })] });
   return rows;
 }
 
-function stScript(): Json {
+/** Every ST row, in the batch's order (one restart: the dark Stopped row's, into read-only; the light Stopped row ends it). */
+const stRows = () => [...firstRows(), ...writesRows("dark"), ...writesRows("light"), stoppedRow("dark", true), ...readOnlyRows("dark"), ...readOnlyRows("light"), stoppedRow("light", false)];
+
+/**
+ * The re-run after the review packet (local/sessions/scripted-1/st-review-packet): the rows marked PASS whose
+ * captures didn't show their state (ST6 and ST8 paused, ST7 diagnostics, ST3's settle, ST2's tones), ST5 (no
+ * frames), ST13, and the rows whose bursts began before their surface showed (ST4 changes, ST3 reduced, ST8
+ * connected and auto). All with changes allowed: no restart.
+ */
+export const RERUN = ["ST8-dark-auto", "ST13-dark",
+  ...(["dark", "light"] as const).flatMap((t) => [`ST8-${t}-connected`, `ST8-${t}-paused`, `ST4-${t}-changes`, `ST5-${t}`, `ST6-${t}-paused`, `ST7-${t}-diagnostics`, `ST3-${t}`, `ST3-${t}-settle`]),
+  "ST2-light", "ST2-light-tones"];
+
+export function stScript(rerun = false, hooks: Hooks = catalogueHooks()): Json {
+  waiting.length = 0;
+  PANEL_HOOK = hooks.panel;
+  CPU_OVERRIDE = hooks.cpu;
+  const all = stRows();
+  const rows = rerun ? all.filter((r) => RERUN.includes(r.id as string)) : all;
+  const left = waiting.filter((w) => !rerun || RERUN.includes(w.row));
   return {
     schema: "xfb/session-script-3",
-    name: "st-styling-0822",
-    title: "In-game styling (0.8.22): ST1-ST13, dark then light, the look switched live",
+    name: rerun ? "st-styling-0822-rerun" : "st-styling-0822",
+    title: rerun ? "In-game styling (0.8.22): the re-run after the review packet (the false passes, ST5, ST13 and the bursts that began early)"
+      : "In-game styling (0.8.22): ST1-ST13, dark then light, the look switched live",
     card: CARD,
     requires: [
       "The XF test profile with the bridge's autonomous -writes build staged (0.8.22 with overlay.set); the runner sets config.ini's [overlay] enabled and diagnostics once and restores the file at the end.",
       "A private fixtures file (--fixtures): mo2 {exe, profile, executable, arguments: -skipStartScreen}, game_dir, staged_mod, save, cet_overlay_key (Ctrl+` here), commit_floor_gb.",
       "Borderless windowed, the game window in front; Windows' Do Not Disturb on (focus-taking toasts stopped the Borg 4 key press).",
-      "Captures are evidence for XF · Studio's UI review; a PASS here means the state and the capture, not the design verdict.",
+      "Every row verifies its named state through the bridge before each capture (bridge_info's status and chip, overlay_state's cet_open and motion, ui_state's question) and checks its surface is in frame after it; bursts start only once their surface shows. A judged row ends CAPTURED, awaiting XF · Studio's UI review, never PASS.",
+      ...(left.length ? [`Left out until the bridge has their hook: ${left.map((w) => `${w.row} (${w.hook})`).join(", ")}; regenerate (bun tools/sessions/make-batches.ts) once the catalogue has it.`] : []),
     ],
     setup: [
       { label: "cet-closed", do: "set", value: false, bind: "cetOpen" },
       { label: "commit", do: "host.commit", on_fail: "stop" },
     ],
-    rows: [...firstRows(), ...writesRows("dark"), ...writesRows("light"), stoppedRow("dark", true), ...readOnlyRows("dark"), ...readOnlyRows("light"), stoppedRow("light", false)],
+    rows,
     teardown: [{ label: "cet", do: "host.key", keys: "$fixture.cet_overlay_key", when: { match: { ref: "$cetOpen", equals: true } } }],
   };
 }
@@ -582,7 +771,8 @@ function freeRoamScript(): Json {
 }
 
 const here = import.meta.dir;
-for (const [file, script] of [["st-styling.json", stScript()], ["borg4-smoke.json", smokeScript()], ["free-roam.json", freeRoamScript()]] as const) {
+if (import.meta.main) for (const [file, script] of [["st-styling.json", stScript()], ["st-rerun.json", stScript(true)], ["borg4-smoke.json", smokeScript()], ["free-roam.json", freeRoamScript()]] as const) {
   writeFileSync(join(here, file), JSON.stringify(script, null, 2) + "\n");
   console.log(`wrote ${file}: ${(script.rows as unknown[]).length} rows`);
 }
+if (import.meta.main && waiting.length) console.log(`left out until the bridge has their hook: ${[...new Set(waiting.map((w) => `${w.row} (${w.hook})`))].join(", ")}`);

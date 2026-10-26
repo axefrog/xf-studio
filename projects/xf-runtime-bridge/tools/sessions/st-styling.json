@@ -7,7 +7,8 @@
     "The XF test profile with the bridge's autonomous -writes build staged (0.8.22 with overlay.set); the runner sets config.ini's [overlay] enabled and diagnostics once and restores the file at the end.",
     "A private fixtures file (--fixtures): mo2 {exe, profile, executable, arguments: -skipStartScreen}, game_dir, staged_mod, save, cet_overlay_key (Ctrl+` here), commit_floor_gb.",
     "Borderless windowed, the game window in front; Windows' Do Not Disturb on (focus-taking toasts stopped the Borg 4 key press).",
-    "Captures are evidence for XF · Studio's UI review; a PASS here means the state and the capture, not the design verdict."
+    "Every row verifies its named state through the bridge before each capture (bridge_info's status and chip, overlay_state's cet_open and motion, ui_state's question) and checks its surface is in frame after it; bursts start only once their surface shows. A judged row ends CAPTURED, awaiting XF · Studio's UI review, never PASS.",
+    "Left out until the bridge has their hook: ST8-dark-paused (cet.panel press), ST5-dark (cet.panel press), ST6-dark-paused (cet.panel press), ST7-dark-diagnostics (cet.panel diagnostics_open), ST3-dark-settle (cet.panel press), ST8-light-paused (cet.panel press), ST2-light-tones (overlay.set diagnostics_cpu_ms), ST5-light (cet.panel press), ST6-light-paused (cet.panel press), ST7-light-diagnostics (cet.panel diagnostics_open), ST3-light-settle (cet.panel press); regenerate (bun tools/sessions/make-batches.ts) once the catalogue has it."
   ],
   "setup": [
     {
@@ -387,7 +388,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST9a_dark_overlay"
+          "bind": "ST9a_dark_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST9a-dark-repaint",
@@ -796,7 +798,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST8_dark_auto_overlay"
+          "bind": "ST8_dark_auto_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST8-dark-auto-repaint",
@@ -819,6 +822,65 @@
           "bind": "ST8_dark_auto_hud"
         },
         {
+          "label": "ST8-dark-auto-is-line",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "cet_line"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_dark_auto_is_line",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-auto-is-cet-closed",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": false
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_dark_auto_is_cet_closed",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-auto-visible-line",
+          "do": "capture.surface",
+          "name": "ST8-dark-auto-probe-line",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.18,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST8-dark-auto-burst",
           "do": "burst",
           "name": "ST8-cetline-connected-auto-dark",
@@ -827,13 +889,54 @@
           "clear_overlay": false,
           "rect": "$win.regions.cet_line",
           "bind": "ST8_dark_auto_burst"
+        },
+        {
+          "label": "ST8-dark-auto-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST8_dark_auto_burst",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.18,
+          "bind": "ST8_dark_auto_frame_burst",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
         {
-          "label": "the still dot",
+          "label": "reduced by frame generation",
+          "ref": "$ST8_dark_auto_overlay.motion.reason",
+          "match": {
+            "equals": "frame_generation"
+          }
+        },
+        {
+          "label": "the still dot (6 x 240 ms)",
           "ref": "$ST8_dark_auto_burst",
           "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST8_dark_auto_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 1.2 s)",
+          "ref": "$ST8_dark_auto_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 1000
+          }
         }
       ],
       "cleanup": [
@@ -1211,7 +1314,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST9b_dark_overlay"
+          "bind": "ST9b_dark_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST9b-dark-repaint",
@@ -1647,7 +1751,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST13_dark_overlay"
+          "bind": "ST13_dark_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST13-dark-repaint",
@@ -2174,7 +2279,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST8_dark_connected_overlay"
+          "bind": "ST8_dark_connected_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST8-dark-connected-repaint",
@@ -2197,14 +2303,92 @@
           "bind": "ST8_dark_connected_hud"
         },
         {
+          "label": "ST8-dark-connected-is-line",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "cet_line"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_dark_connected_is_line",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-connected-is-cet-closed",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": false
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_dark_connected_is_cet_closed",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-dark-connected-visible-line",
+          "do": "capture.surface",
+          "name": "ST8-dark-connected-probe-line",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.18,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST8-dark-connected-burst",
           "do": "burst",
           "name": "ST8-cetline-connected-dark",
-          "frames": 12,
+          "frames": 13,
           "interval_ms": 200,
           "clear_overlay": false,
           "rect": "$win.regions.cet_line",
           "bind": "ST8_dark_connected_burst"
+        },
+        {
+          "label": "ST8-dark-connected-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST8_dark_connected_burst",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.18,
+          "bind": "ST8_dark_connected_frame_burst",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -2216,447 +2400,29 @@
           }
         },
         {
-          "label": "the pulse burst",
+          "label": "the pulse burst (13 x 200 ms, one 2.4 s period)",
           "ref": "$ST8_dark_connected_burst",
           "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST8_dark_connected_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 2.4 s)",
+          "ref": "$ST8_dark_connected_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 2200
+          }
         }
       ],
       "cleanup": [
         {
           "label": "ST8-dark-connected-hud-back",
-          "do": "run",
-          "command": "ui.hud",
-          "input": {
-            "reset": true
-          }
-        }
-      ]
-    },
-    {
-      "id": "ST8-dark-paused",
-      "title": "CET line, paused (dark)",
-      "requires": [
-        {
-          "config": "ui.answer_keys",
-          "equals": "IK_F6"
-        },
-        {
-          "config": "overlay.scale_percent",
-          "equals": "100"
-        },
-        {
-          "config": "overlay.enabled",
-          "equals": "true"
-        },
-        {
-          "config": "overlay.diagnostics",
-          "equals": "true"
-        },
-        {
-          "config": "bridge.allow_writes",
-          "equals": "true"
-        },
-        {
-          "binding": "cet.overlay_key",
-          "equals": "$fixture.cet_overlay_key"
-        }
-      ],
-      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
-      "steps": [
-        {
-          "label": "ST8-dark-paused-play",
-          "do": "run",
-          "command": "game.wait",
-          "input": {
-            "phase": "gameplay",
-            "timeout_ms": 20000
-          },
-          "deadline_ms": 25000,
-          "alternatives": [
-            [
-              {
-                "do": "run",
-                "command": "photo.exit",
-                "input": {}
-              },
-              {
-                "do": "run",
-                "command": "game.wait",
-                "input": {
-                  "phase": "gameplay",
-                  "timeout_ms": 20000
-                },
-                "deadline_ms": 25000
-              }
-            ]
-          ]
-        },
-        {
-          "label": "ST8-dark-paused-look",
-          "do": "run",
-          "command": "overlay.set",
-          "input": {
-            "theme": "dark",
-            "motion": "full",
-            "enabled": false,
-            "diagnostics": true
-          },
-          "bind": "ST8_dark_paused_look",
-          "outcomes": [
-            {
-              "name": "needs_restart",
-              "match": {
-                "code": "needs_restart"
-              },
-              "run": [
-                {
-                  "do": "note",
-                  "text": "ST8-dark-paused: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
-                },
-                {
-                  "do": "config.set",
-                  "values": {
-                    "overlay.enabled": "true",
-                    "overlay.diagnostics": "true"
-                  }
-                },
-                {
-                  "label": "close",
-                  "do": "host.close",
-                  "deadline_ms": 90000,
-                  "alternatives": [
-                    [
-                      {
-                        "do": "host.key",
-                        "keys": "Enter",
-                        "on_fail": "continue"
-                      },
-                      {
-                        "do": "host.wait_exit",
-                        "deadline_ms": 60000
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "launch",
-                  "do": "host.launch",
-                  "outcomes": [
-                    {
-                      "name": "already_running",
-                      "match": {
-                        "code": "already_running"
-                      },
-                      "result": "ok"
-                    }
-                  ]
-                },
-                {
-                  "label": "process",
-                  "do": "host.running",
-                  "until": {
-                    "any": [
-                      {
-                        "path": "running",
-                        "equals": true
-                      },
-                      {
-                        "path": "launch_blocked",
-                        "exists": true
-                      }
-                    ]
-                  },
-                  "interval_ms": 2000,
-                  "deadline_ms": 120000,
-                  "outcomes": [
-                    {
-                      "name": "launch_blocked",
-                      "match": {
-                        "path": "launch_blocked",
-                        "exists": true
-                      },
-                      "run": [
-                        {
-                          "end": "fail",
-                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "label": "bridge",
-                  "do": "run",
-                  "command": "bridge.ping",
-                  "input": {},
-                  "until": {
-                    "ok": true
-                  },
-                  "interval_ms": 2000,
-                  "deadline_ms": 180000
-                },
-                {
-                  "label": "booted",
-                  "do": "run",
-                  "command": "game.status",
-                  "input": {},
-                  "until": {
-                    "path": "phase",
-                    "one_of": [
-                      "main_menu",
-                      "gameplay",
-                      "menu",
-                      "paused",
-                      "photo_mode",
-                      "character_menu"
-                    ]
-                  },
-                  "interval_ms": 2500,
-                  "deadline_ms": 240000,
-                  "bind": "boot",
-                  "alternatives": [
-                    [
-                      {
-                        "do": "host.key",
-                        "keys": "Space",
-                        "on_fail": "continue"
-                      },
-                      {
-                        "do": "run",
-                        "command": "game.status",
-                        "input": {},
-                        "until": {
-                          "path": "phase",
-                          "one_of": [
-                            "main_menu",
-                            "gameplay",
-                            "menu",
-                            "paused",
-                            "photo_mode",
-                            "character_menu"
-                          ]
-                        },
-                        "interval_ms": 2500,
-                        "deadline_ms": 60000,
-                        "bind": "boot"
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "load",
-                  "do": "run",
-                  "command": "game.load",
-                  "input": {
-                    "name": "$fixture.save",
-                    "discard_unsaved": true,
-                    "continue_wait_s": 85
-                  },
-                  "bind": "load",
-                  "deadline_ms": 150000,
-                  "when": {
-                    "check": {
-                      "do": "run",
-                      "command": "game.status",
-                      "input": {}
-                    },
-                    "match": {
-                      "path": "phase",
-                      "equals": "main_menu"
-                    }
-                  },
-                  "retry": {
-                    "times": 12,
-                    "backoff_ms": 3000,
-                    "factor": 1.5,
-                    "max_backoff_ms": 15000,
-                    "on": {
-                      "code": [
-                        "game_not_running",
-                        "timeout",
-                        "busy",
-                        "bridge_busy",
-                        "game_loading",
-                        "rate_limited",
-                        "not_ready"
-                      ]
-                    }
-                  },
-                  "alternatives": [
-                    [
-                      {
-                        "do": "run",
-                        "command": "game.load",
-                        "input": {
-                          "latest": true,
-                          "discard_unsaved": true,
-                          "continue_wait_s": 85
-                        },
-                        "bind": "load",
-                        "deadline_ms": 150000,
-                        "retry": {
-                          "times": 12,
-                          "backoff_ms": 3000,
-                          "factor": 1.5,
-                          "max_backoff_ms": 15000,
-                          "on": {
-                            "code": [
-                              "game_not_running",
-                              "timeout",
-                              "busy",
-                              "bridge_busy",
-                              "game_loading",
-                              "rate_limited",
-                              "not_ready"
-                            ]
-                          }
-                        }
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "press-any-key",
-                  "do": "host.key",
-                  "keys": "Space",
-                  "when": {
-                    "check": {
-                      "do": "run",
-                      "command": "game.status",
-                      "input": {}
-                    },
-                    "match": {
-                      "path": "prompt_state",
-                      "equals": "initial_continue"
-                    }
-                  },
-                  "retry": {
-                    "times": 5,
-                    "backoff_ms": 3000,
-                    "on": {
-                      "code": "not_foreground"
-                    }
-                  },
-                  "outcomes": [
-                    {
-                      "name": "behind",
-                      "match": {
-                        "code": "not_foreground"
-                      },
-                      "run": [
-                        {
-                          "do": "note",
-                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
-                        }
-                      ]
-                    }
-                  ],
-                  "on_fail": "continue"
-                },
-                {
-                  "label": "gameplay",
-                  "do": "run",
-                  "command": "game.wait",
-                  "input": {
-                    "phase": "gameplay",
-                    "timeout_ms": 180000
-                  },
-                  "deadline_ms": 190000
-                },
-                {
-                  "do": "run",
-                  "command": "overlay.set",
-                  "input": {
-                    "theme": "dark",
-                    "motion": "full",
-                    "enabled": false,
-                    "diagnostics": true
-                  },
-                  "bind": "ST8_dark_paused_look"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "label": "ST8-dark-paused-in-force",
-          "do": "run",
-          "command": "overlay.state",
-          "input": {},
-          "until": {
-            "all": [
-              {
-                "path": "theme",
-                "equals": "dark"
-              },
-              {
-                "path": "motion.setting",
-                "equals": "full"
-              }
-            ]
-          },
-          "interval_ms": 250,
-          "deadline_ms": 3000,
-          "bind": "ST8_dark_paused_overlay"
-        },
-        {
-          "label": "ST8-dark-paused-repaint",
-          "do": "wait",
-          "ms": 2500
-        },
-        {
-          "label": "ST8-dark-paused-look-window",
-          "do": "host.window",
-          "bind": "win"
-        },
-        {
-          "label": "ST8-dark-paused-line",
-          "do": "run",
-          "command": "ui.hud",
-          "input": {
-            "show": false,
-            "cet_label": true
-          },
-          "bind": "ST8_dark_paused_hud"
-        },
-        {
-          "label": "ST8-dark-paused-pause",
-          "do": "run",
-          "command": "session.handover",
-          "input": {
-            "note": "ST8-dark-paused: the paused CET line",
-            "restore_ui": false
-          }
-        },
-        {
-          "label": "ST8-dark-paused-wait",
-          "do": "wait",
-          "ms": 800
-        },
-        {
-          "label": "ST8-dark-paused-shot",
-          "do": "capture",
-          "name": "ST8-cetline-paused-dark",
-          "clear_overlay": false,
-          "bind": "ST8_dark_paused_shot"
-        }
-      ],
-      "pass": [
-        {
-          "label": "the paused line",
-          "ref": "$ST8_dark_paused_shot",
-          "captured": true
-        }
-      ],
-      "cleanup": [
-        {
-          "label": "ST8-dark-paused-resume",
-          "do": "run",
-          "command": "session.resume",
-          "input": {}
-        },
-        {
-          "label": "ST8-dark-paused-hud-back",
           "do": "run",
           "command": "ui.hud",
           "input": {
@@ -3030,7 +2796,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST1_dark_overlay"
+          "bind": "ST1_dark_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST1-dark-repaint",
@@ -3068,9 +2835,63 @@
           "bind": "ST1_dark_q"
         },
         {
-          "label": "ST1-dark-settle",
-          "do": "wait",
-          "ms": 800
+          "label": "ST1-dark-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST1_dark_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST1-dark-is-asking",
+          "do": "run",
+          "command": "ui.state",
+          "input": {},
+          "until": {
+            "path": "pending_ask.id",
+            "equals": "$ST1_dark_q.id"
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST1_dark_is_asking",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST1-dark-visible-box",
+          "do": "capture.surface",
+          "name": "ST1-dark-probe-box",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
         },
         {
           "label": "ST1-dark-shot",
@@ -3078,6 +2899,25 @@
           "name": "ST1-xfbox-diagnostics-dark",
           "clear_overlay": false,
           "bind": "ST1_dark_shot"
+        },
+        {
+          "label": "ST1-dark-in-frame-shot",
+          "do": "capture.surface",
+          "capture": "$ST1_dark_shot",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST1_dark_frame_shot",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -3106,6 +2946,14 @@
           "label": "the XF box",
           "ref": "$ST1_dark_shot",
           "captured": true
+        },
+        {
+          "label": "shot in frame",
+          "ref": "$ST1_dark_frame_shot",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
@@ -3492,7 +3340,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST4_dark_changes_overlay"
+          "bind": "ST4_dark_changes_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST4-dark-changes-repaint",
@@ -3515,14 +3364,78 @@
           "bind": "ST4_dark_changes_hud"
         },
         {
+          "label": "ST4-dark-changes-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST4_dark_changes_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST4-dark-changes-visible-box",
+          "do": "capture.surface",
+          "name": "ST4-dark-changes-probe-box",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST4-dark-changes-burst",
           "do": "burst",
           "name": "ST4-xfbox-pulse-changes-dark",
-          "frames": 12,
+          "frames": 13,
           "interval_ms": 200,
           "clear_overlay": false,
           "rect": "$win.regions.xf_box",
           "bind": "ST4_dark_changes_burst"
+        },
+        {
+          "label": "ST4-dark-changes-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST4_dark_changes_burst",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST4_dark_changes_frame_burst",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -3534,9 +3447,24 @@
           }
         },
         {
-          "label": "the pulse burst (12 x 200 ms, one 2.4 s period)",
+          "label": "the pulse burst (13 x 200 ms, one 2.4 s period)",
           "ref": "$ST4_dark_changes_burst",
           "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST4_dark_changes_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 2.4 s)",
+          "ref": "$ST4_dark_changes_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 2200
+          }
         }
       ],
       "cleanup": [
@@ -3551,480 +3479,8 @@
       ]
     },
     {
-      "id": "ST5-dark",
-      "title": "The settle on a change of state, and none for a second change within 2 s (dark)",
-      "requires": [
-        {
-          "config": "ui.answer_keys",
-          "equals": "IK_F6"
-        },
-        {
-          "config": "overlay.scale_percent",
-          "equals": "100"
-        },
-        {
-          "config": "overlay.enabled",
-          "equals": "true"
-        },
-        {
-          "config": "overlay.diagnostics",
-          "equals": "true"
-        },
-        {
-          "config": "bridge.allow_writes",
-          "equals": "true"
-        },
-        {
-          "binding": "cet.overlay_key",
-          "equals": "$fixture.cet_overlay_key"
-        }
-      ],
-      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
-      "steps": [
-        {
-          "label": "ST5-dark-play",
-          "do": "run",
-          "command": "game.wait",
-          "input": {
-            "phase": "gameplay",
-            "timeout_ms": 20000
-          },
-          "deadline_ms": 25000,
-          "alternatives": [
-            [
-              {
-                "do": "run",
-                "command": "photo.exit",
-                "input": {}
-              },
-              {
-                "do": "run",
-                "command": "game.wait",
-                "input": {
-                  "phase": "gameplay",
-                  "timeout_ms": 20000
-                },
-                "deadline_ms": 25000
-              }
-            ]
-          ]
-        },
-        {
-          "label": "ST5-dark-look",
-          "do": "run",
-          "command": "overlay.set",
-          "input": {
-            "theme": "dark",
-            "motion": "full",
-            "enabled": true,
-            "diagnostics": true
-          },
-          "bind": "ST5_dark_look",
-          "outcomes": [
-            {
-              "name": "needs_restart",
-              "match": {
-                "code": "needs_restart"
-              },
-              "run": [
-                {
-                  "do": "note",
-                  "text": "ST5-dark: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
-                },
-                {
-                  "do": "config.set",
-                  "values": {
-                    "overlay.enabled": "true",
-                    "overlay.diagnostics": "true"
-                  }
-                },
-                {
-                  "label": "close",
-                  "do": "host.close",
-                  "deadline_ms": 90000,
-                  "alternatives": [
-                    [
-                      {
-                        "do": "host.key",
-                        "keys": "Enter",
-                        "on_fail": "continue"
-                      },
-                      {
-                        "do": "host.wait_exit",
-                        "deadline_ms": 60000
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "launch",
-                  "do": "host.launch",
-                  "outcomes": [
-                    {
-                      "name": "already_running",
-                      "match": {
-                        "code": "already_running"
-                      },
-                      "result": "ok"
-                    }
-                  ]
-                },
-                {
-                  "label": "process",
-                  "do": "host.running",
-                  "until": {
-                    "any": [
-                      {
-                        "path": "running",
-                        "equals": true
-                      },
-                      {
-                        "path": "launch_blocked",
-                        "exists": true
-                      }
-                    ]
-                  },
-                  "interval_ms": 2000,
-                  "deadline_ms": 120000,
-                  "outcomes": [
-                    {
-                      "name": "launch_blocked",
-                      "match": {
-                        "path": "launch_blocked",
-                        "exists": true
-                      },
-                      "run": [
-                        {
-                          "end": "fail",
-                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "label": "bridge",
-                  "do": "run",
-                  "command": "bridge.ping",
-                  "input": {},
-                  "until": {
-                    "ok": true
-                  },
-                  "interval_ms": 2000,
-                  "deadline_ms": 180000
-                },
-                {
-                  "label": "booted",
-                  "do": "run",
-                  "command": "game.status",
-                  "input": {},
-                  "until": {
-                    "path": "phase",
-                    "one_of": [
-                      "main_menu",
-                      "gameplay",
-                      "menu",
-                      "paused",
-                      "photo_mode",
-                      "character_menu"
-                    ]
-                  },
-                  "interval_ms": 2500,
-                  "deadline_ms": 240000,
-                  "bind": "boot",
-                  "alternatives": [
-                    [
-                      {
-                        "do": "host.key",
-                        "keys": "Space",
-                        "on_fail": "continue"
-                      },
-                      {
-                        "do": "run",
-                        "command": "game.status",
-                        "input": {},
-                        "until": {
-                          "path": "phase",
-                          "one_of": [
-                            "main_menu",
-                            "gameplay",
-                            "menu",
-                            "paused",
-                            "photo_mode",
-                            "character_menu"
-                          ]
-                        },
-                        "interval_ms": 2500,
-                        "deadline_ms": 60000,
-                        "bind": "boot"
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "load",
-                  "do": "run",
-                  "command": "game.load",
-                  "input": {
-                    "name": "$fixture.save",
-                    "discard_unsaved": true,
-                    "continue_wait_s": 85
-                  },
-                  "bind": "load",
-                  "deadline_ms": 150000,
-                  "when": {
-                    "check": {
-                      "do": "run",
-                      "command": "game.status",
-                      "input": {}
-                    },
-                    "match": {
-                      "path": "phase",
-                      "equals": "main_menu"
-                    }
-                  },
-                  "retry": {
-                    "times": 12,
-                    "backoff_ms": 3000,
-                    "factor": 1.5,
-                    "max_backoff_ms": 15000,
-                    "on": {
-                      "code": [
-                        "game_not_running",
-                        "timeout",
-                        "busy",
-                        "bridge_busy",
-                        "game_loading",
-                        "rate_limited",
-                        "not_ready"
-                      ]
-                    }
-                  },
-                  "alternatives": [
-                    [
-                      {
-                        "do": "run",
-                        "command": "game.load",
-                        "input": {
-                          "latest": true,
-                          "discard_unsaved": true,
-                          "continue_wait_s": 85
-                        },
-                        "bind": "load",
-                        "deadline_ms": 150000,
-                        "retry": {
-                          "times": 12,
-                          "backoff_ms": 3000,
-                          "factor": 1.5,
-                          "max_backoff_ms": 15000,
-                          "on": {
-                            "code": [
-                              "game_not_running",
-                              "timeout",
-                              "busy",
-                              "bridge_busy",
-                              "game_loading",
-                              "rate_limited",
-                              "not_ready"
-                            ]
-                          }
-                        }
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "press-any-key",
-                  "do": "host.key",
-                  "keys": "Space",
-                  "when": {
-                    "check": {
-                      "do": "run",
-                      "command": "game.status",
-                      "input": {}
-                    },
-                    "match": {
-                      "path": "prompt_state",
-                      "equals": "initial_continue"
-                    }
-                  },
-                  "retry": {
-                    "times": 5,
-                    "backoff_ms": 3000,
-                    "on": {
-                      "code": "not_foreground"
-                    }
-                  },
-                  "outcomes": [
-                    {
-                      "name": "behind",
-                      "match": {
-                        "code": "not_foreground"
-                      },
-                      "run": [
-                        {
-                          "do": "note",
-                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
-                        }
-                      ]
-                    }
-                  ],
-                  "on_fail": "continue"
-                },
-                {
-                  "label": "gameplay",
-                  "do": "run",
-                  "command": "game.wait",
-                  "input": {
-                    "phase": "gameplay",
-                    "timeout_ms": 180000
-                  },
-                  "deadline_ms": 190000
-                },
-                {
-                  "do": "run",
-                  "command": "overlay.set",
-                  "input": {
-                    "theme": "dark",
-                    "motion": "full",
-                    "enabled": true,
-                    "diagnostics": true
-                  },
-                  "bind": "ST5_dark_look"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "label": "ST5-dark-in-force",
-          "do": "run",
-          "command": "overlay.state",
-          "input": {},
-          "until": {
-            "all": [
-              {
-                "path": "theme",
-                "equals": "dark"
-              },
-              {
-                "path": "motion.setting",
-                "equals": "full"
-              }
-            ]
-          },
-          "interval_ms": 250,
-          "deadline_ms": 3000,
-          "bind": "ST5_dark_overlay"
-        },
-        {
-          "label": "ST5-dark-repaint",
-          "do": "wait",
-          "ms": 2500
-        },
-        {
-          "label": "ST5-dark-look-window",
-          "do": "host.window",
-          "bind": "win"
-        },
-        {
-          "label": "ST5-dark-xfbox",
-          "do": "run",
-          "command": "ui.hud",
-          "input": {
-            "show": false,
-            "cet_label": false
-          },
-          "bind": "ST5_dark_hud"
-        },
-        {
-          "label": "ST5-dark-change",
-          "together": [
-            {
-              "do": "burst",
-              "name": "ST5-xfbox-settle-dark",
-              "frames": 20,
-              "interval_ms": 100,
-              "clear_overlay": false,
-              "rect": "$win.regions.xf_box",
-              "bind": "ST5_dark_burst"
-            },
-            {
-              "sequence": [
-                {
-                  "do": "wait",
-                  "ms": 300
-                },
-                {
-                  "do": "run",
-                  "command": "session.handover",
-                  "input": {
-                    "note": "ST5-dark: settle",
-                    "restore_ui": false
-                  }
-                },
-                {
-                  "do": "wait",
-                  "ms": 700
-                },
-                {
-                  "do": "run",
-                  "command": "session.resume",
-                  "input": {}
-                }
-              ]
-            }
-          ]
-        }
-      ],
-      "pass": [
-        {
-          "label": "motion full",
-          "ref": "$ST5_dark_overlay.motion.effective",
-          "match": {
-            "equals": "full"
-          }
-        },
-        {
-          "label": "the settle burst (change at 0.3 s, second change at 1.0 s)",
-          "ref": "$ST5_dark_burst",
-          "captured": true
-        },
-        {
-          "label": "all 20 frames",
-          "ref": "$ST5_dark_burst.frames.19",
-          "match": {
-            "exists": true
-          }
-        },
-        {
-          "label": "over about 2 s",
-          "ref": "$ST5_dark_burst.timing.first_to_last_ms",
-          "match": {
-            "min": 1700
-          }
-        }
-      ],
-      "cleanup": [
-        {
-          "label": "ST5-dark-resume",
-          "do": "run",
-          "command": "session.resume",
-          "input": {}
-        },
-        {
-          "label": "ST5-dark-hud-back",
-          "do": "run",
-          "command": "ui.hud",
-          "input": {
-            "reset": true
-          }
-        }
-      ]
-    },
-    {
       "id": "ST6-dark-chips",
-      "title": "The chips: Changes allowed, then Paused (dark)",
+      "title": "The chips: Changes allowed (dark)",
       "requires": [
         {
           "config": "ui.answer_keys",
@@ -4387,7 +3843,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST6_dark_chips_overlay"
+          "bind": "ST6_dark_chips_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST6-dark-chips-repaint",
@@ -4491,6 +3948,47 @@
           ]
         },
         {
+          "label": "ST6-dark-chips-is-changes",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST6_dark_chips_is_changes",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST6-dark-chips-visible-window",
+          "do": "capture.surface",
+          "name": "ST6-dark-chips-probe-window",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST6-dark-chips-ST6-cet-chip-changes-dark",
           "do": "capture",
           "name": "ST6-cet-chip-changes-dark",
@@ -4509,36 +4007,23 @@
           "on_fail": "continue"
         },
         {
-          "label": "ST6-dark-chips-pause",
-          "do": "run",
-          "command": "session.handover",
-          "input": {
-            "note": "ST6-dark-chips: the Paused chip",
-            "restore_ui": false
-          }
-        },
-        {
-          "label": "ST6-dark-chips-wait",
-          "do": "wait",
-          "ms": 800
-        },
-        {
-          "label": "ST6-dark-chips-ST6-cet-chip-paused-dark",
-          "do": "capture",
-          "name": "ST6-cet-chip-paused-dark",
-          "clear_overlay": false,
-          "bind": "ST6_dark_chips_paused"
-        },
-        {
-          "label": "ST6-dark-chips-ST6-cet-chip-paused-dark-crop",
-          "do": "run",
-          "command": "capture.recrop",
-          "input": {
-            "path": "$ST6_dark_chips_paused.full.path",
-            "rect": "$win.regions.cet_window",
-            "name": "ST6-cet-chip-paused-dark-crop"
-          },
-          "on_fail": "continue"
+          "label": "ST6-dark-chips-in-frame-changes",
+          "do": "capture.surface",
+          "capture": "$ST6_dark_chips_changes",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST6_dark_chips_frame_changes",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -4548,18 +4033,15 @@
           "captured": true
         },
         {
-          "label": "Paused",
-          "ref": "$ST6_dark_chips_paused",
-          "captured": true
+          "label": "changes in frame",
+          "ref": "$ST6_dark_chips_frame_changes",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
-        {
-          "label": "ST6-dark-chips-resume",
-          "do": "run",
-          "command": "session.resume",
-          "input": {}
-        },
         {
           "label": "ST6-dark-chips-cet-close",
           "do": "host.key",
@@ -4951,7 +4433,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST7_dark_running_overlay"
+          "bind": "ST7_dark_running_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-dark-running-repaint",
@@ -5055,6 +4538,47 @@
           ]
         },
         {
+          "label": "ST7-dark-running-is-running",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST7_dark_running_is_running",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST7-dark-running-visible-window",
+          "do": "capture.surface",
+          "name": "ST7-dark-running-probe-window",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-dark-running-ST7-cet-running-dark",
           "do": "capture",
           "name": "ST7-cet-running-dark",
@@ -5071,6 +4595,25 @@
             "name": "ST7-cet-running-dark-crop"
           },
           "on_fail": "continue"
+        },
+        {
+          "label": "ST7-dark-running-in-frame-running",
+          "do": "capture.surface",
+          "capture": "$ST7_dark_running_running",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_dark_running_frame_running",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -5078,6 +4621,14 @@
           "label": "the window",
           "ref": "$ST7_dark_running_running",
           "captured": true
+        },
+        {
+          "label": "running in frame",
+          "ref": "$ST7_dark_running_frame_running",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
@@ -5472,7 +5023,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST7_dark_question_overlay"
+          "bind": "ST7_dark_question_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-dark-question-repaint",
@@ -5597,16 +5149,65 @@
           "bind": "ST7_dark_question_q"
         },
         {
+          "label": "ST7-dark-question-is-asking",
+          "do": "run",
+          "command": "ui.state",
+          "input": {},
+          "until": {
+            "path": "pending_ask.id",
+            "equals": "$ST7_dark_question_q.id"
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST7_dark_question_is_asking",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-dark-question-wait1",
           "do": "wait",
           "ms": 600
         },
         {
-          "label": "ST7-dark-question-ST7-cet-question-a-dark",
+          "label": "ST7-dark-question-visible-window",
+          "do": "capture.surface",
+          "name": "ST7-dark-question-probe-window",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST7-dark-question-qa",
           "do": "capture",
           "name": "ST7-cet-question-a-dark",
           "clear_overlay": false,
           "bind": "ST7_dark_question_qa"
+        },
+        {
+          "label": "ST7-dark-question-wait2",
+          "do": "wait",
+          "ms": 1200
+        },
+        {
+          "label": "ST7-dark-question-qb",
+          "do": "capture",
+          "name": "ST7-cet-question-b-dark",
+          "clear_overlay": false,
+          "bind": "ST7_dark_question_qb"
         },
         {
           "label": "ST7-dark-question-ST7-cet-question-a-dark-crop",
@@ -5620,16 +5221,23 @@
           "on_fail": "continue"
         },
         {
-          "label": "ST7-dark-question-wait2",
-          "do": "wait",
-          "ms": 1200
-        },
-        {
-          "label": "ST7-dark-question-ST7-cet-question-b-dark",
-          "do": "capture",
-          "name": "ST7-cet-question-b-dark",
-          "clear_overlay": false,
-          "bind": "ST7_dark_question_qb"
+          "label": "ST7-dark-question-in-frame-qa",
+          "do": "capture.surface",
+          "capture": "$ST7_dark_question_qa",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_dark_question_frame_qa",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-dark-question-ST7-cet-question-b-dark-crop",
@@ -5641,6 +5249,25 @@
             "name": "ST7-cet-question-b-dark-crop"
           },
           "on_fail": "continue"
+        },
+        {
+          "label": "ST7-dark-question-in-frame-qb",
+          "do": "capture.surface",
+          "capture": "$ST7_dark_question_qb",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_dark_question_frame_qb",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-dark-question-breathes",
@@ -5788,6 +5415,20 @@
           "bind": "cetOpen"
         },
         {
+          "label": "ST7-dark-question-is-reopened",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST7_dark_question_is_reopened",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-dark-question-settle",
           "do": "wait",
           "ms": 700
@@ -5809,6 +5450,25 @@
             "name": "ST7-cet-answered-dark-crop"
           },
           "on_fail": "continue"
+        },
+        {
+          "label": "ST7-dark-question-in-frame-answered",
+          "do": "capture.surface",
+          "capture": "$ST7_dark_question_answered",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_dark_question_frame_answered",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -5821,6 +5481,22 @@
           "label": "waiting (1.2 s later)",
           "ref": "$ST7_dark_question_qb",
           "captured": true
+        },
+        {
+          "label": "qa in frame",
+          "ref": "$ST7_dark_question_frame_qa",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "qb in frame",
+          "ref": "$ST7_dark_question_frame_qb",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         },
         {
           "label": "the waiting card breathes (the two frames differ in the window)",
@@ -5840,6 +5516,14 @@
           "label": "answered",
           "ref": "$ST7_dark_question_answered",
           "captured": true
+        },
+        {
+          "label": "answered in frame",
+          "ref": "$ST7_dark_question_frame_answered",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
@@ -6242,7 +5926,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST11_dark_overlay"
+          "bind": "ST11_dark_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST11-dark-repaint",
@@ -6325,6 +6010,34 @@
             "seconds": 120
           },
           "bind": "ST11_dark_q"
+        },
+        {
+          "label": "ST11-dark-is-ink",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "path": "status_surface",
+            "equals": "ink_panel"
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST11_dark_is_ink",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST11-dark-is-asking",
+          "do": "run",
+          "command": "ui.state",
+          "input": {},
+          "until": {
+            "path": "pending_ask.id",
+            "equals": "$ST11_dark_q.id"
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST11_dark_is_asking",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST11-dark-wait",
@@ -6410,6 +6123,13 @@
           "ref": "$ST11_dark_after.phase",
           "match": {
             "equals": "photo_mode"
+          }
+        },
+        {
+          "label": "spaced as planned (about 0.65 s)",
+          "ref": "$ST11_dark_burst.timing.first_to_last_ms",
+          "match": {
+            "max": 1000
           }
         }
       ],
@@ -6825,7 +6545,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST10_dark_overlay"
+          "bind": "ST10_dark_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST10-dark-repaint",
@@ -6996,7 +6717,7 @@
     },
     {
       "id": "ST3-dark",
-      "title": "The XF box with motion reduced: a still dot, no settle (dark)",
+      "title": "The XF box with motion reduced: a still dot (dark)",
       "requires": [
         {
           "config": "ui.answer_keys",
@@ -7359,7 +7080,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST3_dark_overlay"
+          "bind": "ST3_dark_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST3-dark-repaint",
@@ -7382,6 +7104,51 @@
           "bind": "ST3_dark_hud"
         },
         {
+          "label": "ST3-dark-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST3_dark_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST3-dark-visible-box",
+          "do": "capture.surface",
+          "name": "ST3-dark-probe-box",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST3-dark-still",
           "do": "burst",
           "name": "ST3-xfbox-reduced-dark",
@@ -7392,43 +7159,23 @@
           "bind": "ST3_dark_still"
         },
         {
-          "label": "ST3-dark-change",
-          "together": [
-            {
-              "do": "burst",
-              "name": "ST3-xfbox-reduced-settle-dark",
-              "frames": 10,
-              "interval_ms": 100,
-              "clear_overlay": false,
-              "rect": "$win.regions.xf_box",
-              "bind": "ST3_dark_settle"
-            },
-            {
-              "sequence": [
-                {
-                  "do": "wait",
-                  "ms": 300
-                },
-                {
-                  "do": "run",
-                  "command": "session.handover",
-                  "input": {
-                    "note": "ST3-dark: no settle under reduced",
-                    "restore_ui": false
-                  }
-                },
-                {
-                  "do": "wait",
-                  "ms": 400
-                },
-                {
-                  "do": "run",
-                  "command": "session.resume",
-                  "input": {}
-                }
-              ]
-            }
-          ]
+          "label": "ST3-dark-in-frame-still",
+          "do": "capture.surface",
+          "capture": "$ST3_dark_still",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST3_dark_frame_still",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -7452,32 +7199,22 @@
           "captured": true
         },
         {
-          "label": "no wash on a change",
-          "ref": "$ST3_dark_settle",
-          "captured": true
-        },
-        {
-          "label": "all 10 settle frames",
-          "ref": "$ST3_dark_settle.frames.9",
+          "label": "still in frame",
+          "ref": "$ST3_dark_frame_still",
           "match": {
-            "exists": true
+            "path": "present",
+            "equals": true
           }
         },
         {
-          "label": "over about 1 s",
-          "ref": "$ST3_dark_settle.timing.first_to_last_ms",
+          "label": "spaced as planned (about 1.2 s)",
+          "ref": "$ST3_dark_still.timing.first_to_last_ms",
           "match": {
-            "min": 800
+            "min": 1000
           }
         }
       ],
       "cleanup": [
-        {
-          "label": "ST3-dark-resume",
-          "do": "run",
-          "command": "session.resume",
-          "input": {}
-        },
         {
           "label": "ST3-dark-hud-back",
           "do": "run",
@@ -7853,7 +7590,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST8_light_connected_overlay"
+          "bind": "ST8_light_connected_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST8-light-connected-repaint",
@@ -7876,14 +7614,92 @@
           "bind": "ST8_light_connected_hud"
         },
         {
+          "label": "ST8-light-connected-is-line",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "cet_line"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_light_connected_is_line",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-light-connected-is-cet-closed",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": false
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_light_connected_is_cet_closed",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST8-light-connected-visible-line",
+          "do": "capture.surface",
+          "name": "ST8-light-connected-probe-line",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.03,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST8-light-connected-burst",
           "do": "burst",
           "name": "ST8-cetline-connected-light",
-          "frames": 12,
+          "frames": 13,
           "interval_ms": 200,
           "clear_overlay": false,
           "rect": "$win.regions.cet_line",
           "bind": "ST8_light_connected_burst"
+        },
+        {
+          "label": "ST8-light-connected-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST8_light_connected_burst",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.03,
+          "bind": "ST8_light_connected_frame_burst",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -7895,447 +7711,29 @@
           }
         },
         {
-          "label": "the pulse burst",
+          "label": "the pulse burst (13 x 200 ms, one 2.4 s period)",
           "ref": "$ST8_light_connected_burst",
           "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST8_light_connected_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 2.4 s)",
+          "ref": "$ST8_light_connected_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 2200
+          }
         }
       ],
       "cleanup": [
         {
           "label": "ST8-light-connected-hud-back",
-          "do": "run",
-          "command": "ui.hud",
-          "input": {
-            "reset": true
-          }
-        }
-      ]
-    },
-    {
-      "id": "ST8-light-paused",
-      "title": "CET line, paused (light)",
-      "requires": [
-        {
-          "config": "ui.answer_keys",
-          "equals": "IK_F6"
-        },
-        {
-          "config": "overlay.scale_percent",
-          "equals": "100"
-        },
-        {
-          "config": "overlay.enabled",
-          "equals": "true"
-        },
-        {
-          "config": "overlay.diagnostics",
-          "equals": "true"
-        },
-        {
-          "config": "bridge.allow_writes",
-          "equals": "true"
-        },
-        {
-          "binding": "cet.overlay_key",
-          "equals": "$fixture.cet_overlay_key"
-        }
-      ],
-      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
-      "steps": [
-        {
-          "label": "ST8-light-paused-play",
-          "do": "run",
-          "command": "game.wait",
-          "input": {
-            "phase": "gameplay",
-            "timeout_ms": 20000
-          },
-          "deadline_ms": 25000,
-          "alternatives": [
-            [
-              {
-                "do": "run",
-                "command": "photo.exit",
-                "input": {}
-              },
-              {
-                "do": "run",
-                "command": "game.wait",
-                "input": {
-                  "phase": "gameplay",
-                  "timeout_ms": 20000
-                },
-                "deadline_ms": 25000
-              }
-            ]
-          ]
-        },
-        {
-          "label": "ST8-light-paused-look",
-          "do": "run",
-          "command": "overlay.set",
-          "input": {
-            "theme": "light",
-            "motion": "full",
-            "enabled": false,
-            "diagnostics": true
-          },
-          "bind": "ST8_light_paused_look",
-          "outcomes": [
-            {
-              "name": "needs_restart",
-              "match": {
-                "code": "needs_restart"
-              },
-              "run": [
-                {
-                  "do": "note",
-                  "text": "ST8-light-paused: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
-                },
-                {
-                  "do": "config.set",
-                  "values": {
-                    "overlay.enabled": "true",
-                    "overlay.diagnostics": "true"
-                  }
-                },
-                {
-                  "label": "close",
-                  "do": "host.close",
-                  "deadline_ms": 90000,
-                  "alternatives": [
-                    [
-                      {
-                        "do": "host.key",
-                        "keys": "Enter",
-                        "on_fail": "continue"
-                      },
-                      {
-                        "do": "host.wait_exit",
-                        "deadline_ms": 60000
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "launch",
-                  "do": "host.launch",
-                  "outcomes": [
-                    {
-                      "name": "already_running",
-                      "match": {
-                        "code": "already_running"
-                      },
-                      "result": "ok"
-                    }
-                  ]
-                },
-                {
-                  "label": "process",
-                  "do": "host.running",
-                  "until": {
-                    "any": [
-                      {
-                        "path": "running",
-                        "equals": true
-                      },
-                      {
-                        "path": "launch_blocked",
-                        "exists": true
-                      }
-                    ]
-                  },
-                  "interval_ms": 2000,
-                  "deadline_ms": 120000,
-                  "outcomes": [
-                    {
-                      "name": "launch_blocked",
-                      "match": {
-                        "path": "launch_blocked",
-                        "exists": true
-                      },
-                      "run": [
-                        {
-                          "end": "fail",
-                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "label": "bridge",
-                  "do": "run",
-                  "command": "bridge.ping",
-                  "input": {},
-                  "until": {
-                    "ok": true
-                  },
-                  "interval_ms": 2000,
-                  "deadline_ms": 180000
-                },
-                {
-                  "label": "booted",
-                  "do": "run",
-                  "command": "game.status",
-                  "input": {},
-                  "until": {
-                    "path": "phase",
-                    "one_of": [
-                      "main_menu",
-                      "gameplay",
-                      "menu",
-                      "paused",
-                      "photo_mode",
-                      "character_menu"
-                    ]
-                  },
-                  "interval_ms": 2500,
-                  "deadline_ms": 240000,
-                  "bind": "boot",
-                  "alternatives": [
-                    [
-                      {
-                        "do": "host.key",
-                        "keys": "Space",
-                        "on_fail": "continue"
-                      },
-                      {
-                        "do": "run",
-                        "command": "game.status",
-                        "input": {},
-                        "until": {
-                          "path": "phase",
-                          "one_of": [
-                            "main_menu",
-                            "gameplay",
-                            "menu",
-                            "paused",
-                            "photo_mode",
-                            "character_menu"
-                          ]
-                        },
-                        "interval_ms": 2500,
-                        "deadline_ms": 60000,
-                        "bind": "boot"
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "load",
-                  "do": "run",
-                  "command": "game.load",
-                  "input": {
-                    "name": "$fixture.save",
-                    "discard_unsaved": true,
-                    "continue_wait_s": 85
-                  },
-                  "bind": "load",
-                  "deadline_ms": 150000,
-                  "when": {
-                    "check": {
-                      "do": "run",
-                      "command": "game.status",
-                      "input": {}
-                    },
-                    "match": {
-                      "path": "phase",
-                      "equals": "main_menu"
-                    }
-                  },
-                  "retry": {
-                    "times": 12,
-                    "backoff_ms": 3000,
-                    "factor": 1.5,
-                    "max_backoff_ms": 15000,
-                    "on": {
-                      "code": [
-                        "game_not_running",
-                        "timeout",
-                        "busy",
-                        "bridge_busy",
-                        "game_loading",
-                        "rate_limited",
-                        "not_ready"
-                      ]
-                    }
-                  },
-                  "alternatives": [
-                    [
-                      {
-                        "do": "run",
-                        "command": "game.load",
-                        "input": {
-                          "latest": true,
-                          "discard_unsaved": true,
-                          "continue_wait_s": 85
-                        },
-                        "bind": "load",
-                        "deadline_ms": 150000,
-                        "retry": {
-                          "times": 12,
-                          "backoff_ms": 3000,
-                          "factor": 1.5,
-                          "max_backoff_ms": 15000,
-                          "on": {
-                            "code": [
-                              "game_not_running",
-                              "timeout",
-                              "busy",
-                              "bridge_busy",
-                              "game_loading",
-                              "rate_limited",
-                              "not_ready"
-                            ]
-                          }
-                        }
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "press-any-key",
-                  "do": "host.key",
-                  "keys": "Space",
-                  "when": {
-                    "check": {
-                      "do": "run",
-                      "command": "game.status",
-                      "input": {}
-                    },
-                    "match": {
-                      "path": "prompt_state",
-                      "equals": "initial_continue"
-                    }
-                  },
-                  "retry": {
-                    "times": 5,
-                    "backoff_ms": 3000,
-                    "on": {
-                      "code": "not_foreground"
-                    }
-                  },
-                  "outcomes": [
-                    {
-                      "name": "behind",
-                      "match": {
-                        "code": "not_foreground"
-                      },
-                      "run": [
-                        {
-                          "do": "note",
-                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
-                        }
-                      ]
-                    }
-                  ],
-                  "on_fail": "continue"
-                },
-                {
-                  "label": "gameplay",
-                  "do": "run",
-                  "command": "game.wait",
-                  "input": {
-                    "phase": "gameplay",
-                    "timeout_ms": 180000
-                  },
-                  "deadline_ms": 190000
-                },
-                {
-                  "do": "run",
-                  "command": "overlay.set",
-                  "input": {
-                    "theme": "light",
-                    "motion": "full",
-                    "enabled": false,
-                    "diagnostics": true
-                  },
-                  "bind": "ST8_light_paused_look"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "label": "ST8-light-paused-in-force",
-          "do": "run",
-          "command": "overlay.state",
-          "input": {},
-          "until": {
-            "all": [
-              {
-                "path": "theme",
-                "equals": "light"
-              },
-              {
-                "path": "motion.setting",
-                "equals": "full"
-              }
-            ]
-          },
-          "interval_ms": 250,
-          "deadline_ms": 3000,
-          "bind": "ST8_light_paused_overlay"
-        },
-        {
-          "label": "ST8-light-paused-repaint",
-          "do": "wait",
-          "ms": 2500
-        },
-        {
-          "label": "ST8-light-paused-look-window",
-          "do": "host.window",
-          "bind": "win"
-        },
-        {
-          "label": "ST8-light-paused-line",
-          "do": "run",
-          "command": "ui.hud",
-          "input": {
-            "show": false,
-            "cet_label": true
-          },
-          "bind": "ST8_light_paused_hud"
-        },
-        {
-          "label": "ST8-light-paused-pause",
-          "do": "run",
-          "command": "session.handover",
-          "input": {
-            "note": "ST8-light-paused: the paused CET line",
-            "restore_ui": false
-          }
-        },
-        {
-          "label": "ST8-light-paused-wait",
-          "do": "wait",
-          "ms": 800
-        },
-        {
-          "label": "ST8-light-paused-shot",
-          "do": "capture",
-          "name": "ST8-cetline-paused-light",
-          "clear_overlay": false,
-          "bind": "ST8_light_paused_shot"
-        }
-      ],
-      "pass": [
-        {
-          "label": "the paused line",
-          "ref": "$ST8_light_paused_shot",
-          "captured": true
-        }
-      ],
-      "cleanup": [
-        {
-          "label": "ST8-light-paused-resume",
-          "do": "run",
-          "command": "session.resume",
-          "input": {}
-        },
-        {
-          "label": "ST8-light-paused-hud-back",
           "do": "run",
           "command": "ui.hud",
           "input": {
@@ -8709,7 +8107,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST2_light_overlay"
+          "bind": "ST2_light_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST2-light-repaint",
@@ -8747,9 +8146,63 @@
           "bind": "ST2_light_q"
         },
         {
-          "label": "ST2-light-settle",
-          "do": "wait",
-          "ms": 800
+          "label": "ST2-light-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST2_light_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST2-light-is-asking",
+          "do": "run",
+          "command": "ui.state",
+          "input": {},
+          "until": {
+            "path": "pending_ask.id",
+            "equals": "$ST2_light_q.id"
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST2_light_is_asking",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST2-light-visible-box",
+          "do": "capture.surface",
+          "name": "ST2-light-probe-box",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
         },
         {
           "label": "ST2-light-shot",
@@ -8757,6 +8210,25 @@
           "name": "ST2-xfbox-diagnostics-light",
           "clear_overlay": false,
           "bind": "ST2_light_shot"
+        },
+        {
+          "label": "ST2-light-in-frame-shot",
+          "do": "capture.surface",
+          "capture": "$ST2_light_shot",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST2_light_frame_shot",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -8785,6 +8257,14 @@
           "label": "the XF box",
           "ref": "$ST2_light_shot",
           "captured": true
+        },
+        {
+          "label": "shot in frame",
+          "ref": "$ST2_light_frame_shot",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
@@ -9171,7 +8651,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST4_light_changes_overlay"
+          "bind": "ST4_light_changes_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST4-light-changes-repaint",
@@ -9194,14 +8675,78 @@
           "bind": "ST4_light_changes_hud"
         },
         {
+          "label": "ST4-light-changes-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST4_light_changes_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST4-light-changes-visible-box",
+          "do": "capture.surface",
+          "name": "ST4-light-changes-probe-box",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST4-light-changes-burst",
           "do": "burst",
           "name": "ST4-xfbox-pulse-changes-light",
-          "frames": 12,
+          "frames": 13,
           "interval_ms": 200,
           "clear_overlay": false,
           "rect": "$win.regions.xf_box",
           "bind": "ST4_light_changes_burst"
+        },
+        {
+          "label": "ST4-light-changes-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST4_light_changes_burst",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST4_light_changes_frame_burst",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -9213,9 +8758,24 @@
           }
         },
         {
-          "label": "the pulse burst (12 x 200 ms, one 2.4 s period)",
+          "label": "the pulse burst (13 x 200 ms, one 2.4 s period)",
           "ref": "$ST4_light_changes_burst",
           "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST4_light_changes_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 2.4 s)",
+          "ref": "$ST4_light_changes_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 2200
+          }
         }
       ],
       "cleanup": [
@@ -9230,480 +8790,8 @@
       ]
     },
     {
-      "id": "ST5-light",
-      "title": "The settle on a change of state, and none for a second change within 2 s (light)",
-      "requires": [
-        {
-          "config": "ui.answer_keys",
-          "equals": "IK_F6"
-        },
-        {
-          "config": "overlay.scale_percent",
-          "equals": "100"
-        },
-        {
-          "config": "overlay.enabled",
-          "equals": "true"
-        },
-        {
-          "config": "overlay.diagnostics",
-          "equals": "true"
-        },
-        {
-          "config": "bridge.allow_writes",
-          "equals": "true"
-        },
-        {
-          "binding": "cet.overlay_key",
-          "equals": "$fixture.cet_overlay_key"
-        }
-      ],
-      "judged_by": "XF · Studio's UI review (the style guide's In-game surfaces specimens)",
-      "steps": [
-        {
-          "label": "ST5-light-play",
-          "do": "run",
-          "command": "game.wait",
-          "input": {
-            "phase": "gameplay",
-            "timeout_ms": 20000
-          },
-          "deadline_ms": 25000,
-          "alternatives": [
-            [
-              {
-                "do": "run",
-                "command": "photo.exit",
-                "input": {}
-              },
-              {
-                "do": "run",
-                "command": "game.wait",
-                "input": {
-                  "phase": "gameplay",
-                  "timeout_ms": 20000
-                },
-                "deadline_ms": 25000
-              }
-            ]
-          ]
-        },
-        {
-          "label": "ST5-light-look",
-          "do": "run",
-          "command": "overlay.set",
-          "input": {
-            "theme": "light",
-            "motion": "full",
-            "enabled": true,
-            "diagnostics": true
-          },
-          "bind": "ST5_light_look",
-          "outcomes": [
-            {
-              "name": "needs_restart",
-              "match": {
-                "code": "needs_restart"
-              },
-              "run": [
-                {
-                  "do": "note",
-                  "text": "ST5-light: the overlay was off at load, so it can't switch live: config.ini gets it and the game restarts once."
-                },
-                {
-                  "do": "config.set",
-                  "values": {
-                    "overlay.enabled": "true",
-                    "overlay.diagnostics": "true"
-                  }
-                },
-                {
-                  "label": "close",
-                  "do": "host.close",
-                  "deadline_ms": 90000,
-                  "alternatives": [
-                    [
-                      {
-                        "do": "host.key",
-                        "keys": "Enter",
-                        "on_fail": "continue"
-                      },
-                      {
-                        "do": "host.wait_exit",
-                        "deadline_ms": 60000
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "launch",
-                  "do": "host.launch",
-                  "outcomes": [
-                    {
-                      "name": "already_running",
-                      "match": {
-                        "code": "already_running"
-                      },
-                      "result": "ok"
-                    }
-                  ]
-                },
-                {
-                  "label": "process",
-                  "do": "host.running",
-                  "until": {
-                    "any": [
-                      {
-                        "path": "running",
-                        "equals": true
-                      },
-                      {
-                        "path": "launch_blocked",
-                        "exists": true
-                      }
-                    ]
-                  },
-                  "interval_ms": 2000,
-                  "deadline_ms": 120000,
-                  "outcomes": [
-                    {
-                      "name": "launch_blocked",
-                      "match": {
-                        "path": "launch_blocked",
-                        "exists": true
-                      },
-                      "run": [
-                        {
-                          "end": "fail",
-                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "label": "bridge",
-                  "do": "run",
-                  "command": "bridge.ping",
-                  "input": {},
-                  "until": {
-                    "ok": true
-                  },
-                  "interval_ms": 2000,
-                  "deadline_ms": 180000
-                },
-                {
-                  "label": "booted",
-                  "do": "run",
-                  "command": "game.status",
-                  "input": {},
-                  "until": {
-                    "path": "phase",
-                    "one_of": [
-                      "main_menu",
-                      "gameplay",
-                      "menu",
-                      "paused",
-                      "photo_mode",
-                      "character_menu"
-                    ]
-                  },
-                  "interval_ms": 2500,
-                  "deadline_ms": 240000,
-                  "bind": "boot",
-                  "alternatives": [
-                    [
-                      {
-                        "do": "host.key",
-                        "keys": "Space",
-                        "on_fail": "continue"
-                      },
-                      {
-                        "do": "run",
-                        "command": "game.status",
-                        "input": {},
-                        "until": {
-                          "path": "phase",
-                          "one_of": [
-                            "main_menu",
-                            "gameplay",
-                            "menu",
-                            "paused",
-                            "photo_mode",
-                            "character_menu"
-                          ]
-                        },
-                        "interval_ms": 2500,
-                        "deadline_ms": 60000,
-                        "bind": "boot"
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "load",
-                  "do": "run",
-                  "command": "game.load",
-                  "input": {
-                    "name": "$fixture.save",
-                    "discard_unsaved": true,
-                    "continue_wait_s": 85
-                  },
-                  "bind": "load",
-                  "deadline_ms": 150000,
-                  "when": {
-                    "check": {
-                      "do": "run",
-                      "command": "game.status",
-                      "input": {}
-                    },
-                    "match": {
-                      "path": "phase",
-                      "equals": "main_menu"
-                    }
-                  },
-                  "retry": {
-                    "times": 12,
-                    "backoff_ms": 3000,
-                    "factor": 1.5,
-                    "max_backoff_ms": 15000,
-                    "on": {
-                      "code": [
-                        "game_not_running",
-                        "timeout",
-                        "busy",
-                        "bridge_busy",
-                        "game_loading",
-                        "rate_limited",
-                        "not_ready"
-                      ]
-                    }
-                  },
-                  "alternatives": [
-                    [
-                      {
-                        "do": "run",
-                        "command": "game.load",
-                        "input": {
-                          "latest": true,
-                          "discard_unsaved": true,
-                          "continue_wait_s": 85
-                        },
-                        "bind": "load",
-                        "deadline_ms": 150000,
-                        "retry": {
-                          "times": 12,
-                          "backoff_ms": 3000,
-                          "factor": 1.5,
-                          "max_backoff_ms": 15000,
-                          "on": {
-                            "code": [
-                              "game_not_running",
-                              "timeout",
-                              "busy",
-                              "bridge_busy",
-                              "game_loading",
-                              "rate_limited",
-                              "not_ready"
-                            ]
-                          }
-                        }
-                      }
-                    ]
-                  ]
-                },
-                {
-                  "label": "press-any-key",
-                  "do": "host.key",
-                  "keys": "Space",
-                  "when": {
-                    "check": {
-                      "do": "run",
-                      "command": "game.status",
-                      "input": {}
-                    },
-                    "match": {
-                      "path": "prompt_state",
-                      "equals": "initial_continue"
-                    }
-                  },
-                  "retry": {
-                    "times": 5,
-                    "backoff_ms": 3000,
-                    "on": {
-                      "code": "not_foreground"
-                    }
-                  },
-                  "outcomes": [
-                    {
-                      "name": "behind",
-                      "match": {
-                        "code": "not_foreground"
-                      },
-                      "run": [
-                        {
-                          "do": "note",
-                          "text": "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)."
-                        }
-                      ]
-                    }
-                  ],
-                  "on_fail": "continue"
-                },
-                {
-                  "label": "gameplay",
-                  "do": "run",
-                  "command": "game.wait",
-                  "input": {
-                    "phase": "gameplay",
-                    "timeout_ms": 180000
-                  },
-                  "deadline_ms": 190000
-                },
-                {
-                  "do": "run",
-                  "command": "overlay.set",
-                  "input": {
-                    "theme": "light",
-                    "motion": "full",
-                    "enabled": true,
-                    "diagnostics": true
-                  },
-                  "bind": "ST5_light_look"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "label": "ST5-light-in-force",
-          "do": "run",
-          "command": "overlay.state",
-          "input": {},
-          "until": {
-            "all": [
-              {
-                "path": "theme",
-                "equals": "light"
-              },
-              {
-                "path": "motion.setting",
-                "equals": "full"
-              }
-            ]
-          },
-          "interval_ms": 250,
-          "deadline_ms": 3000,
-          "bind": "ST5_light_overlay"
-        },
-        {
-          "label": "ST5-light-repaint",
-          "do": "wait",
-          "ms": 2500
-        },
-        {
-          "label": "ST5-light-look-window",
-          "do": "host.window",
-          "bind": "win"
-        },
-        {
-          "label": "ST5-light-xfbox",
-          "do": "run",
-          "command": "ui.hud",
-          "input": {
-            "show": false,
-            "cet_label": false
-          },
-          "bind": "ST5_light_hud"
-        },
-        {
-          "label": "ST5-light-change",
-          "together": [
-            {
-              "do": "burst",
-              "name": "ST5-xfbox-settle-light",
-              "frames": 20,
-              "interval_ms": 100,
-              "clear_overlay": false,
-              "rect": "$win.regions.xf_box",
-              "bind": "ST5_light_burst"
-            },
-            {
-              "sequence": [
-                {
-                  "do": "wait",
-                  "ms": 300
-                },
-                {
-                  "do": "run",
-                  "command": "session.handover",
-                  "input": {
-                    "note": "ST5-light: settle",
-                    "restore_ui": false
-                  }
-                },
-                {
-                  "do": "wait",
-                  "ms": 700
-                },
-                {
-                  "do": "run",
-                  "command": "session.resume",
-                  "input": {}
-                }
-              ]
-            }
-          ]
-        }
-      ],
-      "pass": [
-        {
-          "label": "motion full",
-          "ref": "$ST5_light_overlay.motion.effective",
-          "match": {
-            "equals": "full"
-          }
-        },
-        {
-          "label": "the settle burst (change at 0.3 s, second change at 1.0 s)",
-          "ref": "$ST5_light_burst",
-          "captured": true
-        },
-        {
-          "label": "all 20 frames",
-          "ref": "$ST5_light_burst.frames.19",
-          "match": {
-            "exists": true
-          }
-        },
-        {
-          "label": "over about 2 s",
-          "ref": "$ST5_light_burst.timing.first_to_last_ms",
-          "match": {
-            "min": 1700
-          }
-        }
-      ],
-      "cleanup": [
-        {
-          "label": "ST5-light-resume",
-          "do": "run",
-          "command": "session.resume",
-          "input": {}
-        },
-        {
-          "label": "ST5-light-hud-back",
-          "do": "run",
-          "command": "ui.hud",
-          "input": {
-            "reset": true
-          }
-        }
-      ]
-    },
-    {
       "id": "ST6-light-chips",
-      "title": "The chips: Changes allowed, then Paused (light)",
+      "title": "The chips: Changes allowed (light)",
       "requires": [
         {
           "config": "ui.answer_keys",
@@ -10066,7 +9154,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST6_light_chips_overlay"
+          "bind": "ST6_light_chips_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST6-light-chips-repaint",
@@ -10170,6 +9259,47 @@
           ]
         },
         {
+          "label": "ST6-light-chips-is-changes",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST6_light_chips_is_changes",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST6-light-chips-visible-window",
+          "do": "capture.surface",
+          "name": "ST6-light-chips-probe-window",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST6-light-chips-ST6-cet-chip-changes-light",
           "do": "capture",
           "name": "ST6-cet-chip-changes-light",
@@ -10188,36 +9318,23 @@
           "on_fail": "continue"
         },
         {
-          "label": "ST6-light-chips-pause",
-          "do": "run",
-          "command": "session.handover",
-          "input": {
-            "note": "ST6-light-chips: the Paused chip",
-            "restore_ui": false
-          }
-        },
-        {
-          "label": "ST6-light-chips-wait",
-          "do": "wait",
-          "ms": 800
-        },
-        {
-          "label": "ST6-light-chips-ST6-cet-chip-paused-light",
-          "do": "capture",
-          "name": "ST6-cet-chip-paused-light",
-          "clear_overlay": false,
-          "bind": "ST6_light_chips_paused"
-        },
-        {
-          "label": "ST6-light-chips-ST6-cet-chip-paused-light-crop",
-          "do": "run",
-          "command": "capture.recrop",
-          "input": {
-            "path": "$ST6_light_chips_paused.full.path",
-            "rect": "$win.regions.cet_window",
-            "name": "ST6-cet-chip-paused-light-crop"
-          },
-          "on_fail": "continue"
+          "label": "ST6-light-chips-in-frame-changes",
+          "do": "capture.surface",
+          "capture": "$ST6_light_chips_changes",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST6_light_chips_frame_changes",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -10227,18 +9344,15 @@
           "captured": true
         },
         {
-          "label": "Paused",
-          "ref": "$ST6_light_chips_paused",
-          "captured": true
+          "label": "changes in frame",
+          "ref": "$ST6_light_chips_frame_changes",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
-        {
-          "label": "ST6-light-chips-resume",
-          "do": "run",
-          "command": "session.resume",
-          "input": {}
-        },
         {
           "label": "ST6-light-chips-cet-close",
           "do": "host.key",
@@ -10630,7 +9744,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST7_light_running_overlay"
+          "bind": "ST7_light_running_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-light-running-repaint",
@@ -10734,6 +9849,47 @@
           ]
         },
         {
+          "label": "ST7-light-running-is-running",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST7_light_running_is_running",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST7-light-running-visible-window",
+          "do": "capture.surface",
+          "name": "ST7-light-running-probe-window",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-light-running-ST7-cet-running-light",
           "do": "capture",
           "name": "ST7-cet-running-light",
@@ -10750,6 +9906,25 @@
             "name": "ST7-cet-running-light-crop"
           },
           "on_fail": "continue"
+        },
+        {
+          "label": "ST7-light-running-in-frame-running",
+          "do": "capture.surface",
+          "capture": "$ST7_light_running_running",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_light_running_frame_running",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -10757,6 +9932,14 @@
           "label": "the window",
           "ref": "$ST7_light_running_running",
           "captured": true
+        },
+        {
+          "label": "running in frame",
+          "ref": "$ST7_light_running_frame_running",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
@@ -11151,7 +10334,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST7_light_question_overlay"
+          "bind": "ST7_light_question_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-light-question-repaint",
@@ -11276,16 +10460,65 @@
           "bind": "ST7_light_question_q"
         },
         {
+          "label": "ST7-light-question-is-asking",
+          "do": "run",
+          "command": "ui.state",
+          "input": {},
+          "until": {
+            "path": "pending_ask.id",
+            "equals": "$ST7_light_question_q.id"
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST7_light_question_is_asking",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-light-question-wait1",
           "do": "wait",
           "ms": 600
         },
         {
-          "label": "ST7-light-question-ST7-cet-question-a-light",
+          "label": "ST7-light-question-visible-window",
+          "do": "capture.surface",
+          "name": "ST7-light-question-probe-window",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST7-light-question-qa",
           "do": "capture",
           "name": "ST7-cet-question-a-light",
           "clear_overlay": false,
           "bind": "ST7_light_question_qa"
+        },
+        {
+          "label": "ST7-light-question-wait2",
+          "do": "wait",
+          "ms": 1200
+        },
+        {
+          "label": "ST7-light-question-qb",
+          "do": "capture",
+          "name": "ST7-cet-question-b-light",
+          "clear_overlay": false,
+          "bind": "ST7_light_question_qb"
         },
         {
           "label": "ST7-light-question-ST7-cet-question-a-light-crop",
@@ -11299,16 +10532,23 @@
           "on_fail": "continue"
         },
         {
-          "label": "ST7-light-question-wait2",
-          "do": "wait",
-          "ms": 1200
-        },
-        {
-          "label": "ST7-light-question-ST7-cet-question-b-light",
-          "do": "capture",
-          "name": "ST7-cet-question-b-light",
-          "clear_overlay": false,
-          "bind": "ST7_light_question_qb"
+          "label": "ST7-light-question-in-frame-qa",
+          "do": "capture.surface",
+          "capture": "$ST7_light_question_qa",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_light_question_frame_qa",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-light-question-ST7-cet-question-b-light-crop",
@@ -11320,6 +10560,25 @@
             "name": "ST7-cet-question-b-light-crop"
           },
           "on_fail": "continue"
+        },
+        {
+          "label": "ST7-light-question-in-frame-qb",
+          "do": "capture.surface",
+          "capture": "$ST7_light_question_qb",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_light_question_frame_qb",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-light-question-breathes",
@@ -11467,6 +10726,20 @@
           "bind": "cetOpen"
         },
         {
+          "label": "ST7-light-question-is-reopened",
+          "do": "run",
+          "command": "overlay.state",
+          "input": {},
+          "until": {
+            "path": "cet_open",
+            "equals": true
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST7_light_question_is_reopened",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-light-question-settle",
           "do": "wait",
           "ms": 700
@@ -11488,6 +10761,25 @@
             "name": "ST7-cet-answered-light-crop"
           },
           "on_fail": "continue"
+        },
+        {
+          "label": "ST7-light-question-in-frame-answered",
+          "do": "capture.surface",
+          "capture": "$ST7_light_question_answered",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_light_question_frame_answered",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -11500,6 +10792,22 @@
           "label": "waiting (1.2 s later)",
           "ref": "$ST7_light_question_qb",
           "captured": true
+        },
+        {
+          "label": "qa in frame",
+          "ref": "$ST7_light_question_frame_qa",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "qb in frame",
+          "ref": "$ST7_light_question_frame_qb",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         },
         {
           "label": "the waiting card breathes (the two frames differ in the window)",
@@ -11519,6 +10827,14 @@
           "label": "answered",
           "ref": "$ST7_light_question_answered",
           "captured": true
+        },
+        {
+          "label": "answered in frame",
+          "ref": "$ST7_light_question_frame_answered",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
@@ -11921,7 +11237,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST11_light_overlay"
+          "bind": "ST11_light_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST11-light-repaint",
@@ -12004,6 +11321,34 @@
             "seconds": 120
           },
           "bind": "ST11_light_q"
+        },
+        {
+          "label": "ST11-light-is-ink",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "path": "status_surface",
+            "equals": "ink_panel"
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST11_light_is_ink",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST11-light-is-asking",
+          "do": "run",
+          "command": "ui.state",
+          "input": {},
+          "until": {
+            "path": "pending_ask.id",
+            "equals": "$ST11_light_q.id"
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST11_light_is_asking",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST11-light-wait",
@@ -12090,6 +11435,13 @@
           "match": {
             "equals": "photo_mode"
           }
+        },
+        {
+          "label": "spaced as planned (about 0.65 s)",
+          "ref": "$ST11_light_burst.timing.first_to_last_ms",
+          "match": {
+            "max": 1000
+          }
         }
       ],
       "cleanup": [
@@ -12138,7 +11490,7 @@
     },
     {
       "id": "ST3-light",
-      "title": "The XF box with motion reduced: a still dot, no settle (light)",
+      "title": "The XF box with motion reduced: a still dot (light)",
       "requires": [
         {
           "config": "ui.answer_keys",
@@ -12501,7 +11853,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST3_light_overlay"
+          "bind": "ST3_light_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST3-light-repaint",
@@ -12524,6 +11877,51 @@
           "bind": "ST3_light_hud"
         },
         {
+          "label": "ST3-light-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Changes allowed"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST3_light_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST3-light-visible-box",
+          "do": "capture.surface",
+          "name": "ST3-light-probe-box",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST3-light-still",
           "do": "burst",
           "name": "ST3-xfbox-reduced-light",
@@ -12534,43 +11932,23 @@
           "bind": "ST3_light_still"
         },
         {
-          "label": "ST3-light-change",
-          "together": [
-            {
-              "do": "burst",
-              "name": "ST3-xfbox-reduced-settle-light",
-              "frames": 10,
-              "interval_ms": 100,
-              "clear_overlay": false,
-              "rect": "$win.regions.xf_box",
-              "bind": "ST3_light_settle"
-            },
-            {
-              "sequence": [
-                {
-                  "do": "wait",
-                  "ms": 300
-                },
-                {
-                  "do": "run",
-                  "command": "session.handover",
-                  "input": {
-                    "note": "ST3-light: no settle under reduced",
-                    "restore_ui": false
-                  }
-                },
-                {
-                  "do": "wait",
-                  "ms": 400
-                },
-                {
-                  "do": "run",
-                  "command": "session.resume",
-                  "input": {}
-                }
-              ]
-            }
-          ]
+          "label": "ST3-light-in-frame-still",
+          "do": "capture.surface",
+          "capture": "$ST3_light_still",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST3_light_frame_still",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -12594,32 +11972,22 @@
           "captured": true
         },
         {
-          "label": "no wash on a change",
-          "ref": "$ST3_light_settle",
-          "captured": true
-        },
-        {
-          "label": "all 10 settle frames",
-          "ref": "$ST3_light_settle.frames.9",
+          "label": "still in frame",
+          "ref": "$ST3_light_frame_still",
           "match": {
-            "exists": true
+            "path": "present",
+            "equals": true
           }
         },
         {
-          "label": "over about 1 s",
-          "ref": "$ST3_light_settle.timing.first_to_last_ms",
+          "label": "spaced as planned (about 1.2 s)",
+          "ref": "$ST3_light_still.timing.first_to_last_ms",
           "match": {
-            "min": 800
+            "min": 1000
           }
         }
       ],
       "cleanup": [
-        {
-          "label": "ST3-light-resume",
-          "do": "run",
-          "command": "session.resume",
-          "input": {}
-        },
         {
           "label": "ST3-light-hud-back",
           "do": "run",
@@ -12996,7 +12364,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST7_dark_stopped_overlay"
+          "bind": "ST7_dark_stopped_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-dark-stopped-repaint",
@@ -13116,9 +12485,45 @@
           "input": {}
         },
         {
+          "label": "ST7-dark-stopped-is-stopped",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "code": "killed"
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST7_dark_stopped_is_stopped",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-dark-stopped-wait",
           "do": "wait",
           "ms": 800
+        },
+        {
+          "label": "ST7-dark-stopped-visible-window",
+          "do": "capture.surface",
+          "name": "ST7-dark-stopped-probe-window",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-dark-stopped-ST7-cet-stopped-dark",
@@ -13139,6 +12544,25 @@
           "on_fail": "continue"
         },
         {
+          "label": "ST7-dark-stopped-in-frame-stopped",
+          "do": "capture.surface",
+          "capture": "$ST7_dark_stopped_stopped",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_dark_stopped_frame_stopped",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-dark-stopped-ST6-cet-chip-stopped-dark",
           "do": "capture",
           "name": "ST6-cet-chip-stopped-dark",
@@ -13155,6 +12579,25 @@
             "name": "ST6-cet-chip-stopped-dark-crop"
           },
           "on_fail": "continue"
+        },
+        {
+          "label": "ST7-dark-stopped-in-frame-chip",
+          "do": "capture.surface",
+          "capture": "$ST7_dark_stopped_chip",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_dark_stopped_frame_chip",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-dark-stopped-cet-close-for-line",
@@ -13186,11 +12629,53 @@
           "ms": 800
         },
         {
+          "label": "ST7-dark-stopped-visible-line",
+          "do": "capture.surface",
+          "name": "ST7-dark-stopped-probe-line",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.18,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-dark-stopped-line-shot",
           "do": "capture",
           "name": "ST8-cetline-stopped-dark",
           "clear_overlay": false,
           "bind": "ST7_dark_stopped_line"
+        },
+        {
+          "label": "ST7-dark-stopped-in-frame-line",
+          "do": "capture.surface",
+          "capture": "$ST7_dark_stopped_line",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.18,
+          "bind": "ST7_dark_stopped_frame_line",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -13208,6 +12693,30 @@
           "label": "the stopped CET line",
           "ref": "$ST7_dark_stopped_line",
           "captured": true
+        },
+        {
+          "label": "stopped in frame",
+          "ref": "$ST7_dark_stopped_frame_stopped",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "chip in frame",
+          "ref": "$ST7_dark_stopped_frame_chip",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "line in frame",
+          "ref": "$ST7_dark_stopped_frame_line",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
@@ -13468,7 +12977,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST6_dark_readonly_overlay"
+          "bind": "ST6_dark_readonly_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST6-dark-readonly-repaint",
@@ -13572,6 +13082,47 @@
           ]
         },
         {
+          "label": "ST6-dark-readonly-is-readonly",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status.chip",
+                "equals": "Read-only"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST6_dark_readonly_is_readonly",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST6-dark-readonly-visible-window",
+          "do": "capture.surface",
+          "name": "ST6-dark-readonly-probe-window",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST6-dark-readonly-ST6-cet-chip-readonly-dark",
           "do": "capture",
           "name": "ST6-cet-chip-readonly-dark",
@@ -13590,6 +13141,25 @@
           "on_fail": "continue"
         },
         {
+          "label": "ST6-dark-readonly-in-frame-chip",
+          "do": "capture.surface",
+          "capture": "$ST6_dark_readonly_chip",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST6_dark_readonly_frame_chip",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST6-dark-readonly-ST7-cet-running-readonly-dark",
           "do": "capture",
           "name": "ST7-cet-running-readonly-dark",
@@ -13606,6 +13176,25 @@
             "name": "ST7-cet-running-readonly-dark-crop"
           },
           "on_fail": "continue"
+        },
+        {
+          "label": "ST6-dark-readonly-in-frame-running",
+          "do": "capture.surface",
+          "capture": "$ST6_dark_readonly_running",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST6_dark_readonly_frame_running",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -13618,6 +13207,22 @@
           "label": "running read-only",
           "ref": "$ST6_dark_readonly_running",
           "captured": true
+        },
+        {
+          "label": "chip in frame",
+          "ref": "$ST6_dark_readonly_frame_chip",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "running in frame",
+          "ref": "$ST6_dark_readonly_frame_running",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
@@ -13878,7 +13483,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST4_dark_readonly_overlay"
+          "bind": "ST4_dark_readonly_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST4-dark-readonly-repaint",
@@ -13891,14 +13497,78 @@
           "bind": "win"
         },
         {
+          "label": "ST4-dark-readonly-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Read-only"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST4_dark_readonly_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST4-dark-readonly-visible-box",
+          "do": "capture.surface",
+          "name": "ST4-dark-readonly-probe-box",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST4-dark-readonly-burst",
           "do": "burst",
           "name": "ST4-xfbox-pulse-readonly-dark",
-          "frames": 12,
+          "frames": 13,
           "interval_ms": 200,
           "clear_overlay": false,
           "rect": "$win.regions.xf_box",
           "bind": "ST4_dark_readonly_burst"
+        },
+        {
+          "label": "ST4-dark-readonly-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST4_dark_readonly_burst",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST4_dark_readonly_frame_burst",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -13917,9 +13587,24 @@
           }
         },
         {
-          "label": "the pulse burst",
+          "label": "the pulse burst (13 x 200 ms)",
           "ref": "$ST4_dark_readonly_burst",
           "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST4_dark_readonly_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 2.4 s)",
+          "ref": "$ST4_dark_readonly_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 2200
+          }
         }
       ]
     },
@@ -14154,7 +13839,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST6_light_readonly_overlay"
+          "bind": "ST6_light_readonly_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST6-light-readonly-repaint",
@@ -14258,6 +13944,47 @@
           ]
         },
         {
+          "label": "ST6-light-readonly-is-readonly",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status.chip",
+                "equals": "Read-only"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST6_light_readonly_is_readonly",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST6-light-readonly-visible-window",
+          "do": "capture.surface",
+          "name": "ST6-light-readonly-probe-window",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST6-light-readonly-ST6-cet-chip-readonly-light",
           "do": "capture",
           "name": "ST6-cet-chip-readonly-light",
@@ -14276,6 +14003,25 @@
           "on_fail": "continue"
         },
         {
+          "label": "ST6-light-readonly-in-frame-chip",
+          "do": "capture.surface",
+          "capture": "$ST6_light_readonly_chip",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST6_light_readonly_frame_chip",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST6-light-readonly-ST7-cet-running-readonly-light",
           "do": "capture",
           "name": "ST7-cet-running-readonly-light",
@@ -14292,6 +14038,25 @@
             "name": "ST7-cet-running-readonly-light-crop"
           },
           "on_fail": "continue"
+        },
+        {
+          "label": "ST6-light-readonly-in-frame-running",
+          "do": "capture.surface",
+          "capture": "$ST6_light_readonly_running",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST6_light_readonly_frame_running",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -14304,6 +14069,22 @@
           "label": "running read-only",
           "ref": "$ST6_light_readonly_running",
           "captured": true
+        },
+        {
+          "label": "chip in frame",
+          "ref": "$ST6_light_readonly_frame_chip",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "running in frame",
+          "ref": "$ST6_light_readonly_frame_running",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
@@ -14564,7 +14345,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST4_light_readonly_overlay"
+          "bind": "ST4_light_readonly_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST4-light-readonly-repaint",
@@ -14577,14 +14359,78 @@
           "bind": "win"
         },
         {
+          "label": "ST4-light-readonly-is-box",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "all": [
+              {
+                "path": "status_surface",
+                "equals": "xf_box"
+              },
+              {
+                "path": "status.chip",
+                "equals": "Read-only"
+              }
+            ]
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST4_light_readonly_is_box",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST4-light-readonly-visible-box",
+          "do": "capture.surface",
+          "name": "ST4-light-readonly-probe-box",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST4-light-readonly-burst",
           "do": "burst",
           "name": "ST4-xfbox-pulse-readonly-light",
-          "frames": 12,
+          "frames": 13,
           "interval_ms": 200,
           "clear_overlay": false,
           "rect": "$win.regions.xf_box",
           "bind": "ST4_light_readonly_burst"
+        },
+        {
+          "label": "ST4-light-readonly-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST4_light_readonly_burst",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.xf_box",
+          "min_plate": 0.15,
+          "bind": "ST4_light_readonly_frame_burst",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -14603,9 +14449,24 @@
           }
         },
         {
-          "label": "the pulse burst",
+          "label": "the pulse burst (13 x 200 ms)",
           "ref": "$ST4_light_readonly_burst",
           "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST4_light_readonly_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "spaced as planned (about 2.4 s)",
+          "ref": "$ST4_light_readonly_burst.timing.first_to_last_ms",
+          "match": {
+            "min": 2200
+          }
         }
       ]
     },
@@ -14840,7 +14701,8 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "bind": "ST7_light_stopped_overlay"
+          "bind": "ST7_light_stopped_overlay",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-light-stopped-repaint",
@@ -14960,9 +14822,45 @@
           "input": {}
         },
         {
+          "label": "ST7-light-stopped-is-stopped",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "code": "killed"
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST7_light_stopped_is_stopped",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-light-stopped-wait",
           "do": "wait",
           "ms": 800
+        },
+        {
+          "label": "ST7-light-stopped-visible-window",
+          "do": "capture.surface",
+          "name": "ST7-light-stopped-probe-window",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-light-stopped-ST7-cet-stopped-light",
@@ -14983,6 +14881,25 @@
           "on_fail": "continue"
         },
         {
+          "label": "ST7-light-stopped-in-frame-stopped",
+          "do": "capture.surface",
+          "capture": "$ST7_light_stopped_stopped",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_light_stopped_frame_stopped",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-light-stopped-ST6-cet-chip-stopped-light",
           "do": "capture",
           "name": "ST6-cet-chip-stopped-light",
@@ -14999,6 +14916,25 @@
             "name": "ST6-cet-chip-stopped-light-crop"
           },
           "on_fail": "continue"
+        },
+        {
+          "label": "ST7-light-stopped-in-frame-chip",
+          "do": "capture.surface",
+          "capture": "$ST7_light_stopped_chip",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_window",
+          "min_plate": 0.15,
+          "bind": "ST7_light_stopped_frame_chip",
+          "on_fail": "fail_row"
         },
         {
           "label": "ST7-light-stopped-cet-close-for-line",
@@ -15030,11 +14966,53 @@
           "ms": 800
         },
         {
+          "label": "ST7-light-stopped-visible-line",
+          "do": "capture.surface",
+          "name": "ST7-light-stopped-probe-line",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.03,
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST7-light-stopped-line-shot",
           "do": "capture",
           "name": "ST8-cetline-stopped-light",
           "clear_overlay": false,
           "bind": "ST7_light_stopped_line"
+        },
+        {
+          "label": "ST7-light-stopped-in-frame-line",
+          "do": "capture.surface",
+          "capture": "$ST7_light_stopped_line",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_line",
+          "min_plate": 0.03,
+          "bind": "ST7_light_stopped_frame_line",
+          "on_fail": "fail_row"
         }
       ],
       "pass": [
@@ -15052,6 +15030,30 @@
           "label": "the stopped CET line",
           "ref": "$ST7_light_stopped_line",
           "captured": true
+        },
+        {
+          "label": "stopped in frame",
+          "ref": "$ST7_light_stopped_frame_stopped",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "chip in frame",
+          "ref": "$ST7_light_stopped_frame_chip",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "line in frame",
+          "ref": "$ST7_light_stopped_frame_line",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         }
       ],
       "cleanup": [
