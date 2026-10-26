@@ -32,12 +32,16 @@ export const ALL_CHANNELS = ["v", "actors", "camera", "subtitles", "voice", "fac
 export const DEFAULT_HALT_PATTERNS = ["draw call failed", "evt=overlay\\.stopped", "lvl=fatal"];
 /** The recorder's longest lifetime is 1800 s; it is started again a little before that. */
 const RECORDER_S = 1800;
+/** Catch-up pages read in one drain at most. */
+const PAGE_BOUND = 20;
 const LOG_SLICE_MAX = 4 * 1024 * 1024;
 
 export type RowTelemetry = {
   dir: string;
   files: string[];
-  recorder: { run?: number; restarted?: boolean; unavailable?: string; records?: unknown; gaps?: unknown };
+  recorder: { run?: number; restarted?: boolean; unavailable?: string; records?: unknown; gaps?: unknown;
+    /** The drain stopped at its page bound with more to read: the rest waits behind the saved cursor (cursor.json). */
+    incomplete?: boolean };
   memory?: { free_commit_gb: number | null; game_private_gb?: number; game_working_set_gb?: number; game_handles?: number; system_handles?: number | null };
   frames?: { frames?: number; cpu_ms?: number; cpu_ms_max?: number; drawing_now?: boolean; cet_open?: boolean };
   log_lines: number;
@@ -241,7 +245,8 @@ export class Telemetry {
       if (this.run !== undefined) {
         await this.readStatus();
         const drained = await this.drain(rowKey, (name, value) => save(name, value));
-        out.recorder = drained.ok ? { run: drained.run, records: drained.counts, gaps: drained.gaps } : { run: drained.run, unavailable: drained.code };
+        out.recorder = drained.ok ? { run: drained.run, records: drained.counts, gaps: drained.gaps, ...(drained.incomplete ? { incomplete: true } : {}) } : { run: drained.run, unavailable: drained.code };
+        if (drained.incomplete) missing.push(`game.catchup: the ${PAGE_BOUND}-page bound was reached with more to read (cursor.json)`);
         if (!drained.ok) missing.push(`game.catchup: ${drained.code}`);
       } else out.recorder = { unavailable: this.unavailable ?? "no recorder" };
       const overlay = await this.read("overlay.state");
@@ -288,10 +293,11 @@ export class Telemetry {
    * The run's catch-up from the cursor to the end (at most 20 pages), each page saved and added to the summary. A
    * refusal marks the run stale (a load stopped it, or another recorder replaced it), so the next row starts afresh.
    */
-  private async drain(rowKey: string, save: (name: string, value: unknown) => void): Promise<{ ok: boolean; run?: number; code?: string; counts?: unknown; gaps?: unknown }> {
+  private async drain(rowKey: string, save: (name: string, value: unknown) => void): Promise<{ ok: boolean; run?: number; code?: string; counts?: unknown; gaps?: unknown; incomplete?: boolean }> {
     const run = this.run!;
     let counts: unknown, gaps: string[] = [];
-    for (let page = 1; page <= 20; page++) {
+    let more = false;
+    for (let page = 1; page <= PAGE_BOUND; page++) {
       const read = await this.read("game.catchup", this.cursor ? { cursor: this.cursor } : { run });
       if (!read.ok) {
         this.total.unread.push(`${rowKey}: run ${run}: ${read.code}`);
@@ -305,7 +311,15 @@ export class Telemetry {
       counts = value.counts;
       gaps = [...new Set([...gaps, ...(value.gaps ?? [])])];
       this.add(rowKey, run, value);
-      if (!value.more) break;
+      more = value.more === true;
+      if (!more) break;
+    }
+    // Cut at the bound with more to read: incomplete, never a full drain. The cursor is saved, and the summary lists it
+    // as unread (B318-1's "every page read").
+    if (more) {
+      save("cursor.json", { run, cursor: this.cursor, reason: `the ${PAGE_BOUND}-page bound was reached with more to read` });
+      this.total.unread.push(`${rowKey}: run ${run}: ${PAGE_BOUND} pages read and more remain (the rest waits behind the saved cursor)`);
+      return { ok: true, run, counts, gaps, incomplete: true };
     }
     return { ok: true, run, counts, gaps };
   }

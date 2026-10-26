@@ -291,3 +291,24 @@ describe("M11: a guard's and a block's time is absolute, slow reads included", (
     expect(clock.now()).toBeLessThanOrEqual(1001);
   });
 });
+
+describe("M12: a drain cut at its page bound is incomplete, and says where it stopped", () => {
+  test("a catch-up that always has more: the row's telemetry and the summary say so, and B318-1 doesn't pass", async () => {
+    const { readFileSync, existsSync } = await import("node:fs");
+    const { clock, fakeApi, fakeHost, go, script } = await fakes();
+    const b318 = JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "borg4-smoke.json"), "utf8")).rows.find((r: { id: string }) => r.id === "B318-1");
+    const status = { not_ready: 0, tap_not_ready: [], complete_coverage: true, channel_stats: { subtitles: { ready: true }, voice: { ready: true } } };
+    const api = fakeApi(clock, {
+      "game.catchup": (input) => ({ ok: true, result: { cursor: { after: (input.cursor?.after ?? 0) + 1 }, counts: { v: 3 }, gaps: [], more: true } }),
+      "test.record.read": () => ({ ok: true, result: status }), "test.record.stop": () => ({ ok: true, result: status }),
+    });
+    const dir = tempDir("xfb-r34-");
+    const result = await go(script([{ id: "a", title: "a", steps: [{ label: "w", do: "wait", ms: 10 }] }, b318] as never), api, fakeHost(), clock, dir);
+    const row = result.rows[0];
+    expect(row.telemetry?.recorder.incomplete).toBe(true);
+    expect(existsSync(join(dir, "out", row.telemetry!.dir, "cursor.json"))).toBe(true);
+    const b = result.rows.find((r) => r.id === "B318-1")!;
+    expect(b.verdict).not.toBe("PASS");
+    expect(JSON.stringify(b.reason)).toContain("every page read");
+  });
+});
