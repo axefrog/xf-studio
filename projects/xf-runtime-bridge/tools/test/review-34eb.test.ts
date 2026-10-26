@@ -247,3 +247,25 @@ describe("M9: a cleanup that fails is never a clean close or an ok run", () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe("M10: ST11's crop comes from where the ink panel reports it went, and the panel is checked in every frame", () => {
+  test("inkRect maps panel_rect from the root's units to window pixels, with a margin", async () => {
+    const { inkRect } = await import("../testing/batch.ts");
+    const events = { events: [
+      { kind: "ink_tree", data: { when: "show" } },
+      { kind: "ink_tree", data: { when: "laid_out", showing: true, panel_rect: [100, 200, 400, 300], root_size: [3840, 1600], root_px: [0, 0, 1920, 800], screen: [1920, 800] } },
+    ] };
+    expect(inkRect({ events, window: { width: 3840, height: 1600 }, margin: 0 })).toEqual({ ok: true, value: { x: 100, y: 200, width: 400, height: 300 } });
+    expect(inkRect({ events: { events: [] }, window: { width: 3840, height: 1600 } }).code).toBe("no_layout");
+  });
+  test("the ST11 rows burst over that rectangle and check the answers in every frame", async () => {
+    const { stScript } = await import("../sessions/make-batches.ts");
+    for (const theme of ["dark", "light"]) {
+      const row = (stScript(false) as { rows: { id: string; steps: Record<string, unknown>[] }[] }).rows.find((r) => r.id === `ST11-${theme}`)!;
+      const text = JSON.stringify(row.steps);
+      expect(text).toContain(`"rect":"$ST11_${theme}_ink_rect"`);
+      expect(text).not.toContain("$win.regions.ink_panel");
+      expect(row.steps.some((s) => s.do === "capture.surface" && s.capture === `$ST11_${theme}_burst`)).toBe(true);
+    }
+  });
+});

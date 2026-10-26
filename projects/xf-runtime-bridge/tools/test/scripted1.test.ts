@@ -140,7 +140,8 @@ describe("4: bursts crop to the surface they judge, within the capture tool's me
     const walk = (v: unknown) => { if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === "object") { const o = v as Record<string, unknown>; if (o.do === "burst") bursts.push(o as never); Object.values(o).forEach(walk); } };
     walk(st.rows);
     expect(bursts.length).toBeGreaterThan(10);
-    expect(bursts.every((b) => typeof b.rect === "string" && b.rect.startsWith("$win.regions."))).toBe(true);
+    // ST11 crops to where the ink panel reports it went (M10 of the 34eb3d9d review).
+    expect(bursts.every((b) => typeof b.rect === "string" && (b.rect.startsWith("$win.regions.") || /^\$ST11_[a-z]+_ink_rect$/.test(b.rect)))).toBe(true);
   });
 
   test("the derived surfaces fit the cap at 3840 x 1600 with the ST frame counts, and follow the window's size", async () => {

@@ -166,8 +166,6 @@ describe("the ST batch shows its named states", () => {
         expect(shots.length).toBeGreaterThan(0);
         const first = steps.indexOf(shots[0]);
         expect(steps.slice(0, first).some((s) => String(s.label).includes("-is-"))).toBe(true);
-        // The ink panel isn't a themed plate: ST11 checks its state only.
-        if (row.id.startsWith("ST11")) continue;
         for (const shot of shots) {
           const bind = String(shot.bind);
           expect(steps.some((s) => s.do === "capture.surface" && s.capture === `$${bind}`)).toBe(true);

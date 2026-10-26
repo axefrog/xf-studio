@@ -105,7 +105,8 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   ask: { required: ["text"], optional: ["choices", "seconds"], help: "a question in the game, answered with the answer keys or the CET button; value {label, choice}" },
   set: { required: ["value"], optional: [], help: "keep a value (with bind)" },
   "capture.compare": { required: ["a", "b"], optional: ["rect", "min_changed", "max_changed"], help: "how much two captures differ in an area (diff of their full files)" },
-  "capture.surface": { required: ["plate", "text"], optional: ["capture", "rect", "name", "min_plate", "min_text", "tolerance"],
+  "ink.rect": { required: ["events", "window"], optional: ["margin"], help: "the ink panel's rectangle in window pixels, from the last laid-out ink_tree event of an events window (panel_rect in the root's units, root_px and screen); value {x, y, width, height}" },
+  "capture.surface": { required: ["plate", "text"], optional: ["capture", "rect", "name", "min_plate", "min_text", "tolerance", "plate_alt"],
     help: "is a themed surface in frame: the share of its plate and text colours in an area, in a capture, every frame of a burst, or a fresh probe capture (name); fails surface_missing" },
   "host.running": { required: [], optional: [], help: "is the game running; value {running, pid}" },
   "host.launch": { required: [], optional: [], help: "start the game through MO2 with the fixture's profile and arguments" },
@@ -137,17 +138,43 @@ type Rgb = [number, number, number];
  * 29-78 %) from every frame without it (at most 12 %); the CET line's crop is mostly scene, so its rows pass their own
  * min_plate (dark 0.18, light 0.03). Text is measured and reported, and required only when min_text says so.
  */
-export function surfaceStats(pixels: { width: number; height: number; rgb: Uint8Array }, o: { plate: Rgb; text: Rgb; tolerance?: number; minPlate?: number; minText?: number }) {
+export function surfaceStats(pixels: { width: number; height: number; rgb: Uint8Array }, o: { plate: Rgb; plateAlt?: Rgb[]; text: Rgb; tolerance?: number; minPlate?: number; minText?: number }) {
   const tol = o.tolerance ?? 7, textTol = tol * 2;
   let plate = 0, text = 0;
   const n = pixels.width * pixels.height;
+  // plate_alt: colours that count as the surface too (the ink panel's answers are yellow, or red while they flash).
+  const plates = [o.plate, ...(o.plateAlt ?? [])];
   for (let i = 0; i < n; i++) {
     const r = pixels.rgb[i * 3], g = pixels.rgb[i * 3 + 1], b = pixels.rgb[i * 3 + 2];
-    if (Math.abs(r - o.plate[0]) <= tol && Math.abs(g - o.plate[1]) <= tol && Math.abs(b - o.plate[2]) <= tol) plate++;
+    if (plates.some((c) => Math.abs(r - c[0]) <= tol && Math.abs(g - c[1]) <= tol && Math.abs(b - c[2]) <= tol)) plate++;
     else if (Math.abs(r - o.text[0]) <= textTol && Math.abs(g - o.text[1]) <= textTol && Math.abs(b - o.text[2]) <= textTol) text++;
   }
   const plate_fraction = n ? plate / n : 0, text_fraction = n ? text / n : 0;
   return { plate_fraction: Math.round(plate_fraction * 10000) / 10000, text_fraction: Math.round(text_fraction * 100000) / 100000, present: plate_fraction >= (o.minPlate ?? 0.15) && text_fraction >= (o.minText ?? 0) };
+}
+
+/**
+ * The ink panel's rectangle in the game window's pixels, from the panel's own report: the last laid-out ink_tree event
+ * (redscript XFRuntimeBridgePhotoPanel Tree: panel_rect is left, top, width, height in the root's units; root_size the
+ * root's size in those units; root_px its corners in the global ink space, which spans screen), with a margin.
+ */
+export function inkRect(action: Record<string, unknown>): { ok: boolean; code?: string; message?: string; value?: unknown } {
+  type Tree = { when?: string; panel_rect?: number[]; root_size?: number[]; root_px?: number[]; screen?: number[]; showing?: boolean };
+  const events = ((action.events as { events?: { kind?: string; data?: Tree }[] } | undefined)?.events ?? []).filter((e) => e.kind === "ink_tree" && e.data?.when === "laid_out");
+  const win = action.window as { width?: number; height?: number } | undefined;
+  const tree = events.at(-1)?.data;
+  if (!tree || !win?.width || !win.height) return { ok: false, code: "no_layout", message: "No laid-out ink_tree event in the window (the panel didn't report where it went)." };
+  const [l, t, w, h] = tree.panel_rect ?? [], [rw, rh] = tree.root_size ?? [], [x1, y1, x2, y2] = tree.root_px ?? [];
+  if (![l, t, w, h, rw, rh, x1, y1, x2, y2].every((v) => typeof v === "number" && Number.isFinite(v)) || rw <= 0 || rh <= 0 || w <= 0 || h <= 0) return { ok: false, code: "no_layout", message: "The ink_tree event lacks the panel's rectangle." };
+  if (tree.showing === false) return { ok: false, code: "panel_hidden", message: "The ink panel reports it isn't showing." };
+  const [sx, sy] = tree.screen ?? [];
+  const kx = (typeof sx === "number" && sx > 0 ? win.width / sx : 1), ky = (typeof sy === "number" && sy > 0 ? win.height / sy : 1);
+  const ux = (x2 - x1) / rw, uy = (y2 - y1) / rh;
+  const margin = Number(action.margin ?? 16);
+  const left = Math.max(0, Math.floor((x1 + l * ux) * kx - margin)), top = Math.max(0, Math.floor((y1 + t * uy) * ky - margin));
+  const right = Math.min(win.width, Math.ceil((x1 + (l + w) * ux) * kx + margin)), bottom = Math.min(win.height, Math.ceil((y1 + (t + h) * uy) * ky + margin));
+  if (right - left < 8 || bottom - top < 8) return { ok: false, code: "off_screen", message: "The ink panel's reported rectangle is off the window." };
+  return { ok: true, value: { x: left, y: top, width: right - left, height: bottom - top } };
 }
 
 /** The largest game window the bursts are planned for (3840 x 1600, the maintainer's ultrawide). */
@@ -727,6 +754,8 @@ export class SessionExecutor implements Executor {
         }
         case "stamp":
           return { ok: true, value: { ms: Date.now() } };
+        case "ink.rect":
+          return inkRect(action);
         case "bridge.candidate":
           return await this.candidate(context);
         case "burst.covers": {
@@ -872,7 +901,7 @@ export class SessionExecutor implements Executor {
     const region = Array.isArray(burst?.frames) ? burst.crop?.region : shot?.crop?.region;
     if (region && region !== "full") cropped = true;
     if (!files.length || files.some((f) => typeof f !== "string" || !existsSync(f))) return { ok: false, code: "no_capture", message: "The capture's files are needed." };
-    const options = { plate: action.plate as Rgb, text: action.text as Rgb, tolerance: Number(action.tolerance ?? 7), minPlate: Number(action.min_plate ?? 0.15), minText: Number(action.min_text ?? 0) };
+    const options = { plate: action.plate as Rgb, plateAlt: action.plate_alt as Rgb[] | undefined, text: action.text as Rgb, tolerance: Number(action.tolerance ?? 7), minPlate: Number(action.min_plate ?? 0.15), minText: Number(action.min_text ?? 0) };
     const per = files.map((file) => {
       let pixels = decodePng(readFileSync(file as string));
       if (rect && !cropped) pixels = crop(pixels, { x: Math.max(0, rect.x), y: Math.max(0, rect.y), width: Math.min(rect.width, pixels.width - Math.max(0, rect.x)), height: Math.min(rect.height, pixels.height - Math.max(0, rect.y)) });

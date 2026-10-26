@@ -8806,6 +8806,11 @@
           "bind": "win"
         },
         {
+          "label": "ST11-dark-cursor",
+          "do": "cursor",
+          "bind": "ST11_dark_cursor"
+        },
+        {
           "label": "ST11-dark-photo",
           "do": "run",
           "command": "photo.open",
@@ -8906,9 +8911,50 @@
           "on_fail": "fail_row"
         },
         {
-          "label": "ST11-dark-wait",
-          "do": "wait",
-          "ms": 600
+          "label": "ST11-dark-layout",
+          "do": "events",
+          "cursor": "$ST11_dark_cursor",
+          "duration_s": 2,
+          "bind": "ST11_dark_ink_events"
+        },
+        {
+          "label": "ST11-dark-ink-rect",
+          "do": "ink.rect",
+          "events": "$ST11_dark_ink_events",
+          "window": "$win",
+          "bind": "ST11_dark_ink_rect",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST11-dark-visible-ink",
+          "do": "capture.surface",
+          "name": "ST11-dark-probe-ink",
+          "plate": [
+            255,
+            205,
+            62
+          ],
+          "plate_alt": [
+            [
+              255,
+              91,
+              83
+            ]
+          ],
+          "text": [
+            255,
+            205,
+            62
+          ],
+          "min_plate": 0.002,
+          "tolerance": 30,
+          "rect": "$ST11_dark_ink_rect",
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
         },
         {
           "label": "ST11-dark-flash",
@@ -8919,7 +8965,7 @@
               "frames": 14,
               "interval_ms": 50,
               "clear_overlay": false,
-              "rect": "$win.regions.ink_panel",
+              "rect": "$ST11_dark_ink_rect",
               "bind": "ST11_dark_burst"
             },
             {
@@ -8971,6 +9017,33 @@
           ]
         },
         {
+          "label": "ST11-dark-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST11_dark_burst",
+          "plate": [
+            255,
+            205,
+            62
+          ],
+          "plate_alt": [
+            [
+              255,
+              91,
+              83
+            ]
+          ],
+          "text": [
+            255,
+            205,
+            62
+          ],
+          "min_plate": 0.002,
+          "tolerance": 30,
+          "rect": "$ST11_dark_ink_rect",
+          "bind": "ST11_dark_frame_burst",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST11-dark-held",
           "do": "run",
           "command": "game.status",
@@ -8983,6 +9056,14 @@
           "label": "the flash burst (14 x 50 ms)",
           "ref": "$ST11_dark_burst",
           "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST11_dark_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         },
         {
           "label": "modal held photo mode's exit",
@@ -18461,6 +18542,11 @@
           "bind": "win"
         },
         {
+          "label": "ST11-light-cursor",
+          "do": "cursor",
+          "bind": "ST11_light_cursor"
+        },
+        {
           "label": "ST11-light-photo",
           "do": "run",
           "command": "photo.open",
@@ -18561,9 +18647,50 @@
           "on_fail": "fail_row"
         },
         {
-          "label": "ST11-light-wait",
-          "do": "wait",
-          "ms": 600
+          "label": "ST11-light-layout",
+          "do": "events",
+          "cursor": "$ST11_light_cursor",
+          "duration_s": 2,
+          "bind": "ST11_light_ink_events"
+        },
+        {
+          "label": "ST11-light-ink-rect",
+          "do": "ink.rect",
+          "events": "$ST11_light_ink_events",
+          "window": "$win",
+          "bind": "ST11_light_ink_rect",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST11-light-visible-ink",
+          "do": "capture.surface",
+          "name": "ST11-light-probe-ink",
+          "plate": [
+            255,
+            205,
+            62
+          ],
+          "plate_alt": [
+            [
+              255,
+              91,
+              83
+            ]
+          ],
+          "text": [
+            255,
+            205,
+            62
+          ],
+          "min_plate": 0.002,
+          "tolerance": 30,
+          "rect": "$ST11_light_ink_rect",
+          "until": {
+            "ok": true
+          },
+          "interval_ms": 300,
+          "deadline_ms": 4000,
+          "on_fail": "fail_row"
         },
         {
           "label": "ST11-light-flash",
@@ -18574,7 +18701,7 @@
               "frames": 14,
               "interval_ms": 50,
               "clear_overlay": false,
-              "rect": "$win.regions.ink_panel",
+              "rect": "$ST11_light_ink_rect",
               "bind": "ST11_light_burst"
             },
             {
@@ -18626,6 +18753,33 @@
           ]
         },
         {
+          "label": "ST11-light-in-frame-burst",
+          "do": "capture.surface",
+          "capture": "$ST11_light_burst",
+          "plate": [
+            255,
+            205,
+            62
+          ],
+          "plate_alt": [
+            [
+              255,
+              91,
+              83
+            ]
+          ],
+          "text": [
+            255,
+            205,
+            62
+          ],
+          "min_plate": 0.002,
+          "tolerance": 30,
+          "rect": "$ST11_light_ink_rect",
+          "bind": "ST11_light_frame_burst",
+          "on_fail": "fail_row"
+        },
+        {
           "label": "ST11-light-held",
           "do": "run",
           "command": "game.status",
@@ -18638,6 +18792,14 @@
           "label": "the flash burst (14 x 50 ms)",
           "ref": "$ST11_light_burst",
           "captured": true
+        },
+        {
+          "label": "burst in frame",
+          "ref": "$ST11_light_frame_burst",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
         },
         {
           "label": "modal held photo mode's exit",

@@ -97,6 +97,9 @@ const COLOURS = (() => {
   return { dark: { plate: rgb("WindowBg", "dark"), text: rgb("Text", "dark") }, light: { plate: rgb("WindowBg", "light"), text: rgb("Text", "light") } };
 })();
 type Surface = "xf_box" | "cet_line" | "cet_window";
+/** The ink panel's answers: yellow, and red while they flash (scripted session 1's ST11 frames). */
+const INK_YELLOW = [255, 205, 62];
+const INK_RED = [255, 91, 83];
 /** How much of each surface's crop its plate fills when it shows (capture.surface's notes: the CET line's crop is mostly scene). */
 const MIN_PLATE: Record<Surface, Record<Theme, number>> = { xf_box: { dark: 0.15, light: 0.15 }, cet_window: { dark: 0.15, light: 0.15 }, cet_line: { dark: 0.18, light: 0.03 } };
 const surfaceOf = (surface: Surface, theme: Theme): Json => ({ ...COLOURS[theme], rect: `$win.regions.${surface}`, min_plate: MIN_PLATE[surface][theme] });
@@ -476,10 +479,12 @@ function writesRows(theme: Theme): Json[] {
         ...cetClose(row)] });
   } else waiting.push({ row, hook: "cet.panel diagnostics_open" });
 
-  // The ink panel isn't a themed plate, so its frames have no in-frame check; its state is checked instead.
+  // The ink panel draws where it reports (ink_tree, laid out: photo mode's zones can move it), so the crop comes from
+  // that report, and its answers (yellow, red while they flash) must be in every frame.
   row = `ST11-${theme}`;
+  const ink = { plate: INK_YELLOW, plate_alt: [INK_RED], text: INK_YELLOW, min_plate: 0.002, tolerance: 30, rect: ref(row, "ink_rect") };
   rows.push({ id: row, title: `The ink panel's answer flash in photo mode (modal, a waiting question, Esc) (${theme})`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), ...look(row, theme, "full"),
+    steps: [inPlay(row), ...look(row, theme, "full"), { label: `${row}-cursor`, do: "cursor", bind: key(row, "cursor") },
       { label: `${row}-photo`, do: "run", command: "photo.open", input: {}, deadline_ms: 12_000, retry: { times: 2, backoff_ms: 2000, on: { code: "not_foreground" } },
         alternatives: [
           [{ do: "run", command: "photo.open", input: { route: "postmessage" }, deadline_ms: 12_000 }],
@@ -489,13 +494,17 @@ function writesRows(theme: Theme): Json[] {
       { label: `${row}-modal`, do: "run", command: "ui.hud", input: { show: true, modal: true, layer: "photo_menu" }, bind: key(row, "hud") },
       { label: `${row}-ask`, do: "run", command: "ui.message", input: { level: "ask", text: `${row}: the answers flash when Esc is pressed (no answer needed).`, choices: ["Yes", "No"], seconds: 120 }, bind: key(row, "q") },
       verify(row, "ink", onSurface("ink_panel")), verify(row, "asking", { path: "pending_ask.id", equals: ref(row, "q", "id") }, "ui.state"),
-      { label: `${row}-wait`, do: "wait", ms: 600 },
+      // Where the panel went, from its own laid-out report, then the panel seen there before the burst starts.
+      { label: `${row}-layout`, do: "events", cursor: ref(row, "cursor"), duration_s: 2, bind: key(row, "ink_events") },
+      { label: `${row}-ink-rect`, do: "ink.rect", events: ref(row, "ink_events"), window: "$win", bind: key(row, "ink_rect"), on_fail: "fail_row" },
+      { label: `${row}-visible-ink`, do: "capture.surface", name: `${row}-probe-ink`, ...ink, until: { ok: true }, interval_ms: 300, deadline_ms: 4000, on_fail: "fail_row" },
       { label: `${row}-flash`, together: [
-        { do: "burst", name: `ST11-ink-flash-${theme}`, frames: 14, interval_ms: 50, clear_overlay: false, rect: "$win.regions.ink_panel", bind: key(row, "burst") },
+        { do: "burst", name: `ST11-ink-flash-${theme}`, frames: 14, interval_ms: 50, clear_overlay: false, rect: ref(row, "ink_rect"), bind: key(row, "burst") },
         { sequence: [{ do: "wait", ms: 150 }, press(`${row}-esc`, "Esc")] },
       ] },
+      { label: `${row}-in-frame-burst`, do: "capture.surface", capture: ref(row, "burst"), ...ink, bind: key(row, "frame_burst"), on_fail: "fail_row" },
       { label: `${row}-held`, do: "run", command: "game.status", input: {}, bind: key(row, "after") }],
-    pass: [captured("the flash burst (14 x 50 ms)", row, "burst"), check("modal held photo mode's exit", row, "after", "phase", { equals: "photo_mode" }),
+    pass: [captured("the flash burst (14 x 50 ms)", row, "burst"), framed(row, "burst"), check("modal held photo mode's exit", row, "after", "phase", { equals: "photo_mode" }),
       check("spaced as planned (about 0.65 s)", row, "burst", "timing.first_to_last_ms", { max: 1000 })],
     cleanup: [{ label: `${row}-clear`, do: "run", command: "ui.message", input: { clear: true } }, { label: `${row}-unmodal`, do: "run", command: "ui.hud", input: { modal: false } }, hudBack(row),
       { label: `${row}-exit`, do: "run", command: "photo.exit", input: {}, when: { check: { do: "run", command: "game.status", input: {} }, match: { path: "phase", equals: "photo_mode" } } }] });
