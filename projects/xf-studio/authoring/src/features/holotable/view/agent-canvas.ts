@@ -4,6 +4,8 @@ import type { Vec3 } from "../types";
 import type { camera } from "./projection";
 import { actorCaption, labelContext, labelPriority, placeLabels, type AgentLabel, type LabelBounds, type PlacedLabel } from "./agent-labels";
 
+import { agentInRange } from "./agent-bounds";
+
 type Camera = ReturnType<typeof camera>;
 type XY = readonly [number, number];
 export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
@@ -70,10 +72,15 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
         const item = items[cursor];
         if (performance.now() > deadline) break;
         if (collapsed.has(item.key)) continue;
-        const p = item.place!; if (Math.hypot(...p.map((n, j) => n - C.target[j])) > radius) continue;
-        const xy = positions.get(item.links?.from ?? item.key), rule = answer.specs.kinds[item.kind]; if (!xy || !rule) continue;
+        const p = item.place!; if (!agentInRange(item, C.target, radius)) continue;
+        const rule = answer.specs.kinds[item.kind]; if (!rule) continue;
+        const area = item.resolvedAnchor ?? item.anchor;
+        const extended = ["polyline", "volume", "grid", "curve", "arrow"].includes(rule.draw) || "box" in area || "zone" in area || "sphere" in area;
+        const clipped = item.to ? C.line([p,item.to]) : [];
+        const markerXY = positions.get(item.links?.from ?? item.key);
+        const xy = markerXY ?? clipped[0]?.points[0] ?? (extended ? C.point(C.target) : null); if (!xy) continue;
         if (Math.hypot(...p.map((n, j) => n - C.position[j])) > far || xy[0] < -64 || xy[0] > C.width + 64 || xy[1] < -64 || xy[1] > C.height + 64) {
-          if (!["polyline", "volume", "grid", "curve", "arrow"].includes(rule.draw)) continue;
+          if (!extended) continue;
         }
         const weight = item.weight ?? 0.7, size = 4 + weight * 4, alpha = (0.35 + weight * 0.65) * Math.max(0.12, 1 - Math.hypot(...p.map((n, j) => n - C.position[j])) / fade);
         const colour = palette[rule.style === "tone" ? item.tone ?? "signal" : rule.style] ?? palette.signal;
@@ -100,7 +107,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
         if (rule.draw === "polyline" && "path" in a) stroke(a.path);
         else if (rule.draw === "volume") volume(a, true);
         else if (rule.draw === "grid" && "grid" in a) {
-          const g = a.grid; if (C.scale(g.origin) * g.cell < 2) continue;
+          const g = a.grid; if (Math.max(C.scale(g.origin), C.scale(C.target)) * g.cell < 2) continue;
           const scalars = item.value?.scalars, vectors = item.value?.vectors;
           const max = scalars ? Math.max(1e-9, ...scalars.map(Math.abs)) : 1;
           for (; fieldCell < g.rows * g.cols; fieldCell++) {
@@ -112,7 +119,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
           }
           fieldCell = 0;
         } else if ((rule.draw === "curve" || rule.draw === "arrow") && item.to) {
-          const to = positions.get(item.links?.to ?? item.key + ":to") ?? C.point(item.to); if (!to) continue;
+          const to = positions.get(item.links?.to ?? item.key + ":to") ?? C.point(item.to) ?? clipped.at(-1)?.points.at(-1); if (!to) continue;
           if (rule.draw === "curve") {
             ctx.lineWidth = 1 + (item.value?.strength ?? weight) * 3;
             const dx = to[0] - xy[0], dy = to[1] - xy[1], len = Math.hypot(dx, dy) || 1;
@@ -123,6 +130,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
             if (label) addLabel(label, [points[8][0] + 4, points[8][1] - 4]); label = "";
           } else { ctx.beginPath(); path([xy, to]); ctx.stroke(); hit([xy, to]); arrow(xy, to); }
         } else {
+          if (!markerXY) { if (rule.draw === "diamond") volume(area, false); continue; }
           if (rule.draw === "diamond") { volume(a, false); ctx.beginPath(); path([[xy[0], xy[1]-size], [xy[0]+size,xy[1]], [xy[0],xy[1]+size], [xy[0]-size,xy[1]]], true); ctx.stroke(); }
           else if (rule.draw === "ring") { ctx.beginPath(); ctx.arc(...xy, size, 0, Math.PI*2); ctx.stroke(); }
           else if (rule.draw === "crosshair") {

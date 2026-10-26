@@ -1,8 +1,8 @@
 // Read-only validation of producer output, shared by CLI tests and integration writers.
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { LAYER_BOUNDS, validateManifest, validateRecord, type LayerData, type LayerManifest, type LayerRecord } from "./layers.ts";
-import { withinItemBudget } from "./layer-spool.ts";
+import { LAYER_BOUNDS, type LayerData, type LayerManifest, type LayerRecord } from "./layers.ts";
+import { admitId, ITEM_LIMIT_REASON, layerLine } from "./layer-line.ts";
 import { setConflict } from "./layer-timelines.ts";
 
 export function validateFiles(path: string): { file: string; line: number; reason: string }[] {
@@ -11,19 +11,18 @@ export function validateFiles(path: string): { file: string; line: number; reaso
   if (!existsSync(path)) return [{ file: path, line: 1, reason: "File or folder does not exist." }];
   for (const file of files(path)) {
     if (statSync(file).size > LAYER_BOUNDS.bytes) { errors.push({ file, line: 1, reason: "Spool exceeds 16 MB." }); continue; }
-    const text = readFileSync(file, "utf8"), lines = text.split("\n"); let manifest: LayerManifest | undefined; const records: LayerRecord[] = [];
+    const text = readFileSync(file, "utf8"), lines = text.split("\n"); let manifest: LayerManifest | undefined; const records: LayerRecord[] = [], ids = new Set<string>();
     lines.forEach((line, i) => {
-      if (Buffer.byteLength(line) > 1024 * 1024) { errors.push({ file, line: i + 1, reason: "Item line exceeds 1 MB." }); return; }
-      if (!line.trim()) return;
-      let row: unknown; try { row = JSON.parse(line); } catch { errors.push({ file, line: i + 1, reason: "Line is not valid JSON." }); return; }
-      const reason = manifest ? validateRecord(row, manifest) : validateManifest(row);
-      if (reason) { errors.push({ file, line: i + 1, reason }); return; }
+      const parsed = layerLine(line, manifest);
+      if (parsed.reason) { errors.push({ file, line: i + 1, reason: parsed.reason }); return; }
+      if (parsed.blank) return;
+      const row = parsed.row!;
       if (!manifest) {
         manifest = row as LayerManifest;
         const conflict = setConflict(manifest, layers); if (conflict) errors.push({ file, line: i + 1, reason: conflict });
       } else {
-        records.push(row as LayerRecord);
-        if (!withinItemBudget(records, manifest)) { errors.push({ file, line: i + 1, reason: "Layer exceeds 5,000 live items." }); records.pop(); }
+        if (!admitId(row as LayerRecord, ids)) errors.push({ file, line: i + 1, reason: ITEM_LIMIT_REASON });
+        else records.push(row as LayerRecord);
       }
     });
     if (!manifest) errors.push({ file, line: 1, reason: "File needs a manifest first." });

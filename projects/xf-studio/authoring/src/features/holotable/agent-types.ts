@@ -4,7 +4,7 @@ export type AgentAnchor = { at: Vec3 } | { entity: string } | { item: string } |
 export interface AgentItem {
   id: string; key: string; kind: string; t?: number; until?: number; anchor: AgentAnchor; resolvedAnchor?: AgentAnchor; place?: Vec3; to?: Vec3;
   value?: { name?: string; role?: string; facets?: Record<string, string>; type?: string; strength?: number; mutual?: boolean; scalars?: readonly number[]; vectors?: readonly (readonly [number, number])[]; from?: AgentAnchor; to?: AgentAnchor };
-  label?: string; detail?: string; facets?: Record<string, string>; tone?: string; weight?: number; cite?: string; relations?: string[]; region?: { id: string; name: string; kind: string };
+  glyph?: string; badge?: string; label?: string; detail?: string; facets?: Record<string, string>; tone?: string; weight?: number; cite?: string; relations?: string[]; region?: { id: string; name: string; kind: string };
   toRegion?: { id: string; name: string; kind: string }; toResolvedAnchor?: AgentAnchor; links?: { from: string; to: string };
 }
 export interface AgentLayer { id: string; title: string; producer: string; layer: string; items: readonly AgentItem[]; refused: number; reason: string; notPlaced: readonly string[]; otherBranches: readonly string[] }

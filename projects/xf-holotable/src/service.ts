@@ -15,7 +15,7 @@ import { createLiveBridge, type LiveBridge } from "./live-bridge.ts";
 import { createLiveSource, type LiveClock, type LiveCursor } from "./live.ts";
 import { createLayerSpool } from "./layer-spool.ts";
 import { evaluateLayers, whatsHere, PROJECTION_SPECS } from "./layers.ts";
-import { layerExtent, standaloneSession, standaloneSets } from "./layer-timelines.ts";
+import { standaloneSession, standaloneSets } from "./layer-timelines.ts";
 
 export const PROTOCOL = "xfh/service-1";
 /** The longest request line accepted; a longer one is refused and dropped without growing the buffer. */
@@ -84,6 +84,7 @@ export function createService(options: ServiceOptions) {
   const live = createLiveSource(options.liveBridge ?? createLiveBridge(), { clock: options.liveClock, changed: wantWorld,
     idle() { worldCtl.abort(); worldCtl = new AbortController(); worldPending = false; } });
   async function open(dir: string, signal: AbortSignal): Promise<Session> {
+    if (signal.aborted) throw coded("cancelled", "Cancelled.");
     if (dir.startsWith("layers:")) return standaloneSession(layers.snapshot(), dir, pack() ?? undefined);
     const ready = sessions.get(dir);
     if (ready) { signal.throwIfAborted(); return ready; }
@@ -100,21 +101,31 @@ export function createService(options: ServiceOptions) {
     finally { if (--mine.waiters === 0 && loads.get(dir) === mine && signal.aborted) { mine.ctl.abort(); loads.delete(dir); } }
   }
   const level = (l: unknown): ContentLevel => (l === "full" ? "full" : "structure");
-  const known = (dir: unknown, scanLayers = true) => {
+  async function readLayers(signal?: AbortSignal) {
+    if (signal?.aborted) throw coded("cancelled", "Cancelled.");
+    try { return await layers.read(signal); }
+    catch (error) { if (signal?.aborted) throw coded("cancelled", "Cancelled."); throw error; }
+  }
+  const known = async (dir: unknown, scanLayers = true, signal?: AbortSignal) => {
     if (typeof dir !== "string") throw coded("bad_request", "No recording named");
-    if (dir.startsWith("layers:") && standaloneSets(scanLayers ? layers.read() : layers.snapshot()).some(s => s.dir === dir)) return dir;
+    if (dir.startsWith("layers:") && standaloneSets(scanLayers ? await readLayers(signal) : layers.snapshot()).some(s => s.dir === dir)) return dir;
     const run = listRuns(options.recordingsRoot).find(r => r.dir === dir);
     if (!run) throw coded("unknown_run", "That recording isn't in the recordings folder");
     return run.dir;
   };
-  const pathFor = (s: Session) => s.meta.standalone ? layerExtent(layers.read(), s, pack() ?? undefined) : s.v.map(x => x.position);
+  const pathFor = (s: Session, center?: unknown) => {
+    if (!s.meta.standalone) return s.v.map(x => x.position);
+    if (center !== undefined && (!Array.isArray(center) || center.length !== 3 || !center.every(n => typeof n === "number" && Number.isFinite(n)))) throw coded("bad_request", "Centre must be three finite coordinates.");
+    const extent = s.meta.standalone.extent!;
+    return [center as [number,number,number] ?? extent.min.map((n,i)=>(n+extent.max[i])/2) as [number,number,number]];
+  };
   async function layerAnswer(p: Record<string, unknown>, signal: AbortSignal, watching = false) {
     if (watching) layers.renew(String(p.watch));
-    const s = typeof p.liveWatch === "string" ? (live.renew(p.liveWatch), live.session()) : await open(known(p.dir, !watching), signal);
+    const s = typeof p.liveWatch === "string" ? (live.renew(p.liveWatch), live.session()) : await open(await known(p.dir, !watching, signal), signal);
     if (!s) return { layers: [], here: [], specs: PROJECTION_SPECS };
     const t = typeof p.t === "number" && Number.isFinite(p.t) ? p.t : s.meta.to;
     const hidden = Array.isArray(p.hidden) ? p.hidden.filter((s): s is string => typeof s === "string") : [];
-    const views = evaluateLayers(watching ? layers.snapshot() : layers.read(), s, t, level(p.level), hidden, pack() ?? undefined, typeof p.branch === "string" ? p.branch : s.meta.standalone?.branches[0]);
+    const views = evaluateLayers(watching ? layers.snapshot() : await readLayers(signal), s, t, level(p.level), hidden, pack() ?? undefined, typeof p.branch === "string" ? p.branch : s.meta.standalone?.branches[0]);
     const position = Array.isArray(p.position) && p.position.length === 3 && p.position.every(Number.isFinite) ? p.position as [number, number, number] : undefined;
     return { layers: views, here: position ? whatsHere(views, position, hidden) : [], specs: PROJECTION_SPECS };
   }
@@ -133,10 +144,10 @@ export function createService(options: ServiceOptions) {
     "live.stop": p => { live.stop(String(p.watch)); return { stopped: true }; },
     "live.poll": p => live.poll(String(p.watch), p.since as LiveCursor | undefined, level(p.level)),
     "service.info": () => ({ protocol: PROTOCOL, recordingsRoot: options.recordingsRoot, worldPack: Boolean(pack()) }),
-    "runs.list": () => [...listRuns(options.recordingsRoot), ...standaloneSets(layers.read()).map(s => ({ session: s.dir, run: 0, dir: s.dir, start: s.from, end: s.to, bytes: 0, complete: true, title: s.title, standalone: true, clock: s.clock }))],
-    "session.open": async (p, signal) => sessionAtLevel(await open(known(p.dir), signal), level(p.level)),
+    "runs.list": async (_p, signal) => [...standaloneSets(await readLayers(signal)).map(s => ({ session: s.dir, run: 0, dir: s.dir, start: s.from, end: s.to, bytes: 0, complete: true, title: s.title, standalone: true, clock: s.clock })), ...listRuns(options.recordingsRoot)],
+    "session.open": async (p, signal) => sessionAtLevel(await open(await known(p.dir, true, signal), signal), level(p.level)),
     "world.status": async (p, signal) => {
-      const s = await open(known(p.dir), signal);
+      const s = await open(await known(p.dir, true, signal), signal);
       return solids.status ? solids.status(pathFor(s), signal) : { cold: false };
     },
     "world.around": async (p, signal) => {
@@ -145,16 +156,16 @@ export function createService(options: ServiceOptions) {
         live.renew(p.watch);
         return { version: worldVersion, world: p.since === worldVersion ? null : liveWorld, pending: worldPending, cold: worldCold };
       }
-      const s = await open(known(p.dir), signal), w = pack();
-      const margin = typeof p.margin === "number" ? p.margin : 250;
+      const s = await open(await known(p.dir, true, signal), signal), w = pack();
+      const margin = s.meta.standalone ? 350 : typeof p.margin === "number" ? p.margin : 250;
       if (!Number.isFinite(margin) || margin < 0 || margin > 1000) throw coded("bad_request", "Margin must be between 0 and 1000 metres.");
-      const path = pathFor(s), geometry = await solids.around(path, margin, signal);
+      const path = pathFor(s, p.center), geometry = await solids.around(path, margin, signal);
       signal.throwIfAborted();
       return { ...(w ? region(w, boxOf(path), margin) : { schema: "xfh/world-pack-1", provenance: null, areas: [], cells: [] }), ...geometry };
     },
     "session.report": async (p, signal) => {
       if (typeof p.t !== "number") throw coded("bad_request", "No moment given");
-      const s = typeof p.liveWatch === "string" ? (live.renew(p.liveWatch), live.session()) : await open(known(p.dir), signal);
+      const s = typeof p.liveWatch === "string" ? (live.renew(p.liveWatch), live.session()) : await open(await known(p.dir, true, signal), signal);
       if (!s) throw coded("bad_request", "No live recording yet.");
       const answer = await layerAnswer(p, signal);
       return report(s, p.t, level(p.level), pack() ?? undefined, answer.layers, Array.isArray(p.position) ? p.position as [number, number, number] : undefined, Array.isArray(p.hidden) ? p.hidden as string[] : []);

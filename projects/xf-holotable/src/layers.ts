@@ -7,7 +7,7 @@ export type Tone = "signal" | "accent" | "warning" | "danger" | "muted";
 export type Anchor = { at: Vec3 } | { entity: string } | { path: Vec3[] } | { zone: { poly: [number, number][]; zlo: number; zhi: number } }
   | { box: { min: Vec3; max: Vec3 } } | { sphere: { at: Vec3; r: number } } | { grid: { origin: Vec3; cell: number; cols: number; rows: number } } | { item: string } | { region: string };
 export interface LayerManifest { schema: "xfh/layer-1"; producer: string; layer: string; title: string; description?: string; content: ContentLevel; clock: "recording" | "wall" | "game"; session?: string; run?: number; kinds: LayerKind[]; branch?: string; standalone?: { set: string; title?: string; from: number | string; to: number | string; clock: "recording" | "wall" | "game" } }
-export interface LayerItem { schema?: "xfh/item-1"; id: string; kind: LayerKind; t?: number | string; until?: number | string; anchor: Anchor; branch?: string; value?: { scalars?: number[]; vectors?: [number, number][]; to?: Anchor; from?: Anchor; name?: string; role?: string; facets?: Record<string, string>; type?: string; strength?: number; mutual?: boolean }; label?: string; detail?: string; facets?: Record<string, string>; tone?: Tone; weight?: number; cite?: string }
+export interface LayerItem { schema?: "xfh/item-1"; id: string; kind: LayerKind; t?: number | string; until?: number | string; anchor: Anchor; branch?: string; glyph?: string; badge?: string; value?: { scalars?: number[]; vectors?: [number, number][]; to?: Anchor; from?: Anchor; name?: string; role?: string; facets?: Record<string, string>; type?: string; strength?: number; mutual?: boolean }; label?: string; detail?: string; facets?: Record<string, string>; tone?: Tone; weight?: number; cite?: string }
 export interface Retraction { retract: string; t: number | string; branch?: string }
 export type LayerRecord = LayerItem | Retraction;
 export interface LayerData { manifest: LayerManifest; records: LayerRecord[]; refused: number; reason: string }
@@ -73,7 +73,8 @@ export function validateAnchor(x: unknown): boolean {
 export function validateRecord(x: unknown, m: LayerManifest): string | null {
   if (!object(x)) return "Item must be an object.";
   if ("retract" in x) return keys(x, ["retract", "t", "branch"]) && short(x.retract) && time(x.t, m.clock) && (x.branch === undefined || short(x.branch)) ? null : "Retraction needs an id, an optional branch and a valid time for the layer clock.";
-  if (!keys(x, ["schema", "id", "kind", "t", "until", "anchor", "value", "label", "detail", "facets", "tone", "weight", "cite", "branch"]) || x.schema !== undefined && x.schema !== "xfh/item-1") return "Item has unknown fields or schema.";
+  if (!keys(x, ["schema", "id", "kind", "t", "until", "anchor", "value", "label", "detail", "facets", "tone", "weight", "cite", "branch", "glyph", "badge"]) || x.schema !== undefined && x.schema !== "xfh/item-1") return "Item has unknown fields or schema.";
+  for (const field of ["glyph", "badge"]) if (x[field] !== undefined && (typeof x[field] !== "string" || x[field].length > 32 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(x[field]))) return `${field === "glyph" ? "Glyph" : "Badge"} must be a lowercase slug of at most 32 characters.`;
   if (x.branch !== undefined && !short(x.branch)) return "Branch must be short text.";
   if (!short(x.id) || x.id.includes("/") || !m.kinds.includes(x.kind)) return "Item needs a stable id and a kind declared in the manifest.";
   if ([x.t, x.until].some(t => t !== undefined && !time(t, m.clock))) return "Item time does not match the layer clock.";
@@ -200,8 +201,8 @@ export function evaluateLayers(data: readonly LayerData[], s: Session, t: number
       const other = r.kind === "influence" ? r.value?.to : r.kind === "target" ? r.value?.from : undefined;
       if (other) { item.toRegion = regionMeta(other, world); item.toResolvedAnchor = resolveRegion(other, world); }
       if (level === "structure") {
-        delete item.detail; delete item.facets;
-        if (m.content === "full") delete item.label;
+        delete item.detail; delete item.facets; delete item.label;
+        if (item.cite && /^(agent|se):/.test(item.cite)) delete item.cite;
         if (item.value) {
           const { name: _name, facets: _facets, type: _type, ...safe } = item.value;
           item.value = safe;

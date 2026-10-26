@@ -7,7 +7,7 @@ import { holotableRecordingsPanel } from "../../xf-studio/authoring/src/features
 import { GroupSection, Toggle, propertyList, installReasonTips } from "../../xf-studio/authoring/src/studio-ui/components";
 import { h } from "../../xf-studio/authoring/src/studio-ui/dom";
 import type { ModuleViewContext } from "../../xf-studio/authoring/src/studio-ui/views/feature-view";
-const params=new URLSearchParams(location.search);if(params.get("verify")!=="1")throw Error("Verification workspace required");
+const params=new URLSearchParams(location.search);const story=params.get("story")==="1";if(params.get("verify")!=="1")throw Error("Verification workspace required");
 document.documentElement.dataset.theme=params.get("theme")??"light";
 const ctl=new AbortController(),frames:unknown[]=[];
 const service=createHolotable({transport:async(method,input,signal)=>{const r=await fetch("/fixture",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({method,params:input}),signal});return{ok:r.ok,status:r.status,data:await r.json()};}},ctl.signal);
@@ -21,16 +21,16 @@ const toggle=new Toggle({label:"Default idle",onChange(){}});toggle.update(true,
 const facts=new GroupSection({title:"Character pattern",key:"verify:facts",expanded:true});facts.body.append(propertyList([["Kind","Default V"],["Source","Installed game"]],{label:"Character reference"}));
 const ref=h("div",{class:"panel-content"},reference.element,facts.element);
 const section=(title:string,w:number,body:HTMLElement,height?:number)=>h("section",{style:`width:${w}px;flex:none;min-width:0;background:var(--bg-panel);border:1px solid var(--line)`},h("h2",{style:"font-size:14px;margin:0;padding:12px;border-bottom:1px solid var(--line)",text:title}),h("div",{style:height?`height:${height}px;overflow:auto`:""},body));
-document.body.replaceChildren(h("main",{style:"padding:20px;width:max-content"},h("h1",{style:"font-size:20px;margin:0 0 8px",text:"Holotable · agent layers verification"}),h("p",{class:"note muted",text:"Isolated verification · synthetic agent content over recorded run 4 · offline geometry estimate"}),h("div",{style:"display:flex;gap:16px;align-items:flex-start"},h("div",{},section("Holotable",780,view.spec.element,560),section("Recordings",780,recordings.spec.element)),section("Holotable Details",width,details.spec.element,1020),section("Library reference",width,ref))));
+document.body.replaceChildren(h("main",{style:"padding:20px;width:max-content"},h("h1",{style:"font-size:20px;margin:0 0 8px",text:story?"Holotable · Story Engine verification":"Holotable · agent layers verification"}),h("p",{class:"note muted",text:story?"Isolated verification · Kabuki week · schematic placement over the offline world":"Isolated verification · synthetic agent content over recorded run 4 · offline geometry estimate"}),h("div",{style:"display:flex;gap:16px;align-items:flex-start"},h("div",{},section("Holotable",780,view.spec.element,560),section("Recordings",780,recordings.spec.element)),section("Holotable Details",width,details.spec.element,1020),section("Library reference",width,ref))));
 installReasonTips(document);service.subscribe(paint);service.shown();
 const wait=async(test:()=>boolean)=>{const until=Date.now()+10000;while(!test()){if(Date.now()>until)throw Error("Fixture state deadline");await new Promise(r=>setTimeout(r,20));}};
 await wait(()=>service.snapshot().runs.length>0);
 const standalone=params.get("case")==="standalone";
 const run=service.snapshot().runs.find(r=>standalone?r.standalone:!r.standalone)!;
 await service.dispatch({kind:"holo.open",dir:run.dir});
-await service.dispatch({kind:"holo.seek",t:standalone?3600:service.snapshot().t+30});
+await service.dispatch({kind:"holo.seek",t:standalone?(Number(params.get("day")??1)-1)*86400+3600:service.snapshot().t+30});
 if(params.get("level")==="structure")await service.dispatch({kind:"holo.level",level:"structure"});
-if(standalone)await service.dispatch({kind:"holo.branch",branch:params.get("branch")??"save-a"});
+if(standalone && service.snapshot().open?.session.meta.standalone?.branches.includes(params.get("branch")??"save-a"))await service.dispatch({kind:"holo.branch",branch:params.get("branch")??"save-a"});
 else if(params.get("case")==="here") {const actor=service.snapshot().agents.layers.flatMap(l=>l.items).find(i=>i.id==="mira");if(actor?.place)await service.dispatch({kind:"holo.place",position:actor.place});}
 else if(params.get("case")==="cluster")await service.dispatch({kind:"holo.select",id:"cluster:synthetic-district"});
 else if(params.get("case")==="actor")await service.dispatch({kind:"holo.select",id:"verification/actor/mira"});

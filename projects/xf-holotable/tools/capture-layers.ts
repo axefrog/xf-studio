@@ -27,22 +27,22 @@ const listRuns = service.handlers["runs.list"];
 service.handlers["runs.list"] = async (params, signal) => (await listRuns(params, signal) as any[]).filter(r => r.standalone || r.dir === resolve(runDir));
 const offset=(x:number,y:number,z=0):Vec3=>[p[0]+x,p[1]+y,p[2]+z];
 const actor=(id:string,name:string,x:number,y:number):LayerItem=>({id,kind:"actor",anchor:{at:offset(x,y)},value:{name,role:"generated fixer",facets:{doing:"waiting for a courier",thinking:"The route is watched",planning:"Meet at the district boundary"}},cite:`agent:verification:${id}`});
-function publish(layer:string,items:LayerItem[],extra:Partial<LayerManifest>={}){
- const manifest:LayerManifest={schema:"xfh/layer-1",producer:"verification",layer,title:layer.charAt(0).toUpperCase()+layer.slice(1),content:"full",clock:"recording",kinds:[...new Set(items.map(i=>i.kind))],...extra};const result=service.layers.publish(`verification/${layer}`,[manifest,...items]);if(result.refused)throw Error(result.reasons.join("; "));
+async function publish(layer:string,items:LayerItem[],extra:Partial<LayerManifest>={}){
+ const manifest:LayerManifest={schema:"xfh/layer-1",producer:"verification",layer,title:layer.charAt(0).toUpperCase()+layer.slice(1),content:"full",clock:"recording",kinds:[...new Set(items.map(i=>i.kind))],...extra};const result=await service.layers.publish(`verification/${layer}`,[manifest,...items]);if(result.refused)throw Error(result.reasons.join("; "));
 }
 const cite="agent:verification:synthetic";
-publish("point",[{id:"control",kind:"point",anchor:{at:offset(-35,25)},label:"Control point",cite}]);
-publish("path",[{id:"route",kind:"path",anchor:{path:[offset(-45,-10),offset(-15,20),offset(25,35)]},label:"Proposed route",weight:0.8,cite}]);
-publish("zone",[{id:"territory",kind:"zone",anchor:{box:{min:offset(-30,-25),max:offset(25,25,14)}},label:"Context zone",tone:"warning",cite}]);
-publish("field",[{id:"pressure",kind:"field",anchor:{grid:{origin:offset(-45,-35),cell:10,cols:4,rows:3}},value:{scalars:[0,0.1,0.3,0.5,0.1,0.3,0.6,0.8,0.3,0.5,0.8,1]},tone:"warning",cite}]);
-publish("influence",[{id:"flow",kind:"influence",anchor:{at:offset(-35,-25)},value:{to:{at:offset(30,30)}},tone:"accent",label:"Influence",cite}]);
-publish("target",[{id:"goal",kind:"target",anchor:{at:offset(40,-15)},value:{from:{at:offset(20,0)}},label:"Steering target",cite}]);
-publish("label",[{id:"note",kind:"label",anchor:{at:offset(-50,15)},label:"Synthetic meeting place"}]);
-publish("actor",[actor("mira","Synthetic Mira",-60,0),actor("sol","Synthetic Sol",20,60),actor("kai","Synthetic Kai",65,-45)]);
-publish("relation",[{id:"a-b",kind:"relation",anchor:{item:"actor/mira"},value:{to:{item:"actor/sol"},type:"owes",strength:0.8},cite},{id:"b-c",kind:"relation",anchor:{item:"actor/sol"},value:{to:{item:"actor/kai"},type:"hunting",strength:0.5},cite},{id:"c-a",kind:"relation",anchor:{item:"actor/kai"},value:{to:{item:"actor/mira"},type:"loyal to",mutual:true},cite}]);
-service.layers.publish("verification/point",[{id:"invalid",kind:"point",anchor:{at:["bad",0,0]},cite}]);
-publish("region",Array.from({length:13},(_,i)=>({id:`regional-${i}`,kind:"point",anchor:{region:"synthetic-district"},label:`Regional point ${i}`,cite})));
-publish("week",[...(["save-a","save-b"] as const).flatMap((branch,n)=>[{...actor("mira","Synthetic Mira",n?35:-20,n?25:0),branch,t:0},{...actor("kai","Synthetic Kai",n?-25:25,n?-20:20),branch,t:0},{id:"tie",kind:"relation" as const,anchor:{item:"mira"},value:{to:{item:"kai"},type:n?"rivals":"allies",strength:0.8},branch,t:0,cite}])],{clock:"game",standalone:{set:"week",title:"Synthetic week",from:0,to:604800,clock:"game"}});
+await publish("point",[{id:"control",kind:"point",anchor:{at:offset(-35,25)},label:"Control point",cite}]);
+await publish("path",[{id:"route",kind:"path",anchor:{path:[offset(-45,-10),offset(-15,20),offset(25,35)]},label:"Proposed route",weight:0.8,cite}]);
+await publish("zone",[{id:"territory",kind:"zone",anchor:{box:{min:offset(-30,-25),max:offset(25,25,14)}},label:"Context zone",tone:"warning",cite}]);
+await publish("field",[{id:"pressure",kind:"field",anchor:{grid:{origin:offset(-45,-35),cell:10,cols:4,rows:3}},value:{scalars:[0,0.1,0.3,0.5,0.1,0.3,0.6,0.8,0.3,0.5,0.8,1]},tone:"warning",cite}]);
+await publish("influence",[{id:"flow",kind:"influence",anchor:{at:offset(-35,-25)},value:{to:{at:offset(30,30)}},tone:"accent",label:"Influence",cite}]);
+await publish("target",[{id:"goal",kind:"target",anchor:{at:offset(40,-15)},value:{from:{at:offset(20,0)}},label:"Steering target",cite}]);
+await publish("label",[{id:"note",kind:"label",anchor:{at:offset(-50,15)},label:"Synthetic meeting place"}]);
+await publish("actor",[actor("mira","Synthetic Mira",-60,0),actor("sol","Synthetic Sol",20,60),actor("kai","Synthetic Kai",65,-45)]);
+await publish("relation",[{id:"a-b",kind:"relation",anchor:{item:"actor/mira"},value:{to:{item:"actor/sol"},type:"owes",strength:0.8},cite},{id:"b-c",kind:"relation",anchor:{item:"actor/sol"},value:{to:{item:"actor/kai"},type:"hunting",strength:0.5},cite},{id:"c-a",kind:"relation",anchor:{item:"actor/kai"},value:{to:{item:"actor/mira"},type:"loyal to",mutual:true},cite}]);
+await service.layers.publish("verification/point",[{id:"invalid",kind:"point",anchor:{at:["bad",0,0]},cite}]);
+await publish("region",Array.from({length:13},(_,i)=>({id:`regional-${i}`,kind:"point",anchor:{region:"synthetic-district"},label:`Regional point ${i}`,cite})));
+await publish("week",[...(["save-a","save-b"] as const).flatMap((branch,n)=>[{...actor("mira","Synthetic Mira",n?35:-20,n?25:0),branch,t:0},{...actor("kai","Synthetic Kai",n?-25:25,n?-20:20),branch,t:0},{id:"tie",kind:"relation" as const,anchor:{item:"mira"},value:{to:{item:"kai"},type:n?"rivals":"allies",strength:0.8},branch,t:0,cite}])],{clock:"game",standalone:{set:"week",title:"Synthetic week",from:0,to:604800,clock:"game"}});
 const built=await Bun.build({entrypoints:[join(import.meta.dir,"layers-preview-client.ts")],target:"browser",format:"esm"});if(!built.success)throw Error(built.logs.join("\n"));const script=await built.outputs[0].text();
 const authoring=resolve(import.meta.dir,"../../xf-studio/authoring");
 const server=Bun.serve({hostname:"127.0.0.1",port:0,async fetch(request){const url=new URL(request.url);

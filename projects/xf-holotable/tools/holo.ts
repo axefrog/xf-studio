@@ -2,6 +2,7 @@
 import { resolve } from "node:path";
 import { createService, defaultOptions } from "../src/service.ts";
 import { createLayerSpool } from "../src/layer-spool.ts";
+import { readBatch } from "../src/bounded-input.ts";
 import { validateFiles } from "../src/layer-validation.ts";
 
 const [cmd, target, ...rest] = process.argv.slice(2);
@@ -12,11 +13,10 @@ try {
     for (const e of errors) console.error(`${e.file}:${e.line}: ${e.reason}`);
     console.log(errors.length ? `${errors.length} refusals.` : "Valid: no refusals."); status = errors.length ? 1 : 0;
   } else if (cmd === "publish" && target) {
-    const text = rest[0] ? await Bun.file(rest[0]).text() : await Bun.stdin.text();
-    if (Buffer.byteLength(text) > 16 * 1024 * 1024) throw Error("Batch exceeds 16 MB.");
+    const text = await readBatch((rest[0] ? Bun.file(rest[0]) : Bun.stdin).stream());
     const spool = createLayerSpool(defaultOptions().layersRoot!);
     try {
-      const result = spool.publish(target, text.split("\n").filter(l => l.trim()));
+      const result = await spool.publish(target, text.split("\n"));
       console.log(`${result.accepted} ${result.accepted === 1 ? "line" : "lines"} published; ${result.refused} refused.`);
       for (const reason of result.reasons) console.error(reason);
       status = result.refused ? 1 : 0;

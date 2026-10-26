@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { actorCaption, gameSpan, itemTitle, labelContext, labelPriority, layerCounts, placeLabels, type AgentLabel } from "../src/features/holotable/view/agent-labels";
+import { agentInRange } from "../src/features/holotable/view/agent-bounds";
 import { camera, fitOrbit, ORBITS } from "../src/features/holotable/view/projection";
 import type { AgentItem } from "../src/features/holotable/agent-types";
 import type { Vec3 } from "../src/features/holotable/types";
@@ -66,4 +67,19 @@ test("a mutual relation names the far end from either actor", () => {
   const edge = { ...item("edge", "relation"), value: { type: "loyal to", mutual: true }, links: { from: "kai", to: "mira" } };
   expect(itemTitle(edge, [mira, kai], "mira")).toBe("loyal to ↔ Synthetic Kai");
   expect(itemTitle(edge, [mira, kai], "kai")).toBe("loyal to ↔ Synthetic Mira");
+});
+
+
+test("bounds culling retains paths, areas, fields and relations crossing the 350 m view circle",()=>{
+ const target:Vec3=[0,0,0],base=item("crossing");
+ const examples:AgentItem[]=[
+  {...base,kind:"path",anchor:{path:[[1000,0,0],[-1000,0,0]]},place:[1000,0,0]},
+  {...base,kind:"zone",anchor:{box:{min:[-1000,-1000,0],max:[1000,1000,20]}},place:[1000,0,0]},
+  {...base,kind:"zone",anchor:{zone:{poly:[[-1000,-1000],[1000,-1000],[1000,1000],[-1000,1000]],zlo:0,zhi:20}},place:[1000,0,0]},
+  {...base,kind:"field",anchor:{grid:{origin:[-1000,-1000,0],cell:20,cols:100,rows:100}},place:[-1000,-1000,0]},
+  {...base,kind:"relation",place:[1000,0,0],to:[-1000,0,0]},
+ ];
+ for(const example of examples)expect(agentInRange(example,target,350)).toBe(true);
+ expect(agentInRange({...base,place:[351,0,0]},target,350)).toBe(false);
+ expect(agentInRange({...base,kind:"path",anchor:{path:[[1000,1000,0],[2000,2000,0]]},place:[1000,1000,0]},target,350)).toBe(false);
 });

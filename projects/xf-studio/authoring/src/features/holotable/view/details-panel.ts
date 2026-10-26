@@ -92,7 +92,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
     for (const { id, toggle } of toggles) toggle.update(state.layers[id]);
     story.update(state.level === "full", { disabled: !s, reason: s ? undefined : "Open a recording first." });
     updateAgents(state);
-    setText(limits, s ? `${s.meta.standalone ? "Layers only; no recorded observations. " : `${s.meta.dropped} dropped, ${s.meta.missedDeadlines} missed, largest gap ${f1(s.meta.largestGapS)} s. `}Districts and solid shapes are offline estimates of the live world.` : "");
+    setText(limits, s ? `${s.meta.standalone ? "Layers only; no recorded observations. Solid shapes are drawn within 350 m of where you're looking. " : `${s.meta.dropped} dropped, ${s.meta.missedDeadlines} missed, largest gap ${f1(s.meta.largestGapS)} s. `}Districts and solid shapes are offline estimates of the live world.` : "");
     inspector.element.hidden = !s;
     const k = JSON.stringify([state.open?.dir, state.selected, state.position, state.level, state.agents, state.agentEnabled, Math.round(state.t * 10)]);
     if (k !== inspectKey) { inspectKey = k; inspect.replaceChildren(rows(state)); }

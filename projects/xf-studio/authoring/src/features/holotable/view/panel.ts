@@ -151,6 +151,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     }
     const scene = project(open.session, open.world, state.t, state.layers, orbit, width, height, state.selected, open.session.meta.standalone ? focusAt(state) : undefined, { instances: [], cut: 0 });
     currentScene = scene;
+    if (open.session.meta.standalone) void ctx.dispatch({ kind: "holo.focus", position: scene.solidCamera.target }, { quiet: true });
     const projectedAt = performance.now();
     set(svg, "viewBox", `0 0 ${width} ${height}`);
     const bx = width - 24 - scene.barPx, by = height - 22;
@@ -196,6 +197,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     else { preparationFrames = 0; preparationMs = 0; }
   }
   function focusAt(state: HoloState): Vec3 {
+    if (state.position) return state.position;
     const items = state.agents.layers.filter(l => state.agentEnabled[l.id] !== false).flatMap(l=>l.items).filter(i=>i.place);
     const selected = items.find(i=>i.key===state.selected); if (selected?.place) return selected.place;
     const extent = state.open?.session.meta.standalone?.extent;
@@ -262,8 +264,8 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       if (ek !== emptyKey) {
         emptyKey = ek;
         const opening = state.phase === "opening";
-        empty.replaceChildren(...(s && !opening ? [] : [emptyState(state.live.watching ? "Live game" : opening ? "Opening recording" : "No recording open", state.live.watching || opening ? state.message : state.runs.length ? "Open one in Recordings to replay it here." : "Recordings appear here after a test session with the recorder on.")]));
-        empty.hidden = !!s && !opening; stage.style.display = s && !opening ? "block" : "none";
+        empty.replaceChildren(...(s && !opening && !state.openError ? [] : [openNotice(state, dir => { void ctx.dispatch({ kind: "holo.open", dir }); })]));
+        empty.hidden = !!s && !opening && !state.openError; stage.style.display = s && !opening && !state.openError ? "block" : "none";
       }
       applyCapability(play, facade.capability({ kind: "holo.play", on: true }));
       setButtonLabel(play, state.live.following || state.playing ? "Pause" : "Play");
@@ -286,3 +288,11 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   };
 }
 function gameTime(t: number) { const day = Math.floor(t / 86400) + 1, hour = Math.floor(t / 3600) % 24, minute = Math.floor(t / 60) % 60; return `Day ${day} · ${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`; }
+
+/** Shared empty-state composition also exercised without a canvas in presentation tests. */
+export function openNotice(state: HoloState, retry: (dir: string) => void): HTMLElement {
+  const error = state.openError;
+  if (error) return emptyState(`Couldn't open ${error.title}: ${error.reason}`, "", button({ label: "Try again", onClick: () => retry(error.dir) }));
+  const opening = state.phase === "opening";
+  return emptyState(state.live.watching ? "Live game" : opening ? "Opening recording" : "No recording open", state.live.watching || opening ? state.message : state.runs.length ? "Open one in Recordings to replay it here." : "Recordings appear here after a test session with the recorder on.");
+}

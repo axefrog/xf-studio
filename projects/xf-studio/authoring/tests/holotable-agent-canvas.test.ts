@@ -1,0 +1,21 @@
+import { expect, test } from "bun:test";
+import { agentCanvas } from "../src/features/holotable/view/agent-canvas";
+import { camera, ORBITS } from "../src/features/holotable/view/projection";
+
+test("a path with an off-range first vertex still draws and can be picked where it crosses the view", () => {
+  const keys=["document","window","MutationObserver","matchMedia","getComputedStyle"];
+  const saved=new Map(keys.map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
+  let strokes=0;
+  const makeCanvas=()=>({width:0,height:0,style:{cssText:""},parentElement:{append(){}},after(){},remove(){},setAttribute(){},getContext:()=>({
+    setTransform(){},clearRect(){},moveTo(){},lineTo(){},beginPath(){},closePath(){},stroke(){strokes++;},fill(){},setLineDash(){},arc(){},fillText(){},strokeText(){},measureText:(text:string)=>({width:text.length*7}),
+  })}) as unknown as HTMLCanvasElement;
+  const install=(key:string,value:unknown)=>Object.defineProperty(globalThis,key,{value,configurable:true,writable:true});
+  try {
+    install("document",{documentElement:{},body:{},createElement:makeCanvas});install("window",{devicePixelRatio:1});
+    install("MutationObserver",class {observe(){}disconnect(){}});install("matchMedia",()=>({addEventListener(){},removeEventListener(){}}));
+    install("getComputedStyle",()=>({getPropertyValue:()=>"monospace",backgroundColor:"black"}));
+    const renderer=agentCanvas(makeCanvas(),()=>{});
+    const progress=renderer.draw({specs:{schema:"xfh/projections-1",kinds:{path:{style:"tone",label:"{label}",draw:"polyline"}}},here:[],layers:[{id:"p/path",title:"Path",producer:"p",layer:"path",refused:0,reason:"",notPlaced:[],otherBranches:[],items:[{id:"crossing",key:"p/path/crossing",kind:"path",anchor:{path:[[-1000,0,0],[1000,0,0]]},place:[-1000,0,0]}]}]}, {},camera([0,0,0],ORBITS.top,800,500),null,1000);
+    expect(progress?.drawn).toBe(1);expect(strokes).toBeGreaterThan(0);expect(renderer.pick(400,250)).toBe("p/path/crossing");renderer.dispose();
+  } finally { for(const key of keys){const descriptor=saved.get(key);if(descriptor)Object.defineProperty(globalThis,key,descriptor);else Reflect.deleteProperty(globalThis,key);} }
+});
