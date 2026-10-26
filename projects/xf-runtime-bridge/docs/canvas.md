@@ -1,6 +1,6 @@
 # The world-space canvas (`canvas@1`)
 
-**Stage: proposed.** This is the bridge's schema for the in-game canvas that [Holotable](../../../research/live-world-view/proposal.md) asked for (its wants 10, 11 and 13; registry items `surfaces.canvas`, `surfaces.canvas-keys` and `link.display-feed`). It goes to XF · Holotable for review before anything is built. The outline was agreed on 26 October: **the bridge draws, producers decide what.** This page turns that outline into a contract and answers the phase 2 requirements (proposal §11a) that fall on the bridge.
+**Stage: proposed, reviewed.** XF · Holotable approved it on 27 October with six changes, all folded in below. This is the bridge's schema for the in-game canvas that [Holotable](../../../research/live-world-view/proposal.md) asked for (its wants 10, 11 and 13; registry items `surfaces.canvas`, `surfaces.canvas-keys` and `link.display-feed`). It goes to XF · Holotable for review before anything is built. The outline was agreed on 26 October: **the bridge draws, producers decide what.** This page turns that outline into a contract and answers the phase 2 requirements (proposal §11a) that fall on the bridge.
 
 ## Contents
 
@@ -18,7 +18,7 @@
 - [What the canvas records](#what-the-canvas-records)
 - [Commands, events and the Lua route](#commands-events-and-the-lua-route)
 - [How it will be proven](#how-it-will-be-proven)
-- [Open questions for Holotable](#open-questions-for-holotable)
+- [Settled in review](#settled-in-review)
 
 ## What the canvas is
 
@@ -63,7 +63,7 @@ A producer sends whole snapshots, one layer at a time. Each batch replaces every
 | `schema` | `"canvas@1"` | Required. Unknown fields anywhere are refused, so a later schema's additions are explicit. |
 | `producer` | name, `[a-z0-9_-]{1,32}` | The drawing's owner (see [ownership](#ownership-order-and-lifetime)). |
 | `layer` | name, `[a-z0-9_.-]{1,48}` | At most 16 layers per producer. |
-| `world` | integer | The world generation this batch was built for, as the recorder reports it today (`recorder.status`, `world_generation` on every sample). `game_status` gains the same field with the canvas. |
+| `world` | integer | The world generation this batch was built for, as the recorder reports it today (`recorder.status`, `world_generation` on every sample). `game_status` gains the same field with the canvas. Pipe producers must send it, so `stale_world` can protect them. For CET producers the canvas fills it in. |
 | `seq` | integer | Must rise for each (producer, layer). |
 | `ttl_s` | 0.5–30, default 5 | The snapshot disappears unless refreshed within this time. |
 | `views` | `world`, `radar`, or both | The default for its items; an item may narrow it. |
@@ -96,10 +96,12 @@ All sizes are in world metres unless they end in `_px`. Pixel sizes are at 1x an
 | `point` | `size_px` 2–16 (default 6) | A screen-sized dot. |
 | `polyline` | `points` (2–256, absolute or anchor-relative per `relative`, default absolute), `closed`, `dash: [on, off]`, `width` | Dashes are split into segments by the host; every segment counts against the vertex cap. |
 | `circle` | `radius_m`, `ground` (default true), `segments` 8–64 (default 32), `dash`, `width` | With `ground`, a polyline at the anchor's ground height, projected. |
-| `polygon` | `points` (3–8, anchor-relative, Z ignored), `fill_opacity` 0–0.5 | A filled shape flat on the ground at the anchor's height. |
+| `polygon` | `points` (3–64, anchor-relative, Z ignored), `fill_opacity` 0–0.5, `width` | A filled shape flat on the ground at the anchor's height, for zones and territories. Its points count against the vertex cap. |
 | `box` | `size: [x, y, z]`, `yaw_deg`, `dash`, `width` | A wire box centred on the anchor. |
 | `bracket` | `pad_px` (default 6), `corner_px` (default 12) | Screen-space corner brackets around an entity, sized from its bounds where the game gives them and otherwise from a 0.6 × 1.9 m person-sized box. Entity anchors only. The bounds route is unproven until a session checks it. |
 | `label` | `text` (at most 96 glyphs), `style: plain \| chip`, `leader` (default false), `offset_px` | `chip` draws on the canvas plate with a bevelled corner. Text is limited to the overlay's glyph ranges, as on the XF box. |
+| `icon` | `glyph` (a name), `size_px` 12–24 (default 16), `plate` (default false) | One of the Studio's icons at a world or entity anchor, on the canvas plate when `plate` is set. The vocabulary is Holotable's ([glyphs](../../../research/live-world-view/glyphs.md)), and the shapes are the Studio's icon path data (`studio-ui/icons.ts`). The theme generator bakes them into the overlay's font atlas once at start, like the glyph ranges, so nothing is uploaded while drawing. An unknown glyph draws as a `point`, and `canvas.state` counts it. |
+| `heat` | `cell_m`, `cols` and `rows` (1–32 each), `values` (`cols × rows` numbers 0–1, row by row from the anchor's corner), `max_opacity` (default 0.4, at most 0.4) | A field drawn as ground quads at the anchor's height, each at `value × max_opacity`. Cells of 0 are skipped. Each drawn cell counts as 4 vertices. World view only. An optional feature of `canvas@1`: `canvas.state` lists `heat` in `features` when the build draws it, and a build without it refuses the item `unsupported_kind`. |
 | `panel` | `rect: [u, v, w, h]` (screen fractions), `title`, `lines` (at most 12 of `{ text, tone }`) | A screen-space plate for a legend or readout. Screen anchors only; never on the radar. |
 
 Every item also takes:
@@ -112,13 +114,15 @@ Every item also takes:
 
 `width` is `hair`, `normal` or `bold` (1, 1.5 and 2.5 px).
 
+**Dash units.** `dash: [on, off]` is in metres in the `world` view and in pixels on the radar, where the host redraws the same pattern at a fixed screen size so it stays legible at any range. Each value is 0.05–20.
+
 ## Styling
 
 **Colour is by token only.** No RGB values cross the wire. The tokens come from the generated in-game theme table (`tools/overlay/theme.ts`, from the Studio's tokens), in dark and light, so the canvas follows the overlay's theme without producers knowing it.
 
 | Token | Studio token | Meaning in the Studio's design system |
 |---|---|---|
-| `text`, `text-muted`, `text-faint` | `--text`, `--text-muted`, `--text-faint` | Neutral labels and values. |
+| `text`, `text-muted` (alias `muted`), `text-faint` | `--text`, `--text-muted`, `--text-faint` | Neutral labels and values. `muted` lets producers' tones map one to one. |
 | `signal` | `--signal` | Live data and selection. |
 | `accent` | `--accent` | Commitment and focus only. |
 | `success`, `warning`, `danger` | the same names | States; always paired with words. |
@@ -158,7 +162,8 @@ The caps are the ones agreed on 26 October. A batch over a cap is refused whole,
 | Items across all producers | 1,024 | `canvas_cap {cap: "total_items", …}` |
 | Vertices across all producers | 16,384 | `canvas_cap {cap: "total_vertices", …}` |
 | Entity anchors resolved per tick | 64 | Never refused: round-robin, with the rest `holding` |
-| Batches per producer | 4 per second | `rate {retry_after_ms}`; nothing is queued |
+| Batches per (producer, layer) | 4 per second | `rate {retry_after_ms}`; nothing is queued |
+| Batches per producer, all layers | 16 per second | `rate {retry_after_ms}` |
 | Layers per producer | 16 | `canvas_cap {cap: "layers", …}` |
 
 Malformed batches are refused `bad_batch` with the first JSON path at fault.
@@ -166,8 +171,10 @@ Malformed batches are refused `bad_batch` with the first JSON path at fault.
 ## Showing and hiding
 
 - **Two keys** go through the bridge's own key route, the same one as its stop key, and are rebindable in CET:
-  - `canvas.toggle` shows and hides the canvas;
-  - `canvas.mode` switches between radar only and radar with world markers.
+  - `canvas.toggle` shows and hides the canvas (default **Ctrl + Shift + Insert**);
+  - `canvas.mode` switches between radar only and radar with world markers (default **Ctrl + Shift + Delete**).
+
+  Both are toggles, never holds. The defaults follow the stop key's rule (Ctrl + Shift + End): the game's 2.31 default bindings use neither Insert nor Delete. Of the 23 mods in the study library, one HUD editor lists both bare in its key table and one photo-mode mod uses bare Delete inside a text field. None uses either with Ctrl + Shift. Page Up and Page Down were rejected because a photo-mode mod and a HUD mod use them bare. CET's overlay key is chosen by each player, so the load log warns if a canvas key matches it.
 
   `canvas.state` reports both bindings.
 - **`canvas.visible {visible, mode}`** is a session event each time either changes, so producers can subscribe.
@@ -193,7 +200,7 @@ Malformed batches are refused `bad_batch` with the first JSON path at fault.
 - **Every accepted batch adds a bounded `canvas.fed` session event**, which the recorder keeps:
   - who and where: producer, layer, world, seq;
   - how much: the item count;
-  - a digest of the batch.
+  - its digest: the SHA-256, in lowercase hex, of the batch's canonical JSON as received. Canonical means [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) (JCS): keys sorted, no whitespace, numbers in ECMAScript's shortest form. In TypeScript that is `JSON.stringify` with keys sorted at every level. The bridge's C++ follows the same rules, and the conformance fixtures include digest vectors, so both sides are checked to agree.
 
   The items themselves are not recorded.
 - **Producers publish the matching items** to Holotable's model under the same seq and digest. A replay can then show every drawn batch beside its items, and flag one with no match.
@@ -206,7 +213,7 @@ Malformed batches are refused `bad_batch` with the first JSON path at fault.
 | `canvas.feed` | display | A [batch](#a-batch). Answers `{accepted, items, vertices}` or a refusal. |
 | `canvas.clear` | display | `{producer, layer?}`: clears one layer of the caller's own producer, or all of them. |
 | `canvas.view` | display | `{radar: {corner, size_px, range_m, orientation, opacity}}`: the radar's settings. |
-| `canvas.state` | read | Visible and mode; key bindings; producers and their layers, counts and seqs; anchor states; cost figures; supported schemas (`["canvas@1"]`). |
+| `canvas.state` | read | Visible and mode; key bindings; producers and, per layer, item and vertex counts, the last accepted seq and the last refusal (reason, cap and time), so a producer can show it in place; anchor states; unknown glyphs; cost figures; supported schemas (`["canvas@1"]`) and optional features (`["heat"]`). |
 | `canvas.visible` | event | `{visible, mode, resend}`. |
 | `canvas.fed`, `canvas.refused` | events | As [above](#what-the-canvas-records). |
 
@@ -231,10 +238,14 @@ Malformed batches are refused `bad_batch` with the first JSON path at fault.
 
   Each row's verdict goes into the registry through `verdict`.
 
-## Open questions for Holotable
+## Settled in review
 
-1. **Snapshots only, with no deltas, in `canvas@1`.** At 256 items a snapshot fits in 64 KB, and it removes requirement 8's incomplete state entirely. Does any planned layer need more than 4 updates a second, or more than 256 items?
-2. **Entity offsets in world axes,** not rotated with the entity. Enough for chips and rings?
-3. **Default key bindings.** "Install the mod, press the key, it draws" needs defaults that clash with nothing in the game or common mods. The bridge will propose two after checking the game's input bindings, unless Holotable has a preference.
-4. **`world` on every batch.** Is the generation from `recorder.status` (and `game_status` once the canvas adds it) convenient for the headless service and the CET module, or should the canvas fill it in for CET producers?
-5. **`canvas.fed` with a digest** rather than the items themselves. Enough for the replay audit?
+XF · Holotable's answers (27 October):
+
+1. **Snapshots and 256 items per producer are enough.** Holotable is the only pipe producer: the Story Engine publishes to Holotable, not to the canvas, and Holotable does its own level of detail near V. The rate is per layer (4 a second), with 16 a second per producer, so a dozen story layers at 1 Hz can each refresh.
+2. **Offsets in world axes** are fine.
+3. **Keys** are toggles, proposed [above](#showing-and-hiding).
+4. **`world`** is explicit from pipe producers and filled in for CET producers.
+5. **The digest** is SHA-256 over RFC 8785 canonical JSON, specified [above](#what-the-canvas-records).
+
+The six changes it asked for are in: the `icon` primitive, dash units, 64-point polygons, the optional `heat` primitive, the `muted` tone and the per-layer refusal in `canvas.state`.
