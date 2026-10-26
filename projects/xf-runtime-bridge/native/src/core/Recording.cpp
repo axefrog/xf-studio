@@ -5,6 +5,8 @@
 #include <cstring>
 #include <set>
 #include <fstream>
+#include <ctime>
+#include <cstdio>
 
 namespace xfb::recording
 {
@@ -29,6 +31,20 @@ uint64_t Integer(const json& p, const char* key, uint64_t fallback, uint64_t max
     if (!v.is_number_integer() || v.get<double>() < 0 || v.get<double>() > static_cast<double>(max))
         throw MethodError("bad_params", std::string(key) + " is outside its integer bounds.");
     return v.get<uint64_t>();
+}
+std::string StartAt(double start)
+{
+    // The recorder keeps QPC time only. Derive UTC at observation time; clock adjustments can change this offset.
+    using namespace std::chrono;
+    const auto at = floor<milliseconds>(system_clock::now() - duration_cast<system_clock::duration>(duration<double>(Now() - start)));
+    const auto seconds = floor<std::chrono::seconds>(at);
+    const auto utc = system_clock::to_time_t(seconds);
+    std::tm tm{}; gmtime_s(&tm, &utc);
+    char text[32];
+    std::snprintf(text, sizeof(text), "%04d-%02d-%02dT%02d:%02d:%02d.%03lldZ",
+                  tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec,
+                  static_cast<long long>((at - seconds).count()));
+    return text;
 }
 }
 Service::Service() : m_ring(std::make_unique<std::array<Record, kCapacity>>()) {}
@@ -121,6 +137,31 @@ json Service::Status(double now) const
         {"latest", m_latest}, {"channels", m_channels}, {"actors", m_actors}, {"capacity", kCapacity},
         {"output", m_output.string()}, {"writer_pending", m_writerBusy}, {"file_error", m_fileError},
         {"coverage", "source_snapshots + subtitle/controller + script_voice_requests + facial_submissions + UI_consumers + partial contact callbacks; not continuous no-contact, rendered, evaluated face or audible proof"}};
+}
+json Service::ObserverStatus(const std::string& session) const
+{
+    struct Snapshot
+    {
+        bool active;
+        uint64_t run, world, latest, ack, cap;
+        double start, until;
+        std::vector<std::string> channels;
+        std::string reason;
+    };
+    const auto state = [&] {
+        std::scoped_lock lock(m_mutex);
+        return Snapshot{m_active, m_run, m_world, m_latest, m_ack, m_cap, m_start, m_until, m_channels, m_reason};
+    }();
+    // Construct/encode the response only after releasing the recorder's lock.
+    const bool hasRun = state.run != 0;
+    return {{"active", state.active}, {"run", hasRun ? json(state.run) : json(nullptr)}, {"session", session},
+        {"world", hasRun ? json(state.world) : json(nullptr)}, {"channels", state.channels},
+        {"start", hasRun ? json{{"s", state.start}, {"at", StartAt(state.start)}} : json(nullptr)},
+        {"latest", hasRun ? json(state.latest) : json(nullptr)},
+        {"stop_reason", hasRun && !state.active ? json(state.reason) : json(nullptr)},
+        {"requested_hz", hasRun ? json(10) : json(nullptr)},
+        {"duration_s", hasRun ? json(state.until - state.start) : json(nullptr)},
+        {"byte_cap", hasRun ? json(state.cap) : json(nullptr)}, {"ack", hasRun ? json(state.ack) : json(nullptr)}};
 }
 json Service::Start(const json& p, double now, uint64_t world, uint64_t connection, const std::string& session,
                     std::optional<uint64_t> generation)
@@ -303,6 +344,8 @@ void RegisterMethods(Dispatcher& d, Service& s, bool hooks, std::function<uint64
                      std::function<uint64_t()> connection, std::function<std::string()> session, std::function<void()> guard)
 {
     const auto enabled = [hooks] { if (!hooks) throw MethodError("test_hooks_off", "Recorder needs allow_test_hooks."); };
+    d.Register({"recorder.status", Access::Read, RunOn::BridgeThread, "Observe the current or last recorder run without acknowledging records.",
+        [&s, enabled, session](const MethodContext& c) { enabled(); Keys(c.params, {}); return s.ObserverStatus(session()); }});
     d.Register({"test.record.start", Access::Read, RunOn::BridgeThread, "Start bounded source recording.",
         [&, enabled, world, connection, session, guard](const MethodContext& c) {
             enabled();

@@ -48,6 +48,19 @@ function walk(schema: JsonSchema, visit: (schema: JsonSchema, path: string) => v
 }
 
 describe("catalogue", () => {
+  test("recorder.status is a parameterless reader tool, wired to the native observer", () => {
+    const command = findCommand("recorder.status")!;
+    expect(command.permission).toBe("read");
+    expect(command.bridge?.method).toBe("recorder.status");
+    expect(command.refusals).toEqual(["test_hooks_off"]);
+    expect(validate(command.input, {})).toEqual([]);
+    expect(validate(command.input, { run: 1 }).length).toBeGreaterThan(0);
+    expect(findCommand("recorder_status")).toBe(command);
+    expect(toolsFor([command], ["read"]).find(tool => tool.name === "recorder_status")?.annotations?.readOnlyHint).toBe(true);
+    for (const field of ["active", "run", "session", "world", "channels", "start", "latest", "stop_reason", "requested_hz", "duration_s", "byte_cap", "ack"])
+      expect(command.description).toContain(field);
+  });
+
   test("names are unique, dotted, and map to valid MCP tool names", () => {
     const names = CATALOGUE.map((c) => c.name);
     expect(new Set(names).size).toBe(names.length);

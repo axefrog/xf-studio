@@ -10,6 +10,21 @@ import { areaOf, knownCodes, namedCodes, parameterRows, REFERENCE_OUT, renderRef
 const current = () => readFileSync(REFERENCE_OUT, "utf8").replace(/\r\n/g, "\n");
 
 describe("MCP reference", () => {
+  test("recorder_status is documented with the recorder, including read-only discovery and clock derivation", () => {
+    const command = CATALOGUE.find(c => c.name === "recorder.status")!;
+    expect(areaOf(command).id).toBe("recording");
+    const text = current();
+    const from = text.indexOf("### `recorder_status`");
+    expect(from).toBeGreaterThan(0);
+    const entry = text.slice(from, text.indexOf("\n### ", from + 1));
+    expect(entry).toContain("(`read`)");
+    expect(entry).toContain("No parameters");
+    expect(entry).toContain("start.at is derived UTC ISO time with milliseconds");
+    expect(entry).toContain("no game-thread call, lease, acknowledgement or recorder change");
+    expect(entry).toContain("stop_reason");
+    expect(entry).toContain("test_hooks_off");
+  });
+
   test("docs/mcp-reference.md is current with the catalogue (regenerate with bun tools/docs/mcp-reference.ts)", () => {
     expect(current()).toBe(renderReference());
   });

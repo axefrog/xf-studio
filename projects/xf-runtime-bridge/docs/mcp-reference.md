@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 158 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 159 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -13,7 +13,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Connection, session and answers](#connection-session-and-answers) (14)
 - [Photo mode](#photo-mode) (18)
 - [Appearance screen (character creator)](#appearance-screen-character-creator) (6)
-- [Test source recorder](#test-source-recorder) (3)
+- [Test source recorder](#test-source-recorder) (4)
 - [Autonomous input and choice tests](#autonomous-input-and-choice-tests) (8)
 - [Player](#player) (8)
 - [Behaviours](#behaviours) (6)
@@ -34,7 +34,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 57 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 58 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 5 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -810,6 +810,18 @@ No parameters.
 ## Test source recorder
 
 Explicit autonomous -writes candidate only. Bounded source sampling and private chunks; not rendered or audible proof.
+
+### `recorder_status`
+
+**Observe source recorder.** Autonomous -writes test build and allow_test_hooks only. Find the current or last recorder run, including from a reader connection. Returns active, run, session (current bridge session), world (the run's generation), channels, start {s, at}, latest (newest record sequence), stop_reason, requested_hz, duration_s, byte_cap and ack (the writer's last acknowledged sequence). start.s uses the recorder's QPC seconds; start.at is derived UTC ISO time with milliseconds, using the current wall clock minus elapsed QPC time, and can drift with the QPC-to-wall offset. Before any run, active is false, channels is empty and all run-specific fields are unset. While active, stop_reason is unset; afterwards it is the last run's reason. Answered from a locked state copy on the bridge thread: no game-thread call, lease, acknowledgement or recorder change. Use a returned positive run for the first game.catchup call; the observer may poll every five seconds while visible.
+
+- **Command:** `recorder.status`, the bridge method `recorder.status`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off)
+
+No parameters.
 
 ### `test_record_start`
 

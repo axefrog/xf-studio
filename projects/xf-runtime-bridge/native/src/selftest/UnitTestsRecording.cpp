@@ -5,6 +5,8 @@
 #include <cstdio>
 #include <fstream>
 #include <future>
+#include <ctime>
+#include <cmath>
 namespace
 {
 using namespace xfb;
@@ -16,6 +18,89 @@ template<class F> void Refuses(F fn, const char* code)
 int RecordingUnitTests()
 {
     using namespace xfb::recording;
+    {
+        // RS1: discovery works before the first run and on reader connections, with no game queue or lease.
+        Config config; config.maxRequestsPerSecond = 1000;
+        Session session; session.token = "fixture"; session.sessionId = "observer-session";
+        GameThreadQueue queue; // deliberately not pumping: an accidental game-thread call must fail
+        Dispatcher dispatcher(config, session, queue); Service recorder;
+        int gameCalls = 0;
+        RegisterMethods(dispatcher, recorder, true,
+            [&] { ++gameCalls; return 99; }, [&] { ++gameCalls; return 99; },
+            [&] { return session.sessionId; }, [&] { ++gameCalls; });
+        auto request = [&](bool reader, json params = json::object()) {
+            return json::parse(dispatcher.Handle(SerializeJson(json{{"v", 1}, {"token", session.token},
+                {"method", "recorder.status"}, {"params", params}}), 1, false, reader).line);
+        };
+        const auto empty = request(true);
+        Check(empty["ok"] == true && empty["result"] == json{{"active", false}, {"run", nullptr},
+            {"session", session.sessionId}, {"world", nullptr}, {"channels", json::array()}, {"start", nullptr},
+            {"latest", nullptr}, {"stop_reason", nullptr}, {"requested_hz", nullptr}, {"duration_s", nullptr},
+            {"byte_cap", nullptr}, {"ack", nullptr}}, "RS1: reader discovers no run with explicit nulls");
+        Check(dispatcher.AccessOf("recorder.status") == Access::Read && gameCalls == 0,
+              "RS1: read class without game-thread work");
+        Check(request(false)["result"] == empty["result"], "RS1: writer gets the same empty snapshot");
+        Check(request(true, {{"run", 1}})["error"]["code"] == "bad_params", "RS1: status accepts no parameters");
+
+        const double start = Now() - 2;
+        recorder.Start({{"channels", {"v", "voice"}}, {"duration_s", 23}, {"byte_cap", 123456}}, start, 7, 4, session.sessionId);
+        Ops ops; ops.guard = [] {}; ops.sample = [](const auto&, const auto&) { return json{{"valid", true}}; };
+        recorder.Tick(start, 7, 4, true, 1, ops);
+        const auto before = recorder.Read({{"run", 1}}, start + 0.1, false);
+        const auto generation = recorder.CancellationGeneration();
+        const auto identity = recorder.Identity("voice");
+        const auto active = request(true)["result"];
+        Check(active["active"] == true && active["run"] == 1 && active["session"] == session.sessionId &&
+              active["world"] == 7 && active["channels"] == json::array({"v", "voice"}) &&
+              active["start"]["s"] == start && active["latest"] == before["latest"] && active["ack"] == 0 &&
+              active["requested_hz"] == 10 && active["duration_s"] == 23 && active["byte_cap"] == 123456 && active["stop_reason"].is_null(),
+              "RS1: reader discovers active run and its existing limits/cursors");
+        const auto at = active["start"]["at"].get<std::string>();
+        int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0, ms = 0;
+        const auto fields = sscanf_s(at.c_str(), "%d-%d-%dT%d:%d:%d.%dZ", &year, &month, &day, &hour, &minute, &second, &ms);
+        std::tm tm{}; tm.tm_year = year - 1900; tm.tm_mon = month - 1; tm.tm_mday = day;
+        tm.tm_hour = hour; tm.tm_min = minute; tm.tm_sec = second;
+        const auto derived = std::chrono::system_clock::from_time_t(_mkgmtime(&tm)) + std::chrono::milliseconds(ms);
+        const auto expected = std::chrono::system_clock::now() - std::chrono::duration<double>(Now() - start);
+        Check(fields == 7 && at.size() == 24 && at.back() == 'Z' && ms >= 0 && ms <= 999 &&
+              std::abs(std::chrono::duration<double>(derived - expected).count()) < 1,
+              "RS1: start.at is derived UTC with millisecond precision");
+        Check(recorder.Read({{"run", 1}}, start + 0.1, false) == before && recorder.CancellationGeneration() == generation &&
+              recorder.Identity("voice") == identity && recorder.Wants("voice"), "RS1: observer leaves recorder state untouched");
+        recorder.Read({{"run", 1}, {"since", 1}}, start + 0.1); // the writer alone advances ack
+        Check(request(true)["result"]["ack"] == 1 && request(false)["result"]["ack"] == 1,
+              "RS1: reader and writer status report but never advance writer acknowledgement");
+        recorder.Stop("load_requested", start + 1);
+        const auto stopped = request(true)["result"];
+        Check(stopped["active"] == false && stopped["run"] == 1 && stopped["world"] == 7 &&
+              stopped["stop_reason"] == "load_requested" && stopped["start"]["s"] == start &&
+              stopped["latest"] == active["latest"] && stopped["ack"] == 1 && stopped["channels"] == active["channels"],
+              "RS1: stopped run retains identity, cursors and stop reason");
+        Refuses([&] { recorder.Start(json::object(), start + 2, 7, 4, session.sessionId); }, "recording_busy");
+        Check(gameCalls == 0, "RS1: every status call avoids world/connection/guard callbacks");
+
+        Dispatcher off(config, session, queue); Service disabled;
+        RegisterMethods(off, disabled, false, [] { return 1; }, [] { return 1; }, [] { return "fixture"; }, [] {});
+        const auto refused = json::parse(off.Handle(SerializeJson(json{{"v", 1}, {"token", session.token},
+            {"method", "recorder.status"}, {"params", json::object()}}), 1, false, true).line);
+        Check(refused["error"]["code"] == "test_hooks_off", "RS1: status mirrors recorder test-hook gate");
+    }
+    {
+        Service recorder;
+        recorder.Start({{"channels", {"voice"}}}, 10, 1, 1, "pending");
+        recorder.RequestStop("cancelled");
+        const auto generation = recorder.CancellationGeneration();
+        const auto pending = recorder.ObserverStatus("pending");
+        Check(pending["active"] == true && pending["stop_reason"].is_null() && recorder.CancellationGeneration() == generation,
+              "RS1: status does not apply or replace a pending cancellation");
+        Check(recorder.Read({{"run", 1}}, 11)["reason"] == "cancelled", "RS1: pending stop remains for the existing recorder consumer");
+        Check(recorder.ObserverStatus("pending")["stop_reason"] == "cancelled", "RS1: applied cancellation reason is observable");
+        recorder.Start({{"channels", {"v"}}, {"duration_s", 1}}, 20, 2, 1, "pending");
+        recorder.Tick(21, 2, 1, true, 1, {});
+        const auto expired = recorder.ObserverStatus("pending");
+        Check(expired["active"] == false && expired["run"] == 2 && expired["world"] == 2 &&
+              expired["stop_reason"] == "duration", "RS1: automatic duration stop reason is observable");
+    }
     {
         // R8 §3–4: presence/readiness are observations, not an attach heuristic or invocation ABI.
         lifecycle::Snapshot s; s.observed = s.complete = true; s.atMs = 1000; s.generation = 7;

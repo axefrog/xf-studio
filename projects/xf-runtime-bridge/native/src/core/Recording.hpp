@@ -41,6 +41,8 @@ public:
     // Nonblocking emergency notification. reason must have static lifetime (a string literal).
     void RequestStop(const char* reason);
     json Read(const json& params, double now, bool acknowledge = true);
+    // Observer discovery: copies guarded state, never applies pending stops or acknowledges records.
+    json ObserverStatus(const std::string& session) const;
     void Tick(double now, uint64_t world, uint64_t connection, bool live, uint64_t tick, const Ops& ops);
     bool Wants(const std::string& channel) const; // atomic fast gate, no game access
     // Who is recording: "r<run>.w<world>.c<connection>" while an active run wants the channel, else empty. A stop and a

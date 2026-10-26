@@ -53,7 +53,7 @@ export const AREAS: readonly Area[] = [
     id: "recording",
     title: "Test source recorder",
     intro: "Explicit autonomous -writes candidate only. Bounded source sampling and private chunks; not rendered or audible proof.",
-    match: prefix("test.record"),
+    match: prefix("test.record", "recorder"),
   },
   {
     id: "input-and-choices",
