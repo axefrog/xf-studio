@@ -11,7 +11,8 @@ export const LIVE_BOUNDS = {
   pollBytes: 256 * 1024, pollRows: 256, retainedBytes: 64 * 1024 * 1024,
 } as const;
 type Json = Record<string, any>;
-const tracks = ["v", "camera", "events", "gaps"] as const;
+// A client must receive every known break before any samples it could draw across it.
+const tracks = ["gaps", "v", "camera", "events"] as const;
 export interface LiveCursor { epoch: number; v: number; camera: number; events: number; gaps: number }
 export interface LiveState {
   available: boolean; recording: boolean; watching: boolean;
@@ -40,6 +41,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
   let discovery: Discovery = { available: false, reason: "not_checked" }, statusAt = -Infinity;
   let statusJob: Promise<Discovery> | undefined, sourceJob: Promise<void> | undefined;
   let sourceAt = -Infinity, emptyReads = 0, lastPageAt = 0, sourceNow = 0;
+  let stoppedDrained = false;
   let state: LiveState = { available: false, recording: false, watching: false, phase: "idle", behindS: 0, more: false, droppedBatches: 0, message: "" };
   const status = (): LiveState => ({ ...state, watching: clients.size > 0,
     behindS: session?.v.length ? Math.max(state.behindS, sourceNow - session.meta.to + (time.now() - lastPageAt) / 1000, 0) : state.behindS });
@@ -55,7 +57,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
   async function discover(signal: AbortSignal): Promise<Discovery> {
     signal.throwIfAborted();
     if (time.now() - statusAt >= LIVE_BOUNDS.statusMs) {
-      const statusSignal = ctl.signal;
+      const statusSignal = AbortSignal.any([signal, ctl.signal]);
       statusJob ??= bridge.discover(statusSignal).then(d => {
         statusSignal.throwIfAborted();
         discovery = d; statusAt = time.now();
@@ -68,6 +70,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
   }
   function reset(r: RecorderStatus) {
     epoch++; cursor = undefined; lastSeq = lastEvent = 0; pendingGap = undefined; lines = new Map(); retained = 0;
+    stoppedDrained = false;
     session = { meta: { schema: "xfh/session-1", session: r.session!, run: r.run!, worldGeneration: r.world!, pluginVersion: "",
       start: r.start!, end: r.start!, from: r.start!, to: r.start!, channels: [...r.channels], complete: false,
       dropped: 0, missedDeadlines: 0, largestGapS: 0, coverage: "Live recorder observations; runtime cadence uncommissioned.", problems: [] },
@@ -162,17 +165,24 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
         const found = await discover(signal);
         if (!found.available) throw Error("Bridge unavailable");
         const r = found.recorder;
-        if (!r.run || !r.active) {
+        const sameRun = session?.meta.session === r.session && session?.meta.run === r.run && session?.meta.worldGeneration === r.world;
+        // An inactive recorder still owns a retained tail. Read it through more:false once;
+        // never start observing a different stopped run merely because it was discovered.
+        if (!r.run || !r.active && (!sameRun || stoppedDrained)) {
           state = { ...state, phase: "waiting", recording: false, message: "The recorder is off. It runs during XF test sessions." };
           return;
         }
-        if (!session || session.meta.session !== r.session || session.meta.run !== r.run || session.meta.worldGeneration !== r.world) reset(r);
+        if (!sameRun) reset(r);
+        if (r.active) stoppedDrained = false;
         if (state.phase === "ended") return;
         if (time.now() - sourceAt < LIVE_BOUNDS.intervalMs) return;
         sourceAt = time.now();
         const page = await bridge.catchup({ ...(cursor ? { cursor } : { run: r.run }), now: false, detail: true }, signal);
         signal.throwIfAborted();
-        if (appendPage(page)) state = { ...state, phase: "watching", message: "" };
+        if (appendPage(page)) {
+          stoppedDrained = !r.active && page.more !== true;
+          state = { ...state, recording: r.active && state.recording, phase: stoppedDrained ? "waiting" : "watching", message: stoppedDrained ? "The recorder is off. It runs during XF test sessions." : "" };
+        }
       } catch {
         if (!signal.aborted) {
           state = { ...state, phase: "disconnected", message: lostMessage, available: false };
@@ -209,6 +219,8 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
         if (bytes + size > LIVE_BOUNDS.pollBytes) break;
         (result[k] as unknown[]).push(structuredClone(row)); next[k]++; rows++; bytes += size;
       }
+      // In particular, byte pressure must not let samples bypass an undelivered gap.
+      if (next[k] < source.length) break;
     }
     result.more = tracks.some(k => next[k] < lengths[k]);
     return result;

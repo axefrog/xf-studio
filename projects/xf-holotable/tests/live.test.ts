@@ -22,6 +22,63 @@ function setup() {
 const sig = () => new AbortController().signal;
 
 describe("live source", () => {
+  test("a stopped recorder drains retained pages before waiting, then stops catch-up", async () => {
+    const { bridge, source, rows } = setup();
+    for (let i = 0; i < 8; i++) {
+      const page = bridge.page(rows.slice(i * 2, i * 2 + 2), { more: i < 7 });
+      page.source.active = i < 5; bridge.pages.push(page);
+    }
+    const { watch } = source.watch(); await settle(); await bridge.clock.advance(4000);
+    bridge.recorder.active = false; await bridge.clock.advance(1000);
+    expect(source.poll(watch, undefined, "structure").state.phase).toBe("watching");
+    expect(source.session()!.v).toHaveLength(6);
+    await bridge.clock.advance(2000);
+    expect(source.poll(watch, undefined, "structure").state).toMatchObject({ phase: "waiting", more: false, recording: false });
+    expect(source.session()!.v).toHaveLength(8);
+    expect(bridge.inputs.map(x => x.at)).toEqual([0, 1000, 2000, 3000, 4000, 5000, 6000, 7000]);
+    await bridge.clock.advance(5000); expect(bridge.inputs).toHaveLength(8);
+  });
+  test("stopping discovers the final tail even when the previous page had no backlog", async () => {
+    const { bridge, source, rows } = setup(); bridge.pages.push(bridge.page(rows.slice(0, 2)));
+    const { watch } = source.watch(); await settle(); await bridge.clock.advance(4000);
+    bridge.recorder.active = false;
+    const tail = bridge.page(rows.slice(2, 4)); tail.source.active = false; bridge.pages.push(tail);
+    await bridge.clock.advance(3000);
+    expect(source.poll(watch, undefined, "structure").state.phase).toBe("waiting");
+    expect(source.session()!.v).toHaveLength(2);
+  });
+  for (const many of [false, true]) test(`bounded deltas publish ${many ? "more than one poll of gaps" : "a known gap"} before split samples`, async () => {
+    const { bridge, source, rows } = setup();
+    bridge.pages.push(bridge.page(Array.from({ length: many ? 600 : 400 }, (_, i) => ({ ...rows[0], seq: i + 1, source_s: 1000 + i / 10,
+      valid: many ? i % 2 === 0 : i !== 100, data: { ...rows[0].data, position: [i, 0, 0] } }))));
+    const { watch } = source.watch(); await settle();
+    const received = { ...source.session()!, v: [] as NonNullable<ReturnType<typeof source.session>>["v"], gaps: [] as NonNullable<ReturnType<typeof source.session>>["gaps"] };
+    let since: LiveUpdate["since"] | undefined;
+    for (let i = 0; i < 10; i++) {
+      const page = source.poll(watch, since, "structure"); since = page.since;
+      expect(page.v.length + page.camera.length + page.events.length + page.gaps.length).toBeLessThanOrEqual(LIVE_BOUNDS.pollRows);
+      received.v.push(...page.v); received.gaps.push(...page.gaps);
+      const reached = source.session()!.gaps.filter(g => g.to <= (received.v.at(-1)?.t ?? -Infinity));
+      expect(reached.every(g => received.gaps.some(r => r.to === g.to))).toBe(true);
+      expect(trailUntil(received, Infinity)).toHaveLength(received.v.length ? reached.length + 1 : 0);
+      if (!page.more) break;
+      if (i === 9) throw Error("Live test failed to drain bounded updates");
+    }
+    expect(received.v).toHaveLength(many ? 300 : 399);
+  });
+  test("request cancellation reaches discovery and a late result cannot be cached", async () => {
+    const { bridge, source } = setup();
+    let received: AbortSignal | undefined, release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    bridge.discover = async signal => { received = signal; await held; return { available: true, recorder: bridge.recorder }; };
+    const requester = new AbortController(), pending = source.status(requester.signal).then(() => false, () => true);
+    await settle(); requester.abort();
+    const cancelled = received!.aborted; release(); expect(await pending).toBe(true);
+    expect(cancelled).toBe(true);
+    let retries = 0;
+    bridge.discover = async signal => { signal.throwIfAborted(); retries++; return { available: true, recorder: bridge.recorder }; };
+    await source.status(sig()); expect(retries).toBe(1);
+  });
   test("replays recorded pages through the same model, preserving an opaque cursor verbatim", async () => {
     const { bridge, source, rows } = setup();
     const first = bridge.page(rows.slice(0, 40), { more: true, now: 1004.9 });

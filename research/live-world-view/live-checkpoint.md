@@ -14,6 +14,8 @@ These two interaction decisions replace the initial brief's conflicting lines: W
 
 The source distinguishes three independent facts: bridge backlog (`state.more`), unread client deltas (`more`) and irrecoverable coverage gaps (`gaps`). Invalid envelopes publish nothing and do not advance the source cursor. Dropped budget batches advance the exact cursor and disclose the missing interval; trails break at the next valid sample. Structure responses strip full-content details at the service boundary.
 
+After code review of `e4514a44`, a stopped recorder's current run drains its retained tail through `more:false` before waiting, under the original rate/row/byte limits. Client deltas deliver gaps first and cannot move to samples while any gap is withheld by a bound. Discovery combines requester/source cancellation and rejects late cancelled results before caching. A reset moves paused/scrubbed time to the new start, following time to the newest sample within the new span, and removes a selection absent from the new session.
+
 ## Verification
 
 Focused offline tests cover recorded-run parity, opaque cursor preservation, backlog without a false gap, loss, reconnect, epoch changes, independent watchers, expiry, batch and response budgets, the exact discovery mapping, older bridges, session-event scoping, malformed-page atomicity and shapes that remain pending without delaying a poll. Client tests cover following, Pause, scrub, Back to live, hiding/showing, recorded-run switching and disclosure changes. The worker smoke test injects an explicitly empty installation; it reads no game data.
@@ -22,8 +24,8 @@ Verification on 27 October 2026, after the final 02:45 quiet-window cutoff:
 
 | Check | Result |
 | --- | --- |
-| Studio Holotable module/live/solid tests, native streaming-sector tests, experiment layouts/startup, profile startup and Studio startup ordering | 65 passed; four opt-in real-sector/WolvenKit comparisons skipped |
-| Complete `xf-holotable` test directory | 45 passed, including empty-recorder mapping, invalid V samples, worker lifetime and withdrawing old geometry before a new world's first V sample |
+| Studio Holotable module/live/solid tests, native streaming-sector tests, experiment layouts/startup, profile startup and Studio startup ordering | 68 passed; four opt-in real-sector/WolvenKit comparisons skipped |
+| Complete `xf-holotable` test directory | 50 passed, including empty-recorder mapping, invalid V samples, worker lifetime and withdrawing old geometry before a new world's first V sample |
 | Studio and headless Holotable TypeScript | Both passed |
 | Architecture import boundary, Studio UI boundary and component ratchet | 46 passed |
 | Repository links and private paths | Zero findings; new untracked candidate files were additionally scanned with the same checker functions because standard checks enumerate tracked files |
@@ -32,11 +34,13 @@ Verification on 27 October 2026, after the final 02:45 quiet-window cutoff:
 
 All requested jobs used the memory guard: Studio scoped tests peaked at 0.5 GB under 3 GB; headless tests at 0.3 GB under 2 GB; captures at 0.7 GB under 2 GB. The guarded full Studio suite was stopped on the maintainer's instruction. Its dock/browser-hook timeouts are a known baseline blocker outside Holotable; XF · Studio owns the full suite when landing. No game or bridge MCP tools ran.
 
-The 16 PNGs and `measurements.json` are private evidence in `local/holotable/evidence/live/`, named `<watching|behind|connection-lost|back-to-live>-<light|dark>-<narrow|wide>.png`. They show the actual panels beside the same-width RecordList library pattern. The view is 360/900 px and Recordings/reference 240/400 px. The drawing remains 402 px high and the controls 28 px high in every variant. Visual inspection checked readable states, theme contrast, the single controls line, marker/gap visibility, control labels and the wrapped disconnect message. The Play icon was removed from the library button so it does not contradict Pause. The four design-review FIX items on `3200f0c1` are addressed; these remain author checks, with independent code review and the design lead's re-review PASS required before integration.
+The 16 PNGs and `measurements.json` are private evidence in `local/holotable/evidence/live/`, named `<watching|behind|connection-lost|back-to-live>-<light|dark>-<narrow|wide>.png`. They show the actual panels beside the same-width RecordList library pattern. The view is 360/900 px and Recordings/reference 240/400 px. The drawing remains 402 px high and the controls 28 px high in every variant. Visual inspection checked readable states, theme contrast, the single controls line, marker/gap visibility, control labels and the wrapped disconnect message. The Play icon was removed from the library button so it does not contradict Pause. The maintainer reported design PASS and committed the four design fixes as `e4514a44`. The four Medium code-review findings are fixed with failing-before/passing-after regressions; independent code re-review remains the integration gate.
+
+Regression evidence is private in the same evidence directory: `review-headless-before.log` records five new failing cases (stopped-tail draining with/without prior backlog, one/multiple polls of gaps, requester cancellation); `review-studio-before.log` records three reset failures (paused, scrubbing, following with stale selection). After the fixes all 20 headless live tests and all 10 Studio live tests pass. These tests use only fakes and synthetic recorder rows.
 
 Catch-up is limited to one call per second and 8 MiB/3,072 rows per admitted batch, with empty backoff at 2/4/5 s. Status and reconnect use 5 s. Client replies carry at most 256 rows/256 KiB of row payload; the UI drains at most four per second. Watches expire after 15 s without renewal; accepted source results stop at 64 MiB. Geometry requests run in the background with a 45 s deadline. These are client policy bounds; game cadence and cost remain unproven.
 
-The disk-footprint report left about 302 GB free on C. This worktree was below the report's 0.5 GB threshold, with no task-owned payload over 5 GB. The coordinator committed the original candidate as `3200f0c1`; the design fixes build on it without another agent commit. The brief was left unchanged.
+The disk-footprint report left about 300 GB free on C. This worktree was below the report's 0.5 GB threshold, with no task-owned payload over 5 GB. The coordinator committed the original candidate as `3200f0c1` and design fixes as `e4514a44`; the code-review fixes build on those without another agent commit. The brief was left unchanged.
 
 ## File report
 

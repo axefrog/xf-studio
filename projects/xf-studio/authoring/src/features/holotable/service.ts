@@ -122,9 +122,14 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
           v: [...(old?.v ?? []), ...update.v], camera: [...(old?.camera ?? []), ...update.camera],
           events: [...(old?.events ?? []), ...update.events], gaps: [...(old?.gaps ?? []), ...update.gaps] } : null;
         const following = state.live.following;
-        const t = following && session ? session.v.at(-1)?.t ?? session.meta.from : state.t;
+        let t = state.t, selected = state.selected;
+        if (session) {
+          if (following) t = Math.max(session.meta.from, Math.min(session.meta.to, session.v.at(-1)?.t ?? session.meta.from));
+          else if (update.reset) t = session.meta.from;
+        }
+        if (update.reset && selected && !(selected === "v" ? session?.v.length : session?.events.some(e => e.id === selected))) selected = null;
         const behindS = update.state.behindS + (session?.v.length ? Math.max(0, session.meta.to - session.v.at(-1)!.t) : 0);
-        set({ live: { ...update.state, following, behindS }, ...(session ? { open: { dir: "live", session, world: update.reset ? emptyWorld() : state.open?.world ?? emptyWorld() }, phase: "ready", t } : {}),
+        set({ live: { ...update.state, following, behindS }, selected, ...(session ? { open: { dir: "live", session, world: update.reset ? emptyWorld() : state.open?.world ?? emptyWorld() }, phase: "ready", t } : {}),
           message: update.state.message || (!session?.v.length ? "Waiting for recorder samples…" : "") });
         if (!update.more) break;
       }

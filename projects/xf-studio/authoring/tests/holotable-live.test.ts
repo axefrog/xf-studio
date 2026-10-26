@@ -64,6 +64,21 @@ test("following takes newest samples; Pause and scrub freeze, Back to live jumps
   await f.service.dispatch({ kind: "holo.seek", t: 100.5 });
   expect(f.service.snapshot().t).toBe(100.5); expect(f.service.snapshot().live.following).toBe(false);
 });
+
+for (const mode of ["paused", "scrubbing", "following"] as const) test(`a reset puts ${mode} time inside the new run and removes a stale selection`, async () => {
+  const f = setup(); f.service.shown(); await settle();
+  const first: HoloLiveUpdate = { ...f.data(101), events: [{ id: "old-event", kind: "line", t: 101, seq: 1, summary: "Old event", level: "structure", cite: "test" }] };
+  f.updates.push(first); await f.service.dispatch({ kind: "holo.watch" });
+  await f.service.dispatch({ kind: "holo.select", id: "old-event" });
+  if (mode === "paused") await f.service.dispatch({ kind: "holo.play", on: false });
+  if (mode === "scrubbing") await f.service.dispatch({ kind: "holo.seek", t: 100.5 });
+  const next: HoloLiveUpdate = { ...f.data(201), reset: true, since: { ...f.data(201).since, epoch: 2 },
+    meta: { ...meta, run: 2, start: 200, from: 200, end: 201, to: 201 } };
+  f.updates.push(next); await f.advance(1000);
+  expect(f.service.snapshot().t).toBe(mode === "following" ? 201 : 200);
+  expect(f.service.snapshot().selected).toBeNull();
+  expect(f.service.snapshot().open?.session.v).toHaveLength(1);
+});
 test("the behind readout includes retained rows the client has not received yet", async () => {
   const f = setup(); f.service.shown(); await settle();
   const delayed = f.data(101); f.updates.push({ ...delayed, meta: { ...meta, to: 104 }, state: { ...delayed.state, behindS: 2 } });
