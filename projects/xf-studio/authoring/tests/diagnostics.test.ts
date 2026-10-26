@@ -259,10 +259,19 @@ describe("mods involved, for reproduction without their files", () => {
     writeFileSync(join(appData, "Vortex", "temp", "state_backups_full", "hourly.json"), JSON.stringify(state));
     const settings = { ...defaultLocalSettings(), gameRoot: game, launchRoute: "direct" as const };
     // Source discovery names a Vortex-deployed provider after its staging folder; a file Vortex didn't deploy stays "Installed game".
-    const mods = await involvedMods([
+    const winners = [
       { archive: "hair.archive", provider: "Hair Pack-12345-1-2-1727000000", group: "mod", alternatives: ["tweak.archive (mod, My Tweaks-54321-1-0-1727000001)"] },
       { archive: "odd.archive", provider: "Cool Hair-1-2-3", group: "mod", alternatives: ["hand.archive (mod, Installed game)"] },
-    ], settings, name => name === "APPDATA" ? appData : undefined);
+    ];
+    const env = (name: string) => name === "APPDATA" ? appData : undefined;
+    // A backup alone cannot establish a Vortex data folder. Deployment attribution still supplies the staging-name fallback.
+    const backupOnly = await involvedMods(winners, settings, env);
+    expect(backupOnly.find(row => row.name === "Hair Pack-12345-1-2-1727000000")).toMatchObject({ kind: "vortex-mod", status: "findable",
+      source: { site: "vortex", staging: "Hair Pack-12345-1-2-1727000000", modId: "12345" } });
+    // A readable CURRENT establishes the folder; its unavailable MANIFEST models an incomplete database enriched by the backup.
+    mkdirSync(join(appData, "Vortex", "state.v2"), { recursive: true });
+    writeFileSync(join(appData, "Vortex", "state.v2", "CURRENT"), "MANIFEST-000001\n");
+    const mods = await involvedMods(winners, settings, env);
     const byName = new Map(mods.map(row => [row.name, row]));
     expect(byName.get("Hair Pack")).toMatchObject({ kind: "vortex-mod", version: "1.2", status: "re-downloadable",
       source: { site: "nexusmods", modId: "12345", fileId: "67890" }, archives: [{ name: "hair.archive", bytes: 12, won: 1 }] });
