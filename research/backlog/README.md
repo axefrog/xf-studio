@@ -30,8 +30,10 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
   - the restart to V (2 s budget; PREV-196);
   - the first V after a code change (about 12 s; 26.7 s for a save V, with clothing through WolvenKit);
   - first-run preparation;
-  - Build's verifier and first plate cut (PIPE-130). *29 Sep*
-- **Finish verdicts in game:** Glitter and Shimmer reworked offline, waiting for in-game sessions ([finishes](glitter-material.md)). *29 Sep*
+  - Build's verifier and first plate cut (PIPE-130).
+
+  Progress: a cold tab on another V went from 9.5 s to 0.8–1.0 s (26 Oct). Next, in order: the restart to V (PREV-196), then a cold-frame stall of up to 3 s on a tab's first frame. That stall is flaky on `main` too, with no shader links and no long page tasks, so it needs a GPU or driver trace. *26 Oct*
+- **Finish verdicts in game:** Glitter and Shimmer reworked offline, waiting for in-game sessions ([finishes](glitter-material.md)). Parked until a session: the coordinator adds the finish checks to the next prepared game session's checklist. *26 Oct*
 - **Make the Save Explorer worth having** (21 Oct). Today it's an early-access curiosity that lets you look inside a save, read-only ([save editor design](../save/save-editor-design.md)). When this comes up, an agent studies it and reports back:
   - what players and modders would actually use it for;
   - its gaps;
@@ -39,7 +41,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 
   Then the maintainer decides: build the chosen ideas, or move the panel behind research tools for the beta, in line with the "exportable first" bar. *21 Oct*
 - **Desktop parity with `main`:** the last packaged build is `v0.1.0-alpha.2` (28 Sep), and nothing since has been checked installed (CORE-123 among them). Wanted: a nightly packaged build of `main` in CI (an artifact, not a release); an unattended installed acceptance in Windows Sandbox every week and before each release; then `v0.1.0-alpha.3`. *26 Oct*
-- **Consistency leftovers:** UI-142's build steps ([readiness](../../docs/release-readiness.md)). *29 Sep*
+- **Consistency leftovers:** UI-142's build steps ([readiness](../../docs/release-readiness.md)). Building an expression set shows only "Building…" for a minute or two; it needs a progress stream from the export host, the way eye-makeup Build names its stages (PIPE-131). It's next in the polish slot after the Vortex discovery fix. *26 Oct*
 
 ### Polish lane (before 1.0)
 - **In-game styling for the bridge surfaces: the spec has landed, and the build is with XF · Runtime bridge.** The style guide's section "In-game surfaces" holds the token table (`studio-ui/style-guide/in-game-theme.ts`, imported by `tools/overlay/theme.ts`), the type roles, the components, the pulse and settle motion, and the reduced-motion rule for the overlay panel, the CET window and line, and the ink panel. The bridge builds it, including replacing the ink answers' fast red/yellow flash with a hold and ease. The UI track reviews the in-game captures. *22 Oct; spec 26 Oct*
