@@ -6,23 +6,23 @@
 
 ## Summary
 
-168 capabilities in 16 areas.
+172 capabilities in 16 areas.
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 6 | 13 | 19 | 2 | 0 | 128 | 0 | 0 |
+| items | 10 | 13 | 19 | 2 | 0 | 128 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
-| items | 41 | 18 | 82 | 27 | 0 |
+| items | 45 | 18 | 82 | 27 | 0 |
 
 | Health | unknown | works | caveats | degraded | broken |
 |---|---:|---:|---:|---:|---:|
-| items | 53 | 70 | 43 | 0 | 2 |
+| items | 57 | 70 | 43 | 0 | 2 |
 
 | Priority | P0 | P1 | P2 | P3 |
 |---|---:|---:|---:|---:|
-| items | 0 | 13 | 52 | 103 |
+| items | 0 | 13 | 52 | 107 |
 
 ### Evidence debt
 
@@ -99,7 +99,7 @@ Per consumer, blocking first.
 
 #### XF · Story Engine
 
-77 open (0 blocking, 70 needs, 7 wants).
+81 open (0 blocking, 74 needs, 7 wants).
 
 | Level | Ref | Milestone | Capability | Stage | Evidence | Need |
 |---|---|---|---|---|---|---|
@@ -173,6 +173,10 @@ Per consumer, blocking first.
 | needs | P2 | M5 | [`core.restage`](#core.restage) | planned | none | Restage after load: bring back whatever should be present; an asynchronous restaging state is a review item. |
 | needs | P4 | M5 | [`core.play-mode`](#core.play-mode) | planned | none | Story writes without the save lock: play mode takes no save lock. |
 | needs | H6 | M5 | [`core.companion`](#core.companion) | planned | none | Companion processes under the seven agreed conditions; first proof is an in-game session on a hello-world companion. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.actor-identity`](#recorder.actor-identity) | requested | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.deaths`](#recorder.deaths) | requested | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.combat`](#recorder.combat) | requested | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.crime`](#recorder.crime) | requested | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
 | wants |  |  | [`tooling.capability-registry`](#tooling.capability-registry) | merged | offline | Its requirements page asks the bridge chat to mark the bridge's status per row at each milestone; the registry carries that as demand. |
 | wants | H3 | Later | [`core.owned-scope`](#core.owned-scope) | planned | none | An access class for story writes in the release flavour, scoped to what the plugin owns; writes to vanilla state wait on O5. |
 | wants | C3 | Later | [`core.consent`](#core.consent) | planned | none | Release consent and a switch per feature. |
@@ -195,7 +199,7 @@ Per consumer, blocking first.
 
 #### XF · Holotable
 
-11 open (0 blocking, 7 needs, 4 wants).
+15 open (0 blocking, 11 needs, 4 wants).
 
 | Level | Ref | Milestone | Capability | Stage | Evidence | Need |
 |---|---|---|---|---|---|---|
@@ -206,6 +210,10 @@ Per consumer, blocking first.
 | needs | want 10 | M7 | [`surfaces.canvas`](#surfaces.canvas) | proposed | none | Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building. |
 | needs | want 11 | M7 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) | proposed | none | Show and hide while playing, without opening CET (CET blocks input). |
 | needs | want 12 | M7 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) | proposed | none | Lets the overlay work with no other XF program running (bridge proposal B). |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.actor-identity`](#recorder.actor-identity) | requested | none | Story Engine shadow mode binds simulated residents to recorded actors; Holotable shows affiliation in the People layer. |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.deaths`](#recorder.deaths) | requested | none | Story Engine shadow mode reacts to deaths; Holotable draws them as events. |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.combat`](#recorder.combat) | requested | none | Shadow mode and Holotable timelines. |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.crime`](#recorder.crime) | requested | none | Shadow mode and Holotable timelines. |
 | wants | want 15 | M6 | [`recorder.observe-result`](#recorder.observe-result) | planned | none | Lets Holotable draw what sessions already asked, at no extra game cost. |
 | wants | agent-layers clock | M6b | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) | planned | none | Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today. |
 | wants | agent-layers game clock | M6c | [`recorder.game-time`](#recorder.game-time) | planned | none | Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock. |
@@ -2379,7 +2387,7 @@ showroom.spawn, showroom.light, showroom.rotate, showroom.clear and showroom.sta
 
 ## Recorder and catch-up
 
-Continuous channels, taps, session events and catching up on what happened between turns. (area `recorder`, 12 capabilities)
+Continuous channels, taps, session events and catching up on what happened between turns. (area `recorder`, 16 capabilities)
 
 | Capability | Kind | Stage | Evidence | Health | Priority |
 |---|---|---|---|---|---|
@@ -2395,6 +2403,10 @@ Continuous channels, taps, session events and catching up on what happened betwe
 | [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | planned | none | unknown | P3 |
 | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | service | planned | none | unknown | P2 |
 | [`recorder.game-time`](#recorder.game-time) Game time on recorder samples | sense | planned | none | unknown | P3 |
+| [`recorder.actor-identity`](#recorder.actor-identity) Actor identity on recorder samples | sense | requested | none | unknown | P3 |
+| [`recorder.deaths`](#recorder.deaths) Deaths and knockdowns on the recorder | sense | requested | none | unknown | P3 |
+| [`recorder.combat`](#recorder.combat) Combat start and end on the recorder | sense | requested | none | unknown | P3 |
+| [`recorder.crime`](#recorder.crime) Crimes and police heat on the recorder | sense | requested | none | unknown | P3 |
 
 <a id="recorder.session-events"></a>
 
@@ -2586,6 +2598,54 @@ The recorder run manifest carries a wall-clock mapping for its QPC clock (for ex
 The recorder's V samples (or a 1 Hz heartbeat) carry the game's own clock (game_time_s), so tools can align game-clock items, such as the Story Engine's shadow-mode simulation, with recorded and live observations.
 
 - **Demand (holotable, wants, agent-layers game clock, M6c):** Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock.
+- **Updated:** 2026-10-27
+
+<a id="recorder.actor-identity"></a>
+
+### Actor identity on recorder samples
+
+`recorder.actor-identity` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+
+The actors channel carries each actor's character record id, affiliation and crowd flag, once per actor (or on first sample), so observers can tell who an actor is.
+
+- **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Story Engine shadow mode binds simulated residents to recorded actors; Holotable shows affiliation in the People layer.
+- **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
+- **Updated:** 2026-10-27
+
+<a id="recorder.deaths"></a>
+
+### Deaths and knockdowns on the recorder
+
+`recorder.deaths` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+
+A recorder channel (or incident kind) for deaths and knockdowns with victim, instigator and cause, with positions.
+
+- **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Story Engine shadow mode reacts to deaths; Holotable draws them as events.
+- **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
+- **Updated:** 2026-10-27
+
+<a id="recorder.combat"></a>
+
+### Combat start and end on the recorder
+
+`recorder.combat` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+
+Combat start and end events with participants.
+
+- **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Shadow mode and Holotable timelines.
+- **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
+- **Updated:** 2026-10-27
+
+<a id="recorder.crime"></a>
+
+### Crimes and police heat on the recorder
+
+`recorder.crime` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+
+Crime events with offender and the police heat level over time.
+
+- **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Shadow mode and Holotable timelines.
+- **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
 - **Updated:** 2026-10-27
 
 ## Supervisor and plans

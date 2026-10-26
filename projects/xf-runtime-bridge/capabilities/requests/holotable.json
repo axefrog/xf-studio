@@ -1,1 +1,122 @@
-[]
+[
+  {
+    "id": "recorder.actor-identity",
+    "title": "Actor identity on recorder samples",
+    "summary": "The actors channel carries each actor's character record id, affiliation and crowd flag, once per actor (or on first sample), so observers can tell who an actor is.",
+    "area": "recorder",
+    "kind": "sense",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "needs",
+        "ref": "shadow mode (SE D-34; S1, S3)",
+        "milestone": "M6c",
+        "note": "Story Engine shadow mode binds simulated residents to recorded actors; Holotable shows affiliation in the People layer.",
+        "since": "2026-10-27"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "D-34; S1, S3",
+        "milestone": "shadow-mode",
+        "note": "Shadow mode reads these from the recorder (live and replay) through Holotable's model.",
+        "since": "2026-10-27"
+      }
+    ],
+    "updated": "2026-10-27"
+  },
+  {
+    "id": "recorder.deaths",
+    "title": "Deaths and knockdowns on the recorder",
+    "summary": "A recorder channel (or incident kind) for deaths and knockdowns with victim, instigator and cause, with positions.",
+    "area": "recorder",
+    "kind": "sense",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "needs",
+        "ref": "shadow mode (SE D-34; S1, S3)",
+        "milestone": "M6c",
+        "note": "Story Engine shadow mode reacts to deaths; Holotable draws them as events.",
+        "since": "2026-10-27"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "D-34; S1, S3",
+        "milestone": "shadow-mode",
+        "note": "Shadow mode reads these from the recorder (live and replay) through Holotable's model.",
+        "since": "2026-10-27"
+      }
+    ],
+    "updated": "2026-10-27"
+  },
+  {
+    "id": "recorder.combat",
+    "title": "Combat start and end on the recorder",
+    "summary": "Combat start and end events with participants.",
+    "area": "recorder",
+    "kind": "sense",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "needs",
+        "ref": "shadow mode (SE D-34; S1, S3)",
+        "milestone": "M6c",
+        "note": "Shadow mode and Holotable timelines.",
+        "since": "2026-10-27"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "D-34; S1, S3",
+        "milestone": "shadow-mode",
+        "note": "Shadow mode reads these from the recorder (live and replay) through Holotable's model.",
+        "since": "2026-10-27"
+      }
+    ],
+    "updated": "2026-10-27"
+  },
+  {
+    "id": "recorder.crime",
+    "title": "Crimes and police heat on the recorder",
+    "summary": "Crime events with offender and the police heat level over time.",
+    "area": "recorder",
+    "kind": "sense",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "needs",
+        "ref": "shadow mode (SE D-34; S1, S3)",
+        "milestone": "M6c",
+        "note": "Shadow mode and Holotable timelines.",
+        "since": "2026-10-27"
+      },
+      {
+        "consumer": "story-engine",
+        "level": "needs",
+        "ref": "D-34; S1, S3",
+        "milestone": "shadow-mode",
+        "note": "Shadow mode reads these from the recorder (live and replay) through Holotable's model.",
+        "since": "2026-10-27"
+      }
+    ],
+    "updated": "2026-10-27"
+  }
+]
