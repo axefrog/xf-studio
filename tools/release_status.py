@@ -124,7 +124,9 @@ def ci_status() -> list[dict]:
 
 
 # A blocker waits on the maintainer when its text says so: his decision or an in-game session he runs.
-WAITS_ON_MAINTAINER = re.compile(r"waiting (for|on) (in-game|a game session|game sessions|the maintainer|his )|waits (for|on) (in-game|a game session|game sessions|the maintainer|his )|needs the maintainer'?s? (decision|go|answer)", re.I)
+# Only what he can act on now: a decision, an approval or answer, or a session that is prepared and waits for his go.
+# A blocker merely parked "until a game session" is not his to act on yet.
+WAITS_ON_MAINTAINER = re.compile(r"(waiting|waits) (for|on) (the maintainer|his )(decision|go|answer|approval|OK|choice)|needs the maintainer'?s? (decision|go|answer|approval)|ready for the maintainer|session (is )?(prepared|ready)[^.]{0,40}(waits|waiting) (for|on) (the maintainer|his)", re.I)
 
 
 def decisions() -> list[str]:
