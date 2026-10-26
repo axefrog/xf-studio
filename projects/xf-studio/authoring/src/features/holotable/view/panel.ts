@@ -55,14 +55,14 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   const play = button({ label: "Play", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.play", on: !facade.snapshot().playing }, { quiet: true }); } });
   const time = new SliderWithValue({ label: "Moment", min: 0, max: 1, step: 0.1, format: v => `${f1(v)} s`,
     transaction: { edit: v => { const s = facade.snapshot().open?.session; if (s) void ctx.dispatch({ kind: "holo.seek", t: s.meta.from + v }, { quiet: true }); } } });
-  const readout = h("span", { class: "note muted mono", role: "status" });
+  const readout = h("span", { class: "note muted mono", role: "status", style: "flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" });
   const backToLive = button({ label: "Back to live", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.follow" }, { quiet: true }); } });
-  const feedMessage = h("p", { class: "note muted", role: "status" });
 
-  const controls = h("div", { class: "control-line", style: "flex:0 0 auto;flex-wrap:wrap" }, play, view.element, readout, backToLive);
+  for (const control of [play, view.element, backToLive]) control.style.flex = "0 0 auto";
+  const controls = h("div", { class: "control-line", style: "flex:0 0 auto;flex-wrap:nowrap" }, play, view.element, readout, backToLive);
   time.element.style.flex = "0 0 auto"; // the drawing takes the room; the controls keep their own height
   const element = h("div", { class: "panel-content holotable-panel", style: "display:flex;flex-direction:column;height:100%;min-height:0;box-sizing:border-box;overflow:auto" },
-    empty, stage, time.element, controls, feedMessage);
+    empty, stage, time.element, controls);
 
   // Gestures: orbit, zoom, pick. The viewpoint is this view's own; the selection is the service's.
   // The mark under the pointer is read on press: pointer capture retargets the release to the drawing itself.
@@ -99,7 +99,9 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   // The drawing reuses its nodes: each frame sets the attributes that changed on pooled lines and labels, instead of building
   // hundreds of elements per playback tick. The edge ticks change only with the drawing's size.
   const chrome = document.createElementNS(NS, "g"), linesLayer = document.createElementNS(NS, "g"), marksLayer = document.createElementNS(NS, "g"), textLayer = document.createElementNS(NS, "g");
-  svg.append(chrome, linesLayer, marksLayer, textLayer);
+  const message = document.createElementNS(NS, "text"); message.setAttribute("role", "status");
+  svg.append(chrome, linesLayer, marksLayer, textLayer, message);
+  let messageKey = "";
   let chromeSize = "";
   const pooled = (layer: SVGGElement, tag: "polyline" | "text", index: number): SVGElement => {
     let e = layer.children[index] as SVGElement | undefined;
@@ -111,7 +113,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
 
   function draw(state: HoloState) {
     const open = state.open;
-    if (!open || state.phase === "opening") { solidsCanvas.clear(svg.clientWidth, svg.clientHeight); trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); chromeSize = ""; return; }
+    if (!open || state.phase === "opening") { solidsCanvas.clear(svg.clientWidth, svg.clientHeight); trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); message.textContent = ""; messageKey = ""; chromeSize = ""; return; }
     const width = svg.clientWidth || 800, height = svg.clientHeight || 480;
     const started = performance.now();
     const scene = project(open.session, open.world, state.t, state.layers, orbit, width, height, state.selected);
@@ -135,8 +137,9 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     const textList: { at: readonly [number, number]; text: string; style: Style; anchor?: "end" }[] =
       scene.primitives.filter((p): p is Extract<Primitive, { kind: "text" }> => p.kind === "text").map(p => ({ at: p.at, text: p.text, style: p.style }));
     textList.push({ at: [bx + scene.barPx, by - 8], text: `${scene.metresPerBar} m`, style: "label-muted", anchor: "end" });
-    if (scene.inGap) textList.push({ at: [16, 24], text: "No samples at this moment: nothing here proves what happened", style: "label-muted" });
-    else if (scene.camStale && state.layers.camera) textList.push({ at: [16, 24], text: "No fresh camera sample at this moment", style: "label-muted" });
+    const notice = state.live.watching && state.message ? state.message : scene.inGap ? "No samples at this moment: nothing here proves what happened" :
+      scene.camStale && state.layers.camera ? "No fresh camera sample at this moment" : "";
+    paintMessage(notice, width);
     textList.forEach((p, i) => paintText(pooled(textLayer, "text", i), p.at, p.text, p.style, p.anchor));
     trim(textLayer, textList.length);
     // Markers are few (V and the placed events): rebuilt each frame.
@@ -172,6 +175,22 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     set(e, "style", `fill:${STROKES[style]};font:11px var(--font-mono);paint-order:stroke;stroke:var(--bg-app);stroke-width:3px;stroke-linejoin:round`);
     if (e.textContent !== value) e.textContent = value;
   }
+  /** The drawing's top-left notice wraps inside the stage, without changing its height. */
+  function paintMessage(value: string, width: number) {
+    const key = JSON.stringify([value, width]); if (key === messageKey) return; messageKey = key;
+    paintText(message, [16, 24], "", "label-muted");
+    message.setAttribute("aria-label", value);
+    let span: SVGTSpanElement | undefined, line = "";
+    for (const word of value.split(/\s+/).filter(Boolean)) {
+      if (!span) { span = document.createElementNS(NS, "tspan"); span.setAttribute("x", "16"); message.append(span); }
+      span.textContent = line ? `${line} ${word}` : word;
+      if (line && span.getComputedTextLength() > Math.max(1, width - 32)) {
+        span.textContent = line;
+        span = document.createElementNS(NS, "tspan"); span.setAttribute("x", "16"); span.setAttribute("dy", "16"); message.append(span);
+        line = word; span.textContent = word;
+      } else line = span.textContent;
+    }
+  }
 
   return {
     spec: { id: "holotable.view", ...HOLOTABLE_PANEL_META["holotable.view"], element },
@@ -190,13 +209,13 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       play.setAttribute("aria-pressed", String(state.live.following || state.playing));
       backToLive.hidden = !state.live.watching || state.live.following;
       applyCapability(backToLive, facade.capability({ kind: "holo.follow" }));
-      setText(feedMessage, s && state.live.watching ? state.message : "");
-      feedMessage.hidden = !feedMessage.textContent;
       time.update(s ? state.t - s.meta.from : 0, { min: 0, max: s ? Math.max(0.1, s.meta.to - s.meta.from) : 1, disabled: !s, reason: s ? undefined : "Open a recording first." });
       if (s) {
         const v = vAt(state);
-        setText(readout, `${state.live.following ? "Live · " : ""}${f1(state.t - s.meta.from)} s${state.live.following ? "" : ` of ${f1(s.meta.to - s.meta.from)} s`}${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}${state.live.following && state.live.behindS > 2 ? ` · ${f1(state.live.behindS)} s behind` : ""}`);
+        const reconnecting = state.live.watching && state.live.phase === "disconnected";
+        setText(readout, `${reconnecting ? "Reconnecting · " : state.live.following ? "Live · " : ""}${f1(state.t - s.meta.from)} s${state.live.following ? "" : ` of ${f1(s.meta.to - s.meta.from)} s`}${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}${state.live.following && !reconnecting && state.live.behindS > 2 ? ` · ${f1(state.live.behindS)} s behind` : ""}`);
       } else setText(readout, "");
+      readout.title = readout.textContent ?? "";
       const dk = JSON.stringify([state.revision, orbit, svg.clientWidth, svg.clientHeight]);
       if (dk !== drawnKey) { drawnKey = dk; draw(state); }
     },

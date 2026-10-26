@@ -34,6 +34,16 @@ function fixture(name: string, variant: string) {
   service = createService({ recordingsRoot: "", worldPackPath: "", liveBridge: bridge, liveClock: bridge.clock,
     solidSource: { status: async () => ({ cold: false }), around: async () => ({ ...emptySolids(), solids: shapes }) } });
   service.handlers["runs.list"] = () => [{ session: "synthetic-recording", run: 1, dir: "offline-fixture", start: 1000, end: 1005.9, bytes: 24000, complete: true }];
+  service.handlers["session.open"] = () => structuredClone(service!.live.session());
+  service.handlers["world.status"] = () => ({ cold: false });
+  const around = service.handlers["world.around"];
+  service.handlers["world.around"] = (p, signal) => p.watch ? around(p, signal) : { provenance: null, areas: [], cells: [], ...emptySolids(), solids: shapes };
+  service.handlers["fixture.connection"] = async p => {
+    bridge.connected = p.connected === true;
+    if (bridge.connected) bridge.pages.push(bridge.page([], { record: seq, now: 1005.9 }));
+    else bridge.pages.push(Error("Synthetic disconnect"));
+    await bridge.clock.advance(5000); return {};
+  };
   const originalWatch = service.handlers["live.watch"];
   service.handlers["live.watch"] = async (p, signal) => {
     const watch = await originalWatch(p, signal); await settle();
@@ -67,15 +77,37 @@ try {
     await page.waitFor('document.body.dataset.ready === "true" && document.body.dataset.shapes === "true"');
     const measured = await page.evaluate(`(() => {
       const panel = document.querySelector('.holotable-panel'), buttons = [...panel.querySelectorAll('button')].filter(b=>!b.hidden), text = panel.textContent;
+      const controls = panel.querySelector('.control-line'), readout = controls.querySelector('[role="status"]'),
+        back = buttons.find(b=>b.textContent==='Back to live'), play = buttons.find(b=>b.textContent==='Play'||b.textContent==='Pause'),
+        row = document.querySelector('.holotable-recordings').textContent, notice = panel.querySelector('svg [role="status"]'),
+        stage = panel.querySelector('svg').getBoundingClientRect(), line = controls.getBoundingClientRect();
       return {name:${JSON.stringify(name)},theme:${JSON.stringify(theme)},width:${JSON.stringify(width)},
         overflow:panel.scrollWidth > panel.clientWidth, controls:buttons.map(b=>b.textContent),
         live:text.includes('Live ·'), behind:text.includes('s behind'), disconnected:text.includes('The game stopped sending.'),
-        back:buttons.some(b=>b.textContent==='Back to live'), samplesDrawn:panel.querySelectorAll('svg [data-id="v"]').length};
+        reconnecting:readout.textContent.startsWith('Reconnecting · '), retainedRow:row.includes('Live game')&&row.includes('Watching'), reconnectingRow:row.includes('Reconnecting…'),
+        messageInDrawing:notice.getAttribute('aria-label').includes('The game stopped sending.'), noticeFits:notice.getBBox().width<=stage.width-31,
+        noticeWidth:notice.getBBox().width, stageWidth:stage.width,
+        stageHeight:stage.height, controlsHeight:line.height, singleLine:line.height<=28&&(!back||Math.abs(back.getBoundingClientRect().top-play.getBoundingClientRect().top)<2),
+        readoutTitle:readout.title===readout.textContent, ellipsis:getComputedStyle(readout).textOverflow==='ellipsis',
+        back:!!back, samplesDrawn:panel.querySelectorAll('svg [data-id="v"]').length};
     })()`);
     measurements.push(measured);
     await page.screenshot(join(output, `${name}-${theme}-${width}.png`));
     console.log(`${name} ${theme} ${width}: ${JSON.stringify(measured)}`);
-    if (measured.overflow || !measured.samplesDrawn || name === "behind" && !measured.behind || name === "connection-lost" && !measured.disconnected || name === "back-to-live" && !measured.back) throw Error(`Live capture assertion failed: ${name} ${theme} ${width}`);
+    if (measured.overflow || !measured.samplesDrawn || !measured.singleLine || !measured.readoutTitle || !measured.ellipsis || !measured.retainedRow || !measured.noticeFits ||
+      name === "behind" && !measured.behind || name === "connection-lost" && (!measured.disconnected || measured.live || !measured.reconnecting || !measured.reconnectingRow || !measured.messageInDrawing) ||
+      name === "back-to-live" && !measured.back) throw Error(`Live capture assertion failed: ${name} ${theme} ${width}`);
+    const watching = measurements.find((m: any) => m.name === "watching" && m.theme === theme && m.width === width) as any;
+    if (watching && measured.stageHeight !== watching.stageHeight) throw Error(`Transient state shifted drawing: ${name} ${theme} ${width}`);
+    if (name === "connection-lost") {
+      const connection = (connected: boolean) => page!.evaluate(`fetch('/fixture?case=connection-lost&variant=${theme}-${width}',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({method:'fixture.connection',params:{connected:${connected}}})}).then(r=>r.json())`);
+      await connection(true);
+      await page.waitFor(`document.querySelector('.holotable-panel .control-line [role="status"]').textContent.startsWith('Live · ') && !document.querySelector('.holotable-recordings').textContent.includes('Reconnecting…')`);
+      await connection(false);
+      await page.waitFor(`document.querySelector('.holotable-recordings').textContent.includes('Reconnecting…')`);
+      await page.evaluate(`[...document.querySelectorAll('.holotable-recordings button')].find(b=>b.textContent==='Open').click()`);
+      await page.waitFor(`!document.querySelector('.holotable-recordings').textContent.includes('Live game')`);
+    }
   }
   if (page.console.some(e => e.type === "exception" || e.type === "error")) throw Error(JSON.stringify(page.console));
   writeFileSync(join(output, "measurements.json"), JSON.stringify(measurements, null, 2));

@@ -26,7 +26,7 @@ export function holotableRecordingsPanel(ctx: Ctx): PanelController {
       const state = facade.snapshot();
       setText(status, state.phase === "ready" || state.phase === "unavailable" || state.phase === "failed" ? "" : state.message);
       status.hidden = !status.textContent;
-      const k = JSON.stringify([state.phase, state.message, state.runs.map(r => r.dir), state.open?.dir, state.live.available, state.live.recording, state.live.watching]);
+      const k = JSON.stringify([state.phase, state.message, state.runs.map(r => r.dir), state.open?.dir, state.live.available, state.live.recording, state.live.watching, state.live.phase]);
       if (k === key) return;
       key = k;
       if (state.phase === "unavailable" || state.phase === "failed") {
@@ -41,10 +41,11 @@ export function holotableRecordingsPanel(ctx: Ctx): PanelController {
         badge: state.open?.dir === r.dir ? { text: "Open now", tone: "info" } : undefined,
         action: state.open?.dir === r.dir ? undefined : button({ label: "Open", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.open", dir: r.dir }); } }),
       }));
-      if (state.live.available) {
+      if (state.live.available || state.live.watching) {
         const watch = button({ label: "Watch", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.watch" }); } });
         applyCapability(watch, facade.capability({ kind: "holo.watch" }));
-        rows.unshift({ id: "live", name: "Live game", meta: [state.live.recording ? "Recording now" : "Not recording"], current: state.live.watching,
+        const reconnecting = state.live.watching && (state.live.phase === "disconnected" || !state.live.available);
+        rows.unshift({ id: "live", name: "Live game", meta: [reconnecting ? "Reconnecting…" : state.live.recording ? "Recording now" : "Not recording"], current: state.live.watching,
           badge: state.live.watching ? { text: "Watching", tone: "info" } : undefined, action: state.live.watching ? undefined : watch });
       }
       runs.update(rows);
