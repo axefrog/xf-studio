@@ -15,6 +15,43 @@ function fixture() {
   return { s, scope: history.scope(viewScope(s.profile))!, tab: s.tabId() };
 }
 
+test.each([false, true])("CORE-244: unlink copies B's target atomically, including empty=%s, and survives replay and restart", empty => {
+  const { s, scope } = fixture(), a = s.graph.node(MAIN_VIEW, "scene").id, b = s.addView(MAIN_VIEW, {});
+  const source = s.graph.node(b, "scene").id;
+  s.setSubject(source, empty ? undefined : { kind: "character", id: "c-2" });
+  s.setLook(source, empty ? undefined : look(2));
+  const c = s.addView(b, { scene: true }), target = { ...s.scene(source), gen: 0 }, first = s.scene(a);
+  scope.clear();
+  const observed: unknown[] = [];
+  const capture = () => observed.push(s.scene(s.graph.node(c, "scene").id));
+  s.graph.subscribe(capture); s.subscribe(capture);
+  expect(s.graph.unlink(c, "scene")).toBe(true);
+  const fork = s.graph.node(c, "scene").id;
+  expect(fork).not.toBe(source); expect(s.scene(fork)).toEqual(target);
+  expect(observed.length).toBeGreaterThan(0); expect(observed.every(value => JSON.stringify(value) === JSON.stringify(target))).toBe(true);
+  expect(s.scene(a)).toEqual(first); expect(scope.state().depth).toBe(1);
+  expect(scope.undo()).toBe(true); expect(s.graph.node(c, "scene").id).toBe(source);
+  expect(scope.redo()).toBe(true); expect(s.scene(fork)).toEqual(target);
+  expect(openSession(s.session()).knownScene(fork)).toEqual(target);
+});
+
+test.each(["scene", "knownScene"] as const)("CORE-245: %s returns detached subject and look values", read => {
+  const { s } = fixture(), scene = s.graph.node(MAIN_VIEW, "scene").id, before = s.session();
+  let notifications = 0; s.subscribe(() => notifications++);
+  const target = s[read](scene)!;
+  (target.subject as { id: string }).id = "changed";
+  (target.look as { look: string }).look = "changed";
+  expect(s.session()).toEqual(before); expect(s[read](scene)).toEqual({ subject: { kind: "character", id: "c-1" }, look: look(1), gen: 0 });
+  expect(notifications).toBe(0);
+});
+
+test("CORE-245: a newly inherited scene read is detached too", () => {
+  const { s } = fixture(), inherited = s.scene("unseen");
+  (inherited.subject as { id: string }).id = "changed";
+  (inherited.look as { look: string }).look = "changed";
+  expect(s.knownScene("unseen")).toEqual({ subject: { kind: "character", id: "c-1" }, look: look(1), gen: 0 });
+});
+
 test("review H1: panels.add with New scene copies source B's V/look, including an explicitly empty target", () => {
   const { s, tab, scope } = fixture(), a = s.graph.node(MAIN_VIEW, "scene").id, b = s.addView(MAIN_VIEW, {}), sourceScene = s.graph.node(b, "scene").id;
   s.setSubject(sourceScene, { kind: "character", id: "c-2" }); s.setLook(sourceScene, look(2));

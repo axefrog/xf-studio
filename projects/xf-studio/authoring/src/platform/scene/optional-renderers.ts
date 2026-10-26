@@ -18,6 +18,7 @@ export function followOptionalRenderers(source: Pick<ExperimentPort, "registrati
     }
   };
   const unsubscribe = source.subscribe(sync);
-  sync();
-  return () => { unsubscribe(); for (const token of registered.values()) token.abort(); registered.clear(); };
+  const release = () => { unsubscribe(); for (const token of registered.values()) token.abort(); registered.clear(); };
+  try { sync(); } catch (error) { release(); throw error; }
+  return release;
 }

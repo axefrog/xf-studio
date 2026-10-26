@@ -61,6 +61,8 @@ function supersedeList(parts: readonly SupersededPart[]): readonly SupersededPar
  */
 export function createFeatureRenderers(context: FeatureRendererContext, factories: readonly FeatureRendererFactory[], signal?: AbortSignal) {
   const entries: Entry[] = [];
+  // Includes reservations still being created: a factory can register another renderer synchronously.
+  const bands = new Set<RenderBand>();
   const { head } = context;
   const report = context.report ?? ((feature, method, error) => console.error(`The ${feature} renderer's ${method} failed.`, error));
   /** The head's current weight of a facial target, by name (an attached mesh takes the V's shape as it joins). */
@@ -164,6 +166,7 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
     entry.attached.clear(); entry.restored.clear();
     const superseded = entry.supersedes.length > 0;
     entry.supersedes = [];
+    bands.delete(entry.band);
     return superseded;
   }
   function disposeEntry(entry: Entry) {
@@ -184,22 +187,38 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
       if (!entry.failing.has(method)) { entry.failing.add(method); report(entry.feature, method, error); }
     }
   }
-  let nextSlot: number = RENDER_ORDER.featurePlates;
-  function add(factory: FeatureRendererFactory) {
+  function add(factory: FeatureRendererFactory, signal?: AbortSignal) {
+      if (signal?.aborted) return;
       if (entries.some(entry => entry.feature === factory.feature)) throw Error(`The feature ${factory.feature} has two renderers.`);
       const slots = factory.renderSlots ?? 0;
       if (!Number.isInteger(slots) || slots < 0) throw Error(`The ${factory.feature} renderer asks for ${slots} draw-order slots.`);
+      let nextSlot: number = RENDER_ORDER.featurePlates;
+      for (const band of [...bands].filter(band => band.slots > 0).sort((a, b) => a.first - b.first)) {
+        if (slots > 0 && nextSlot + slots <= band.first) break;
+        nextSlot = Math.max(nextSlot, band.first + band.slots);
+      }
       if (nextSlot + slots > RENDER_ORDER.eyeShell)
         throw Error(`The feature plates' draw order is full: ${factory.feature} needs ${slots} slots after ${nextSlot - RENDER_ORDER.featurePlates}.`);
       const entry: Entry = { feature: factory.feature, factory, band: renderBand(nextSlot, slots), attached: new Set(), restored: new Set(),
         releases: new Set(), supersedes: [], failing: new Set() };
-      nextSlot += slots;
+      bands.add(entry.band);
+      let creating = true;
+      const withdraw = () => {
+        // Creation may acquire more resources after an abort; dispose the complete result below.
+        if (creating) return;
+        const at = entries.indexOf(entry);
+        if (at >= 0) { entries.splice(at, 1); disposeEntry(entry); context.requestFrame(); }
+      };
+      signal?.addEventListener("abort", withdraw, { once: true });
+      if (signal) tracked(entry, () => signal.removeEventListener("abort", withdraw));
       try { entry.renderer = factory.create(port(entry)); }
       catch (error) {
         // What it made before failing is released too (PREV-92); it never counted towards what the V shows.
         releasePort(entry);
         throw error;
       }
+      creating = false;
+      if (signal?.aborted) { disposeEntry(entry); return; }
       entries.push(entry);
       return entry;
   }
@@ -209,9 +228,7 @@ export function createFeatureRenderers(context: FeatureRendererContext, factorie
   return {
     /** Optional contributions have a token; withdrawal restores resolved parts synchronously. */
     register(factory: FeatureRendererFactory, signal: AbortSignal) {
-      if (signal.aborted) return;
-      const entry = add(factory);
-      signal.addEventListener("abort", () => { const at = entries.indexOf(entry); if (at >= 0) { entries.splice(at, 1); disposeEntry(entry); } }, { once: true });
+      if (!add(factory, signal)) return;
       context.supersededChanged(); context.requestFrame();
     },
     /** A composed feature's renderer, typed by the factory that made it (the composition root reads its own features'; the host never does). */

@@ -56,6 +56,8 @@ export type ViewHistoryScope = Pick<HistoryScope, "checkpoint" | "clear" | "seal
 export interface ViewGraphOwner {
   history(target: HistoryTarget, options: ScopeOptions): ViewHistoryScope;
   freshId(kind: "view" | ViewSlot): string;
+  /** Copy owner-held node state before the fork's history and graph notifications are published. */
+  fork?(slot: ViewSlot, source: string, copy: string): void;
 }
 /** A node a structure change adds, with its slot; `at`: its place among its slot's nodes (default: last). */
 export type AddedNode = { readonly slot: ViewSlot; readonly node: StoredNode; readonly at?: number };
@@ -201,6 +203,7 @@ export class ViewGraph {
   private readonly scope: ViewHistoryScope;
   /** Where new views' and nodes' IDs come from: the owner's, else a counter. */
   private readonly fresh?: (kind: "view" | ViewSlot) => string;
+  private readonly fork?: ViewGraphOwner["fork"];
   private trails = new Map<string, Trail>();
   /** Tools and view settings the presentation no longer offers (UI-102, UI-163): each view keeps its choice, and no device acts on them. */
   private withdrawnIds = new Set<string>();
@@ -225,6 +228,7 @@ export class ViewGraph {
     if ("freshId" in history) {
       this.scope = history.history(target, { limit: VIEW_HISTORY_LIMIT });
       this.fresh = kind => history.freshId(kind);
+      this.fork = (slot, source, copy) => history.fork?.(slot, source, copy);
     } else this.scope = history.open(scope, target, { limit: VIEW_HISTORY_LIMIT });
   }
 
@@ -450,6 +454,7 @@ export class ViewGraph {
     const current = this.record(view), node = this.nodes.get(current[slot])!;
     if (this.viewsOf(node.id).length < 2) return false;
     const copy: NodeEntry = { ...clone(node), id: this.freshNodeId(slot) };
+    this.fork?.(slot, node.id, copy.id);
     this.commit([copy], { views: this.views.map(item => item.id === view ? { ...current, [slot]: copy.id } : item) },
       { label: `Unlink ${SLOT_NAMES[slot]}`, ...options });
     return true;

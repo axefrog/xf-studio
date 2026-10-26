@@ -34,7 +34,7 @@
  * - **The editing context.** A recorded operation makes `view:<profile>` the editing context (§3.7), so global Undo reaches it; showing a
  *   tab and arranging one are navigation.
  * - **Scenes** name the subject and look they show (`subject`, `look`) and count their changes (`gen`); the graph holds their display
- *   state. A scene the session hasn't seen yet shows what the first scene showing anything shows.
+ *   state. An unlinked scene copies its source's target; an otherwise unknown scene shows what the first populated scene shows.
  * - **The dock** uses instance IDs, as stored. Named phase-2 input/output adapters retain the existing one-controller UI until P3-iii/viii.
  */
 import type { Capability } from "../../platform/api/capability";
@@ -202,6 +202,7 @@ export class ProfileSessions {
       history: (target, options) => { this.graphTarget = target; this.scope = deps.history.open(viewScope(this.profile), this.historyTarget(), {
         ...options }); return this.graphScope(); },
       freshId: kind => this.freshId(kind),
+      fork: (slot, source, copy) => { if (slot === "scene") this.targets.set(copy, { ...this.scene(source), gen: 0 }); },
     };
     // The graph holds each scene's display state; the session holds what it shows.
     this.graph = deps.graph({ ...data.views, scenes: data.views.scenes.map(graphScene) } as ViewGraphData, owner);
@@ -268,17 +269,17 @@ export class ProfileSessions {
       throw new TabRefusal("missing_target", "That panel changed. Open the command again.");
   }
 
-  /** What a scene shows. A scene the session hasn't seen yet (a view's scene forked meanwhile) shows what the first scene showing anything shows. */
+  /** What a scene shows, detached. An unknown scene inherits the first populated target; unlink copies its source through the owner. */
   scene(id: string): SceneTarget {
     const known = this.targets.get(id);
-    if (known) return known;
+    if (known) return clone(known);
     const first = [...this.targets.values()].find(target => target.subject || target.look);
     const inherited: SceneTarget = { ...(first?.subject ? { subject: { ...first.subject } } : {}), ...(first?.look ? { look: { ...first.look } } : {}), gen: 0 };
     this.targets.set(id, inherited);
-    return inherited;
+    return clone(inherited);
   }
   /** What a scene shows, when the session knows it (never made here). */
-  knownScene(id: string): SceneTarget | undefined { const known = this.targets.get(id); return known && { ...known }; }
+  knownScene(id: string): SceneTarget | undefined { const known = this.targets.get(id); return known && clone(known); }
   /** `scene.setLook`: the scene shows `look` (undefined: none); its `gen` rises. Never an Undo step. */
   setLook(scene: string, look: LookRef | undefined) {
     const current = this.scene(scene);

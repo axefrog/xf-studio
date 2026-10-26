@@ -62,6 +62,45 @@ function context(parts = rig()) {
 
 const COMPLETE = { size: 16, normal: new Uint8Array(16 * 16 * 4), surface: new Uint8Array(16 * 16 * 4) };
 
+test("PREV-246: withdrawal during creation disposes the result and everything acquired even after abort", () => {
+  const { ctx, parts, skinListeners, frameListeners, characterListeners } = context();
+  const features = createFeatureRenderers(ctx, []), token = new AbortController(), object = new THREE.Group();
+  let disposed = 0, draws = 0;
+  const factory: FeatureRendererFactory = { feature: featureId("optional"), renderSlots: 40, create(host) {
+    token.abort();
+    host.attach(object); host.skin.subscribe(() => {}); host.subscribeCharacter(() => {}); host.onFrame(() => {});
+    host.supersede([{ slot: "hair" }]);
+    return { beforeDraw() { draws++; }, dispose() { disposed++; } };
+  } };
+  features.register(factory, token.signal);
+  expect(features.features()).toEqual([]); expect(features.get(factory)).toBeUndefined(); expect(features.superseded()).toEqual([]);
+  expect(disposed).toBe(1); expect(object.parent).toBeNull(); expect(parts.root.children.length).toBe(2);
+  expect([skinListeners.size, frameListeners.size, characterListeners.size]).toEqual([0, 0, 0]);
+  features.beforeDraw(); expect(draws).toBe(0);
+  const next = new AbortController(); features.register({ ...factory, create: () => ({ dispose() {} }) }, next.signal);
+  expect(features.features()).toEqual([featureId("optional")]); next.abort(); features.dispose();
+});
+
+test.each([false, true])("PREV-248: draw-order slots are reclaimed after failed=%s registrations, without moving live bands", failed => {
+  const { ctx } = context(), features = createFeatureRenderers(ctx, []), kept = new AbortController(), low = new AbortController();
+  const factory = (name: string, slots: number): FeatureRendererFactory => ({ feature: featureId(name), renderSlots: slots, create: () => ({ dispose() {} }) });
+  if (!failed) features.register(factory("low", 30), low.signal);
+  features.register(factory("kept", 30), kept.signal);
+  low.abort();
+  for (let i = 0; i < 10; i++) {
+    const token = new AbortController(), optional = factory("optional", 30);
+    if (failed) {
+      expect(() => features.register({ ...optional, create() { throw Error("creation failed"); } }, token.signal)).toThrow("creation failed");
+    } else {
+      features.register(optional, token.signal);
+      expect(features.bands()).toEqual({ kept: { first: 40, slots: 30 }, optional: { first: 10, slots: 30 } });
+    }
+    token.abort();
+    expect(features.bands()).toEqual({ kept: { first: failed ? 10 : 40, slots: 30 } });
+  }
+  kept.abort(); features.dispose();
+});
+
 test("eye makeup's renderer draws on the core record's eye plate through its port, and every layer change requests a frame", () => {
   const { ctx, parts, state, stats, skinListeners } = context();
   const before = parts.root.children.length;

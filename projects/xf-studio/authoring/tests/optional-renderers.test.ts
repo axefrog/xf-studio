@@ -46,10 +46,16 @@ test("an unwanted renderer is withdrawn, a wanted one comes back, and release wi
   expect(signals.length).toBe(2);
 });
 
-test("a renderer that fails to register is forgotten, so the next change tries again", () => {
-  const experiments = source(), hair = factory("hair-lab");
+test("PREV-247: failed initial reconciliation releases earlier registrations and its subscription", () => {
+  const experiments = source(), hair = factory("hair-lab"), broken = factory("broken");
   let attempts = 0;
-  experiments.set([hair]);
-  expect(() => followOptionalRenderers(experiments, () => { attempts++; throw new Error("no GPU"); })).toThrow("no GPU");
-  expect(attempts).toBe(1);
+  const signals: AbortSignal[] = [];
+  experiments.set([hair, broken]);
+  expect(() => followOptionalRenderers(experiments, (item, signal) => {
+    attempts++; signals.push(signal); if (item === broken) throw new Error("no GPU");
+  })).toThrow("no GPU");
+  expect(signals.every(signal => signal.aborted)).toBe(true);
+  expect(() => experiments.notify()).not.toThrow();
+  experiments.set([]); experiments.set([hair]);
+  expect(attempts).toBe(2);
 });
