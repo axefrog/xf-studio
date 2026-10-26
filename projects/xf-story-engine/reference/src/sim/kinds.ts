@@ -161,7 +161,8 @@ const AGENT_ROLES: Record<string, string[]> = {
   theft: ['aggressor'], assault: ['aggressor'], shakedown: ['aggressor'], 'gang-clash': ['aggressor'], 'psycho-break': ['aggressor'], 'police-action': ['responder'], tell: ['teller'],
   presence: ['guard'], 'call-in': ['creditor'], warning: ['warner'], price: ['warner'], search: ['searcher'], confront: ['confronter'],
   // a kind a seed produces and S1 reads without owning it (S1 5.1, 16.2): V answering an offer acts in it as the protagonist
-  response: ['protagonist'], favour: ['giver'], repair: ['repairer'], expose: ['exposer'], confess: ['confessor'],
+  // (S2's own code mints the protagonist's `response` with V as `actor`, and the port's `accident` names V's part `actor`: both are declared until S2 and the port say `protagonist` and an agent role of their own)
+  response: ['protagonist', 'actor'], accident: ['actor'], favour: ['giver'], repair: ['repairer'], expose: ['exposer'], confess: ['confessor'],
 };
 
 const city = (d: CityKindDef): KindDef1 => {

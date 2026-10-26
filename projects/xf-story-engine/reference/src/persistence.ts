@@ -308,7 +308,8 @@ export class Persistence {
         if (this.recovered.ids.has(id)) continue;
         const c = this.base.contributions.get(id), e = this.base.edges.get(id), p = this.base.pins.get(id);
         const fr = this.base.frames.get(id);
-        if (fr && !this.k.frames.frame(id)) this.recoverFrame(fr);
+        // only a retained frame is saved on: an ended situation or goal frame of V is opened afresh in a run that was loaded, and in one that went on (S1 8.2)
+        if (fr?.retain && !this.k.frames.frame(id)) this.recoverFrame(fr);
         if (c) this.recoverContribution(id);
         else if (e) this.recoverEdge(id);
         else if (p) {

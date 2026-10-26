@@ -193,7 +193,7 @@ describe('review 6: V is recognised by the roles a kind declares', () => {
     // the watch listens for every declared agent role, and for no other
     const roles = sim.w.kinds.allAgentRoles();
     for (const r of ['aggressor', 'promiser', 'protagonist', 'warner', 'creditor', 'enforcer']) expect(roles).toContain(r);
-    for (const r of ['actor', 'victim', 'promisee']) expect(roles).not.toContain(r);
+    for (const r of ['victim', 'promisee']) expect(roles).not.toContain(r);
     const watch = sim.k.frames.frame(sim.policies.watch)!;
     const mine = (watch.own.reactsTo ?? []).find((i) => i.scope && 'nodes' in i.scope && i.scope.nodes.includes(sim.w.v) && i.where?.some((x) => x.path === '@role' && x.op === 'in'))!;
     expect((mine.where![0]!.arg as string[]).sort()).toEqual(roles);
