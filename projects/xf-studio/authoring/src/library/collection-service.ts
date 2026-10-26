@@ -174,16 +174,20 @@ export class CollectionService {
   private current: string | undefined;
   private readonly clock: Clock;
   private readonly unsubscribe: () => void;
+  private disposed = false;
+  private resultReaders = 0;
 
   constructor(private readonly deps: CollectionServiceDeps) {
     this.clock = deps.clock ?? hostClock();
     const changed = () => {
       const structure = this.structureKey();
       if (structure !== this.structure) { this.structure = structure; this.content++; }
+      if (this.packageKey && this.packageKey !== this.draftKey()) this.packageKey = undefined;
       this.persistenceCache = undefined;
       this.notify();
     };
     this.current = deps.scene.look()?.collection;
+    this.structure = this.structureKey();
     const offOwner = deps.owner.subscribe(changed), offScene = deps.scene.subscribe(() => {
       const ref = deps.scene.look();
       if (ref) { this.lastShown.set(ref.collection, ref.look); this.current = ref.collection; }
@@ -191,7 +195,19 @@ export class CollectionService {
     });
     this.unsubscribe = () => { offOwner(); offScene(); };
   }
-  dispose() { this.buildAbort?.abort(); this.unsubscribe(); this.listeners.clear(); }
+  dispose() {
+    this.disposed = true; this.buildAbort?.abort();
+    if (!this.resultReaders) { this.unsubscribe(); this.listeners.clear(); }
+  }
+  /** A completed package keeps only this bound read service alive, never its editable-context want. */
+  retainPackageResult(): () => void {
+    this.resultReaders++;
+    let released = false;
+    return () => {
+      if (released) return; released = true;
+      if (!--this.resultReaders && this.disposed) { this.unsubscribe(); this.listeners.clear(); }
+    };
+  }
   private newId() { return (this.deps.newId ?? (() => crypto.randomUUID()))(); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private notify() { for (const listener of [...this.listeners]) listener(); }
@@ -360,7 +376,10 @@ export class CollectionService {
     const view = this.shown();
     if (!view) return undefined;
     const live = this.deps.readRecipe?.();
-    return JSON.stringify([this.content, this.versions(view), view.saved?.revision, live?.revision, live?.others?.revision]);
+    // The original document may retire after completion. Its look's recorded parts still change on every edit,
+    // including edits through a newly acquired context; memory/selection-only writes do not change those parts.
+    const selected = this.selectedId(), parts = selected && this.deps.owner.look({ collection: view.id, look: selected })?.parts;
+    return JSON.stringify([this.content, this.versions(view), view.saved?.revision, live?.revision, live?.others?.revision, parts]);
   }
   /** The versions of the shown collection's looks other than the shown one (whose content is the editor's revision). */
   private versions(view: CollectionView) {
@@ -717,6 +736,7 @@ export class CollectionService {
   }
 
   async execute(request: CollectionRequest): Promise<CollectionOutcome> {
+    if (this.disposed) return { ok: false, code: "missing_target", message: "This collection destination was released." };
     const allowed = this.capability(request);
     if (!allowed.available) return { ok: false, code: this.deps.current && allowed.code === "missing_target" ? "missing_target" : "unavailable", message: allowed.reason! };
     const check = () => { const current = this.deps.current?.(); if (current && !current.available) throw new CollectionServiceError(current.code ?? "missing_target", current.reason ?? "This collection destination changed."); };

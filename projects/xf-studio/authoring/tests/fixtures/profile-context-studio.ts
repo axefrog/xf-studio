@@ -9,7 +9,9 @@ import { createProfileServices, createTargetResolver, sceneCommands } from "../.
 import { sessionOfWorkspace } from "../../src/app/profiles/profiles-migration-data";
 import { profileSessionOf, type ProfileSessionData } from "../../src/app/profiles/profile-session";
 import { createTrustedStudioBootstrap } from "../../src/app/trusted-studio-bootstrap";
-import type { StudioPickedFile } from "../../src/app/studio-file-operations";
+import type { StudioFilePort, StudioPickedFile } from "../../src/app/studio-file-operations";
+import type { ModInstallActions } from "../../src/installation/mod-install-actions";
+import type { PartPresetService } from "../../src/library/part-presets";
 import { ViewportAttachment } from "../../src/app/viewport-attachment";
 import { UIPreferenceActions } from "../../src/app/ui-preferences";
 import { CreatorCatalogue } from "../../src/character/creator-catalogue";
@@ -32,7 +34,7 @@ import { openTestLibrary, type TestLibrary } from "./library-file";
 import { libraryPort, libraryVersions, storedLook } from "./profile-studio";
 
 export type ContextRestart = { library: TestLibrary; session: ProfileSessionData; profile: string; looks: LookRef[]; vs: string[] };
-export async function profileContextStudio(options: { restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"]; diagnostics?: DiagnosticsActions; starters?: boolean; recipe?: () => Recipe } = {}) {
+export async function profileContextStudio(options: { restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"]; diagnostics?: DiagnosticsActions; starters?: boolean; recipe?: () => Recipe; modInstall?: ModInstallActions; presets?: PartPresetService } = {}) {
   const library = options.restart?.library ?? openTestLibrary(), transport = libraryPort(library), storage = memoryOutboxStorage();
   const outbox = new DocumentOutbox(transport, storage, { retryMs: 5 }); outbox.open();
   const history = createHistoryService(), workspace = freshWorkspace(), host = await fixtureHost();
@@ -76,6 +78,7 @@ export async function profileContextStudio(options: { restart?: ContextRestart; 
   const authoring = createProfileAuthoring(workspace, { history, views: session.graph, selectedCollection: () => "fixture", resetStack: () => { resets++; } },
     STUDIO_COMPOSITION, { owner: services.collections, sessions: services.looks, outbox, note: text => notes.push(text), report: error => failures.push(error), shown: () => { shows++; } });
   const core = authoring.core, targets = createTargetResolver({ state: session, history, services, contexts: type => STUDIO_CATALOGUE.context(type) });
+  if (options.presets) core.app.attach({ presets: options.presets });
   core.app.attach({ scenes: sceneCommands(session, services), panels: panelCommands(session, targets), targetCheck: targets });
   let drawn = session.session().views.views[0]!.id;
   const scene = session.graph.node(drawn, "scene").id, sceneOf = () => session.graph.node(drawn, "scene").id;
@@ -89,11 +92,11 @@ export async function profileContextStudio(options: { restart?: ContextRestart; 
   }
   const collectionTransport: CollectionTransport = { list: async () => library.collections.list(), get: async id => library.collections.get(id),
     package: options.package ?? (async () => { throw Error("Not used"); }) };
-  const fileDevice = { pick: options.pick ?? (async () => undefined), download: () => {}, bakeMask: async () => new Blob() };
+  const fileDevice: StudioFilePort = { pick: options.pick ?? (async () => undefined), download: () => {}, bakeMask: async () => new Blob() };
   const viewport = new ViewportAttachment<string>({ moveHost: () => {}, measure: () => ({ width: 300, height: 600 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => false,
     hitAt: () => undefined, queryContext: hit => core.app.contextQuery(hit) });
-  const boot = createTrustedStudioBootstrap({ core, diagnostics: options.diagnostics, preferences: new UIPreferenceActions(workspace.uiPreferences), viewport,
+  const boot = createTrustedStudioBootstrap({ core, diagnostics: options.diagnostics, modInstall: options.modInstall, preferences: new UIPreferenceActions(workspace.uiPreferences), viewport,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 512, pending: 0, waiting: false, estimatedBytes: 0, layers: [] }), subscribe: () => () => {} },
     fileDevice,
     collections: { owner: services.collections, scene: { look: () => session.scene(sceneOf()).look, setLook: ref => session.setLook(sceneOf(), ref), subscribe: listener => session.subscribe(listener) },

@@ -33,7 +33,7 @@ import type { LocalSetupActions } from "../setup/local-setup-actions";
 import { InstallDetectionActions } from "../installation/install-detection-actions";
 import type { FrameworkProduct } from "../installation/framework-catalogue";
 import { frameworkStatusForInputs, type FrameworkStatusView } from "../installation/framework-status";
-import { ModInstallActions } from "../installation/mod-install-actions";
+import { ModInstallActions, type ModInstallPort } from "../installation/mod-install-actions";
 import { DesktopAppActions, type DesktopAppState } from "../setup/desktop-app";
 import { UpdateCheckActions, type UpdateCheckState } from "../setup/update-check-actions";
 import type { PreviewSetupActions, PreviewSetupSnapshot } from "../preview/preview-setup";
@@ -402,7 +402,7 @@ export function createStudioPresentation<Slot>(sources: {
   /** Requirements contributed by a feature whose library holds at least one set (queried through its owner). */
   frameworkProducts?: readonly (FrameworkProduct & { readonly feature: string })[];
   /** Optional for fixtures; without it every install action says it isn't available here. */
-  modInstall?: ModInstallActions;
+  modInstall?: ModInstallPort;
   /** Optional for fixtures; without it the port reports a head that needs no setup. */
   previewSetup?: PreviewSetupActions;
   /** The localhost host's desktop-app offer; without it (the desktop app, fixtures) nothing about the desktop app is offered. */

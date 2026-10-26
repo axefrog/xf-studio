@@ -21,6 +21,7 @@ import type { ModuleService } from "../platform/api";
 import type { NamedTargets } from "./action-targets";
 import type { Capability } from "../platform/api";
 import { PanelEditingContexts } from "./profiles/panel-editing-contexts";
+import { builtModsOf } from "../installation/mod-install-actions";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
@@ -97,7 +98,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   if (options.signal?.aborted) life.abort();
   let collection: CollectionApplication, editing: PanelEditingContexts<Slot> | undefined;
   const writer: FileWriter = {
-    operations: () => collection.service,
+    operations: () => ({ service: collection.service, execute: request => core.app.execute(request) }),
     message: () => collection.service.view().progress?.message,
     collection: () => collection.service.draftIdentity()?.collectionId,
     recipe: () => core.presentation.recipe(), selectedLayer: () => core.presentation.layer(),
@@ -122,7 +123,6 @@ export function createTrustedStudioBootstrap<Slot>(options: {
       },
       save: () => core.app.characterPresetFile(),
     },
-    executeCollection: request => core.app.execute(request),
     recoverCollection: draft => collection.recover(draft),
     buildReadiness: options.localSetup && (() => {
       const setup = options.localSetup!.snapshot();
@@ -131,11 +131,12 @@ export function createTrustedStudioBootstrap<Slot>(options: {
       return setup.view.readiness.build.ready ? "ready" : buildToolsChecking(setup.view) ? "checking" : "needs-setup";
     }),
   };
-  const files = new StudioFileOperations(options.fileDevice, { ...writer, capture: () => {
+  const files = new StudioFileOperations(options.fileDevice, { ...writer, executeCollection: request => core.app.execute(request),
+    capture: options.bound || options.fileCapture ? () => {
     if (editing) return editing.captureView(options.naming?.().view, life.signal);
     const held = options.fileCapture?.();
     return held && { ...held, writer };
-  } });
+  } : undefined });
   collection = new CollectionApplication({ ...options.collections, model: core.documents }, core.document, core.app, files);
   editing = options.bound ? new PanelEditingContexts<Slot>({ ...options.bound, create: input => {
     const scoped = createTrustedStudioBootstrap<Slot>({ ...options, core: input.core, bound: undefined, naming: () => input.named,
@@ -154,7 +155,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal,
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
-    localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts, modInstall: options.modInstall, previewSetup: options.previewSetup,
+    localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts,
+    modInstall: options.modInstall?.withBuilds(() => builtModsOf(files.snapshot().package)), previewSetup: options.previewSetup,
     desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments,
     workspace: options.lease, outbox: options.outbox, ...(options.panelInstance ? { panelInstance: options.panelInstance } : {}),
     ...(options.targets ? { targets: options.targets } : {}), ...(options.focus ? { focus: options.focus } : {}),

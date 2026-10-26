@@ -61,6 +61,7 @@ export type ModInstallState = {
 export type ModInstallOutcome = { ok: true; message: string } | { ok: false; code: string; message: string };
 export type ModInstallTransport = (body: { action: "plan" | "install" | "reveal"; candidateId: string; token?: string }) =>
   Promise<{ ok: boolean; status: number; data: unknown }>;
+export type ModInstallPort = Pick<ModInstallActions, "snapshot" | "subscribe" | "capability" | "dispatch" | "descriptors">;
 
 const UNREACHABLE = "XF Studio couldn't reach its installer. Restart XF Studio and try again.";
 
@@ -75,7 +76,10 @@ export class ModInstallActions {
   descriptors() { return structuredClone(MOD_INSTALL_DESCRIPTORS); }
   /** A detached copy; plans and outcomes for a build no longer current are left out. */
   snapshot(): Readonly<ModInstallState> {
-    const current = new Map(this.builds().map(build => [build.product, build.candidateId]));
+    return this.snapshotFor(this.builds());
+  }
+  private snapshotFor(builds: readonly BuiltMod[]): Readonly<ModInstallState> {
+    const current = new Map(builds.map(build => [build.product, build.candidateId]));
     const keep = <T extends { candidateId: string }>(record: Record<string, T>) =>
       Object.fromEntries(Object.entries(record).filter(([product, value]) => current.get(product) === value.candidateId));
     return structuredClone({ busy: this.state.busy, plans: keep(this.state.plans), outcomes: keep(this.state.outcomes) });
@@ -83,11 +87,20 @@ export class ModInstallActions {
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private publish(next: Partial<ModInstallState>) { this.state = { ...this.state, ...next }; for (const listener of this.listeners) listener(); }
   private build(product: string) { return this.builds().find(build => build.product === product); }
+  /** Bind a result surface to its own receipts while keeping plans, busy state and transport under this one owner. */
+  withBuilds(builds: () => readonly BuiltMod[]): ModInstallPort {
+    const current = () => { const own = builds(); return [...this.builds().filter(build => !own.some(own => own.product === build.product)), ...own]; };
+    return { snapshot: () => this.snapshotFor(current()), subscribe: listener => this.subscribe(listener), descriptors: () => this.descriptors(),
+      capability: action => this.capabilityFor(action, current().find(build => build.product === action.product)),
+      dispatch: action => this.dispatchFor(action, current().find(build => build.product === action.product)) };
+  }
 
   capability(action: ModInstallAction): Capability {
+    return this.capabilityFor(action, this.build(action.product));
+  }
+  private capabilityFor(action: ModInstallAction, build: BuiltMod | undefined): Capability {
     if (!(action?.kind in MOD_INSTALL_DESCRIPTORS)) return refusal("invalid_value", "Unknown command.");
     if (!this.transport) return refusal("unavailable", "Adding mods for you isn't available here. Show the mod's folder and copy it by hand.");
-    const build = this.build(action.product);
     if (!build) return refusal("missing_target", "Build this mod first.");
     if (this.state.busy) return refusal("busy", this.state.busy.kind === "modInstall.apply" ? "A mod is being added. Wait for it to finish."
       : "XF Studio is checking where the mod would go. Wait a moment.");
@@ -104,38 +117,42 @@ export class ModInstallActions {
   }
 
   async dispatch(action: ModInstallAction): Promise<ModInstallOutcome> {
-    const allowed = this.capability(action);
+    return this.dispatchFor(action, this.build(action.product));
+  }
+  private async dispatchFor(action: ModInstallAction, build: BuiltMod | undefined): Promise<ModInstallOutcome> {
+    action = structuredClone(action);
+    const allowed = this.capabilityFor(action, build);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Not available right now." };
-    const build = this.build(action.product)!;
+    const accepted = { build: structuredClone(build!), plan: structuredClone(this.state.plans[action.product]) };
     this.publish({ busy: { kind: action.kind, product: action.product } });
     const outcomes = () => ({ ...this.state.outcomes });
     try {
       if (action.kind === "modInstall.review") {
-        const answer = await this.transport!({ action: "plan", candidateId: build.candidateId });
+        const answer = await this.transport!({ action: "plan", candidateId: accepted.build.candidateId });
         const plan = answer.data as ModInstallPlan;
-        if (!answer.ok || plan?.schema !== MOD_INSTALL_PLAN || plan.candidateId !== build.candidateId) return this.fail(action.product, build.candidateId, answer);
+        if (!answer.ok || plan?.schema !== MOD_INSTALL_PLAN || plan.candidateId !== accepted.build.candidateId) return this.fail(action.product, accepted.build.candidateId, answer);
         this.publish({ busy: null, plans: { ...this.state.plans, [action.product]: plan } });
         return { ok: true, message: plan.blocked ?? "" };
       }
       if (action.kind === "modInstall.reveal") {
-        const answer = await this.transport!({ action: "reveal", candidateId: build.candidateId });
-        if (!answer.ok) return this.fail(action.product, build.candidateId, answer, false);
+        const answer = await this.transport!({ action: "reveal", candidateId: accepted.build.candidateId });
+        if (!answer.ok) return this.fail(action.product, accepted.build.candidateId, answer, false);
         this.publish({ busy: null });
         return { ok: true, message: "" };
       }
-      const plan = this.state.plans[action.product]!;
-      const answer = await this.transport!({ action: "install", candidateId: build.candidateId, token: plan.token });
+      const plan = accepted.plan!;
+      const answer = await this.transport!({ action: "install", candidateId: accepted.build.candidateId, token: plan.token });
       const done = answer.data as ModInstallResult;
       if (!answer.ok || done?.schema !== MOD_INSTALL_RESULT) {
         // A plan that no longer matches is dropped, so the view reviews again before another try.
         const code = (answer.data as { code?: string } | null)?.code;
         if (code === "stale_plan") { const plans = { ...this.state.plans }; delete plans[action.product]; this.state = { ...this.state, plans }; }
-        return this.fail(action.product, build.candidateId, answer);
+        return this.fail(action.product, accepted.build.candidateId, answer);
       }
-      this.publish({ busy: null, outcomes: { ...outcomes(), [action.product]: { ok: true, message: done.message, candidateId: build.candidateId } } });
+      this.publish({ busy: null, outcomes: { ...outcomes(), [action.product]: { ok: true, message: done.message, candidateId: accepted.build.candidateId } } });
       return { ok: true, message: done.message };
     } catch {
-      this.publish({ busy: null, outcomes: { ...outcomes(), [action.product]: { ok: false, code: "transport", message: UNREACHABLE, candidateId: build.candidateId } } });
+      this.publish({ busy: null, outcomes: { ...outcomes(), [action.product]: { ok: false, code: "transport", message: UNREACHABLE, candidateId: accepted.build.candidateId } } });
       return { ok: false, code: "transport", message: UNREACHABLE };
     }
   }

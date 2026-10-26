@@ -169,6 +169,7 @@ export class PartPresetService {
     return { available: true };
   }
   async execute(request: PartPresetRequest): Promise<PartPresetOutcome> {
+    request = structuredClone(request);
     const allowed = this.capability(request);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "invalid_value", message: allowed.reason ?? "That can't be done." };
     if (request.kind.startsWith("partPresetSet.")) return this.executeSet(request);

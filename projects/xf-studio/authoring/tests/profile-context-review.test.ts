@@ -1,3 +1,4 @@
+import { ModInstallActions, type BuiltMod } from "../src/installation/mod-install-actions";
 import { expect, test } from "bun:test";
 import { profileContextStudio } from "./fixtures/profile-context-studio";
 import type { StudioPickedFile } from "../src/app/studio-file-operations";
@@ -10,7 +11,7 @@ import { STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { initialRecipe } from "./fixtures/eye-region";
 import { CollectionServiceError } from "../src/library/collection-service";
 import type { PackageBuildProgress } from "../src/platform/api";
-import { eyeCheck } from "./fixtures/package-results";
+import { eyeCheck, eyeBuild } from "./fixtures/package-results";
 
 async function until(ready: () => boolean) {
   const deadline = Date.now() + 4000;
@@ -292,3 +293,54 @@ test("review Low: diagnostics callbacks restore the surviving context when panel
     await w.dispose(); expect(diagnostics.pageFacts().state.source).toBe("before Studio");
   } finally { await w.dispose(); }
 });
+
+for (const target of ["root", "pinned"] as const) for (const action of ["check", "build"] as const) for (const entry of ["files", "library", "authoring"] as const) {
+  test(`accepted ${target} ${action} owns terminal freshness/result/reveal after a drawn switch (${entry})`, async () => {
+    let fallback: BuiltMod[] = [], reveal: (() => void) | undefined, sent: string | undefined, finish: (() => void) | undefined;
+    const install = new ModInstallActions(async request => {
+      sent = request.candidateId; await new Promise<void>(done => { reveal = done; }); return { ok: true, status: 200, data: {} };
+    }, () => fallback);
+    const w = await profileContextStudio({ modInstall: install });
+    try {
+      await w.settle();
+      const ref = w.looks[target === "root" ? 0 : 2]!, port = target === "root" ? w.port : w.bind("presets--scene2").context.current();
+      const candidate = `candidate-${ref.look}`;
+      w.collectionTransport.packageProgress = async () => ({ stage: "convert", step: 3, steps: 5, looks: 1 });
+      w.collectionTransport.package = async (_kind, input) => {
+        await new Promise<void>(done => { finish = done; });
+        const check = eyeCheck(input as { id: string }, { presets: [] });
+        if (action === "check") return check;
+        const build = eyeBuild(check); return { ...build, products: build.products.map(product => ({ ...product, package: `proof/${candidate}` })) };
+      };
+      const pending = entry === "files" ? port.files.execute({ kind: action === "check" ? "package.check" : "package.build" }) : port[entry].execute({ kind: "package", action });
+      await until(() => !!finish);
+      const views = w.session.session().views.views as readonly ViewRecord[];
+      w.history.focus.focusView(views[1]!.id); w.draw(views[1]!.id);
+      expect(port.files.snapshot().progress).toMatchObject({ phase: "working", code: "package" });
+      expect(port.files.activity()).toMatchObject([{ kind: `package.${action}`, cancellable: action === "build" }]);
+      finish!(); expect(await pending).toMatchObject({ ok: true });
+      const state = port.files.snapshot();
+      expect(state).toMatchObject({ collectionBusy: false, activity: [], last: { ok: true, kind: `package.${action}` },
+        progress: { phase: "success", code: action === "check" ? "packageCheck" : "packageBuild" },
+        package: { freshness: "current", result: { collectionId: ref.collection, products: [{ productId: ref.collection }] } } });
+      expect(w.targets.held()).toBe(0);
+      if (action === "build") {
+        fallback = [{ product: ref.collection, candidateId: "live-B", modName: "Live B" }];
+        const showing = port.modInstall.dispatch({ kind: "modInstall.reveal", product: ref.collection });
+        await until(() => !!reveal);
+        w.history.focus.focusView(views[2]!.id); w.draw(views[2]!.id); fallback = [];
+        reveal!(); expect(await showing).toMatchObject({ ok: true }); expect(sent).toBe(candidate);
+      }
+      const peer = w.bind(target === "root" ? "presets--scene2" : "presets--scene1").context.current();
+      expect(peer.authoring.dispatch({ kind: "layer.setOpacity", layerId: "layer-1", opacity: .22 }).ok).toBe(true);
+      expect(port.files.snapshot().package?.freshness).toBe("current");
+      const own = w.bind(target === "root" ? "presets--scene0" : "presets--scene2").context.current();
+      expect(own.authoring.dispatch({ kind: "layer.select", layerId: "layer-2" }).ok).toBe(true);
+      expect(port.files.snapshot().package?.freshness).toBe("current");
+      expect(own.authoring.dispatch({ kind: "layer.setOpacity", layerId: "layer-1", opacity: .37 }).ok).toBe(true);
+      expect(port.files.snapshot().package?.freshness).toBe("stale");
+      expect(own.authoring.dispatch({ kind: "history.undo" }).ok).toBe(true);
+      expect(port.files.snapshot().package?.freshness).toBe("stale");
+    } finally { finish?.(); reveal?.(); await w.dispose(); }
+  });
+}
