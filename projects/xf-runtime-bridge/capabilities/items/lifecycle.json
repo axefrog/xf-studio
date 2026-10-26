@@ -231,11 +231,10 @@
     "summary": "The batch runner's host adapter starts the game through MO2's command line in the test profile with -skipStartScreen, waits for the bridge, and restarts it when a row needs other config.ini keys.",
     "area": "lifecycle",
     "kind": "tool",
-    "stage": "built",
+    "stage": "merged",
     "evidence": "partial",
     "health": "caveats",
     "priority": "P2",
-    "branch": "claude/bridge-runner",
     "depends_on": ["tooling.batch-runner"],
     "surface": { "code": ["tools/testing/host.ts"] },
     "verification": {

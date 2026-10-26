@@ -10,11 +10,11 @@
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 6 | 9 | 16 | 2 | 8 | 119 | 0 | 0 |
+| items | 6 | 9 | 16 | 2 | 1 | 126 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
-| items | 33 | 20 | 80 | 27 | 0 |
+| items | 33 | 18 | 82 | 27 | 0 |
 
 | Health | unknown | works | caveats | degraded | broken |
 |---|---:|---:|---:|---:|---:|
@@ -22,11 +22,11 @@
 
 | Priority | P0 | P1 | P2 | P3 |
 |---|---:|---:|---:|---:|
-| items | 1 | 11 | 49 | 99 |
+| items | 0 | 12 | 49 | 99 |
 
 ### Evidence debt
 
-Built, merged or released capabilities with no game evidence (none or offline): 20. Age is in days to 2026-10-26.
+Built, merged or released capabilities with no game evidence (none or offline): 18. Age is in days to 2026-10-26.
 
 | Capability | Stage | Evidence | Since (version) | Age |
 |---|---|---|---|---:|
@@ -41,13 +41,11 @@ Built, merged or released capabilities with no game evidence (none or offline): 
 | [`photo.poses`](#photo.poses) V's photo-mode pose | merged | offline | 2026-10-26 (0.3.0) | 0 d |
 | [`safety.contact-alerts`](#safety.contact-alerts) Contact alerts | merged | offline | 2026-10-26 (0.8.15) | 0 d |
 | [`supervisor.actor-entries`](#supervisor.actor-entries) Supervising XF actors | merged | offline | 2026-10-26 (0.8.19) | 0 d |
-| [`supervisor.plan-module`](#supervisor.plan-module) Plans | built | offline | 2026-10-26 | 0 d |
+| [`supervisor.plan-module`](#supervisor.plan-module) Plans | merged | offline | 2026-10-26 | 0 d |
 | [`supervisor.while-away`](#supervisor.while-away) While you were away | merged | offline | 2026-10-26 (0.8.15) | 0 d |
-| [`surfaces.overlay-set`](#surfaces.overlay-set) Overlay settings live | built | offline | 2026-10-26 (0.8.22) | 0 d |
-| [`tooling.batch-runner`](#tooling.batch-runner) Batches of rows with verdicts | built | offline | 2026-10-26 | 0 d |
 | [`tooling.capability-registry`](#tooling.capability-registry) The capability registry | built | offline | 2026-10-26 | 0 d |
 | [`tooling.lint`](#tooling.lint) Lints and contracts | merged | offline | 2026-10-26 (0.3.0) | 0 d |
-| [`tooling.preflight`](#tooling.preflight) Session preflight | built | offline | 2026-10-26 | 0 d |
+| [`tooling.preflight`](#tooling.preflight) Session preflight | merged | offline | 2026-10-26 | 0 d |
 | [`tooling.selftest`](#tooling.selftest) Self-test host and unit checks | merged | offline | 2026-10-26 (0.2.0) | 0 d |
 | [`world.doors`](#world.doors) Doors | merged | offline | 2026-10-26 (0.8.12) | 0 d |
 
@@ -152,12 +150,12 @@ Per consumer, blocking first.
 | needs | S6 | M4 | [`character.cyberware`](#character.cyberware) | merged | partial | V's cyberware. |
 | needs | S1 | M4 | [`recorder.session-events`](#recorder.session-events) | merged | partial | The bridge's own event ring and npc.* events are part of the world event feed. |
 | needs | S1 | M4 | [`recorder.world-event-feed`](#recorder.world-event-feed) | proposed | none | A world event feed; the graded hooks and a minimal set of twelve event kinds are designed. Gaps: interior entry is polled, no 'any fact changed' hook, dialogue picks inferred. |
-| needs | runtime-requirements.md#scene-execution-what-the-engine-needs-from-the-bridges-plan-layer | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | built | offline | The engine decides what is true and what happens next; the plan decides how bodies carry it out, performs, observes and reports, and never changes the record. |
-| needs | runtime-requirements.md#1-what-a-scene-decides-at-run-time-and-against-which-signals | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | built | offline | Anticipated outcomes map onto the scene's declared branches; an unanticipated outcome is reported as such and takes the fallback. |
-| needs | runtime-requirements.md#3-several-actors | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | built | offline | A scene is a unit with a cast: joint beats, roles bound to actors, one blackboard per scene, one report stream per scene, up to 5 actors. |
-| needs | runtime-requirements.md#4-failure-semantics | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | built | offline | The ladder: retry, alternative, drop a rung, dissolve, release; the truth once, no contradiction, a safe world, closed bookkeeping. |
-| needs | runtime-requirements.md#6-save-and-load | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | built | offline | A load cancels every plan with one signal; start a scene at phase X at time t, not resume mid-plan; reports keyed by scene, plan and step so a duplicate counts once. |
-| needs | H5 | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | built | offline | The sequencer and frame-rate behaviours for staging beats (waits, conditions, per-step checks, undo). |
+| needs | runtime-requirements.md#scene-execution-what-the-engine-needs-from-the-bridges-plan-layer | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | The engine decides what is true and what happens next; the plan decides how bodies carry it out, performs, observes and reports, and never changes the record. |
+| needs | runtime-requirements.md#1-what-a-scene-decides-at-run-time-and-against-which-signals | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | Anticipated outcomes map onto the scene's declared branches; an unanticipated outcome is reported as such and takes the fallback. |
+| needs | runtime-requirements.md#3-several-actors | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | A scene is a unit with a cast: joint beats, roles bound to actors, one blackboard per scene, one report stream per scene, up to 5 actors. |
+| needs | runtime-requirements.md#4-failure-semantics | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | The ladder: retry, alternative, drop a rung, dissolve, release; the truth once, no contradiction, a safe world, closed bookkeeping. |
+| needs | runtime-requirements.md#6-save-and-load | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | A load cancels every plan with one signal; start a scene at phase X at time t, not resume mid-plan; reports keyed by scene, plan and step so a duplicate counts once. |
+| needs | H5 | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | The sequencer and frame-rate behaviours for staging beats (waits, conditions, per-step checks, undo). |
 | needs | runtime-requirements.md#2-timing | M4 | [`supervisor.frame-rate-executor`](#supervisor.frame-rate-executor) | proposed | none | Frame-rate reflexes in game; a report within about a second of the signal; a reflex may change how something looks, never what happened. |
 | needs | runtime-requirements.md#5-authoring | M4 | [`supervisor.primitives`](#supervisor.primitives) | requested | none | The bridge owns the primitives and the executor; the engine owns composition. Fixtures: the market pickpocketing, the Friday collection, a warning under D-30. |
 | needs | V12 | M4 | [`surfaces.ink-panel`](#surfaces.ink-panel) | merged | partial | Messages to the player: ui.message and ui.hud (on main). |
@@ -188,7 +186,7 @@ Per consumer, blocking first.
 
 | Level | Ref | Milestone | Capability | Stage | Evidence | Need |
 |---|---|---|---|---|---|---|
-| blocking | polish lane: in-game styling |  | [`surfaces.in-game-styling`](#surfaces.in-game-styling) | built | partial | The UI track reviews the in-game captures, light and dark; the review needs the cards drawing. |
+| blocking | polish lane: in-game styling |  | [`surfaces.in-game-styling`](#surfaces.in-game-styling) | merged | partial | The UI track reviews the in-game captures, light and dark; the review needs the cards drawing. |
 | wants |  |  | [`character.live-pose`](#character.live-pose) | merged | offline | Live posing through the bridge: pose V from the Studio and see it in the running game. |
 | wants |  |  | [`capture.showroom`](#capture.showroom) | merged | partial | Finish verdicts in game for the eye-makeup finishes (beta blocker lane). |
 | wants |  |  | [`tooling.mcp-server`](#tooling.mcp-server) | merged | partial | MCP as an optional, off-by-default XF Studio capability: the desktop app hosts the same tools behind a switch. |
@@ -209,7 +207,7 @@ Per consumer, blocking first.
 | Level | Ref | Milestone | Capability | Stage | Evidence | Need |
 |---|---|---|---|---|---|---|
 | needs |  |  | [`lifecycle.continue`](#lifecycle.continue) | planned | none | Unattended launches: today the external key is the only route (Borg 1 to 4). |
-| needs |  |  | [`supervisor.plan-module`](#supervisor.plan-module) | built | offline | Rows with verdicts are plans: schema-3 session scripts run on the plan module. |
+| needs |  |  | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | Rows with verdicts are plans: schema-3 session scripts run on the plan module. |
 | wants |  |  | [`lifecycle.quit`](#lifecycle.quit) | proposed | none | Borg 1's rule: use the game's own quit route, or a bridge quit command; CloseMainWindow acts like Alt+F4 and is the fallback. |
 
 ## Link and protocol
@@ -615,7 +613,7 @@ Launch, phases, waiting, loading saves, the start screen and continue, closing. 
 | [`lifecycle.prompt-detector`](#lifecycle.prompt-detector) Load prompt detection | sense | merged | partial | works | P2 |
 | [`lifecycle.continue-plan`](#lifecycle.continue-plan) Read-only continue plan | research | merged | partial | works | P2 |
 | [`lifecycle.continue`](#lifecycle.continue) Continue past press-any-key in the game | verb | planned | none | unknown | P1 |
-| [`lifecycle.launch`](#lifecycle.launch) Launching the game through MO2 | tool | built | partial | caveats | P2 |
+| [`lifecycle.launch`](#lifecycle.launch) Launching the game through MO2 | tool | merged | partial | caveats | P2 |
 | [`lifecycle.quit`](#lifecycle.quit) Quitting the game | verb | proposed | none | unknown | P2 |
 | [`lifecycle.options-read`](#lifecycle.options-read) Graphics settings record | sense | merged | offline | unknown | P3 |
 
@@ -747,11 +745,10 @@ Ending the press-any-key screen from inside the game, exactly once, so a launch 
 
 ### Launching the game through MO2
 
-`lifecycle.launch` · tool · stage **built** · evidence **partial** · health **caveats** · P2
+`lifecycle.launch` · tool · stage **merged** · evidence **partial** · health **caveats** · P2
 
 The batch runner's host adapter starts the game through MO2's command line in the test profile with -skipStartScreen, waits for the bridge, and restarts it when a row needs other config.ini keys.
 
-- **Version:** branch `claude/bridge-runner`
 - **Depends on:** [`tooling.batch-runner`](#tooling.batch-runner)
 - **Code:** `tools/testing/host.ts`
 - **Row LC8152:** pass (borg-2, 0.8.16 c96779ee, 2026-10-25): Run by hand with the same command line.
@@ -2515,7 +2512,7 @@ Actor goals, invariants and policies at frame rate; the plan executor shared wit
 | [`supervisor.v-entry`](#supervisor.v-entry) Supervising V between turns | service | merged | partial | caveats | P2 |
 | ↳ [`supervisor.actor-entries`](#supervisor.actor-entries) Supervising XF actors | service | merged | offline | unknown | P2 |
 | ↳ [`supervisor.while-away`](#supervisor.while-away) While you were away | service | merged | offline | caveats | P1 |
-| [`supervisor.plan-module`](#supervisor.plan-module) Plans | service | built | offline | unknown | P1 |
+| [`supervisor.plan-module`](#supervisor.plan-module) Plans | service | merged | offline | unknown | P1 |
 | [`supervisor.frame-rate-executor`](#supervisor.frame-rate-executor) Plans executed in the game | service | proposed | none | unknown | P2 |
 | [`supervisor.primitives`](#supervisor.primitives) Scene primitives | verb | requested | none | unknown | P2 |
 
@@ -2590,12 +2587,11 @@ game.catchup's supervisor_summary reconciles every violation and action with its
 
 ### Plans
 
-`supervisor.plan-module` · service · stage **built** · evidence **offline** · health **unknown** · P1
+`supervisor.plan-module` · service · stage **merged** · evidence **offline** · health **unknown** · P1
 
 A plain-data, serialisable plan: steps with a precondition, an action, anticipated outcomes, branches, bounded retries, alternatives, a fallback and a deadline, roles and a shared blackboard, the failure ladder, and one report stream ending in exactly one closing report.
 
 - **Why P1:** The Story Engine's scene execution sits on it, and the batch runner (the next session's ST batch) is its first consumer.
-- **Version:** branch `claude/bridge-runner`
 - **Code:** `tools/testing/plan.ts`, `tools/testing/fixtures/scene-a-pickpocket.plan.json`
 - **Demand (story-engine, needs, runtime-requirements.md#scene-execution-what-the-engine-needs-from-the-bridges-plan-layer, M4):** The engine decides what is true and what happens next; the plan decides how bodies carry it out, performs, observes and reports, and never changes the record.
 - **Demand (story-engine, needs, runtime-requirements.md#1-what-a-scene-decides-at-run-time-and-against-which-signals, M4):** Anticipated outcomes map onto the scene's declared branches; an unanticipated outcome is reported as such and takes the fallback.
@@ -2650,9 +2646,9 @@ The ink panel, the XF overlay box, the CET window and line, their themes and mot
 | [`surfaces.questions`](#surfaces.questions) Questions to the player | surface | merged | proven | works | P3 |
 | [`surfaces.messages`](#surfaces.messages) Message lines | surface | merged | proven | works | P3 |
 | [`surfaces.one-status-surface`](#surfaces.one-status-surface) One status surface at a time | surface | merged | proven | works | P3 |
-| [`surfaces.in-game-styling`](#surfaces.in-game-styling) In-game styling (the Studio's design) | surface | built | partial | caveats | P0 |
-| ↳ [`surfaces.motion`](#surfaces.motion) The motion setting | surface | built | partial | works | P1 |
-| [`surfaces.overlay-set`](#surfaces.overlay-set) Overlay settings live | surface | built | offline | unknown | P1 |
+| [`surfaces.in-game-styling`](#surfaces.in-game-styling) In-game styling (the Studio's design) | surface | merged | partial | caveats | P1 |
+| ↳ [`surfaces.motion`](#surfaces.motion) The motion setting | surface | merged | partial | works | P1 |
+| [`surfaces.overlay-set`](#surfaces.overlay-set) Overlay settings live | surface | merged | partial | unknown | P1 |
 | [`surfaces.overlay-state`](#surfaces.overlay-state) Overlay state | sense | merged | partial | caveats | P1 |
 
 <a id="surfaces.ink-panel"></a>
@@ -2812,12 +2808,12 @@ The ink panel while the HUD shows, the XF box in photo mode and menus (carrying 
 
 ### In-game styling (the Studio's design)
 
-`surfaces.in-game-styling` · surface · stage **built** · evidence **partial** · health **caveats** · P0
+`surfaces.in-game-styling` · surface · stage **merged** · evidence **partial** · health **caveats** · P1
 
 The bridge's surfaces take XF Studio's 'In-game surfaces' design: generated colour, metric and type tables, five baked fonts, cards, chips, bars, the chamfered mark, light and dark themes, and a pulse and settle that stand still under reduced motion.
 
-- **Why P0:** The 0.8.22 merge is on hold until the cards draw, and XF · Studio's UI review (a polish-lane item) needs the ST captures in both themes.
-- **Version:** since 0.8.22, branch `claude/bridge-0822`
+- **Why P1:** 0.8.22 landed; the CET line and window redesign from Studio's review is the 0.8.23 follow-up
+- **Version:** since 0.8.22
 - **Depends on:** [`surfaces.xf-box`](#surfaces.xf-box), [`surfaces.cet-window`](#surfaces.cet-window), [`surfaces.cet-line`](#surfaces.cet-line)
 - **Config:** `[overlay] theme`, `[overlay] motion`
 - **Code:** `tools/overlay/theme.ts`, `native/src/core/overlay/ThemeTable.inc`, `cet/xf_runtime_bridge/theme.lua`, `tools/overlay/cet-bindings.ts`, `tools/lint-lua.ts`
@@ -2843,12 +2839,12 @@ The bridge's surfaces take XF Studio's 'In-game surfaces' design: generated colo
 
 ### The motion setting
 
-`surfaces.motion` · surface · stage **built** · evidence **partial** · health **works** · P1
+`surfaces.motion` · surface · stage **merged** · evidence **partial** · health **works** · P1
 
 [overlay] motion is auto, reduced or full: auto follows Windows' animation-effects setting and also stays still while frame generation is on; the effective value is reported in overlay.state.
 
 - **Why P1:** Part of the ST session that unblocks the 0.8.22 merge; the pulse and settle rows need motion full, since frame generation forces auto to reduced.
-- **Version:** since 0.8.22, branch `claude/bridge-0822`
+- **Version:** since 0.8.22
 - **Part of:** [`surfaces.in-game-styling`](#surfaces.in-game-styling)
 - **Commands:** `overlay.state`
 - **Config:** `[overlay] motion`
@@ -2861,12 +2857,12 @@ The bridge's surfaces take XF Studio's 'In-game surfaces' design: generated colo
 
 ### Overlay settings live
 
-`surfaces.overlay-set` · surface · stage **built** · evidence **offline** · health **unknown** · P1
+`surfaces.overlay-set` · surface · stage **merged** · evidence **partial** · health **unknown** · P1
 
 overlay.set changes the XF box's theme, motion, diagnostics and drawing while the game runs, in memory only (config.ini untouched), with an undo of exactly the keys given.
 
 - **Why P1:** The ST session starts with [overlay] enabled = true and switches the rest live, so the styling rows need no restart per theme.
-- **Version:** since 0.8.22, branch `claude/bridge-0822`
+- **Version:** since 0.8.22
 - **Depends on:** [`surfaces.xf-box`](#surfaces.xf-box)
 - **Commands:** `overlay.set`, `overlay.state`
 - **Code:** `native/src/core/overlay`
@@ -2902,8 +2898,8 @@ The MCP server, CLI, session runner, preflight, packaging and staging. (area `to
 | [`tooling.mcp-server`](#tooling.mcp-server) The MCP server | tool | merged | partial | caveats | P3 |
 | [`tooling.cli`](#tooling.cli) The command line | tool | merged | partial | works | P3 |
 | [`tooling.session-runner`](#tooling.session-runner) Scripted sessions | tool | merged | partial | caveats | P2 |
-| [`tooling.batch-runner`](#tooling.batch-runner) Batches of rows with verdicts | tool | built | offline | unknown | P1 |
-| ↳ [`tooling.preflight`](#tooling.preflight) Session preflight | tool | built | offline | unknown | P1 |
+| [`tooling.batch-runner`](#tooling.batch-runner) Batches of rows with verdicts | tool | merged | partial | unknown | P1 |
+| ↳ [`tooling.preflight`](#tooling.preflight) Session preflight | tool | merged | offline | unknown | P1 |
 | [`tooling.packaging`](#tooling.packaging) Packages | tool | merged | partial | works | P3 |
 | [`tooling.selftest`](#tooling.selftest) Self-test host and unit checks | tool | merged | offline | works | P3 |
 | [`tooling.lint`](#tooling.lint) Lints and contracts | tool | merged | offline | works | P3 |
@@ -2983,12 +2979,11 @@ bun tools/session.ts runs a JSON session script through the command API (camera,
 
 ### Batches of rows with verdicts
 
-`tooling.batch-runner` · tool · stage **built** · evidence **offline** · health **unknown** · P1
+`tooling.batch-runner` · tool · stage **merged** · evidence **partial** · health **unknown** · P1
 
 Schema-3 session scripts: each row ends PASS, FAIL, PARTIAL or SKIP with its evidence, one row's failure never stalls the batch; the runner sets the config.ini keys a row needs and restarts the game through MO2, keeps telemetry on every channel, halts fast on a significant bug and resumes.
 
 - **Why P1:** The next session is the ST styling batch (st-styling.json, 34 rows in nine config groups) and the Borg 4 regression smoke, both generated for this runner.
-- **Version:** branch `claude/bridge-runner`
 - **Depends on:** [`tooling.session-runner`](#tooling.session-runner), [`supervisor.plan-module`](#supervisor.plan-module)
 - **Code:** `tools/testing/batch.ts`, `tools/testing/config-ini.ts`, `tools/testing/telemetry.ts`, `tools/testing/loop.ts`, `tools/sessions/st-styling.json`, `tools/sessions/borg4-smoke.json`
 - **Tests:** `tools/test/batch.test.ts`, `tools/test/batch-halt.test.ts`, `tools/test/review-0826.test.ts`
@@ -3002,12 +2997,11 @@ Schema-3 session scripts: each row ends PASS, FAIL, PARTIAL or SKIP with its evi
 
 ### Session preflight
 
-`tooling.preflight` · tool · stage **built** · evidence **offline** · health **unknown** · P1
+`tooling.preflight` · tool · stage **merged** · evidence **offline** · health **unknown** · P1
 
 --preflight checks offline the staged build and its manifest, the DLL's methods and write classes, the config fixes and restarts, CET's packed key bindings, free commit, the writer seat and frame generation, before any game time.
 
 - **Why P1:** Borg 4 lost time to a disabled overlay in the staged config and a stale MCP catalogue; the preflight checks both before the ST session.
-- **Version:** branch `claude/bridge-runner`
 - **Part of:** [`tooling.batch-runner`](#tooling.batch-runner)
 - **Code:** `tools/testing/preflight.ts`
 - **Tests:** `tools/test/batch.test.ts`

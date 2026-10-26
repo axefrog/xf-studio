@@ -118,12 +118,11 @@
     "summary": "Schema-3 session scripts: each row ends PASS, FAIL, PARTIAL or SKIP with its evidence, one row's failure never stalls the batch; the runner sets the config.ini keys a row needs and restarts the game through MO2, keeps telemetry on every channel, halts fast on a significant bug and resumes.",
     "area": "tooling",
     "kind": "tool",
-    "stage": "built",
-    "evidence": "offline",
+    "stage": "merged",
+    "evidence": "partial",
     "health": "unknown",
     "priority": "P1",
     "priority_reason": "The next session is the ST styling batch (st-styling.json, 34 rows in nine config groups) and the Borg 4 regression smoke, both generated for this runner.",
-    "branch": "claude/bridge-runner",
     "depends_on": ["tooling.session-runner", "supervisor.plan-module"],
     "surface": {
       "code": [
@@ -151,12 +150,11 @@
     "area": "tooling",
     "parent": "tooling.batch-runner",
     "kind": "tool",
-    "stage": "built",
+    "stage": "merged",
     "evidence": "offline",
     "health": "unknown",
     "priority": "P1",
     "priority_reason": "Borg 4 lost time to a disabled overlay in the staged config and a stale MCP catalogue; the preflight checks both before the ST session.",
-    "branch": "claude/bridge-runner",
     "surface": { "code": ["tools/testing/preflight.ts"] },
     "verification": { "tests": ["tools/test/batch.test.ts"] },
     "updated": "2026-10-26"

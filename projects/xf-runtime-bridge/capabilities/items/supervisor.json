@@ -135,12 +135,11 @@
     "summary": "A plain-data, serialisable plan: steps with a precondition, an action, anticipated outcomes, branches, bounded retries, alternatives, a fallback and a deadline, roles and a shared blackboard, the failure ladder, and one report stream ending in exactly one closing report.",
     "area": "supervisor",
     "kind": "service",
-    "stage": "built",
+    "stage": "merged",
     "evidence": "offline",
     "health": "unknown",
     "priority": "P1",
     "priority_reason": "The Story Engine's scene execution sits on it, and the batch runner (the next session's ST batch) is its first consumer.",
-    "branch": "claude/bridge-runner",
     "demand": [
       {
         "consumer": "story-engine",
