@@ -77,6 +77,48 @@ describe("experiment-contributed default layouts", () => {
     expect(log[0]).toContain("Broken");
   });
 
+  test("an experiment whose defaults can't be read or copied is refused alone; the others and the built-in defaults still list", () => {
+    const base = HOLOTABLE_MODULE.defaults![0]!;
+    // Panel state that can't be cloned (a function): copying it throws, as Sol's review reproduced.
+    const uncloneable: StudioModule = { ...HOLOTABLE_MODULE, id: "uncloneable", label: "Uncloneable", defaults: [{ ...base, fragment: { ...base.fragment,
+      panels: base.fragment.panels.map(panel => panel.type === "holotable.view" ? { ...panel, state: { draw: () => 1 } } : panel) } }] };
+    const unreadable = { ...HOLOTABLE_MODULE, id: "unreadable", label: "Unreadable", get defaults(): never { throw Error("unreadable"); } } as StudioModule;
+    const log: string[] = [];
+    const experiments = experimentsDouble([{ module: uncloneable, contribution: HOLOTABLE_VIEW }, { module: unreadable, contribution: HOLOTABLE_VIEW }, holotable]);
+    const w = windowWith(experiments, log);
+    experiments.set(true);
+    const ids = w.defaults.list().map(item => item.id);
+    expect(ids).toContain(EYE); expect(ids).toContain(HOLO);
+    expect(ids).not.toContain("uncloneable/default");
+    expect(log.some(line => line.includes("Uncloneable"))).toBe(true);
+    expect(log.some(line => line.includes("Unreadable"))).toBe(true);
+  });
+
+  test("a module registered again with other defaults is checked afresh, not served from the cache", () => {
+    const first: LayoutExperiment = { module: HOLOTABLE_MODULE, contribution: HOLOTABLE_VIEW };
+    const renamed: LayoutExperiment = { module: { ...HOLOTABLE_MODULE, defaults: [{ ...HOLOTABLE_MODULE.defaults![0]!, name: "Holotable again" }] }, contribution: HOLOTABLE_VIEW };
+    let current = [first];
+    const listeners = new Set<() => void>();
+    const experiments = { registrations: () => current, subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; } };
+    const w = windowWith(experiments as never);
+    expect(w.defaults.get(HOLO)?.name).toBe("Holotable");
+    current = [renamed]; for (const listener of listeners) listener();
+    expect(w.defaults.get(HOLO)?.name).toBe("Holotable again");
+    expect(w.defaults.list().find(item => item.id === HOLO)?.name).toBe("Holotable again");
+  });
+
+  test("a change that arrives while the list is being built is never kept as current", () => {
+    let on = true, fired = false;
+    const listeners = new Set<() => void>();
+    const experiments = { registrations() {
+      if (!fired) { fired = true; on = false; for (const listener of listeners) listener(); }
+      return on ? [holotable] : [];
+    }, subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; } };
+    const w = windowWith(experiments as never);
+    expect(w.defaults.list().map(item => item.id)).not.toContain(HOLO);
+    expect(w.defaults.get(HOLO)).toBeUndefined();
+  });
+
   test("a tab made from an experiment default survives the experiment going off and on", () => {
     const experiments = experimentsDouble([holotable]), w = windowWith(experiments);
     experiments.set(true);

@@ -34,7 +34,8 @@ export function holotablePanel(ctx: Ctx): PanelController {
   const svg = document.createElementNS(NS, "svg");
   svg.setAttribute("role", "img"); svg.setAttribute("tabindex", "0");
   svg.setAttribute("aria-label", "Replay drawn from above: drag to orbit, scroll to zoom, arrow keys turn and tilt");
-  svg.setAttribute("style", "display:block;flex:1 1 auto;min-height:120px;width:100%;background:var(--stage);border:1px solid var(--line);cursor:grab;touch-action:none");
+  // The drawing gives way first in a short panel (it may shrink to nothing), so the controls under it stay in reach.
+  svg.setAttribute("style", "display:block;flex:1 1 auto;min-height:0;width:100%;background:var(--stage);border:1px solid var(--line);cursor:grab;touch-action:none");
   const empty = h("div", { style: "flex:1 1 auto;min-height:0" });
   // The panel can be resized, docked or floated at any time: redraw at the new size.
   // A press orbits or picks without taking keyboard focus, so the focus ring shows only when someone tabs in to turn the view by keys.
@@ -49,7 +50,7 @@ export function holotablePanel(ctx: Ctx): PanelController {
   const readout = h("span", { class: "note muted mono", role: "status" });
 
   const controls = h("div", { class: "control-line" }, play, view.element, readout);
-  const element = h("div", { class: "panel-content holotable-panel", style: "display:flex;flex-direction:column;height:100%;min-height:0;box-sizing:border-box;overflow:hidden" },
+  const element = h("div", { class: "panel-content holotable-panel", style: "display:flex;flex-direction:column;height:100%;min-height:0;box-sizing:border-box;overflow:auto" },
     empty, svg, time.element, controls);
 
   // Gestures: orbit, zoom, pick. The viewpoint is this view's own; the selection is the service's.

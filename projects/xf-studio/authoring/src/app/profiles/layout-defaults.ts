@@ -153,13 +153,19 @@ export class LayoutDefaults {
     this.resolveConflicts();
   }
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-  private changed() { this.views = null; notifyAll(this.listeners); }
+  /** Bumped by every change, so a list built while a change arrives is never kept as current. */
+  private generation = 0;
+  private changed() { this.views = null; this.generation++; notifyAll(this.listeners); }
 
   // ----- Reads -----
   /** Every default: the modules' in module order, then the person's in the order they were made. Detached. */
   list(): readonly LayoutDefaultView[] {
-    this.views ??= Object.freeze([...this.source.list().map(item => this.contributedView(item)), ...this.own().map(item => this.ownView(item))]);
-    return structuredClone(this.views);
+    if (this.views) return structuredClone(this.views);
+    const generation = this.generation;
+    const views = Object.freeze([...this.source.list().map(item => this.contributedView(item)), ...this.own().map(item => this.ownView(item))]);
+    // A change during the build leaves the cache empty, so the next read builds again from what is current.
+    if (generation === this.generation) this.views = views;
+    return structuredClone(generation === this.generation ? views : this.list());
   }
   get(id: string): LayoutDefaultView | undefined {
     const contributed = this.source.list().find(item => item.id === id);

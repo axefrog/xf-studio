@@ -37,20 +37,30 @@ export type LayoutExperiments = { registrations(): readonly LayoutExperiment[]; 
 export function studioLayoutDefaults(experiments: LayoutExperiments, log: (message: string) => void = () => {}) {
   const known: FragmentKnowledge = Object.freeze({ rules: STUDIO_VIEW_GRAPH_RULES, tool: STUDIO_FRAGMENT_KNOWLEDGE.tool,
     panel: (type: string) => panels.has(type) || experiments.registrations().some(item => item.contribution.panels.some(panel => panel.id === type)) });
-  const refused = new Set<string>();
-  let cached: { key: string; list: readonly ContributedLayoutDefault[] } | null = null;
+  const refused = new WeakSet<StudioModule>();
+  // Cached on the registrations themselves (their identities), so a module registered again with other defaults is checked afresh.
+  let cached: { on: readonly LayoutExperiment[]; list: readonly ContributedLayoutDefault[] } | null = null;
+  const refuse = (item: LayoutExperiment, reason: string) => {
+    if (refused.has(item.module)) return;
+    refused.add(item.module);
+    log(`The ${item.module.label} experiment's default layouts can't be offered: ${reason}.`);
+  };
   const list = (): readonly ContributedLayoutDefault[] => {
-    const on = experiments.registrations().filter(item => item.module.defaults?.length);
-    const key = on.map(item => item.module.id).join(" ");
-    if (cached?.key === key) return cached.list;
+    const on = experiments.registrations().filter(item => {
+      try { return !!item.module.defaults?.length; } catch (error) { refuse(item, String((error as Error)?.message ?? error)); return false; }
+    });
+    if (cached && cached.on.length === on.length && cached.on.every((item, index) => item === on[index])) return cached.list;
     const added = on.flatMap(item => {
-      const own = new Set(item.contribution.panels.map(panel => panel.id));
-      const issues = contributedDefaultIssues([item.module], { ...STUDIO_FRAGMENT_KNOWLEDGE, panel: type => panels.has(type) || own.has(type) });
-      if (!issues.length) return contributedDefaults([item.module]);
-      if (!refused.has(item.module.id)) { refused.add(item.module.id); log(`The ${item.module.label} experiment's default layouts can't be offered: ${issues.join("; ")}.`); }
+      // One experiment's broken defaults never take the others, or the built-in ones, with them.
+      try {
+        const own = new Set(item.contribution.panels.map(panel => panel.id));
+        const issues = contributedDefaultIssues([item.module], { ...STUDIO_FRAGMENT_KNOWLEDGE, panel: type => panels.has(type) || own.has(type) });
+        if (!issues.length) return contributedDefaults([item.module]);
+        refuse(item, issues.join("; "));
+      } catch (error) { refuse(item, String((error as Error)?.message ?? error)); }
       return [];
     });
-    cached = { key, list: Object.freeze([...STUDIO_LAYOUT_DEFAULTS, ...added]) };
+    cached = { on, list: Object.freeze([...STUDIO_LAYOUT_DEFAULTS, ...added]) };
     return cached.list;
   };
   const contributed: ContributedDefaultsSource = { list, subscribe: listener => experiments.subscribe(listener) };
