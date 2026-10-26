@@ -553,7 +553,7 @@ function registrationHarness(writable = true) {
   const disposed: number[] = [], replacements: { serial: number; spec: PanelSpec; instance?: string }[] = [];
   const make = (id: string) => {
     const item = { serial: serial++, spec: { id, title: `${id} ${serial}`, icon: "layers" as const, description: id, element: document.createElement("div") },
-      instance: undefined as string | undefined, update() {}, bind(instance: string | undefined) { item.instance = instance; } };
+      instance: undefined as string | undefined, update() {}, dispose() {}, bind(instance: string | undefined) { item.instance = instance; } };
     item.spec.element.textContent = item.spec.title; return item;
   };
   let controllers = [make("experiment.panel"), make("b"), make("c")];

@@ -44,7 +44,7 @@ async function measureTabSwitches(): Promise<TabSwitchProbe> {
     views: () => tabViews(session.graph.snapshot().views, session.tabId()), drawn: () => ({ drawn: drawnView(session) }),
     catalogue: ids => { catalogue.panels = base.panels.flatMap(panel => panel.id === "head" ? viewPanelEntries(head, ids) : [panel]); catalogue.ids = catalogue.panels.map(panel => panel.id); },
     make: id => { const spec = body(id), slot = document.createElement("div"); spec.element.append(slot);
-      return { spec, slot, update() {} } satisfies ViewPaneController; },
+      return { spec, slot, update() {}, dispose() {} } satisfies ViewPaneController; },
     spec: pane => pane.spec, attach: slot => slot.append(canvas),
     save: (tab, state) => { if (tab) session.arrange(tab, serializeDockState(state)); },
     restore: layout => { loads++; dock.load(restoreDockPreference(layout, area(), catalogue, [], viewPanelIds(session.graph.snapshot()), true).state,

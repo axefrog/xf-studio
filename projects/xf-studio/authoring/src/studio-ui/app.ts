@@ -1,5 +1,5 @@
 import { instanceViewPane } from "./panels/instance-view-pane";
-import { captureRuntime } from "./captured-runtime";
+import { captureFocusedRuntime, captureRuntime } from "./captured-runtime";
 import { InstancePanels } from "./panels/instance-panels";
 import { viewCatalogue } from "./views/contribution";
 import { withEmptyChoices } from "./panels/empty-choices";
@@ -458,7 +458,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
 
   const commands = (input = rt) => withPreviewSetup(input, [...buildCommands(input, theme, view, byId,
     featureViews.flatMap(({ binding }) => featureCommands(binding, featureViewContext(input, binding.owner)))), ...panels.flatMap(panel => panel.commands?.() ?? []), ...(tabs?.commands() ?? []), ...guidance.commands()]);
-  const palette = () => { const held = captureRuntime(rt); openPalette(() => commands(held.runtime), { onClose: held.release, signal: held.signal }); };
+  const palette = () => { const held = captureFocusedRuntime(rt, id => instancePanels.controllerRuntime(id) ?? viewPanes.pane(id)?.runtime);
+    if (held) openPalette(() => commands(held.runtime), { onClose: held.release, signal: held.signal }); };
   // Native menus stay in text fields; custom menus are opened by their targets.
   document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
   window.addEventListener("keydown", event => {

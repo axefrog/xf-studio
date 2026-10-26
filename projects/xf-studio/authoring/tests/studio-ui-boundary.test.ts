@@ -28,8 +28,8 @@ const views = readdirSync(join(root, "features")).map(id => join(root, "features
 const CORE_VALUES = new Map<string, readonly string[]>([
   // The shared pure dock engine: only the existing compatibility export imports it by value.
   ["platform/core/dock-layout", ["*"]],
-  // The theme, the dock's recovery gate, and the remembered scroll anchor's validation (view-state.ts reads stored anchors through it).
-  ["app/ui-preferences", ["effectiveTheme", "parseScrollAnchor", "recoverDockLayout"]],
+  // The theme, dock recovery, stored scroll-anchor validation, and the preference owner's pure instance easing-key encoding.
+  ["app/ui-preferences", ["effectiveTheme", "parseScrollAnchor", "recoverDockLayout", "easingScopeFor"]],
   ["legacy/eye-makeup/mod-branding", ["EYE_MAKEUP_MOD", "MOD_NAME_HINT"]],
   // The Character panel's hierarchy: the Studio's own section contributions and the pure tree derivation (character-panel-sections.ts).
   ["character/character-panel-sections", ["allSections", "CHARACTER_CONTRIBUTIONS", "characterPanelTree"]],

@@ -23,6 +23,7 @@ export function holotableRecordingsPanel(ctx: Ctx): PanelController {
   const element = h("div", { class: "panel-content holotable-recordings" }, h("div", { class: "control-line" }, refresh), status, body);
   let key = "";
   return {
+    dispose() {},
     spec: { id: "holotable.recordings", ...HOLOTABLE_PANEL_META["holotable.recordings"], element },
     update() {
       const state = facade.snapshot();

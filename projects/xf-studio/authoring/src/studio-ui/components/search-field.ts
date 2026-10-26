@@ -31,6 +31,8 @@ export class SearchField {
   readonly input: HTMLInputElement;
   private readonly clearButton: HTMLButtonElement;
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private disposed = false;
+  dispose() { this.disposed = true; clearTimeout(this.timer); }
   private last: string;
   constructor(private readonly options: SearchFieldOptions) {
     this.last = (options.value ?? "").trim();
@@ -54,8 +56,9 @@ export class SearchField {
   clear() { this.input.value = ""; this.paint(); this.flush(); }
   focus() { this.input.focus(); }
   private paint() { this.clearButton.classList.toggle("empty", !this.input.value); this.clearButton.tabIndex = this.input.value ? 0 : -1; }
-  private schedule() { clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), this.options.debounce ?? 120); }
+  private schedule() { if (this.disposed) return; clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), this.options.debounce ?? 120); }
   private flush() {
+    if (this.disposed) return;
     clearTimeout(this.timer);
     const query = this.value;
     if (query === this.last) return;

@@ -288,6 +288,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
     diagnostics,
     display);
   return {
+    dispose() {},
     spec: { id: "lighting", ...PANEL_META["lighting"], element },
     update(frame) {
       lastFrame = frame;
@@ -403,6 +404,7 @@ export function motionPanel(rt: StudioRuntime): PanelController {
   const blinkTip = blinkSection.querySelector<HTMLElement>(".help-tip")!;
   const element = h("div", { class: "panel-content" }, idleSection, section("Hair", physics.element), blinkSection);
   return {
+    dispose() {},
     spec: { id: "motion", ...PANEL_META["motion"], element },
     update(frame) {
       const motion = frame.preview.motion;
@@ -511,6 +513,7 @@ export function qualityPanel(rt: StudioRuntime): PanelController {
       "Saved on this computer; your looks and your mod are unchanged."] }, tiers.element, stateLine, rebuildRow),
     rendering);
   return {
+    dispose() {},
     spec: { id: "quality", ...PANEL_META["quality"], element },
     update(frame) {
       const quality = frame.preview.quality, readiness = frame.readiness;
@@ -559,8 +562,9 @@ export function activityPanel(rt: StudioRuntime): PanelController {
     list.replaceChildren(...[...log].reverse().slice(0, 80).map(entry => h("li", { class: `activity-item ${entry.tone}` },
       h("time", { datetime: entry.time.toISOString(), text: entry.time.toLocaleTimeString() }), h("strong", { text: entry.source }), h("span", { text: entry.message }))));
   };
-  rt.feedback.subscribe(draw);
+  const unsubscribe = rt.feedback.subscribe(draw);
   return {
+    dispose: unsubscribe,
     spec: { id: "activity", ...PANEL_META["activity"], element },
     update(_frame: Frame) { draw(); },
   };

@@ -105,6 +105,7 @@ test("a bound panel's real controller fills immediately and can replace its cont
   const rt = { port: { emptyChoices: { snapshot: () => missing ? snapshot : null, execute: async () => { missing = false; return { ok: true }; } } },
     changed: () => {}, report: () => {} } as unknown as StudioRuntime;
   const content = h("div", {}, h("p", {}, "Feature content")), panel = withEmptyChoices(rt, { spec: { id: "layers", title: "Layers", description: "Makeup layers", icon: "layers", element: content },
+    dispose() {},
     update() { updates++; content.replaceChildren(h("p", {}, "Showing Smoky")); } });
   panel.update({} as Frame); expect((content.children[0] as HTMLElement).hidden).toBe(true); expect(updates).toBe(0);
   el(panel.spec.element).querySelector("button")!.click(); panel.update({} as Frame);
@@ -150,8 +151,8 @@ for (const ownerId of ["presets", "layers"]) for (const readonly of [false, true
     capability: readonly ? { available: false, reason: "This workspace is read-only." } : { available: true },
     owner: { panel: ownerId, label: ownerId, prompt: "No look in this scene. Choose one in" } };
   const rt = { port: { emptyChoices: { snapshot: () => snapshot } }, dock } as unknown as StudioRuntime;
-  const owner = withEmptyChoices(rt, { spec: { id: ownerId, title: ownerId, description: "", icon: "layers", element: presets }, update() {} });
-  const panel = withEmptyChoices(rt, { spec: { id: "uv", title: "UV map", description: "", icon: "layers", element: layers }, update() {} });
+  const owner = withEmptyChoices(rt, { spec: { id: ownerId, title: ownerId, description: "", icon: "layers", element: presets }, update() {}, dispose() {} });
+  const panel = withEmptyChoices(rt, { spec: { id: "uv", title: "UV map", description: "", icon: "layers", element: layers }, update() {}, dispose() {} });
   lightDocument.body.append(el(dock.element)); owner.update({} as Frame);
   try {
     panel.update({} as Frame); el(layers).querySelector(".empty-target-pointer")!.querySelector("button")!.click();
@@ -169,7 +170,7 @@ test("Open a 3D view reports the application outcome; session reconciliation own
       id: "default", label: "Use the default V", action: { destination: { route: "view", tab: "requested" } },
     }] }), execute: async () => { calls.push("execute"); return { ok }; } } },
     changed: () => { calls.push("changed"); }, report: (kind: string, result: unknown) => { reported.push({ kind, result }); } } as unknown as StudioRuntime;
-  const panel = withEmptyChoices(rt, { spec: { id: "layers", title: "Layers", description: "", icon: "layers", element: h("div") }, update() {} });
+  const panel = withEmptyChoices(rt, { spec: { id: "layers", title: "Layers", description: "", icon: "layers", element: h("div") }, update() {}, dispose() {} });
   try {
     panel.update({} as Frame); el(panel.spec.element).querySelector(".empty-actions")!.querySelector("button")!.click();
     expect(calls).toEqual(["execute", "changed"]); expect(reported).toEqual([]);

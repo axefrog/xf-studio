@@ -92,6 +92,11 @@ const MAX_NEAR = 4;
 const MAX_OFFSET = 1_000_000;
 const MAX_CHOICE_TYPES = 32;
 const choiceType = (value: unknown): value is string => typeof value === "string" && /^[a-z][a-z0-9-]{0,31}$/.test(value);
+/** Collision-free instance identity plus the existing operation name, with a bounded persisted grammar. */
+export const easingScopeFor = (scope: string, instance?: string): string => instance === undefined ? scope
+  : `instance-${Array.from(new TextEncoder().encode(instance), byte => byte.toString(16).padStart(2, "0")).join("")}-${scope}`;
+const easingScope = (value: unknown): value is string => choiceType(value) || typeof value === "string"
+  && /^instance-(?:[0-9a-f]{2}){1,256}-[a-z][a-z0-9-]{0,31}$/.test(value);
 const choiceSize = (value: unknown): value is ChoiceSize => value === "s" || value === "m" || value === "l";
 const choiceLayout = (value: unknown): value is ChoiceLayout => value === "grid" || value === "list" || value === "details";
 /** A kept control size: whole CSS pixels in a sane range (the control clamps it to what fits). */
@@ -260,7 +265,7 @@ export function parseUIPreferences(value: unknown): UIPreferences {
       if (sizes.length) result.controlSizes = Object.fromEntries(sizes) as Record<string, number>;
     }
     if (candidate.easings && typeof candidate.easings === "object" && !Array.isArray(candidate.easings)) {
-      const easings = Object.entries(candidate.easings).filter(([scope, easing]) => choiceType(scope) && isEasing(easing)).slice(0, MAX_CHOICE_TYPES);
+      const easings = Object.entries(candidate.easings).filter(([scope, easing]) => easingScope(scope) && isEasing(easing)).slice(0, MAX_CHOICE_TYPES);
       if (easings.length) result.easings = Object.fromEntries(easings) as Record<string, EasingId>;
     }
     if (candidate.tours && typeof candidate.tours === "object" && !Array.isArray(candidate.tours)) {
@@ -309,7 +314,7 @@ export class UIPreferenceActions {
         return { available: false, reason: "Too many control sizes are remembered already." };
     }
     if (action.kind === "easing.set") {
-      if (!choiceType(action.scope) || !isEasing(action.easing)) return { available: false, reason: "Choose an operation and one of its curves." };
+      if (!easingScope(action.scope) || !isEasing(action.easing)) return { available: false, reason: "Choose an operation and one of its curves." };
       if (!Object.hasOwn(this.value.easings ?? {}, action.scope) && Object.keys(this.value.easings ?? {}).length >= MAX_CHOICE_TYPES)
         return { available: false, reason: "Too many curves are remembered already." };
     }

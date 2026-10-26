@@ -92,6 +92,7 @@ export function posesPanel(ctx: Ctx): PanelController {
   };
 
   return {
+    dispose() { search.dispose(); },
     spec: { id: "poses.library", ...POSES_PANEL_META["poses.library"], element },
     update() {
       const snapshot = facade.snapshot(), catalogue = snapshot.catalogue;

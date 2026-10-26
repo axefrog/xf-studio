@@ -65,6 +65,7 @@ export function historyPanel(rt: StudioRuntime): PanelController {
   };
 
   return {
+    dispose() {},
     spec: { id: "history", ...PANEL_META["history"], element },
     update(frame: Frame) {
       const timeline = frame.history, draft = frame.library.draft;

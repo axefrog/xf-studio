@@ -52,7 +52,7 @@ export function viewPanelEntries<E extends PanelContribution>(base: E, panels: r
 }
 
 /** A 3D view pane's controller: a panel, with the slot the canvas goes into while the pane holds the picture. */
-export type ViewPaneController = PanelController & { readonly slot: HTMLElement };
+export type ViewPaneController = PanelController & { readonly slot: HTMLElement; readonly runtime?: import("../runtime").StudioRuntime };
 
 export type ViewPanelsDeps = {
   /** Bind the other reusable panel controllers before the destination dock can show or update them. */
@@ -173,7 +173,7 @@ export class ViewPanels {
         const specs = fresh.map(panel => this.deps.spec(this.make(panel)));
         if (restore) this.deps.restore(arrangement, destination.tab);
         else if (specs.length) this.deps.dock.addPanels(specs);
-        for (const pane of leaving) { pane.spec.visibility?.(false); pane.dispose?.(); }
+        for (const pane of leaving) { pane.spec.visibility?.(false); pane.dispose(); }
       }
       releaseContributions?.(); releaseContributions = undefined;
       const opening = this.deps.opening?.();
@@ -194,7 +194,7 @@ export class ViewPanels {
     }
   }
   dispose() {
-    for (const pane of this.panes.values()) { this.deps.removed?.(pane); pane.spec.visibility?.(false); pane.dispose?.(); }
+    for (const pane of this.panes.values()) { this.deps.removed?.(pane); pane.spec.visibility?.(false); pane.dispose(); }
     this.panes.clear(); this.placed = undefined;
   }
   private rememberArrangement() {

@@ -40,7 +40,7 @@ export function withEmptyChoices(rt: StudioRuntime, panel: PanelController): Pan
   const empty = panelEmptyChoices(rt, panel.spec.id), content = panel.spec.element, hidden = new Map<HTMLElement, HTMLElement["hidden"]>();
   const attach = () => panel.emptyChoices === "first" ? content.insertBefore(empty.element, content.children[0] ?? null) : content.append(empty.element);
   attach();
-  return { ...panel, dispose() { empty.dispose(); panel.dispose?.(); }, update(frame) {
+  return { ...panel, dispose() { empty.dispose(); panel.dispose(); }, update(frame) {
     const missing = empty.update();
     if (!missing || panel.emptyChoices) {
       for (const [child, wasHidden] of hidden) child.hidden = wasHidden;

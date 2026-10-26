@@ -328,6 +328,7 @@ export type StudioPresentationPort<Slot> = {
    * focus in a view, the panel holding keyboard focus); none of it is ever an Undo step. `editing` names the scope Undo acts on.
    */
   readonly focus: {
+    instance(): string | undefined;
     view(view: ViewId): void;
     panel(panel: string | undefined): void;
     /**
@@ -720,6 +721,7 @@ export function createStudioPresentation<Slot>(sources: {
     panels: Object.freeze({ ...sources.panelTargets, instance: (panel: string, tab?: string) => sources.panelInstance?.(panel, tab) ?? `${panel}--local`,
       historyScope: (panel: string | undefined) => resolver?.undoScope(panel === undefined ? undefined : sources.panelInstance?.(panel)) }),
     focus: Object.freeze({
+      instance: () => resolver?.focusedInstance(),
       view: (view: ViewId) => sources.focus?.focusView(view),
       panel: (panel: string | undefined) => sources.focus?.focusPanel(panel === undefined ? undefined : sources.panelInstance?.(panel) ?? panel),
       editing: () => { const scope = editingScope(), name = scope && sources.scopeName?.(scope); return scope ? { scope, ...(name ? { name } : {}) } : null; },

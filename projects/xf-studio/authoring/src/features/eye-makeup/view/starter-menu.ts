@@ -56,9 +56,10 @@ export function renameCommand(ctx: EyeMakeupViewContext, listing: StarterListing
   if (!listing || !own.length) return undefined;
   const anchor = { x: 24, y: 96 };
   return { capability: ctx.starters.capability({ kind: "starters.rename", starter: own[0]!.id, name: own[0]!.name }),
-    run: () => { openMenu(own.map(item => ({ kind: "action" as const, label: item.name, thumbnail: () => starterThumbnail(item, listing.thumbnail),
-      capability: ctx.starters.capability({ kind: "starters.rename", starter: item.id, name: item.name }), run: () => rename(ctx, item, anchor) })), anchor,
-      { label: "Rename a starter" }); } };
+    run: () => { const held = ctx.capture?.(), input = held?.context ?? ctx;
+      if (!openMenu(own.map(item => ({ kind: "action" as const, label: item.name, thumbnail: () => starterThumbnail(item, listing.thumbnail),
+        capability: input.starters.capability({ kind: "starters.rename", starter: item.id, name: item.name }), run: () => rename(input, item, anchor) })), anchor,
+      { label: "Rename a starter", signal: held?.signal, onClose: held?.release })) held?.release(); } };
 }
 /** Rename an own starter in the value popover (1 to 60 characters). */
 function rename(ctx: EyeMakeupViewContext, item: StarterView, anchor: MenuAnchor) {

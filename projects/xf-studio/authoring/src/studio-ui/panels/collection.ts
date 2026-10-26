@@ -28,7 +28,7 @@ export type PanelController = { spec: PanelSpec; update(frame: Frame): void;
   /** Reuse this controller for the shown tab's instance; undefined while the session is empty. */
   bind?(instance: string | undefined): void;
   /** The panel is gone for good (its module was hidden): what it holds in a service lets go (a Save Explorer's open save). */
-  dispose?(): void;
+  dispose(): void;
   /** The panel's own palette commands (its presentation state, e.g. folding), read when the palette opens. */
   commands?(): Command[];
   /** Bring one part of the panel into view and focus it (Settings: a group, `settings-sections.ts`). */
@@ -211,6 +211,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   // Build's button is the one showing: Build mod files, or (once the latest Build is current) its secondary twin.
   let buildAnchor = "", releaseBuildAnchor = () => {};
   return {
+    dispose() {},
     spec: { id: "package", ...PANEL_META["package"], element },
     update(frame) {
       const files = frame.files, library = frame.library;

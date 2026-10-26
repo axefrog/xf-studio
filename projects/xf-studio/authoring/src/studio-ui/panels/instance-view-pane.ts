@@ -27,6 +27,6 @@ export function instanceViewPane(root: StudioRuntime, context: ViewContext, inst
   let portOff = current().subscribe(() => root.changed());
   const off = input?.subscribe(() => { portOff(); portOff = current().subscribe(() => root.changed()); root.changed(); }), pane = make(rt, context, instance);
   rt.anchors.register("panel.head", pane.spec.element);
-  return { ...pane, update: () => pane.update(new Frame(current(), root.views, root.dock?.tree)),
-    dispose() { off?.(); portOff(); life.abort(); pane.dispose?.(); } };
+  return { ...pane, runtime: rt, update: () => pane.update(new Frame(current(), root.views, root.dock?.tree)),
+    dispose() { off?.(); portOff(); life.abort(); pane.dispose(); } };
 }

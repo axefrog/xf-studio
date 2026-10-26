@@ -125,6 +125,7 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
   // The first paint (the panel is shown) fills it; the tour runner exists by then.
   let rendered = false;
   return {
+    dispose() {},
     spec: { id: "help", ...PANEL_META.help, element },
     update(_frame: Frame) {
       if (!rendered) {

@@ -168,6 +168,7 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
   ctx.anchors.register("finish.picker", finishGroup);
   ctx.anchors.register("finish.color", color.element);
   return {
+    dispose() {},
     spec: { id: "finish", ...EYE_MAKEUP_PANEL_META.finish, element },
     update(frame) {
       strip.update(frame);
@@ -300,6 +301,7 @@ export function shapePanel(ctx: EyeMakeupViewContext): PanelController {
     gestures);
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
+    dispose() {},
     spec: { id: "shape", ...EYE_MAKEUP_PANEL_META.shape, element },
     update(frame) {
       strip.update(frame);
@@ -356,6 +358,7 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
     section("Edge softness", variable.element, width.element), mottle.element);
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
+    dispose() {},
     spec: { id: "edge", ...EYE_MAKEUP_PANEL_META.edge, element },
     update(frame) {
       strip.update(frame);
@@ -467,6 +470,7 @@ export function warpPanel(ctx: EyeMakeupViewContext): PanelController {
       h("div", { class: "row between" }, chips, add), fieldNote), selected);
   const element = h("div", { class: "panel-content" }, strip.element, empty.element, body);
   return {
+    dispose() {},
     spec: { id: "warp", ...EYE_MAKEUP_PANEL_META.warp, element },
     update(frame) {
       strip.update(frame);

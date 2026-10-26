@@ -107,6 +107,7 @@ export function settingsPanel(rt: StudioRuntime, context: ViewContext): PanelCon
 
   let updatesShown = false;
   return {
+    dispose() { form.cancelDetection(); },
     spec: { id: SETTINGS_PANEL, ...PANEL_META[SETTINGS_PANEL], element,
       // Finding the game and mod manager is read only and quick: done the first time Settings is shown.
       visibility: visible => { if (visible) form.detect(); else form.cancelDetection(); } },

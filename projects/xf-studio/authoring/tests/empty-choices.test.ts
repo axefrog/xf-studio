@@ -103,7 +103,7 @@ for (const count of [0, 1, 8]) test(`after choosing a V, only Presets offers loo
   installLightDom();
   const rt = { port: { emptyChoices: f.port }, dock: { reveal: (panel: string) => revealed.push(panel) }, changed() {}, report() {} } as unknown as StudioRuntime;
   const panels = ["presets", "layers", "uv", "finish", "shape", "edge", "warp", "library"].map(id => withEmptyChoices(rt, {
-    spec: { id, title: id, icon: "head", description: "", element: h("div", {}, h("p", {}, "Editor content")) }, update() {},
+    spec: { id, title: id, icon: "head", description: "", element: h("div", {}, h("p", {}, "Editor content")) }, update() {}, dispose() {},
   }));
   const visible = (node: LightElement) => { for (let at: LightElement | null = node; at; at = at.parentNode) if (at.hidden) return false; return true; };
   try {
@@ -248,7 +248,7 @@ for (const count of [0, 1, 8]) test(`a view-less tab gives the declared primary 
   const f = await fixture(count); f.session.closeView("main"); installLightDom();
   const rt = { port: { emptyChoices: f.port }, views: STUDIO_CATALOGUE } as unknown as StudioRuntime;
   const panels = ["layers", "uv", "finish", "presets", "library"].map(id => withEmptyChoices(rt, {
-    spec: { id, title: id, icon: "head", description: "", element: h("div") }, update() {},
+    spec: { id, title: id, icon: "head", description: "", element: h("div") }, update() {}, dispose() {},
   }));
   try {
     for (const panel of panels) {

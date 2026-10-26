@@ -2,7 +2,11 @@ import type { Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import type { StudioPickedFile } from "../src/app/studio-file-operations";
 import { presetMenu } from "../src/studio-ui/target-menus";
-import { closeMenus } from "../src/studio-ui/menu";
+import { closeMenus, closePopovers, openMenu } from "../src/studio-ui/menu";
+import { EYE_MAKEUP_VIEW_BINDING } from "../src/features/eye-makeup/view";
+import { featureCommands } from "../src/studio-ui/views/feature-context";
+import { easingScopeFor, parseUIPreferences } from "../src/app/ui-preferences";
+import { tabDefaults } from "../src/app/profiles/profile-window";
 import { openPalette } from "../src/studio-ui/commands";
 import { generateInstanceCommands } from "./fixtures/profile-session-generator";
 import { SaveExplorerSessions, saveExplorerFacade } from "../src/features/save-explorer";
@@ -10,19 +14,20 @@ import { explorerPanel } from "../src/features/save-explorer/view/panel";
 import { moduleViewContext } from "../src/studio-ui/views/feature-context";
 import { syntheticSave } from "./fixtures/synthetic-explorer-save";
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { installLightDom, uninstallLightDom, lightEvent, type LightElement } from "./light-dom";
+import { installLightDom, uninstallLightDom, lightEvent, LightElement, lightDocument } from "./light-dom";
 import { profileContextStudio } from "./fixtures/profile-context-studio";
 import { StudioRuntime, Frame, type Port } from "../src/studio-ui/runtime";
 import { InstancePanels } from "../src/studio-ui/panels/instance-panels";
 import { instanceViewPane } from "../src/studio-ui/panels/instance-view-pane";
 import { headPanel } from "../src/studio-ui/panels/viewports";
-import { presetsPanel } from "../src/features/eye-makeup/view/collection";
+import { presetsPanel, libraryPanel } from "../src/features/eye-makeup/view/collection";
+import { finishPanel } from "../src/features/eye-makeup/view/inspector";
 import { uvPanel } from "../src/features/eye-makeup/view/uv";
 import { characterPanel } from "../src/studio-ui/panels/character";
 import { featureViewContext } from "../src/studio-ui/views/feature-context";
 import { STUDIO_CATALOGUE } from "../src/compose/views";
 import { serializeDockState } from "../src/studio-ui/dock/persist";
-import { captureRuntime } from "../src/studio-ui/captured-runtime";
+import { captureFocusedRuntime, captureRuntime } from "../src/studio-ui/captured-runtime";
 import { viewScope } from "../src/platform/core/history-service";
 import { MemoryViewState, bindViewState, scopedViewState } from "../src/studio-ui/view-state";
 import { createPanelUV } from "../src/preview/browser/panel-uv";
@@ -30,8 +35,11 @@ import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import type { Feedback } from "../src/studio-ui/feedback";
 import type { createUVEditor } from "../src/legacy/eye-makeup/browser/uv-editor";
 
-beforeAll(() => installLightDom());
-afterAll(() => uninstallLightDom());
+const originalGlobals = { window: globalThis.window, addEventListener: globalThis.addEventListener, removeEventListener: globalThis.removeEventListener };
+const testWindow = Object.assign(new LightElement("window"), { innerWidth: 1400, innerHeight: 900 });
+beforeAll(() => { installLightDom(); Object.assign(globalThis, { window: testWindow,
+  addEventListener: testWindow.addEventListener.bind(testWindow), removeEventListener: testWindow.removeEventListener.bind(testWindow) }); });
+afterAll(() => { uninstallLightDom(); Object.assign(globalThis, originalGlobals); });
 const toasts: string[] = [];
 const feedback = { toast(_tone: string, _source: string, message: string) { toasts.push(message); }, record() {}, announce() {} } as unknown as Feedback;
 const node = (value: Element) => value as unknown as LightElement;
@@ -44,10 +52,20 @@ function owner(s: Awaited<ReturnType<typeof profileContextStudio>>, available = 
   const root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE);
   const catalogue = { ...STUDIO_CATALOGUE, get ids() { return available() ? STUDIO_CATALOGUE.ids : []; } };
   const panels = new InstancePanels(root, { catalogue: () => catalogue, generation, changed() { changes++; }, make: (instance, rt) => instance.type === "character" ? characterPanel(rt)
+    : instance.type === "library" ? libraryPanel(featureViewContext(rt, "eye-makeup"))
+    : instance.type === "finish" ? finishPanel(featureViewContext(rt, "eye-makeup"))
     : instance.type === "save-explorer.explorer" ? explorerPanel(moduleViewContext(rt, "save-explorer") as never)
     : instance.type === "uv" ? uvPanel(featureViewContext(rt, "eye-makeup")) : presetsPanel(featureViewContext(rt, "eye-makeup")) });
   const paint = () => { panels.sync(); for (const panel of panels.controllers()) { document.body.append(panel.spec.element); panel.update(new Frame(s.port)); } };
   return { panels, root, paint, get changes() { return changes; } };
+}
+async function readyCharacters(ui: ReturnType<typeof owner>, ids: string[]) {
+  const deadline = performance.now() + 5000;
+  while (ids.some(id => !ui.panels.runtime(id)?.authoring.characterPanel()?.sections.some(section => section.rows.length))) {
+    if (performance.now() > deadline) throw Error("Character rows did not load within five seconds");
+    await Bun.sleep(5); ui.paint();
+  }
+  ui.paint();
 }
 
 test("G1/G1b: three real Presets and Character controllers retain their separate writers, histories and DOM IDs", async () => {
@@ -55,6 +73,7 @@ test("G1/G1b: three real Presets and Character controllers retain their separate
   arrange(s, ids); const ui = owner(s);
   try {
     ui.paint(); expect(ui.panels.controllers()).toHaveLength(6);
+    await readyCharacters(ui, ids.filter(id => id.startsWith("character")));
     for (const i of [0, 1, 2]) {
       s.session.focus.focusView(s.session.session().views.views[(i + 1) % 3]!.id); ui.paint();
       const panel = ui.panels.controllers().find(panel => panel.spec.id === `presets--scene${i}`)!;
@@ -72,7 +91,12 @@ test("G1/G1b: three real Presets and Character controllers retain their separate
       expect(ui.panels.runtime(character.spec.id)!.panels.historyScope(character.spec.id)).toBe(`character:${s.vs[i]}`);
     }
     const allIds = ui.panels.controllers().flatMap(panel => node(panel.spec.element).querySelectorAll("[id]").map(element => element.id));
+    expect(allIds.filter(id => id.includes("cc-choices-")).length).toBeGreaterThan(3);
     expect(new Set(allIds).size).toBe(allIds.length);
+    for (const panel of ui.panels.controllers()) for (const control of node(panel.spec.element).querySelectorAll("[aria-controls]")) {
+      const id = control.getAttribute("aria-controls")!;
+      expect(node(panel.spec.element).querySelectorAll("[id]").filter(element => element.id === id)).toHaveLength(1);
+    }
     const snapshot = s.stored(); ui.panels.dispose(); await s.dispose();
     const restarted = await profileContextStudio({ restart: snapshot }); const again = owner(restarted);
     try { again.paint(); expect(again.panels.controllers().map(panel => panel.spec.id).sort()).toEqual([...ids].sort()); }
@@ -322,5 +346,92 @@ test("G1 real Presets rows add, rename, remove, restore and choose only their na
       expect(s.session.knownScene(scenes[i]!)!.look).toEqual(s.looks[i]);
       for (const peer of [0, 1, 2].filter(peer => peer !== i)) expect(s.session.knownScene(scenes[peer]!)).toEqual(before[peer]);
     }
+  } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("review High: the palette captures the focused unseen inspector, then keeps it across focus movement", async () => {
+  const s = await profileContextStudio(), inspector = s.session.addPanel(s.session.tabId(), "finish", { binding: { policy: "pinned", target: { look: s.looks[2]! } } });
+  arrange(s, ["presets--scene0", inspector]); const ui = owner(s);
+  try {
+    ui.paint(); s.port.focus.panel(inspector);
+    const a = JSON.stringify(ui.panels.runtime("presets--scene0")!.feature("eye-makeup").view().recipe());
+    const held = captureFocusedRuntime(ui.root, id => ui.panels.controllerRuntime(id))!, layer = held.runtime.editor.layer()!;
+    expect(held.runtime.port.focus.targets().look).toEqual(s.looks[2]);
+    openPalette(() => [{ id: "opacity", title: "Set opacity", group: "Edit", capability: () => ({ available: true }),
+      run: () => { held.runtime.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .43 }); } }], { signal: held.signal, onClose: held.release });
+    s.port.focus.panel("presets--scene0"); node(document.body).querySelector(".palette-item")!.click();
+    expect(ui.panels.runtime(inspector)!.feature("eye-makeup").view().layer()!.opacity).toBe(.43);
+    expect(JSON.stringify(ui.panels.runtime("presets--scene0")!.feature("eye-makeup").view().recipe())).toBe(a);
+    expect(s.authoring.drawn.ref()).toEqual(s.looks[0]); expect(s.targets.held()).toBe(0);
+  } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("review capture handoff: real palette → starter menu → naming popover each owns and releases its capture", async () => {
+  const s = await profileContextStudio({ starters: true }); arrange(s, ["presets--unseen"]); const ui = owner(s);
+  try {
+    ui.paint(); const origin = ui.panels.controllerRuntime("presets--unseen")!;
+    expect(origin.dispatch({ kind: "starters.save", layerId: origin.editor.layer()!.id, name: "Own shape" })).toBe(true);
+    const held = captureRuntime(origin);
+    openPalette(() => featureCommands(EYE_MAKEUP_VIEW_BINDING, featureViewContext(held.runtime, "eye-makeup")).filter(command => command.id === "starters.rename"),
+      { signal: held.signal, onClose: held.release });
+    node(document.body).querySelector(".palette-item")!.click();
+    expect(held.active()).toBe(false); expect(s.targets.held()).toBe(1);
+    const item = node(document.body).querySelectorAll(".menu-item").find(item => item.querySelector(".menu-label")?.textContent === "Own shape")!;
+    s.session.focus.focusView(s.session.graph.viewIds()[0]!); item.click(); expect(s.targets.held()).toBe(1);
+    const form = node(document.body).querySelector("form.popover")!, input = form.querySelector("input")!;
+    input.value = "Renamed own shape"; form.dispatchEvent(lightEvent("submit"));
+    expect(s.starters!.list().some(item => item.name === "Renamed own shape")).toBe(true); expect(s.targets.held()).toBe(0);
+    input.value = "Late rename"; form.dispatchEvent(lightEvent("submit")); item.click();
+    expect(s.starters!.list().some(item => item.name === "Late rename")).toBe(false);
+  } finally { closeMenus(false); closePopovers(false); ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("review closed-menu rule: dismissed own-default Delete refuses clicks, secondary keys and the row Delete key", async () => {
+  const s = await profileContextStudio(), defaults = tabDefaults(s.session, s.services), tab = s.session.tabId();
+  try {
+    defaults.dispatch({ kind: "tabs.saveAsDefault", tab, name: "Kept default" });
+    const own = s.services.defaults.list().find(item => item.name === "Kept default")!; expect(own).toBeDefined();
+    const anchor = document.createElement("button"); document.body.append(anchor);
+    const action = { kind: "defaults.delete" as const, default: own.id }; expect(defaults.capability(action).available).toBe(true);
+    const items = [{ kind: "action" as const, label: own.name, run() {}, secondary: { icon: "trash" as const, name: "Delete default", run: () => defaults.dispatch(action) } }];
+    openMenu(items, anchor);
+    const row = node(document.body).querySelector(".menu-item")!, remove = node(document.body).querySelector('[aria-label="Delete default"]')!;
+    closeMenus(false); const before = JSON.stringify(s.services.defaults.list()), session = JSON.stringify(s.session.session());
+    row.click(); remove.click(); remove.dispatchEvent(lightEvent("keydown", { key: "Enter" }));
+    remove.dispatchEvent(lightEvent("keydown", { key: "Delete" })); row.dispatchEvent(lightEvent("keydown", { key: "Delete" }));
+    expect(JSON.stringify(s.services.defaults.list())).toBe(before); expect(JSON.stringify(s.session.session())).toBe(session);
+    openMenu(items, anchor); node(document.body).querySelector('[aria-label="Delete default"]')!.click();
+    expect(s.services.defaults.list().some(item => item.id === own.id)).toBe(false);
+  } finally { closeMenus(false); await s.dispose(); s.library.close(); }
+});
+
+test("review disposal rule: global listeners return to baseline through park, reopen, rebind and tab cycles", async () => {
+  const s = await profileContextStudio(), tab = s.session.tabId(), chars = ["character--target0", "character--target1"];
+  const libraries = [0, 1].map(i => s.session.addPanel(tab, "library", { binding: { policy: "pinned", target: { scene: s.session.graph.node(s.session.graph.viewIds()[i]!, "scene").id } } }));
+  const ids = [...chars, ...libraries]; arrange(s, ids); const ui = owner(s);
+  const counts = () => [lightDocument.listenerCount("scroll"), lightDocument.listenerCount("visibilitychange"), testWindow.listenerCount("focus"), testWindow.listenerCount("scroll")];
+  const baseline = counts(), active = () => { const now = counts(); expect(now.slice(0, 3)).toEqual(baseline.slice(0, 3).map(value => value + 2)); };
+  try {
+    ui.paint(); await readyCharacters(ui, chars); active();
+    s.session.setPanelsOpen(tab, ids, false, () => null); ui.paint(); expect(counts()).toEqual(baseline);
+    s.session.setPanelsOpen(tab, ids, true, () => null); ui.paint(); await readyCharacters(ui, chars); active();
+    s.session.setPanelBinding(tab, chars[0]!, { policy: "pinned", target: { subject: { kind: "character", id: s.vs[2]! } } });
+    ui.paint(); await readyCharacters(ui, chars); active();
+    const other = s.session.duplicate(tab); ui.paint(); active();
+    for (let i = 0; i < 3; i++) { s.session.show(tab); ui.paint(); active(); s.session.show(other); ui.paint(); active(); }
+    ui.panels.dispose(); expect(counts()).toEqual(baseline);
+  } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("review preference rule: instance curves persist through the real preference port and stay separate", async () => {
+  const s = await profileContextStudio(); arrange(s, ["presets--scene0", "presets--scene1"]); const ui = owner(s);
+  try {
+    ui.paint(); const a = featureViewContext(ui.panels.controllerRuntime("presets--scene0")!, "expressions"), b = featureViewContext(ui.panels.controllerRuntime("presets--scene1")!, "expressions");
+    a.easing.set("expression-intensity", "inOut"); expect(a.easing.get("expression-intensity")).toBe("inOut");
+    expect(b.easing.get("expression-intensity")).toBeUndefined(); b.easing.set("expression-intensity", "out");
+    const stored = s.port.preferences.snapshot(), restored = parseUIPreferences(JSON.parse(JSON.stringify(stored)));
+    expect(restored.easings?.[easingScopeFor("expression-intensity", "presets--scene0")]).toBe("inOut");
+    expect(restored.easings?.[easingScopeFor("expression-intensity", "presets--scene1")]).toBe("out");
+    expect(a.easing.get("expression-intensity")).toBe("inOut");
   } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
 });

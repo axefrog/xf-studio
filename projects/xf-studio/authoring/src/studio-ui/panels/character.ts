@@ -126,6 +126,8 @@ export const characterPanel = (rt: StudioRuntime): PanelController => characterP
 export function characterPanelWith(rt: StudioRuntime, contributions: readonly CharacterSectionContribution[] = CHARACTER_CONTRIBUTIONS,
   moduleControls: CharacterControls = {}): PanelController {
   const port = rt.port, memory = scopedViewState(rt.instance?.id);
+  const life = new AbortController();
+  const swatches = new Set<() => void>();
   const dispatch = (action: Parameters<StudioRuntime["dispatch"]>[0]) => rt.dispatch(action);
 
   // ---- The V and its source ----
@@ -167,7 +169,7 @@ export function characterPanelWith(rt: StudioRuntime, contributions: readonly Ch
   const elsewhere = note("");
   elsewhere.setAttribute("role", "status");
   elsewhere.setAttribute("aria-live", "polite");
-  const messages = h("div", { class: rt.key("cc-messages"), id: rt.key("cc-messages"), hidden: true });
+  const messages = h("div", { class: "cc-messages", id: rt.key("cc-messages"), hidden: true });
   let showMessages = false;
   // The library's search field (icon, clear button, Escape clears; the same as Poses): the panel filters on its pause, and each paint
   // reads the query from its input.
@@ -342,6 +344,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
       `${section.key}/${section.children.length}/${section.rows.length}/${section.toggles.map(t => t.id)}/${section.controls}`).join(",")}`).join(";")}`;
 
   function buildTree(panel: Readonly<CcPanel> | null, tree: readonly CharacterPanelGroup[]) {
+    for (const off of swatches) off(); swatches.clear();
     for (const controls of built?.rows ?? []) stopPrefetch(controls);
     const rows: RowControls[] = [];
     let serial = 0;
@@ -353,7 +356,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         const own: RowControls[] = [];
         for (const row of panel ? entry.rows : []) {
           const view: RowView = { row, section: entry.title, options: row.options.map(index => panel!.options[index]!) };
-          const controls = buildRow(panel!, view, `cc-choices-${++serial}`);
+          const controls = buildRow(panel!, view, rt.key(`cc-choices-${++serial}`));
           rowsHost.append(controls.element);
           rows.push(controls); own.push(controls);
         }
@@ -438,7 +441,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         });
         controls.list.element.hidden = true;
         // The swatch card for the list's colour swatches: the true colour, name and maker of the one under the pointer or focus.
-        attachSwatchCard(controls.list.list, item => swatchSample(controls, item));
+        swatches.add(attachSwatchCard(controls.list.list, item => swatchSample(controls, item)));
         // One tip slot (UI-130): the row's help tip, or the More contrast marker while the list shows it, so the row's name keeps its room.
         if (controls.help) controls.contrast.hidden = true;
         controls.element.append(h("div", { class: "cc-row-head" }, main, h("span", { class: "cc-row-tip" }, controls.contrast, controls.help),
@@ -533,7 +536,7 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
         askPictures(controls);
       }
     });
-  }, { capture: true, passive: true });
+  }, { capture: true, passive: true, signal: life.signal });
 
   function updateRows(frame: Frame, panel: Readonly<CcPanel> | null, view: Readonly<CreatorView> | null) {
     const tree = characterPanelTree(panel, contributions);
@@ -743,6 +746,8 @@ ${tree.map(group => `${group.id}:${group.toggles.map(t => t.id)}:${group.control
 
   return {
     commands,
+    dispose() { life.abort(); cancelAnimationFrame(scrollFrame); searchField.dispose();
+      for (const off of swatches) off(); swatches.clear(); for (const row of built?.rows ?? []) stopPrefetch(row); },
     spec: { id: "character", ...PANEL_META["character"], element },
     update(frame) {
       const state = frame.preview, context = state.character, preview = state.preview, saved = state.savedV, assets = frame.status.assets;

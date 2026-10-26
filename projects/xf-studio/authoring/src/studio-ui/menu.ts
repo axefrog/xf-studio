@@ -139,6 +139,11 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
   const element = h("div", { class: "menu", role: "menu", "aria-label": label, tabindex: "-1" });
   const entries: HTMLElement[] = [];
   let closed = false;
+  const dispatch = (action: { capability?: Capability; run(): void }) => {
+    if (closed || action.capability?.available === false) return;
+    const opened = root;
+    try { action.run(); } finally { if (root === opened) closeMenus(true); }
+  };
   const self: OpenMenu = { element, parent, invoker, close(restore) {
     if (closed) return; closed = true;
     self.child?.close(false);
@@ -174,11 +179,11 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
       if (closed) return;
       if (!available) return;
       if (item.kind === "submenu") { openChild(entry, item); return; }
-      const opened = root;
-      try { item.run(); } finally { if (root === opened) closeMenus(true); }
+      dispatch(item);
     };
     entry.addEventListener("click", activate);
     entry.addEventListener("pointerenter", () => {
+      if (closed) return;
       entry.focus();
       if (item.kind === "submenu" && available) openChild(entry, item);
       else self.child?.close(false);
@@ -188,7 +193,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
         event.preventDefault(); event.stopPropagation();
         const all = Array.isArray(item.secondary) ? item.secondary as readonly MenuSecondary[] : [item.secondary as MenuSecondary];
         const remove = all.find(action => (action.tone ?? "danger") === "danger");
-        if (remove && remove.capability?.available !== false) { const opened = root; try { remove.run(); } finally { if (root === opened) closeMenus(true); } }
+        if (remove) dispatch(remove);
       }
       if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(); }
       if (event.key === "ArrowRight" && item.kind === "submenu") { event.preventDefault(); if (available) openChild(entry, item, true); }
@@ -196,11 +201,12 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
     entries.push(entry);
     if (item.kind === "action" && item.secondary) {
       const all = Array.isArray(item.secondary) ? item.secondary as readonly MenuSecondary[] : [item.secondary as MenuSecondary];
-      const row = menuSecondaryRow(entry, all.map(action => ({ ...action, run: () => { const opened = root; try { action.run(); } finally { if (root === opened) closeMenus(true); } } })));
+      const row = menuSecondaryRow(entry, all.map(action => ({ ...action, run: () => dispatch(action) })));
       entries.push(...row.actions); element.append(row.element);
     } else element.append(entry);
   }
   function openChild(entry: HTMLElement, item: Extract<MenuItem, { kind: "submenu" }>, focusFirst = false) {
+    if (closed) return;
     if (self.child?.invoker === entry) { if (focusFirst) focusEntry(self.child, 0); return; }
     self.child?.close(false);
     // A submenu with nothing to act on stays closed, as a menu does.

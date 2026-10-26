@@ -354,6 +354,7 @@ export function expressionSets(ctx: Ctx): PanelController {
 
   let signature = "";
   return {
+    dispose() {},
     spec: { id: "expressions.sets", ...EXPRESSIONS_PANEL_META["expressions.sets"], element },
     update() {
       const list = ctx.presets.sets(), presets = ctx.presets.list(), set = current(), exports = ctx.presets.exports();

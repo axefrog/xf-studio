@@ -87,7 +87,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
     }
     agentGroup.element.hidden = !state.agents.layers.length;
   }
-  return { spec: { id: "holotable.details", ...HOLOTABLE_PANEL_META["holotable.details"], element }, update() {
+  return { dispose() {}, spec: { id: "holotable.details", ...HOLOTABLE_PANEL_META["holotable.details"], element }, update() {
     const state = facade.snapshot(), s = state.open?.session;
     for (const { id, toggle } of toggles) {
       toggle.element.hidden = !!s?.meta.standalone && ["v", "camera", "events", "gaps"].includes(id);

@@ -3,6 +3,12 @@
 // `document` at call time; uninstall it afterwards. It is a test harness, not a browser: layout sizes are zero.
 
 type Listener = (event: LightEvent) => void;
+function addListener(listeners: Map<string, Set<Listener>>, type: string, listener: Listener, options?: boolean | AddEventListenerOptions) {
+  const signal = typeof options === "object" ? options.signal : undefined;
+  if (signal?.aborted) return;
+  if (!listeners.has(type)) listeners.set(type, new Set()); listeners.get(type)!.add(listener);
+  signal?.addEventListener("abort", () => listeners.get(type)?.delete(listener), { once: true });
+}
 export type LightEvent = { type: string; key?: string; target?: LightElement; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; altKey?: boolean;
   defaultPrevented?: boolean; stopped?: boolean; preventDefault(): void; stopPropagation(): void;
   pointerType?: string; pointerId?: number; button?: number; buttons?: number; clientX?: number; clientY?: number };
@@ -90,7 +96,8 @@ export class LightElement extends LightNode {
   removeChild(child: LightNode) { const at = this.childNodes.indexOf(child); if (at >= 0) this.childNodes.splice(at, 1); child.parentNode = null; return child; }
   replaceChildren(...children: (LightNode | string)[]) { for (const child of this.childNodes.splice(0)) child.parentNode = null; this.append(...children); }
   contains(node: LightNode | null): boolean { for (let at = node; at; at = at.parentNode) if (at === this) return true; return false; }
-  addEventListener(type: string, listener: Listener) { if (!this.listeners.has(type)) this.listeners.set(type, new Set()); this.listeners.get(type)!.add(listener); }
+  addEventListener(type: string, listener: Listener, options?: boolean | AddEventListenerOptions) { addListener(this.listeners, type, listener, options); }
+  listenerCount(type: string) { return this.listeners.get(type)?.size ?? 0; }
   removeEventListener(type: string, listener: Listener) { this.listeners.get(type)?.delete(listener); }
   /** Dispatch with bubbling to the ancestors. */
   dispatchEvent(event: LightEvent) {
@@ -158,7 +165,8 @@ export const lightDocument = {
   querySelectorAll: (selector: string): LightElement[] => lightDocument.body.querySelectorAll(selector),
   // The document is an event target too (panels listen for scrolls there); its listeners are cleared on each install.
   listeners: new Map<string, Set<Listener>>(),
-  addEventListener(type: string, listener: Listener) { if (!this.listeners.has(type)) this.listeners.set(type, new Set()); this.listeners.get(type)!.add(listener); },
+  addEventListener(type: string, listener: Listener, options?: boolean | AddEventListenerOptions) { addListener(this.listeners, type, listener, options); },
+  listenerCount(type: string) { return this.listeners.get(type)?.size ?? 0; },
   removeEventListener(type: string, listener: Listener) { this.listeners.get(type)?.delete(listener); },
   dispatchEvent(event: LightEvent) { for (const listener of this.listeners.get(event.type) ?? []) listener(event); return !event.defaultPrevented; },
 };

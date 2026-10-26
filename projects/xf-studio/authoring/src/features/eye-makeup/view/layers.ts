@@ -108,6 +108,7 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
   ctx.anchors.register("layers.starters", starters);
   ctx.anchors.register("layers.list", list.element);
   return {
+    dispose() {},
     spec: { id: "layers", ...EYE_MAKEUP_PANEL_META.layers, element },
     update(frame) {
       const recipe = frame.recipe, layers = recipe.layers, active = frame.layer;

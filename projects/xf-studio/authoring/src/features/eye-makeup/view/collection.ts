@@ -89,6 +89,7 @@ export function presetsPanel(ctx: EyeMakeupViewContext): PanelController {
   ctx.anchors.register("presets.list", list.element);
   ctx.anchors.register("presets.add", addButton);
   return {
+    dispose() {},
     spec: { id: "presets", ...EYE_MAKEUP_PANEL_META["presets"], element },
     emptyChoices: "first",
     update(frame) {
@@ -136,6 +137,7 @@ export function presetsPanel(ctx: EyeMakeupViewContext): PanelController {
 }
 
 export function libraryPanel(ctx: EyeMakeupViewContext): PanelController {
+  const life = new AbortController();
   const collection = ctx.collection;
   const save = button({ label: "Save version", icon: "save", variant: "primary", onClick: () => void collection.request({ kind: "save" }) });
   const saveCopy = button({ label: "Save as new collection", icon: "duplicate", title: "Stores a copy with a new identity; you continue editing the copy.",
@@ -146,8 +148,8 @@ export function libraryPanel(ctx: EyeMakeupViewContext): PanelController {
   // The saved list updates itself (release-readiness-audit.md item 13): read quietly whenever this panel is shown or the window comes
   // back (another window of XF Studio may have saved), so there is no Refresh button.
   const syncList = () => collection.refresh();
-  window.addEventListener("focus", syncList);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) syncList(); });
+  window.addEventListener("focus", syncList, { signal: life.signal });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) syncList(); }, { signal: life.signal });
   // Recent drafts, newest first (item 13): the library's other collections never saved as a version, each shown again with its Reopen.
   const drafts = new RecordList({ label: "Recent drafts" });
   const draftsSection = section({ title: "Recent drafts", help: ["Collections in your library that were never saved as a version: an import, or an earlier draft. Reopen shows one; the collection you have open stays in your library.",
@@ -179,6 +181,7 @@ export function libraryPanel(ctx: EyeMakeupViewContext): PanelController {
     filesSection);
   return {
     spec: { id: "library", ...EYE_MAKEUP_PANEL_META["library"], element, visibility: visible => { if (visible) syncList(); } },
+    dispose() { life.abort(); },
     emptyChoices: "alongside",
     update(frame) {
       const library = frame.library, draft = library.draft;
@@ -224,4 +227,3 @@ export function libraryPanel(ctx: EyeMakeupViewContext): PanelController {
     },
   };
 }
-

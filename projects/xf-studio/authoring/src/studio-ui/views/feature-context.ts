@@ -1,4 +1,5 @@
 import { captureRuntime, capturedItems } from "../captured-runtime";
+import { easingScopeFor } from "../../app/ui-preferences";
 /**
  * The shell's side of feature views (UI-73): it builds each feature view's `FeatureViewContext` from the
  * feature's facade and its own presentation services, and renders what the view contributes (target menus,
@@ -87,9 +88,9 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
     changed: () => rt.changed(),
     research: () => !!port.preferences.snapshot().researchTools,
     easing: Object.freeze({
-      get: (scope: string) => port.preferences.snapshot().easings?.[rt.key(scope)],
+      get: (scope: string) => port.preferences.snapshot().easings?.[easingScopeFor(scope, rt.instance?.id)],
       set: (scope: string, easing: EasingId) => {
-        const action = { kind: "easing.set" as const, scope: rt.key(scope), easing };
+        const action = { kind: "easing.set" as const, scope: easingScopeFor(scope, rt.instance?.id), easing };
         if (!port.preferences.capability(action).available) return;
         port.preferences.dispatch(action);
         rt.changed();

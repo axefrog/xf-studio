@@ -113,6 +113,15 @@ test("group section: the count hides at 0, reset never folds the group, the open
   expect(again.expanded).toBe(true);
 });
 
+test("a disposed search cancels pending filtering and refuses retained input callbacks", async () => {
+  const { SearchField } = await lib(), queries: string[] = [];
+  const search = new SearchField({ label: "Search", onFilter: query => queries.push(query), debounce: 5 });
+  const input = search.input as unknown as LightElement;
+  input.value = "pending"; input.dispatchEvent(lightEvent("input")); search.dispose();
+  await Bun.sleep(10); input.value = "late"; input.dispatchEvent(lightEvent("input")); input.dispatchEvent(lightEvent("keydown", { key: "Enter" }));
+  await Bun.sleep(10); expect(queries).toEqual([]);
+});
+
 test("search field: debounced filtering, Enter at once, Escape and the clear button clear, and a no-matches state with Clear search", async () => {
   const { SearchField } = await lib();
   const queries: string[] = [];

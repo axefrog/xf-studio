@@ -42,7 +42,7 @@ export class InstancePanels {
       } else if (entry.port === entry.current()) continue;
       else { const destination = JSON.stringify(port.panels.target?.(instance.id));
         if (destination !== entry.destination) { entry.captureLife.abort(); entry.captureLife = new AbortController(); entry.destination = destination; }
-        entry.portOff(); entry.life.abort(); entry.panel.dispose?.(); entry.panel.spec.element.remove(); entry.port = entry.current(); entry.life = new AbortController(); }
+        entry.portOff(); entry.life.abort(); entry.panel.dispose(); entry.panel.spec.element.remove(); entry.port = entry.current(); entry.life = new AbortController(); }
       entry.portOff = entry.port === port ? () => {} : entry.port.subscribe(this.deps.changed);
       const rt = new Runtime(entry.port, this.root.feedback, catalogue, { id: instance.id, type: instance.type, signal: entry.life.signal, captureSignal: entry.captureLife.signal },
         this.root.anchors.scoped(instance.id, entry.life.signal));
@@ -63,6 +63,6 @@ export class InstancePanels {
     }
     return changed;
   }
-  private release(entry: Mounted) { entry.off(); entry.portOff(); entry.captureLife.abort(); entry.life.abort(); entry.panel.spec.visibility?.(false); entry.panel.dispose?.(); entry.panel.bind?.(undefined); entry.inputLife.abort(); entry.panel.spec.element.remove(); }
+  private release(entry: Mounted) { entry.off(); entry.portOff(); entry.captureLife.abort(); entry.life.abort(); entry.panel.spec.visibility?.(false); entry.panel.dispose(); entry.panel.bind?.(undefined); entry.inputLife.abort(); entry.panel.spec.element.remove(); }
   dispose() { for (const entry of this.mounted.values()) this.release(entry); this.mounted.clear(); }
 }

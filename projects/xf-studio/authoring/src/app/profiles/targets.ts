@@ -54,6 +54,7 @@ export type TargetResolverDeps = {
 const WHOLE_CHAIN: PanelContext = { kind: "view" };
 
 export class TargetResolver {
+  focusedInstance() { return this.deps.focus.focusedPanel(); }
   private captures = new Set<number>();
   private next = 0;
   constructor(private readonly deps: TargetResolverDeps) {}

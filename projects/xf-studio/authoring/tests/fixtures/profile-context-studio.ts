@@ -87,12 +87,14 @@ export async function profileContextStudio(options: { restart?: ContextRestart; 
   let drawn = session.session().views.views[0]!.id;
   const scene = session.graph.node(drawn, "scene").id, sceneOf = () => session.graph.viewIds().includes(drawn) ? session.graph.node(drawn, "scene").id : undefined;
   let starters: ShapeStarters | undefined;
+  let starterActions: StarterActions | undefined;
   if (options.starters) {
     const region = STUDIO_COMPOSITION.region;
     starters = new ShapeStarters({ documents: transport, outbox, feature: region.id, label: region.label, contributed: region.starters,
       fallback: region.defaultStarter, read: value => readStarterShape(value, region.newLayer(), region.models), choice: { get: () => undefined, set: () => {} } });
     await starters.load();
-    core.app.attach({ starters: new StarterActions({ starters, feature: region.id, label: region.label, thumbnail: region.thumbnail }), starterShapes: starters });
+    starterActions = new StarterActions({ starters, feature: region.id, label: region.label, thumbnail: region.thumbnail });
+    core.app.attach({ starters: starterActions, starterShapes: starters });
   }
   const collectionTransport: CollectionTransport = { list: async () => library.collections.list(), get: async id => library.collections.get(id),
     package: options.package ?? (async () => { throw Error("Not used"); }) };
@@ -107,6 +109,7 @@ export async function profileContextStudio(options: { restart?: ContextRestart; 
       transport: collectionTransport, flushLook: () => authoring.contexts.commit() },
     naming: () => targets.namedView(drawn),
     modules: options.modules, panelViewport: options.panelViewport,
+    focus: session.focus, starters: starterActions?.port(),
     panelInstance: (panel, tab) => session.instance(panel, tab),
     panelTargets: { target: id => session.panelTarget(id), tabTarget: id => session.panelTabTarget(id), capture: id => targets.structural(id) },
     tabs: layoutTabsPort(session, tabDefaults(session, services), services),

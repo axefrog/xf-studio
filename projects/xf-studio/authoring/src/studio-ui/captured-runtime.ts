@@ -1,6 +1,12 @@
 /** A shell surface owns a concrete input until dismissal; a child surface captures before its parent closes. */
 import { StudioRuntime } from "./runtime";
 import type { MenuItem } from "./menu";
+/** Header focus does not replace the last editing instance. A retired origin never falls back to the drawn view. */
+export function captureFocusedRuntime(root: StudioRuntime, instance: (id: string) => StudioRuntime | undefined) {
+  const id = root.port.focus.instance();
+  const origin = id === undefined ? root : instance(id);
+  return origin && captureRuntime(origin);
+}
 export function captureRuntime(runtime: StudioRuntime) {
   const life = new AbortController();
   if (runtime.instance?.captureSignal?.aborted) life.abort();
