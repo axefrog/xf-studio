@@ -21,7 +21,8 @@
 //                  acting; an executor that can check on the executing frame does it inside its own action
 //                  (game.wait). otherwise: skip (default) passes the step by, fail goes straight to on_fail (the
 //                  step never started, so its fallback doesn't run), fallback runs the step's fallback.
-//   until          poll the action every interval_ms until its outcome matches (bounded by deadline_ms)
+//   until          poll the action every interval_ms until its outcome matches (bounded by deadline_ms). interval_ms
+//                  is a control field only beside until: without it, it is the action's own (a burst's spacing)
 //   success        what counts as success (default: the outcome is ok)
 //   deadline_ms    each attempt's limit (default 60 s); nothing waits forever
 //   retry          {times, backoff_ms?, factor?, max_backoff_ms?, on?: match}: rung 1 of the failure ladder
@@ -287,7 +288,7 @@ export function checkPlan(plan: Plan, checkAction: ActionChecker = () => []): st
       if (step.end !== undefined && !["ok", "fail", "stop"].includes(step.end as string)) problems.push(`${at}: end is ok, fail or stop`);
       if (step.do !== undefined && typeof step.do !== "string") problems.push(`${at}: do must be a string`);
       if (step.deadline_ms !== undefined && !inRange(step.deadline_ms, 1, MAX_DEADLINE_MS)) problems.push(`${at}: deadline_ms must be 1 to ${MAX_DEADLINE_MS}`);
-      if (step.interval_ms !== undefined && !inRange(step.interval_ms, 10, 600_000)) problems.push(`${at}: interval_ms must be 10 to 600000`);
+      if (step.until !== undefined && step.interval_ms !== undefined && !inRange(step.interval_ms, 10, 600_000)) problems.push(`${at}: interval_ms must be 10 to 600000`);
       if (step.on_fail !== undefined && !["continue", "end", "stop"].includes(step.on_fail as string)) problems.push(`${at}: on_fail is continue, end or stop`);
       if (step.bind !== undefined && (typeof step.bind !== "string" || !/^[A-Za-z][A-Za-z0-9_]*$/.test(step.bind) || ["board", "cast"].includes(step.bind))) problems.push(`${at}: bind must be a plain name (not board or cast)`);
       for (const role of (step.roles as unknown[]) ?? []) if (!cast.has(role as string)) problems.push(`${at}: role ${String(role)} is not in the plan's cast`);
@@ -353,9 +354,12 @@ export function checkPlan(plan: Plan, checkAction: ActionChecker = () => []): st
   return problems;
 }
 
-/** The action of a step: every field that isn't a control field. */
+/**
+ * The action of a step: every field that isn't a control field. interval_ms is the polling interval only beside until;
+ * otherwise it is the action's own (capture.burst's spacing, which was silently dropped to its 100 ms default).
+ */
 export function actionOf(step: Step): Action {
-  return Object.fromEntries(Object.entries(step).filter(([key]) => !CONTROL_KEYS.has(key))) as Action;
+  return Object.fromEntries(Object.entries(step).filter(([key]) => !CONTROL_KEYS.has(key) || (key === "interval_ms" && step.until === undefined))) as Action;
 }
 
 function refsIn(value: unknown, out: string[] = []): string[] {
