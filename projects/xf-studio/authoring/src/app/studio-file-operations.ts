@@ -129,13 +129,19 @@ export class StudioFileOperations {
     return operation && { capability: (request: CollectionRequest) => operation.collectionCapability(request)! };
   }
   snapshot(): ReadonlyDeep<StudioFileState> {
-    const owner = this.progressOwner(), accepted = owner?.snapshot();
+    // Each operation's snapshot is taken once per read: an operation can be the progress owner, the last result and the package
+    // owner at once, and its package freshness is a key comparison that needn't run three times.
+    const snapshots = new Map<AcceptedStudioOperation, ReturnType<AcceptedStudioOperation["snapshot"]>>();
+    const of = (operation: AcceptedStudioOperation) => snapshots.get(operation) ?? snapshots.set(operation, operation.snapshot()).get(operation)!;
+    const running = this.running();
+    const owner = running.find(operation => operation.kind === "package.build") ?? running.find(operation => of(operation).collectionBusy) ?? this.busy ?? this.last;
+    const accepted = owner && of(owner);
     // Idle preflight data is separate from accepted state: no field of an accepted result falls back to it.
     const idle = owner ? undefined : this.liveCollection?.summary();
     const shown = this.liveCollection?.draftIdentity()?.collectionId;
     return structuredClone({ workspaceFile: !!this.port.revealWorkspace, busy: this.busy?.isRunning() ? this.busy.kind as StudioFileAction["kind"] : undefined,
-      collectionBusy: this.running().some(operation => operation.snapshot().collectionBusy) || (!owner && !!idle?.busy),
-      last: this.last?.snapshot().last, package: this.packageOwner?.snapshot().package,
+      collectionBusy: running.some(operation => of(operation).collectionBusy) || (!owner && !!idle?.busy),
+      last: this.last && of(this.last).last, package: this.packageOwner && of(this.packageOwner).package,
       progress: accepted?.progress ?? (owner ? undefined : idle?.progress), activity: this.activity(),
       // Recovery is preflight for a new command, independent of an accepted operation's result.
       recovery: this.liveCollection?.actionCapability({ kind: "collection.undoOpen", collection: shown ?? "" }) ??
