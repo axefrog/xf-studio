@@ -122,7 +122,9 @@ type AsyncHandlers = {
   readonly presets: AsyncActionHandler<PartPresetRequest, PartPresetOutcome>;
   readonly empty: AsyncActionHandler<EmptyChoiceRequest, StudioDispatchResult>;
 };
-type Services = { document: AuthoringDocument;
+export type StudioApplicationServices = { document: AuthoringDocument;
+  /** A bound facade's destination/lifetime gate. It never consults focus. */
+  input?: { check(): StudioCapability };
   /** Eye makeup's live part and editor state, and where its pure action results are published. */
   eyeMakeup: EyeMakeupPort;
   /** Where new items' IDs come from for the other features' actions (default: random UUIDs). */
@@ -185,6 +187,15 @@ type Services = { document: AuthoringDocument;
    */
   access?: { refusal(): (StudioCapability & { available: false }) | undefined } };
 
+type Services = StudioApplicationServices;
+/** All facades over one document share its in-progress edits, as well as its history and selection. */
+type EditingState = {
+  gesture?: { source: GestureSource; scope: string; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
+  featureControl?: { feature: string; id: string; transaction: HistoryTransaction<HistoryEntryId> };
+  ended: Set<string>;
+  look?: { features: readonly string[] };
+};
+
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
   private services: Services;
@@ -194,7 +205,9 @@ export class StudioApplication {
   private seenContent?: number;
   private previewUnavailable?: string;
   /** The open gesture: its source, the look it edits (its capture, profiles design §3.3) and the layer and controls it started on. */
-  private gesture?: { source: GestureSource; scope: string; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
+  private readonly edits: EditingState;
+  private get gesture() { return this.edits.gesture; }
+  private set gesture(value: EditingState["gesture"]) { this.edits.gesture = value; }
   /** The action registry: owners, descriptors, Undo policy and routes. */
   private readonly routes: Registry<AnyOwner>;
   /** One handler per registered owner: the compiler requires every owner in the composition list. */
@@ -207,18 +220,25 @@ export class StudioApplication {
    */
   private readonly featureHandlers = new Map<string, ActionHandler<{ kind: string }>>();
   /** The open generic feature control (`featureControlBegin`): one Undo step over its feature's part for a run of edits. */
-  private featureControl?: { feature: string; id: string; transaction: HistoryTransaction<HistoryEntryId> };
+  private get featureControl() { return this.edits.featureControl; }
+  private set featureControl(value: EditingState["featureControl"]) { this.edits.featureControl = value; }
   /** Control runs a replacement of the document's content ended: their continuations are refused until they begin again. */
-  private readonly ended = new Set<string>();
+  private get ended() { return this.edits.ended; }
   /** The open look transaction (`transaction`): its actions record no steps of their own. */
-  private look?: { features: readonly string[] };
+  private get look() { return this.edits.look; }
+  private set look(value: EditingState["look"]) { this.edits.look = value; }
+  private readonly forks = new Map<StudioApplication, Set<keyof Services>>();
+  private replacingOff: () => void;
+  private parentOff?: () => void;
+  private disposed = false;
   /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
-  constructor(services: Services, registry: Registry<AnyOwner>) {
+  constructor(services: Services, registry: Registry<AnyOwner>, edits?: EditingState) {
+    this.edits = edits ?? { ended: new Set() };
     this.services = services; this.routes = registry; this.handlers = this.bindHandlers();
     // A gesture or control run belongs to the content it began on: it settles (commits) before the document shows other content, another
     // look's or the same look's replaced from elsewhere, and is over. A gesture ends with its session; a control run's later edits are
     // refused until the control begins again (`ended`).
-    services.document.onReplacing(() => {
+    this.replacingOff = services.document.onReplacing(() => {
       const control = this.services.controls.snapshot();
       if (control) this.ended.add(`control:${control.id}`);
       if (this.featureControl) this.ended.add(`feature:${this.featureControl.id}`);
@@ -242,6 +262,23 @@ export class StudioApplication {
   attach(next: Partial<Omit<Services, "document" | "eyeMakeup" | "gestures" | "controls">>) {
     if (next.collection && next.collection !== this.services.collection) this.collectionRevision++;
     this.services = { ...this.services, ...next }; this.subscribeSources(); this.notify();
+    for (const [fork, own] of this.forks) fork.attach(Object.fromEntries(Object.entries(next).filter(([key]) => !own.has(key as keyof Services))));
+  }
+  /** A bound application facade. Editing machinery stays owned once; only named destination/device services differ. */
+  fork(overrides: Partial<Services>, editing?: StudioApplication): StudioApplication {
+    const services = { ...this.services, ...overrides };
+    const shared = editing?.edits ?? (services.document === this.services.document ? this.edits : undefined);
+    const app = new StudioApplication(services, this.routes, shared);
+    this.forks.set(app, new Set(Object.keys(overrides) as (keyof Services)[]));
+    app.parentOff = () => this.forks.delete(app);
+    return app;
+  }
+  dispose() {
+    this.disposed = true;
+    this.parentOff?.(); this.replacingOff();
+    for (const child of [...this.forks.keys()]) child.dispose();
+    for (const off of this.unsubs) off();
+    this.unsubs = []; this.listeners.clear();
   }
   /** A device failure is terminal for this page load; edits and mask work remain available. */
   setPreviewUnavailable(reason: string) { this.previewUnavailable = reason; this.notify(); }
@@ -300,6 +337,7 @@ export class StudioApplication {
    * is kept exactly as it came), nor while no preset owns the editor. The refusal says why in plain words.
    */
   featureEditable(feature: string): StudioCapability {
+    const denied = this.denied(); if (denied) return denied;
     const owner = this.routes.owner(feature);
     if (owner?.owner !== "feature") return unknownCommand();
     if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
@@ -689,7 +727,11 @@ export class StudioApplication {
   /** The runtime holding the view an action names (view-routes.ts); undefined without runtimes or a view (the attached services answer). */
   private route(view: unknown) { return typeof view === "string" ? this.services.runtimes?.route(view) : undefined; }
   /** The workspace lease's refusal while another page holds this workspace; undefined while this page may write. */
-  private denied() { return this.services.access?.refusal(); }
+  private denied() {
+    if (this.disposed) return refusal("missing_target", "This editing context was released.");
+    const input = this.services.input?.check();
+    return input && !input.available ? input : this.services.access?.refusal();
+  }
   /** A request that only reads (the library list) stays available in a read-only page; `open` replaces the draft, so it doesn't. */
   private readOnlyRequest(kind: string) {
     const route = this.routes.routeAsync(kind);

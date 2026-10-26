@@ -1,7 +1,7 @@
 import type { ModuleRegistration } from "../platform/api";
 import { createViewServices } from "./view-actions";
 import { AuthoringControlEdits } from "./authoring/authoring-control-edits";
-import { AuthoringDocument } from "./authoring/authoring-document";
+import { AuthoringDocument, type DocumentState } from "./authoring/authoring-document";
 import { eyeMakeupPort, RecipeActions, type EyeMakeupGestures, type EyeMakeupSpec } from "../legacy/eye-makeup/authoring-eye-makeup";
 import { AuthoringGeometry } from "./authoring/authoring-geometry";
 import { AuthoringGestures } from "./authoring/authoring-gestures";
@@ -44,6 +44,22 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
    */
   views?: ViewGraph;
 }, composition: StudioComposition) {
+  const history = ports.history ?? createHistoryService();
+  const editing = createAuthoringEditing(workspace, { ...ports, history }, composition);
+  const { views, viewActions } = createViewServices(workspace.preview, workspace.views, composition.modules, history, ports.views);
+  const app = new StudioApplication({ ...editing, history, views, viewActions,
+    ...(ports.newId ? { newId: ports.newId } : {}) }, composition.registry);
+  return { ...editing, app, history, documents: composition.documents, views };
+}
+
+/** One look's data/edit machinery. No view graph, renderer, raster scheduler, collection or persistence writer. */
+export function createAuthoringEditing(workspace: DocumentState & Pick<WorkspaceState, "glitterChoices">, ports: {
+  resetStack(previous: Recipe): void;
+  selectedCollection(): string;
+  newId?(): string;
+  history: HistoryService;
+  scope?: string;
+}, composition: StudioComposition) {
   const { registry, documents } = composition;
   if (composition.region.id !== documents.live) throw Error(`The composition's layered-makeup region is not the live feature's (${documents.live}).`);
   const live = registry.owner(documents.live);
@@ -59,7 +75,7 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
     .map(feature => documents.parts.feature(feature)!));
   // Every Undo history of the session is a scope of one history service: the look's (this document), the View and lighting
   // history (the view graph) and, through the experiments, their documents'.
-  const history = ports.history ?? createHistoryService();
+  const history = ports.history;
   const document = new AuthoringDocument({ recipe: workspace.recipe, active: workspace.active,
     selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history,
     ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}),
@@ -86,9 +102,5 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   // gate first and reports failures as typed results, so hosts wire nothing here.
   const controls = new AuthoringControlEdits(document, action => eyeMakeup.apply(specOf(action.kind), action, false).changed,
     action => specOf(action.kind).label(action));
-  // The view graph (view-graph-design.md §3.3): every view's camera, light, display, scene and tool state, for the whole session.
-  const { views, viewActions } = createViewServices(workspace.preview, workspace.views, composition.modules, history, ports.views);
-  const app = new StudioApplication({ document, eyeMakeup, history, gestures, controls, views, viewActions,
-    ...(ports.newId ? { newId: ports.newId } : {}) }, registry);
-  return { document, geometry, presentation, recipe, eyeMakeup, gestures, controls, app, history, documents, views };
+  return { document, geometry, presentation, recipe, eyeMakeup, gestures, controls };
 }

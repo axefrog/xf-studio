@@ -174,6 +174,11 @@ export class AuthoringDocument {
   subscribeEffects(listener: (effect: DocumentEffect) => void) {
     this.effectListeners.add(listener); return () => this.effectListeners.delete(listener);
   }
+  /** The final editable-context owner releases its history target and subscriptions. */
+  dispose() {
+    this.replacing(); this.service.close(this.scope.id);
+    this.listeners.clear(); this.replacingListeners.clear(); this.effectListeners.clear();
+  }
   private notify(change: DocumentChange) { for (const listener of this.listeners) listener(change); }
   private effect(value: DocumentEffect) { for (const listener of this.effectListeners) listener(value); }
   get recipe() { return this.state.recipe; }

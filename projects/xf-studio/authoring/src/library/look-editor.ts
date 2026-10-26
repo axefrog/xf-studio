@@ -160,7 +160,7 @@ export class LookEditor {
     const view = shown.session.look();
     if (view?.state !== "live") {
       shown.content = null;
-      this.display({ recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() }, NO_LOOK_SCOPE);
+      this.display({ recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() }, lookScope(shown.ref));
       return;
     }
     let content: LookContent;
