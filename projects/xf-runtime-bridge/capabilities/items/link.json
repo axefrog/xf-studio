@@ -245,5 +245,28 @@
     ],
     "docs": ["projects/xf-runtime-bridge/README.md#bridge-in-one-paragraph", "research/runtime/runtime-bridge-test-card.md#recorder-and-taps-borg-mode-session"],
     "updated": "2026-10-26"
+  },
+  {
+    "id": "link.display-feed",
+    "title": "The display access class and canvas.feed",
+    "summary": "A display access class and a canvas.feed command usable from read-only connections, so producers such as the Story Engine can draw in game in bounded batches (1-4 Hz).",
+    "area": "link",
+    "kind": "service",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "depends_on": ["surfaces.canvas"],
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "needs",
+        "ref": "want 13",
+        "milestone": "M8",
+        "note": "Bridge proposal C. Story Engine layers reach the overlay through it.",
+        "since": "2026-10-26"
+      }
+    ],
+    "updated": "2026-10-27"
   }
 ]

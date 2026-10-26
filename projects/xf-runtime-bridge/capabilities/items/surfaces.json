@@ -432,5 +432,80 @@
     ],
     "docs": ["research/runtime/runtime-bridge-test-card.md#in-game-styling-0822"],
     "updated": "2026-10-26"
+  },
+  {
+    "id": "surfaces.canvas",
+    "title": "World-space canvas (canvas@1)",
+    "summary": "A world-space canvas in the native overlay host: primitives, anchors, caps and a per-tick camera snapshot, with the radar view, so producers draw in game with no per-layer game-side code.",
+    "area": "surfaces",
+    "kind": "surface",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "needs",
+        "ref": "want 10",
+        "milestone": "M7",
+        "note": "Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building.",
+        "since": "2026-10-26"
+      },
+      {
+        "consumer": "holotable",
+        "level": "wants",
+        "ref": "want plate",
+        "milestone": "M7",
+        "note": "The design comes from the UI component track; the bridge exposes the token to canvas@1.",
+        "since": "2026-10-26"
+      }
+    ],
+    "updated": "2026-10-27"
+  },
+  {
+    "id": "surfaces.canvas-keys",
+    "title": "Canvas keys and canvas.visible",
+    "summary": "Show, hide and mode keys for the canvas through the bridge's own key route, rebindable in CET, with a canvas.visible state.",
+    "area": "surfaces",
+    "kind": "surface",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P2",
+    "depends_on": ["surfaces.canvas"],
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "needs",
+        "ref": "want 11",
+        "milestone": "M7",
+        "note": "Show and hide while playing, without opening CET (CET blocks input).",
+        "since": "2026-10-26"
+      }
+    ],
+    "updated": "2026-10-27"
+  },
+  {
+    "id": "surfaces.lua-snapshot",
+    "title": "Read-only Lua snapshot for CET modules",
+    "summary": "A read-only snapshot for Holotable's CET module: V, XF actors, incidents, supervisor holds and recorder gaps, refreshed a few times a second.",
+    "area": "surfaces",
+    "kind": "sense",
+    "stage": "proposed",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "needs",
+        "ref": "want 12",
+        "milestone": "M7",
+        "note": "Lets the overlay work with no other XF program running (bridge proposal B).",
+        "since": "2026-10-26"
+      }
+    ],
+    "updated": "2026-10-27"
   }
 ]

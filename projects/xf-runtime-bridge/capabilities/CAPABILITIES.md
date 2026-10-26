@@ -6,23 +6,23 @@
 
 ## Summary
 
-169 capabilities in 16 areas.
+168 capabilities in 16 areas.
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 14 | 9 | 16 | 2 | 0 | 128 | 0 | 0 |
+| items | 6 | 13 | 19 | 2 | 0 | 128 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
-| items | 42 | 18 | 82 | 27 | 0 |
+| items | 41 | 18 | 82 | 27 | 0 |
 
 | Health | unknown | works | caveats | degraded | broken |
 |---|---:|---:|---:|---:|---:|
-| items | 54 | 70 | 43 | 0 | 2 |
+| items | 53 | 70 | 43 | 0 | 2 |
 
 | Priority | P0 | P1 | P2 | P3 |
 |---|---:|---:|---:|---:|
-| items | 0 | 13 | 49 | 107 |
+| items | 0 | 13 | 52 | 103 |
 
 ### Evidence debt
 
@@ -200,16 +200,16 @@ Per consumer, blocking first.
 | Level | Ref | Milestone | Capability | Stage | Evidence | Need |
 |---|---|---|---|---|---|---|
 | needs | want 14 | M6 | [`link.observers`](#link.observers) | merged | partial | The headless service as a read-only observer (readOnly: true). The runner, the Story Engine and Holotable each want a slot, so please raise the default from 3 to 6 after measuring. |
+| needs | want 13 | M8 | [`link.display-feed`](#link.display-feed) | proposed | none | Bridge proposal C. Story Engine layers reach the overlay through it. |
 | needs | proposal 5.1 | M6 | [`recorder.catchup`](#recorder.catchup) | merged | partial | The live feed reads catch-up with detail: true and its cursor, at most once a second, backing off when there is no more. |
 | needs | milestone 6 | M6 | [`recorder.status`](#recorder.status) | merged | none | Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run. |
-| needs | want 10 | M7 | [`surfaces.canvas`](#surfaces.canvas) | requested | none | Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building. |
-| needs | want 11 | M7 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) | requested | none | Show and hide while playing, without opening CET (CET blocks input). |
-| needs | want 12 | M7 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) | requested | none | Lets the overlay work with no other XF program running (bridge proposal B). |
-| needs | want 13 | M8 | [`link.display-feed`](#link.display-feed) | requested | none | Bridge proposal C. Story Engine layers reach the overlay through it. |
-| wants | want 15 | M6 | [`recorder.observe-result`](#recorder.observe-result) | requested | none | Lets Holotable draw what sessions already asked, at no extra game cost. |
-| wants | want plate | M7 | [`surfaces.canvas-plate`](#surfaces.canvas-plate) | requested | none | The design comes from the UI component track; the bridge exposes the token to canvas@1. |
-| wants | agent-layers clock | M6b | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) | requested | none | Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today. |
-| wants | agent-layers game clock | M6c | [`recorder.game-time`](#recorder.game-time) | requested | none | Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock. |
+| needs | want 10 | M7 | [`surfaces.canvas`](#surfaces.canvas) | proposed | none | Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building. |
+| needs | want 11 | M7 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) | proposed | none | Show and hide while playing, without opening CET (CET blocks input). |
+| needs | want 12 | M7 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) | proposed | none | Lets the overlay work with no other XF program running (bridge proposal B). |
+| wants | want 15 | M6 | [`recorder.observe-result`](#recorder.observe-result) | planned | none | Lets Holotable draw what sessions already asked, at no extra game cost. |
+| wants | agent-layers clock | M6b | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) | planned | none | Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today. |
+| wants | agent-layers game clock | M6c | [`recorder.game-time`](#recorder.game-time) | planned | none | Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock. |
+| wants | want plate | M7 | [`surfaces.canvas`](#surfaces.canvas) | proposed | none | The design comes from the UI component track; the bridge exposes the token to canvas@1. |
 
 #### Photo Mode Tools
 
@@ -241,7 +241,7 @@ The pipe, discovery, the writer seat and reader slots, the command catalogue, re
 | [`link.observers`](#link.observers) One writer and read-only observers | service | merged | partial | caveats | P2 |
 | [`link.catalogue`](#link.catalogue) One command catalogue | service | merged | proven | works | P3 |
 | [`link.undo`](#link.undo) Undo on every write | service | merged | partial | caveats | P3 |
-| [`link.display-feed`](#link.display-feed) The display access class and canvas.feed | service | requested | none | unknown | P3 |
+| [`link.display-feed`](#link.display-feed) The display access class and canvas.feed | service | proposed | none | unknown | P3 |
 
 <a id="link.pipe"></a>
 
@@ -372,12 +372,13 @@ Each write logs what it changed with its reversal and returns a machine-readable
 
 ### The display access class and canvas.feed
 
-`link.display-feed` · service · stage **requested** · evidence **none** · health **unknown** · P3
+`link.display-feed` · service · stage **proposed** · evidence **none** · health **unknown** · P3
 
 A display access class and a canvas.feed command usable from read-only connections, so producers such as the Story Engine can draw in game in bounded batches (1-4 Hz).
 
+- **Depends on:** [`surfaces.canvas`](#surfaces.canvas)
 - **Demand (holotable, needs, want 13, M8):** Bridge proposal C. Story Engine layers reach the overlay through it.
-- **Updated:** 2026-10-26
+- **Updated:** 2026-10-27
 
 ## Safety
 
@@ -2391,9 +2392,9 @@ Continuous channels, taps, session events and catching up on what happened betwe
 | [`recorder.game-events-probe`](#recorder.game-events-probe) Game-events probe | research | merged | partial | caveats | P3 |
 | [`recorder.world-event-feed`](#recorder.world-event-feed) World event feed | sense | proposed | none | unknown | P2 |
 | [`recorder.status`](#recorder.status) Read-only recorder status | sense | merged | none | unknown | P1 |
-| [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | requested | none | unknown | P3 |
-| [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | service | requested | none | unknown | P3 |
-| [`recorder.game-time`](#recorder.game-time) Game time on recorder samples | sense | requested | none | unknown | P3 |
+| [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | planned | none | unknown | P3 |
+| [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | service | planned | none | unknown | P2 |
+| [`recorder.game-time`](#recorder.game-time) Game time on recorder samples | sense | planned | none | unknown | P3 |
 
 <a id="recorder.session-events"></a>
 
@@ -2558,18 +2559,18 @@ A read-only command answered on the bridge thread (no game-thread call, no lease
 
 ### Published probe and scene results (observe.result)
 
-`recorder.observe-result` · service · stage **requested** · evidence **none** · health **unknown** · P3
+`recorder.observe-result` · service · stage **planned** · evidence **none** · health **unknown** · P3
 
 A bounded observe.result session event with the command, the caller's cid and the result whenever a writer calls world_probe, scene_read or world_district, adding no game-thread work.
 
 - **Demand (holotable, wants, want 15, M6):** Lets Holotable draw what sessions already asked, at no extra game cost.
-- **Updated:** 2026-10-26
+- **Updated:** 2026-10-27
 
 <a id="recorder.manifest-wall-clock"></a>
 
 ### Wall-clock time in the run manifest
 
-`recorder.manifest-wall-clock` · service · stage **requested** · evidence **none** · health **unknown** · P3
+`recorder.manifest-wall-clock` · service · stage **planned** · evidence **none** · health **unknown** · P2
 
 The recorder run manifest carries a wall-clock mapping for its QPC clock (for example start_at, the ISO time at start_s), so replay tools can place wall-clock-timed items on the recording timeline.
 
@@ -2580,7 +2581,7 @@ The recorder run manifest carries a wall-clock mapping for its QPC clock (for ex
 
 ### Game time on recorder samples
 
-`recorder.game-time` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+`recorder.game-time` · sense · stage **planned** · evidence **none** · health **unknown** · P3
 
 The recorder's V samples (or a 1 Hz heartbeat) carry the game's own clock (game_time_s), so tools can align game-clock items, such as the Story Engine's shadow-mode simulation, with recorded and live observations.
 
@@ -2718,7 +2719,7 @@ The hand-written primitives plans are made of, parameterised by roles, places an
 
 ## In-game surfaces
 
-The ink panel, the XF overlay box, the CET window and line, their themes and motion. (area `surfaces`, 16 capabilities)
+The ink panel, the XF overlay box, the CET window and line, their themes and motion. (area `surfaces`, 15 capabilities)
 
 | Capability | Kind | Stage | Evidence | Health | Priority |
 |---|---|---|---|---|---|
@@ -2734,10 +2735,9 @@ The ink panel, the XF overlay box, the CET window and line, their themes and mot
 | ↳ [`surfaces.motion`](#surfaces.motion) The motion setting | surface | merged | partial | works | P1 |
 | [`surfaces.overlay-set`](#surfaces.overlay-set) Overlay settings live | surface | merged | partial | unknown | P1 |
 | [`surfaces.overlay-state`](#surfaces.overlay-state) Overlay state | sense | merged | partial | caveats | P1 |
-| [`surfaces.canvas`](#surfaces.canvas) World-space canvas (canvas@1) | surface | requested | none | unknown | P3 |
-| [`surfaces.canvas-keys`](#surfaces.canvas-keys) Canvas keys and canvas.visible | surface | requested | none | unknown | P3 |
-| [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) Read-only Lua snapshot for CET modules | sense | requested | none | unknown | P3 |
-| [`surfaces.canvas-plate`](#surfaces.canvas-plate) The XfCanvasPlate token | surface | requested | none | unknown | P3 |
+| [`surfaces.canvas`](#surfaces.canvas) World-space canvas (canvas@1) | surface | proposed | none | unknown | P2 |
+| [`surfaces.canvas-keys`](#surfaces.canvas-keys) Canvas keys and canvas.visible | surface | proposed | none | unknown | P2 |
+| [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) Read-only Lua snapshot for CET modules | sense | proposed | none | unknown | P3 |
 
 <a id="surfaces.ink-panel"></a>
 
@@ -2980,45 +2980,36 @@ overlay.state reports the XF box (on or off, hooked, drawing or why not, back bu
 
 ### World-space canvas (canvas@1)
 
-`surfaces.canvas` · surface · stage **requested** · evidence **none** · health **unknown** · P3
+`surfaces.canvas` · surface · stage **proposed** · evidence **none** · health **unknown** · P2
 
 A world-space canvas in the native overlay host: primitives, anchors, caps and a per-tick camera snapshot, with the radar view, so producers draw in game with no per-layer game-side code.
 
 - **Demand (holotable, needs, want 10, M7):** Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building.
-- **Updated:** 2026-10-26
+- **Demand (holotable, wants, want plate, M7):** The design comes from the UI component track; the bridge exposes the token to canvas@1.
+- **Updated:** 2026-10-27
 
 <a id="surfaces.canvas-keys"></a>
 
 ### Canvas keys and canvas.visible
 
-`surfaces.canvas-keys` · surface · stage **requested** · evidence **none** · health **unknown** · P3
+`surfaces.canvas-keys` · surface · stage **proposed** · evidence **none** · health **unknown** · P2
 
 Show, hide and mode keys for the canvas through the bridge's own key route, rebindable in CET, with a canvas.visible state.
 
+- **Depends on:** [`surfaces.canvas`](#surfaces.canvas)
 - **Demand (holotable, needs, want 11, M7):** Show and hide while playing, without opening CET (CET blocks input).
-- **Updated:** 2026-10-26
+- **Updated:** 2026-10-27
 
 <a id="surfaces.lua-snapshot"></a>
 
 ### Read-only Lua snapshot for CET modules
 
-`surfaces.lua-snapshot` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+`surfaces.lua-snapshot` · sense · stage **proposed** · evidence **none** · health **unknown** · P3
 
 A read-only snapshot for Holotable's CET module: V, XF actors, incidents, supervisor holds and recorder gaps, refreshed a few times a second.
 
 - **Demand (holotable, needs, want 12, M7):** Lets the overlay work with no other XF program running (bridge proposal B).
-- **Updated:** 2026-10-26
-
-<a id="surfaces.canvas-plate"></a>
-
-### The XfCanvasPlate token
-
-`surfaces.canvas-plate` · surface · stage **requested** · evidence **none** · health **unknown** · P3
-
-A canvas plate style token (the translucent backing behind overlay panels and labels, about 72 % opacity) themed with XF Studio's tokens in dark and light.
-
-- **Demand (holotable, wants, want plate, M7):** The design comes from the UI component track; the bridge exposes the token to canvas@1.
-- **Updated:** 2026-10-26
+- **Updated:** 2026-10-27
 
 ## Host tooling
 
