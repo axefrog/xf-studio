@@ -522,6 +522,8 @@ export class SessionExecutor implements Executor {
   private rowDir: string;
   /** The batch's commit monitor (set by runBatch): a trip refuses every further action. */
   monitor?: CommitMonitor;
+  /** Run before each launch (the batch keeps the plugin logs so far: a new game session starts a new log). */
+  beforeLaunch?: () => void;
 
   /** Every API path the executor takes (commands, schema-2 steps, questions, releases) goes through this, so a handed_over refusal is seen on any of them. */
   private readonly api: Pick<CommandApi, "run">;
@@ -636,6 +638,7 @@ export class SessionExecutor implements Executor {
           if (!mo2?.exe || !mo2.profile || !mo2.executable) return { ok: false, code: "fixture_missing", message: "The fixtures file needs mo2.exe, mo2.profile and mo2.executable to launch the game." };
           if ((await this.gamePid()) !== undefined) return { ok: false, code: "already_running", message: "The game is already running." };
           if (context.signal.aborted) return CANCELLED;
+          try { this.beforeLaunch?.(); } catch { /* keeping logs never blocks a launch */ }
           const started = await this.c.host.launch({ exe: mo2.exe, profile: mo2.profile, executable: mo2.executable, arguments: mo2.arguments }, context.signal);
           // A new game session starts from config.ini: nothing live to put back from the last one.
           if (started.started) this.overlayUndo = {};
@@ -1067,6 +1070,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   const signal = options.signal ?? new AbortController().signal;
   const monitor = new CommitMonitor({ host: options.host, api: options.api, clock, floorGb: typeof fixtures.commit_floor_gb === "number" ? fixtures.commit_floor_gb : 4, everyMs: options.commitEveryMs ?? 10_000 });
   executor.monitor = monitor;
+  executor.beforeLaunch = () => { telemetry.keepLogs(); };
   const startedAt = new Date().toISOString();
   const records: RowRecord[] = [];
   // Set by stopWith (also from closures), so its type is declared wide.
@@ -1262,6 +1266,12 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       teardown?.reports.push(...closed.reports);
     }
   });
+  // The plugin logs of the whole attempt, whole, now the game has closed (or still runs, adopted next time).
+  await attemptCleanup("plugin logs", async () => {
+    telemetry.keepLogs();
+    if (telemetry.keptLogs.length) log(`Kept ${telemetry.keptLogs.length} plugin log${telemetry.keptLogs.length > 1 ? "s" : ""} in ${join(options.outDir, "logs", `a${attempt}`)}`);
+    else log("No plugin log was written during this attempt in the folders the fixtures name (logs.plugin_dir, mo2.exe's overwrite, game_dir).");
+  });
   // config.ini goes back directly, past the executor's stop gates, and its outcome is recorded either way.
   if (config) {
     try {
@@ -1285,6 +1295,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
     rows_done: records.filter((r) => r.reason !== "not selected" && !left.includes(r.id)).map((r) => ({ id: r.id, verdict: r.verdict, ...(r.reason ? { reason: r.reason } : {}) })),
     rows_remaining: left,
     command: left.length ? (options.resumeCommand?.(left) ?? `bun tools/session.ts ${options.scriptPath ?? "<script.json>"} --fixtures <private.json> --out "${options.outDir}" --rows ${left.join(",")}`) : null,
+    plugin_logs: telemetry.keptLogs.map((p) => relative(options.outDir, p)),
     ...(cleanupErrors.length ? { cleanup_errors: cleanupErrors } : {}),
   }, null, 2) + "\n"));
   await attemptCleanup("closing the connection", async () => { options.api.close(); options.observer?.close?.(); });

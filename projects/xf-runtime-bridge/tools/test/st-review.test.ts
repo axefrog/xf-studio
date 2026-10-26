@@ -123,3 +123,29 @@ describe("the surface is in frame (capture.surface)", () => {
     expect(row.reason).toContain("in frames 1, 2 of 4");
   });
 });
+
+describe("plugin logs survive restarts", () => {
+  test("every log written during the attempt is copied before each launch and at the end, the first even after it is deleted", async () => {
+    const { writeFileSync, mkdirSync, rmSync, existsSync, readFileSync, appendFileSync } = await import("node:fs");
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
+    const dir = tempDir("xfb-str-");
+    const logs = join(dir, "red4ext-logs");
+    mkdirSync(logs, { recursive: true });
+    const first = join(logs, "xfruntimebridge-2026-10-26-12-12-00.log");
+    writeFileSync(first, "overlay.fonts weights_asked=title=600,eyebrow=600 drawn=400\n");
+    writeFileSync(join(logs, "unrelated.log"), "not ours\n");
+    const clock = new FakeClock();
+    // The launch starts a new log and rotates the old one away, as a restart does.
+    const host = fakeHost({ running: false, onLaunch: () => { rmSync(first); writeFileSync(join(logs, "xfruntimebridge-2026-10-26-12-25-00.log"), "second session\n"); } });
+    const rows = [{ id: "r", title: "r", steps: [{ label: "launch", do: "host.launch" }, { label: "more", do: "wait", ms: 10 }] }];
+    const result = await go(script(rows as never), fakeApi(clock), host, clock, dir, { fixtures: { logs: { plugin_dir: logs }, mo2: { exe: join(dir, "mo2", "ModOrganizer.exe"), profile: "p", executable: "e" } } });
+    appendFileSync(join(logs, "xfruntimebridge-2026-10-26-12-25-00.log"), "");
+    const kept = join(dir, "out", "logs", "a1");
+    expect(readFileSync(join(kept, "xfruntimebridge-2026-10-26-12-12-00.log"), "utf8")).toContain("overlay.fonts");
+    expect(existsSync(join(kept, "xfruntimebridge-2026-10-26-12-25-00.log"))).toBe(true);
+    expect(existsSync(join(kept, "unrelated.log"))).toBe(false);
+    const resume = JSON.parse(readFileSync(result.resumePath, "utf8"));
+    expect(resume.plugin_logs.length).toBe(2);
+  });
+});

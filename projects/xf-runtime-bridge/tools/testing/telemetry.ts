@@ -6,6 +6,10 @@
 //   telemetry/a<attempt>/<row>/bridge-info.json     bridge.info
 //   telemetry/a<attempt>/<row>/plugin-log.txt       the plugin log's lines written during the row (the CET layer logs there too)
 //   telemetry/a<attempt>/<row>/memory.json          free commit, the game's private bytes, working set and handles, the system's handles
+//   logs/a<attempt>/xfruntimebridge-<time>.log      every plugin log written during the attempt, whole: kept before each
+//                                                   launch and at the attempt's end, so a restart (a new log, the old
+//                                                   ones rotated away) never loses evidence (scripted session 1 lost
+//                                                   the overlay.fonts line this way)
 //
 // Collecting never fails a row: what couldn't be read is listed in the row's telemetry summary (missing). The summary
 // also carries the plugin log lines that match the halt patterns (a draw call that failed, the overlay stopping), so
@@ -17,7 +21,7 @@
 // load_requested), so the batch marks the run stale after a prelude that loaded, and a catch-up the bridge refuses
 // marks it stale too: the next row starts a fresh run instead of reading a dead one.
 
-import { existsSync, mkdirSync, openSync, readSync, closeSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, openSync, readSync, closeSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CommandApi } from "../api/command-api.ts";
 import type { Host } from "./host.ts";
@@ -108,10 +112,43 @@ export class Telemetry {
   private readonly patterns: RegExp[];
   private readonly total: TelemetrySummary = { runs: [], pages: 0, rows: [], gaps: [], channels: {}, coverage: { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false }, invalid_in: [], gaps_in: [], unread: [] };
 
+  /** When the attempt started (wall clock: log files carry wall-clock times), and the logs kept so far. */
+  private readonly since = Date.now();
+  readonly keptLogs: string[] = [];
+
   constructor(private readonly o: TelemetryOptions) {
     this.dir = join(o.outDir, "telemetry", `a${o.attempt}`);
     mkdirSync(this.dir, { recursive: true });
     this.patterns = (o.haltPatterns ?? DEFAULT_HALT_PATTERNS).map((p) => new RegExp(p, "i"));
+  }
+
+  /**
+   * Copies every plugin log (rotated ones too) written since the attempt started into logs/a<attempt>/, whole; a copy
+   * is refreshed when its source has grown. Answers the copies made or refreshed now. Never throws.
+   */
+  keepLogs(): string[] {
+    const dest = join(this.o.outDir, "logs", `a${this.o.attempt}`);
+    const copied: string[] = [];
+    for (const dir of this.o.pluginLogDirs ?? []) {
+      try {
+        if (!existsSync(dir)) continue;
+        for (const name of readdirSync(dir)) {
+          if (!/^xfruntimebridge-.*\.log$/i.test(name)) continue;
+          const from = join(dir, name), to = join(dest, name);
+          const stat = statSync(from);
+          // A minute's slack: a log the game was writing as the attempt began.
+          if (stat.mtimeMs < this.since - 60_000) continue;
+          if (existsSync(to) && statSync(to).size === stat.size) continue;
+          mkdirSync(dest, { recursive: true });
+          copyFileSync(from, to);
+          copied.push(to);
+          if (!this.keptLogs.includes(to)) this.keptLogs.push(to);
+        }
+      } catch {
+        // A folder that can't be read keeps nothing; the row slices still list what was missing.
+      }
+    }
+    return copied;
   }
 
   private async read(name: string, input: Record<string, unknown> = {}) {
