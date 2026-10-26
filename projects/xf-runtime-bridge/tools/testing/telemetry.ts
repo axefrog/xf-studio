@@ -85,6 +85,11 @@ export type TelemetrySummary = {
   invalid_in: { row: string; channel: string; invalid: number }[];
   gaps_in: { row: string; gaps: string[] }[];
   unread: string[];
+  /**
+   * Samples the recorder marked not_ready (0.8.22: a subtitle or voice tap with no controllers yet, in a run's first
+   * 2 s): valid records, counted apart from invalid ones. From the recorder's own status, per run and per channel.
+   */
+  not_ready: { total: number; by_channel: Record<string, number>; runs: Record<string, number> };
 };
 
 function readFrom(path: string, from: number): string {
@@ -110,7 +115,9 @@ export class Telemetry {
   private unavailable?: string;
   private mark?: { file: string; size: number };
   private readonly patterns: RegExp[];
-  private readonly total: TelemetrySummary = { runs: [], pages: 0, rows: [], gaps: [], channels: {}, coverage: { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false }, invalid_in: [], gaps_in: [], unread: [] };
+  private readonly total: TelemetrySummary = { runs: [], pages: 0, rows: [], gaps: [], channels: {}, coverage: { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false }, invalid_in: [], gaps_in: [], unread: [],
+    not_ready: { total: 0, by_channel: {}, runs: {} } };
+  private readonly notReadyByRun: Record<string, Record<string, number>> = {};
 
   /** When the attempt started (wall clock: log files carry wall-clock times), and the logs kept so far. */
   private readonly since = Date.now();
@@ -163,7 +170,7 @@ export class Telemetry {
     if (!sid) return { restarted: false, unavailable: info.ok ? "the bridge reports no session" : `bridge.info: ${info.code}` };
     const fresh = this.run !== undefined && sid === this.sid && this.o.clock.now() - this.startedMs < (RECORDER_S - 120) * 1000;
     if (fresh) return { run: this.run, restarted: false };
-    if (this.run !== undefined && sid === this.sid) await this.read("test.record.stop");
+    if (this.run !== undefined && sid === this.sid) this.noteStatus(this.run, await this.read("test.record.stop"));
     let started = await this.read("test.record.start", { channels: ALL_CHANNELS, duration_s: RECORDER_S });
     if (!started.ok && /recording_active|busy/.test(started.code)) {
       await this.read("test.record.stop");
@@ -211,6 +218,7 @@ export class Telemetry {
     const out: RowTelemetry = { dir: relative(this.o.outDir, dir), files, recorder: {}, log_lines: 0, log_matches: [], missing };
     try {
       if (this.run !== undefined) {
+        await this.readStatus();
         const drained = await this.drain(rowKey, (name, value) => save(name, value));
         out.recorder = drained.ok ? { run: drained.run, records: drained.counts, gaps: drained.gaps } : { run: drained.run, unavailable: drained.code };
         if (!drained.ok) missing.push(`game.catchup: ${drained.code}`);
@@ -311,6 +319,25 @@ export class Telemetry {
   }
 
   /** The batch's recorder history so far (whole-batch passive rows read it as $telemetry). */
+  /** The recorder's own status for this run (its not_ready counts; a read that acknowledges nothing). */
+  private async readStatus() {
+    const run = this.run;
+    if (run === undefined) return;
+    this.noteStatus(run, await this.read("test.record.read", { run, since: 0, limit: 1 }).catch(() => ({ ok: false as const })));
+  }
+
+  /** Keeps a run's not_ready counts (the status's counters are the run's totals so far: the latest reading wins). */
+  private noteStatus(run: number, read: { ok: boolean; value?: unknown }) {
+    const status = read.ok ? (read.value as { not_ready?: number; channel_stats?: Record<string, { not_ready?: number }> } | undefined) : undefined;
+    if (typeof status?.not_ready !== "number") return;
+    const t = this.total.not_ready;
+    t.runs[String(run)] = status.not_ready;
+    this.notReadyByRun[String(run)] = Object.fromEntries(Object.entries(status.channel_stats ?? {}).filter(([, c]) => typeof c?.not_ready === "number").map(([ch, c]) => [ch, c.not_ready!]));
+    t.total = Object.values(t.runs).reduce((a, b) => a + b, 0);
+    t.by_channel = {};
+    for (const channels of Object.values(this.notReadyByRun)) for (const [ch, n] of Object.entries(channels)) t.by_channel[ch] = (t.by_channel[ch] ?? 0) + n;
+  }
+
   summary(): TelemetrySummary {
     return structuredClone(this.total);
   }
@@ -320,7 +347,9 @@ export class Telemetry {
     if (this.run !== undefined) {
       await this.drain("end", (name, value) => writeFileSync(join(this.dir, `final-${name}`), JSON.stringify(value, null, 2) + "\n")).catch(() => null);
     }
-    await this.read("test.record.stop").catch(() => null);
+    const run = this.run;
+    const stopped = await this.read("test.record.stop").catch(() => ({ ok: false as const }));
+    if (run !== undefined) this.noteStatus(run, stopped);
     this.run = undefined;
   }
 }

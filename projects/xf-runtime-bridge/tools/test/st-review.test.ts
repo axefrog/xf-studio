@@ -213,3 +213,32 @@ describe("the ST batch shows its named states", () => {
     expect(JSON.parse(readFileSync(join(dir, "st-styling.json"), "utf8"))).toEqual(JSON.parse(JSON.stringify(stScript(false))));
   });
 });
+
+describe("not_ready samples (bridge 0.8.22) are counted apart, never invalid", () => {
+  test("the telemetry summary keeps the recorder's not_ready counts by channel, and B318-1 passes over them", async () => {
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
+    const { readFileSync } = await import("node:fs");
+    const clock = new FakeClock();
+    const status = { not_ready: 3, channel_stats: { subtitles: { attempts: 9, not_ready: 2 }, voice: { attempts: 9, not_ready: 1 }, v: { attempts: 9 } } };
+    const api = fakeApi(clock, { "test.record.read": () => ({ ok: true, result: status }), "test.record.stop": () => ({ ok: true, result: status }) });
+    const smoke = JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "borg4-smoke.json"), "utf8"));
+    const b318 = smoke.rows.find((r: { id: string }) => r.id === "B318-1");
+    const rows = [{ id: "plain", title: "plain", steps: [{ label: "w", do: "wait", ms: 10 }] }, b318];
+    const result = await go(script(rows as never), api, fakeHost(), clock, tempDir("xfb-str-"));
+    const row = result.rows.find((r) => r.id === "B318-1")!;
+    expect(row.verdict).toBe("PASS");
+    const fact = row.facts!.find((f) => f.label.startsWith("not ready"))!.value as { total: number; by_channel: Record<string, number> };
+    expect(fact.total).toBe(3);
+    expect(fact.by_channel).toEqual({ subtitles: 2, voice: 1 });
+  });
+
+  test("B318-1 fails when another channel reports not_ready", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { matches } = await import("../testing/plan.ts");
+    const smoke = JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "borg4-smoke.json"), "utf8"));
+    const check = smoke.rows.find((r: { id: string }) => r.id === "B318-1").pass.find((c: { label: string }) => c.label.startsWith("not_ready only"));
+    expect(matches(check.match, { ok: true, value: { subtitles: 4, voice: 2 } })).toBe(true);
+    expect(matches(check.match, { ok: true, value: { face: 1 } })).toBe(false);
+  });
+});

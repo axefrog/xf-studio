@@ -46,6 +46,7 @@ import { join } from "node:path";
 import { findCommand } from "../api/catalogue.ts";
 import { closeSteps, launchSteps } from "../testing/batch.ts";
 import { buildTheme, STUDIO_CSS } from "../overlay/theme.ts";
+import { ALL_CHANNELS } from "../testing/telemetry.ts";
 
 type Json = Record<string, unknown>;
 const key = (row: string, name: string) => `${row.replace(/[^A-Za-z0-9]/g, "_")}_${name}`;
@@ -309,6 +310,7 @@ function writesRows(theme: Theme): Json[] {
         { label: `${row}-${name}-shot`, do: "capture", name: `ST2-xfbox-bar-${name}-light`, clear_overlay: false, bind: key(row, name) },
         inFrame(row, name, "xf_box", "light"),
       ];
+      // The figure needs the autonomous build's test hooks, which the preflight checks (a row requirement would restart the game).
       rows.push({ id: row, title: "The XF box's diagnostics bar in light: the figure over the fill, and the warning and danger tones (a test figure)", requires, judged_by: STUDIO,
         steps: [inPlay(row), ...look(row, "light", "full"), ...xfBox(row), visible(row, "xf_box", "light", "box"),
           ...tone("fill", 0.6, { min: 0.55, max: 0.65 }), ...tone("warning", 0.8, { min: 0.76, max: 0.89 }), ...tone("danger", 0.95, { min: 0.91 })],
@@ -582,10 +584,15 @@ function smokeScript(): Json {
       check("no invalid samples", row, "all", "coverage.invalid", { equals: 0 }),
       ...["subtitles", "voice", "face", "ui"].map((ch) => ({ label: `${ch}: no invalid samples`, ref: ref(row, "all"), match: { any: [{ path: `channels.${ch}.invalid`, equals: 0 }, { path: `channels.${ch}`, exists: false }] } })),
       check("no gaps", row, "all", "gaps", { equals: [] }),
+      // 0.8.22: a subtitle or voice tap with no controllers in a run's first 2 s (right after a load) is not_ready, a
+      // valid sample counted apart, never invalid; only those two channels may have any.
+      { label: "not_ready only on the subtitle and voice taps", ref: ref(row, "all", "not_ready.by_channel"), match: { all:
+        ALL_CHANNELS.filter((ch) => ch !== "subtitles" && ch !== "voice").map((ch) => ({ not: { path: ch, min: 1 } })) } },
     ],
     facts: [
       { label: "runs", ref: ref(row, "all", "runs") }, { label: "pages", ref: ref(row, "all", "pages") }, { label: "gaps", ref: ref(row, "all", "gaps") },
-      { label: "coverage loss", ref: ref(row, "all", "coverage") }, { label: "invalid samples by row", ref: ref(row, "all", "invalid_in") }, { label: "gaps by row", ref: ref(row, "all", "gaps_in") },
+      { label: "coverage loss", ref: ref(row, "all", "coverage") },
+      { label: "not ready (early tap samples, not invalid)", ref: ref(row, "all", "not_ready") }, { label: "invalid samples by row", ref: ref(row, "all", "invalid_in") }, { label: "gaps by row", ref: ref(row, "all", "gaps_in") },
     ] });
 
   row = "B318-3";

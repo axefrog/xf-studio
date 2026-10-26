@@ -119,6 +119,62 @@
           "match": {
             "equals": []
           }
+        },
+        {
+          "label": "not_ready only on the subtitle and voice taps",
+          "ref": "$B318_1_all.not_ready.by_channel",
+          "match": {
+            "all": [
+              {
+                "not": {
+                  "path": "v",
+                  "min": 1
+                }
+              },
+              {
+                "not": {
+                  "path": "actors",
+                  "min": 1
+                }
+              },
+              {
+                "not": {
+                  "path": "camera",
+                  "min": 1
+                }
+              },
+              {
+                "not": {
+                  "path": "face",
+                  "min": 1
+                }
+              },
+              {
+                "not": {
+                  "path": "ui",
+                  "min": 1
+                }
+              },
+              {
+                "not": {
+                  "path": "contacts",
+                  "min": 1
+                }
+              },
+              {
+                "not": {
+                  "path": "supervisor",
+                  "min": 1
+                }
+              },
+              {
+                "not": {
+                  "path": "incidents",
+                  "min": 1
+                }
+              }
+            ]
+          }
         }
       ],
       "facts": [
@@ -137,6 +193,10 @@
         {
           "label": "coverage loss",
           "ref": "$B318_1_all.coverage"
+        },
+        {
+          "label": "not ready (early tap samples, not invalid)",
+          "ref": "$B318_1_all.not_ready"
         },
         {
           "label": "invalid samples by row",
