@@ -10,7 +10,8 @@ import { catchUp } from "../testing/timeline.ts";
 import type { Json, TestApi } from "../testing/windows.ts";
 import { projectDir } from "./helpers.ts";
 
-const source = (...parts: string[]) => readFileSync(join(projectDir, ...parts), "utf8");
+// As LF, whatever the checkout's line endings: .reds files are text=auto, so a Windows checkout may hold them as CRLF.
+const source = (...parts: string[]) => readFileSync(join(projectDir, ...parts), "utf8").replace(/\r\n/g, "\n");
 
 // A small recorder fixture: rows as given, read five at a time as the recorder does.
 function recorder(rows: Array<{ channel: string; valid: boolean; data: Json }>, counters: { invalid?: number } = {}) {

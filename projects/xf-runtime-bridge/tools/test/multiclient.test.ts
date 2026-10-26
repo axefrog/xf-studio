@@ -2,12 +2,12 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import { BridgeClient, PipeConnectError } from "../bridge-lib.ts";
 import { CommandApi } from "../api/command-api.ts";
-import { startSelftestHost, type Host, sleep } from "./helpers.ts";
+import { requireAutonomousSelftest, startSelftestHost, type Host, sleep } from "./helpers.ts";
 
 let host: Host;
 const clients: BridgeClient[] = [];
 const apis: CommandApi[] = [];
-beforeAll(async () => { host = await startSelftestHost(["--allow-writes", "--allow-test-hooks", "--write-classes", "photo,world,character,npc"]); }, 60000);
+beforeAll(async () => { requireAutonomousSelftest(); host = await startSelftestHost(["--allow-writes", "--allow-test-hooks", "--write-classes", "photo,world,character,npc"]); }, 60000);
 afterAll(async () => { for (const api of apis) api.close(); for (const c of clients) c.close(); await host?.stop(); });
 const client = async (readOnly = false) => {
   const c = new BridgeClient(host.session, 500); clients.push(c);

@@ -10,7 +10,7 @@ import { CommandApi } from "../api/command-api.ts";
 import { BridgeClient } from "../bridge-lib.ts";
 import { catchUp } from "../testing/timeline.ts";
 import type { Json, TestApi } from "../testing/windows.ts";
-import { projectDir, startSelftestHost, tempDir } from "./helpers.ts";
+import { projectDir, requireAutonomousSelftest, startSelftestHost, tempDir } from "./helpers.ts";
 
 const entry = { schema: "xfb/supervisor-entry-1", actor: { kind: "player", ref: "V" }, goal: { kind: "idle_safe" }, invariants: ["alive"], policy: { alive: "pause_world" } };
 
@@ -45,6 +45,7 @@ test("review H2: MCP restricted to player cannot arm world or withdrawal policie
 });
 
 test("review H2: native refuses arming with caller player-only capabilities despite broad config", async () => {
+  requireAutonomousSelftest();
   const host = await startSelftestHost(["--allow-writes", "--allow-test-hooks", "--write-classes", "player,world,npc,dm"]);
   const client = new BridgeClient(host.session, 3000);
   try {

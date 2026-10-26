@@ -262,6 +262,8 @@ Needs Visual Studio 2022 (MSVC 14.43), CMake 4.0.1 and Bun 1.4.2. The native dep
 ```powershell
 # from projects/xf-runtime-bridge; add -DXFB_RED4EXT_SDK_GIT=D:/Dev/RED4ext.SDK to clone the SDK from a local checkout
 cmake -S native -B build -G "Visual Studio 17 2022" -A x64
+# for the full test suite: the self-test host with the autonomous test hooks (tests that need them say so plainly without)
+cmake -S native -B build -DXFB_AUTONOMOUS_TEST_HOOKS=ON -DXFB_ENGINE_INPUT_TESTS=ON
 cmake --build build --config Release                   # while developing
 cmake --build build --config Release --clean-first     # 0.8.2: always before packaging (tools/package.ts refuses a build with a stale object file)
 bun install

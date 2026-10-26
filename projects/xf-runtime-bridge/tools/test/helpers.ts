@@ -1,7 +1,7 @@
 // Shared test helpers: synthetic windows and the self-test bridge host.
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { readSession, type BridgeSession } from "../bridge-lib.ts";
 import { sweptDir, tempDir } from "./temp-dir.ts";
@@ -63,6 +63,24 @@ export async function openSyntheticWindow(width: number, height: number, options
 }
 
 export type Host = { child: ChildProcess; dir: string; session: BridgeSession; log: string[]; stop: () => Promise<void> };
+
+/**
+ * Whether build/Release/xfb_selftest.exe was built with the autonomous test hooks (cmake -DXFB_AUTONOMOUS_TEST_HOOKS=ON
+ * -DXFB_ENGINE_INPUT_TESTS=ON), read from the build stamp the binary itself carries. Without them the recorder, the
+ * supervisor's test admission and the reader pool's test methods aren't compiled in, so those tests could only fail
+ * with unknown_method.
+ */
+export function selftestHasAutonomousHooks(): boolean {
+  return existsSync(selftestExe) && readFileSync(selftestExe).includes(";XFB_AUTONOMOUS_TEST_HOOKS=1");
+}
+
+/** Fails in plain words when the self-test binary lacks the autonomous test hooks a test needs. */
+export function requireAutonomousSelftest() {
+  if (!selftestHasAutonomousHooks()) {
+    throw new Error(`${selftestExe} was built without the autonomous test hooks this test needs: configure with ` +
+      "cmake -S native -B build -DXFB_AUTONOMOUS_TEST_HOOKS=ON -DXFB_ENGINE_INPUT_TESTS=ON, then rebuild xfb_selftest");
+  }
+}
 
 /** Starts build/Release/xfb_selftest.exe: the real bridge core and pipe with a simulated game. */
 export async function startSelftestHost(extraArgs: string[] = [], seconds = 60): Promise<Host> {

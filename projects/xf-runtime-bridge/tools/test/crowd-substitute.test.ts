@@ -17,7 +17,7 @@ import { BridgeClient } from "../bridge-lib.ts";
 import { NPC_MESSAGES } from "../api/errors080npc.ts";
 import { validate } from "../api/schema.ts";
 import { WAIT_KINDS } from "../api/catalogue070.ts";
-import { HOOK_TIMEOUT_MS, projectDir, sleep, startSelftestHost, tempDir, type Host } from "./helpers.ts";
+import { HOOK_TIMEOUT_MS, projectDir, requireAutonomousSelftest, sleep, startSelftestHost, tempDir, type Host } from "./helpers.ts";
 
 type Any = any;
 const ALL = "photo,world,character,save,showroom,player,npc";
@@ -553,6 +553,7 @@ describe("0.8.19 review 6: supervision of an XF actor needs NPC writes, not play
   });
 
   test("against the host's admission: an actor's entry reaches the adapter with only the NPC class on; V's is refused by config", async () => {
+    requireAutonomousSelftest();
     const host = await startSelftestHost(["--allow-writes", "--allow-test-hooks", "--write-classes", "npc"]);
     const client = new BridgeClient(host.session, 3000);
     try {
