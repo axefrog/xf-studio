@@ -46,7 +46,10 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
   const view = (p: Vec3) => { const d = [p[0] - c[0], p[1] - c[1], p[2] - c[2]]; return [d[0] * r[0] + d[1] * r[1] + d[2] * r[2], d[0] * u[0] + d[1] * u[1] + d[2] * u[2], d[0] * f[0] + d[1] * f[1] + d[2] * f[2]]; };
   const screen = (q: number[]): [number, number] => [width / 2 + focal * q[0] / q[2], height / 2 - focal * q[1] / q[2]];
   const point = (p: Vec3) => { const q = view(p); return q[2] < NEAR ? null : screen(q); };
-  /** A polyline clipped against the near plane: the parts in front of the camera, as separate runs. */
+  /**
+   * A polyline clipped against the near plane, then against the drawing (plus a margin): only what can be seen, as separate runs.
+   * Unclipped, a district outline near the camera projects millions of pixels off-screen, and the browser dashes every one each frame.
+   */
   const line = (ps: readonly Vec3[], closed = false): [number, number][][] => {
     const qs = ps.map(view); if (closed && qs.length) qs.push(qs[0]);
     const runs: [number, number][][] = []; let run: [number, number][] = [];
@@ -59,7 +62,7 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
       if (inA) run.push(screen(a));
     }
     if (run.length > 1) runs.push(run);
-    return runs.filter(r2 => r2.length > 1);
+    return runs.flatMap(r2 => clipToRect(r2, -MARGIN, -MARGIN, width + MARGIN, height + MARGIN));
   };
   /** Screen pixels per metre at a world point (for scale bars and sizes). */
   const scale = (p: Vec3) => { const q = view(p); return q[2] < NEAR ? 0 : focal / q[2]; };
@@ -125,6 +128,34 @@ export const STALE_S = 0.5;
 const CELL_RADIUS = 450;
 
 const snap = (x: number) => Math.round(x / 20) * 20;
+
+/** How far past the drawing's edge a clipped line still runs, in pixels: enough that no stroke or dash ends visibly at the edge. */
+const MARGIN = 32;
+
+/**
+ * A screen polyline clipped to a rectangle (Liang–Barsky per segment): the parts inside, as separate runs. A run breaks where a segment
+ * leaves the rectangle; a segment wholly outside draws nothing.
+ */
+export function clipToRect(ps: readonly [number, number][], x0: number, y0: number, x1: number, y1: number): [number, number][][] {
+  const runs: [number, number][][] = []; let run: [number, number][] = [];
+  const flush = () => { if (run.length > 1) runs.push(run); run = []; };
+  for (let i = 1; i < ps.length; i++) {
+    const [ax, ay] = ps[i - 1], [bx, by] = ps[i], dx = bx - ax, dy = by - ay;
+    let t0 = 0, t1 = 1, inside = true;
+    for (const [p, q] of [[-dx, ax - x0], [dx, x1 - ax], [-dy, ay - y0], [dy, y1 - ay]] as const) {
+      if (p === 0) { if (q < 0) { inside = false; break; } continue; }
+      const r = q / p;
+      if (p < 0) { if (r > t1) { inside = false; break; } if (r > t0) t0 = r; }
+      else { if (r < t0) { inside = false; break; } if (r < t1) t1 = r; }
+    }
+    if (!inside) { flush(); continue; }
+    if (!run.length || t0 > 0) { flush(); run.push(t0 > 0 ? [ax + dx * t0, ay + dy * t0] : [ax, ay]); }
+    run.push(t1 < 1 ? [ax + dx * t1, ay + dy * t1] : [bx, by]);
+    if (t1 < 1) flush();
+  }
+  flush();
+  return runs;
+}
 
 function box(c: HoloCell, draw: (ps: Vec3[], opacity: number) => void) {
   const [x0, y0, z0] = c.min, [x1, y1, z1] = c.max;

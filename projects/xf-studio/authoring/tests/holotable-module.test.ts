@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHolotable, type HoloTransport } from "../src/features/holotable";
 import { createHolotableHandler, type HolotableSpawner } from "../src/features/holotable/host/holotable-server";
-import { ORBITS, project, trail } from "../src/features/holotable/view/projection";
+import { clipToRect, ORBITS, project, trail } from "../src/features/holotable/view/projection";
 import type { HoloSession } from "../src/features/holotable/types";
 
 const session = (level: "structure" | "full"): HoloSession => ({
@@ -110,6 +110,25 @@ describe("Holotable projection", () => {
     expect(scene.primitives.some(p => p.kind === "marker" && p.id === "e2" && p.style === "event-selected")).toBe(true);
     expect(scene.barPx).toBeLessThanOrEqual(140);
     expect([5, 10, 20, 50, 100, 200, 500]).toContain(scene.metresPerBar);
+  });
+  test("clipping keeps what is inside, cuts at the edges, breaks the run where a line leaves, and drops what misses", () => {
+    expect(clipToRect([[10, 10], [50, 10], [50, 50]], 0, 0, 100, 100)).toEqual([[[10, 10], [50, 10], [50, 50]]]);
+    expect(clipToRect([[-100, 50], [200, 50]], 0, 0, 100, 100)).toEqual([[[0, 50], [100, 50]]]);
+    // Out through the right edge and back in: two runs, each ending on the edge.
+    expect(clipToRect([[50, 20], [150, 20], [150, 80], [50, 80]], 0, 0, 100, 100)).toEqual([[[50, 20], [100, 20]], [[100, 80], [50, 80]]]);
+    expect(clipToRect([[-50, -50], [-10, 200]], 0, 0, 100, 100)).toEqual([]);
+  });
+  test("no line runs far past the drawing: a district outline around the camera stays within the margin", () => {
+    // A district much larger than the view, centred on V: unclipped, its near edges project millions of pixels away.
+    const big = { kind: "district" as const, name: "Big", poly: [[-5000, -5000], [5000, -5000], [5000, 5000], [-5000, 5000]] as [number, number][], zlo: 0, zhi: 400 };
+    const layers = { v: true, camera: true, events: true, gaps: true, areas: true, cells: false };
+    for (const orbit of Object.values(ORBITS)) {
+      const scene = project(session("structure"), { provenance: null, areas: [big as never], cells: [] }, 105, layers, orbit, 800, 500, null);
+      for (const p of scene.primitives) if (p.kind === "line") for (const [x, y] of p.points) {
+        expect(x).toBeGreaterThanOrEqual(-32.001); expect(x).toBeLessThanOrEqual(832.001);
+        expect(y).toBeGreaterThanOrEqual(-32.001); expect(y).toBeLessThanOrEqual(532.001);
+      }
+    }
   });
 });
 
