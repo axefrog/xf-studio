@@ -547,6 +547,9 @@ export class SessionExecutor implements Executor {
   clearStops() {
     this.stopReason = undefined;
     this.handedOver = false;
+    // The stopped commit monitor is detached too: its trip stays on the batch's halt (the report), and must not refuse the
+    // teardown's own steps.
+    this.monitor = undefined;
   }
 
   get bindings() {
