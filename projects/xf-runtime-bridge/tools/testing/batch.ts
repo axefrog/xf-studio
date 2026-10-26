@@ -32,7 +32,7 @@ import { checkMatch, checkPlan, describePlan, matches, realClock, resolveRefs, r
 import { planTestStep, TEST_STEP_KINDS, TestSession } from "./script.ts";
 import { captureCursor, waitForEvent } from "./windows.ts";
 import { tripReason } from "../commit-tripwire.ts";
-import { ALL_CHANNELS, DEFAULT_HALT_PATTERNS, Telemetry, type RowTelemetry } from "./telemetry.ts";
+import { ALL_CHANNELS, DEFAULT_HALT_PATTERNS, Telemetry, earlierSummaries, mergeSummaries, type RowTelemetry } from "./telemetry.ts";
 
 export const SCRIPT_SCHEMA_3 = "xfb/session-script-3";
 export const REPORT_SCHEMA_3 = "xfb/session-report-3";
@@ -1235,11 +1235,11 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   await attemptCleanup("commit monitor", () => monitor.stop());
   if (monitor.reason) stopWith("tripwire", monitor.reason);
   await attemptCleanup("telemetry", () => telemetry.finish());
-  // Whole-batch passive rows: judged now over everything the recorder saw, with no session time of their own.
-  bindings.telemetry = telemetry.summary();
+  // Whole-batch passive rows: judged on every attempt (whichever rows it ran) over the evidence of every attempt so far
+  // (mergeSummaries), with no session time of their own: an earlier attempt's verdict never stands for a later one.
+  bindings.telemetry = mergeSummaries([...earlierSummaries(options.outDir, attempt), { attempt, summary: telemetry.summary() }]);
   for (const { row, plan: rowPlan, failRow } of planned.rows.filter((r) => r.row.passive)) {
     const record = records.find((r) => r.id === row.id)!;
-    if (options.rows && !options.rows.includes(row.id)) continue;
     await attemptCleanup(`passive row ${row.id}`, async () => {
       const before = new Map(Object.entries(bindings));
       const result = await runPlan(rowPlan, { executor, clock, bindings });

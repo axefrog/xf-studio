@@ -356,7 +356,7 @@ describe("whole-batch passive rows, and the telemetry they judge", () => {
     const result = await go(script(two), api, fakeHost(), clock, tempDir("xfb-batch-"));
     const row = result.rows.find((r) => r.id === "B318-1")!;
     expect(row.verdict).toBe("FAIL");
-    expect(row.facts![0].value).toEqual([{ row: "b", channel: "subtitles", invalid: 2 }]);
+    expect(row.facts![0].value).toEqual([{ row: "attempt 1: b", channel: "subtitles", invalid: 2 }]);
     // It ran no prelude, held no session time and collected no telemetry of its own.
     expect(row.prelude).toBeUndefined();
     expect(row.telemetry).toBeUndefined();

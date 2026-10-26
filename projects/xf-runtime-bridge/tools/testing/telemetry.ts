@@ -21,7 +21,7 @@
 // load_requested), so the batch marks the run stale after a prelude that loaded, and a catch-up the bridge refuses
 // marks it stale too: the next row starts a fresh run instead of reading a dead one.
 
-import { copyFileSync, existsSync, mkdirSync, openSync, readSync, closeSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, openSync, readFileSync, readSync, closeSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { CommandApi } from "../api/command-api.ts";
 import type { Host } from "./host.ts";
@@ -362,5 +362,55 @@ export class Telemetry {
     const stopped = await this.read("test.record.stop").catch(() => ({ ok: false as const }));
     if (run !== undefined) this.noteStatus(run, stopped);
     this.run = undefined;
+    // This attempt's evidence, for the whole-batch rows of every later attempt (mergeSummaries).
+    writeFileSync(join(this.dir, "summary.json"), JSON.stringify(this.total, null, 2) + "\n");
   }
+}
+
+/**
+ * The whole-batch evidence over several attempts, each attempt's summary in order. Counts add up, lists join, and
+ * what names a run is prefixed with its attempt ("attempt 1: run 3: voice"; not_ready and taps runs as "a1:3"), since
+ * run numbers start again with each game session. An attempt with no summary (it never finished) is listed in
+ * missing_attempts: its evidence is unknown, never read as clean.
+ */
+export function mergeSummaries(attempts: { attempt: number; summary?: TelemetrySummary }[]): TelemetrySummary & { attempts: number[]; missing_attempts: number[] } {
+  const out: TelemetrySummary & { attempts: number[]; missing_attempts: number[] } = { runs: [], pages: 0, rows: [], gaps: [], channels: {}, coverage: { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false },
+    invalid_in: [], gaps_in: [], unread: [], not_ready: { total: 0, by_channel: {}, runs: {} }, taps: { runs: {}, never_ready: [] }, attempts: [], missing_attempts: [] };
+  for (const { attempt, summary: s } of attempts) {
+    out.attempts.push(attempt);
+    if (!s) { out.missing_attempts.push(attempt); continue; }
+    const tag = (text: string) => `attempt ${attempt}: ${text}`;
+    out.runs.push(...(s.runs ?? []));
+    out.pages += s.pages ?? 0;
+    out.rows.push(...(s.rows ?? []).map(tag));
+    out.gaps = [...new Set([...out.gaps, ...(s.gaps ?? [])])];
+    for (const [ch, c] of Object.entries(s.channels ?? {})) {
+      const t = (out.channels[ch] ??= { records: 0, invalid: 0, valid: 0 });
+      t.records += c.records; t.invalid += c.invalid; t.valid += c.valid;
+    }
+    const cov = s.coverage ?? { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false };
+    out.coverage = { dropped: out.coverage.dropped + cov.dropped, invalid: out.coverage.invalid + cov.invalid, missed_deadlines: out.coverage.missed_deadlines + cov.missed_deadlines, file_error: out.coverage.file_error || cov.file_error };
+    out.invalid_in.push(...(s.invalid_in ?? []).map((e) => ({ ...e, row: tag(e.row) })));
+    out.gaps_in.push(...(s.gaps_in ?? []).map((e) => ({ ...e, row: tag(e.row) })));
+    out.unread.push(...(s.unread ?? []).map(tag));
+    const nr = s.not_ready ?? { total: 0, by_channel: {}, runs: {} };
+    out.not_ready.total += nr.total;
+    for (const [ch, n] of Object.entries(nr.by_channel)) out.not_ready.by_channel[ch] = (out.not_ready.by_channel[ch] ?? 0) + n;
+    for (const [run, n] of Object.entries(nr.runs)) out.not_ready.runs[`a${attempt}:${run}`] = n;
+    const taps = s.taps ?? { runs: {}, never_ready: [] };
+    for (const [run, t] of Object.entries(taps.runs)) out.taps.runs[`a${attempt}:${run}`] = t;
+    out.taps.never_ready.push(...taps.never_ready.map(tag));
+  }
+  return out;
+}
+
+/** Each earlier attempt's summary (telemetry/a<n>/summary.json), or none where that attempt didn't finish. */
+export function earlierSummaries(outDir: string, attempt: number): { attempt: number; summary?: TelemetrySummary }[] {
+  const out: { attempt: number; summary?: TelemetrySummary }[] = [];
+  for (let a = 1; a < attempt; a++) {
+    const path = join(outDir, "telemetry", `a${a}`, "summary.json");
+    try { out.push({ attempt: a, summary: existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined }); }
+    catch { out.push({ attempt: a }); }
+  }
+  return out;
 }
