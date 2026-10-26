@@ -6,6 +6,8 @@ type Camera = ReturnType<typeof camera>;
 const EDGES = [0,1,0,2,0,4,1,3,1,5,2,3,2,6,3,7,4,5,4,6,5,7,6,7];
 const TOPS = [false, true];
 const TRAILS = [[0,1,3,2,0,4,5,1],[2,6,4],[3,7,5],[6,7]];
+/** Outlines stay a step behind the recorded data: the trail and V lead, the city is context (design review, round 2). */
+const EDGE_OPACITY = 0.6;
 export function solidCanvas(canvas: HTMLCanvasElement, changed: () => void) {
   const ctx = canvas.getContext("2d"); if (!ctx) throw Error("Canvas 2D is unavailable for Solid shapes.");
   // CSS resolves light-dark()/color-mix() before Canvas's independent colour parser sees the values.
@@ -40,7 +42,7 @@ export function solidCanvas(canvas: HTMLCanvasElement, changed: () => void) {
         if (s.kind !== "box") {
           const drawing = solidDrawing(s, C, instance.opacity, fillFaces, instance.extentPx < 64 ? 16 : 24);
           if (fillFaces) { ctx.beginPath(); for (const f of drawing.faces) path(f.points, true); ctx.globalAlpha = instance.opacity * 0.04; ctx.fill(); }
-          ctx.beginPath(); for (const line of drawing.lines) path(line.points, false); ctx.globalAlpha = instance.opacity; ctx.stroke(); continue;
+          ctx.beginPath(); for (const line of drawing.lines) path(line.points, false); ctx.globalAlpha = instance.opacity * EDGE_OPACITY; ctx.stroke(); continue;
         }
         const g = solidGeometry(s), wholeInside = C.projectInto(g.corners, xy, depths);
         if (fillFaces) for (let i = 0; i < g.faces.length; i++) {
@@ -71,7 +73,7 @@ export function solidCanvas(canvas: HTMLCanvasElement, changed: () => void) {
           if (depths[i] >= 1 && depths[j] >= 1) clipSegment(xy[i * 2], xy[i * 2 + 1], xy[j * 2], xy[j * 2 + 1], -32, -32, C.width + 32, C.height + 32, segment);
           else for (const line of C.line([g.corners[i], g.corners[j]])) path(line.points, false);
         }
-        ctx.globalAlpha = instance.opacity; ctx.stroke();
+        ctx.globalAlpha = instance.opacity * EDGE_OPACITY; ctx.stroke();
       }
       ctx.globalAlpha = 1;
     },
