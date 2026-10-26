@@ -41,6 +41,24 @@ const SAMPLED = H(hs('tie'), hs('sampled'));
 /** The ended intervals of one tie that the record keeps, newest last. */
 const SPAN_MAX = 16;
 
+/** Pure projection of recorded interactions; never restores or materialises a tie. */
+export function recordedTieStrength(rec: TieRecord | undefined, s: TiesData['strength'], t: GameTime): number {
+  if (!rec) return 0;
+  const timeP = Math.min(1, rec.hours / s.sharedHoursFull);
+  let intensityP = 0;
+  for (const e of rec.entries) {
+    const age = (t - e.at) / DAY;
+    let rec_ = 0;
+    for (const r of s.recency) {
+      if (age <= r.upToDays) { rec_ = r.weight; break; }
+    }
+    intensityP = Math.max(intensityP, (e.salience / 3) * rec_);
+  }
+  const intimacyP = Math.min(1, rec.disclosures * s.disclosureStep);
+  const servicesP = Math.min(1, rec.favours / s.favoursFull);
+  return q64(0.25 * (timeP + intensityP + intimacyP + servicesP));
+}
+
 export class TiePolicy {
   constructor(private readonly sim: Sim) {}
 
@@ -69,25 +87,7 @@ export class TiePolicy {
   /** `strength = q64(0.25 (timeP + intensityP + intimacyP + servicesP))`, read from the history and `t`, never pinned (S1 4.7). */
   strengthOf(a: Id, b: Id, t: GameTime = this.k.now): number {
     if (!this.hasEdge(a, b)) return 0;
-    const rec = this.sim.record.tieHistory[tieEdgeId(a, b)];
-    if (!rec) return 0;
-    const s = this.cfg.strength;
-    const timeP = Math.min(1, rec.hours / s.sharedHoursFull);
-    let intensityP = 0;
-    for (const e of rec.entries) {
-      const age = (t - e.at) / DAY;
-      let rec_ = 0;
-      for (const r of s.recency) {
-        if (age <= r.upToDays) {
-          rec_ = r.weight;
-          break;
-        }
-      }
-      intensityP = Math.max(intensityP, (e.salience / 3) * rec_);
-    }
-    const intimacyP = Math.min(1, rec.disclosures * s.disclosureStep);
-    const servicesP = Math.min(1, rec.favours / s.favoursFull);
-    return q64(0.25 * (timeP + intensityP + intimacyP + servicesP));
+    return recordedTieStrength(this.sim.record.tieHistory[tieEdgeId(a, b)], this.cfg.strength, t);
   }
 
   /**

@@ -85,6 +85,15 @@ The model's runtime dependency is `@noble/hashes` (BLAKE3). The source audits us
 
 ## Running the tests
 
+The reference model also has an [offline Holotable spool writer](reference/HOLOTABLE.md).
+It publishes existing simulation, seeding and procedural state as full-content
+diagnostic layers on one standalone game-time timeline. A shared SF3-60-style
+Kabuki week is the first output fixture. Observation never opens detail or evaluates
+a draw; tests compare records, digests, draw transcripts and saves with and without
+it. Real district ids come from Holotable's world pack; synthetic cells use an
+explicitly labelled schematic grid within the real bounds. This is an offline
+reference-model facility, not live game integration.
+
 From `projects/xf-story-engine/reference/`:
 
 ```
@@ -140,7 +149,7 @@ changes; observer reads run in a disposable projection and cannot repair the obs
 Public spatial, temporal and witness discovery run as generated operations without preparatory restoration.
 Each lifecycle compares complete discovery results; random discovery checks saved event identities.
 The observer excludes deliberately ephemeral overlays and never prefills saved history.
-The public reference API inventory enumerates **482 operations** across `src/`, records their common-gate or raw-data
+The public reference API inventory enumerates **483 operations** across `src/`, records their common-gate or raw-data
 routes in SPEC-NOTES 195 and 196, and rejects future ungated reference operations, including ids nested in new record types.
 S3J-01 preserves first-save edge/contribution edits with full changed-event payload and identity dependencies;
 S3J-02 routes pinning, observation and canonisation through recovery before header/default-field inspection.

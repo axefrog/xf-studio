@@ -9,6 +9,7 @@ import { H, s } from '../src/id.ts';
 // Raw storage/replay and collector hooks intentionally see physical residency. They cannot
 // recover: doing so would make sweeping itself keep history alive. These are not semantic reads.
 const raw: Record<string, string> = {
+ 'HolotableObserver.sample': 'physical diagnostic observer; must never recover or materialise the observed execution (holotable read-only parity tests)',
  'writeKeys': 'physical audit classification; never repairs the audited store',
  'Kernel.create': 'factory, no live state',
  'Kernel.emit': 'notification snapshot, no lookup',

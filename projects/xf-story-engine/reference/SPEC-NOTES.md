@@ -1500,6 +1500,7 @@ Schema, hashing and identity arithmetic never inspect live state.
 
 | Public operation | Recovery route |
 |---|---|
+| `HolotableObserver.sample` | raw: physical diagnostic view only; recovery/materialisation would alter the observed execution; parity and throwing-sentinel tests in the Holotable tests |
 | `addPredInterests` | pure data, supplied predicate environment or gated kernel delegation |
 | `applyEffects` | pure data, supplied predicate environment or gated kernel delegation |
 | `applyRejection` | pure data, supplied predicate environment or gated kernel delegation |
@@ -1965,7 +1966,7 @@ It rejects **28/28 historical S3C-I probes plus 3/3 SE-229 discovery counterfact
 invalid probes. All **64/64 dedicated source-loader probes** fail at their intended semantic assertion,
 including SE-231's facade `kindOf` removal. No setup, import or timeout failure counts as evidence.
 
-The recovery inventory enumerates **482 operations**. It treats object facade callables, returned functions and exported arrows/function
+The recovery inventory enumerates **483 operations**, including the physical-only Holotable observer. It treats object facade callables, returned functions and exported arrows/function
 expressions as independent operations. AST walks exclude nested callable bodies when checking their
 factory, resolve simple store/argument aliases in lexical scope, and require the lookup's actual input
 to be covered by an earlier gate. Counterfactuals reject wrong-argument recovery, factory-only recovery,

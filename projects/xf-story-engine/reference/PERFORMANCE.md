@@ -8,6 +8,8 @@ suite sequentially. Scratch is removed after recording the results.
 
 The latest validation is in [review corrections after cd601cc2](#review-corrections-after-cd601cc2):
 175.10 s for the default suite and 40.025 s for the three-day reproduction.
+The independent [offline Holotable producer measurement](#offline-holotable-producer)
+also records its end-to-end week throughput and observation checks.
 
 ## What was expensive
 
@@ -585,3 +587,56 @@ Per-file seconds sum Bun test timings; setup and runner overhead appear only in 
 | `id.test.ts` | 0.001 | 0.001 |
 | `sim/transcript.test.ts` | 0.000 | 0.000 |
 | `s3/graph-history.test.ts` | 0.000 | 0.081 |
+
+## Offline Holotable producer
+
+Offline evidence, 27 October 2026: the shared SF3-60-style Kabuki week, default
+fixture density, reaches GameTime 604,800 and publishes 1,010 observations to
+12 layers. The CLI reads the existing private world pack; district regions are
+real ids and synthetic cells are explicitly schematic. The consumer validator
+accepts both the week and a temporary save/load test spool without refusals.
+
+| Measurement | Result |
+|---|---:|
+| End to end, including fixture construction | 30.212 s |
+| Observation, validation and spool writing combined | 17.120 s |
+| Combined publishing time per observation, mean | 16.95 ms |
+| Guard peak | 0.4 GB / 4 GB |
+| Total spool bytes | 202,213 |
+| Largest spool, people | 147,702 bytes |
+| Default suite | 1,712 pass, 46 skip, 0 fail; 558.97 s, peak 1.5 GB |
+| Guarded targeted observer/consumer/recovery recheck | 38 pass, 0 fail; 24.73 s, peak 0.9 GB |
+
+The full suite includes the distinct-id and per-item bounds, branch-prefix
+retraction and replacement regressions, a 20,000-entry list-prefix regression,
+all ten fidelity-review corrections, glyphs/badges, captions, cell item anchors
+and exact-time delivery holds. It ran after the coordinated quiet
+window ended. The opt-in consumer test passed in the guarded targeted run.
+The regenerated week reports
+zero truncations and unknown glyph names in every layer. It includes one recorded
+delivery hold and its exact-time retraction. Typechecking, link/privacy checks and the recovery
+API inventory pass. Fidelity review extracted the tie policy's strength formula
+into a pure function shared with observation; no state-transition behaviour changed.
+The regenerated week excludes two synthetic event placeholders, preserves the
+fixture's zero ties/items/intentions and one belief, and passes the independent
+consumer validator. The fixture extraction
+preserves its assertions and default/FULL scales.
+
+These are single-run timings on a shared host, not controlled benchmark deltas
+or game/UI latency claims. The next cost to isolate is projection versus writer
+time: the combined total does not establish that disk writes dominate. Unchanged
+layers skip item-bound revalidation and appends. Observer-on/off tests compare
+record/digest/transcript/save bytes with equal starting memo conditions; immediate
+raw-state images additionally detect cache/header changes from observation.
+
+Consumer read-back at the week's end places all 25 place zones, all four groups,
+290 of 291 people, 1 of 20 event items, 8 of 18 story items and 5 of the 8 remaining
+director items. Cell references resolve through the places layer; detail zones
+keep the cell's own box. Remaining unplaced points have no recorded location,
+and their relations or links to V inherit the missing endpoint. No locations
+are invented. The consumer reports zero refused items. This
+confirms producer/consumer interpretation only, not an in-game result.
+
+The task footprint is below 0.5 GB, with no task payload above 5 GB. Scratch
+spools/logs are regenerable and removed at handoff; the commands and counts remain
+in the [producer notes](HOLOTABLE.md).

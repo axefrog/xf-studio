@@ -2,7 +2,7 @@
 
 This is the R&D lab's distilled reference for how Cyberpunk 2077's engine, resources and modding frameworks fit together. It is written primarily for agents: CP2077 modding knowledge is thin in training data, so every agent should be able to start here instead of rediscovering it. The project's standing mandate is that R&D runs permanently alongside product work, like a research lab beside a commercial team. The knowledge built here is what makes body customisation, world integration and quest tooling possible later.
 
-Offline Story Engine reference-model performance, fixture scales and validation are recorded in [the test-performance guide](../projects/xf-story-engine/reference/PERFORMANCE.md). These are model measurements, not Cyberpunk runtime evidence.
+Offline Story Engine reference-model performance, fixture scales and validation are recorded in [the test-performance guide](../projects/xf-story-engine/reference/PERFORMANCE.md). The [Holotable producer notes](../projects/xf-story-engine/reference/HOLOTABLE.md) describe physical-only observation, save branches, game-time conversion and explicitly schematic fixture placement. These are model measurements and producer-contract evidence, not Cyberpunk runtime evidence.
 
 ## Published on the public site
 
