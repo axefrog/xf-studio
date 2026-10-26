@@ -90,6 +90,11 @@ export type TelemetrySummary = {
    * 2 s): valid records, counted apart from invalid ones. From the recorder's own status, per run and per channel.
    */
   not_ready: { total: number; by_channel: Record<string, number>; runs: Record<string, number> };
+  /**
+   * Each run's taps as the recorder's status last reported them (channel_stats.<ch>.ready, tap_not_ready,
+   * complete_coverage), and every run whose tap never became ready ("run 3: voice"): such a run's coverage isn't complete.
+   */
+  taps: { runs: Record<string, { ready: Record<string, boolean>; tap_not_ready: string[]; complete_coverage: boolean }>; never_ready: string[] };
 };
 
 function readFrom(path: string, from: number): string {
@@ -116,7 +121,7 @@ export class Telemetry {
   private mark?: { file: string; size: number };
   private readonly patterns: RegExp[];
   private readonly total: TelemetrySummary = { runs: [], pages: 0, rows: [], gaps: [], channels: {}, coverage: { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false }, invalid_in: [], gaps_in: [], unread: [],
-    not_ready: { total: 0, by_channel: {}, runs: {} } };
+    not_ready: { total: 0, by_channel: {}, runs: {} }, taps: { runs: {}, never_ready: [] } };
   private readonly notReadyByRun: Record<string, Record<string, number>> = {};
 
   /** When the attempt started (wall clock: log files carry wall-clock times), and the logs kept so far. */
@@ -328,7 +333,13 @@ export class Telemetry {
 
   /** Keeps a run's not_ready counts (the status's counters are the run's totals so far: the latest reading wins). */
   private noteStatus(run: number, read: { ok: boolean; value?: unknown }) {
-    const status = read.ok ? (read.value as { not_ready?: number; channel_stats?: Record<string, { not_ready?: number }> } | undefined) : undefined;
+    const status = read.ok ? (read.value as { not_ready?: number; tap_not_ready?: string[]; complete_coverage?: boolean; channel_stats?: Record<string, { not_ready?: number; ready?: boolean }> } | undefined) : undefined;
+    if (status && Array.isArray(status.tap_not_ready)) {
+      const taps = this.total.taps;
+      const ready = Object.fromEntries(Object.entries(status.channel_stats ?? {}).filter(([, c]) => typeof c?.ready === "boolean").map(([ch, c]) => [ch, c.ready!]));
+      taps.runs[String(run)] = { ready, tap_not_ready: [...status.tap_not_ready], complete_coverage: status.complete_coverage !== false };
+      taps.never_ready = Object.entries(taps.runs).flatMap(([r, t]) => t.tap_not_ready.map((ch) => `run ${r}: ${ch}`));
+    }
     if (typeof status?.not_ready !== "number") return;
     const t = this.total.not_ready;
     t.runs[String(run)] = status.not_ready;

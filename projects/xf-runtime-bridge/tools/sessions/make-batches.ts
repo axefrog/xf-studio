@@ -214,7 +214,16 @@ const pressOutcomes = (label: string, target: "pause_changes" | "resume_changes"
   { name: "killed", match: { code: ["killed", "cancelled"] }, run: [{ end: "fail", reason: `${label}: the bridge was stopped (or the request cancelled) before the press ran` }] },
 ];
 const panelPress = (row: string, name: string, target: "pause_changes" | "resume_changes", extra: Json = {}): Json =>
-  ({ label: `${row}-${name}`, do: "run", command: "cet.panel", input: { press: target }, outcomes: pressOutcomes(`${row}-${name}`, target), on_fail: "fail_row", ...extra });
+  ({ label: `${row}-${name}`, do: "run", command: "cet.panel", input: { press: target }, outcomes: pressOutcomes(`${row}-${name}`, target), on_fail: "fail_row", bind: key(row, `${name}_req`), ...extra });
+/** A request as bridge_info's cet_panel.requests lists it: this one (by the id its answer gave), with these fields. */
+const request = (row: string, name: string, fields: Json[]): Json => ({ path: "cet_panel.requests", some: { all: [{ path: "id", equals: ref(row, `${name}_req`, "id") }, ...fields] } });
+/**
+ * The press ran: its request done (the CET layer claimed it and XFBridge_PauseWrites answered). A refusal at execution
+ * (paused_by_player again, a kill, a new client) shows as its press_status and why, which the failure names.
+ */
+const pressDone = (row: string, name: string): Json =>
+  ({ label: `${row}-${name}-done`, do: "run", command: "bridge.info", input: {}, until: request(row, name, [{ path: "press_status", equals: "done" }]),
+    interval_ms: 250, deadline_ms: 4000, bind: key(row, `${name}_done`), on_fail: "fail_row" });
 /**
  * Resume changes, however the row ended (cleanup), and confirm it. If the player paused them themselves, the runner
  * leaves them paused and says so (the bridge refuses a remote Resume then).
@@ -288,7 +297,7 @@ function writesRows(theme: Theme): Json[] {
   if (PANEL_HOOK) {
     rows.push({ id: row, title: `CET line, paused through the CET window's own Pause changes: the amber ring (${theme})`, requires, judged_by: STUDIO,
       steps: [inPlay(row), ...look(row, theme, "full", false), cetLine(row),
-        panelPress(row, "pause", "pause_changes", { on_fail: "fail_row" }),
+        panelPress(row, "pause", "pause_changes"), pressDone(row, "pause"),
         verify(row, "paused", { all: [onSurface("cet_line"), paused] }), verify(row, "cet-closed", cetIs(false), "overlay.state"),
         // The line takes the new status with its next info refresh (2 s).
         { label: `${row}-paused-repaint`, do: "wait", ms: 2500 },
@@ -376,7 +385,7 @@ function writesRows(theme: Theme): Json[] {
   if (PANEL_HOOK) {
     rows.push({ id: row, title: `The chips: Paused, through the CET window's own Pause changes (amber outline, no fill) (${theme})`, requires, judged_by: STUDIO,
       steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
-        panelPress(row, "pause", "pause_changes", { on_fail: "fail_row" }),
+        panelPress(row, "pause", "pause_changes"), pressDone(row, "pause"),
         verify(row, "paused", { all: [paused, ...drawn("Paused")] }), verify(row, "cet-open", cetIs(true), "overlay.state"),
         { label: `${row}-paused-repaint`, do: "wait", ms: 800 }, visible(row, "cet_window", theme, "window"),
         ...cetShot(row, `ST6-cet-chip-paused-${theme}`, "paused", theme)],
@@ -428,13 +437,17 @@ function writesRows(theme: Theme): Json[] {
   if (PANEL_HOOK) {
     rows.push({ id: row, title: `The CET window with the DIAGNOSTICS header open (${theme})`, requires, judged_by: STUDIO,
       steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
-        { label: `${row}-open-header`, do: "run", command: "cet.panel", input: { diagnostics_open: true }, deadline_ms: 8000, on_fail: "fail_row" },
-        // The window drew the header open, with CET's overlay still open (scripted session 1's captures had no window).
-        verify(row, "open", { path: "cet_panel.diagnostics_open", equals: true }), verify(row, "cet-open", cetIs(true), "overlay.state"),
+        { label: `${row}-open-header`, do: "run", command: "cet.panel", input: { diagnostics_open: true }, deadline_ms: 8000, bind: key(row, "open_req"), on_fail: "fail_row" },
+        // The window drew the header open (its request applied), with CET's overlay still open (scripted session 1's
+        // captures had no window).
+        verify(row, "open", { all: [request(row, "open", [{ path: "header", equals: "applied" }]), { path: "cet_panel.diagnostics_open", equals: true }] }),
+        verify(row, "cet-open", cetIs(true), "overlay.state"),
         { label: `${row}-settle`, do: "wait", ms: 800 }, visible(row, "cet_window", theme, "window"),
         ...cetShot(row, `ST7-cet-diagnostics-${theme}`, "diag", theme)],
       pass: [captured("Diagnostics open", row, "diag"), framed(row, "diag")],
-      cleanup: [{ label: `${row}-close-header`, do: "run", command: "cet.panel", input: { diagnostics_open: false }, on_fail: "continue" }, ...cetClose(row)] });
+      // The header back as the window had it before (the request's undo: what the CET layer captured when it applied it).
+      cleanup: [{ label: `${row}-close-header`, do: "run", command: "cet.panel", input: { undo: ref(row, "open_req", "id") }, on_fail: "continue",
+        when: { match: { ref: ref(row, "open_req", "id"), exists: true } } }, ...cetClose(row)] });
   } else waiting.push({ row, hook: "cet.panel diagnostics_open" });
 
   // The ink panel isn't a themed plate, so its frames have no in-frame check; its state is checked instead.
@@ -602,13 +615,16 @@ function smokeScript(): Json {
       check("no gaps", row, "all", "gaps", { equals: [] }),
       // 0.8.22: a subtitle or voice tap with no controllers in a run's first 2 s (right after a load) is not_ready, a
       // valid sample counted apart, never invalid; only those two channels may have any.
+      // A tap that never became ready in a run makes that run incomplete (the recorder's complete_coverage, tap_not_ready).
+      check("every tap became ready in every run (complete coverage)", row, "all", "taps.never_ready", { equals: [] }),
       { label: "not_ready only on the subtitle and voice taps", ref: ref(row, "all", "not_ready.by_channel"), match: { all:
         ALL_CHANNELS.filter((ch) => ch !== "subtitles" && ch !== "voice").map((ch) => ({ not: { path: ch, min: 1 } })) } },
     ],
     facts: [
       { label: "runs", ref: ref(row, "all", "runs") }, { label: "pages", ref: ref(row, "all", "pages") }, { label: "gaps", ref: ref(row, "all", "gaps") },
       { label: "coverage loss", ref: ref(row, "all", "coverage") },
-      { label: "not ready (early tap samples, not invalid)", ref: ref(row, "all", "not_ready") }, { label: "invalid samples by row", ref: ref(row, "all", "invalid_in") }, { label: "gaps by row", ref: ref(row, "all", "gaps_in") },
+      { label: "not ready (early tap samples, not invalid)", ref: ref(row, "all", "not_ready") },
+      { label: "taps by run (ready, tap_not_ready, complete_coverage)", ref: ref(row, "all", "taps") }, { label: "invalid samples by row", ref: ref(row, "all", "invalid_in") }, { label: "gaps by row", ref: ref(row, "all", "gaps_in") },
     ] });
 
   row = "B318-3";

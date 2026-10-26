@@ -2854,6 +2854,32 @@
               ]
             }
           ],
+          "on_fail": "fail_row",
+          "bind": "ST8_dark_paused_pause_req"
+        },
+        {
+          "label": "ST8-dark-paused-pause-done",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "path": "cet_panel.requests",
+            "some": {
+              "all": [
+                {
+                  "path": "id",
+                  "equals": "$ST8_dark_paused_pause_req.id"
+                },
+                {
+                  "path": "press_status",
+                  "equals": "done"
+                }
+              ]
+            }
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_dark_paused_pause_done",
           "on_fail": "fail_row"
         },
         {
@@ -4578,7 +4604,8 @@
                       ]
                     }
                   ],
-                  "on_fail": "fail_row"
+                  "on_fail": "fail_row",
+                  "bind": "ST5_dark_pause_req"
                 },
                 {
                   "do": "wait",
@@ -4642,7 +4669,8 @@
                       ]
                     }
                   ],
-                  "on_fail": "fail_row"
+                  "on_fail": "fail_row",
+                  "bind": "ST5_dark_resume_req"
                 },
                 {
                   "do": "wait",
@@ -5894,6 +5922,32 @@
               ]
             }
           ],
+          "on_fail": "fail_row",
+          "bind": "ST6_dark_paused_pause_req"
+        },
+        {
+          "label": "ST6-dark-paused-pause-done",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "path": "cet_panel.requests",
+            "some": {
+              "all": [
+                {
+                  "path": "id",
+                  "equals": "$ST6_dark_paused_pause_req.id"
+                },
+                {
+                  "path": "press_status",
+                  "equals": "done"
+                }
+              ]
+            }
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST6_dark_paused_pause_done",
           "on_fail": "fail_row"
         },
         {
@@ -8085,6 +8139,7 @@
             "diagnostics_open": true
           },
           "deadline_ms": 8000,
+          "bind": "ST7_dark_diagnostics_open_req",
           "on_fail": "fail_row"
         },
         {
@@ -8093,8 +8148,27 @@
           "command": "bridge.info",
           "input": {},
           "until": {
-            "path": "cet_panel.diagnostics_open",
-            "equals": true
+            "all": [
+              {
+                "path": "cet_panel.requests",
+                "some": {
+                  "all": [
+                    {
+                      "path": "id",
+                      "equals": "$ST7_dark_diagnostics_open_req.id"
+                    },
+                    {
+                      "path": "header",
+                      "equals": "applied"
+                    }
+                  ]
+                }
+              },
+              {
+                "path": "cet_panel.diagnostics_open",
+                "equals": true
+              }
+            ]
           },
           "interval_ms": 250,
           "deadline_ms": 4000,
@@ -8202,9 +8276,15 @@
           "do": "run",
           "command": "cet.panel",
           "input": {
-            "diagnostics_open": false
+            "undo": "$ST7_dark_diagnostics_open_req.id"
           },
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST7_dark_diagnostics_open_req.id",
+              "exists": true
+            }
+          }
         },
         {
           "label": "ST7-dark-diagnostics-cet-close",
@@ -10383,7 +10463,8 @@
                       ]
                     }
                   ],
-                  "on_fail": "fail_row"
+                  "on_fail": "fail_row",
+                  "bind": "ST3_dark_settle_pause_req"
                 },
                 {
                   "do": "wait",
@@ -10447,7 +10528,8 @@
                       ]
                     }
                   ],
-                  "on_fail": "fail_row"
+                  "on_fail": "fail_row",
+                  "bind": "ST3_dark_settle_resume_req"
                 },
                 {
                   "do": "wait",
@@ -11541,6 +11623,32 @@
               ]
             }
           ],
+          "on_fail": "fail_row",
+          "bind": "ST8_light_paused_pause_req"
+        },
+        {
+          "label": "ST8-light-paused-pause-done",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "path": "cet_panel.requests",
+            "some": {
+              "all": [
+                {
+                  "path": "id",
+                  "equals": "$ST8_light_paused_pause_req.id"
+                },
+                {
+                  "path": "press_status",
+                  "equals": "done"
+                }
+              ]
+            }
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST8_light_paused_pause_done",
           "on_fail": "fail_row"
         },
         {
@@ -13956,7 +14064,8 @@
                       ]
                     }
                   ],
-                  "on_fail": "fail_row"
+                  "on_fail": "fail_row",
+                  "bind": "ST5_light_pause_req"
                 },
                 {
                   "do": "wait",
@@ -14020,7 +14129,8 @@
                       ]
                     }
                   ],
-                  "on_fail": "fail_row"
+                  "on_fail": "fail_row",
+                  "bind": "ST5_light_resume_req"
                 },
                 {
                   "do": "wait",
@@ -15272,6 +15382,32 @@
               ]
             }
           ],
+          "on_fail": "fail_row",
+          "bind": "ST6_light_paused_pause_req"
+        },
+        {
+          "label": "ST6-light-paused-pause-done",
+          "do": "run",
+          "command": "bridge.info",
+          "input": {},
+          "until": {
+            "path": "cet_panel.requests",
+            "some": {
+              "all": [
+                {
+                  "path": "id",
+                  "equals": "$ST6_light_paused_pause_req.id"
+                },
+                {
+                  "path": "press_status",
+                  "equals": "done"
+                }
+              ]
+            }
+          },
+          "interval_ms": 250,
+          "deadline_ms": 4000,
+          "bind": "ST6_light_paused_pause_done",
           "on_fail": "fail_row"
         },
         {
@@ -17463,6 +17599,7 @@
             "diagnostics_open": true
           },
           "deadline_ms": 8000,
+          "bind": "ST7_light_diagnostics_open_req",
           "on_fail": "fail_row"
         },
         {
@@ -17471,8 +17608,27 @@
           "command": "bridge.info",
           "input": {},
           "until": {
-            "path": "cet_panel.diagnostics_open",
-            "equals": true
+            "all": [
+              {
+                "path": "cet_panel.requests",
+                "some": {
+                  "all": [
+                    {
+                      "path": "id",
+                      "equals": "$ST7_light_diagnostics_open_req.id"
+                    },
+                    {
+                      "path": "header",
+                      "equals": "applied"
+                    }
+                  ]
+                }
+              },
+              {
+                "path": "cet_panel.diagnostics_open",
+                "equals": true
+              }
+            ]
           },
           "interval_ms": 250,
           "deadline_ms": 4000,
@@ -17580,9 +17736,15 @@
           "do": "run",
           "command": "cet.panel",
           "input": {
-            "diagnostics_open": false
+            "undo": "$ST7_light_diagnostics_open_req.id"
           },
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST7_light_diagnostics_open_req.id",
+              "exists": true
+            }
+          }
         },
         {
           "label": "ST7-light-diagnostics-cet-close",
@@ -19223,7 +19385,8 @@
                       ]
                     }
                   ],
-                  "on_fail": "fail_row"
+                  "on_fail": "fail_row",
+                  "bind": "ST3_light_settle_pause_req"
                 },
                 {
                   "do": "wait",
@@ -19287,7 +19450,8 @@
                       ]
                     }
                   ],
-                  "on_fail": "fail_row"
+                  "on_fail": "fail_row",
+                  "bind": "ST3_light_settle_resume_req"
                 },
                 {
                   "do": "wait",

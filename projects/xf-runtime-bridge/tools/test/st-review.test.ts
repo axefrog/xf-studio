@@ -275,3 +275,54 @@ describe("cet.panel's press refusals, anticipated", () => {
     expect(result.rows[0].reports.some((r) => (r as { label?: string; status?: string }).label === "ST6-dark-paused-resumed" && (r as { status?: string }).status === "skipped")).toBe(true);
   });
 });
+
+describe("bridge 65b8da29: cet.panel requests and tap readiness", () => {
+  const pausedRow = async (requests: unknown[]) => {
+    const { stScript } = await import("../sessions/make-batches.ts");
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
+    const row = { ...(stScript(false, { panel: true, cpu: true }) as { rows: { id: string }[] }).rows.find((r) => r.id === "ST8-light-paused")!, requires: [] };
+    const clock = new FakeClock();
+    const api = fakeApi(clock, {
+      "overlay.state": () => ({ ok: true, result: { theme: "light", motion: { setting: "full", effective: "full" }, cet_open: false } }),
+      "bridge.info": () => ({ ok: true, result: { sid: "sid-1", status_surface: "cet_line", status: { chip: "Changes allowed" }, bridge: { writes_paused: false }, cet_panel: { requests, pending: 0, reported: true } } }),
+      "cet.panel": () => ({ ok: true, result: { queued: true, id: 7, request: { id: 7, press: "pause_changes" } } }),
+    });
+    return (await go(script([row] as never), api, fakeHost(), clock, tempDir("xfb-str-"))).rows[0];
+  };
+  test("a press refused when it ran fails the row naming its press_status, before any state check", async () => {
+    const row = await pausedRow([{ id: 7, press: "pause_changes", press_status: "refused", why: "paused_by_player" }]);
+    expect(row.verdict).toBe("FAIL");
+    expect(row.reason).toContain("ST8-light-paused-pause-done");
+    expect(row.reason).toContain('"press_status":"refused"');
+  });
+  test("a press done goes on to the state check, which names what the bridge shows", async () => {
+    const row = await pausedRow([{ id: 7, press: "pause_changes", press_status: "done", paused_before: false }]);
+    expect(row.verdict).toBe("FAIL");
+    expect(row.reason).toContain("ST8-light-paused-is-paused");
+    expect(row.reason).toContain('status.chip "Changes allowed"');
+  });
+  test("the Diagnostics row waits for its request applied and undoes exactly that request", async () => {
+    const { stScript } = await import("../sessions/make-batches.ts");
+    const row = (stScript(false, { panel: true, cpu: true }) as { rows: { id: string; steps: Record<string, unknown>[]; cleanup: Record<string, unknown>[] }[] }).rows.find((r) => r.id === "ST7-dark-diagnostics")!;
+    expect(JSON.stringify(row.steps.find((s) => s.label === "ST7-dark-diagnostics-is-open"))).toContain('"header","equals":"applied"');
+    expect(row.cleanup[0].input).toEqual({ undo: "$ST7_dark_diagnostics_open_req.id" });
+  });
+  test("B318-1 fails when a run's tap never became ready, and names it", async () => {
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
+    const { readFileSync } = await import("node:fs");
+    const smoke = JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "borg4-smoke.json"), "utf8"));
+    const b318 = smoke.rows.find((r: { id: string }) => r.id === "B318-1");
+    const judge = async (tapNotReady: string[]) => {
+      const clock = new FakeClock();
+      const status = { not_ready: 0, tap_not_ready: tapNotReady, complete_coverage: !tapNotReady.length, channel_stats: { subtitles: { ready: true }, voice: { ready: !tapNotReady.includes("voice") } } };
+      const api = fakeApi(clock, { "test.record.read": () => ({ ok: true, result: status }), "test.record.stop": () => ({ ok: true, result: status }) });
+      return (await go(script([{ id: "plain", title: "plain", steps: [{ label: "w", do: "wait", ms: 10 }] }, b318] as never), api, fakeHost(), clock, tempDir("xfb-str-"))).rows.find((r) => r.id === "B318-1")!;
+    };
+    expect((await judge([])).verdict).toBe("PASS");
+    const failed = await judge(["voice"]);
+    expect(failed.verdict).not.toBe("PASS");
+    expect(JSON.stringify(failed.facts)).toContain("run 1: voice");
+  });
+});

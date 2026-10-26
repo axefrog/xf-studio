@@ -121,6 +121,13 @@
           }
         },
         {
+          "label": "every tap became ready in every run (complete coverage)",
+          "ref": "$B318_1_all.taps.never_ready",
+          "match": {
+            "equals": []
+          }
+        },
+        {
           "label": "not_ready only on the subtitle and voice taps",
           "ref": "$B318_1_all.not_ready.by_channel",
           "match": {
@@ -197,6 +204,10 @@
         {
           "label": "not ready (early tap samples, not invalid)",
           "ref": "$B318_1_all.not_ready"
+        },
+        {
+          "label": "taps by run (ready, tap_not_ready, complete_coverage)",
+          "ref": "$B318_1_all.taps"
         },
         {
           "label": "invalid samples by row",
