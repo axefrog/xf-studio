@@ -127,6 +127,8 @@ export class Telemetry {
   private readonly patterns: RegExp[];
   private readonly total: TelemetrySummary = { runs: [], pages: 0, rows: [], gaps: [], channels: {}, coverage: { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false }, invalid_in: [], gaps_in: [], unread: [],
     not_ready: { total: 0, by_channel: {}, runs: {} }, taps: { runs: {}, never_ready: [], unknown: [] } };
+  /** A load ended the run: read it to its end before the next starts. */
+  private stale = false;
   /** Every recorder run this batch started, whose readiness it must have seen reported. */
   private readonly startedRuns: number[] = [];
   private readonly notReadyByRun: Record<string, Record<string, number>> = {};
@@ -180,9 +182,15 @@ export class Telemetry {
     const info = await this.read("bridge.info");
     const sid = info.ok ? (info.value as { sid?: string }).sid : undefined;
     if (!sid) return { restarted: false, unavailable: info.ok ? "the bridge reports no session" : `bridge.info: ${info.code}` };
-    const fresh = this.run !== undefined && sid === this.sid && this.o.clock.now() - this.startedMs < (RECORDER_S - 120) * 1000;
+    const fresh = this.run !== undefined && !this.stale && sid === this.sid && this.o.clock.now() - this.startedMs < (RECORDER_S - 120) * 1000;
     if (fresh) return { run: this.run, restarted: false };
-    if (this.run !== undefined && sid === this.sid) this.noteStatus(this.run, await this.read("test.record.stop"));
+    // The run this session still has (it rolls over, or a load ended it): stopped, read to its end and so acknowledged,
+    // before the next starts (the bridge refuses a start, recording_busy, while a run's records are unread).
+    if (this.run !== undefined && sid === this.sid) {
+      this.noteStatus(this.run, await this.read("test.record.stop"));
+      await this.drain(`recorder run ${this.run} (to its end)`, (name, value) => writeFileSync(join(this.dir, `run-${this.run}-end-${name}`), JSON.stringify(value, null, 2) + "\n")).catch(() => null);
+    }
+    this.stale = false;
     let started = await this.read("test.record.start", { channels: ALL_CHANNELS, duration_s: RECORDER_S });
     if (!started.ok && /recording_active|busy/.test(started.code)) {
       await this.read("test.record.stop");
@@ -287,7 +295,7 @@ export class Telemetry {
       const read = await this.read("game.catchup", this.cursor ? { cursor: this.cursor } : { run });
       if (!read.ok) {
         this.total.unread.push(`${rowKey}: run ${run}: ${read.code}`);
-        this.invalidate();
+        this.forget();
         return { ok: false, run, code: read.code };
       }
       const value = read.value as { cursor?: unknown; counts?: unknown; gaps?: string[]; more?: boolean; count_detail?: Record<string, { records?: number; invalid?: number; valid?: number }>;
@@ -325,8 +333,16 @@ export class Telemetry {
     t.coverage.file_error ||= delta.file_error === true;
   }
 
-  /** The run is no longer the bridge's (a load stopped it, or a refusal said so): the next ensureRecorder starts a fresh one. */
+  /**
+   * A load stopped the run: the next ensureRecorder reads it to its end (acknowledging it) and starts a fresh one. The
+   * run and its cursor are kept for that drain.
+   */
   invalidate() {
+    this.stale = true;
+  }
+
+  /** The bridge refused the run (another recorder replaced it): nothing of it is left to read. */
+  private forget() {
     this.run = undefined;
     this.cursor = undefined;
   }
@@ -369,12 +385,13 @@ export class Telemetry {
 
   /** The end of the run: the rest of the history, then the recorder stopped. */
   async finish() {
-    if (this.run !== undefined) {
-      await this.drain("end", (name, value) => writeFileSync(join(this.dir, `final-${name}`), JSON.stringify(value, null, 2) + "\n")).catch(() => null);
-    }
+    // Stopped first, so the last drain reaches the run's real end (nothing more is recorded after it) and acknowledges it.
     const run = this.run;
     const stopped = await this.read("test.record.stop").catch(() => ({ ok: false as const }));
     if (run !== undefined) this.noteStatus(run, stopped);
+    if (run !== undefined) {
+      await this.drain("end", (name, value) => writeFileSync(join(this.dir, `final-${name}`), JSON.stringify(value, null, 2) + "\n")).catch(() => null);
+    }
     this.run = undefined;
     // This attempt's evidence, for the whole-batch rows of every later attempt (mergeSummaries).
     writeFileSync(join(this.dir, "summary.json"), JSON.stringify(this.total, null, 2) + "\n");

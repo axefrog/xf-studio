@@ -147,3 +147,38 @@ describe("H5: a running game is adopted only when its bridge is the staged candi
     expect(log).not.toContain("launch");
   });
 });
+
+describe("M6: a recorder rollover drains and acknowledges the old run before starting the next", () => {
+  test("the bridge refuses a start while records are unread: the runner stops, drains, then starts", async () => {
+    const { clock, fakeApi, fakeHost, go, script } = await fakes();
+    // As the native recorder: Start refuses (recording_busy) while the last run has records nobody read.
+    let runs = 0, unread = false, active = false;
+    const order: string[] = [];
+    const api = fakeApi(clock, {
+      "test.record.start": () => { order.push("start"); if (unread) return { ok: false, code: "recording_busy" }; active = true; unread = true; return { ok: true, result: { run: ++runs } }; },
+      "test.record.stop": () => { order.push("stop"); active = false; return { ok: true, result: {} }; },
+      "game.catchup": (input) => { order.push("drain"); unread = active; return { ok: true, result: { cursor: { after: (input.cursor?.after ?? 0) + 1 }, counts: { v: 3 }, gaps: [] } }; },
+    });
+    // A row longer than the recorder's lifetime, then another: the second row's start rolls the recorder over.
+    const rows = [{ id: "long", title: "long", steps: [1, 2, 3].map((i) => ({ label: `w${i}`, do: "wait", ms: 580_000, deadline_ms: 590_000 })) }, { id: "next", title: "next", steps: [{ label: "w", do: "wait", ms: 10 }] }];
+    const result = await go(script(rows as never), api, fakeHost(), clock, tempDir("xfb-r34-"), { commitEveryMs: 600_000 });
+    expect(runs).toBe(2);
+    const second = order.lastIndexOf("start");
+    expect(order.slice(0, second)).toEqual(expect.arrayContaining(["stop", "drain"]));
+    expect(order.lastIndexOf("drain", second)).toBeGreaterThan(order.lastIndexOf("stop", second));
+    expect(result.rows[1].telemetry?.recorder.unavailable).toBeUndefined();
+  });
+
+  test("at the finish the recorder stops before the last drain, so the drain reaches the end", async () => {
+    const { clock, fakeApi, fakeHost, go, script } = await fakes();
+    const order: string[] = [];
+    const api = fakeApi(clock, {
+      "test.record.stop": () => { order.push("stop"); return { ok: true, result: {} }; },
+      "game.catchup": (input) => { order.push("drain"); return { ok: true, result: { cursor: { after: (input.cursor?.after ?? 0) + 1 }, counts: { v: 3 }, gaps: [] } }; },
+    });
+    await go(script([{ id: "r", title: "r", steps: [{ label: "w", do: "wait", ms: 10 }] }] as never), api, fakeHost(), clock, tempDir("xfb-r34-"));
+    // The last drain (the finish's) comes after a stop since the drain before it.
+    const last = order.lastIndexOf("drain"), before = order.lastIndexOf("drain", last - 1);
+    expect(order.slice(before + 1, last)).toContain("stop");
+  });
+});
