@@ -180,6 +180,8 @@ export type InstallDetectionSnapshot = ReturnType<InstallDetectionActions["snaps
 
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
+  /** Data/facade acquisition only. Controller composition consumes it in P3-iii. */
+  readonly editing?: { acquire(instance: string, signal: AbortSignal): import("./profiles/panel-editing-contexts").PanelEditingPort<Slot> | undefined };
   readonly experiments?: ExperimentPort;
   readonly authoring: PresentationAuthoring;
   readonly library: CollectionViewPort;
@@ -429,6 +431,9 @@ export function createStudioPresentation<Slot>(sources: {
    * names. Without them (tools) actions are dispatched as given, and one that leaves a target out is refused.
    */
   targets?: TargetResolver;
+  /** Explicit input target for the drawn compatibility port or a bound instance; never inferred by an owner. */
+  naming?: () => NamedTargets;
+  editing?: StudioPresentationPort<Slot>["editing"];
   focus?: Pick<FocusService, "focusView" | "focusPanel">;
   /** A history scope's name for people ("Look 3"); without it the scope ID. */
   scopeName?: (scope: string) => string | undefined;
@@ -454,10 +459,9 @@ export function createStudioPresentation<Slot>(sources: {
   const hint = (action: { kind: string }) => sources.experiments?.registrations().map(item => item.actionHints?.()[action.kind]).find(Boolean);
   // The input layer (profiles design §3.6): what the shown tab's focused view resolves to, and the editing context, named in each action.
   const resolver = sources.targets;
-  const named = (): NamedTargets => resolver?.named() ?? {};
-  const name = <A extends { kind: string }>(action: A | Unnamed<A>): A => resolver
-    ? resolver.complete(action as A, a.descriptor(action.kind)) : action as A;
-  const editingScope = () => resolver?.editing();
+  const named = (): NamedTargets => sources.naming?.() ?? resolver?.named() ?? {};
+  const name = <A extends { kind: string }>(action: A | Unnamed<A>): A => nameTargets(action as A, a.descriptor(action.kind), named());
+  const editingScope = () => sources.naming ? named().scope : resolver?.editing();
   // A control run (a slider drag) captures what it acts on when it begins (§3.3): its edits name that, never what focus resolves to later,
   // so a run that outlives its look is refused instead of landing on the next one.
   const runs = new Map<string, NamedTargets>();
@@ -466,8 +470,7 @@ export function createStudioPresentation<Slot>(sources: {
     nameTargets(action as A, a.descriptor(action.kind), runs.get(id) ?? named());
   const endRun = (id: string) => { runs.delete(id); };
   // A picker's request names what its file goes to now, when it is asked (§3.3), not when the file arrives.
-  const nameFile = (action: Unnamed<StudioFileAction>): StudioFileAction => (resolver
-    ? resolver.complete(action, a.fileDescriptor(action.kind)) : action) as StudioFileAction;
+  const nameFile = (action: Unnamed<StudioFileAction>): StudioFileAction => nameTargets(action, a.fileDescriptor(action.kind), named()) as StudioFileAction;
   const authoring: StudioPresentationPort<Slot>["authoring"] = {
     snapshot: () => a.snapshot(), actionKinds: () => a.actionKinds(),
     requestKinds: () => a.requestKinds(), actionDescriptors: () => a.actionDescriptors(),
@@ -678,7 +681,7 @@ export function createStudioPresentation<Slot>(sources: {
   const linkSource = sources.links;
   const links: ProjectLinkPort = Object.freeze({ open: (link: ProjectLink) => linkSource ? linkSource.open(link)
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
-  return Object.freeze({ authoring: Object.freeze(authoring), library: Object.freeze(library),
+  return Object.freeze({ ...(sources.editing ? { editing: sources.editing } : {}), authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, views, features: () => infos, feature, module: (id: string) => {
       const service = moduleServices.get(id) ?? sources.experiments?.registrations().find(item => item.module.id === id)?.service;

@@ -7,7 +7,7 @@ import type { ReadonlyDeep } from "../platform/api/read-only";
 import type { SavedAppearanceState } from "../character/saved-appearance-actions";
 import type { SavedV } from "../saves/save-reader";
 import { CC_PRESET_LIMITS, readPresetJson } from "../character/cc-preset";
-import { refusal, type ReasonCode } from "../platform/api/capability";
+import { refusal, type Capability, type ReasonCode } from "../platform/api/capability";
 
 export type StudioFileKind = "recipe" | "collection" | "savedV" | "characterPreset";
 export type StudioPickedFile = { name: string; size: number; text(): Promise<string>; bytes(): Promise<Uint8Array> };
@@ -60,6 +60,8 @@ export type StudioFileState = { workspaceFile?: boolean; busy?: StudioFileAction
   activity: StudioActivity[];
   recovery: { available: boolean; reason?: string } };
 type FileSources = {
+  /** Freeze the destination/revisions when a workflow starts; validate again after every asynchronous return. */
+  capture?(): () => Capability;
   recipe(): ReadonlyDeep<Recipe>;
   selectedLayer(): ReadonlyDeep<Layer> | undefined;
   /** Import a recipe as a new preset of `collection` (the one the request named when it was asked). */
@@ -91,6 +93,7 @@ type FileSources = {
 
 /** File and package workflow contract; DOM, worker and download mechanics are injected. */
 export class StudioFileOperations {
+  private disposed = false;
   private collection?: CollectionService;
   private collectionUnsubscribe?: () => void;
   private busy?: { kind: StudioFileAction["kind"]; owner: symbol; id: number; startedAt: number };
@@ -99,6 +102,7 @@ export class StudioFileOperations {
   private package?: PackageResult;
   private listeners = new Set<() => void>();
   constructor(private port: StudioFilePort, private sources: FileSources) {}
+  dispose() { this.disposed = true; this.collectionUnsubscribe?.(); this.listeners.clear(); }
   attachCollection(collection: CollectionService) {
     this.collectionUnsubscribe?.(); this.collection = collection;
     this.collectionUnsubscribe = collection.subscribe(() => this.notify()); this.notify();
@@ -141,6 +145,7 @@ export class StudioFileOperations {
       : "Nothing with that ID is running." };
   }
   capability(action: StudioFileAction): { available: boolean; reason?: string; code?: ReasonCode } {
+    if (this.disposed) return refusal("missing_target", "This file destination was released.");
     if (action.kind === "package.stop") {
       const build = this.activity().find(entry => entry.kind === "package.build");
       return build?.cancellable ? { available: true } : { available: false, reason: build
@@ -191,7 +196,12 @@ export class StudioFileOperations {
   async execute(action: StudioFileAction): Promise<StudioFileOutcome> {
     const allowed = this.capability(action);
     // A refused call never acquired the transaction, so it must not release or replace its result.
-    if (!allowed.available) return { ok: false, code: this.busy ? "busy" : "unavailable", message: allowed.reason! };
+    if (!allowed.available) return { ok: false, code: allowed.code ?? (this.busy ? "busy" : "unavailable"), message: allowed.reason! };
+    const captured = this.sources.capture?.();
+    const check = () => {
+      const allowed = this.disposed ? refusal("missing_target", "This file destination was released.") : captured?.();
+      if (allowed && !allowed.available) throw new FileOperationError(allowed.code ?? "missing_target", allowed.reason ?? "This file destination changed.");
+    };
     if (action.kind === "package.stop") {
       const entry = this.activity().find(entry => entry.kind === "package.build" && entry.cancellable)!;
       const answer = this.cancel(entry.id);
@@ -202,6 +212,7 @@ export class StudioFileOperations {
     const owner = Symbol(action.kind);
     this.busy = { kind: action.kind, owner, id: ++this.sequence, startedAt: Date.now() }; this.notify();
     try {
+      check();
       let outcome: StudioFileOutcome;
       switch (action.kind) {
         case "workspace.showInFolder": {
@@ -210,9 +221,11 @@ export class StudioFileOperations {
         }
         case "recipe.import": {
           const file = await this.port.pick("recipe");
+          check();
           if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Recipe selection cancelled." });
           if (file.size > 1_000_000) throw new FileOperationError("too_large", "Recipe is too large.");
           const recipe = readPortableRecipe(JSON.parse(await file.text()));
+          check();
           if (!recipe) throw Error(RECIPE_FILE_MESSAGE);
           this.sources.importRecipe(recipe, file.name.replace(/\.json$/i, ""), action.collection);
           outcome = { ok: true, code: "imported", message: `Opened ${file.name}` }; break;
@@ -225,14 +238,17 @@ export class StudioFileOperations {
         case "mask.export": {
           const layer = structuredClone(this.sources.selectedLayer()!) as Layer;
           const blob = await this.port.bakeMask(layer);
+          check();
           this.port.download(blob, `xfs-${layer.id}-alpha.png`);
           outcome = { ok: true, code: "exported", message: "Exported the layer's shape as a 2048 × 2048 mask." }; break;
         }
         case "savedV.import": {
           const file = await this.port.pick("savedV");
+          check();
           if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Saved V selection cancelled." });
           if (file.size > 128 * 1024 * 1024) throw new FileOperationError("too_large", "Save is larger than the supported limit.");
-          const savedAppearance = this.sources.loadSavedV(await file.bytes(), action.character);
+          const bytes = await file.bytes(); check();
+          const savedAppearance = this.sources.loadSavedV(bytes, action.character);
           outcome = { ok: true, code: "loaded", message: "Your V is loaded. Skin, face details, eyes, brows, lashes, hair, piercings and body follow in a moment.",
             savedAppearance }; break;
         }
@@ -242,14 +258,17 @@ export class StudioFileOperations {
           outcome = { ok: true, code: "exported", message: "Saved appearance exported." }; break;
         case "characterPreset.import": {
           const file = await this.port.pick("characterPreset");
+          check();
           if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Character preset selection cancelled." });
           if (file.size > CC_PRESET_LIMITS.bytes) throw new FileOperationError("too_large", "This character preset can't be read: the file is larger than 1 MB.");
           // The JSON is read once here and the preset once by the context (CORE-55).
-          this.sources.characterPreset!.load(readPresetJson(await file.bytes()), action.character);
+          const bytes = await file.bytes(); check();
+          this.sources.characterPreset!.load(readPresetJson(bytes), action.character);
           outcome = { ok: true, code: "loaded", message: `Loaded ${file.name}. Your V's skin, face details, eyes, brows, lashes, hair, piercings and body follow in a moment.` }; break;
         }
         case "characterPreset.export": {
           const saved = await this.sources.characterPreset!.save();
+          check();
           this.port.download(new Blob([saved.text], { type: "application/json" }), saved.name);
           const notes = [saved.leftOut ? `${saved.leftOut} choice${saved.leftOut === 1 ? "" : "s"} couldn't be written and ${saved.leftOut === 1 ? "was" : "were"} left out.` : "",
             saved.personal ? `${saved.personal} item${saved.personal === 1 ? "" : "s"} naming a personal folder or address ${saved.personal === 1 ? "was" : "were"} left out.` : ""].filter(Boolean);
@@ -268,11 +287,14 @@ export class StudioFileOperations {
           let request: CollectionRequest;
           if (action.kind === "collection.import") {
             const file = await this.port.pick("collection");
+            check();
             if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Collection selection cancelled." });
             // Keep the service's exact size validation and error code.
             request = { kind: "import", text: file.size > 16_000_000 ? "" : await file.text(), bytes: file.size };
+            check();
           } else request = collectionRequest(action.kind);
           const result = await this.sources.executeCollection(request);
+          check();
           if (!result.ok) { outcome = result; break; }
           if (result.result.kind === "export")
             this.port.download(new Blob([result.result.json], { type: "application/json" }), result.result.name);
