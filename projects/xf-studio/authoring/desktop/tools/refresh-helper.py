@@ -7,46 +7,49 @@ swallow an install, and would hide the real %LOCALAPPDATA% from anything the scr
 writes one JSON result (config "result") and exits; nothing else is left behind.
 
 In order:
- 1. Takes the app's own single-instance mutex (config "mutex", computed by tools/installed-instance-name.ts from single-instance.ts,
+ 1. Puts itself in a Job Object that kills everything in it when it closes, before it starts any process at all. Whatever it starts
+    (the setup, the app the setup opens at its end, which XFS_INSTALL_REFRESH makes exit at once, and their children) is in the job,
+    so when this process ends, on any path, none of them is left running.
+ 2. Takes the app's own single-instance mutex (config "mutex", computed by tools/installed-instance-name.ts from single-instance.ts,
     so the two can't drift). Held by someone else means XF Studio is running: result "pending", nothing touched. Held here until
     the helper exits, a normal launch meanwhile finds the lock taken and ends quietly (single-instance.ts).
- 2. Config "skipIfCurrent" and the install already complete for this build: result "installed", nothing run.
- 3. Puts itself in a Job Object that kills everything in it when it closes, then starts the setup (/VERYSILENT ...) with
-    XFS_INSTALL_REFRESH=1. The setup, the app it opens at its end (which that variable makes exit at once) and anything they start are
-    in the job, so when this process ends, on any path, none of them is left running.
- 4. Waits for the setup (config "timeoutSec"), then checks the install is complete: every file of the built update archive is in the
-    app folder with the listed size, version.json names the built hash, bin/launcher.exe exists and Electrobun's uninstall entry exists.
-    Anything less is "failed", never "installed".
+ 3. Reads the built update archive structurally (tarfile; no program's text output, no locale). An entry that is neither a directory
+    nor a regular file under the archive's one top folder fails the run before anything is installed.
+ 4. Config "skipIfCurrent" and the install already complete for this build: result "installed", nothing run.
+ 5. Starts the setup (/VERYSILENT ...) with XFS_INSTALL_REFRESH=1 and waits for it (config "timeoutSec"), then checks the install is
+    complete: every file of the archive is in the app folder with its size, version.json names the built hash, bin/launcher.exe exists
+    and Electrobun's uninstall entry exists. Anything less is "failed", never "installed".
 
 Result: {"outcome": "installed" | "pending" | "failed", "reason": str, "current": bool, "setupExit": int | null, "problems": [str]}.
 Standard library only; Windows only.
 """
 import json
 import os
-import re
 import subprocess
 import sys
+import tarfile
 
 CREATE_NO_WINDOW = 0x08000000
 WAIT_OBJECT_0, WAIT_ABANDONED, WAIT_TIMEOUT = 0, 0x80, 0x102
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
 MAX_PROBLEMS = 8
 
-# `tar -tvf` (Windows' bsdtar): "-rw-rw-rw-  0 0      0        6674 Oct 26 13:12 XFStudio-canary/Resources/app.ico"
-_LISTING_LINE = re.compile(r"^(?P<kind>[-dl])\S*\s+\d+\s+\S+\s+\S+\s+(?P<size>\d+)\s+\w{3}\s+\d+\s+[\d:]+\s+(?P<path>.+?)\s*$")
-
-
-def parse_listing(text):
-    """{relative path: size} for the files of an update archive listing. The archive's one top folder is the app folder's content."""
-    files = {}
-    for line in text.splitlines():
-        match = _LISTING_LINE.match(line)
-        if not match or match["kind"] != "-":
-            continue
-        parts = match["path"].split("/", 1)
-        if len(parts) == 2 and parts[1]:
-            files[parts[1]] = int(match["size"])
-    return files
+def archive_files(archive):
+    """({relative path: size}, problems) from the build's update archive, read structurally (tarfile reads Zstandard natively; no
+    program's text output, so no locale to parse). The archive's one top folder is the app folder's content. Every regular file is
+    accounted for; any entry that isn't a directory or a regular file under that folder is a problem, never silently skipped."""
+    files, problems, top = {}, [], None
+    with tarfile.open(archive, "r:*") as tar:
+        for member in tar:
+            if member.isdir():
+                continue
+            parts = member.name.replace("\\", "/").strip("/").split("/", 1)
+            top = top or parts[0]
+            if member.isreg() and len(parts) == 2 and parts[0] == top and parts[1]:
+                files[parts[1]] = member.size
+            else:
+                problems.append(f"the update archive has an entry the check can't account for: {member.name}")
+    return files, problems
 
 
 def check_complete(listing, app_dir, build_hash, has_uninstall_entry):
@@ -146,14 +149,6 @@ def join_kill_on_close_job():
     return job
 
 
-def archive_listing(archive):
-    tar = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "tar.exe")
-    run = subprocess.run([tar, "-tvf", archive], capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=CREATE_NO_WINDOW)
-    if run.returncode != 0:
-        raise OSError(f"tar couldn't list the update archive ({run.returncode})")
-    return run.stdout
-
-
 def uninstall_entry_exists(key):
     import winreg
     try:
@@ -165,21 +160,18 @@ def uninstall_entry_exists(key):
 
 def run(config):
     """The whole refresh for one config; returns the result (it never touches the installed app unless the mutex was won)."""
+    join_kill_on_close_job()  # first of all: every process this helper ever starts is then in the job
     expected = os.path.normcase(os.path.normpath(config["localAppData"]))
     if os.path.normcase(os.path.normpath(os.environ.get("LOCALAPPDATA", ""))) != expected:
         return _outcome("failed", "the helper's LOCALAPPDATA isn't the one the instance lock name was computed for")
     if acquire_mutex(config["mutex"]) is None:
         return _outcome("pending", "XF Studio is running")
-    if "listingFile" in config:
-        with open(config["listingFile"], encoding="utf-8") as handle:
-            text = handle.read()
-    else:
-        text = archive_listing(config["archive"])
-    listing = parse_listing(text)
+    listing, unaccounted = archive_files(config["archive"])
+    if unaccounted:
+        return _outcome("failed", _summary(unaccounted), problems=unaccounted)
     app_dir, build_hash, key = config["appDir"], config["hash"], config["uninstallKey"]
     if config.get("skipIfCurrent") and not check_complete(listing, app_dir, build_hash, uninstall_entry_exists(key)):
         return _outcome("installed", "the installed app is already this build", current=True)
-    join_kill_on_close_job()
     environment = dict(os.environ, XFS_INSTALL_REFRESH="1")
     setup = subprocess.Popen(config["setup"], env=environment, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)

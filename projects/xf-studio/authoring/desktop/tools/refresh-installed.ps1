@@ -137,27 +137,46 @@ function Invoke-Refresh {
   }
   [IO.File]::WriteAllText($configFile, ($config | ConvertTo-Json -Depth 4), (New-Object Text.UTF8Encoding($false)))
   Remove-Item -LiteralPath $resultFile -ErrorAction SilentlyContinue
+  $launchedAt = Get-Date
   $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
     CommandLine = "`"$pythonw`" `"$helper`" `"$configFile`""; CurrentDirectory = $logDir }
   if ($created.ReturnValue -ne 0 -or -not $created.ProcessId) { throw "WMI could not start the helper (return value $($created.ReturnValue))" }
-  $helperPid = [int]$created.ProcessId
+  # Hold a handle to the helper from here on: it is waited on and stopped only through that handle, never by PID later (a PID can be
+  # reused). A process of that PID that isn't a pythonw started just now is not the helper (it is already gone); it is let go untouched.
+  $helperProcess = Get-Process -Id ([int]$created.ProcessId) -ErrorAction SilentlyContinue
+  if ($helperProcess) {
+    $null = $helperProcess.Handle
+    if ($helperProcess.ProcessName -ne "pythonw" -or $helperProcess.StartTime -lt $launchedAt.AddSeconds(-2)) { $helperProcess.Dispose(); $helperProcess = $null }
+  }
   Write-Line "installing build $($built.hash)..."
 
-  $deadline = (Get-Date).AddSeconds($setupSeconds + 60)
-  while (-not (Test-Path -LiteralPath $resultFile)) {
-    $alive = Get-CimInstance Win32_Process -Filter "ProcessId = $helperPid" | Where-Object { $_.CommandLine -like "*refresh-helper.py*" }
-    if (-not $alive) { Start-Sleep -Milliseconds 300; if (Test-Path -LiteralPath $resultFile) { break }; throw "the helper ended without a result" }
-    if ((Get-Date) -gt $deadline) {
-      Stop-Process -Id $helperPid -Force -ErrorAction SilentlyContinue  # its job object takes the setup with it
-      throw "the helper did not finish within $($setupSeconds + 60) s and was stopped"
+  $deadline = $launchedAt.AddSeconds($setupSeconds + 60)
+  try {
+    while (-not (Test-Path -LiteralPath $resultFile)) {
+      if (-not $helperProcess -or $helperProcess.HasExited) {
+        Start-Sleep -Milliseconds 300
+        if (Test-Path -LiteralPath $resultFile) { break }
+        throw "the helper ended without a result"
+      }
+      if ((Get-Date) -gt $deadline) { throw "the helper did not finish within $($setupSeconds + 60) s and was stopped" }
+      Start-Sleep -Milliseconds 500
     }
-    Start-Sleep -Milliseconds 500
-  }
-  $result = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
-  switch ($result.outcome) {
-    "pending" { Write-Line "XF Studio is open, so build $($built.hash) waits; the next run installs it without rebuilding."; return "pending" }
-    "installed" { Write-Line "installed build $($built.hash) in $([int]((Get-Date) - $started).TotalSeconds) s$(if ($result.current) { ' (already current)' })."; return "installed" }
-    default { throw ([string]$result.reason) }
+    $result = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
+    switch ($result.outcome) {
+      "pending" { Write-Line "XF Studio is open, so build $($built.hash) waits; the next run installs it without rebuilding."; return "pending" }
+      "installed" { Write-Line "installed build $($built.hash) in $([int]((Get-Date) - $started).TotalSeconds) s$(if ($result.current) { ' (already current)' })."; return "installed" }
+      default { throw ([string]$result.reason) }
+    }
+  } finally {
+    # Never report done while the helper, and so its job, is still running: wait for it up to the deadline (an exception above may
+    # have come early), and only then stop it through the handle, which closes its job.
+    if ($helperProcess) {
+      if (-not $helperProcess.HasExited) {
+        $left = [int][Math]::Max(0, ($deadline - (Get-Date)).TotalMilliseconds)
+        if (-not $helperProcess.WaitForExit($left)) { try { $helperProcess.Kill() } catch { }; $null = $helperProcess.WaitForExit(15000) }
+      }
+      $helperProcess.Dispose()
+    }
   }
 }
 

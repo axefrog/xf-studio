@@ -12,12 +12,22 @@ const python = join(process.env.LOCALAPPDATA ?? "", "Python", "pythoncore-3.14-6
 const helper = resolve(import.meta.dir, "..", "tools", "refresh-helper.py");
 const runnable = process.platform === "win32" && existsSync(python);
 const hash = "fixturehash01";
-const files: Record<string, string> = { "Resources/version.json": JSON.stringify({ hash }), "bin/launcher.exe": "launcher", "Resources/app/bun/index.js": "main();" };
-const listing = [
-  "drwxrwxrwx  0 0      0           0 Oct 26 13:12 XFStudio-canary/",
-  "drwxrwxrwx  0 0      0           0 Oct 26 13:12 XFStudio-canary/bin/",
-  ...Object.entries(files).map(([path, text]) => `-rw-rw-rw-  0 0      0 ${String(Buffer.byteLength(text)).padStart(10)} Oct 26 13:12 XFStudio-canary/${path}`),
-].join("\n");
+// One file's name looks like a localised listing row: the archive is read structurally, so nothing is parsed out of text.
+const files: Record<string, string> = { "Resources/version.json": JSON.stringify({ hash }), "bin/launcher.exe": "launcher", "Resources/app/bun/index.js": "main();",
+  "Resources/app/oct. 26 13:12 é.txt": "odd name" };
+// The build's update archive: a Zstandard tar with one top folder, plus whatever extra entry a case adds.
+const makeArchive = `
+import io, json, sys, tarfile
+out, files, extra = sys.argv[1], json.load(open(sys.argv[2], encoding="utf-8")), sys.argv[3]
+with tarfile.open(out, "w:zst") as tar:
+    top = tarfile.TarInfo("XFStudio-canary"); top.type = tarfile.DIRTYPE; tar.addfile(top)
+    for path, text in files.items():
+        data = text.encode(); info = tarfile.TarInfo("XFStudio-canary/" + path); info.size = len(data); tar.addfile(info, io.BytesIO(data))
+    if extra == "symlink":
+        link = tarfile.TarInfo("XFStudio-canary/Resources/link"); link.type = tarfile.SYMTYPE; link.linkname = "version.json"; tar.addfile(link)
+    if extra == "stray":
+        data = b"x"; stray = tarfile.TarInfo("stray.txt"); stray.size = 1; tar.addfile(stray, io.BytesIO(data))
+`;
 const fakeSetup = `
 import json, os, sys, time
 mode, app, build_hash, marker, files = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], json.loads(sys.argv[5])
@@ -47,19 +57,22 @@ time.sleep(30)
 type Result = { outcome: string; reason: string; current: boolean; setupExit: number | null; problems: string[] };
 const reg = (...args: string[]) => spawnSync("reg.exe", args, { windowsHide: true, encoding: "utf8" });
 
-function scenario(mode: string, options: { timeoutSec?: number; skipIfCurrent?: boolean; uninstallEntry?: boolean; preinstalled?: boolean } = {}) {
+function scenario(mode: string, options: { timeoutSec?: number; skipIfCurrent?: boolean; uninstallEntry?: boolean; preinstalled?: boolean; extra?: "symlink" | "stray" } = {}) {
   const dir = tempDir("xfs-refresh-helper-");
   const app = join(dir, "app"), marker = join(dir, "marker"), resultFile = join(dir, "result.json");
   mkdirSync(app, { recursive: true }); mkdirSync(marker, { recursive: true });
-  writeFileSync(join(dir, "listing.txt"), listing);
   writeFileSync(join(dir, "fake-setup.py"), fakeSetup);
+  writeFileSync(join(dir, "make-archive.py"), makeArchive);
+  writeFileSync(join(dir, "files.json"), JSON.stringify(files));
+  const made = spawnSync(python, [join(dir, "make-archive.py"), join(dir, "update.tar.zst"), join(dir, "files.json"), options.extra ?? ""], { windowsHide: true, encoding: "utf8" });
+  expect(made.status).toBe(0);
   const key = `Software\\XFStudioTest\\refresh-${crypto.randomUUID()}`;
   if (options.uninstallEntry !== false) reg("add", `HKCU\\${key}`, "/f");
   if (options.preinstalled) for (const [path, text] of Object.entries(files)) {
     mkdirSync(join(app, ...path.split("/").slice(0, -1)), { recursive: true }); writeFileSync(join(app, ...path.split("/")), text);
   }
   const mutex = `Local\\XFStudioTest-${crypto.randomUUID()}`;
-  const config = { mutex, localAppData: process.env.LOCALAPPDATA, appDir: app, hash, uninstallKey: key, listingFile: join(dir, "listing.txt"),
+  const config = { mutex, localAppData: process.env.LOCALAPPDATA, appDir: app, hash, uninstallKey: key, archive: join(dir, "update.tar.zst"),
     skipIfCurrent: options.skipIfCurrent ?? false, timeoutSec: options.timeoutSec ?? 60, result: resultFile,
     setup: [python, join(dir, "fake-setup.py"), mode, app, hash, marker, JSON.stringify(files)] };
   writeFileSync(join(dir, "config.json"), JSON.stringify(config));
@@ -109,6 +122,18 @@ describe.skipIf(!runnable)("the install-refresh helper", () => {
       expect(result.outcome).toBe("failed");
       expect(result.problems).toContain("Electrobun's uninstall entry is missing");
     } finally { s.cleanup(); }
+  }, 30_000);
+
+  test("an archive entry the check can't account for fails the run before anything is installed", () => {
+    for (const extra of ["symlink", "stray"] as const) {
+      const s = scenario("ok", { extra });
+      try {
+        const { result, ran } = s.run();
+        expect(result.outcome).toBe("failed");
+        expect(result.problems.join("; ")).toContain("can't account for");
+        expect(ran).toBeNull();
+      } finally { s.cleanup(); }
+    }
   }, 30_000);
 
   test("a setup that outlasts the deadline fails, and nothing it started is left running", async () => {
