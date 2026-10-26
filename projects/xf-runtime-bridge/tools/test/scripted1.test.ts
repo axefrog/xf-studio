@@ -76,3 +76,29 @@ describe("7: the host never launches a second game", () => {
     expect(host.log).toEqual([]);
   });
 });
+
+describe("5: an intended stop is not a halt", () => {
+  test("a final row that kills the bridge on purpose (no after: restart) ends the batch cleanly", async () => {
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
+    const { parseHaltOn } = await import("../testing/batch.ts");
+    const clock = new FakeClock();
+    let alive = true;
+    const api = fakeApi(clock, { "bridge.ping": () => (alive ? { ok: true, result: {} } : { ok: false, code: "no_bridge" }), "bridge.kill": () => { alive = false; return { ok: true, result: { killed: true } }; } });
+    const rows = [{ id: "ST7-light-stopped", title: "stopped", steps: [{ do: "run", command: "bridge.kill", input: {} }] }];
+    const result = await go(script(rows), api, fakeHost({ running: true }), clock, tempDir("xfb-s1-"), { haltOn: parseHaltOn("bridge_lost") });
+    expect(result.haltInfo).toBeUndefined();
+    expect(result.rows[0].verdict).toBe("PASS");
+  });
+
+  test("a row that kills the bridge makes the next row restart the game", async () => {
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script, stagedMod } = await import("./batch-fakes.ts");
+    const clock = new FakeClock();
+    const dir = tempDir("xfb-s1-");
+    const host = fakeHost({ running: true });
+    const rows = [{ id: "kill", title: "kill", steps: [{ do: "run", command: "bridge.kill", input: {} }] }, { id: "next", title: "next", steps: [{ do: "set", value: 1 }] }];
+    await go(script(rows), fakeApi(clock), host, clock, dir, { fixtures: { staged_mod: stagedMod(dir), mo2: { exe: "m", profile: "p", executable: "g" } } });
+    expect(host.log).toEqual(["close", "launch"]);
+  });
+});

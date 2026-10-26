@@ -863,6 +863,8 @@ export function failureSignature(record: RowRecord): string | undefined {
 }
 
 const closesTheGame = (row: Row) => JSON.stringify(row.steps).includes('"host.close"');
+/** A row that stops the bridge on purpose (bridge.kill in its steps, or after: restart): its silence is not a lost bridge, and the next row restarts. */
+const stopsTheBridge = (row: Row) => row.after === "restart" || JSON.stringify(row.steps).includes('"command":"bridge.kill"');
 
 // ---- Running a batch -----------------------------------------------------------------------------------
 
@@ -1068,7 +1070,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       log(`${record.verdict.padEnd(7)} ${row.id}${record.reason ? `: ${record.reason}` : ""}`);
       if (monitor.reason) stopWith("tripwire", monitor.reason, row.id);
       if (result.status === "stopped") stopWith(kindOfStop(result.reason), result.reason ?? "stopped", row.id);
-      restartDue = row.after === "restart";
+      restartDue = stopsTheBridge(row);
       // Significant bugs: the batch stops here rather than piling misleading rows on top.
       const kinds = row.halt_on ? new Set(row.halt_on) : policy.kinds;
       if (!halt && kinds.has("runner_error") && /runner_error|executor_error/.test(record.close.reason ?? "")) stopWith("runner_error", `the runner failed in ${row.id}: ${record.close.reason}`, row.id, [record.telemetry.dir]);
@@ -1076,7 +1078,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       if (!halt && (kinds.has("crash") || kinds.has("bridge_lost"))) {
         const game = await options.host.gameProcess();
         if (!game && kinds.has("crash") && !closesTheGame(row)) stopWith("crash", `the game is no longer running after ${row.id} (a crash?)`, row.id, [record.telemetry.dir]);
-        else if (game && kinds.has("bridge_lost") && row.after !== "restart") {
+        else if (game && kinds.has("bridge_lost") && !stopsTheBridge(row)) {
           let alive = false;
           for (let probe = 0; probe < (options.bridgeProbes ?? 3) && !alive; probe++) {
             if (probe) await clock.sleep(2000, signal);
