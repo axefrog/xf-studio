@@ -294,8 +294,8 @@ def main() -> int:
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(md) + "\n", encoding="utf-8")
-    out.with_suffix(".json").write_text(json.dumps({"blockers": blockers, "polish": polish, "ledger": ledger, "projects": activity,
-                                                    "tags": tags, "ci": ci, "chats": rows, "repo_wide": repo_wide, "signals": signals,
+    # Agent Watch reads chats[] (per project), repo_wide, decisions and signals; keep the shape stable and tell it before renaming.
+    out.with_suffix(".json").write_text(json.dumps({"chats": rows, "repo_wide": repo_wide, "signals": signals,
                                                     "decisions": decisions()}, indent=1, default=str), encoding="utf-8")
     print(f"wrote {out} ({len(signals)} signals)")
     return 0
