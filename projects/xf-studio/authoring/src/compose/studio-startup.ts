@@ -90,7 +90,7 @@ import { createProfileServices, createTargetResolver, drawnScene, drawnView as d
   sceneHeadTargets, sceneCommands, tabDefaults } from "../app/profiles/profile-window";
 import { starterParts } from "../app/workspace/collection-workspace";
 import { printDefault } from "../app/profiles/layout-fragment";
-import { keepsStateInDefaults, STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS, STUDIO_INITIAL_LAYOUT } from "./layout-defaults";
+import { keepsStateInDefaults, STUDIO_INITIAL_LAYOUT, studioLayoutDefaults } from "./layout-defaults";
 import { viewPanel } from "../app/profiles/profile-sessions";
 import { createStudioSubjects } from "./subjects";
 import { LookEditor, lookContent } from "../library/look-editor";
@@ -199,10 +199,12 @@ async function start(host: StudioHost, root: HTMLElement) {
   const creatorCatalogue = new CreatorCatalogue(createBrowserCreatorDevice());
   // The library's owners (profiles design §7): profiles, Vs, collections and looks, each changed only through its commands (the outbox).
   // Startup preservation can finish before the presentation exists. Deliver its information through the usual message route once mounted.
+  // The default layouts and what this build knows, the experiments switched on included (compose/layout-defaults.ts).
+  const layouts = studioLayoutDefaults(experiments, message => diagnostics.failure("layouts", "experiment_defaults_refused", message, undefined, { level: "warn" }));
   const defaultNotes: string[] = [];
   let defaultNote: (text: string) => void = text => { defaultNotes.push(text); };
   const services = createProfileServices({ documents: documents.documents, outbox: documents.outbox, subjects: createStudioSubjects(),
-    layouts: { contributed: STUDIO_LAYOUT_DEFAULTS, known: STUDIO_FRAGMENT_KNOWLEDGE,
+    layouts: { ...layouts,
       // The library's own write authority (the lease), not the workspace file's protection: a protected workspace still edits defaults.
       writable: () => lease?.writable() ?? true, note: text => defaultNote(text) },
     catalogue: creatorCatalogue, history: historyService, versions: collectionVersions(`${base}/collection-versions`, fetch, documents.fence),
@@ -332,7 +334,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     subscribe: (listener: () => void) => sessionState.subscribe(listener) };
   // The scenes' `gen` (what a view action that edits a scene names) and the input layer's resolution over the session.
   // The layout tabs' actions: the session's operations, and those naming a default (the modules' and the person's own).
-  const layoutTabs = tabDefaults(sessionState, services, { keepsState: keepsStateInDefaults, known: STUDIO_FRAGMENT_KNOWLEDGE });
+  const layoutTabs = tabDefaults(sessionState, services, { keepsState: keepsStateInDefaults, known: layouts.known });
   core.app.attach({ scenes: sceneCommands(sessionState, services), tabs: layoutTabs });
   const starterActions = new StarterActions({ starters: starterShapes, feature: region.id, label: region.label, thumbnail: region.thumbnail,
     layer: (ref, id) => { const edited = lookEditor.ref();

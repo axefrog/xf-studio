@@ -34,7 +34,7 @@ import { ProfileService } from "./profile-service";
 import { ProfileSessions } from "./profile-sessions";
 import type { ProfileSessionData } from "./profile-session";
 import { FIRST_TAB_NAME, sessionOfWorkspace, type InitialProfileLayout } from "./profiles-migration-data";
-import { LayoutDefaults, type ContributedLayoutDefault } from "./layout-defaults";
+import { LayoutDefaults, type ContributedDefaultsSource, type ContributedLayoutDefault } from "./layout-defaults";
 import type { FragmentKnowledge, SceneCandidate, SubstitutionContext } from "./layout-fragment";
 import { TabDefaults } from "./tab-defaults";
 import { upgradePhaseOneSession } from "./profile-session-upgrade";
@@ -53,7 +53,7 @@ export type ProfileServices = {
 export function createProfileServices(deps: { documents: DocumentStorePort; outbox: DocumentOutbox; subjects: SubjectRegistryPort; catalogue: CreatorCatalogue;
   history: HistoryService; versions?: CollectionVersionsPort; report?: (error: unknown) => void;
   /** The modules' default layouts and what the build has (`compose/layout-defaults.ts`). */
-  layouts?: { contributed: readonly ContributedLayoutDefault[]; known: FragmentKnowledge; writable?: () => boolean; note?: (message: string) => void } }): ProfileServices {
+  layouts?: { contributed: readonly ContributedLayoutDefault[] | ContributedDefaultsSource; known: FragmentKnowledge; writable?: () => boolean; note?: (message: string) => void } }): ProfileServices {
   const profiles = new ProfileService({ documents: deps.documents, outbox: deps.outbox, subjects: deps.subjects });
   const characters = new CharacterService({ documents: deps.documents, outbox: deps.outbox, catalogue: deps.catalogue, history: deps.history, profiles,
     ...(deps.report ? { report: deps.report } : {}) });

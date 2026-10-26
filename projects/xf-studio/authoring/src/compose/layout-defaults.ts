@@ -4,7 +4,8 @@
  * state the graph's codecs refuse, stops the build from starting. `STUDIO_FRAGMENT_KNOWLEDGE` is what the build has, so an own default
  * from a newer build is listed as unavailable rather than made into a broken tab.
  */
-import { contributedDefaultIssues, contributedDefaults } from "../app/profiles/layout-defaults";
+import { contributedDefaultIssues, contributedDefaults, type ContributedDefaultsSource, type ContributedLayoutDefault } from "../app/profiles/layout-defaults";
+import type { StudioModule } from "../platform/api";
 import type { FragmentKnowledge } from "../app/profiles/layout-fragment";
 import { STUDIO_VIEW_GRAPH_RULES } from "../preview/preview-view-graph";
 import { STUDIO_MODULE_REGISTRATION, STUDIO_MODULES } from "./modules";
@@ -22,6 +23,39 @@ const issues = contributedDefaultIssues(STUDIO_MODULES, STUDIO_FRAGMENT_KNOWLEDG
 if (issues.length) throw Error(`The modules' default layouts are incomplete: ${issues.join("; ")}.`);
 
 export const STUDIO_LAYOUT_DEFAULTS = contributedDefaults(STUDIO_MODULES);
+
+/** An experiment as the layouts see it: its module (with any defaults) and the panels its view contributes while it's on. */
+export type LayoutExperiment = { readonly module: StudioModule; readonly contribution: { readonly panels: readonly { readonly id: string }[] } };
+export type LayoutExperiments = { registrations(): readonly LayoutExperiment[]; subscribe(listener: () => void): () => void };
+
+/**
+ * The one source of default layouts and fragment knowledge the startup hands over: the built-in modules' (checked above, at
+ * composition), plus the defaults of the experiments switched on now. An experiment's defaults are checked when it switches on, against
+ * the build's knowledge plus that experiment's own panels; an invalid one is refused, logged once and never offered, and it never stops
+ * the build. Switching the experiment off withdraws its defaults and its panel types; tabs made from them are the person's and stay.
+ */
+export function studioLayoutDefaults(experiments: LayoutExperiments, log: (message: string) => void = () => {}) {
+  const known: FragmentKnowledge = Object.freeze({ rules: STUDIO_VIEW_GRAPH_RULES, tool: STUDIO_FRAGMENT_KNOWLEDGE.tool,
+    panel: (type: string) => panels.has(type) || experiments.registrations().some(item => item.contribution.panels.some(panel => panel.id === type)) });
+  const refused = new Set<string>();
+  let cached: { key: string; list: readonly ContributedLayoutDefault[] } | null = null;
+  const list = (): readonly ContributedLayoutDefault[] => {
+    const on = experiments.registrations().filter(item => item.module.defaults?.length);
+    const key = on.map(item => item.module.id).join(" ");
+    if (cached?.key === key) return cached.list;
+    const added = on.flatMap(item => {
+      const own = new Set(item.contribution.panels.map(panel => panel.id));
+      const issues = contributedDefaultIssues([item.module], { ...STUDIO_FRAGMENT_KNOWLEDGE, panel: type => panels.has(type) || own.has(type) });
+      if (!issues.length) return contributedDefaults([item.module]);
+      if (!refused.has(item.module.id)) { refused.add(item.module.id); log(`The ${item.module.label} experiment's default layouts can't be offered: ${issues.join("; ")}.`); }
+      return [];
+    });
+    cached = { key, list: Object.freeze([...STUDIO_LAYOUT_DEFAULTS, ...added]) };
+    return cached.list;
+  };
+  const contributed: ContributedDefaultsSource = { list, subscribe: listener => experiments.subscribe(listener) };
+  return { contributed, known };
+}
 // A first workspace keeps its legacy view graph, and starts with Eye makeup's contributed panel arrangement in both size classes.
 const first = STUDIO_LAYOUT_DEFAULTS.find(item => item.id === "eye-makeup/default")!;
 export const STUDIO_INITIAL_LAYOUT: InitialProfileLayout = { origin: first.id, dock: rewriteDock(first.fragment.tab.dock as DockLayout,

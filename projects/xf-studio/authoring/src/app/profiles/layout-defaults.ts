@@ -83,13 +83,22 @@ export function ownDefaultOf(value: unknown): OwnDefaultDocument | null {
   return { ...value, createdAt: Number.isFinite(value.createdAt) ? value.createdAt : 0 } as unknown as OwnDefaultDocument;
 }
 
+/**
+ * The modules' defaults as a live source: the built-in modules' and those of the experiments switched on now, in module order. An
+ * experiment switched off withdraws its defaults from the list; a tab made from one is the person's and stays as it is.
+ */
+export type ContributedDefaultsSource = {
+  list(): readonly ContributedLayoutDefault[];
+  subscribe(listener: () => void): () => void;
+};
+
 export type LayoutDefaultsDeps = {
   /** The library's documents, read once at `load`. */
   readonly documents: Pick<DocumentStorePort, "list">;
   /** Every command goes through the outbox. */
   readonly outbox: DocumentOutbox;
-  /** The modules' defaults, in module order (frozen). */
-  readonly contributed?: readonly ContributedLayoutDefault[];
+  /** The modules' defaults, in module order (frozen): fixed, or a live source that changes as experiments switch on and off. */
+  readonly contributed?: readonly ContributedLayoutDefault[] | ContributedDefaultsSource;
   /** What this build has: an own default needing more is listed as unavailable. Absent: only the fragment's structure is checked. */
   readonly known?: FragmentKnowledge;
   readonly random?: () => number;
@@ -105,11 +114,13 @@ export class LayoutDefaults {
   private readonly ids = new Set<string>();
   private readonly listeners = new Set<() => void>();
   private views: readonly LayoutDefaultView[] | null = null;
-  private readonly contributed: readonly ContributedLayoutDefault[];
+  private readonly source: ContributedDefaultsSource;
   private resolving = false;
 
   constructor(private readonly deps: LayoutDefaultsDeps) {
-    this.contributed = deps.contributed ?? [];
+    const given = deps.contributed ?? [];
+    this.source = Array.isArray(given) ? { list: () => given, subscribe: () => () => {} } : given as ContributedDefaultsSource;
+    this.source.subscribe(() => this.changed());
     deps.outbox.subscribe(event => {
       if (event.kind === "status") return;
       const refs = event.kind === "external" || event.kind === "resolved" || event.kind === "recorded" ? event.refs : event.entry.writes;
@@ -147,17 +158,17 @@ export class LayoutDefaults {
   // ----- Reads -----
   /** Every default: the modules' in module order, then the person's in the order they were made. Detached. */
   list(): readonly LayoutDefaultView[] {
-    this.views ??= Object.freeze([...this.contributed.map(item => this.contributedView(item)), ...this.own().map(item => this.ownView(item))]);
+    this.views ??= Object.freeze([...this.source.list().map(item => this.contributedView(item)), ...this.own().map(item => this.ownView(item))]);
     return structuredClone(this.views);
   }
   get(id: string): LayoutDefaultView | undefined {
-    const contributed = this.contributed.find(item => item.id === id);
+    const contributed = this.source.list().find(item => item.id === id);
     if (contributed) return structuredClone(this.contributedView(contributed));
     const own = this.own().find(item => item.value.id === id);
     return own && structuredClone(this.ownView(own));
   }
   /** Whether `id` names a module's default. */
-  isContributed(id: string): boolean { return this.contributed.some(item => item.id === id); }
+  isContributed(id: string): boolean { return this.source.list().some(item => item.id === id); }
   /** Own-default conflicts awaiting automatic preservation (only a writable window resolves them). */
   conflicts(): readonly OutboxEntry[] { return this.deps.outbox.conflicts().filter(entry => entry.writes.some(write => write.kind === LAYOUT_DEFAULT_DOCUMENT)); }
   /** No owning panel exists to ask in. Preserve mine as a copy and take theirs, in the outbox's single crash-safe operation. */
