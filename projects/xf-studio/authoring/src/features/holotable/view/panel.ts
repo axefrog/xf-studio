@@ -13,6 +13,7 @@ import type { HoloState } from "../service";
 import { ORBITS, project, type Orbit, type Primitive, type Style } from "./projection";
 import { HOLOTABLE_PANEL_META } from "./contribution";
 import { f1, heading, vAt } from "./shared";
+import { solidCanvas } from "./solid-canvas";
 
 type Ctx = ModuleViewContext<HolotableFacade>;
 const NS = "http://www.w3.org/2000/svg";
@@ -27,7 +28,8 @@ const DASH: Partial<Record<Style, string>> = { gap: "2 5", area: "10 4 2 4", cam
 /** Each dash pattern's length (an odd-length list repeats twice), so a line cut at the edge continues its pattern in phase. */
 const DASH_PERIOD = Object.fromEntries(Object.entries(DASH).map(([style, d]) => { const xs = d!.split(" ").map(Number), sum = xs.reduce((a, b) => a + b, 0); return [style, xs.length % 2 ? sum * 2 : sum]; })) as Partial<Record<Style, number>>;
 
-export function holotablePanel(ctx: Ctx): PanelController {
+export interface HolotableFrame { ms: number; projectMs: number; drawMs: number; width: number; height: number; solids: number; cut: number }
+export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => void): PanelController {
   const facade = ctx.facade;
   let orbit: Orbit = { ...ORBITS.tilt };
   let drawnKey = "", emptyKey = "";
@@ -37,7 +39,11 @@ export function holotablePanel(ctx: Ctx): PanelController {
   svg.setAttribute("role", "img"); svg.setAttribute("tabindex", "0");
   svg.setAttribute("aria-label", "Replay drawn from above: drag to orbit, scroll to zoom, arrow keys turn and tilt");
   // The drawing gives way first in a short panel (it may shrink to nothing), so the controls under it stay in reach.
-  svg.setAttribute("style", "display:block;flex:1 1 auto;min-height:0;width:100%;background:var(--stage);border:1px solid var(--line);cursor:grab;touch-action:none");
+  svg.setAttribute("style", "position:absolute;inset:0;display:block;height:100%;width:100%;cursor:grab;touch-action:none");
+  const canvas = document.createElement("canvas"); canvas.setAttribute("aria-hidden", "true");
+  canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none";
+  const stage = h("div", { style: "position:relative;flex:1 1 auto;min-height:0;width:100%;background:var(--stage);border:1px solid var(--line);overflow:hidden" }, canvas, svg);
+  const solidsCanvas = solidCanvas(canvas, () => { drawnKey = ""; ctx.changed(); });
   const empty = h("div", { style: "flex:1 1 auto;min-height:0" });
   // The panel can be resized, docked or floated at any time: redraw at the new size.
   // A press orbits or picks without taking keyboard focus, so the focus ring shows only when someone tabs in to turn the view by keys.
@@ -54,7 +60,7 @@ export function holotablePanel(ctx: Ctx): PanelController {
   const controls = h("div", { class: "control-line", style: "flex:0 0 auto" }, play, view.element, readout);
   time.element.style.flex = "0 0 auto"; // the drawing takes the room; the controls keep their own height
   const element = h("div", { class: "panel-content holotable-panel", style: "display:flex;flex-direction:column;height:100%;min-height:0;box-sizing:border-box;overflow:auto" },
-    empty, svg, time.element, controls);
+    empty, stage, time.element, controls);
 
   // Gestures: orbit, zoom, pick. The viewpoint is this view's own; the selection is the service's.
   // The mark under the pointer is read on press: pointer capture retargets the release to the drawing itself.
@@ -90,8 +96,8 @@ export function holotablePanel(ctx: Ctx): PanelController {
 
   // The drawing reuses its nodes: each frame sets the attributes that changed on pooled lines and labels, instead of building
   // hundreds of elements per playback tick. The edge ticks change only with the drawing's size.
-  const chrome = document.createElementNS(NS, "g"), solidsLayer = document.createElementNS(NS, "g"), linesLayer = document.createElementNS(NS, "g"), marksLayer = document.createElementNS(NS, "g"), textLayer = document.createElementNS(NS, "g");
-  svg.append(solidsLayer, chrome, linesLayer, marksLayer, textLayer);
+  const chrome = document.createElementNS(NS, "g"), linesLayer = document.createElementNS(NS, "g"), marksLayer = document.createElementNS(NS, "g"), textLayer = document.createElementNS(NS, "g");
+  svg.append(chrome, linesLayer, marksLayer, textLayer);
   let chromeSize = "";
   const pooled = (layer: SVGGElement, tag: "polyline" | "text", index: number): SVGElement => {
     let e = layer.children[index] as SVGElement | undefined;
@@ -103,23 +109,15 @@ export function holotablePanel(ctx: Ctx): PanelController {
 
   function draw(state: HoloState) {
     const open = state.open;
-    if (!open) { trim(solidsLayer, 0); trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); chromeSize = ""; return; }
+    if (!open || state.phase === "opening") { solidsCanvas.clear(svg.clientWidth, svg.clientHeight); trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); chromeSize = ""; return; }
     const width = svg.clientWidth || 800, height = svg.clientHeight || 480;
+    const started = performance.now();
     const scene = project(open.session, open.world, state.t, state.layers, orbit, width, height, state.selected);
+    const projectedAt = performance.now();
     set(svg, "viewBox", `0 0 ${width} ${height}`);
-    const solids = scene.primitives.filter((p): p is Extract<Primitive, { kind: "solid" }> => p.kind === "solid");
-    const path = (points: readonly (readonly [number, number])[], closed = false) => points.length ? `M${points.map(p => `${f1(p[0])},${f1(p[1])}`).join("L")}${closed ? "Z" : ""}` : "";
-    solids.forEach((p, i) => {
-      let group = solidsLayer.children[i] as SVGGElement | undefined;
-      if (!group) { group = document.createElementNS(NS, "g"); for (let k = 0; k < 3; k++) group.append(document.createElementNS(NS, "path")); solidsLayer.append(group); }
-      for (const [index, top] of [false, true].entries()) {
-        set(group.children[index], "d", p.faces.filter(f => f.top === top).map(f => path(f.points, true)).join(""));
-        set(group.children[index], "style", `fill:var(--text);stroke:none;opacity:${(p.opacity * (top ? 0.06 : 0.04)).toFixed(3)}`);
-      }
-      set(group.children[2], "d", p.lines.map(r => path(r.points)).join(""));
-      set(group.children[2], "style", `fill:none;stroke:var(--line-strong);stroke-width:1;opacity:${p.opacity.toFixed(2)}`);
-    });
-    trim(solidsLayer, solids.length);
+    solidsCanvas.draw(scene.solids, scene.solidCamera);
+    const paintedAt = performance.now();
+    measured?.({ ms: paintedAt - started, projectMs: projectedAt - started, drawMs: paintedAt - projectedAt, width, height, solids: scene.solidsDrawn, cut: scene.solidsCut });
     if (chromeSize !== `${width}x${height}`) {
       chromeSize = `${width}x${height}`;
       const ticks: Element[] = [];
@@ -178,11 +176,12 @@ export function holotablePanel(ctx: Ctx): PanelController {
     update() {
       const state = facade.snapshot(), s = state.open?.session;
       // Nothing open: one plain line where the drawing goes, pointing at Recordings.
-      const ek = JSON.stringify([!!s, state.phase, state.runs.length]);
+      const ek = JSON.stringify([!!s, state.phase, state.message, state.runs.length]);
       if (ek !== emptyKey) {
         emptyKey = ek;
-        empty.replaceChildren(...(s ? [] : [emptyState("No recording open", state.runs.length ? "Open one in Recordings to replay it here." : "Recordings appear here after a test session with the recorder on.")]));
-        empty.hidden = !!s; svg.style.display = s ? "block" : "none";
+        const opening = state.phase === "opening";
+        empty.replaceChildren(...(s && !opening ? [] : [emptyState(opening ? "Opening recording" : "No recording open", opening ? state.message : state.runs.length ? "Open one in Recordings to replay it here." : "Recordings appear here after a test session with the recorder on.")]));
+        empty.hidden = !!s && !opening; stage.style.display = s && !opening ? "block" : "none";
       }
       applyCapability(play, facade.capability({ kind: "holo.play", on: true }));
       setButtonLabel(play, state.playing ? "Pause" : "Play");
@@ -194,6 +193,6 @@ export function holotablePanel(ctx: Ctx): PanelController {
       const dk = JSON.stringify([state.revision, orbit, svg.clientWidth, svg.clientHeight]);
       if (dk !== drawnKey) { drawnKey = dk; draw(state); }
     },
-    dispose() { resized.disconnect(); },
+    dispose() { resized.disconnect(); solidsCanvas.dispose(); },
   };
 }

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { camera, ORBITS, project } from "../src/features/holotable/view/projection";
+import { camera, clipSegment, clipToRect, ORBITS, project } from "../src/features/holotable/view/projection";
 import { solidDrawing, SOLID_DRAW_CAP } from "../src/features/holotable/view/solid-projection";
 import type { HoloSession, HoloSolid } from "../src/features/holotable/types";
 
@@ -20,18 +20,26 @@ test("a box has its 12 crisp edges and faint visible faces; sphere and capsule e
   }
 });
 
-test("distance culling precedes the count cap, nearest solids survive and geometry paints far to near below data", () => {
+test("distance culling precedes the significance cap, large volumes survive and geometry paints far to near below data", () => {
   const solids = [...Array.from({ length: 30 }, (_, i) => box(`far${i}`, [400 + i, 0, 0])),
-    ...Array.from({ length: SOLID_DRAW_CAP + 2 }, (_, i) => box(String(i).padStart(3, "0"), [i * 0.5, 0, 0]))];
+    ...Array.from({ length: SOLID_DRAW_CAP + 1 }, (_, i) => box(String(i).padStart(5, "0"), [0, 0, 0])),
+    { ...box("building", [80, 0, 0]), size: [25, 25, 25] as const }];
   const scene = project(s, { provenance: null, areas: [], cells: [], solids }, 0, layers, ORBITS.tilt, 800, 480, null);
   expect(scene.solidsDrawn).toBe(SOLID_DRAW_CAP); expect(scene.solidsCut).toBe(2);
   const drawn = scene.primitives.filter(p => p.kind === "solid");
   expect(drawn.some(p => p.id.startsWith("far"))).toBe(false);
-  expect(drawn.some(p => p.id === String(SOLID_DRAW_CAP + 1).padStart(3, "0"))).toBe(false);
+  expect(drawn.some(p => p.id === "building")).toBe(true);
+  expect(drawn.some(p => p.id === String(SOLID_DRAW_CAP).padStart(5, "0"))).toBe(false);
   const C = camera([0, 0, 0], ORBITS.tilt, 800, 480), distance = (id: string) => Math.hypot(...solids.find(s => s.id === id)!.center.map((x, i) => x - C.position[i]));
   for (let i = 1; i < drawn.length; i++) expect(distance(drawn[i - 1].id)).toBeGreaterThanOrEqual(distance(drawn[i].id));
   expect(scene.primitives.map(p => p.kind).lastIndexOf("solid")).toBeLessThan(scene.primitives.findIndex(p => p.kind === "marker"));
   expect(project(s, { provenance: null, areas: [], cells: [], solids }, 0, { ...layers, solids: false }, ORBITS.tilt, 800, 480, null).solidsDrawn).toBe(0);
+});
+
+test("sub-four-pixel shapes beyond 30 m drop out while equally small shapes beside V remain", () => {
+  const tiny = (id: string, x: number) => ({ ...box(id, [x, 0, 0]), size: [0.05, 0.05, 0.05] as const });
+  const scene = project(s, { provenance: null, areas: [], cells: [], solids: [tiny("near", 20), tiny("far", 50)] }, 0, layers, ORBITS.tilt, 800, 480, null);
+  expect(scene.primitives.filter(p => p.kind === "solid").map(p => p.id)).toEqual(["near"]);
 });
 
 test("every solid line and face stays inside the drawing plus margin, including near-plane crossings", () => {
@@ -53,4 +61,15 @@ test("a primitive crossing the 350 m boundary is culled as a whole before the dr
   const edge = box("edge", [349, 0, 0]);
   const scene = project(s, { provenance: null, areas: [], cells: [], solids: [large, edge, box("near", [0, 0, 0])] }, 0, layers, ORBITS.tilt, 800, 480, null);
   expect(scene.primitives.filter(p => p.kind === "solid").map(p => p.id)).toEqual(["near"]);
+});
+
+test("the Canvas scalar clipper agrees with the polyline oracle for crossing, parallel and invisible edges", () => {
+  for (let i = 0; i < 100; i++) {
+    const a: [number, number] = [Math.sin(i * 2) * 800, Math.cos(i) * 600], b: [number, number] = [Math.cos(i * 3) * 900, Math.sin(i) * 700];
+    let actual: number[][] = [];
+    clipSegment(...a, ...b, -32, -32, 800 + 32, 480 + 32, (ax, ay, bx, by) => { actual = [[ax, ay], [bx, by]]; });
+    const expected = clipToRect([a, b], -32, -32, 832, 512)[0]?.points ?? [];
+    expect(actual.length).toBe(expected.length);
+    for (let j = 0; j < actual.length; j++) for (let k = 0; k < 2; k++) expect(actual[j][k]).toBeCloseTo(expected[j][k], 9);
+  }
 });

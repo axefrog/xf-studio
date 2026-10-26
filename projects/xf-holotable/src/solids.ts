@@ -2,6 +2,37 @@
 import type { Solid, Vec3 } from "./model.ts";
 
 export const WORLD_SOLID_CAP = 12_000;
+export function pathBounds(path: readonly Vec3[]): { min: Vec3; max: Vec3 } {
+  const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (const p of path) for (let i = 0; i < 3; i++) { min[i] = Math.min(min[i], p[i]); max[i] = Math.max(max[i], p[i]); }
+  return { min, max };
+}
+/** Exact segment/AABB distance: the squared distance is quadratic between box-plane crossings. */
+export function segmentBoxDistance2(a: Vec3, b: Vec3, min: Vec3, max: Vec3): number {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], cuts = [0, 1];
+  for (let j = 0; j < 3; j++) if (d[j]) for (const bound of [min[j], max[j]]) { const t = (bound - a[j]) / d[j]; if (t > 0 && t < 1) cuts.push(t); }
+  cuts.sort((x, y) => x - y); let best = Infinity;
+  const distance = (t: number) => { let n = 0; for (let j = 0; j < 3; j++) n += Math.max(min[j] - a[j] - t * d[j], 0, a[j] + t * d[j] - max[j]) ** 2; return n; };
+  for (let i = 1; i < cuts.length; i++) {
+    const lo = cuts[i - 1], hi = cuts[i], mid = (lo + hi) / 2; let aa = 0, bb = 0;
+    for (let j = 0; j < 3; j++) {
+      const p = a[j] + mid * d[j], bound = p < min[j] ? min[j] : p > max[j] ? max[j] : undefined;
+      if (bound !== undefined) { aa += d[j] ** 2; bb += d[j] * (a[j] - bound); }
+    }
+    best = Math.min(best, distance(aa ? Math.max(lo, Math.min(hi, -bb / aa)) : mid));
+  }
+  return best;
+}
+export function pathNearBox(path: readonly Vec3[], min: Vec3, max: Vec3, radius: number): boolean {
+  for (let i = 0; i < path.length; i++) {
+    const a = path[i], b = path[Math.min(i + 1, path.length - 1)];
+    if (i && a[0] === b[0] && a[1] === b[1] && a[2] === b[2]) continue;
+    let lower = 0;
+    for (let j = 0; j < 3; j++) lower += Math.max(min[j] - Math.max(a[j], b[j]), Math.min(a[j], b[j]) - max[j], 0) ** 2;
+    if (lower <= radius * radius && segmentBoxDistance2(a, b, min, max) <= radius * radius) return true;
+  }
+  return false;
+}
 export function rotate(p: Vec3, q: readonly number[]): Vec3 {
   const [x, y, z, w] = q, [a, b, c] = p;
   const tx = 2 * (y * c - z * b), ty = 2 * (z * a - x * c), tz = 2 * (x * b - y * a);

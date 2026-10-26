@@ -70,6 +70,10 @@ export function createService(options: ServiceOptions) {
     "service.info": () => ({ protocol: PROTOCOL, recordingsRoot: options.recordingsRoot, worldPack: Boolean(pack()) }),
     "runs.list": () => listRuns(options.recordingsRoot),
     "session.open": async (p, signal) => sessionAtLevel(await open(known(p.dir), signal), level(p.level)),
+    "world.status": async (p, signal) => {
+      const s = await open(known(p.dir), signal);
+      return solids.status ? solids.status(s.v.map(v => v.position), signal) : { cold: false };
+    },
     "world.around": async (p, signal) => {
       const s = await open(known(p.dir), signal), w = pack();
       const margin = typeof p.margin === "number" ? p.margin : 250;

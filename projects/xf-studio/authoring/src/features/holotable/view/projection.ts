@@ -5,11 +5,11 @@
  */
 import type { HoloArea, HoloCameraSample, HoloCell, HoloEvent, HoloSession, HoloSolid, HoloVSample, HoloWorld, Vec3 } from "../types";
 import type { HoloLayer } from "../service";
-import { solidDrawing, type SolidDrawing, SOLID_DRAW_CAP } from "./solid-projection";
+import { solidGeometry, type SolidInstance, SOLID_DRAW_CAP } from "./solid-projection";
 
 export type Style = "grid" | "area" | "venue" | "cell" | "trail" | "v" | "cone" | "camera" | "event" | "event-selected" | "gap" | "label" | "label-muted";
 export type Primitive =
-  | SolidDrawing
+  | SolidInstance
   | { kind: "line"; points: [number, number][]; style: Style; opacity: number; closed?: boolean; /** How far into its dash pattern the line starts, in pixels: a line cut at the edge keeps its dashes where they were. */ dashOffset?: number }
   | { kind: "marker"; at: [number, number]; size: number; style: Style; id?: string; shape: "chevron" | "diamond" | "dot"; angle?: number }
   | { kind: "text"; at: [number, number]; text: string; style: Style };
@@ -72,18 +72,57 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
   };
   /** Screen pixels per metre at a world point (for scale bars and sizes). */
   const scale = (p: Vec3) => { const q = view(p); return q[2] < NEAR ? 0 : focal / q[2]; };
-  const polygon = (ps: readonly Vec3[]): [number, number][] => {
-    let qs = ps.map(view);
-    qs = cutPolygon(qs, q => q[2] - NEAR);
-    let projected = qs.map(screen);
+  const clipPolygon = (ps: [number, number][]): [number, number][] => {
+    let projected = ps;
     for (const plane of [(p: number[]) => p[0] + MARGIN, (p: number[]) => width + MARGIN - p[0],
       (p: number[]) => p[1] + MARGIN, (p: number[]) => height + MARGIN - p[1]]) projected = cutPolygon(projected, plane) as [number, number][];
     return projected;
   };
-  return { point, line, polygon, scale, position: c };
+  const polygon = (ps: readonly Vec3[]): [number, number][] => clipPolygon(cutPolygon(ps.map(view), q => q[2] - NEAR).map(screen));
+  /** Largest projected bound extent, with a frustum rejection. Scalar math avoids eight temporary vectors per candidate. */
+  const extent = (ps: readonly Vec3[]): number => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, front = false, behind = false;
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i];
+      const x = p[0] - c[0], y = p[1] - c[1], z = p[2] - c[2], depth = x * f[0] + y * f[1] + z * f[2];
+      if (depth < NEAR) { behind = true; continue; }
+      front = true;
+      const sx = width / 2 + focal * (x * r[0] + y * r[1] + z * r[2]) / depth;
+      const sy = height / 2 - focal * (x * u[0] + y * u[1] + z * u[2]) / depth;
+      x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
+    }
+    if (!front) return 0;
+    if (behind) return Math.max(width, height); // Near-plane crossing: exact clipping follows selection.
+    if (x1 < -MARGIN || x0 > width + MARGIN || y1 < -MARGIN || y0 > height + MARGIN) return 0;
+    return Math.max(x1 - x0, y1 - y0);
+  };
+  /** Renderer-owned scratch buffers avoid per-vertex/per-edge allocations in Canvas. */
+  const projectInto = (ps: readonly Vec3[], xy: Float64Array, depths: Float64Array) => {
+    let inside = true;
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i], x = p[0] - c[0], y = p[1] - c[1], z = p[2] - c[2], depth = x * f[0] + y * f[1] + z * f[2];
+      depths[i] = depth;
+      xy[i * 2] = width / 2 + focal * (x * r[0] + y * r[1] + z * r[2]) / depth;
+      xy[i * 2 + 1] = height / 2 - focal * (x * u[0] + y * u[1] + z * u[2]) / depth;
+      if (depth < NEAR || xy[i * 2] < -MARGIN || xy[i * 2] > width + MARGIN || xy[i * 2 + 1] < -MARGIN || xy[i * 2 + 1] > height + MARGIN) inside = false;
+    }
+    return inside;
+  };
+  /** Conservative projected cube around a sphere: safe upper bound for rejecting insignificant candidates. */
+  const boundExtent = (p: Vec3, radius: number) => {
+    const x = p[0] - c[0], y = p[1] - c[1], z = p[2] - c[2], depth = x * f[0] + y * f[1] + z * f[2];
+    if (depth <= radius + NEAR) return Infinity;
+    const across = Math.max(radius, Math.abs(x * r[0] + y * r[1] + z * r[2]), Math.abs(x * u[0] + y * u[1] + z * u[2]));
+    return 2 * radius * focal * (depth + across) / (depth * depth - radius * radius);
+  };
+  return { point, line, polygon, clipPolygon, extent, boundExtent, projectInto, scale, position: c, width, height };
 }
 
-export interface Scene { primitives: Primitive[]; v?: HoloVSample; cam?: HoloCameraSample; camStale: boolean; vStale: boolean; recent: HoloEvent[]; inGap: boolean; metresPerBar: number; barPx: number; solidsDrawn: number; solidsCut: number }
+export interface Scene { primitives: Primitive[]; solids: readonly SolidInstance[]; solidCamera: ReturnType<typeof camera>; v?: HoloVSample; cam?: HoloCameraSample; camStale: boolean; vStale: boolean; recent: HoloEvent[]; inGap: boolean; metresPerBar: number; barPx: number; solidsDrawn: number; solidsCut: number }
+const EMPTY_SOLIDS: readonly HoloSolid[] = [];
+// Two recent camera states per immutable world snapshot; yaw changes in the recorded data do not change the city camera.
+const solidViews = new WeakMap<readonly HoloSolid[], Map<string, { instances: SolidInstance[]; cut: number }>>();
+const sizeOrder = new WeakMap<readonly HoloSolid[], readonly HoloSolid[]>();
 
 /** The model at moment t, projected for an orbit around V (or the first sample, before V's first sample). */
 export function project(s: HoloSession, world: HoloWorld, t: number, layers: Readonly<Record<HoloLayer, boolean>>, orbit: Orbit,
@@ -106,14 +145,17 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
     if (Math.hypot(cx - target[0], cy - target[1]) <= CELL_RADIUS) box(c, (ps, o) => lines(ps, "cell", o * fade(ps[0])));
   }
   if (layers.areas) for (const a of world.areas) plate(a, target, (ps, style, o) => lines(ps, style, o * fade(ps[0]), true));
-  // Cull by distance from V before counting; keep the nearest, then paint far to near beneath every recorded data layer.
-  const nearby = nearestVisible(layers.solids ? world.solids ?? [] : [], target);
-  const visible = nearby.kept.sort((a, b) => distance2(b.solid.center, C.position) - distance2(a.solid.center, C.position));
-  let solidsDrawn = 0;
-  for (const { solid } of visible) {
-    const drawing = solidDrawing(solid, C, fade(solid.center));
-    if (drawing.lines.length || drawing.faces.length) { out.push(drawing); solidsDrawn++; }
+  // Significance follows distance/frustum culling: buildings and walls win over small nearby props.
+  const source = layers.solids ? world.solids ?? EMPTY_SOLIDS : EMPTY_SOLIDS, key = JSON.stringify([target, orbit, width, height]);
+  let views = solidViews.get(source); if (!views) solidViews.set(source, views = new Map());
+  let geometry = views.get(key);
+  if (!geometry) {
+    const nearby = significantVisible(source, target, C);
+    const visible = nearby.kept.sort((a, b) => distance2(b.solid.center, C.position) - distance2(a.solid.center, C.position));
+    geometry = { instances: visible.map(({ solid }) => ({ kind: "solid", id: solid.id, source: solid, opacity: fade(solid.center) })), cut: Math.max(0, nearby.total - SOLID_DRAW_CAP) };
+    views.set(key, geometry); if (views.size > 2) views.delete(views.keys().next().value!);
   }
+  out.push(...geometry.instances);
   if (layers.v) for (const run of trail(s, t)) lines(run.map(p => [p[0], p[1], p[2] + 0.3] as Vec3), "trail", 0.85);
   if (layers.gaps) for (const g of s.gaps) if (g.from <= t) {
     const a = at(s.v, g.from), b = at(s.v, g.to);
@@ -140,41 +182,39 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
   }
   // A scale bar that tells the truth: the largest round distance that fits in 140 px at V.
   const ppm = C.scale(target), choice = [5, 10, 20, 50, 100, 200, 500].filter(m => m * ppm <= 140).pop() ?? 5;
-  return { primitives: out, v, cam, camStale, vStale: !!v && t - v.t > STALE_S, recent: s.events.filter(e => e.t <= t && t - e.t <= 5),
+  return { primitives: out, solids: geometry.instances, solidCamera: C, v, cam, camStale, vStale: !!v && t - v.t > STALE_S, recent: s.events.filter(e => e.t <= t && t - e.t <= 5),
     inGap: s.gaps.some(g => g.from < t && t < g.to), metresPerBar: choice, barPx: choice * ppm,
-    solidsDrawn, solidsCut: Math.max(0, nearby.total - SOLID_DRAW_CAP) };
+    solidsDrawn: geometry.instances.length, solidsCut: geometry.cut };
 }
 
 const distance2 = (a: Vec3, b: Vec3) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
-// World snapshots are immutable. This geometry-only memo is weakly held and independent of the camera and playback state.
-const solidRadii = new WeakMap<HoloSolid, number>();
-function solidRadius(solid: HoloSolid): number {
-  const cached = solidRadii.get(solid); if (cached !== undefined) return cached;
-  let radius = 0;
-  for (let i = 0; i < 3; i++) radius += Math.hypot(...solid.axes[i]) * (solid.kind === "box" ? solid.size[i] : solid.size[0]);
-  if (solid.kind === "capsule") radius += Math.hypot(...solid.axes[2]) * solid.size[1] / 2;
-  solidRadii.set(solid, radius); return radius;
-}
-/** A bounded max heap selects the nearest in O(n log cap), without allocating/sorting all 12,000 solids each frame. */
-function nearestVisible(solids: readonly HoloSolid[], target: Vec3) {
-  type Near = { solid: HoloSolid; d: number };
-  const kept: Near[] = []; let total = 0;
-  const farther = (a: Near, b: Near) => a.d > b.d || a.d === b.d && a.solid.id > b.solid.id;
-  for (const solid of solids) {
+/** Bounded min heap: retain the largest screen extents, with stable identities as ties. */
+function significantVisible(solids: readonly HoloSolid[], target: Vec3, C: ReturnType<typeof camera>) {
+  type Significant = { solid: HoloSolid; extent: number };
+  const kept: Significant[] = []; let total = 0;
+  const smaller = (a: Significant, b: Significant) => a.extent < b.extent || a.extent === b.extent && a.solid.id > b.solid.id;
+  let ordered = sizeOrder.get(solids);
+  if (!ordered) sizeOrder.set(solids, ordered = [...solids].sort((a, b) => solidGeometry(b).radius - solidGeometry(a).radius));
+  for (const solid of ordered) {
     const d = distance2(solid.center, target); if (d > 350 * 350) continue;
     // A conservative affine bound keeps every drawn point within 350 m, including large shapes crossing the boundary.
-    if (Math.sqrt(d) + solidRadius(solid) > 350) continue;
+    const geometry = solidGeometry(solid);
+    if (Math.sqrt(d) + geometry.radius > 350) continue;
     total++;
+    const upper = C.boundExtent(solid.center, geometry.radius);
+    if (upper < 4 && d > 30 * 30 || kept.length === SOLID_DRAW_CAP && upper < kept[0].extent) continue;
+    const extent = C.extent(geometry.corners);
+    if (!extent || extent < 4 && d > 30 * 30) continue;
     if (kept.length < SOLID_DRAW_CAP) {
-      let i = kept.length; kept.push({ solid, d });
-      while (i > 0) { const p = (i - 1) >> 1; if (!farther(kept[i], kept[p])) break; const swap = kept[i]; kept[i] = kept[p]; kept[p] = swap; i = p; }
-    } else if (d < kept[0].d || d === kept[0].d && solid.id < kept[0].solid.id) {
-      kept[0] = { solid, d }; let i = 0;
+      let i = kept.length; kept.push({ solid, extent });
+      while (i > 0) { const p = (i - 1) >> 1; if (!smaller(kept[i], kept[p])) break; const swap = kept[i]; kept[i] = kept[p]; kept[p] = swap; i = p; }
+    } else if (extent > kept[0].extent || extent === kept[0].extent && solid.id < kept[0].solid.id) {
+      kept[0] = { solid, extent }; let i = 0;
       for (;;) {
         const l = i * 2 + 1, r = l + 1;
         if (l >= kept.length) break;
-        const child = r < kept.length && farther(kept[r], kept[l]) ? r : l;
-        if (!farther(kept[child], kept[i])) break;
+        const child = r < kept.length && smaller(kept[r], kept[l]) ? r : l;
+        if (!smaller(kept[child], kept[i])) break;
         const swap = kept[i]; kept[i] = kept[child]; kept[child] = swap; i = child;
       }
     }
@@ -208,6 +248,20 @@ const MARGIN = 32;
  * point, so its dash pattern can continue where the cut-away part left it.
  */
 export type ClippedRun = { points: [number, number][]; offset: number };
+/** Allocation-free form of the same Liang–Barsky clipping for Canvas edges. */
+export function clipSegment(ax: number, ay: number, bx: number, by: number, x0: number, y0: number, x1: number, y1: number,
+  draw: (ax: number, ay: number, bx: number, by: number) => void): boolean {
+  const dx = bx - ax, dy = by - ay; let t0 = 0, t1 = 1;
+  for (let i = 0; i < 4; i++) {
+    const p = i === 0 ? -dx : i === 1 ? dx : i === 2 ? -dy : dy;
+    const q = i === 0 ? ax - x0 : i === 1 ? x1 - ax : i === 2 ? ay - y0 : y1 - ay;
+    if (p === 0) { if (q < 0) return false; continue; }
+    const r = q / p;
+    if (p < 0) { if (r > t1) return false; t0 = Math.max(t0, r); }
+    else { if (r < t0) return false; t1 = Math.min(t1, r); }
+  }
+  draw(ax + dx * t0, ay + dy * t0, ax + dx * t1, ay + dy * t1); return true;
+}
 export function clipToRect(ps: readonly [number, number][], x0: number, y0: number, x1: number, y1: number): ClippedRun[] {
   if (ps.length === 2) {
     const [a, b] = ps;

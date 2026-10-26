@@ -21,12 +21,13 @@ for (const r of [run4, largest]) {
   const h = createService(options).handlers;
   let t = performance.now();
   const s = await h["session.open"]({ dir: r.dir }, signal) as Session;
+  const status = await h["world.status"]({ dir: r.dir }, signal);
   const w = await h["world.around"]({ dir: r.dir }, signal) as HoloWorld & SolidRegion;
   const coldMs = performance.now() - t;
   t = performance.now(); await h["world.around"]({ dir: r.dir }, signal); const memoryMs = performance.now() - t;
   t = performance.now(); await createService(options).handlers["world.around"]({ dir: r.dir }, signal); const diskMs = performance.now() - t;
   const metrics: Record<string, unknown> = {};
-  for (const width of [300, 800]) for (const [name, orbit] of Object.entries(ORBITS)) {
+  for (const width of args.includes("--source-only") ? [] : [300, 800]) for (const [name, orbit] of Object.entries(ORBITS)) {
     const ms: number[] = [], drawn: number[] = []; let cut = 0;
     for (let i = 0; i < 240; i++) {
       const at = s.meta.from + (s.meta.to - s.meta.from) * (i % 40 / 39); t = performance.now();
@@ -36,7 +37,7 @@ for (const r of [run4, largest]) {
     ms.sort((a, b) => a - b);
     metrics[`${width}/${name}`] = { median: ms[60], p95: ms[114], max: ms[119], drawn: [Math.min(...drawn), Math.max(...drawn)], cut };
   }
-  const result = { session: r.session, run: r.run, bytes: r.bytes, samples: s.v.length, coldMs, memoryMs, diskMs, solidInfo: w.solidInfo, metrics };
+  const result = { session: r.session, run: r.run, bytes: r.bytes, samples: s.v.length, status, coldMs, memoryMs, diskMs, solidInfo: w.solidInfo, metrics };
   results.push(result); console.log(JSON.stringify(result));
   writeFileSync(join(out, `world-${r.session}-${r.run}.json`), JSON.stringify(w));
   writeFileSync(join(out, `session-${r.session}-${r.run}.json`), JSON.stringify(s));

@@ -94,7 +94,10 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     pause();
     set({ phase: "opening", message: "Opening the recording…" });
     try {
-      const [session, world] = await Promise.all([call<HoloSession>("session.open", { dir, level }, cancel), call<HoloWorld>("world.around", { dir }, cancel)]);
+      const [session, status] = await Promise.all([call<HoloSession>("session.open", { dir, level }, cancel), call<{ cold: boolean }>("world.status", { dir }, cancel)]);
+      if (cancel.aborted) return;
+      if (status.cold) set({ message: "Reading the city around this recording from the game files… This happens once." });
+      const world = await call<HoloWorld>("world.around", { dir }, cancel);
       if (cancel.aborted) return;
       pendingLevel = null;
       const t = keepTime && state.open?.dir === dir ? state.t : session.meta.from;

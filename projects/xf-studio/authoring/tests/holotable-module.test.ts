@@ -24,6 +24,21 @@ function fakeTransport(log: string[] = []): HoloTransport {
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe("Holotable service", () => {
+  test("a cold open announces the city read and a newer recording cancels that read", async () => {
+    let firstSignal!: AbortSignal, release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; }), base = fakeTransport();
+    const transport: HoloTransport = async (method, params, signal) => {
+      if (method === "runs.list") return { ok: true, status: 200, data: { ok: true, result: ["D1", "D2"].map(dir => ({ session: "s1", run: 1, dir, start: 100, end: 110, bytes: 1, complete: true })) } };
+      if (method === "world.status") return { ok: true, status: 200, data: { ok: true, result: { cold: params.dir === "D1" } } };
+      if (method === "world.around" && params.dir === "D1") { firstSignal = signal; await gate; signal.throwIfAborted(); }
+      return base(method, params, signal);
+    };
+    const service = createHolotable({ transport }, new AbortController().signal);
+    service.shown(); await flush(); const first = service.dispatch({ kind: "holo.open", dir: "D1" }); await flush();
+    expect(service.snapshot().message).toBe("Reading the city around this recording from the game files… This happens once.");
+    await service.dispatch({ kind: "holo.open", dir: "D2" }); expect(firstSignal.aborted).toBe(true);
+    release(); await first; expect(service.snapshot().open?.dir).toBe("D2"); expect(service.snapshot().phase).toBe("ready");
+  });
   test("lists recordings only when first shown, then opens one at the start", async () => {
     const log: string[] = [];
     const service = createHolotable({ transport: fakeTransport(log) }, new AbortController().signal);

@@ -13,7 +13,7 @@ test("cache identities include every source's path, size and precise modificatio
   const key = solidCacheKey([a], path, 250);
   expect(solidCacheKey([{ ...a }], path, 250)).toBe(key);
   for (const change of [{ size: 101 }, { mtimeMs: 123.5 }, { path: "other/archive.archive" }]) expect(solidCacheKey([{ ...a, ...change }], path, 250)).not.toBe(key);
-  expect(solidCacheKey([a], path, 250, 6)).not.toBe(key);
+  expect(solidCacheKey([a], path, 250, 7)).not.toBe(key);
   expect(solidCacheKey([a, a], path, 250)).not.toBe(key);
   expect(solidCacheKey([a], path, 251)).not.toBe(key);
 });

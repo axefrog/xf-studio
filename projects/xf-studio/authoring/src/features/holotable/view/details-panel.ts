@@ -65,8 +65,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
       setButtonLabel(story, state.level === "full" ? "Hide story content" : "Show story content…");
       applyCapability(story, facade.capability({ kind: "holo.level", level: "full" }));
       setText(storyNote, state.level === "full" ? "Story shown" : "Story hidden");
-      const geometry = state.open?.world.solidInfo;
-      setText(limits, s ? `${s.meta.problems.length ? `This recording is damaged: ${s.meta.problems.join("; ")}. ` : ""}This recording: ${s.meta.dropped} dropped, ${s.meta.missedDeadlines} missed, largest gap ${f1(s.meta.largestGapS)} s. Districts and cells come from offline game data, an estimate of the live world. Solid shapes are the game's collision data near the path, read from the installed game; mods aren't applied yet${geometry?.omittedMeshShapes ? `; ${geometry.omittedMeshShapes.toLocaleString()} mesh shapes aren't drawn yet` : ""}.${geometry && !geometry.available ? " Set the game folder in Settings to read solid shapes." : ""}${geometry?.cut ? ` ${geometry.cut.toLocaleString()} further solid shapes were left out at the ${geometry.cap.toLocaleString()}-shape limit.` : ""}` : "");
+      setText(limits, s ? `${s.meta.problems.length ? `This recording is damaged: ${s.meta.problems.join("; ")}. ` : ""}This recording: ${s.meta.dropped} dropped, ${s.meta.missedDeadlines} missed, largest gap ${f1(s.meta.largestGapS)} s. Districts and cells come from offline game data, an estimate of the live world. Solid shapes are the game's collision data near the path, read from the installed game without mods. About half of it is stored as meshes, which aren't drawn yet.` : "");
       inspector.element.hidden = !s;
       const k = JSON.stringify([state.open?.dir, state.selected, state.level, Math.round(state.t * 10)]);
       if (k !== inspectKey) { inspectKey = k; inspect.replaceChildren(rows(state)); }
