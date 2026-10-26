@@ -1,10 +1,10 @@
 {
   "schema": "xfb/session-script-3",
   "name": "st-styling-0822",
-  "title": "In-game styling (0.8.22): ST1-ST13, dark then light, the look switched live",
+  "title": "In-game styling (0.8.23): ST1-ST13, dark then light, the look switched live",
   "card": "research/runtime/runtime-bridge-test-card.md#in-game-styling-0822",
   "requires": [
-    "The XF test profile with the bridge's autonomous -writes build staged (0.8.22 with overlay.set); the runner sets config.ini's [overlay] enabled and diagnostics once and restores the file at the end.",
+    "The XF test profile with the bridge's autonomous -writes build staged (0.8.23 with overlay.set); the runner sets config.ini's [overlay] enabled and diagnostics once and restores the file at the end.",
     "A private fixtures file (--fixtures): mo2 {exe, profile, executable, arguments: -skipStartScreen}, game_dir, staged_mod, save, cet_overlay_key (Ctrl+` here), commit_floor_gb.",
     "Borderless windowed, the game window in front; Windows' Do Not Disturb on (focus-taking toasts stopped the Borg 4 key press).",
     "Every row verifies its named state through the bridge before each capture (bridge_info's status and chip, overlay_state's cet_open and motion, ui_state's question) and checks its surface is in frame after it; bursts start only once their surface shows. A judged row ends CAPTURED, awaiting XF · Studio's UI review, never PASS."
@@ -7703,7 +7703,7 @@
     },
     {
       "id": "ST7-dark-diagnostics",
-      "title": "The CET window with the DIAGNOSTICS header open (dark)",
+      "title": "The CET window opening the native XF Diagnostics card (dark)",
       "requires": [
         {
           "config": "ui.answer_keys",
@@ -8215,8 +8215,20 @@
           "command": "overlay.state",
           "input": {},
           "until": {
-            "path": "cet_open",
-            "equals": true
+            "all": [
+              {
+                "path": "cet_open",
+                "equals": true
+              },
+              {
+                "path": "cet_diagnostics",
+                "equals": true
+              },
+              {
+                "path": "drawing_now",
+                "equals": true
+              }
+            ]
           },
           "interval_ms": 250,
           "deadline_ms": 4000,
@@ -8287,6 +8299,35 @@
           "min_plate": 0.15,
           "bind": "ST7_dark_diagnostics_frame_diag",
           "on_fail": "fail_row"
+        },
+        {
+          "label": "ST7-dark-diagnostics-native-card",
+          "do": "capture.surface",
+          "capture": "$ST7_dark_diagnostics_diag",
+          "plate": [
+            27,
+            30,
+            35
+          ],
+          "text": [
+            236,
+            239,
+            242
+          ],
+          "rect": "$win.regions.cet_diagnostics",
+          "min_plate": 0.15,
+          "bind": "ST7_dark_diagnostics_native_diag",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST7-dark-diagnostics-native-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_dark_diagnostics_diag.full.path",
+            "rect": "$win.regions.cet_diagnostics",
+            "name": "ST7-xf-diagnostics-dark"
+          }
         }
       ],
       "pass": [
@@ -8298,6 +8339,14 @@
         {
           "label": "diag in frame",
           "ref": "$ST7_dark_diagnostics_frame_diag",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "native Diagnostics card in frame",
+          "ref": "$ST7_dark_diagnostics_native_diag",
           "match": {
             "path": "present",
             "equals": true
@@ -17381,7 +17430,7 @@
     },
     {
       "id": "ST7-light-diagnostics",
-      "title": "The CET window with the DIAGNOSTICS header open (light)",
+      "title": "The CET window opening the native XF Diagnostics card (light)",
       "requires": [
         {
           "config": "ui.answer_keys",
@@ -17893,8 +17942,20 @@
           "command": "overlay.state",
           "input": {},
           "until": {
-            "path": "cet_open",
-            "equals": true
+            "all": [
+              {
+                "path": "cet_open",
+                "equals": true
+              },
+              {
+                "path": "cet_diagnostics",
+                "equals": true
+              },
+              {
+                "path": "drawing_now",
+                "equals": true
+              }
+            ]
           },
           "interval_ms": 250,
           "deadline_ms": 4000,
@@ -17965,6 +18026,35 @@
           "min_plate": 0.15,
           "bind": "ST7_light_diagnostics_frame_diag",
           "on_fail": "fail_row"
+        },
+        {
+          "label": "ST7-light-diagnostics-native-card",
+          "do": "capture.surface",
+          "capture": "$ST7_light_diagnostics_diag",
+          "plate": [
+            252,
+            253,
+            255
+          ],
+          "text": [
+            23,
+            27,
+            32
+          ],
+          "rect": "$win.regions.cet_diagnostics",
+          "min_plate": 0.15,
+          "bind": "ST7_light_diagnostics_native_diag",
+          "on_fail": "fail_row"
+        },
+        {
+          "label": "ST7-light-diagnostics-native-crop",
+          "do": "run",
+          "command": "capture.recrop",
+          "input": {
+            "path": "$ST7_light_diagnostics_diag.full.path",
+            "rect": "$win.regions.cet_diagnostics",
+            "name": "ST7-xf-diagnostics-light"
+          }
         }
       ],
       "pass": [
@@ -17976,6 +18066,14 @@
         {
           "label": "diag in frame",
           "ref": "$ST7_light_diagnostics_frame_diag",
+          "match": {
+            "path": "present",
+            "equals": true
+          }
+        },
+        {
+          "label": "native Diagnostics card in frame",
+          "ref": "$ST7_light_diagnostics_native_diag",
           "match": {
             "path": "present",
             "equals": true

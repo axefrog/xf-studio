@@ -158,7 +158,7 @@ const IMPL = `
     GetForegroundDrawList = function() return "fg" end,
     GetColorU32 = function(r, g, b, a) return math.floor((a or 1) * 1000 + 0.5) end,
     ImDrawListAddRectFilled = function(list, x1, y1, x2, y2, c) rec("rectfilled@" .. list .. ":" .. tostring(x2 - x1)) end,
-    ImDrawListAddCircleFilled = function(list) rec("dot@" .. list) end,
+    ImDrawListAddCircleFilled = function(list, x, y, r) rec("dot@" .. list .. ":" .. x .. "," .. y .. "," .. r) end,
     ImDrawListAddCircle = function(list) rec("ring@" .. list) end,
     CalcTextSize = function(s) return #s * 7, 14 end,
     Button = function(label) item("button", label, 22); return false end,
@@ -167,16 +167,20 @@ const IMPL = `
     TextColored = function(r, g, b, a, t) item("text", t) end,
     TextDisabled = function(t) item("disabled", t) end,
     TextWrapped = function(t) item("wrapped", t) end,
-    InputTextMultiline = function(label, text) return text, false end,
+    InputTextMultiline = function(label, text, capacity, w, h) rec("field:" .. w .. "," .. h); return text, false end,
+    SetNextWindowSizeConstraints = function(a,b,w,h) rec("cap:" .. w .. "," .. h) end,
+    SetNextWindowPos = function(x,y) rec("pos:" .. x .. "," .. y) end,
+    SameLine = function(x,gap) rec("same:" .. tostring(x) .. "," .. tostring(gap)) end,
     CollapsingHeader = function(label) rec("header:" .. label); return true end,
     SetNextItemOpen = function(open) rec("setnextopen:" .. tostring(open)) end,
     PushStyleColor = function() pc = pc + 1 end,
     PopStyleColor = function(n) pc = pc - (n or 1) end,
-    PushStyleVar = function() pv = pv + 1 end,
+    PushStyleVar = function(i,a,b) pv = pv + 1; rec("var:" .. i .. ":" .. a .. "," .. tostring(b)) end,
     PopStyleVar = function(n) pv = pv - (n or 1) end,
     SetWindowFontScale = function(s) rec("scale:" .. tostring(s)) end,
   }
   __cet()
+  GetDisplayResolution = function() return 2560, 1600 end
 `;
 
 const panel = read("cet", "xf_runtime_bridge", "panel.lua");
@@ -268,7 +272,7 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
     const borders = 2 ** 0;
     const flags = bindings.enums.ImGuiWindowFlags!.filter((m) => m !== "None");
     const windowFlags = 2 ** flags.indexOf("NoScrollbar") + 2 ** flags.indexOf("NoScrollWithMouse");
-    for (const id of ["question", "keys", "diagnostics"]) expect(out).toContain(`child:##xf_card_${id}:${borders}:${windowFlags}`);
+    for (const id of ["question"]) expect(out).toContain(`child:##xf_card_${id}:${borders}:${windowFlags}`);
     expect((out.match(/child:/g) ?? []).length).toBe((out.match(/endchild/g) ?? []).length);
     // the question's 2 px accent edge, on the window's own draw list (no longer always the foreground one)
     expect(out).toContain("rectfilled@wl:2");
@@ -317,21 +321,91 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
       calls = {}; handlers.onDraw(); local line = table.concat(calls, "|")
       handlers.onOverlayOpen(); handlers.onUpdate(1)
       calls = {}; handlers.onDraw(); local window = table.concat(calls, "|")
-      return table.concat(natives, ",") .. "~~" .. line .. "~~" .. window .. "~~" .. table.concat(logs, " / ")`);
-    const [natives, line, window, logs] = out.split("~~");
+      handlers.onOverlayClose(); DECODE.INFO.bridge.killed = true; DECODE.INFO.status.tone = "killed"
+      handlers.onUpdate(1); calls = {}; handlers.onDraw(); local stopped = table.concat(calls, "|")
+      return stopped .. "~~" .. table.concat(natives, ",") .. "~~" .. line .. "~~" .. window .. "~~" .. table.concat(logs, " / ")`);
+    const [stopped, natives, line, window, logs] = out.split("~~");
     if (logs === undefined) throw new Error(out.slice(0, 2000));
     expect(logs).not.toContain("draw call failed");
-    expect(natives).toBe("cet_overlay:false,cet_overlay:true");
+    expect(natives).toBe("cet_overlay:false,cet_overlay:true,cet_overlay:false");
+    expect(line).toContain("pos:16,16");
+    expect(line).toContain(`var:${bindings.enums.ImGuiStyleVar!.indexOf("WindowPadding")}:12.0,8.0`);
+    expect(line).toContain("same:26.0,nil");
+    expect(line).toContain("dot@fg:54.0,68.4,4.0");
+    expect(stopped).toContain("Stopped \u00b7 reconnect in the CET window");
+    expect(stopped).not.toContain("wrapped:");
+    expect(stopped?.match(/text:XF Runtime Bridge/g)?.length).toBe(1);
     expect(line).toContain("begin:XF Runtime Bridge##indicator");
     expect(window).toContain("begin:XF Runtime Bridge");
     expect(out).not.toContain("failed:");
     expect(out).not.toMatch(/^run:/);
   });
 
+  test("0.8.23: one build-version title, ordered sections, only the question in a card, and Danger last", () => {
+    const out = drawPanel(`local s = state({ pendingAsk = { id = 1, text = "Ready?", choices = { "Done" } } })
+      s.info.plugin_version = "0.8.23"; s.info.save_lock = { save_anyway = true }
+      return draw(s)`);
+    expect(out).toContain("begin:XF Runtime Bridge 0.8.23###xf_runtime_bridge");
+    const names = ["text:STATUS", "text:QUESTION FROM XF STUDIO", "text:SESSION", "text:SAVES", "text:COMMENT FOR XF STUDIO", "text:KEYS", "text:DANGER"];
+    const positions = names.map((n) => out.indexOf(n));
+    expect(positions.every((n) => n >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a,b) => a-b));
+    expect(out.match(/XF Runtime Bridge/g)?.length).toBe(1);
+    expect(out).not.toContain("Version ");
+    expect(out).not.toContain("child:##xf_card_keys");
+    expect(out).not.toContain("child:##xf_card_diagnostics");
+    expect(out).toContain("button:Save anyway");
+    expect(out.indexOf("button:Stop the bridge")).toBeGreaterThan(out.indexOf("button:Send##xf_comment_send"));
+  });
+
+  test("0.8.23: height is capped at 70 percent of CET's display, with ordinary internal scrolling and a three-line field", () => {
+    const out = drawPanel(`return draw(state())`);
+    expect(out).toContain("cap:396.0,1120.0"); // 1600px display, theme's 13px font
+    expect(out).toContain("field:312.0,54.0"); // 3 x 14px lines + 2 x 6px padding; Send occupies the row's right
+    expect(out).toContain("button:Send##xf_comment_send");
+    const body = panel.slice(panel.indexOf("function panel.body"));
+    expect(body).toContain("ImGuiWindowFlags.AlwaysAutoResize");
+    expect(body).not.toMatch(/ImGuiWindowFlags.NoScroll(?:bar|WithMouse)/);
+    expect(out).toContain(`var:${bindings.enums.ImGuiStyleVar!.indexOf("FrameBorderSize")}:1,nil`);
+    expect(out).toContain(`var:${bindings.enums.ImGuiStyleVar!.indexOf("ItemSpacing")}:8.0,8.0`);
+    expect(out).not.toContain("failed:");
+  });
+
+  test("0.8.23: a primary or danger button failure restores the style and window stacks", () => {
+    for (const label of ["Reconnect", "Stop the bridge"]) {
+      const out = drawPanel(`local s = state(); s.info.bridge.killed = ${label === "Reconnect" ? "true" : "false"}
+        IMPL.Button = function(text) if text == "${label}" then error("button rejected") end; return false end
+        local ok = pcall(function() draw(s) end)
+        return tostring(ok) .. ":" .. pc .. "," .. pv .. "|" .. table.concat(calls, "|")`);
+      expect(out).toStartWith("false:0,0|");
+      expect(out).toEndWith("end");
+    }
+  });
+
+  test("0.8.23: Status Resume and Diagnostics growth keep the click-settle guard on controls below them", () => {
+    const out = drawPanel(`local s = state(); local queued = {}
+      local function frame()
+        calls, curY = {}, 0
+        panel.draw(s, function(name) queued[#queued + 1] = name end, THEME)
+      end
+      IMPL.CollapsingHeader = function() return false end
+      frame(); queued = {}
+      IMPL.Button = function(label) curY = curY + 22; return label == "Mark this moment" or label == "Stop the bridge" end
+      s.info.bridge.writes_paused = true
+      T = T + 0.1; frame(); local guarded = #queued
+      T = T + 0.5; frame(); local settled = #queued
+      queued = {}; IMPL.Button = function(label) curY = curY + 22; return label == "Stop the bridge" end
+      IMPL.CollapsingHeader = function() return true end
+      T = T + 0.1; frame()
+      local killed = false; for _, name in ipairs(queued) do if name == "kill" then killed = true end end
+      return guarded .. "," .. settled .. "," .. tostring(killed)`);
+    expect(out).toBe("0,2,false");
+  });
+
   // cet.panel's CET side against a stand-in plugin that keeps the protocol: requests are sent until completed (a header until a
   // draw reports it in header_done; a press until it is claimed), a press runs only after a claim the plugin grants.
   const panelRig = (opts: { requests: string; info: string; claim?: "granted" | "refused"; open?: boolean }) => `${IMPL}
-      handlers, DECODE, natives, reports, claims = {}, {}, {}, {}, {}
+      handlers, DECODE, natives, reports, claims, diagnostics = {}, {}, {}, {}, {}, {}
       registerForEvent = function(name, fn) handlers[name] = fn end
       registerHotkey = function() end
       logs = {}
@@ -343,6 +417,7 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
         decode = function(s) return DECODE[s] end,
         encode = function(t)
           if t.claim then claims[#claims + 1] = t.claim; return "CLAIM" end
+          if t.diagnostics_set ~= nil then return t.diagnostics_set and "DIAG_ON" or "DIAG_OFF" end
           reports[#reports + 1] = t
           for _, d in ipairs(t.header_done or {}) do headerDone[d.id] = d end
           return "REPORT"
@@ -352,6 +427,9 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
       Game = setmetatable({ XFBridge_Info = function() return "INFO" end, XFBridge_Hud = function() return "xfhud\\t1\\nsurface\\tcet_line\\nkeys\\t1\\n" end,
         XFBridge_Messages = function() return "" end, XFBridge_Ping = function() return "pong" end,
         XFBridge_CetPanel = function(body)
+          if body == "DIAG_ON" or body == "DIAG_OFF" then
+            diagnostics[#diagnostics + 1] = body; return "DIAG_OK"
+          end
           if body == "CLAIM" then return "${opts.claim === "refused" ? "CLAIM_NO" : "CLAIM_OK"}" end
           -- the stand-in keeps a header request until a draw completes it, and a press until it is claimed
           local pending = {}
@@ -369,6 +447,7 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
       DECODE.INFO = ${opts.info}
       DECODE.ALL = ${opts.requests}
       DECODE.PAUSED = { changed = true, writes_paused = true }
+      DECODE.DIAG_OK = { applied = true }
       DECODE.CLAIM_OK = { claimed = true }
       DECODE.CLAIM_NO = { claimed = false, why = "cancelled: the bridge was stopped" }
       local function boot() return (function() ${init} end)() end
@@ -398,10 +477,22 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
     expect(claims).toBe("1");
     expect(first).toMatch(/setnextopen:true\|(scale:[\d.]+\|)?header:DIAGNOSTICS##xf_diagnostics/);
     expect(second).not.toContain("setnextopen:");
-    expect(second).toContain("child:##xf_card_diagnostics");
+    expect(second).not.toContain("child:##xf_card_diagnostics");
+    expect(second).toContain("Diagnostics is shown in the XF box.");
     // the header before the request was never drawn: its earlier state is unknown (nil), and the report says it was applied
     expect(report).toBe("1,nil,true,Changes allowed,cet_window,2,true");
     expect(logs).not.toContain("draw call failed");
+  });
+
+  test("0.8.23 Diagnostics: the disclosure notifies the existing native ingress on update, once per change", () => {
+    const out = runCet(`${panelRig({ requests: `{ { id = 1, diagnostics_open = true } }`, info: INFO(), open: true })}
+      handlers.onUpdate(0.3); handlers.onDraw()
+      local before = #diagnostics
+      handlers.onUpdate(0.3); handlers.onDraw(); handlers.onUpdate(0.3)
+      IMPL.CollapsingHeader = function() return false end
+      handlers.onDraw(); handlers.onUpdate(0.3)
+      return before .. "|" .. table.concat(diagnostics, ",")`);
+    expect(out).toBe("0|DIAG_ON,DIAG_OFF");
   });
 
   test("cet.panel: a press whose claim is refused (a kill came first) never reaches XFBridge_PauseWrites; a stopped bridge queues none", () => {

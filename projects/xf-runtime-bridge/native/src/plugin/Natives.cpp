@@ -562,7 +562,19 @@ void CetPanel(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CStr
     aFrame->code++; // skip ParamEnd
 
     Guarded("XFBridge_CetPanel", [&] {
-        const auto pending = Get().cetPanel.Exchange(ToStd(report), CetPanelContext());
+        const auto body = ToStd(report);
+        const auto parsed = body.size() <= 8192 ? json::parse(body, nullptr, false) : json();
+        if (parsed.is_object() && parsed.contains("diagnostics_set"))
+        {
+            auto& host = Get().overlayHost;
+            const auto& value = parsed["diagnostics_set"];
+            const bool allowed = value.is_boolean() && (!value.get<bool>() || host.CanShowPanel());
+            if (allowed) host.RequestDiagnostics(value.get<bool>());
+            const json answer{{"applied", allowed}, {"reason", allowed ? "" : "Diagnostics needs the XF overlay enabled and drawing. Enable it and restart the game if needed."}};
+            if (aOut) *aOut = RED4ext::CString(answer.dump().c_str());
+            return;
+        }
+        const auto pending = Get().cetPanel.Exchange(body, CetPanelContext());
         if (aOut)
         {
             *aOut = RED4ext::CString(pending.c_str());

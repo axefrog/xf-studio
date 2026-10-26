@@ -163,10 +163,11 @@ describe.skipIf(!existsSync(FENGARI))("0.8.6 init.lua: the CET line and Reconnec
 
   test("P5 (0.8.11, UI review fix 1): the status dot is drawn on the foreground draw list at the middle of the window's left padding and of the line, so the words start at the padding like every later line", () => {
     const out = run(`return draw()`);
-    // Window at 12, 12; padding 26: the dot's centre is at 12 + 13 = 25, and 12 + 7 (half the 14 px line) = 19 down; radius 4 px at a 13 px body (here 14 px, so 4 x 14 / 13).
-    expect(out).toMatch(/dot@25(\.0)?,19(\.0)? r=4\.30\d*\|colour:Text=[^|]+\|wrapped@26:XF Runtime Bridge/);
+    // Dot occupies its own slot, 6 px before the title, with the following lines under the title.
+    expect(out).toMatch(/dot@42\.30\d*,20\.4 r=4\.30\d*/);
+    expect(out).toContain("sameline:41.076923076923,nil");
     expect(out).not.toContain("bullet@");
-    expect(out).not.toContain("indent:");
+    expect(out).toContain("indent:15.076923076923");
   });
 
   test("P4: a refused or failed Reconnect says what to do in plain words, by the plugin's code; never the plugin's own reason", () => {

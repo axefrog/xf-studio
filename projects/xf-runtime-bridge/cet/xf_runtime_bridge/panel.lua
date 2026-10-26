@@ -361,6 +361,8 @@ function panel.opened(state)
   state.layoutHeight = nil
   state.layoutChangedAt = nil
   state.cards = nil -- a card measures itself again
+  state.diagnosticsOpen = nil -- opening CET re-notifies its native card
+  state.dangerLayout = nil
   settling = false
 end
 
@@ -437,7 +439,7 @@ end
 -- group, none when flush (the first line of a card).
 function panel.eyebrow(state, theme, which, label, flush, colourName)
   if not flush then
-    ImGui.SetCursorPosY(curY() + math.max(0, panel.metric(theme, "SectionGap", 16) - panel.metric(theme, "ItemSpacingY", 6)))
+    ImGui.SetCursorPosY(curY() + math.max(0, panel.metric(theme, "SectionGap", 16) - panel.metric(theme, "ItemSpacingX", 8)))
   end
   local colour = panel.colour(theme, which, colourName or "XfTextMuted", GREY)
   local edge = panel.colour(theme, which, "XfAccentEdge", AMBER)
@@ -768,7 +770,7 @@ local function mutedWrapped(theme, which, text)
   ImGui.PopTextWrapPos()
 end
 
--- 0.8.22: "Keys" is an eyebrow over a card (the Studio's keys card); the stop key row, the reserved line and the notes sit in it.
+-- 0.8.23: Keys uses the same eyebrow and spacing as the other sections, without its former card.
 local function drawKeysBody(state, queue, theme, which, killKey)
   local pad, gap = spacing(theme)
   local row = { used = 0 }
@@ -849,9 +851,7 @@ end
 drawKillKey = function(state, queue, theme, which, killKey)
   if not killKey then return end
   panel.eyebrow(state, theme, which, "Keys", false)
-  panel.card(state, theme, which, "keys", nil, false, function()
-    drawKeysBody(state, queue, theme, which, killKey)
-  end)
+  drawKeysBody(state, queue, theme, which, killKey)
 end
 
 -- The commentary box: Send, disabled while the box is empty, or Ctrl+Enter while typing (session 8's request).
@@ -861,7 +861,11 @@ end
 -- new line), and the text is taken every frame.
 local function drawComment(state, queue, theme, which)
   panel.eyebrow(state, theme, which, "Comment for XF Studio", false)
-  local width = limitWidth()
+  local pad, gap = spacing(theme)
+  local sendWidth = (ImGui.CalcTextSize("Send")) + pad * 2
+  local width = limitWidth() - sendWidth - gap
+  local rowX, rowY = curX(), curY()
+  local fieldHeight = lineHeight() * 3 + panel.metric(theme, "FramePaddingY", 6) * 2
   local nativeWrap = ImGuiInputTextFlags and ImGuiInputTextFlags.WordWrap -- Dear ImGui 1.92+, if a later CET offers it
   local flags = (ImGuiInputTextFlags and ImGuiInputTextFlags.EnterReturnsTrue) or 0
   local reloading = state.commentReload ~= nil
@@ -875,7 +879,7 @@ local function drawComment(state, queue, theme, which)
   end
   local before = state.comment or ""
   local text, submitted = ImGui.InputTextMultiline("##xf_comment_" .. tostring(state.commentGen or 0), before, 1000, width,
-    ImGui.GetFontSize() * 4, flags)
+    fieldHeight, flags)
   local editing = ImGui.IsItemActive()
   if type(text) == "string" and not reloading then
     local typedNewline = ImGuiKey ~= nil and (ImGui.IsKeyPressed(ImGuiKey.Enter, true) or ImGui.IsKeyPressed(ImGuiKey.KeypadEnter, true))
@@ -901,6 +905,9 @@ local function drawComment(state, queue, theme, which)
   if submitted and not empty and not reloading then
     queue("comment", message)
   end
+  ImGui.SameLine()
+  ImGui.SetCursorPosX(rowX + width + gap)
+  ImGui.SetCursorPosY(rowY)
   ImGui.BeginDisabled(empty)
   if button("Send##xf_comment_send") and not empty then
     queue("comment", message)
@@ -909,6 +916,8 @@ local function drawComment(state, queue, theme, which)
   if ImGui.IsItemHovered() then
     ImGui.SetTooltip("Ctrl+Enter sends")
   end
+  ImGui.SetCursorPosY(math.max(curY(), rowY + fieldHeight + panel.metric(theme, "ItemSpacingX", 8)))
+  ImGui.SetCursorPosX(rowX)
 end
 
 -- The primary button (the one thing the player is asked for): XfAccent fill, the Studio's primary hover (XfAccentHover; XfAccentEdge
@@ -925,15 +934,16 @@ local function primaryButton(theme, which, label, target, state)
   ImGui.PushStyleColor(ImGuiCol.Border, edge[1], edge[2], edge[3], edge[4])
   local bordered = ImGuiStyleVar and ImGuiStyleVar.FrameBorderSize ~= nil
   if bordered then ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1) end
-  local a, b, c = button(label, target, state)
+  local ok, a, b, c = pcall(button, label, target, state)
   if bordered then ImGui.PopStyleVar(1) end
   ImGui.PopStyleColor(5)
+  if not ok then error(a, 0) end
   return a, b, c
 end
 
 -- The gap between groups (SectionGap, less the item spacing the cursor already carries).
 local function sectionGap(theme)
-  ImGui.SetCursorPosY(curY() + math.max(0, panel.metric(theme, "SectionGap", 16) - panel.metric(theme, "ItemSpacingY", 6)))
+  ImGui.SetCursorPosY(curY() + math.max(0, panel.metric(theme, "SectionGap", 16) - panel.metric(theme, "ItemSpacingX", 8)))
 end
 
 -- The question's slot (0.8, the UI review): the pending question with its answers as primary buttons (0.8.7, session 14:
@@ -1018,15 +1028,13 @@ local function setPos(x, y)
   ImGui.SetCursorPosY(y)
 end
 
--- The heading: the brand mark (the Studio's chamfered mark: XfAccent with XfAccentInk; the chamfer is two quads, a square where this
--- CET lacks the call), the title in the title role, an info chip saying this is a test build, and the version at the right in
--- TextDisabled. 24 px row (at 13 px body); ItemSpacingY below.
+-- The status row's XF mark and TEST chip. The mode chip follows on this same row;
+-- the only title and build version live in the window chrome.
 function panel.heading(state, theme, which, info)
   local k = panel.k or 1
   local markW, markH = 30 * k, 24 * k
   local bevel = panel.metric(theme, "BevelLarge", 7)
   local gap = panel.metric(theme, "ItemSpacingX", 8)
-  local rowW = ImGui.GetFontSize() * WRAP_EM
   local cx, cy = curX(), curY()
   local accent = panel.colour(theme, which, "XfAccent", AMBER)
   local ink = panel.colour(theme, which, "XfAccentInk", { 0.09, 0.09, 0.05, 1.0 })
@@ -1046,25 +1054,15 @@ function panel.heading(state, theme, which, info)
     local tw, th = textSize("XF")
     setPos(cx + (markW - tw) / 2, cy + (markH - th) / 2)
     coloured(ink, "XF")
-    local _, lineH = textSize("XF Runtime Bridge")
-    setPos(cx + markW + gap, cy + (markH - lineH) / 2)
-    coloured(panel.colour(theme, which, "XfAccentText", AMBER), "XF Runtime Bridge")
   end)
-  local titleW = panel.inRole(theme, "title", function() return (textSize("XF Runtime Bridge")) end)
-  local chipX = cx + markW + gap + (type(titleW) == "number" and titleW or 0) + gap
+  local chipX = cx + markW + gap
   local _, eh = panel.inRole(theme, "eyebrow", function() return textSize("X") end)
   local chipH = (type(eh) == "number" and eh or ImGui.GetFontSize()) + panel.metric(theme, "ChipPaddingY", 2) * 2 + 2
   setPos(chipX, cy + (markH - chipH) / 2)
   panel.chip(state, theme, which, "test", "info", false)
-  if info and info.plugin_version ~= nil then
-    local version = tostring(info.plugin_version)
-    panel.inRole(theme, "label", function()
-      local vw, vh = textSize(version)
-      setPos(math.max(chipX, cx + rowW - vw), cy + (markH - vh) / 2)
-      ImGui.TextDisabled(version)
-    end)
-  end
-  setPos(cx, cy + markH + panel.metric(theme, "ItemSpacingY", 6))
+  setPos(cx, cy + markH + panel.metric(theme, "ItemSpacingX", 8))
+  local testW = panel.inRole(theme, "eyebrow", function() return (textSize("TEST")) end) + panel.metric(theme, "ChipPaddingX", 8) * 2 + 2
+  return chipX + testW + gap, cy + (markH - chipH) / 2, cx, cy + markH + panel.metric(theme, "ItemSpacingX", 8)
 end
 
 -- The mode chip's label and tone: the plugin's (status.chip, with the status tone), else worked out from the bridge's flags for a
@@ -1081,10 +1079,16 @@ local function chipOf(info, bridge)
   return "Changes allowed", "write"
 end
 
--- The status line (the Studio's): the dot in the tone's slot, pulsing while the bridge is live and motion runs, the plugin's
--- connection sentence in the muted colour (the danger colour once stopped), the settle wash behind the row when the tone has just
--- changed; under it the mode chip and what it means for the player.
+-- The status mark/chips, then one connection line and the primary action when applicable.
 function panel.statusBlock(state, theme, which, info, bridge)
+  local chipX, chipY, rowX, nextY = panel.heading(state, theme, which, info)
+  local label, tone = chipOf(info, bridge)
+  state.drawnChip, state.drawnTone, state.drawnSurface = label, tone, "cet_window"
+  if label and bridge and bridge.enabled then
+    setPos(chipX, chipY)
+    panel.chip(state, theme, which, label, tone, tone == "paused")
+  end
+  setPos(rowX, nextY)
   local now = ImGui.GetTime()
   local reduced = panel.reduced(state)
   local status = info and info.status
@@ -1124,21 +1128,7 @@ function panel.statusBlock(state, theme, which, info, bridge)
   ImGui.PopTextWrapPos()
   state.statusRowHeight = math.max(lineH, curY() - top - panel.metric(theme, "ItemSpacingY", 6))
   if dotDrawn then ImGui.Unindent(hang) end
-  -- the chip row
-  local label, chipTone = chipOf(info, bridge)
-  -- 0.8.22 (cet.panel's report): what the window drew with.
-  state.drawnChip, state.drawnTone, state.drawnSurface = label, chipTone or tone, "cet_window"
-  if label and bridge and bridge.enabled then
-    panel.chip(state, theme, which, label, chipTone, chipTone == "paused")
-    local foot = (not bridge.allow_writes and not bridge.killed) and "This build can't change the game."
-      or bridge.killed and nil
-      or bridge.writes_paused and "Changes are paused."
-      or "XF test profile"
-    if foot then
-      ImGui.SameLine()
-      panel.inRole(theme, "label", function() coloured(panel.colour(theme, which, "TextDisabled", GREY), foot) end)
-    end
-  end
+
 end
 
 -- One key-value row: the label (label role, XfTextMuted) in a column as wide as 9 em, then the value (value role for figures).
@@ -1186,39 +1176,21 @@ function panel.bar(state, theme, which, fraction, label, tone)
   ImGui.Dummy(width, height)
 end
 
--- The diagnostics (collapsed by default: the window's actions, the question and the stop button never collapse): the plugin's
--- numbers as key-value rows and the overlay host's CPU time as a labelled meter against a 1 ms budget (warning past 75 %, danger
--- past 90 %, the figure always shown).
-local function drawDiagnostics(state, theme, which, info)
+-- Diagnostics keeps the request/undo disclosure, but opens the native card instead of duplicating its contents here.
+local function drawDiagnostics(state, queue, theme, which, info)
   if not info then return end
-  sectionGap(theme)
-  local open = false
-  -- 0.8.22, cet.panel: a requested header state, applied once right before the header (the player's own clicks rule after it);
-  -- the draw that applied it is reported with the header as drawn before it (nothing when it had never been drawn).
   local wanted = state.diagnosticsWanted
   if wanted ~= nil then
     state.diagnosticsWanted = nil
     if ImGui.SetNextItemOpen ~= nil then try(state, "SetNextItemOpen", function() ImGui.SetNextItemOpen(wanted.value == true) end) end
   end
   local before = state.diagnosticsOpen
+  local open = false
   panel.inRole(theme, "eyebrow", function() open = ImGui.CollapsingHeader("DIAGNOSTICS##xf_diagnostics") end)
   state.diagnosticsOpen = open == true
+  if wanted ~= nil or (before ~= nil and before ~= state.diagnosticsOpen) or (before == nil and open) then queue("diagnostics", state.diagnosticsOpen) end
   if wanted ~= nil and state.headerDoneFor then state.headerDoneFor({ id = wanted.id, previous = before }) end
-  if not open then return end
-  local overlay = type(info.overlay) == "table" and info.overlay or {}
-  local bridge = type(info.bridge) == "table" and info.bridge or {}
-  panel.card(state, theme, which, "diagnostics", nil, false, function()
-    keyValue(theme, which, "Overlay", tostring(overlay.phase or "off") .. (overlay.off_for_frame_generation and " (off for frame generation)" or ""), false)
-    if overlay.frames ~= nil then keyValue(theme, which, "Frames", string.format("%d", overlay.frames), true) end
-    if overlay.cpu_ms ~= nil then keyValue(theme, which, "CPU", string.format("%.3f ms (max %.3f)", overlay.cpu_ms, overlay.cpu_ms_max or 0), true) end
-    keyValue(theme, which, "Motion", tostring(overlay.motion or "full") .. (overlay.motion_reason and overlay.motion_reason ~= "" and (" (" .. tostring(overlay.motion_reason) .. ")") or ""), false)
-    keyValue(theme, which, "Requests", string.format("%d", bridge.requests or 0), true)
-    keyValue(theme, which, "Game", tostring(info.game_state or "?"), false)
-    if type(overlay.cpu_ms) == "number" then
-      local cpu = overlay.cpu_ms
-      panel.bar(state, theme, which, cpu, string.format("%.2f ms of 1 ms", cpu), cpu > 0.9 and "danger" or cpu > 0.75 and "warning" or nil)
-    end
-  end)
+  if open then mutedWrapped(theme, which, "Diagnostics is shown in the XF box.") end
 end
 
 -- state: init.lua's state (info from XFBridge_Info, pluginPresent, pending, message, pendingAsk, answeredAsk, comment).
@@ -1234,6 +1206,14 @@ function panel.draw(state, queue, theme)
   local colours, vars = panel.pushTheme(theme, which)
   if ImGuiStyleVar and ImGuiStyleVar.Alpha ~= nil then
     ImGui.PushStyleVar(ImGuiStyleVar.Alpha, 1.0)
+    vars = vars + 1
+  end
+  if ImGuiStyleVar.ItemSpacing ~= nil then
+    ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, panel.metric(theme, "ItemSpacingX", 8), panel.metric(theme, "ItemSpacingX", 8))
+    vars = vars + 1
+  end
+  if ImGuiStyleVar.FrameBorderSize ~= nil then
+    ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1)
     vars = vars + 1
   end
   local ok, err = pcall(panel.body, state, queue, theme, which)
@@ -1252,19 +1232,49 @@ function panel.body(state, queue, theme, which)
   -- theme's overlay token (alpha 0.97) or CET's global alpha.
   ImGui.SetNextWindowBgAlpha(1.0)
   panel.anchorBefore(state)
-  if not ImGui.Begin("XF Runtime Bridge", ImGuiWindowFlags.AlwaysAutoResize) then
+  local screenW, screenH = 1920, 1080
+  if GetDisplayResolution ~= nil then
+    local ok, width, height = try(state, "GetDisplayResolution", function() local w, h = GetDisplayResolution(); return w, h end)
+    if ok and type(height) == "number" and height > 0 then screenH = height end
+    if ok and type(width) == "number" and width > 0 then screenW = width end
+  end
+  try(state, "window height cap", function()
+    ImGui.SetNextWindowSizeConstraints(0, 0, ImGui.GetFontSize() * WRAP_EM + panel.metric(theme, "WindowPaddingX", 12) * 2 + panel.metric(theme, "ScrollbarSize", 8), screenH * 0.7)
+  end)
+  local title = "XF Runtime Bridge " .. tostring(state.info and state.info.plugin_version or "0.8.23") .. "###xf_runtime_bridge"
+  if not ImGui.Begin(title, ImGuiWindowFlags.AlwaysAutoResize) then
     if state.testInput and state.testInput.ui then state.testInput.ui("cet_window", { drawn = false, collapsed = true, save_button_drawn = false, rect = state.testInput.windowRect() }) end
     ImGui.End()
     return
   end
+  try(state, "window screen bounds", function()
+    local x, y = ImGui.GetWindowPos()
+    local w, h = ImGui.GetWindowSize()
+    if type(x) == "number" and type(y) == "number" and type(w) == "number" and type(h) == "number" then
+      local left = math.max(0, math.min(x, screenW - w))
+      local top = math.max(0, math.min(y, screenH - h))
+      if left ~= x or top ~= y then ImGui.SetWindowPos(left, top, ImGuiCond.Always) end
+    end
+  end)
   panel.anchorAfter(state)
   local recordSaveDrawn = false
   local drew, err = pcall(function()
     local info = state.info
     local bridge = info and info.bridge
 
-    panel.heading(state, theme, which, info)
+    panel.eyebrow(state, theme, which, "Status", true)
     panel.statusBlock(state, theme, which, info, bridge)
+
+    if bridge and bridge.enabled and bridge.killed then
+      if state.pending == "rearm" or info.rearm_pending then
+        wrapped("Reconnecting... The bridge first puts back what it changed, then starts again.")
+      else
+        if primaryButton(theme, which, "Reconnect") then queue("rearm") end
+        if info.writes_used then wrapped("Saving stays locked until you load a save.") end
+      end
+    elseif bridge and bridge.listening and bridge.writes_paused and bridge.allow_writes then
+      if primaryButton(theme, which, "Resume changes") then queue("pause", false) end
+    end
 
     local live = bridge and bridge.enabled and bridge.listening and not bridge.killed
     local slotTop = ImGui.GetCursorPosY()
@@ -1278,109 +1288,44 @@ function panel.body(state, queue, theme, which)
       ImGui.Dummy(1, state.questionSlotHeight - slotHeight)
       ImGui.SetCursorPosY(slotTop + state.questionSlotHeight)
     end
-    panel.noteLayout(state, state.questionSlotHeight)
-
-    if bridge and bridge.enabled then
-      if bridge.killed then
-        sectionGap(theme)
-        if state.pending == "rearm" or (info and info.rearm_pending) then
-          wrapped("Reconnecting... The bridge first puts back what it changed (a frozen world, a hidden menu), then starts again.")
-        else
-          -- 0.8.4 (the UI review's fix 7): the button, and the one thing the player needs to know, only when it applies.
-          -- 0.8.22: Reconnect is the window's one primary once the bridge is stopped.
-          if primaryButton(theme, which, "Reconnect") then
-            queue("rearm")
-          end
-          if info and info.writes_used then
-            wrapped("Saving stays locked until you load a save.")
-          end
-        end
-      elseif bridge.listening then
-        sectionGap(theme)
-        if bridge.allow_writes then
-          if bridge.writes_paused then
-            if button("Resume changes") then
-              queue("pause", false)
-            end
-          else
-            if button("Pause changes") then
-              queue("pause", true)
-            end
-          end
-          ImGui.SameLine()
-        end
-        if button("Mark this moment") then
-          queue("mark")
-        end
-        -- 0.8.7 (session 14's friction: the bridge's save lock refused the player's own save with only the game's "You can't
-        -- save right now"): while the lock holds, the player can save anyway, on their own say-so (the -writes package only:
-        -- the plugin offers it only where writes and the save class are allowed).
-        local lock = info and type(info.save_lock) == "table" and info.save_lock or nil
-        -- 0.8.11 (UI review of 0.8.11, fix 2): the reason first, in the muted colour, then the button on its own row with "or load
-        -- a save" beside it, as the Stop row has its key hint.
-        if lock and lock.save_anyway then
-          ImGui.Spacing()
-          coloured(panel.colour(theme, which, "XfTextMuted", GREY), "Saves are held: a test change would go into them.")
-          recordSaveDrawn = true
-          local activated, token, physical = button("Save anyway", "save_anyway", state)
-          if activated then
-            -- A simultaneous human click keeps its ordinary path, but consumes the token once.
-            local accepted = token and state.testInput.stage("queued", token)
-            if physical or accepted then queue("saveanyway", { test_token = token or nil, physical = physical }) end
-          end
-          if ImGui.IsItemHovered() then
-            ImGui.SetTooltip("Makes a manual save now, past the XF Runtime Bridge's save lock. The test change goes into that save.")
-          end
-          ImGui.SameLine()
-          coloured(panel.colour(theme, which, "XfTextMuted", GREY), "or load a save")
-        end
-        -- 0.8 (the UI review): the kill switch on its own row, in the danger colour, away from the everyday buttons. 0.8.5 (the
-        -- UI review's fix 8): the Studio's danger button (.btn.danger): danger text and border on a clear fill. 0.8.22: its hover
-        -- and press take the danger wash (XfDangerBg), as the Studio's.
-        ImGui.Spacing()
-        local wash = panel.colour(theme, which, "XfDangerBg", nil)
-        ImGui.PushStyleColor(ImGuiCol.Button, 0, 0, 0, 0)
-        ImGui.PushStyleColor(ImGuiCol.Text, RED[1], RED[2], RED[3], RED[4])
-        ImGui.PushStyleColor(ImGuiCol.Border, RED[1], RED[2], RED[3], RED[4])
-        local pushed = 3
-        if wash then
-          ImGui.PushStyleColor(ImGuiCol.ButtonHovered, wash[1], wash[2], wash[3], wash[4])
-          ImGui.PushStyleColor(ImGuiCol.ButtonActive, wash[1], wash[2], wash[3], wash[4])
-          pushed = 5
-        end
-        local stopBordered = ImGuiStyleVar and ImGuiStyleVar.FrameBorderSize ~= nil
-        if stopBordered then ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1) end
-        local stop = button("Stop the bridge")
-        if stopBordered then ImGui.PopStyleVar(1) end
-        ImGui.PopStyleColor(pushed)
-        if stop then
-          queue("kill")
-        end
-        -- 0.8.3: the bridge's own stop key ([ui] kill_key), which works in the game without CET. 0.8.4 (the UI review's
-        -- fix 8): in the muted text colour (not the disabled one), with where it works as a tooltip.
-        local killKey = info and type(info.kill_key) == "table" and info.kill_key or nil
-        if killKey and killKey.enabled and type(killKey.label) == "string" then
-          ImGui.SameLine()
-          coloured(panel.colour(theme, which, "XfTextMuted", GREY), "or press " .. killKey.label .. " in the game")
-          if ImGui.IsItemHovered() then
-            ImGui.SetTooltip("Works in play, photo mode, menus and loading screens while the CET overlay is closed.")
-          end
-        end
-      end
-    end
+    -- Status actions can move the question slot too; guard all leading content, not just its own height.
+    panel.noteLayout(state, ImGui.GetCursorPosY())
 
     if live then
-      drawComment(state, queue, theme, which)
-    end
+      panel.eyebrow(state, theme, which, "Session", false)
+      if bridge.allow_writes then
+        if button(bridge.writes_paused and "Resume changes" or "Pause changes") then queue("pause", not bridge.writes_paused) end
+      end
+      if button("Mark this moment") then queue("mark") end
+      local lock = info and type(info.save_lock) == "table" and info.save_lock or nil
+      -- 0.8.11 (UI review of 0.8.11, fix 2): the reason first, in the muted colour, then the button on its own row with "or load
+      -- a save" beside it, as the Stop row has its key hint.
+      panel.eyebrow(state, theme, which, "Saves", false)
+      if not (lock and lock.save_anyway) then
+        mutedWrapped(theme, which, (info.writes_used or (lock and (lock.refusals or 0) > 0)) and "Saves are held during this test." or "Saves follow the game's own rules.")
+      end
+      if lock and lock.save_anyway then
+        coloured(panel.colour(theme, which, "XfTextMuted", GREY), "Saves are held: a test change would go into them.")
+        recordSaveDrawn = true
+        local activated, token, physical = button("Save anyway", "save_anyway", state)
+        if activated then
+          -- A simultaneous human click keeps its ordinary path, but consumes the token once.
+          local accepted = token and state.testInput.stage("queued", token)
+          if physical or accepted then queue("saveanyway", { test_token = token or nil, physical = physical }) end
+        end
+        if ImGui.IsItemHovered() then
+          ImGui.SetTooltip("Makes a manual save now, past the XF Runtime Bridge's save lock. The test change goes into that save.")
+        end
+        ImGui.SameLine()
+        ImGui.AlignTextToFramePadding()
+        coloured(panel.colour(theme, which, "XfTextMuted", GREY), "or load a save")
+      end
 
-    -- 0.8.4 (the UI review): the Keys line, lower in the window, away from the Stop row.
-    if bridge and bridge.enabled and bridge.listening and not bridge.killed then
+      drawComment(state, queue, theme, which)
       drawKillKey(state, queue, theme, which, info and type(info.kill_key) == "table" and info.kill_key or nil)
     end
-
-    -- 0.8.22: the diagnostics, collapsed until opened.
-    drawDiagnostics(state, theme, which, info)
-
+    sectionGap(theme)
+    drawDiagnostics(state, queue, theme, which, info)
     -- 0.8.7: Save anyway's outcome, once, in the message line.
     local saveLock = info and type(info.save_lock) == "table" and info.save_lock or nil
     if saveLock and saveLock.last and saveLock.last_seq ~= state.saveSeenSeq then
@@ -1393,11 +1338,46 @@ function panel.body(state, queue, theme, which)
       wrapped(state.message)
     end
 
-    if info then
-      sectionGap(theme)
-      panel.inRole(theme, "label", function()
-        ImGui.TextDisabled("Version " .. tostring(info.plugin_version)) -- 0.8.4 (the UI review's fix 10): the title already names it
-      end)
+    if live then
+      -- Diagnostics and action feedback now precede Danger. A change there gets the same click guard.
+      state.dangerLayout = state.dangerLayout or {}
+      local earlierSettling = settling
+      panel.noteLayout(state.dangerLayout, ImGui.GetCursorPosY())
+      settling = earlierSettling or settling
+      -- 0.8 (the UI review): the kill switch on its own row, in the danger colour, away from the everyday buttons. 0.8.5 (the
+      -- UI review's fix 8): the Studio's danger button (.btn.danger): danger text and border on a clear fill. 0.8.22: its hover
+      -- and press take the danger wash (XfDangerBg), as the Studio's.
+      panel.eyebrow(state, theme, which, "Danger", false)
+      local wash = panel.colour(theme, which, "XfDangerBg", nil)
+      ImGui.PushStyleColor(ImGuiCol.Button, 0, 0, 0, 0)
+      ImGui.PushStyleColor(ImGuiCol.Text, RED[1], RED[2], RED[3], RED[4])
+      ImGui.PushStyleColor(ImGuiCol.Border, RED[1], RED[2], RED[3], RED[4])
+      local pushed = 3
+      if wash then
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, wash[1], wash[2], wash[3], wash[4])
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, wash[1], wash[2], wash[3], wash[4])
+        pushed = 5
+      end
+      local stopBordered = ImGuiStyleVar and ImGuiStyleVar.FrameBorderSize ~= nil
+      if stopBordered then ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1) end
+      local okStop, stop = pcall(button, "Stop the bridge")
+      if stopBordered then ImGui.PopStyleVar(1) end
+      ImGui.PopStyleColor(pushed)
+      if not okStop then error(stop, 0) end
+      if stop then
+        queue("kill")
+      end
+      -- 0.8.3: the bridge's own stop key ([ui] kill_key), which works in the game without CET. 0.8.4 (the UI review's
+      -- fix 8): in the muted text colour (not the disabled one), with where it works as a tooltip.
+      local killKey = info and type(info.kill_key) == "table" and info.kill_key or nil
+      if killKey and killKey.enabled and type(killKey.label) == "string" then
+        ImGui.SameLine()
+        ImGui.AlignTextToFramePadding()
+        coloured(panel.colour(theme, which, "XfTextMuted", GREY), "or press " .. killKey.label .. " in the game")
+        if ImGui.IsItemHovered() then
+          ImGui.SetTooltip("Works in play, photo mode, menus and loading screens while the CET overlay is closed.")
+        end
+      end
     end
   end)
   if state.testInput and state.testInput.ui then

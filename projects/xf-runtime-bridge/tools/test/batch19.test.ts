@@ -218,7 +218,7 @@ describe("0.8.5 copy, the CET line and the question sound", () => {
   test("fix 9: the CET line's later lines hang at the status words, not under the dot (0.8.6: the fallback when the dot does not fit in the padding)", () => {
     const init = read("cet", "xf_runtime_bridge", "init.lua");
     const body = init.slice(init.indexOf("local function drawLabelBody"), init.indexOf("local function drawLabel()"));
-    expect(body).toMatch(/hang = ImGui\.GetCursorPosX\(\) - startX/);
+    expect(body).toContain("local hang = 14 * k");
     expect(body).toMatch(/ImGui\.Indent\(hang\)/);
     expect(body).toMatch(/ImGui\.Unindent\(hang\)/);
     expect(body.indexOf("ImGui.Indent(hang)")).toBeLessThan(body.indexOf("for _, message in ipairs(state.messages)"));

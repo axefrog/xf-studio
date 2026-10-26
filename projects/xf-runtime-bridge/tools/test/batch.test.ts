@@ -334,8 +334,8 @@ describe("config.ini, keys and CET bindings", () => {
   });
 
   test("the CET window's area follows the window's height", () => {
-    expect(cetWindowRect(3840, 1600)).toEqual({ x: 0, y: 560, width: 820, height: 1040 });
-    expect(cetWindowRect(1920, 1080)).toEqual({ x: 0, y: 378, width: 554, height: 702 });
+    expect(cetWindowRect(3840, 1600)).toEqual({ x: 0, y: 0, width: 820, height: 1600 });
+    expect(cetWindowRect(1920, 1080)).toEqual({ x: 0, y: 0, width: 554, height: 1080 });
   });
 });
 

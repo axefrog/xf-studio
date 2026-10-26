@@ -4,8 +4,8 @@
 //
 //   bun tools/sessions/make-batches.ts        writes st-styling.json, st-rerun.json, borg4-smoke.json and free-roam.json beside this file
 //
-// st-styling.json: the test card's "In-game styling (0.8.22)" rows ST1-ST13, dark then light, as one unattended
-// batch. What it anticipates, from what the Borg 4 session ran into and what 0.8.22 added since:
+// st-styling.json: the test card's "In-game styling (0.8.23)" rows ST1-ST13, dark then light, as one unattended
+// batch. What it anticipates, from what the Borg 4 session ran into and what 0.8.23 added since:
 //   - the staged config has [overlay] enabled = false: every row requires enabled = true and diagnostics = true, so
 //     the runner sets them once before the launch (config.set);
 //   - theme, motion and drawing switch live (overlay.set, in memory): each row sets its own look first, so it holds
@@ -71,7 +71,7 @@ const cetKey = { binding: "cet.overlay_key", equals: "$fixture.cet_overlay_key" 
 // is an ImGui CollapsingHeader only a click opens. session.handover is not that pause (scripted session 1: its
 // "Paused" captures show Changes allowed). Both wait for the bridge's cet.panel command, spec'd for the bridge chat:
 //   cet.panel {diagnostics_open?: bool, press?: "pause_changes" | "resume_changes"} (notify, so it works while paused):
-//   the CET layer applies diagnostics_open with ImGui.SetNextItemOpen before the header (once per change), and runs a
+//   the CET layer applies diagnostics_open before its compact disclosure and notifies the native Diagnostics card; it runs a
 //   press as the button's own action (queue("pause", true|false), so XFBridge_PauseWrites runs as on a click), and
 //   reports what it drew in bridge.info cet_panel {diagnostics_open, chip, tone, last_press {id, target, answer}}.
 // ST2's warning and danger tones wait for a test-only diagnostics figure: overlay.set {diagnostics_cpu_ms: number |
@@ -464,16 +464,19 @@ function writesRows(theme: Theme): Json[] {
 
   row = `ST7-${theme}-diagnostics`;
   if (PANEL_HOOK) {
-    rows.push({ id: row, title: `The CET window with the DIAGNOSTICS header open (${theme})`, requires, judged_by: STUDIO,
+    rows.push({ id: row, title: `The CET window opening the native XF Diagnostics card (${theme})`, requires, judged_by: STUDIO,
       steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
         { label: `${row}-open-header`, do: "run", command: "cet.panel", input: { diagnostics_open: true }, deadline_ms: 8000, bind: key(row, "open_req"), on_fail: "fail_row" },
         // The window drew the header open (its request applied), with CET's overlay still open (scripted session 1's
         // captures had no window).
         verify(row, "open", { all: [request(row, "open", [{ path: "header", equals: "applied" }]), { path: "cet_panel.diagnostics_open", equals: true }] }),
-        verify(row, "cet-open", cetIs(true), "overlay.state"),
+        verify(row, "cet-open", { all: [cetIs(true), { path: "cet_diagnostics", equals: true }, { path: "drawing_now", equals: true }] }, "overlay.state"),
         { label: `${row}-settle`, do: "wait", ms: 800 }, visible(row, "cet_window", theme, "window"),
-        ...cetShot(row, `ST7-cet-diagnostics-${theme}`, "diag", theme)],
-      pass: [captured("Diagnostics open", row, "diag"), framed(row, "diag")],
+        ...cetShot(row, `ST7-cet-diagnostics-${theme}`, "diag", theme),
+        { label: `${row}-native-card`, do: "capture.surface", capture: ref(row, "diag"), ...COLOURS[theme], rect: "$win.regions.cet_diagnostics", min_plate: 0.15,
+          bind: key(row, "native_diag"), on_fail: "fail_row" },
+        { label: `${row}-native-crop`, do: "run", command: "capture.recrop", input: { path: ref(row, "diag", "full.path"), rect: "$win.regions.cet_diagnostics", name: `ST7-xf-diagnostics-${theme}` } }],
+      pass: [captured("Diagnostics open", row, "diag"), framed(row, "diag"), { label: "native Diagnostics card in frame", ref: ref(row, "native_diag"), match: { path: "present", equals: true } }],
       // The header back as the window had it before (the request's undo: what the CET layer captured when it applied it).
       // CET stays open until the window has drawn the undo (its own request's header applied): closed first, the header
       // would wait for the next time someone opens CET.
@@ -611,11 +614,11 @@ export function stScript(rerun = false, hooks: Hooks = catalogueHooks()): Json {
   return {
     schema: "xfb/session-script-3",
     name: rerun ? "st-styling-0822-rerun" : "st-styling-0822",
-    title: rerun ? "In-game styling (0.8.22): the re-run after the review packet (the false passes, ST5, ST13 and the bursts that began early)"
-      : "In-game styling (0.8.22): ST1-ST13, dark then light, the look switched live",
+    title: rerun ? "In-game styling (0.8.23): the re-run after the review packet (the false passes, ST5, ST13 and the bursts that began early)"
+      : "In-game styling (0.8.23): ST1-ST13, dark then light, the look switched live",
     card: CARD,
     requires: [
-      "The XF test profile with the bridge's autonomous -writes build staged (0.8.22 with overlay.set); the runner sets config.ini's [overlay] enabled and diagnostics once and restores the file at the end.",
+      "The XF test profile with the bridge's autonomous -writes build staged (0.8.23 with overlay.set); the runner sets config.ini's [overlay] enabled and diagnostics once and restores the file at the end.",
       "A private fixtures file (--fixtures): mo2 {exe, profile, executable, arguments: -skipStartScreen}, game_dir, staged_mod, save, cet_overlay_key (Ctrl+` here), commit_floor_gb.",
       "Borderless windowed, the game window in front; Windows' Do Not Disturb on (focus-taking toasts stopped the Borg 4 key press).",
       "Every row verifies its named state through the bridge before each capture (bridge_info's status and chip, overlay_state's cet_open and motion, ui_state's question) and checks its surface is in frame after it; bursts start only once their surface shows. A judged row ends CAPTURED, awaiting XF · Studio's UI review, never PASS.",

@@ -307,7 +307,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.22 the CET layer under fengari", () =
     // title 15/13 around the heading's text, eyebrow 11/13 around the chip and the labels, label 12/13 around the version
     expect(out).toContain("scale:1.1538");
     expect(out).toContain("scale:0.8462");
-    expect(out).toContain("scale:0.9231");
+    // The removed version footer no longer introduces label-role text in this window.
     // every non-1 scale is followed, before the next non-1 scale, by a reset to 1
     const scales = [...out.matchAll(/scale:([\d.]+)/g)].map((m) => Number(m[1]));
     for (let i = 0; i < scales.length; i++) if (scales[i] !== 1) expect(scales[i + 1]).toBe(1);
@@ -329,7 +329,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.22 the CET layer under fengari", () =
       draw(s); return draw(s)`);
     expect((withChild.match(/child:/g) ?? []).length).toBe((withChild.match(/endchild/g) ?? []).length);
     expect(withChild).toContain("child:##xf_card_question");
-    expect(withChild).toContain("child:##xf_card_keys");
+    expect(withChild).not.toContain("child:##xf_card_keys");
     expect(withChild).toContain("text:QUESTION FROM XF STUDIO");
     expect(withChild).toContain("text:KEYS");
     const without = run(IMGUI({ child: false }), `local s = state({ pendingAsk = { id = 1, text = "Ready?", choices = { "Done", "Not yet" } } })
@@ -387,11 +387,12 @@ describe.skipIf(!existsSync(FENGARI))("0.8.22 the CET layer under fengari", () =
   test("the heading, the status line and the mode chip: brand mark, 'XF Runtime Bridge', the plugin's chip in capitals, the version", () => {
     const out = run(IMGUI(), `return draw(state())`);
     expect(out).toContain("quad"); // the chamfered brand mark
-    expect(out).toContain("text:XF Runtime Bridge");
+    expect(out).toContain("begin:XF Runtime Bridge 0.8.22###xf_runtime_bridge");
+    expect(out).not.toContain("text:XF Runtime Bridge");
     expect(out).toContain("text:TEST"); // the info chip
     expect(out).toContain("text:XF Studio connected."); // the plugin's connection sentence
     expect(out).toContain("text:CHANGES ALLOWED"); // status.chip
-    expect(out).toContain("disabled:0.8.22");
+    expect(out).not.toContain("disabled:0.8.22");
     const readOnly = run(IMGUI(), `return draw(state({ info = info({ status = { tone = "ok", connection = "XF Studio connected", connection_tone = "ok", chip = "Read-only" },
       bridge = { enabled = true, listening = true, killed = false, allow_writes = false } }) }))`);
     expect(readOnly).toContain("text:READ-ONLY");
@@ -536,8 +537,8 @@ describe("0.8.22 documentation hooks", () => {
     expect(page).toContain("`CheckboxSelectedBg`");
   });
 
-  test("the version is 0.8.22 in the build and the tools", () => {
-    expect(read("native", "CMakeLists.txt")).toMatch(/VERSION 0\.8\.22/);
-    expect(JSON.parse(read("package.json")).version).toBe("0.8.22");
+  test("the version is 0.8.23 in the build and the tools", () => {
+    expect(read("native", "CMakeLists.txt")).toMatch(/VERSION 0\.8\.23/);
+    expect(JSON.parse(read("package.json")).version).toBe("0.8.23");
   });
 });

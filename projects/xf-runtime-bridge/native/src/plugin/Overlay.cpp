@@ -1101,7 +1101,8 @@ void DrawPanel(double aSeconds)
     }
     // 0.8.2: one status surface at a time; while the ink panel is on screen (or the CET line is the fallback) this
     // panel doesn't draw.
-    if (!gR.panel.show)
+    const bool cetDiagnostics = gHost->DiagnosticsRequested();
+    if (!gR.panel.show && !cetDiagnostics)
     {
         return;
     }
@@ -1109,7 +1110,7 @@ void DrawPanel(double aSeconds)
     gR.scale = scale;
     const float width = 360.0f * scale;
     const auto [left, top] = xfb::overlay::PanelOrigin(gR.panel.anchor, gR.panel.x, gR.panel.y, static_cast<float>(gR.width), static_cast<float>(gR.height), width, gPanelHeight);
-    ImGui::SetNextWindowPos(ImVec2(left, top), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(cetDiagnostics ? ImVec2(std::max(16.0f, static_cast<float>(gR.width) - width - 16.0f), 16.0f) : ImVec2(left, top), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(width, 0.0f), ImGuiCond_Always);
     const auto flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                        ImGuiWindowFlags_NoNav;
@@ -1120,49 +1121,52 @@ void DrawPanel(double aSeconds)
     const auto motion = gHost->Motion();
     if (ImGui::Begin("XF Runtime Bridge##xf_overlay_panel", nullptr, flags))
     {
-        gPanelHeight = ImGui::GetWindowSize().y; // its auto-fitted height (from last frame's content), for the next placement
+        if (!cetDiagnostics) gPanelHeight = ImGui::GetWindowSize().y; // its auto-fitted height (from last frame's content), for the next placement
         const auto& c = gR.colours;
-        Heading();
+        if (!cetDiagnostics)
+        {
+            Heading();
 
-        // The status line: the dot in the tone's slot (live tones pulse), then the plugin's sentence, hanging under its own
-        // words when it wraps. A change of tone settles once: the signal wash fades out behind the row.
-        const std::string& tone = gR.panel.tone;
-        gR.statusSettle.Note(tone, clock * 1000.0, motion.reduced);
-        const float settle = gR.statusSettle.Strength(clock * 1000.0);
-        const ImVec2 rowAt = ImGui::GetCursorScreenPos();
-        if (settle > 0.0f)
-        {
-            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(rowAt.x - gR.metrics.childPadX, rowAt.y - gR.metrics.itemSpacingY * 0.5f),
-                                                      ImVec2(rowAt.x + ImGui::GetContentRegionAvail().x + gR.metrics.childPadX, rowAt.y + gR.statusRowHeight + gR.metrics.itemSpacingY * 0.5f),
-                                                      Col(c.signalBg, settle), gR.metrics.rounding);
+            // The status line: the dot in the tone's slot (live tones pulse), then the plugin's sentence, hanging under its own
+            // words when it wraps. A change of tone settles once: the signal wash fades out behind the row.
+            const std::string& tone = gR.panel.tone;
+            gR.statusSettle.Note(tone, clock * 1000.0, motion.reduced);
+            const float settle = gR.statusSettle.Strength(clock * 1000.0);
+            const ImVec2 rowAt = ImGui::GetCursorScreenPos();
+            if (settle > 0.0f)
+            {
+                ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(rowAt.x - gR.metrics.childPadX, rowAt.y - gR.metrics.itemSpacingY * 0.5f),
+                                                          ImVec2(rowAt.x + ImGui::GetContentRegionAvail().x + gR.metrics.childPadX, rowAt.y + gR.statusRowHeight + gR.metrics.itemSpacingY * 0.5f),
+                                                          Col(c.signalBg, settle), gR.metrics.rounding);
+            }
+            const float lineH = ImGui::GetTextLineHeight();
+            const bool live = tone == "ok" || tone == "write";
+            StatusDot(ImVec2(rowAt.x + gR.metrics.dot * 0.5f, rowAt.y + lineH * 0.5f), tone, live ? xfb::overlay::PulseAlpha(clock, motion.reduced) : 1.0f);
+            const float hang = gR.metrics.dot + gR.metrics.itemSpacingX;
+            ImGui::Indent(hang);
+            ImGui::PushTextWrapPos(0.0f);
+            const ImVec4& sentence = tone == "paused" ? c.warning : tone == "killed" ? c.danger : c.textMuted;
+            ImGui::TextColored(sentence, "%s", gR.panel.bridgeStatus.empty() ? "Not ready yet." : gR.panel.bridgeStatus.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::Unindent(hang);
+            gR.statusRowHeight = std::max(lineH, ImGui::GetCursorScreenPos().y - rowAt.y - gR.metrics.itemSpacingY);
+            ImGui::PushTextWrapPos(0.0f);
+            // 0.8.2: as the status surface, the coordinator's lines and the question too (the ink panel's content), each level in
+            // the theme's colour; at most four lines, the oldest going first. The answer keys sit under the question, muted.
+            const size_t first = gR.panel.lines.size() > 4 ? gR.panel.lines.size() - 4 : 0;
+            for (size_t i = first; i < gR.panel.lines.size(); ++i)
+            {
+                const auto& [level, text] = gR.panel.lines[i];
+                const ImVec4& colour = level == "warn" ? c.warning : level == "done" ? c.success : level == "ask" ? c.accentText : c.text;
+                ImGui::TextColored(colour, "%s", text.c_str());
+            }
+            if (!gR.panel.askHint.empty())
+            {
+                ImGui::TextColored(c.textMuted, "%s", gR.panel.askHint.c_str());
+            }
+            ImGui::PopTextWrapPos();
         }
-        const float lineH = ImGui::GetTextLineHeight();
-        const bool live = tone == "ok" || tone == "write";
-        StatusDot(ImVec2(rowAt.x + gR.metrics.dot * 0.5f, rowAt.y + lineH * 0.5f), tone, live ? xfb::overlay::PulseAlpha(clock, motion.reduced) : 1.0f);
-        const float hang = gR.metrics.dot + gR.metrics.itemSpacingX;
-        ImGui::Indent(hang);
-        ImGui::PushTextWrapPos(0.0f);
-        const ImVec4& sentence = tone == "paused" ? c.warning : tone == "killed" ? c.danger : c.textMuted;
-        ImGui::TextColored(sentence, "%s", gR.panel.bridgeStatus.empty() ? "Not ready yet." : gR.panel.bridgeStatus.c_str());
-        ImGui::PopTextWrapPos();
-        ImGui::Unindent(hang);
-        gR.statusRowHeight = std::max(lineH, ImGui::GetCursorScreenPos().y - rowAt.y - gR.metrics.itemSpacingY);
-        ImGui::PushTextWrapPos(0.0f);
-        // 0.8.2: as the status surface, the coordinator's lines and the question too (the ink panel's content), each level in
-        // the theme's colour; at most four lines, the oldest going first. The answer keys sit under the question, muted.
-        const size_t first = gR.panel.lines.size() > 4 ? gR.panel.lines.size() - 4 : 0;
-        for (size_t i = first; i < gR.panel.lines.size(); ++i)
-        {
-            const auto& [level, text] = gR.panel.lines[i];
-            const ImVec4& colour = level == "warn" ? c.warning : level == "done" ? c.success : level == "ask" ? c.accentText : c.text;
-            ImGui::TextColored(colour, "%s", text.c_str());
-        }
-        if (!gR.panel.askHint.empty())
-        {
-            ImGui::TextColored(c.textMuted, "%s", gR.panel.askHint.c_str());
-        }
-        ImGui::PopTextWrapPos();
-        if (!gR.panel.diagnostics)
+        if (!gR.panel.diagnostics && !cetDiagnostics)
         {
             ImGui::End();
             return;

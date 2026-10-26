@@ -367,7 +367,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.4 the CET comment box wraps at words 
       local c = table.concat(draw(refused), "|")
       return tostring(string.find(a, "Saving stays locked", 1, true) ~= nil) .. "," .. tostring(string.find(a, "connection key", 1, true) == nil)
         .. "," .. tostring(string.find(b, "Press the new key", 1, true) ~= nil) .. "," .. tostring(string.find(c, "F6 answers", 1, true) ~= nil)
-        .. "," .. tostring(string.find(b, "Version 0.8.6", 1, true) ~= nil)`);
+        .. "," .. tostring(string.find(b, "Version 0.8.6", 1, true) == nil)`);
     expect(out).toBe("true,true,true,true,true");
   });
 

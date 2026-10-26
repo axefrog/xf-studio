@@ -3491,6 +3491,15 @@ void Bridge070Tests()
         Check("0.7 overlay: hidden for a capture, and back by itself", !host.ShouldDraw(now + std::chrono::milliseconds(100)) && host.ShouldDraw(now + std::chrono::milliseconds(600)));
         host.SetCetOpen(true);
         Check("0.7 overlay: yields while CET's overlay is open", !host.ShouldDraw(now + std::chrono::seconds(1)));
+        host.RequestDiagnostics(true);
+        Check("0.8.23 CET diagnostics: the native card can draw beside CET", host.DiagnosticsRequested() && host.ShouldDraw(now + std::chrono::seconds(1)));
+        host.RequestDiagnostics(false);
+        Check("0.8.23 CET diagnostics: closing the card restores CET yield", !host.ShouldDraw(now + std::chrono::seconds(1)));
+        host.RequestDiagnostics(true);
+        host.SetCetOpen(false);
+        Check("0.8.23 CET diagnostics: closing CET clears its transient request", !host.DiagnosticsRequested() && host.Snapshot()["cet_diagnostics"] == false);
+        host.SetCetOpen(true);
+        Check("0.8.23 CET diagnostics: reopening CET starts without the old card", !host.ShouldDraw(now + std::chrono::seconds(1)));
         host.SetCetOpen(false);
         host.SetPassThrough(true);
         Check("0.7 overlay: the pass-through switch stops drawing without unhooking", !host.ShouldDraw(now + std::chrono::seconds(1)) && host.Snapshot()["hooks"]["present"] == true);

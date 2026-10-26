@@ -418,6 +418,12 @@ local function runAction(action)
     if request then
       state.lastPress = { id = request.id, target = request.target, answer = answer or { error = "the plugin didn't answer" } }
     end
+  elseif action.name == "diagnostics" then
+    local encoded, body = pcall(json.encode, { diagnostics_set = action.argument == true })
+    local answer = encoded and decodeAnswer(callNative("XFBridge_CetPanel", body)) or nil
+    if not (answer and answer.applied) then
+      state.message = answer and answer.reason or "Diagnostics couldn't open. Enable the XF overlay and restart the game."
+    end
   elseif action.name == "mark" then
     -- 0.6: a marker in the session's event stream, for the coordinator to find (session.log); changes nothing.
     local ok, noted = callNative("XFBridge_Note", "ask", "The player marked this moment in the XF Runtime Bridge window")
@@ -636,10 +642,8 @@ end
 -- GetWindowSize or SetCursorPosX") although the installed CET registers all four names, and the hanging dot put the words 66 px
 -- in. 0.8.11 (UI review of 0.8.11, fix 1) draws the dot on the foreground draw list instead, which no window clip cuts and which
 -- needs only calls other mods use (GetForegroundDrawList, ImDrawListAddCircleFilled, GetColorU32, GetCursorScreenPos,
--- GetWindowPos, GetTextLineHeight): its centre is the middle of the padding, at the middle of the line, and the cursor stays
--- at the padding. Nothing is tested for by type(): the calls are made under pcall, and what raised is named in the mod's log
--- once. Answers false, drawing nothing, where the padding can't hold the dot or a call fails (the text then hangs past the
--- dot, as in 0.8.5).
+-- GetTextLineHeight). 0.8.23 reserves a slot for it inside the padding, before the title. Nothing is tested for by type():
+-- calls run under pcall, and a failure is named once in the mod's log before a plain bullet takes its slot.
 local function xyOf(a, b)
   if type(a) == "table" then return a.x or a[1], a.y or a[2] end
   return a, b
@@ -649,7 +653,7 @@ end
 -- tone's slot, and breathes while the bridge is live (the success and changes-allowed tones; panel.pulseAlpha, one clock for
 -- every pulsing element: ImGui.GetTime); paused is a ring, stopped, off and idle are still. It changes alpha only. Under
 -- reduced motion (the plugin's info.overlay.motion) it is drawn at full alpha.
-local function statusDot(toneName, tone, startX)
+local function statusDot(toneName, tone)
   local k = ImGui.GetFontSize() / ((theme and theme.metrics and theme.metrics.FontSize) or 13)
   local radius = 4 * k
   local reduced = state.info and type(state.info.overlay) == "table" and state.info.overlay.motion == "reduced"
@@ -657,24 +661,20 @@ local function statusDot(toneName, tone, startX)
   local alpha = 1.0
   if live and panel and panel.pulseAlpha then alpha = panel.pulseAlpha(theme, ImGui.GetTime(), reduced) end
   local why = nil
-  if not (startX >= 2 * radius + 2) then
-    why = "the window's padding (" .. tostring(startX) .. " px) is narrower than the dot (" .. tostring(2 * radius + 2) .. " px)"
-  else
-    local ok, err = pcall(function()
-      local _, sy = xyOf(ImGui.GetCursorScreenPos())
-      local wx = xyOf(ImGui.GetWindowPos())
-      local list = ImGui.GetForegroundDrawList()
-      local x, y = wx + startX / 2, sy + ImGui.GetTextLineHeight() / 2
-      if toneName == "paused" then
-        local ring = ImGui.GetColorU32(tone[1], tone[2], tone[3], tone[4])
-        ImGui.ImDrawListAddCircle(list, x, y, radius - 0.75 * k, ring, 12, 1.5 * k)
-      else
-        local colour = ImGui.GetColorU32(tone[1], tone[2], tone[3], (tone[4] or 1.0) * alpha)
-        ImGui.ImDrawListAddCircleFilled(list, x, y, radius, colour, 12)
-      end
-    end)
-    if not ok then why = "the draw-list call raised: " .. tostring(err) end
-  end
+  local ok, err = pcall(function()
+    local sx, sy = xyOf(ImGui.GetCursorScreenPos())
+    local list = ImGui.GetForegroundDrawList()
+    -- The visible lower-case body sits below the font's ascender: centre on its x-height.
+    local x, y = sx + radius, sy + ImGui.GetTextLineHeight() * 0.6
+    if toneName == "paused" then
+      local ring = ImGui.GetColorU32(tone[1], tone[2], tone[3], tone[4])
+      ImGui.ImDrawListAddCircle(list, x, y, radius - 0.75 * k, ring, 12, 1.5 * k)
+    else
+      local colour = ImGui.GetColorU32(tone[1], tone[2], tone[3], (tone[4] or 1.0) * alpha)
+      ImGui.ImDrawListAddCircleFilled(list, x, y, radius, colour, 12)
+    end
+  end)
+  if not ok then why = "the draw-list call raised: " .. tostring(err) end
   if why then
     if not state.dotFallbackLogged then
       state.dotFallbackLogged = true
@@ -706,21 +706,52 @@ local function drawLabelBody(which)
   state.drawnSurface = "cet_line"
   local muted = themeColour(which, "XfTextMuted", MUTED)
   local tone = themeColour(which, TONE_TOKENS[status.tone] or "TextDisabled", TONE_COLORS[status.tone] or TONE_COLORS.off)
-  ImGui.PushTextWrapPos(MESSAGE_WRAP_PX)
-  -- 0.8.5 (the UI review's fix 9: the status words sat indented past the next line): every line under the dot starts where the
-  -- status words do. 0.8.6 (P5): the dot in the left padding (statusDot), so they start at the padding; only where it doesn't
-  -- fit there does the text hang past the dot, as in 0.8.5.
+  local k = ImGui.GetFontSize() / ((theme and theme.metrics and theme.metrics.FontSize) or 13)
   local startX = ImGui.GetCursorPosX()
-  local hang = 0
-  if not statusDot(status.tone, tone, startX) then
-    ImGui.PushStyleColor(ImGuiCol.Text, tone[1], tone[2], tone[3], tone[4])
+  if statusDot(status.tone, tone) then
+    ImGui.Dummy(8 * k, ImGui.GetTextLineHeight())
+  else
     ImGui.Bullet()
-    ImGui.PopStyleColor(1)
-    ImGui.SameLine()
-    hang = ImGui.GetCursorPosX() - startX
   end
-  draw(muted, status.label)
-  if hang > 0 then ImGui.Indent(hang) end
+  ImGui.SameLine(startX + 14 * k)
+  -- Keep the status on one unwrapped row, separate from the window's longer explanation.
+  local bridge = state.info and state.info.bridge or {}
+  local sentence
+  if bridge.killed or status.tone == "killed" then sentence = "Stopped" .. MIDDLE_DOT .. "reconnect in the CET window"
+  else
+    local connected = status.connection == "XF Studio connected" or string.find(status.label, "XF Studio connected", 1, true) ~= nil
+    if connected then
+      sentence = "Connected"
+      if bridge.writes_paused then sentence = sentence .. MIDDLE_DOT .. "changes paused"
+      elseif bridge.allow_writes then sentence = sentence .. MIDDLE_DOT .. "changes allowed" end
+    else
+      sentence = status.label
+      local prefix = "XF Runtime Bridge" .. MIDDLE_DOT
+      if string.sub(sentence, 1, #prefix) == prefix then sentence = string.sub(sentence, #prefix + 1) end
+      sentence = string.gsub(sentence, "XF Studio not connected", "Not connected", 1)
+      if sentence == "XF Runtime Bridge" then sentence = "Starting..." end
+    end
+  end
+  local function plain(colour, text)
+    drawnTexts[#drawnTexts + 1] = text
+    ImGui.TextColored(colour[1], colour[2], colour[3], colour[4], text)
+  end
+  if panel and panel.inRole then
+    panel.inRole(theme, "label", function() plain(themeColour(which, "Text", MUTED), "XF Runtime Bridge") end)
+  else plain(themeColour(which, "Text", MUTED), "XF Runtime Bridge") end
+  local titleWidth = ImGui.CalcTextSize("XF Runtime Bridge")
+  if panel and panel.inRole then titleWidth = panel.inRole(theme, "label", function() return (ImGui.CalcTextSize("XF Runtime Bridge")) end) end
+  ImGui.SameLine(startX + 14 * k + titleWidth + 6 * k)
+  plain(muted, sentence)
+  if bridge.killed or status.tone == "killed" then
+    if state.testInput and state.testInput.ui then
+      state.testInput.ui("cet_line", { drawn = true, texts = drawnTexts, rect = state.testInput.windowRect(), heading = "XF Runtime Bridge" })
+    end
+    return
+  end
+  local hang = 14 * k
+  ImGui.Indent(hang)
+  ImGui.PushTextWrapPos(MESSAGE_WRAP_PX)
   local ask = state.pendingAsk
   local answered = state.answeredAsk
   local inkShows = (ask and state.inkAsk == ask.id) or (not ask and answered and state.inkAsk == answered.id)
@@ -755,7 +786,10 @@ local function drawLabel()
   if panel and panel.pushTheme then
     colours, vars = panel.pushTheme(theme, which)
   end
-  ImGui.SetNextWindowPos(12, 12, ImGuiCond.Always)
+  local k = ImGui.GetFontSize() / ((theme and theme.metrics and theme.metrics.FontSize) or 13)
+  ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, 12 * k, 8 * k)
+  vars = vars + 1
+  ImGui.SetNextWindowPos(16, 16, ImGuiCond.Always)
   -- 0.8.22: the flags' union without bit32 (a member this CET lacks is left out; NoDecoration and NoInputs are composites).
   local flags = 0
   for _, name in ipairs({ "NoDecoration", "NoInputs", "AlwaysAutoResize", "NoSavedSettings", "NoFocusOnAppearing" }) do
@@ -824,7 +858,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.8.22",
+  version = "0.8.23",
   -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,
 }

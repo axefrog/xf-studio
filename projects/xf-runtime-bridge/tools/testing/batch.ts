@@ -26,7 +26,7 @@ import type { CommandApi } from "../api/command-api.ts";
 import { decodePng, diffStats, crop } from "../capture/image.ts";
 import { validateBound } from "./assertions.ts";
 import { ConfigEditor, readIni, stagedConfigPath, stagedManifestPath, type IniValues } from "./config-ini.ts";
-import { burstBytes, cetLineRect, cetWindowRect, decodeCetBinding, inkPanelRect, keysLabel, parseCetBindings, parseKeys, xfBoxRect, type Host } from "./host.ts";
+import { burstBytes, cetDiagnosticsRect, cetLineRect, cetWindowRect, decodeCetBinding, inkPanelRect, keysLabel, parseCetBindings, parseKeys, xfBoxRect, type Host } from "./host.ts";
 import { BURST_MEMORY_LIMIT } from "../capture/capture.ts";
 import { checkMatch, checkPlan, describePlan, matches, realClock, resolveRefs, runPlan, type Action, type ExecContext, type Executor, type Match, type Outcome, type Plan, type PlanClock, type PlanResult, type ReportEntry, type Step } from "./plan.ts";
 import { planTestStep, TEST_STEP_KINDS, TestSession } from "./script.ts";
@@ -739,7 +739,7 @@ export class SessionExecutor implements Executor {
           if (!window) return { ok: false, code: "no_window", message: "The game's window wasn't found." };
           const monitors = await this.c.host.monitors().catch(() => []);
           return { ok: true, value: { ...window, monitors, regions: { cet_window: cetWindowRect(window.width, window.height), xf_box: xfBoxRect(window.width, window.height),
-            cet_line: cetLineRect(window.width, window.height), ink_panel: inkPanelRect(window.width, window.height) } } };
+            cet_diagnostics: cetDiagnosticsRect(window.width, window.height), cet_line: cetLineRect(window.width, window.height), ink_panel: inkPanelRect(window.width, window.height) } } };
         }
         case "host.commit": {
           const free = await this.c.host.freeCommitBytes();

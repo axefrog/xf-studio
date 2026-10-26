@@ -139,6 +139,10 @@ public:
     uint32_t ThemeGeneration() const { return m_themeGeneration.load(); }
     void SetDiagnostics(bool aOn) { m_diagnostics.store(aOn); }
     bool Diagnostics() const { return m_diagnostics.load(); }
+    // 0.8.23: CET opens the existing native card, separately from the status surface.
+    // This is a UI notification only, never a game mutation or a persistent overlay setting.
+    void RequestDiagnostics(bool aOpen) { m_diagnosticsRequested.store(aOpen); }
+    bool DiagnosticsRequested() const { return m_diagnosticsRequested.load() && m_cetOpen.load(); }
     // Drawing switched off live (the hooks stay; the detour passes through as when the panel isn't the status surface). Only a
     // host enabled at load can draw at all: switching on one that wasn't needs [overlay] enabled = true and a restart.
     void SetSwitchedOff(bool aOff) { m_switchedOff.store(aOff); }
@@ -208,6 +212,7 @@ public:
     void SetCetOpen(bool aOpen)
     {
         m_cetOpen.store(aOpen);
+        if (!aOpen) m_diagnosticsRequested.store(false);
         m_cetKnown.store(true);
     }
     bool CetOpenKnown() const { return m_cetKnown.load(); }
@@ -223,6 +228,7 @@ private:
     std::atomic<bool> m_enabled{false};
     std::atomic<Phase> m_phase{Phase::Disabled};
     std::atomic<bool> m_cetOpen{false};
+    std::atomic<bool> m_diagnosticsRequested{false};
     std::atomic<bool> m_cetKnown{false};
     std::atomic<bool> m_killed{false};
     std::atomic<bool> m_passThrough{false};

@@ -105,14 +105,16 @@ export function parseCetBindings(text: string): Record<string, Record<string, bi
   return out;
 }
 
-/**
- * Where the CET overlay's XF Runtime Bridge window draws, derived from the game window's size. Seen on a 3840x1600
- * window at x 0-820, y 560-1600 (Borg 4); ImGui scales the window with the screen height (height / 1080), so the
- * crop scales with the height and keeps to the left edge and the bottom.
- */
+/** CET 0.8.23: the height-capped window can sit anywhere along the left side after ImGui clamps it to screen. */
 export function cetWindowRect(width: number, height: number) {
-  const y = Math.round(height * (560 / 1600));
-  return { x: 0, y, width: Math.min(width, Math.round(height * (820 / 1600))), height: height - y };
+  return { x: 0, y: 0, width: Math.min(width, Math.round(height * (820 / 1600))), height };
+}
+
+/** The native Diagnostics card opened beside CET: Overlay.cpp places it 16px from the top-right. */
+export function cetDiagnosticsRect(width: number, height: number) {
+  const cardWidth = 360 * height / 1080;
+  const x = Math.max(0, Math.floor(width - cardWidth - 24));
+  return { x, y: 0, width: width - x, height: Math.min(height, Math.ceil(600 * height / 1080)) };
 }
 
 /**

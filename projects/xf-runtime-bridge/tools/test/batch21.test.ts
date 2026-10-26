@@ -104,18 +104,11 @@ describe.skipIf(!existsSync(FENGARI))("0.8.7 the CET layer: the CET line's dot, 
       local function draw() calls, y, cx = {}, 0, padding; handlers.onDraw(); return table.concat(calls, "|") end
       ${body}`);
 
-  test("T3/P5: where the padding can't hold even the dot, the words hang past it, and the mod's log says why once", () => {
-    const out = run(`
-      padding = 4
-      local a = draw()
-      draw()
-      local n = 0
-      for _, line in ipairs(logged) do if string.find(line, "status dot hangs", 1, true) then n = n + 1 end end
-      return a .. "@@" .. n`);
-    const [frame, count] = out.split("@@");
-    expect(frame).toMatch(/bullet@4\|sameline\|wrapped@18:XF Runtime Bridge/);
-    expect(frame).toContain("indent:14");
-    expect(count).toBe("1");
+  test("0.8.23: the dot has a dedicated slot even with narrow inherited padding", () => {
+    const out = run(`padding = 4; return draw()`);
+    expect(out).toContain("dot@");
+    expect(out).not.toContain("bullet@");
+    expect(out).toContain("text:XF Runtime Bridge");
   });
 
   test("0.8.11 (UI review fix 1): a draw-list call that raises is named in the mod's log once, and the words hang past the dot as in 0.8.5", () => {
@@ -157,7 +150,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.7 the CET layer: the CET line's dot, 
       local dragged = draw()
       return restored .. "@@" .. dragged`);
     const [restored, dragged] = out.split("@@");
-    expect(restored).toMatch(/^nextpos:100,100\|begin:XF Runtime Bridge\|/);
+    expect(restored).toMatch(/^nextpos:100,100\|begin:XF Runtime Bridge 0\.8\.7###xf_runtime_bridge\|/);
     expect(dragged).not.toContain("nextpos:");
   });
 
@@ -178,7 +171,8 @@ describe.skipIf(!existsSync(FENGARI))("0.8.7 the CET layer: the CET line's dot, 
     expect(offered).toContain("button:Save anyway");
     // 0.8.11 (UI review of 0.8.11, fix 2): the reason above the button, "or load a save" beside it.
     expect(offered).toMatch(/Saves are held: a test change would go into them\.[^@]*button:Save anyway[^@]*sameline[^@]*or load a save/);
-    expect(hidden).not.toContain("Saves are held");
+    expect(hidden).not.toContain("Saves are held: a test change would go into them.");
+    expect(hidden).toContain("Saves are held during this test.");
     expect(calls).toBe("SaveAnyway:cet-panel");
     expect(after).toContain("Saving... The XF Runtime Bridge window says when it's done.");
     expect(hidden).not.toContain("button:Save anyway");
