@@ -213,6 +213,9 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   const { head, eyes, surfaces, albedo, motion } = rig;
   const { idle, blink, rig: rigMotion } = motion;
   const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => features?.superseded() ?? [] });
+  // A loss ends the old ledger's load. Wait until the device has restored every runtime's pool before retrying for a live requester.
+  const details: typeof character.details = { load: (record, options) => acrossContextLoss(device,
+    signal => character.details.load(record, { ...options, signal }), { signal: options.signal }) };
   // The lips' aperture on the posed face, measured each drawn frame for the mouth interior's light (PREV-147 step A): the lip joints come
   // from the face records' rest and regions (the idle's face, else the blink's), the posed bones are the core head's own.
   const mouth = createMouthApertureSampler(() => headBones(head), () => [idle?.facial?.source, blink?.source]);
@@ -533,8 +536,8 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
     setHair: (enabled: boolean) => character.setSlotVisible("hair", enabled),
     /** The head options whose parts the view hides (the V's own makeup); a visibility preference, instant. */
     setHiddenOptions: (options: readonly string[]) => character.setHiddenOptions(options),
-    /** The host's detail loader (§5): the V's resolved components, each chunk through the adapter for its template. */
-    details: character.details,
+    /** The host's detail loader (§5), retried after context loss only while the requester remains active. */
+    details,
     setCharacterDetails: character.setCharacterDetails,
     /**
      * Before `setCharacterDetails(details)`: make the parts it adds ready for their first frame while the shown V keeps drawing (maps
