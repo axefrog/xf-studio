@@ -10,7 +10,7 @@
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 10 | 13 | 19 | 2 | 0 | 128 | 0 | 0 |
+| items | 6 | 15 | 21 | 2 | 0 | 128 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
@@ -151,6 +151,10 @@ Per consumer, blocking first.
 | needs | S6 | M4 | [`character.cyberware`](#character.cyberware) | merged | partial | V's cyberware. |
 | needs | S1 | M4 | [`recorder.session-events`](#recorder.session-events) | merged | partial | The bridge's own event ring and npc.* events are part of the world event feed. |
 | needs | S1 | M4 | [`recorder.world-event-feed`](#recorder.world-event-feed) | proposed | none | A world event feed; the graded hooks and a minimal set of twelve event kinds are designed. Gaps: interior entry is polled, no 'any fact changed' hook, dialogue picks inferred. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.actor-identity`](#recorder.actor-identity) | planned | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.deaths`](#recorder.deaths) | proposed | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.combat`](#recorder.combat) | proposed | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.crime`](#recorder.crime) | proposed | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
 | needs | runtime-requirements.md#scene-execution-what-the-engine-needs-from-the-bridges-plan-layer | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | The engine decides what is true and what happens next; the plan decides how bodies carry it out, performs, observes and reports, and never changes the record. |
 | needs | runtime-requirements.md#1-what-a-scene-decides-at-run-time-and-against-which-signals | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | Anticipated outcomes map onto the scene's declared branches; an unanticipated outcome is reported as such and takes the fallback. |
 | needs | runtime-requirements.md#3-several-actors | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | A scene is a unit with a cast: joint beats, roles bound to actors, one blackboard per scene, one report stream per scene, up to 5 actors. |
@@ -173,10 +177,6 @@ Per consumer, blocking first.
 | needs | P2 | M5 | [`core.restage`](#core.restage) | planned | none | Restage after load: bring back whatever should be present; an asynchronous restaging state is a review item. |
 | needs | P4 | M5 | [`core.play-mode`](#core.play-mode) | planned | none | Story writes without the save lock: play mode takes no save lock. |
 | needs | H6 | M5 | [`core.companion`](#core.companion) | planned | none | Companion processes under the seven agreed conditions; first proof is an in-game session on a hello-world companion. |
-| needs | D-34; S1, S3 | shadow-mode | [`recorder.actor-identity`](#recorder.actor-identity) | requested | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
-| needs | D-34; S1, S3 | shadow-mode | [`recorder.deaths`](#recorder.deaths) | requested | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
-| needs | D-34; S1, S3 | shadow-mode | [`recorder.combat`](#recorder.combat) | requested | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
-| needs | D-34; S1, S3 | shadow-mode | [`recorder.crime`](#recorder.crime) | requested | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
 | wants |  |  | [`tooling.capability-registry`](#tooling.capability-registry) | merged | offline | Its requirements page asks the bridge chat to mark the bridge's status per row at each milestone; the registry carries that as demand. |
 | wants | H3 | Later | [`core.owned-scope`](#core.owned-scope) | planned | none | An access class for story writes in the release flavour, scoped to what the plugin owns; writes to vanilla state wait on O5. |
 | wants | C3 | Later | [`core.consent`](#core.consent) | planned | none | Release consent and a switch per feature. |
@@ -207,17 +207,17 @@ Per consumer, blocking first.
 | needs | want 13 | M8 | [`link.display-feed`](#link.display-feed) | proposed | none | Bridge proposal C. Story Engine layers reach the overlay through it. |
 | needs | proposal 5.1 | M6 | [`recorder.catchup`](#recorder.catchup) | merged | partial | The live feed reads catch-up with detail: true and its cursor, at most once a second, backing off when there is no more. |
 | needs | milestone 6 | M6 | [`recorder.status`](#recorder.status) | merged | none | Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run. |
-| needs | want 10 | M7 | [`surfaces.canvas`](#surfaces.canvas) | proposed | none | Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building. |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.actor-identity`](#recorder.actor-identity) | planned | none | Story Engine shadow mode binds simulated residents to recorded actors; Holotable shows affiliation in the People layer. |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.deaths`](#recorder.deaths) | proposed | none | Story Engine shadow mode reacts to deaths; Holotable draws them as events. |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.combat`](#recorder.combat) | proposed | none | Shadow mode and Holotable timelines. |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.crime`](#recorder.crime) | proposed | none | Shadow mode and Holotable timelines. |
+| needs | want 10 | M7 | [`surfaces.canvas`](#surfaces.canvas) | planned | none | Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building. |
 | needs | want 11 | M7 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) | proposed | none | Show and hide while playing, without opening CET (CET blocks input). |
 | needs | want 12 | M7 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) | proposed | none | Lets the overlay work with no other XF program running (bridge proposal B). |
-| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.actor-identity`](#recorder.actor-identity) | requested | none | Story Engine shadow mode binds simulated residents to recorded actors; Holotable shows affiliation in the People layer. |
-| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.deaths`](#recorder.deaths) | requested | none | Story Engine shadow mode reacts to deaths; Holotable draws them as events. |
-| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.combat`](#recorder.combat) | requested | none | Shadow mode and Holotable timelines. |
-| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.crime`](#recorder.crime) | requested | none | Shadow mode and Holotable timelines. |
 | wants | want 15 | M6 | [`recorder.observe-result`](#recorder.observe-result) | planned | none | Lets Holotable draw what sessions already asked, at no extra game cost. |
 | wants | agent-layers clock | M6b | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) | planned | none | Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today. |
 | wants | agent-layers game clock | M6c | [`recorder.game-time`](#recorder.game-time) | planned | none | Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock. |
-| wants | want plate | M7 | [`surfaces.canvas`](#surfaces.canvas) | proposed | none | The design comes from the UI component track; the bridge exposes the token to canvas@1. |
+| wants | want plate | M7 | [`surfaces.canvas`](#surfaces.canvas) | planned | none | The design comes from the UI component track; the bridge exposes the token to canvas@1. |
 
 #### Photo Mode Tools
 
@@ -2403,10 +2403,10 @@ Continuous channels, taps, session events and catching up on what happened betwe
 | [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | planned | none | unknown | P3 |
 | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | service | planned | none | unknown | P2 |
 | [`recorder.game-time`](#recorder.game-time) Game time on recorder samples | sense | planned | none | unknown | P3 |
-| [`recorder.actor-identity`](#recorder.actor-identity) Actor identity on recorder samples | sense | requested | none | unknown | P3 |
-| [`recorder.deaths`](#recorder.deaths) Deaths and knockdowns on the recorder | sense | requested | none | unknown | P3 |
-| [`recorder.combat`](#recorder.combat) Combat start and end on the recorder | sense | requested | none | unknown | P3 |
-| [`recorder.crime`](#recorder.crime) Crimes and police heat on the recorder | sense | requested | none | unknown | P3 |
+| [`recorder.actor-identity`](#recorder.actor-identity) Actor identity on recorder samples | sense | planned | none | unknown | P3 |
+| [`recorder.deaths`](#recorder.deaths) Deaths and knockdowns on the recorder | sense | proposed | none | unknown | P3 |
+| [`recorder.combat`](#recorder.combat) Combat start and end on the recorder | sense | proposed | none | unknown | P3 |
+| [`recorder.crime`](#recorder.crime) Crimes and police heat on the recorder | sense | proposed | none | unknown | P3 |
 
 <a id="recorder.session-events"></a>
 
@@ -2604,7 +2604,7 @@ The recorder's V samples (or a 1 Hz heartbeat) carry the game's own clock (game_
 
 ### Actor identity on recorder samples
 
-`recorder.actor-identity` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+`recorder.actor-identity` · sense · stage **planned** · evidence **none** · health **unknown** · P3
 
 The actors channel carries each actor's character record id, affiliation and crowd flag, once per actor (or on first sample), so observers can tell who an actor is.
 
@@ -2616,36 +2616,39 @@ The actors channel carries each actor's character record id, affiliation and cro
 
 ### Deaths and knockdowns on the recorder
 
-`recorder.deaths` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+`recorder.deaths` · sense · stage **proposed** · evidence **none** · health **unknown** · P3
 
 A recorder channel (or incident kind) for deaths and knockdowns with victim, instigator and cause, with positions.
 
 - **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Story Engine shadow mode reacts to deaths; Holotable draws them as events.
 - **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
+- **Unknown:** Which game event or listener reports this without new game-thread polling (an event the engine already raises, read where the recorder already samples)? Needs the game.
 - **Updated:** 2026-10-27
 
 <a id="recorder.combat"></a>
 
 ### Combat start and end on the recorder
 
-`recorder.combat` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+`recorder.combat` · sense · stage **proposed** · evidence **none** · health **unknown** · P3
 
 Combat start and end events with participants.
 
 - **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Shadow mode and Holotable timelines.
 - **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
+- **Unknown:** Which game event or listener reports this without new game-thread polling (an event the engine already raises, read where the recorder already samples)? Needs the game.
 - **Updated:** 2026-10-27
 
 <a id="recorder.crime"></a>
 
 ### Crimes and police heat on the recorder
 
-`recorder.crime` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+`recorder.crime` · sense · stage **proposed** · evidence **none** · health **unknown** · P3
 
 Crime events with offender and the police heat level over time.
 
 - **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Shadow mode and Holotable timelines.
 - **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
+- **Unknown:** Which game event or listener reports this without new game-thread polling (an event the engine already raises, read where the recorder already samples)? Needs the game.
 - **Updated:** 2026-10-27
 
 ## Supervisor and plans
@@ -2795,7 +2798,7 @@ The ink panel, the XF overlay box, the CET window and line, their themes and mot
 | ↳ [`surfaces.motion`](#surfaces.motion) The motion setting | surface | merged | partial | works | P1 |
 | [`surfaces.overlay-set`](#surfaces.overlay-set) Overlay settings live | surface | merged | partial | unknown | P1 |
 | [`surfaces.overlay-state`](#surfaces.overlay-state) Overlay state | sense | merged | partial | caveats | P1 |
-| [`surfaces.canvas`](#surfaces.canvas) World-space canvas (canvas@1) | surface | proposed | none | unknown | P2 |
+| [`surfaces.canvas`](#surfaces.canvas) World-space canvas (canvas@1) | surface | planned | none | unknown | P2 |
 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) Canvas keys and canvas.visible | surface | proposed | none | unknown | P2 |
 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) Read-only Lua snapshot for CET modules | sense | proposed | none | unknown | P3 |
 
@@ -3040,7 +3043,7 @@ overlay.state reports the XF box (on or off, hooked, drawing or why not, back bu
 
 ### World-space canvas (canvas@1)
 
-`surfaces.canvas` · surface · stage **proposed** · evidence **none** · health **unknown** · P2
+`surfaces.canvas` · surface · stage **planned** · evidence **none** · health **unknown** · P2
 
 A world-space canvas in the native overlay host: primitives, anchors, caps and a per-tick camera snapshot, with the radar view, so producers draw in game with no per-layer game-side code.
 

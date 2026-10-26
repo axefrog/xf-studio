@@ -439,7 +439,7 @@
     "summary": "A world-space canvas in the native overlay host: primitives, anchors, caps and a per-tick camera snapshot, with the radar view, so producers draw in game with no per-layer game-side code.",
     "area": "surfaces",
     "kind": "surface",
-    "stage": "proposed",
+    "stage": "planned",
     "evidence": "none",
     "health": "unknown",
     "priority": "P2",
