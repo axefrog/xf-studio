@@ -7,6 +7,7 @@ import { contrastTable } from "../src/studio-ui/style-guide/contrast";
 import { finishCatalogue } from "./fixtures/eye-region";
 import { notDrawnStateMarkup } from "../src/studio-ui/components";
 import { XF_STUDIO_SITE } from "../src/studio-ui/style-guide/back-link";
+import { minifyCss } from "../src/studio-ui/style-guide/minify-css";
 
 const root = resolve(import.meta.dir, "..");
 const lf = (text: string) => text.replace(/\r\n/g, "\n");
@@ -42,9 +43,9 @@ test("d-summon groups early-access panels with their stages and documents the fi
   expect(summon).toContain("scrolls inside");
 });
 
-test("the committed style guide embeds the current design system verbatim", () => {
+test("the committed style guide embeds the current design system, comments and whitespace aside", () => {
   // Regenerate with: bun tools/build-style-guide.ts
-  expect(has(css)).toBe(true);
+  expect(has(`<style id="studio-css">${minifyCss(css)}</style>`)).toBe(true);
 });
 
 test("the style guide covers every panel, icon and finish, and labels pattern status", () => {
