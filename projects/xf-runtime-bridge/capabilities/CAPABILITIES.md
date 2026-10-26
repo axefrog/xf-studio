@@ -6,23 +6,23 @@
 
 ## Summary
 
-168 capabilities in 16 areas.
+169 capabilities in 16 areas.
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 14 | 9 | 16 | 2 | 0 | 127 | 0 | 0 |
+| items | 15 | 9 | 16 | 2 | 0 | 127 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
-| items | 41 | 18 | 82 | 27 | 0 |
+| items | 42 | 18 | 82 | 27 | 0 |
 
 | Health | unknown | works | caveats | degraded | broken |
 |---|---:|---:|---:|---:|---:|
-| items | 53 | 70 | 43 | 0 | 2 |
+| items | 54 | 70 | 43 | 0 | 2 |
 
 | Priority | P0 | P1 | P2 | P3 |
 |---|---:|---:|---:|---:|
-| items | 0 | 12 | 49 | 107 |
+| items | 0 | 12 | 49 | 108 |
 
 ### Evidence debt
 
@@ -194,7 +194,7 @@ Per consumer, blocking first.
 
 #### XF · Holotable
 
-10 open (0 blocking, 7 needs, 3 wants).
+11 open (0 blocking, 7 needs, 4 wants).
 
 | Level | Ref | Milestone | Capability | Stage | Evidence | Need |
 |---|---|---|---|---|---|---|
@@ -208,6 +208,7 @@ Per consumer, blocking first.
 | wants | want 15 | M6 | [`recorder.observe-result`](#recorder.observe-result) | requested | none | Lets Holotable draw what sessions already asked, at no extra game cost. |
 | wants | want plate | M7 | [`surfaces.canvas-plate`](#surfaces.canvas-plate) | requested | none | The design comes from the UI component track; the bridge exposes the token to canvas@1. |
 | wants | agent-layers clock | M6b | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) | requested | none | Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today. |
+| wants | agent-layers game clock | M6c | [`recorder.game-time`](#recorder.game-time) | requested | none | Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock. |
 
 #### Photo Mode Tools
 
@@ -2376,7 +2377,7 @@ showroom.spawn, showroom.light, showroom.rotate, showroom.clear and showroom.sta
 
 ## Recorder and catch-up
 
-Continuous channels, taps, session events and catching up on what happened between turns. (area `recorder`, 11 capabilities)
+Continuous channels, taps, session events and catching up on what happened between turns. (area `recorder`, 12 capabilities)
 
 | Capability | Kind | Stage | Evidence | Health | Priority |
 |---|---|---|---|---|---|
@@ -2391,6 +2392,7 @@ Continuous channels, taps, session events and catching up on what happened betwe
 | [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | requested | none | unknown | P3 |
 | [`recorder.status`](#recorder.status) Read-only recorder status | sense | requested | none | unknown | P3 |
 | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | service | requested | none | unknown | P3 |
+| [`recorder.game-time`](#recorder.game-time) Game time on recorder samples | sense | requested | none | unknown | P3 |
 
 <a id="recorder.session-events"></a>
 
@@ -2568,6 +2570,17 @@ A read-only command answered on the bridge thread (no game-thread call, no lease
 The recorder run manifest carries a wall-clock mapping for its QPC clock (for example start_at, the ISO time at start_s), so replay tools can place wall-clock-timed items on the recording timeline.
 
 - **Demand (holotable, wants, agent-layers clock, M6b):** Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today.
+- **Updated:** 2026-10-27
+
+<a id="recorder.game-time"></a>
+
+### Game time on recorder samples
+
+`recorder.game-time` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+
+The recorder's V samples (or a 1 Hz heartbeat) carry the game's own clock (game_time_s), so tools can align game-clock items, such as the Story Engine's shadow-mode simulation, with recorded and live observations.
+
+- **Demand (holotable, wants, agent-layers game clock, M6c):** Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock.
 - **Updated:** 2026-10-27
 
 ## Supervisor and plans

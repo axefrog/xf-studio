@@ -174,5 +174,27 @@
       }
     ],
     "updated": "2026-10-27"
+  },
+  {
+    "id": "recorder.game-time",
+    "title": "Game time on recorder samples",
+    "summary": "The recorder's V samples (or a 1 Hz heartbeat) carry the game's own clock (game_time_s), so tools can align game-clock items, such as the Story Engine's shadow-mode simulation, with recorded and live observations.",
+    "area": "recorder",
+    "kind": "sense",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "wants",
+        "ref": "agent-layers game clock",
+        "milestone": "M6c",
+        "note": "Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock.",
+        "since": "2026-10-27"
+      }
+    ],
+    "updated": "2026-10-27"
   }
 ]

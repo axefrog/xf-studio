@@ -54,3 +54,4 @@
 {"at":"2026-10-26T23:21:47+10:00","by":"holotable","kind":"added","items":["surfaces.canvas-plate"],"summary":"holotable asks for: The XfCanvasPlate token.","digests":{"surfaces.canvas-plate":"9c0878d151d8dfa3"}}
 {"at":"2026-10-27T01:03:47+10:00","by":"holotable","kind":"added","items":["recorder.status"],"summary":"holotable asks for: Read-only recorder status.","digests":{"recorder.status":"437e491e171f5e55"}}
 {"at":"2026-10-27T05:51:40+10:00","by":"holotable","kind":"added","items":["recorder.manifest-wall-clock"],"summary":"holotable asks for: Wall-clock time in the run manifest.","digests":{"recorder.manifest-wall-clock":"322b5143bff46cdd"}}
+{"at":"2026-10-27T07:58:22+10:00","by":"holotable","kind":"added","items":["recorder.game-time"],"summary":"holotable asks for: Game time on recorder samples.","digests":{"recorder.game-time":"d9ada69ee1fcfcc0"}}
