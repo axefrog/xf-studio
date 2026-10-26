@@ -38,6 +38,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
   - which ideas are cheap to build and turn it into a real value-add for the first release, such as finding which mods a save depends on, explaining what changed between two saves, or checking a save before a mod update.
 
   Then the maintainer decides: build the chosen ideas, or move the panel behind research tools for the beta, in line with the "exportable first" bar. *21 Oct*
+- **Desktop parity with `main`:** the last packaged build is `v0.1.0-alpha.2` (28 Sep), and nothing since has been checked installed (CORE-123 among them). Wanted: a nightly packaged build of `main` in CI (an artifact, not a release); an unattended installed acceptance in Windows Sandbox every week and before each release; then `v0.1.0-alpha.3`. *26 Oct*
 - **Consistency leftovers:** UI-142's build steps ([readiness](../../docs/release-readiness.md)). *29 Sep*
 
 ### Polish lane (before 1.0)
