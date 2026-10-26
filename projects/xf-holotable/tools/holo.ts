@@ -1,19 +1,40 @@
-// Holotable from the command line: the same service methods the Studio and agents use.
-//   bun tools/holo.ts runs
-//   bun tools/holo.ts report <run folder> [--at <seconds from the first sample>] [--full]
+// Headless CLI. Validation never starts a service or writes a spool.
+import { resolve } from "node:path";
 import { createService, defaultOptions } from "../src/service.ts";
+import { createLayerSpool } from "../src/layer-spool.ts";
+import { validateFiles } from "../src/layer-validation.ts";
 
-const [cmd, dir, ...rest] = process.argv.slice(2);
-const { handlers } = createService(defaultOptions());
-const signal = new AbortController().signal;
-if (cmd === "runs") {
-  for (const r of await handlers["runs.list"]({}, signal) as any[]) console.log(`${r.session} run-${r.run}  ${(r.end - r.start).toFixed(0)} s  ${(r.bytes / 1e6).toFixed(1)} MB${r.complete ? "" : "  (incomplete)"}  ${r.dir}`);
-} else if (cmd === "report" && dir) {
-  const at = rest.includes("--at") ? Number(rest[rest.indexOf("--at") + 1]) : undefined;
-  const s = await handlers["session.open"]({ dir, level: "structure" }, signal) as any;
-  const t = at === undefined ? s.meta.to : s.meta.from + at;
-  console.log(await handlers["session.report"]({ dir, t, level: rest.includes("--full") ? "full" : "structure" }, signal));
-} else {
-  console.error("Usage: bun tools/holo.ts runs | report <run folder> [--at <seconds>] [--full]");
-  process.exit(2);
-}
+const [cmd, target, ...rest] = process.argv.slice(2);
+let status = 0;
+try {
+  if (cmd === "validate" && target) {
+    const errors = validateFiles(resolve(target));
+    for (const e of errors) console.error(`${e.file}:${e.line}: ${e.reason}`);
+    console.log(errors.length ? `${errors.length} refusals.` : "Valid: no refusals."); status = errors.length ? 1 : 0;
+  } else if (cmd === "publish" && target) {
+    const text = rest[0] ? await Bun.file(rest[0]).text() : await Bun.stdin.text();
+    if (Buffer.byteLength(text) > 16 * 1024 * 1024) throw Error("Batch exceeds 16 MB.");
+    const spool = createLayerSpool(defaultOptions().layersRoot!);
+    try {
+      const result = spool.publish(target, text.split("\n").filter(l => l.trim()));
+      console.log(`${result.accepted} lines published; ${result.refused} items refused.`);
+      for (const reason of result.reasons) console.error(reason);
+      status = result.refused ? 1 : 0;
+    } finally { spool.close(); }
+  } else if (cmd === "runs" || cmd === "report" && target) {
+    const service = createService(defaultOptions()), signal = new AbortController().signal;
+    try {
+      if (cmd === "runs") {
+        for (const r of await service.handlers["runs.list"]({}, signal) as any[]) console.log(`${r.title ?? `${r.session} run-${r.run}`}  ${r.standalone ? "layers only · " : ""}${(r.end - r.start).toFixed(0)} s  ${r.dir}`);
+      } else {
+        const at = rest.includes("--at") ? Number(rest[rest.indexOf("--at") + 1]) : undefined;
+        const s = await service.handlers["session.open"]({ dir: target, level: "structure" }, signal) as any;
+        const t = at === undefined ? s.meta.to : s.meta.from + at;
+        const position = rest.includes("--position") ? rest[rest.indexOf("--position") + 1].split(",").map(Number) : undefined;
+        const branch = rest.includes("--branch") ? rest[rest.indexOf("--branch") + 1] : undefined;
+        console.log(await service.handlers["session.report"]({ dir: target, t, level: rest.includes("--structure") ? "structure" : "full", position, branch }, signal));
+      }
+    } finally { service.close(); }
+  } else { console.error("Usage: bun projects/xf-holotable/tools/holo.ts runs | publish <producer/layer> [file] | validate <file|folder> | report <run folder|layers:producer/set> [--at seconds] [--structure] [--branch name] [--position x,y,z]"); status = 2; }
+} catch (e) { console.error(String((e as Error).message)); status = 1; }
+process.exitCode = status;

@@ -56,6 +56,8 @@ function* parseRun(dir: string, signal?: AbortSignal): Generator<void, Session> 
   const meta: SessionMeta = {
     schema: "xfh/session-1", session: manifest.session, run: manifest.run, worldGeneration: manifest.world_generation,
     pluginVersion: manifest.plugin_version ?? "", start: manifest.start_s, end: manifest.end_s, channels: manifest.channels ?? [],
+    wallStart: manifestWallStart(manifest),
+    gameTimeSamples: Array.isArray(manifest.game_time_samples) ? manifest.game_time_samples.filter((x: Json) => Number.isFinite(x.source_s) && Number.isFinite(x.game_s)).map((x: Json) => ({ source: x.source_s, game: x.game_s })) : undefined,
     complete: manifest.complete === true, dropped: manifest.dropped ?? 0, missedDeadlines: manifest.missed_deadlines ?? 0,
     largestGapS: manifest.largest_gap_s ?? 0, coverage: manifest.coverage ?? "", from: manifest.start_s, to: manifest.end_s, problems: [],
   };
@@ -88,7 +90,7 @@ function* parseRun(dir: string, signal?: AbortSignal): Generator<void, Session> 
       if (row.seq <= last) throw new Error(`Sequence went backwards at ${row.seq}`);
       if (last && row.seq !== last + 1) session.gaps.push({ from: row.source_s, to: row.source_s, reason: "sequence", fromSeq: last, toSeq: row.seq });
       last = row.seq; lastT = row.source_s;
-      if (row.valid === false) { if (row.channel === "v") invalidV.push(row.source_s); continue; }
+      if (row.valid === false && row.channel !== "actors") { if (row.channel === "v") invalidV.push(row.source_s); continue; }
       ingest(row, session, cite, lines);
     }
     yield;
@@ -103,10 +105,19 @@ function* parseRun(dir: string, signal?: AbortSignal): Generator<void, Session> 
 export function ingest(row: Json, s: Session, cite: (seq: number) => Cite, lines: Map<string, Json>) {
   const d = row.data ?? {}, t = row.source_s as number, seq = row.seq as number;
   switch (row.channel) {
+    case "actors": {
+      if (!Array.isArray(d.actors)) return;
+      for (const a of d.actors.slice(0, 16)) if (typeof a.who === "string") {
+        (s.actors ??= []).push({ t, who: a.who, entity: typeof a.entity === "string" ? a.entity : undefined,
+          position: a.valid === true && Array.isArray(a.position) && a.position.length === 3 && a.position.every(Number.isFinite) ? a.position : undefined });
+      }
+      return;
+    }
     case "v": {
       if (!Array.isArray(d.position)) return;
       const vel = Array.isArray(d.velocity) ? d.velocity : [0, 0, 0];
       s.v.push({ t, seq, position: d.position as Vec3, yaw: d.yaw ?? 0, speed: Math.hypot(vel[0], vel[1], vel[2]),
+        gameTime: typeof d.game_time_s === "number" && Number.isFinite(d.game_time_s) ? d.game_time_s : undefined,
         health: d.vitals?.health ?? 0, healthMax: d.vitals?.health_max ?? 0, inCombat: d.vitals?.in_combat === true,
         vehicle: d.vehicle?.mounted === true, busy: d.busy ?? "" } satisfies VSample);
       return;
@@ -144,6 +155,12 @@ export function ingest(row: Json, s: Session, cite: (seq: number) => Cite, lines
       return;
     }
   }
+}
+
+/** The single replay clock mapping adapter, including older manifests with no mapping. */
+export function manifestWallStart(manifest: Json): string | undefined {
+  const at = manifest.start_at ?? manifest.wall_start;
+  return typeof at === "string" && Number.isFinite(Date.parse(at)) ? at : undefined;
 }
 
 function push(s: Session, e: Omit<TimelineEvent, "id">) { s.events.push({ id: `e${s.events.length + 1}`, ...e }); }

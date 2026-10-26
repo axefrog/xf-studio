@@ -36,8 +36,8 @@ export function holotableRecordingsPanel(ctx: Ctx): PanelController {
       }
       if (!body.contains(runs.element)) body.replaceChildren(runs.element);
       const rows: RecordRow[] = state.runs.map((r): RecordRow => ({
-        id: r.dir, name: `Session ${r.session.slice(0, 8)} · run ${r.run}`, current: state.open?.dir === r.dir,
-        meta: [`${Math.round(r.end - r.start)} s`, `${(r.bytes / 1e6).toFixed(1)} MB`],
+        id: r.dir, name: r.title ?? `Session ${r.session.slice(0, 8)} · run ${r.run}`, current: state.open?.dir === r.dir,
+        meta: r.standalone ? [`layers only · ${Math.round(r.end - r.start)} s`] : [`${Math.round(r.end - r.start)} s`, `${(r.bytes / 1e6).toFixed(1)} MB`],
         badge: state.open?.dir === r.dir ? { text: "Open now", tone: "info" } : undefined,
         action: state.open?.dir === r.dir ? undefined : button({ label: "Open", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.open", dir: r.dir }); } }),
       }));

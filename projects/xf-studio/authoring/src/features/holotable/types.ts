@@ -6,7 +6,7 @@
 export type Vec3 = readonly [number, number, number];
 export type ContentLevel = "structure" | "full";
 
-export interface HoloRun { readonly session: string; readonly run: number; readonly dir: string; readonly start: number; readonly end: number; readonly bytes: number; readonly complete: boolean }
+export interface HoloRun { readonly session: string; readonly run: number; readonly dir: string; readonly start: number; readonly end: number; readonly bytes: number; readonly complete: boolean; readonly title?: string; readonly standalone?: boolean; readonly clock?: string }
 
 export interface HoloVSample {
   readonly t: number; readonly seq: number; readonly position: Vec3; readonly yaw: number; readonly speed: number;
@@ -26,6 +26,7 @@ export interface HoloSession {
     readonly complete: boolean; readonly dropped: number; readonly missedDeadlines: number; readonly largestGapS: number; readonly coverage: string;
     /** Damage found while reading (missing chunks, an unfinished last row). */
     readonly problems: readonly string[];
+    readonly standalone?: { readonly set: string; readonly title: string; readonly clock: "wall" | "game" | "recording"; readonly branches: readonly string[] };
   };
   readonly v: readonly HoloVSample[];
   readonly camera: readonly HoloCameraSample[];

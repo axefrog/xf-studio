@@ -14,6 +14,10 @@ import { ORBITS, project, type Orbit, type Primitive, type Style } from "./proje
 import { HOLOTABLE_PANEL_META } from "./contribution";
 import { f1, heading, vAt } from "./shared";
 import { solidCanvas } from "./solid-canvas";
+import { agentCanvas } from "./agent-canvas";
+import { pickPlace } from "./place-picking";
+import { createSolidSelection } from "./solid-selection";
+import type { Vec3 } from "../types";
 
 type Ctx = ModuleViewContext<HolotableFacade>;
 const NS = "http://www.w3.org/2000/svg";
@@ -28,7 +32,7 @@ const DASH: Partial<Record<Style, string>> = { gap: "2 5", area: "10 4 2 4", cam
 /** Each dash pattern's length (an odd-length list repeats twice), so a line cut at the edge continues its pattern in phase. */
 const DASH_PERIOD = Object.fromEntries(Object.entries(DASH).map(([style, d]) => { const xs = d!.split(" ").map(Number), sum = xs.reduce((a, b) => a + b, 0); return [style, xs.length % 2 ? sum * 2 : sum]; })) as Partial<Record<Style, number>>;
 
-export interface HolotableFrame { ms: number; projectMs: number; drawMs: number; width: number; height: number; solids: number; cut: number }
+export interface HolotableFrame { ms: number; projectMs: number; drawMs: number; width: number; height: number; solids: number; cut: number; pending?: boolean; preparationFrames?: number; preparationMs?: number }
 export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => void): PanelController {
   const facade = ctx.facade;
   let orbit: Orbit = { ...ORBITS.tilt };
@@ -42,8 +46,14 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   svg.setAttribute("style", "position:absolute;inset:0;display:block;height:100%;width:100%;cursor:grab;touch-action:none");
   const canvas = document.createElement("canvas"); canvas.setAttribute("aria-hidden", "true");
   canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none";
-  const stage = h("div", { style: "position:relative;flex:1 1 auto;min-height:0;width:100%;background:var(--stage);border:1px solid var(--line);overflow:hidden" }, canvas, svg);
+  const agents = document.createElement("canvas"); agents.setAttribute("aria-hidden", "true"); agents.style.cssText = canvas.style.cssText;
+  const stage = h("div", { style: "position:relative;flex:1 1 auto;min-height:0;width:100%;background:var(--stage);border:1px solid var(--line);overflow:hidden" }, canvas, agents, svg);
   const solidsCanvas = solidCanvas(canvas, () => { drawnKey = ""; ctx.changed(); });
+  const layersCanvas = agentCanvas(agents, () => { drawnKey = ""; ctx.changed(); });
+  let currentScene: ReturnType<typeof project> | undefined;
+  const solidSelection = createSolidSelection();
+  let resumeFrame: number | undefined, disposed = false, preparationFrames = 0, preparationMs = 0;
+  const emptySolids: never[] = [];
   const empty = h("div", { style: "flex:1 1 auto;min-height:0" });
   // The panel can be resized, docked or floated at any time: redraw at the new size.
   // A press orbits or picks without taking keyboard focus, so the focus ring shows only when someone tabs in to turn the view by keys.
@@ -57,18 +67,21 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     transaction: { edit: v => { const s = facade.snapshot().open?.session; if (s) void ctx.dispatch({ kind: "holo.seek", t: s.meta.from + v }, { quiet: true }); } } });
   const readout = h("span", { class: "note muted mono", role: "status", style: "flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" });
   const backToLive = button({ label: "Back to live", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.follow" }, { quiet: true }); } });
+  const branches = new Segmented<string>({ label: "Branch", options: [], onSelect: branch => { void ctx.dispatch({ kind: "holo.branch", branch }); } });
+  branches.element.style.flex = "0 0 auto";
 
   for (const control of [play, view.element, backToLive]) control.style.flex = "0 0 auto";
   const controls = h("div", { class: "control-line", style: "flex:0 0 auto;flex-wrap:nowrap" }, play, view.element, readout, backToLive);
   time.element.style.flex = "0 0 auto"; // the drawing takes the room; the controls keep their own height
   const element = h("div", { class: "panel-content holotable-panel", style: "display:flex;flex-direction:column;height:100%;min-height:0;box-sizing:border-box;overflow:auto" },
-    empty, stage, time.element, controls);
+    empty, stage, branches.element, time.element, controls);
 
   // Gestures: orbit, zoom, pick. The viewpoint is this view's own; the selection is the service's.
   // The mark under the pointer is read on press: pointer capture retargets the release to the drawing itself.
   let drag: { id: number; x: number; y: number; yaw: number; pitch: number; moved: boolean; mark: string | null } | null = null;
   svg.addEventListener("pointerdown", event => {
-    const mark = (event.target as Element | null)?.closest?.("[data-id]")?.getAttribute("data-id") ?? null;
+    const bounds = svg.getBoundingClientRect();
+    const mark = (event.target as Element | null)?.closest?.("[data-id]")?.getAttribute("data-id") ?? layersCanvas.pick(event.clientX - bounds.left, event.clientY - bounds.top);
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY, yaw: orbit.yaw, pitch: orbit.pitch, moved: false, mark };
     svg.setPointerCapture(event.pointerId);
   });
@@ -81,9 +94,14 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   });
   const endDrag = (event: PointerEvent) => {
     if (!drag || event.pointerId !== drag.id) return;
-    const picked = !drag.moved ? drag.mark : null;
+    const clicked = !drag.moved, picked = clicked ? drag.mark : null;
     drag = null;
     if (picked) void ctx.dispatch({ kind: "holo.select", id: picked }, { quiet: true });
+    else if (clicked && currentScene) {
+      const bounds = svg.getBoundingClientRect(), state = facade.snapshot();
+      const place = pickPlace(currentScene.solidCamera, event.clientX-bounds.left, event.clientY-bounds.top, currentScene.solids.map(s=>s.source), currentScene.v?.position[2] ?? focusAt(state)[2]);
+      if (place) void ctx.dispatch({ kind: "holo.place", position: place }, { quiet: true });
+    }
   };
   svg.addEventListener("pointerup", endDrag);
   svg.addEventListener("pointercancel", () => { drag = null; });
@@ -112,16 +130,24 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   const trim = (layer: SVGGElement, used: number) => { while (layer.children.length > used) layer.lastElementChild!.remove(); };
 
   function draw(state: HoloState) {
+    if (resumeFrame !== undefined) { cancelAnimationFrame(resumeFrame); resumeFrame = undefined; }
     const open = state.open;
-    if (!open || state.phase === "opening") { solidsCanvas.clear(svg.clientWidth, svg.clientHeight); trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); message.textContent = ""; messageKey = ""; chromeSize = ""; return; }
+    if (!open || state.phase === "opening") { solidsCanvas.clear(svg.clientWidth, svg.clientHeight); layersCanvas.clear(svg.clientWidth, svg.clientHeight); trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); message.textContent = ""; messageKey = ""; chromeSize = ""; return; }
     const width = svg.clientWidth || 800, height = svg.clientHeight || 480;
     const started = performance.now();
-    const scene = project(open.session, open.world, state.t, state.layers, orbit, width, height, state.selected);
+    const scene = project(open.session, open.world, state.t, state.layers, orbit, width, height, state.selected, open.session.meta.standalone ? focusAt(state) : undefined, { instances: [], cut: 0 });
+    currentScene = scene;
     const projectedAt = performance.now();
     set(svg, "viewBox", `0 0 ${width} ${height}`);
-    solidsCanvas.draw(scene.solids, scene.solidCamera);
+    const agentProgress = layersCanvas.draw(state.agents, state.agentEnabled, scene.solidCamera, state.selected, Math.max(0, Math.min(4, started + 6 - performance.now())));
+    const target = open.session.meta.standalone ? focusAt(state) : scene.v?.position ?? [0,0,0] as Vec3;
+    const solidStarted = performance.now();
+    const prepared = solidSelection.step(state.layers.solids ? open.world.solids ?? emptySolids : emptySolids, target, scene.solidCamera, Math.min(started + 3.5, solidStarted + 1.5));
+    const solidProgress = solidsCanvas.draw(prepared.instances, scene.solidCamera, started + 5.5);
+    scene.solids = prepared.instances.slice(0, solidProgress.drawn); scene.solidsDrawn = solidProgress.drawn; scene.solidsCut = prepared.cut;
+    const pending = prepared.pending || solidProgress.pending || !!agentProgress?.pending;
+    preparationFrames++; preparationMs += performance.now() - solidStarted;
     const paintedAt = performance.now();
-    measured?.({ ms: paintedAt - started, projectMs: projectedAt - started, drawMs: paintedAt - projectedAt, width, height, solids: scene.solidsDrawn, cut: scene.solidsCut });
     if (chromeSize !== `${width}x${height}`) {
       chromeSize = `${width}x${height}`;
       const ticks: Element[] = [];
@@ -144,6 +170,19 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     trim(textLayer, textList.length);
     // Markers are few (V and the placed events): rebuilt each frame.
     marksLayer.replaceChildren(...scene.primitives.filter(p => p.kind === "marker").map(p => marker(p as Extract<Primitive, { kind: "marker" }>)));
+    measured?.({ ms: performance.now() - started, projectMs: projectedAt - started, drawMs: paintedAt - projectedAt, width, height, solids: scene.solidsDrawn, cut: scene.solidsCut, pending, preparationFrames, preparationMs });
+    if (pending && !disposed) resumeFrame = requestAnimationFrame(() => {
+      resumeFrame = undefined;
+      if (!disposed && element.isConnected && element.getClientRects().length) { drawnKey = ""; draw(facade.snapshot()); }
+      else solidSelection.cancel();
+    });
+    else { preparationFrames = 0; preparationMs = 0; }
+  }
+  function focusAt(state: HoloState): Vec3 {
+    const items = state.agents.layers.filter(l => state.agentEnabled[l.id] !== false).flatMap(l=>l.items).filter(i=>i.place);
+    const selected = items.find(i=>i.key===state.selected); if (selected?.place) return selected.place;
+    if (!items.length) return [0,0,0];
+    return [0,1,2].map(axis => (Math.min(...items.map(i=>i.place![axis]))+Math.max(...items.map(i=>i.place![axis])))/2) as unknown as Vec3;
   }
 
   function marker(p: Extract<Primitive, { kind: "marker" }>): Element {
@@ -196,6 +235,9 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     spec: { id: "holotable.view", ...HOLOTABLE_PANEL_META["holotable.view"], element },
     update() {
       const state = facade.snapshot(), s = state.open?.session;
+      const branchNames = s?.meta.standalone?.branches ?? [];
+      branches.element.hidden = branchNames.length < 2;
+      branches.setOptions(branchNames.map(value => ({ value, label: value }))); if (state.branch) branches.update(state.branch);
       // Nothing open: one plain line where the drawing goes, pointing at Recordings.
       const ek = JSON.stringify([!!s, state.phase, state.message, state.runs.length]);
       if (ek !== emptyKey) {
@@ -209,16 +251,19 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       play.setAttribute("aria-pressed", String(state.live.following || state.playing));
       backToLive.hidden = !state.live.watching || state.live.following;
       applyCapability(backToLive, facade.capability({ kind: "holo.follow" }));
-      time.update(s ? state.t - s.meta.from : 0, { min: 0, max: s ? Math.max(0.1, s.meta.to - s.meta.from) : 1, disabled: !s, reason: s ? undefined : "Open a recording first." });
+      time.relabel(s?.meta.standalone?.clock === "game" ? "Game time" : "Moment");
+      time.update(s ? state.t - s.meta.from : 0, { min: 0, max: s ? Math.max(0.1, s.meta.to - s.meta.from) : 1, disabled: !s, reason: s ? undefined : "Open a recording first.", text: s?.meta.standalone?.clock === "game" ? gameTime(state.t) : undefined });
       if (s) {
         const v = vAt(state);
         const reconnecting = state.live.watching && state.live.phase === "disconnected";
-        setText(readout, `${reconnecting ? "Reconnecting · " : state.live.following ? "Live · " : ""}${f1(state.t - s.meta.from)} s${state.live.following ? "" : ` of ${f1(s.meta.to - s.meta.from)} s`}${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}${state.live.following && !reconnecting && state.live.behindS > 2 ? ` · ${f1(state.live.behindS)} s behind` : ""}`);
+        const gameClock = s.meta.standalone?.clock === "game";
+        setText(readout, gameClock ? gameTime(state.t) : `${reconnecting ? "Reconnecting · " : state.live.following ? "Live · " : ""}${f1(state.t - s.meta.from)} s${state.live.following ? "" : ` of ${f1(s.meta.to - s.meta.from)} s`}${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}${state.live.following && !reconnecting && state.live.behindS > 2 ? ` · ${f1(state.live.behindS)} s behind` : ""}`);
       } else setText(readout, "");
       readout.title = readout.textContent ?? "";
       const dk = JSON.stringify([state.revision, orbit, svg.clientWidth, svg.clientHeight]);
       if (dk !== drawnKey) { drawnKey = dk; draw(state); }
     },
-    dispose() { resized.disconnect(); solidsCanvas.dispose(); },
+    dispose() { disposed = true; if (resumeFrame !== undefined) cancelAnimationFrame(resumeFrame); solidSelection.cancel(); resized.disconnect(); solidsCanvas.dispose(); layersCanvas.dispose(); },
   };
 }
+function gameTime(t: number) { const day = Math.floor(t / 86400) + 1, hour = Math.floor(t / 3600) % 24, minute = Math.floor(t / 60) % 60; return `Day ${day} · ${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`; }

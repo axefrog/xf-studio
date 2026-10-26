@@ -50,6 +50,7 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
   const view = (p: Vec3) => { const x = p[0] - c[0], y = p[1] - c[1], z = p[2] - c[2]; return [x * r[0] + y * r[1] + z * r[2], x * u[0] + y * u[1] + z * u[2], x * f[0] + y * f[1] + z * f[2]]; };
   const screen = (q: number[]): [number, number] => [width / 2 + focal * q[0] / q[2], height / 2 - focal * q[1] / q[2]];
   const point = (p: Vec3) => { const q = view(p); return q[2] < NEAR ? null : screen(q); };
+  const ray = (x: number, y: number) => ({ origin: c, direction: f.map((n, i) => n + r[i] * (x - width / 2) / focal - u[i] * (y - height / 2) / focal) as unknown as Vec3 });
   /**
    * A polyline clipped against the near plane, then against the drawing (plus a margin): only what can be seen, as separate runs.
    * Unclipped, a district outline near the camera projects millions of pixels off-screen, and the browser dashes every one each frame.
@@ -119,7 +120,7 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
     const across = Math.max(radius, Math.abs(horizontal), Math.abs(vertical));
     return 2 * radius * focal * (depth + across) / (depth * depth - radius * radius);
   };
-  return { point, line, polygon, clipPolygon, extent, boundExtent, projectInto, scale, position: c, width, height };
+  return { point, line, polygon, clipPolygon, extent, boundExtent, projectInto, scale, ray, position: c, target, width, height };
 }
 
 export interface Scene { primitives: Primitive[]; solids: readonly SolidInstance[]; solidCamera: ReturnType<typeof camera>; v?: HoloVSample; cam?: HoloCameraSample; camStale: boolean; vStale: boolean; recent: HoloEvent[]; inGap: boolean; metresPerBar: number; barPx: number; solidsDrawn: number; solidsCut: number }
@@ -132,9 +133,9 @@ const distanceViews = new WeakMap<readonly HoloSolid[], { target: string; eligib
 
 /** The model at moment t, projected for an orbit around V (or the first sample, before V's first sample). */
 export function project(s: HoloSession, world: HoloWorld, t: number, layers: Readonly<Record<HoloLayer, boolean>>, orbit: Orbit,
-  width: number, height: number, selected: string | null): Scene {
+  width: number, height: number, selected: string | null, focus?: Vec3, prepared?: { instances: SolidInstance[]; cut: number }): Scene {
   const v = at(s.v, t) ?? s.v[0], cam = at(s.camera, t);
-  const target: Vec3 = v ? v.position : [0, 0, 0];
+  const target: Vec3 = focus ?? (v ? v.position : [0, 0, 0]);
   const C = camera(target, orbit, width, height), out: Primitive[] = [];
   const fade = (p: Vec3) => { const d = Math.hypot(p[0] - C.position[0], p[1] - C.position[1], p[2] - C.position[2]); return Math.max(0.15, Math.min(1, 1.3 - d / (orbit.distance * 2.6))); };
   const lines = (ps: readonly Vec3[], style: Style, opacity: number, closed = false) => { for (const r of C.line(ps, closed)) out.push({ kind: "line", points: r.points, style, opacity, dashOffset: r.offset }); };
@@ -154,7 +155,7 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
   // Significance follows distance/frustum culling: buildings and walls win over small nearby props.
   const source = layers.solids ? world.solids ?? EMPTY_SOLIDS : EMPTY_SOLIDS, key = JSON.stringify([target, orbit, width, height]);
   let views = solidViews.get(source); if (!views) solidViews.set(source, views = new Map());
-  let geometry = views.get(key);
+  let geometry = prepared ?? views.get(key);
   if (!geometry) {
     const nearby = significantVisible(source, target, C);
     const visible = nearby.kept.sort((a, b) => distance2(b.solid.center, C.position) - distance2(a.solid.center, C.position));

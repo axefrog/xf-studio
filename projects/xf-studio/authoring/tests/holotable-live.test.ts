@@ -103,6 +103,7 @@ test("hiding stops the watch and all requests; showing resumes the live source",
 });
 test("level changes refetch events without rewinding track cursors and remove full words immediately", async () => {
   const f = setup(); f.service.shown(); await settle(); await f.service.dispatch({ kind: "holo.watch" });
+  await f.service.dispatch({ kind: "holo.level", level: "structure" });
   const full = f.data(102); f.updates.push({ ...full, events: [{ id: "e", kind: "line", t: 101, seq: 2, summary: "Subtitle requested", level: "full", detail: "secret", cite: "test" }] });
   await f.service.dispatch({ kind: "holo.level", level: "full" }); await settle();
   expect(JSON.stringify(f.service.snapshot().open)).toContain("secret");
@@ -113,6 +114,7 @@ test("level changes refetch events without rewinding track cursors and remove fu
 });
 test("a late full-content response cannot restore words after the person hides them", async () => {
   const f = setup(); f.service.shown(); await settle(); await f.service.dispatch({ kind: "holo.watch" });
+  await f.service.dispatch({ kind: "holo.level", level: "structure" });
   const full = f.data(102);
   f.updates.push({ ...full, events: [{ id: "late", kind: "line", t: 101, seq: 2, summary: "Subtitle requested", level: "full", detail: "late private words", cite: "test" }] });
   const release = f.holdNextPoll();

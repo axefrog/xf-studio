@@ -3,7 +3,7 @@ import { CommandApi, type CommandApiOptions } from "../../xf-runtime-bridge/tool
 
 export interface RecorderStatus {
   active: boolean; run: number | null; session: string; world: number | null;
-  channels: string[]; start: number | null; latest: number | null; stopReason: string | null;
+  channels: string[]; start: number | null; wallStart?: string; latest: number | null; stopReason: string | null;
 }
 export type Discovery = { available: true; recorder: RecorderStatus } | { available: false; reason: string };
 export interface LiveBridge {
@@ -19,7 +19,8 @@ export function mapRecorderStatus(raw: Record<string, any>): RecorderStatus {
   if (raw.active && raw.run === null || raw.run !== null && (!Number.isSafeInteger(raw.run) || raw.run < 1 || typeof raw.session !== "string" || !Number.isSafeInteger(raw.world) || !Number.isFinite(raw.start?.s))) throw Error("Invalid recorder identity");
   return { active: raw.active, run: raw.run, session: raw.session, world: raw.world, channels: raw.channels,
     // s shares the samples' QPC timeline; at is wall-clock display data only.
-    start: raw.start?.s ?? null, latest: raw.latest, stopReason: raw.stop_reason ?? null };
+    start: raw.start?.s ?? null, wallStart: typeof raw.start?.at === "string" && Number.isFinite(Date.parse(raw.start.at)) ? raw.start.at : undefined,
+    latest: raw.latest, stopReason: raw.stop_reason ?? null };
 }
 
 export function createLiveBridge(createApi: (options: CommandApiOptions) => Pick<CommandApi, "callBridge" | "run" | "close"> = options => new CommandApi(options)): LiveBridge {

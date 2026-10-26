@@ -12,6 +12,7 @@ export type Cite = `recorder:${string}:${number}:${number}` | `event:${string}:$
 /** One sample of V, from the recorder's `v` channel. Times are QPC source seconds. */
 export interface VSample {
   t: number; seq: number;
+  gameTime?: number;
   position: Vec3; yaw: number; speed: number;
   health: number; healthMax: number; inCombat: boolean; vehicle: boolean; busy: string;
 }
@@ -42,6 +43,10 @@ export interface SessionMeta {
   schema: "xfh/session-1";
   session: string; run: number; worldGeneration: number; pluginVersion: string;
   start: number; end: number; channels: string[];
+  /** ISO wall-clock reference at start, when the source supplies a mapping. */
+  wallStart?: string;
+  gameTimeSamples?: { source: number; game: number }[];
+  standalone?: { set: string; title: string; clock: "wall" | "game" | "recording"; branches: string[] };
   /** The sampled span: V's first and last samples. The recorder arms before its first sample, so replay covers this, not start–end. */
   from: number; to: number;
   complete: boolean; dropped: number; missedDeadlines: number; largestGapS: number;
@@ -57,13 +62,14 @@ export interface Session {
   camera: CameraSample[];
   events: TimelineEvent[];
   gaps: Gap[];
+  actors?: { t: number; who: string; entity?: string; position?: Vec3 }[];
 }
 
 /** A district or venue outline with its vertical band, from offline game data. */
-export interface Area { id: string; name: string; kind: "district" | "venue"; parent?: string; poly: [number, number][]; zlo: number; zhi: number }
+export interface Area { id: string; name: string; kind: "district" | "venue"; parent?: string; poly: [number, number][]; zlo: number; zhi: number; labelPoint?: Vec3 }
 
 /** A streaming sector's box, a coarse "what the game streams here" cell. */
-export interface Cell { level: number; category: string; min: Vec3; max: Vec3 }
+export interface Cell { id?: string; name?: string; labelPoint?: Vec3; level: number; category: string; min: Vec3; max: Vec3 }
 
 /** A primitive in world metres. Axes retain the full actor-scale × local-pose transform, including nonuniform scales. */
 export interface Solid {

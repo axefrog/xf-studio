@@ -72,7 +72,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
     epoch++; cursor = undefined; lastSeq = lastEvent = 0; pendingGap = undefined; lines = new Map(); retained = 0;
     stoppedDrained = false;
     session = { meta: { schema: "xfh/session-1", session: r.session!, run: r.run!, worldGeneration: r.world!, pluginVersion: "",
-      start: r.start!, end: r.start!, from: r.start!, to: r.start!, channels: [...r.channels], complete: false,
+      start: r.start!, wallStart: r.wallStart, end: r.start!, from: r.start!, to: r.start!, channels: [...r.channels], complete: false,
       dropped: 0, missedDeadlines: 0, largestGapS: 0, coverage: "Live recorder observations; runtime cadence uncommissioned.", problems: [] },
       v: [], camera: [], events: [], gaps: [] };
     state = { ...state, phase: "watching", more: false, droppedBatches: 0, behindS: 0, message: "" };
@@ -123,7 +123,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
       lastSeq = row.seq;
       const vec = (v: unknown) => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
       const d = row.data;
-      const valid = row.valid === true && d && (d.event === undefined || typeof d.event === "string") &&
+      const valid = (row.valid === true || row.channel === "actors") && d && (d.event === undefined || typeof d.event === "string") &&
         (row.channel !== "v" || vec(d.position) && Number.isFinite(d.yaw) && (!d.velocity || vec(d.velocity))) &&
         (row.channel !== "camera" || vec(d.camera?.position) && vec(d.camera?.forward) && vec(d.camera?.up) && Number.isFinite(d.camera?.fov) && Number.isFinite(d.camera?.aspect));
       if (!valid) { pendingGap = "invalid"; continue; }

@@ -55,7 +55,8 @@ describe("Holotable service", () => {
     const service = createHolotable({ transport: fakeTransport(log) }, new AbortController().signal);
     service.shown(); await flush();
     await service.dispatch({ kind: "holo.open", dir: "D1" });
-    expect(JSON.stringify(service.snapshot().open)).not.toContain("hello");
+    expect(service.snapshot().level).toBe("full");
+    expect(JSON.stringify(service.snapshot().open)).toContain("hello");
     await service.dispatch({ kind: "holo.level", level: "full" });
     expect(JSON.stringify(service.snapshot().open)).toContain("hello");
     await service.dispatch({ kind: "holo.level", level: "structure" });
@@ -80,13 +81,16 @@ describe("Holotable service", () => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     const base = fakeTransport();
+    let delayFull = false;
     const slowFull: HoloTransport = async (method, params, signal) => {
-      if (method === "session.open" && params.level === "full") { await gate; signal.throwIfAborted(); }
+      if (delayFull && method === "session.open" && params.level === "full") { await gate; signal.throwIfAborted(); }
       return base(method, params, signal);
     };
     const service = createHolotable({ transport: slowFull }, new AbortController().signal);
     service.shown(); await flush();
     await service.dispatch({ kind: "holo.open", dir: "D1" });
+    await service.dispatch({ kind: "holo.level", level: "structure" });
+    delayFull = true;
     const toFull = service.dispatch({ kind: "holo.level", level: "full" });
     await service.dispatch({ kind: "holo.level", level: "structure" });
     release(); await toFull; await flush();
