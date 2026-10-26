@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { AcceptedStudioOperation } from "../src/app/accepted-studio-operation";
 import { StudioFileOperations, type CapturedCollectionService, type FileWriter, type StudioFileAction, type StudioFilePort } from "../src/app/studio-file-operations";
 import type { CollectionActivity, CollectionOutcome, CollectionProgress, CollectionRequest, CollectionResult, CollectionService } from "../src/library/collection-service";
 import { FILE_DESCRIPTORS, PART_PRESET_DESCRIPTORS, REQUEST_DESCRIPTORS } from "../src/app/studio-action-descriptors";
@@ -86,12 +87,38 @@ function fixture() {
     capture: () => { focused = "B"; return { writer, check: () => ({ available: true }), release: () => { released++; } }; } });
   files.attachCollection(live);
   const states: ReturnType<StudioFileOperations["snapshot"]>[] = []; files.subscribe(() => states.push(files.snapshot()));
-  return { files, service, gate, states, seen, downloads, focused: () => focused, released: () => released, reads: () => reads };
+  return { files, service, device, gate, states, seen, downloads, focused: () => focused, released: () => released, reads: () => reads };
 }
 
 test("operation matrix covers every registered file kind and library kind (Stop controls an existing operation)", () => {
   expect(fileActions.map(action => String(action.kind)).sort()).toEqual(Object.keys(FILE_DESCRIPTORS).filter(kind => kind !== "package.stop").sort());
   expect([...new Set(requests.map(request => String(request.kind)))].sort()).toEqual(Object.keys(REQUEST_DESCRIPTORS).sort());
+});
+
+const completedOperations = [
+  ...fileActions.map(action => ({ name: `file ${action.kind}`, run: (files: StudioFileOperations) => files.execute(action) })),
+  ...requests.map(request => ({ name: `library ${request.kind}${request.kind === "package" ? `.${request.action}` : ""}`,
+    run: (files: StudioFileOperations) => files.executeCollection(request) })),
+];
+for (const operation of completedOperations) test(`late notifications preserve the newer outcome after completed ${operation.name}`, async () => {
+  const f = fixture(), subscribe = AcceptedStudioOperation.prototype.subscribe;
+  let notify: (() => void) | undefined;
+  // Keep a delivery already queued by an adapter, even if its subscription is later removed.
+  const subscription = spyOn(AcceptedStudioOperation.prototype, "subscribe").mockImplementation(function (this: AcceptedStudioOperation, listener) {
+    notify = listener; return subscribe.call(this, listener);
+  });
+  try {
+    const pending = operation.run(f.files); subscription.mockRestore();
+    f.gate.resolve(); expect(await pending).toMatchObject({ ok: true });
+    f.device.pick = async () => ({ name: "broken.json", size: 1, text: async () => "{", bytes: async () => new TextEncoder().encode("{") });
+    expect(await f.files.execute({ kind: "recipe.import", collection: "A" })).toMatchObject({ ok: false, code: "invalid_json" });
+    const state = f.files.snapshot(), notifications = f.states.length;
+    expect(state.last).toMatchObject({ kind: "recipe.import", ok: false, code: "invalid_json" });
+    expect(notify).toBeDefined();
+    notify!(); notify!(); notify!();
+    expect(f.states.length).toBeGreaterThan(notifications);
+    expect(f.files.snapshot()).toEqual(state);
+  } finally { subscription.mockRestore(); f.files.dispose(); expect(f.reads()).toBe(0); }
 });
 
 for (const action of fileActions) test(`all accepted file dependencies stay captured through completion: ${action.kind}`, async () => {

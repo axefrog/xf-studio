@@ -23,6 +23,32 @@ const picked = (value: unknown): StudioPickedFile => {
   return { name: "captured.json", size: text.length, text: async () => text, bytes: async () => new TextEncoder().encode(text) };
 };
 
+for (const target of ["root", "pinned"] as const) test(`completed ${target} Check freshness repaints without hiding a later invalid recipe import`, async () => {
+  const w = await profileContextStudio({ package: async (_action, input) => eyeCheck(input as { id: string }, { presets: [] }) });
+  let off = () => {};
+  try {
+    await w.settle();
+    const own = w.bind(target === "root" ? "presets--scene0" : "presets--scene2").context.current();
+    const port = target === "root" ? w.port : own;
+    expect(await port.files.execute({ kind: "package.check" })).toMatchObject({ ok: true });
+    expect(port.files.snapshot().package?.freshness).toBe("current");
+    w.fileDevice.pick = async () => ({ name: "broken.json", size: 1, text: async () => "{", bytes: async () => new TextEncoder().encode("{") });
+    expect(await port.files.execute({ kind: "recipe.import" })).toMatchObject({ ok: false, code: "invalid_json" });
+    const failure = port.files.snapshot().last, checked = port.files.snapshot().package;
+    expect(failure).toMatchObject({ kind: "recipe.import", ok: false, code: "invalid_json" });
+    let notifications = 0; off = port.subscribe(() => { notifications++; });
+    for (const index of [2, 1, 3]) {
+      expect(own.authoring.dispatch({ kind: "point.select", layerId: "layer-1", index }).ok).toBe(true);
+      expect(port.files.snapshot().last).toEqual(failure);
+      expect(port.files.snapshot().package).toEqual(checked);
+    }
+    expect(notifications).toBeGreaterThan(0);
+    expect(own.authoring.dispatch({ kind: "layer.setOpacity", layerId: "layer-1", opacity: .37 }).ok).toBe(true);
+    expect(port.files.snapshot().package?.freshness).toBe("stale");
+    expect(port.files.snapshot().last).toEqual(failure);
+  } finally { off(); await w.dispose(); }
+});
+
 test("review High / rule A: a root collection picker holds A's writer through a drawn switch to B", async () => {
   let answer!: (file: StudioPickedFile) => void;
   const w = await profileContextStudio({ pick: () => new Promise(done => { answer = done; }) });

@@ -205,7 +205,15 @@ export class StudioFileOperations {
       (this.liveCollection ? { service: this.liveCollection, execute: executeCollection } : undefined);
     const operation = new AcceptedStudioOperation(++this.sequence, kind, file,
       { sources, collection, device: { ...this.port }, capture: captured, signal: this.life.signal }, !!captured);
-    this.operations.set(operation, operation.subscribe(() => { if (!operation.isRunning()) this.completed(operation); this.notify(); }));
+    let completionHandled = false;
+    this.operations.set(operation, operation.subscribe(() => {
+      if (!completionHandled && !operation.isRunning()) {
+        completionHandled = true;
+        this.completed(operation);
+      }
+      // Retained package subscriptions repaint freshness without publishing the outcome again.
+      this.notify();
+    }));
     return operation;
   }
   private prune() {
