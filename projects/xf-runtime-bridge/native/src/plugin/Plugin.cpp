@@ -119,9 +119,27 @@ xfb::overlay::MotionState MotionNow(State& aState)
     return aState.overlayHost.Motion();
 }
 
+cetpanel::Context CetPanelContext()
+{
+    auto& state = Get();
+    cetpanel::Context c;
+    c.generation = state.session.sessionId + ":" + std::to_string(state.bridge ? state.bridge->ConnectionsAccepted() : 0);
+    c.killed = !state.bridge || state.bridge->GetDispatcher().IsKilled();
+    c.ownerConnected = state.bridge && state.bridge->HasClient();
+#ifdef XFB_AUTONOMOUS_TEST_HOOKS
+    c.pressAllowed = state.config.allowTestHooks;
+#endif
+    c.writesAllowed = state.config.allowWrites;
+    c.writesPaused = state.bridge && state.bridge->GetDispatcher().WritesPaused();
+    c.pausedBy = c.writesPaused ? static_cast<cetpanel::PauseOrigin>(state.pausedBy.load()) : cetpanel::PauseOrigin::None;
+    if (state.cetOverlaySeen.load()) c.cetOpen = state.cetOverlayOpen.load();
+    return c;
+}
+
 nlohmann::json InfoJson()
 {
     auto& state = Get();
+    const auto cpuOverride = state.overlayHost.CpuOverride(); // 0.8.22: loaded once (the test figure, or none)
     return nlohmann::json{
         {"plugin", "XF Runtime Bridge"},
         {"plugin_version", XFB_VERSION_STRING},
@@ -160,8 +178,8 @@ nlohmann::json InfoJson()
                      // the host's own figures, for the CET window's diagnostics card
                      {"frames", state.overlayHost.Frames()},
                      // 0.8.22: the test figure (overlay.set diagnostics_cpu_ms) where one is set, so the CET window's bar draws it too
-                     {"cpu_ms", state.overlayHost.CpuOverridden() ? state.overlayHost.DisplayCpuMs() : std::round(state.overlayHost.CpuMs() * 1000.0) / 1000.0},
-                     {"cpu_ms_override", state.overlayHost.CpuOverridden()},
+                     {"cpu_ms", cpuOverride ? *cpuOverride : std::round(state.overlayHost.CpuMs() * 1000.0) / 1000.0},
+                     {"cpu_ms_override", cpuOverride.has_value()},
                      {"cpu_ms_max", std::round(state.overlayHost.CpuMsMax() * 1000.0) / 1000.0}}},
         // 0.8.22: what the CET window last drew (its DIAGNOSTICS header, chip and tone) and how cet.panel's last press went; null
         // until the CET layer has reported (core/CetPanel.hpp).

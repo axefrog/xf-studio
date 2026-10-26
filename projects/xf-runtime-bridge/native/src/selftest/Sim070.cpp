@@ -515,7 +515,11 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
     aDispatcher.Register({"cet.panel", Access::Notify, RunOn::BridgeThread, "The CET window's header and pause button (simulated: no CET layer).",
                           [writes = aConfig.allowWrites](const MethodContext& aContext) {
                               static xfb::cetpanel::Channel channel;
-                              auto out = channel.Request(aContext.params, std::nullopt, writes, false);
+                              xfb::cetpanel::Context context;
+                              context.generation = "sim";
+                              context.pressAllowed = true; // the self-test host has test hooks
+                              context.writesAllowed = writes;
+                              auto out = channel.Request(aContext.params, context);
                               out["simulated"] = true;
                               return out;
                           }});

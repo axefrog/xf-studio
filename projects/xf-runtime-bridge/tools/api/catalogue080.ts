@@ -237,7 +237,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "photo.scene.set": ["not_in_photo_mode", "unavailable", "write_mismatch"],
   "overlay.state": [],
   "overlay.set": ["needs_restart", "test_hooks_off"],
-  "cet.panel": ["writes_disabled", "cet_not_answering"],
+  "cet.panel": ["test_hooks_off", "paused_by_player", "writes_disabled", "cet_not_answering"],
   // NPC direction (0.8, part B): its own map, kept beside its commands (catalogue080npc.ts).
   ...NPC_REFUSALS,
   // The live-direction toolkit (0.8.12): its own map, kept beside its commands (catalogue080dm.ts).

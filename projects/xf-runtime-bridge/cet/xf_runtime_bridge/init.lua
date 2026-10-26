@@ -90,8 +90,9 @@ local state = {
   messageOk = true,
   -- 0.8.22, cet.panel (XFBridge_CetPanel): the last request applied, the header state wanted (applied once, before the header) and
   -- as last drawn, what the status surfaces last drew (chip, tone, which surface) and how the last requested press went.
-  panelApplied = 0,
-  diagnosticsWanted = nil,
+  headerDone = {},  -- the draws that applied header requests: { id, previous } (or { id, superseded = true }), the last few
+  pressSeen = {},   -- the press request ids already queued (a request sent again runs once)
+  diagnosticsWanted = nil, -- { id, value }
   diagnosticsOpen = nil,
   drawnChip = nil,
   drawnTone = nil,
@@ -231,13 +232,22 @@ local function answerOptions()
     found, #request.names, #skipped, tostring(sent and stored)))
 end
 
--- 0.8.22, cet.panel: the report of what this layer drew goes in, and the requests not applied yet come back (a JSON array, oldest
--- first). A header request waits in diagnosticsWanted until the window next draws the header (once: the player's own clicks rule
--- after it); a press is queued as the Pause changes button's own action, so it runs as a click would, overlay open or not.
-local function exchangePanel()
-  local report = { applied_id = state.panelApplied, diagnostics_open = state.diagnosticsOpen, diagnostics_pending = state.diagnosticsWanted,
-    chip = state.drawnChip, tone = state.drawnTone, surface = state.drawnSurface, last_press = state.lastPress,
-    panel = panel ~= nil, cet_open = state.overlayOpen == true }
+-- 0.8.22, cet.panel: the report of what this layer drew goes in, and the requests not completed yet come back (a JSON array, oldest
+-- first). Receipt is not completion (the review): a header request is completed only by the draw that applies it (header_done,
+-- with the header as drawn before it, or nothing when it had never been drawn), so the plugin sends it again until then, a CET
+-- reload included; a press is queued once per request id, and runs only once the plugin grants its claim (remote_pause), so a
+-- request sent again never runs twice and one the kill switch cancelled never runs. A stopped bridge queues no press.
+local HEADER_DONE_KEPT = 8
+local function headerDone(entry)
+  table.insert(state.headerDone, entry)
+  while #state.headerDone > HEADER_DONE_KEPT do table.remove(state.headerDone, 1) end
+end
+state.headerDoneFor = headerDone -- panel.lua reports the draw that applied a header request
+
+local function exchangePanel(bridge)
+  local report = { header_done = state.headerDone, diagnostics_open = state.diagnosticsOpen,
+    diagnostics_pending = state.diagnosticsWanted and state.diagnosticsWanted.value, chip = state.drawnChip, tone = state.drawnTone,
+    surface = state.drawnSurface, last_press = state.lastPress, panel = panel ~= nil, cet_open = state.overlayOpen == true }
   local encoded, body = pcall(json.encode, report)
   if not encoded or type(body) ~= "string" then return end
   local ok, text = pcall(function() return Game.XFBridge_CetPanel(body) end)
@@ -246,12 +256,18 @@ local function exchangePanel()
   if not decoded or type(requests) ~= "table" then return end
   for _, request in ipairs(requests) do
     local id = type(request) == "table" and tonumber(request.id) or nil
-    if id and id > state.panelApplied then
-      if request.diagnostics_open ~= nil then state.diagnosticsWanted = request.diagnostics_open == true end
-      if request.press == "pause_changes" or request.press == "resume_changes" then
-        table.insert(state.actions, { name = "pause", argument = request.press == "pause_changes", request = { id = id, target = request.press } })
+    if id then
+      if request.diagnostics_open ~= nil then
+        local wanted = state.diagnosticsWanted
+        if not wanted or wanted.id < id then
+          if wanted then headerDone({ id = wanted.id, superseded = true }) end
+          state.diagnosticsWanted = { id = id, value = request.diagnostics_open == true }
+        end
       end
-      state.panelApplied = id
+      if (request.press == "pause_changes" or request.press == "resume_changes") and not state.pressSeen[id] and not (bridge and bridge.killed) then
+        state.pressSeen[id] = true
+        table.insert(state.actions, { name = "remote_pause", request = { id = id, target = request.press } })
+      end
     end
   end
 end
@@ -266,7 +282,7 @@ local function pollMessages()
   if state.pluginPresent and bridge and bridge.enabled then
     hudOk, frame = pcall(function() return Game.XFBridge_Hud() end)
   end
-  if state.pluginPresent and bridge and bridge.enabled then exchangePanel() end
+  if state.pluginPresent and bridge and bridge.enabled then exchangePanel(bridge) end
   local surface = hudOk and type(frame) == "string" and string.match(frame, "\nsurface\t([%a_]+)\n") or nil
   state.surface = surface or "cet_line"
   if not state.pluginPresent or not bridge or not bridge.enabled or bridge.killed then
@@ -371,8 +387,24 @@ local function runAction(action)
       state.messageOk = false
       log("warn", cid, "panel: reconnect refused: code=" .. tostring(answer and answer.code) .. " " .. tostring(answer and answer.reason))
     end
-  elseif action.name == "pause" then
-    local answer = decodeAnswer(callNative("XFBridge_PauseWrites", action.argument == true))
+  elseif action.name == "pause" or action.name == "remote_pause" then
+    local request = action.request
+    local paused = action.argument == true
+    if action.name == "remote_pause" then
+      -- 0.8.22 (the review): a press cet.panel asked for runs only once the plugin grants its claim (its session, client and the
+      -- bridge still the ones it was asked under, and not a resume over the player's own pause); XFBridge_PauseWrites then takes
+      -- the claim, so the plugin knows the bridge paused, not the player.
+      local encoded, body = pcall(json.encode, { claim = request.id })
+      local claim = encoded and decodeAnswer(callNative("XFBridge_CetPanel", body)) or nil
+      if not (claim and claim.claimed) then
+        state.lastPress = { id = request.id, target = request.target, refused = claim and claim.why or "the plugin didn't answer" }
+        log("info", cid, "panel: requested " .. tostring(request.target) .. " not run: " .. tostring(state.lastPress.refused))
+        refreshInfo()
+        return
+      end
+      paused = request.target == "pause_changes"
+    end
+    local answer = decodeAnswer(callNative("XFBridge_PauseWrites", paused))
     if answer and answer.reason then
       state.message = answer.reason
       state.messageOk = false
@@ -383,8 +415,8 @@ local function runAction(action)
     end
     log("info", cid, "panel: writes paused=" .. tostring(answer and answer.writes_paused))
     -- 0.8.22: a press cet.panel asked for says how it went (bridge.info cet_panel.last_press).
-    if action.request then
-      state.lastPress = { id = action.request.id, target = action.request.target, answer = answer or { error = "the plugin didn't answer" } }
+    if request then
+      state.lastPress = { id = request.id, target = request.target, answer = answer or { error = "the plugin didn't answer" } }
     end
   elseif action.name == "mark" then
     -- 0.6: a marker in the session's event stream, for the coordinator to find (session.log); changes nothing.

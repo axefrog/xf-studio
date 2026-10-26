@@ -3393,29 +3393,88 @@ void Bridge070Tests()
             o::SetLive(on, figure["undo"]["params"], true);
             const auto cleared = on.Snapshot();
             {
-                // 0.8.22 cet.panel: queued for the CET layer, retired by its report, undone to what the window drew and the pause state.
-                xfb::cetpanel::Channel panel;
+                // 0.8.22 cet.panel, after its review: a header in every build, a press only with test hooks; requests belong to their
+                // session and client; a header is sent until a draw applies it; a press runs once, after a claim; the undo is the
+                // captured earlier state, unknown kept unknown; a remote resume never undoes the player's pause.
+                namespace cp = xfb::cetpanel;
+                const auto ctx = [](bool pressAllowed = true, bool paused = false, cp::PauseOrigin by = cp::PauseOrigin::None) {
+                    cp::Context c;
+                    c.generation = "s:1";
+                    c.pressAllowed = pressAllowed;
+                    c.writesAllowed = true;
+                    c.writesPaused = paused;
+                    c.pausedBy = by;
+                    c.cetOpen = false;
+                    return c;
+                };
+                cp::Channel panel;
                 const bool unreported = panel.Report().is_null();
-                const auto open = panel.Request(json{{"diagnostics_open", true}}, false, true, false);
-                const auto press = panel.Request(json{{"press", "pause_changes"}}, false, true, false);
-                const auto first = json::parse(panel.Exchange(""));
-                const bool queued = first.size() == 2 && first[0]["diagnostics_open"] == true && first[1]["press"] == "pause_changes" &&
-                                    open["undo"]["params"] == json{{"diagnostics_open", false}} && press["undo"]["params"] == json{{"press", "resume_changes"}} &&
-                                    open["applies"][0].get<std::string>().find("next time") != std::string::npos && open["cet_overlay_open"] == false;
-                const auto left = panel.Exchange(json{{"applied_id", open["id"]}, {"diagnostics_open", true}, {"chip", "Changes allowed"}}.dump());
-                const auto report = panel.Report();
-                const auto again = panel.Request(json{{"diagnostics_open", false}}, true, true, true);
-                Check("0.8.22 cet.panel: requests queue for the CET layer until its report retires them; bridge.info carries the report; the undo is what was drawn",
-                      unreported && queued && json::parse(left).size() == 1 && report["diagnostics_open"] == true && report["pending"] == 1 &&
-                          again["undo"]["params"] == json{{"diagnostics_open", true}} && panel.Exchange(json{{"applied_id", 99}}.dump()).empty() &&
-                          ParamsCode([&] { panel.Request(json{{"press", "pause_changes"}}, true, false, false); }) == "writes_disabled" &&
-                          ParamsCode([&] { panel.Request(json{{"press", "pause"}}, true, true, false); }) == "bad_params" &&
-                          ParamsCode([&] { panel.Request(json::object(), true, true, false); }) == "bad_params",
-                      report.dump());
-                xfb::cetpanel::Channel full;
-                for (size_t i = 0; i < xfb::cetpanel::kMaxPending; ++i) full.Request(json{{"diagnostics_open", true}}, std::nullopt, true, false);
+                const auto pressNoHooks = ParamsCode([&] { panel.Request(json{{"press", "pause_changes"}}, ctx(false)); });
+                const auto header = panel.Request(json{{"diagnostics_open", true}}, ctx(false)); // headers need no test hooks
+                const auto first = json::parse(panel.Exchange("", ctx()));
+                // Receipt is not completion: the header is sent again until a draw reports it applied (a CET reload replays it).
+                const auto again = json::parse(panel.Exchange(json{{"chip", "Changes allowed"}}.dump(), ctx()));
+                const auto applied = panel.Exchange(json{{"header_done", json::array({{{"id", header["id"]}}})}}.dump(), ctx()); // previous unknown
+                const auto record = panel.Report()["requests"][0];
+                Check("0.8.22 cet.panel review: headers in every build, presses only with test hooks; a header is sent until a draw applies it",
+                      unreported && pressNoHooks == "test_hooks_off" && first.size() == 1 && again.size() == 1 && applied.empty() && record["header"] == "applied" &&
+                          record["header_previous"].is_null() && header["undo"]["params"] == json{{"undo", header["id"]}},
+                      record.dump());
+                // The undo of a header whose earlier state was never drawn leaves it alone, and says so.
+                const auto undoUnknown = panel.Request(json{{"undo", header["id"]}}, ctx());
+                // A header applied over a drawn state undoes to that state.
+                const auto closeIt = panel.Request(json{{"diagnostics_open", false}}, ctx());
+                panel.Exchange(json{{"header_done", json::array({{{"id", closeIt["id"]}, {"previous", true}}})}}.dump(), ctx());
+                const auto undoKnown = panel.Request(json{{"undo", closeIt["id"]}}, ctx());
+                Check("0.8.22 cet.panel review: the undo puts back the captured header state, and an unknown one stays unknown",
+                      undoUnknown["queued"] == false && undoUnknown["notes"][0].get<std::string>().find("unknown") != std::string::npos &&
+                          undoKnown["request"]["diagnostics_open"] == true && undoKnown["undo_of"] == closeIt["id"],
+                      undoKnown.dump());
+                // A press runs once, after its claim; a replay after a CET reload is refused; the undo restores the pause state before it.
+                const auto pause = panel.Request(json{{"press", "pause_changes"}}, ctx());
+                const auto claim = json::parse(panel.Exchange(json{{"claim", pause["id"]}}.dump(), ctx()));
+                const auto use = panel.TakeClaim(true, ctx());
+                panel.NotePress(use.id, json{{"writes_paused", true}});
+                const auto replay = json::parse(panel.Exchange(json{{"claim", pause["id"]}}.dump(), ctx(true, true, cp::PauseOrigin::Bridge)));
+                const auto click = panel.TakeClaim(false, ctx()); // no claim: the player's own click
+                const auto undoPress = panel.Request(json{{"undo", pause["id"]}}, ctx(true, true, cp::PauseOrigin::Bridge));
+                Check("0.8.22 cet.panel review: a press runs once after its claim, a replay is refused, and its undo restores the earlier pause state",
+                      claim["claimed"] == true && use.kind == cp::ClaimUse::Kind::Press && replay["claimed"] == false &&
+                          click.kind == cp::ClaimUse::Kind::None && undoPress["request"]["press"] == "resume_changes",
+                      replay.dump());
+                // The player's pause: a remote resume is refused at the request and at the claim.
+                cp::Channel player;
+                const auto refusedNow = ParamsCode([&] { player.Request(json{{"press", "resume_changes"}}, ctx(true, true, cp::PauseOrigin::Player)); });
+                const auto resume = player.Request(json{{"press", "resume_changes"}}, ctx(true, true, cp::PauseOrigin::Bridge));
+                const auto refusedAtClaim = json::parse(player.Exchange(json{{"claim", resume["id"]}}.dump(), ctx(true, true, cp::PauseOrigin::Player)));
+                Check("0.8.22 cet.panel review (High): a remote resume never undoes a pause the player set",
+                      refusedNow == "paused_by_player" && refusedAtClaim["claimed"] == false && refusedAtClaim["why"] == "paused_by_player");
+                // A kill, the client going or a new client cancels what is queued; a claim cancelled before PauseWrites takes it is refused.
+                cp::Channel killed;
+                const auto queuedPress = killed.Request(json{{"press", "pause_changes"}}, ctx());
+                auto stoppedCtx = ctx();
+                stoppedCtx.killed = true;
+                const auto afterKill = killed.Exchange("", stoppedCtx);
+                const auto lateClaim = json::parse(killed.Exchange(json{{"claim", queuedPress["id"]}}.dump(), stoppedCtx));
+                cp::Channel owner;
+                const auto ownersPress = owner.Request(json{{"press", "pause_changes"}}, ctx());
+                auto otherCtx = ctx();
+                otherCtx.generation = "s:2";
+                const auto afterNewClient = owner.Exchange("", otherCtx);
+                cp::Channel race;
+                const auto racePress = race.Request(json{{"press", "pause_changes"}}, ctx());
+                race.Exchange(json{{"claim", racePress["id"]}}.dump(), ctx());
+                const auto raced = race.TakeClaim(true, stoppedCtx);
+                Check("0.8.22 cet.panel review: a kill or a new client cancels queued presses, and a claim taken after a kill is refused",
+                      afterKill.empty() && lateClaim["claimed"] == false && afterNewClient.empty() && raced.kind == cp::ClaimUse::Kind::Cancelled &&
+                          killed.Report()["requests"][0]["press_status"] == "cancelled",
+                      lateClaim.dump());
+                cp::Channel full;
+                for (size_t i = 0; i < cp::kMaxPending; ++i) full.Request(json{{"press", "pause_changes"}}, ctx()); // presses wait too
                 Check("0.8.22 cet.panel: a CET layer that never takes them is said once the queue is full",
-                      ParamsCode([&] { full.Request(json{{"diagnostics_open", true}}, std::nullopt, true, false); }) == "cet_not_answering");
+                      ParamsCode([&] { full.Request(json{{"press", "pause_changes"}}, ctx()); }) == "cet_not_answering" &&
+                          ParamsCode([&] { full.Request(json{{"press", "pause"}}, ctx()); }) == "bad_params" &&
+                          ParamsCode([&] { full.Request(json{{"undo", 999}}, ctx()); }) == "bad_params");
             }
             Check("0.8.22 overlay.set diagnostics_cpu_ms: test hooks only; the figure replaces the measured time in the bars and the state, null clears it",
                   noHooks == "test_hooks_off" && drawn && cleared["cpu_ms_override"].is_null() && std::abs(on.DisplayCpuMs() - 0.15) < 1e-9 &&

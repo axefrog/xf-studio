@@ -162,8 +162,14 @@ public:
     // 0.8.22, test builds (overlay.set diagnostics_cpu_ms): a figure the diagnostics bars draw instead of the measured time, so the
     // bar's warning and danger tones can be captured; NaN when none. DisplayCpuMs is what the bars and the states show.
     void SetCpuOverride(double aMs) { m_cpuOverrideMs.store(aMs); }
-    bool CpuOverridden() const { return !std::isnan(m_cpuOverrideMs.load()); }
-    double DisplayCpuMs() const { return CpuOverridden() ? m_cpuOverrideMs.load() : CpuMs(); }
+    // One load each (review, Low 6): a clear between two loads must never hand out NaN.
+    std::optional<double> CpuOverride() const
+    {
+        const double value = m_cpuOverrideMs.load();
+        return std::isnan(value) ? std::nullopt : std::optional<double>(value);
+    }
+    bool CpuOverridden() const { return CpuOverride().has_value(); }
+    double DisplayCpuMs() const { return CpuOverride().value_or(CpuMs()); }
     double CpuMsMax() const { return m_cpuMicrosMax.load() / 1000.0; }
     void NoteFrameGeneration(const std::vector<std::string>& aModules);
     // 0.8.22 (the Studio's in-game motion rule): [overlay] motion, Windows' own animation-effects setting (read at start and with

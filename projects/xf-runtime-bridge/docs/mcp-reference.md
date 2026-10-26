@@ -2992,18 +2992,19 @@ Tools not yet sorted into an area above.
 
 ### `cet_panel`
 
-**Drive the CET window's own controls.** 0.8.22: the XF Runtime Bridge window in Cyber Engine Tweaks' overlay, as the player would use it: diagnostics_open opens or closes its DIAGNOSTICS header (once, right before the header is drawn; the player's own clicks rule after it), and press runs its Pause changes or Resume changes button's own action, exactly as a click would. Notify class, so it works while changes are paused. The CET layer takes the request within about 0.25 s: a press runs whether or not CET's overlay is open; with the overlay closed the header state waits for the next time the window draws (the result says which). bridge_info's cet_panel says what the window last drew (diagnostics_open, chip, tone, surface) and how the last press went (last_press {id, target, answer}). The undo puts the header back as it was drawn and the pause state as it was.
+**Drive the CET window's own controls.** 0.8.22: the XF Runtime Bridge window in Cyber Engine Tweaks' overlay, as the player would use it. diagnostics_open opens or closes its DIAGNOSTICS header, in every build: once, right before the header is drawn (the player's own clicks rule after it); with CET's overlay closed it waits for the next time the window draws, and it is sent again until a draw applies it (a CET reload included). press runs the Pause changes or Resume changes button's own action, exactly as a click would, overlay open or closed: test builds only (the autonomous test hooks and allow_test_hooks, else test_hooks_off), and a Resume never undoes a pause the player set with the button (paused_by_player). A press runs once, after the CET layer claims it; a kill, the client going or a new client cancels it first. Notify class, so it works while changes are paused. bridge_info's cet_panel says what the window last drew (diagnostics_open, chip, tone, surface), the recent requests with their status, and how the last press went (last_press). The undo is cet_panel {undo: id}: it puts back what the CET layer captured when it applied that request (the header as drawn before it; the pause state before the press); a header state the window never drew stays unknown, and the header is then left as it is.
 
 - **Command:** `cet.panel`, the bridge method `cet.panel`
 - **Permission:** Show messages in the game (`notify`)
 - **Changes the game:** No: it shows or moves the bridge's own messages and panel
-- **Undo:** The result's undo (cet_panel with the header as it was drawn and the press that restores the pause state).
-- **Refusals:** [`writes_disabled`](#refusal-writes-disabled), [`cet_not_answering`](#refusal-cet-not-answering)
+- **Undo:** The result's undo (cet_panel {undo: id}): the header as it was drawn before, and the pause state before the press.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`paused_by_player`](#refusal-paused-by-player), [`writes_disabled`](#refusal-writes-disabled), [`cet_not_answering`](#refusal-cet-not-answering)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
 | `diagnostics_open` | boolean | `true`, `false` | Open (true) or close (false) the DIAGNOSTICS header. |
-| `press` | string | `pause_changes`, `resume_changes` | Press the window's Pause changes or Resume changes button. |
+| `press` | string | `pause_changes`, `resume_changes` | Press the window's Pause changes or Resume changes button (test builds only). |
+| `undo` | integer | 1 to 9007199254740991 | Put back what that request (its id) changed; takes no other option. |
 
 ### `supervisor_set`
 
@@ -3296,6 +3297,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-not-v"></a>`not_v` | The player isn't V right now (a Johnny section, or someone else the story puts in V's place), so the appearance screen wasn't opened. Try again once V is back. |
 | <a id="refusal-npc-not-found"></a>`npc_not_found` | That handle isn't one of the bridge's XF actors (npc_status lists them), and a declared incident names XF actors only, never V or a picked passer-by. |
 | <a id="refusal-outfit-managed-elsewhere"></a>`outfit_managed_elsewhere` | V's outfit is managed by a script mod's outfit system (such as EquipmentEx), which replaces the wardrobe's own requests, so this change would do nothing. Nothing was changed. wardrobe_equip with suspend: true takes that outfit off for now (the story's own request) so equipped clothing draws; resume: true puts it back. |
+| <a id="refusal-paused-by-player"></a>`paused_by_player` | The player paused changes with the XF Runtime Bridge window's own button, so only the player can resume them there. Ask the player, then try again. |
 | <a id="refusal-permission-denied"></a>`permission_denied` | The caller did not allow every capability this policy needs. Grant the required classes explicitly or choose a narrower policy; nothing was started. |
 | <a id="refusal-photo-key-needed"></a>`photo_key_needed` | The game offers no way to open the full photo mode from inside. Use photo_open, which presses the photo mode key in the game window, or ask the player to press it; game_wait with phase photo_mode notices when it opens. |
 | <a id="refusal-plan-unavailable"></a>`plan_unavailable` | The supervisor could not safely resolve its action targets. Read the action result and current actor state before replacing the entry. |

@@ -109,6 +109,8 @@ struct State
     std::atomic<bool> cetOverlaySeen{false};
     // 0.8.22: cet.panel's requests to the CET window and the CET layer's report of what it drew (XFBridge_CetPanel).
     cetpanel::Channel cetPanel;
+    // Who paused changes, while they are paused (the window's button clicked, or a press cet.panel asked for).
+    std::atomic<int> pausedBy{static_cast<int>(cetpanel::PauseOrigin::None)};
 
     // 0.8 (the UI review: the question showed three times): the question the ink panel reports drawing on screen now
     // (XFBridge_InkDrawn, about five times a second while it draws one) and when, in steady-clock milliseconds; stale after
@@ -173,6 +175,8 @@ struct State
 State& Get();
 std::string GameStateName(int aState);
 nlohmann::json InfoJson();
+// 0.8.22: what cet.panel and XFBridge_CetPanel check now (the session and client, the kill switch, the test hooks, the pause).
+cetpanel::Context CetPanelContext();
 // XFBridge_Hud's answer: the panel's settings, the bridge's state and the message lines as a text frame (core/InkUi.hpp).
 std::string HudFrame();
 // 0.8: the bridge's state as every panel's status line reads it (core/InkUi.hpp Summarize).

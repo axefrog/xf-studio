@@ -311,13 +311,14 @@ export const COMMANDS_070: CommandDef[] = [
     name: "cet.panel",
     title: "Drive the CET window's own controls",
     description:
-      "0.8.22: the XF Runtime Bridge window in Cyber Engine Tweaks' overlay, as the player would use it: diagnostics_open opens or closes its DIAGNOSTICS header (once, right before the header is drawn; the player's own clicks rule after it), and press runs its Pause changes or Resume changes button's own action, exactly as a click would. Notify class, so it works while changes are paused. The CET layer takes the request within about 0.25 s: a press runs whether or not CET's overlay is open; with the overlay closed the header state waits for the next time the window draws (the result says which). bridge_info's cet_panel says what the window last drew (diagnostics_open, chip, tone, surface) and how the last press went (last_press {id, target, answer}). The undo puts the header back as it was drawn and the pause state as it was.",
+      "0.8.22: the XF Runtime Bridge window in Cyber Engine Tweaks' overlay, as the player would use it. diagnostics_open opens or closes its DIAGNOSTICS header, in every build: once, right before the header is drawn (the player's own clicks rule after it); with CET's overlay closed it waits for the next time the window draws, and it is sent again until a draw applies it (a CET reload included). press runs the Pause changes or Resume changes button's own action, exactly as a click would, overlay open or closed: test builds only (the autonomous test hooks and allow_test_hooks, else test_hooks_off), and a Resume never undoes a pause the player set with the button (paused_by_player). A press runs once, after the CET layer claims it; a kill, the client going or a new client cancels it first. Notify class, so it works while changes are paused. bridge_info's cet_panel says what the window last drew (diagnostics_open, chip, tone, surface), the recent requests with their status, and how the last press went (last_press). The undo is cet_panel {undo: id}: it puts back what the CET layer captured when it applied that request (the header as drawn before it; the pause state before the press); a header state the window never drew stays unknown, and the header is then left as it is.",
     permission: "notify",
     input: obj({
       diagnostics_open: bool("Open (true) or close (false) the DIAGNOSTICS header."),
-      press: oneOf("Press the window's Pause changes or Resume changes button.", ["pause_changes", "resume_changes"]),
+      press: oneOf("Press the window's Pause changes or Resume changes button (test builds only).", ["pause_changes", "resume_changes"]),
+      undo: int("Put back what that request (its id) changed; takes no other option.", 1, Number.MAX_SAFE_INTEGER),
     }),
-    undo: "The result's undo (cet_panel with the header as it was drawn and the press that restores the pause state).",
+    undo: "The result's undo (cet_panel {undo: id}): the header as it was drawn before, and the pause state before the press.",
     bridge: { method: "cet.panel" },
   },
 ];

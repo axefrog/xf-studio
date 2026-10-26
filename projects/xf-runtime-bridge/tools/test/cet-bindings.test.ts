@@ -328,78 +328,114 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
     expect(out).not.toMatch(/^run:/);
   });
 
-  test("cet.panel: the header opens once through SetNextItemOpen right before it, a press runs the button's own action, and the report says both", () => {
-    const out = runCet(`${IMPL}
-      handlers, DECODE, natives, reports = {}, {}, {}, {}
+  // cet.panel's CET side against a stand-in plugin that keeps the protocol: requests are sent until completed (a header until a
+  // draw reports it in header_done; a press until it is claimed), a press runs only after a claim the plugin grants.
+  const panelRig = (opts: { requests: string; info: string; claim?: "granted" | "refused"; open?: boolean }) => `${IMPL}
+      handlers, DECODE, natives, reports, claims = {}, {}, {}, {}, {}
       registerForEvent = function(name, fn) handlers[name] = fn end
       registerHotkey = function() end
       logs = {}
       local function logLine(line) logs[#logs + 1] = line end
       spdlog = { info = logLine, warning = logLine, error = logLine, debug = logLine }
       GetVersion = function() return "1.37.1" end
-      json = { decode = function(s) return DECODE[s] end, encode = function(t) reports[#reports + 1] = t; return "REPORT" end }
+      local headerDone = {}
+      json = {
+        decode = function(s) return DECODE[s] end,
+        encode = function(t)
+          if t.claim then claims[#claims + 1] = t.claim; return "CLAIM" end
+          reports[#reports + 1] = t
+          for _, d in ipairs(t.header_done or {}) do headerDone[d.id] = d end
+          return "REPORT"
+        end }
       package.preload["panel"] = function() return (function() ${panel} end)() end
       package.preload["theme"] = function() return (function() ${theme} end)() end
-      local requests = "REQ"
       Game = setmetatable({ XFBridge_Info = function() return "INFO" end, XFBridge_Hud = function() return "xfhud\\t1\\nsurface\\tcet_line\\nkeys\\t1\\n" end,
         XFBridge_Messages = function() return "" end, XFBridge_Ping = function() return "pong" end,
-        XFBridge_CetPanel = function(body) local r = requests; requests = ""; return r end,
+        XFBridge_CetPanel = function(body)
+          if body == "CLAIM" then return "${opts.claim === "refused" ? "CLAIM_NO" : "CLAIM_OK"}" end
+          -- the stand-in keeps a header request until a draw completes it, and a press until it is claimed
+          local pending = {}
+          for _, r in ipairs(DECODE.ALL) do
+            local keep = {}
+            if r.diagnostics_open ~= nil and not headerDone[r.id] then keep.diagnostics_open = r.diagnostics_open end
+            if r.press and #claims == 0 then keep.press = r.press end
+            if next(keep) then keep.id = r.id; pending[#pending + 1] = keep end
+          end
+          DECODE.PENDING = pending
+          return #pending > 0 and "PENDING" or ""
+        end,
         XFBridge_PauseWrites = function(paused) natives[#natives + 1] = "pause:" .. tostring(paused); return "PAUSED" end },
         { __index = function() return function() return "" end end })
-      DECODE.INFO = { plugin_version = "0.8.22", bridge = { enabled = true, listening = true, killed = false, allow_writes = true },
-        overlay = { theme = "dark", motion = "full", cpu_ms = 0.8 }, status = { label = "XF Runtime Bridge", tone = "write", chip = "Changes allowed" } }
-      DECODE.REQ = { { id = 1, diagnostics_open = true }, { id = 2, press = "pause_changes" } }
+      DECODE.INFO = ${opts.info}
+      DECODE.ALL = ${opts.requests}
       DECODE.PAUSED = { changed = true, writes_paused = true }
-      local mod = (function() ${init} end)()
-      handlers.onInit(); handlers.onOverlayOpen()
-      handlers.onUpdate(0.3) -- polls: the two requests come in, the press is queued
-      handlers.onUpdate(0.3) -- runs the press as the button's action, then polls again
+      DECODE.CLAIM_OK = { claimed = true }
+      DECODE.CLAIM_NO = { claimed = false, why = "cancelled: the bridge was stopped" }
+      local function boot() return (function() ${init} end)() end
+      local mod = boot()
+      handlers.onInit()
+      ${opts.open ? "handlers.onOverlayOpen()" : ""}`;
+  const INFO = (extra = "") => `{ plugin_version = "0.8.22", bridge = { enabled = true, listening = true, killed = false, allow_writes = true }, overlay = { theme = "dark", motion = "full" },
+        status = { label = "XF Runtime Bridge", tone = "write", chip = "Changes allowed" } ${extra} }`;
+
+  test("cet.panel: the header opens once through SetNextItemOpen right before it, a draw completes it with the state before, and a press runs once after its claim", () => {
+    const out = runCet(`${panelRig({ requests: `{ { id = 1, diagnostics_open = true }, { id = 2, press = "pause_changes" } }`, info: INFO(), open: true })}
+      handlers.onUpdate(0.3) -- polls: the requests come in, the press is queued
+      handlers.onUpdate(0.3) -- claims and runs the press; polls again (the same requests are sent again: no second press)
+      handlers.onUpdate(0.3)
       calls = {}; handlers.onDraw(); local first = table.concat(calls, "|")
       calls = {}; handlers.onDraw(); local second = table.concat(calls, "|")
-      handlers.onUpdate(0.3) -- the next poll reports what was drawn
+      handlers.onUpdate(0.3) -- reports the completed header
       local r = reports[#reports]
-      return table.concat(natives, ",") .. "~~" .. first .. "~~" .. second .. "~~" ..
-        table.concat({ tostring(r.applied_id), tostring(r.diagnostics_open), tostring(r.diagnostics_pending), tostring(r.chip), tostring(r.surface),
-          tostring(r.last_press and r.last_press.id), tostring(r.last_press and r.last_press.target), tostring(r.last_press and r.last_press.answer.writes_paused) }, ",") ..
+      local done = r.header_done and r.header_done[1] or {}
+      return table.concat(natives, ",") .. "~~" .. #claims .. "~~" .. first .. "~~" .. second .. "~~" ..
+        table.concat({ tostring(done.id), tostring(done.previous), tostring(r.diagnostics_open), tostring(r.chip), tostring(r.surface),
+          tostring(r.last_press and r.last_press.id), tostring(r.last_press and r.last_press.answer and r.last_press.answer.writes_paused) }, ",") ..
         "~~" .. table.concat(logs, " / ")`);
-    const [natives, first, second, report, logs] = out.split("~~");
+    const [natives, claims, first, second, report, logs] = out.split("~~");
     if (logs === undefined) throw new Error(out.slice(0, 2000));
-    expect(natives).toBe("pause:true");
-    // once, right before the header, and not again on the next frame
+    expect(natives).toBe("pause:true"); // once, though the request came three times
+    expect(claims).toBe("1");
     expect(first).toMatch(/setnextopen:true\|(scale:[\d.]+\|)?header:DIAGNOSTICS##xf_diagnostics/);
     expect(second).not.toContain("setnextopen:");
     expect(second).toContain("child:##xf_card_diagnostics");
-    expect(report).toBe("2,true,nil,Changes allowed,cet_window,2,pause_changes,true");
+    // the header before the request was never drawn: its earlier state is unknown (nil), and the report says it was applied
+    expect(report).toBe("1,nil,true,Changes allowed,cet_window,2,true");
     expect(logs).not.toContain("draw call failed");
   });
 
-  test("cet.panel with CET's overlay closed: the press still runs, and the header waits for the window", () => {
-    const out = runCet(`${IMPL}
-      handlers, DECODE, natives, reports = {}, {}, {}, {}
-      registerForEvent = function(name, fn) handlers[name] = fn end
-      registerHotkey = function() end
-      spdlog = { info = function() end, warning = function() end, error = function() end, debug = function() end }
-      GetVersion = function() return "1.37.1" end
-      json = { decode = function(s) return DECODE[s] end, encode = function(t) reports[#reports + 1] = t; return "REPORT" end }
-      package.preload["panel"] = function() return (function() ${panel} end)() end
-      package.preload["theme"] = function() return (function() ${theme} end)() end
-      local requests = "REQ"
-      Game = setmetatable({ XFBridge_Info = function() return "INFO" end, XFBridge_Hud = function() return "xfhud\\t1\\nsurface\\tcet_line\\nkeys\\t1\\n" end,
-        XFBridge_Messages = function() return "" end, XFBridge_Ping = function() return "pong" end,
-        XFBridge_CetPanel = function(body) local r = requests; requests = ""; return r end,
-        XFBridge_PauseWrites = function(paused) natives[#natives + 1] = "pause:" .. tostring(paused); return "PAUSED" end },
-        { __index = function() return function() return "" end end })
-      DECODE.INFO = { plugin_version = "0.8.22", bridge = { enabled = true, listening = true, killed = false, allow_writes = true },
-        overlay = { theme = "dark", motion = "full" }, status = { label = "XF Runtime Bridge", tone = "paused", chip = "Paused" } }
-      DECODE.REQ = { { id = 1, diagnostics_open = true, press = "resume_changes" } }
-      DECODE.PAUSED = { changed = true, writes_paused = false }
-      local mod = (function() ${init} end)()
-      handlers.onInit()
+  test("cet.panel: a press whose claim is refused (a kill came first) never reaches XFBridge_PauseWrites; a stopped bridge queues none", () => {
+    const refused = runCet(`${panelRig({ requests: `{ { id = 3, press = "pause_changes" } }`, info: INFO(), claim: "refused" })}
+      handlers.onUpdate(0.3); handlers.onUpdate(0.3); handlers.onUpdate(0.3)
+      local r = reports[#reports]
+      return table.concat(natives, ",") .. "~~" .. #claims .. "~~" .. tostring(r.last_press and r.last_press.refused)`);
+    expect(refused).toBe("~~1~~cancelled: the bridge was stopped");
+    const killed = runCet(`${panelRig({ requests: `{ { id = 4, press = "pause_changes" } }`, info: INFO().replace("killed = false", "killed = true") })}
       handlers.onUpdate(0.3); handlers.onUpdate(0.3)
-      calls = {}; handlers.onDraw()
+      return table.concat(natives, ",") .. "~~" .. #claims`);
+    expect(killed).toBe("~~0");
+  });
+
+  test("cet.panel: a header request survives a CET reload until a draw applies it, and the window's earlier state is captured", () => {
+    const out = runCet(`${panelRig({ requests: `{ { id = 5, diagnostics_open = true } }`, info: INFO() })}
+      handlers.onUpdate(0.3) -- received, overlay closed: not drawn
+      mod = boot(); handlers.onInit(); handlers.onOverlayOpen() -- Reload all mods: a fresh layer, nothing remembered
+      handlers.onUpdate(0.3) -- the plugin sends it again
+      calls = {}; handlers.onDraw(); local first = table.concat(calls, "|")
       handlers.onUpdate(0.3)
       local r = reports[#reports]
-      return table.concat(natives, ",") .. "~~" .. tostring(r.diagnostics_pending) .. "," .. tostring(r.surface) .. "," .. tostring(r.chip) .. "," .. tostring(r.cet_open)`);
-    expect(out).toBe("pause:false~~true,cet_line,Paused,false");
+      local done = r.header_done and r.header_done[1] or {}
+      return tostring(string.find(first, "setnextopen:true", 1, true) ~= nil) .. "," .. tostring(done.id)`);
+    expect(out).toBe("true,5");
+    // A header over a window that drew it closed: the state before is captured as false.
+    const known = runCet(`${panelRig({ requests: `{}`, info: INFO(), open: true })}
+      IMPL.CollapsingHeader = function(label) calls[#calls + 1] = "header:" .. label; return false end
+      handlers.onUpdate(0.3); calls = {}; handlers.onDraw() -- drawn closed
+      DECODE.ALL = { { id = 6, diagnostics_open = true } }
+      handlers.onUpdate(0.3); calls = {}; handlers.onDraw(); handlers.onUpdate(0.3)
+      local r = reports[#reports]
+      local done = r.header_done and r.header_done[#r.header_done] or {}
+      return tostring(done.id) .. "," .. tostring(done.previous)`);
+    expect(known).toBe("6,false");
   });
 });

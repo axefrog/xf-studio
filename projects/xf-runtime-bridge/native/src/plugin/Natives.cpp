@@ -277,9 +277,31 @@ void PauseWrites(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::C
         }
         else
         {
+            // 0.8.22 (the review's High): a press cet.panel asked for runs only as a claim the CET layer made just before this call,
+            // and only if its session, client and the bridge are still the ones it was asked under; anything else is the player's
+            // own click. Who paused is kept, so a remote resume never undoes the player's pause.
+            const auto claim = state.cetPanel.TakeClaim(paused, CetPanelContext());
+            if (claim.kind == cetpanel::ClaimUse::Kind::Cancelled)
+            {
+                answer["reason"] = "this press was cancelled: the bridge stopped, or the client that asked for it went away";
+                answer["writes_paused"] = state.bridge->GetDispatcher().WritesPaused();
+                if (aOut)
+                {
+                    *aOut = RED4ext::CString(SerializeJson(answer).c_str());
+                }
+                return;
+            }
             auto& dispatcher = state.bridge->GetDispatcher();
             answer["changed"] = dispatcher.WritesPaused() != paused;
             dispatcher.SetWritesPaused(paused);
+            const auto origin = claim.kind == cetpanel::ClaimUse::Kind::Press ? cetpanel::PauseOrigin::Bridge : cetpanel::PauseOrigin::Player;
+            state.pausedBy.store(static_cast<int>(paused ? origin : cetpanel::PauseOrigin::None));
+            answer["by"] = cetpanel::PauseOriginName(origin);
+            if (claim.kind == cetpanel::ClaimUse::Kind::Press)
+            {
+                answer["writes_paused"] = dispatcher.WritesPaused();
+                state.cetPanel.NotePress(claim.id, answer);
+            }
         }
         answer["writes_paused"] = state.bridge && state.bridge->GetDispatcher().WritesPaused();
         if (aOut)
@@ -540,7 +562,7 @@ void CetPanel(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CStr
     aFrame->code++; // skip ParamEnd
 
     Guarded("XFBridge_CetPanel", [&] {
-        const auto pending = Get().cetPanel.Exchange(ToStd(report));
+        const auto pending = Get().cetPanel.Exchange(ToStd(report), CetPanelContext());
         if (aOut)
         {
             *aOut = RED4ext::CString(pending.c_str());

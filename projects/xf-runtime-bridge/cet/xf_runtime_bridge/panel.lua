@@ -1193,14 +1193,17 @@ local function drawDiagnostics(state, theme, which, info)
   if not info then return end
   sectionGap(theme)
   local open = false
-  -- 0.8.22, cet.panel: a requested header state, applied once right before the header (the player's own clicks rule after it).
-  if state.diagnosticsWanted ~= nil then
-    local want = state.diagnosticsWanted == true
+  -- 0.8.22, cet.panel: a requested header state, applied once right before the header (the player's own clicks rule after it);
+  -- the draw that applied it is reported with the header as drawn before it (nothing when it had never been drawn).
+  local wanted = state.diagnosticsWanted
+  if wanted ~= nil then
     state.diagnosticsWanted = nil
-    if ImGui.SetNextItemOpen ~= nil then try(state, "SetNextItemOpen", function() ImGui.SetNextItemOpen(want) end) end
+    if ImGui.SetNextItemOpen ~= nil then try(state, "SetNextItemOpen", function() ImGui.SetNextItemOpen(wanted.value == true) end) end
   end
+  local before = state.diagnosticsOpen
   panel.inRole(theme, "eyebrow", function() open = ImGui.CollapsingHeader("DIAGNOSTICS##xf_diagnostics") end)
   state.diagnosticsOpen = open == true
+  if wanted ~= nil and state.headerDoneFor then state.headerDoneFor({ id = wanted.id, previous = before }) end
   if not open then return end
   local overlay = type(info.overlay) == "table" and info.overlay or {}
   local bridge = type(info.bridge) == "table" and info.bridge or {}

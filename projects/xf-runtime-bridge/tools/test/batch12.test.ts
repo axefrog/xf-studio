@@ -188,7 +188,7 @@ describe("0.7 against the self-test host", () => {
     await ok(api, figure.undo.method, figure.undo.params);
     expect((await ok(api, "overlay.state", {})).cpu_ms_override).toBe(null);
     const panel = await ok(api, "cet.panel", { diagnostics_open: true, press: "pause_changes" });
-    expect(panel).toMatchObject({ queued: true, cet_overlay_open: null, undo: { method: "cet.panel", params: { diagnostics_open: false, press: "resume_changes" } } });
+    expect(panel).toMatchObject({ queued: true, cet_overlay_open: null, undo: { method: "cet.panel", params: { undo: panel.id } } });
     expect(panel.applies.join(" ")).toContain("next time");
     expect((await api.callBridge("cet.panel", { press: "pause" }, "t-bad-press")).ok).toBe(false);
   });

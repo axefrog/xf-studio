@@ -335,9 +335,7 @@ json OverlaySet(const MethodContext& aContext)
 json CetPanelRequest(const MethodContext& aContext)
 {
     auto& state = Get();
-    const std::optional<bool> cetOpen = state.cetOverlaySeen.load() ? std::optional<bool>(state.cetOverlayOpen.load()) : std::nullopt;
-    const bool paused = state.bridge && state.bridge->GetDispatcher().WritesPaused();
-    auto out = state.cetPanel.Request(aContext.params, cetOpen, state.config.allowWrites, paused);
+    auto out = state.cetPanel.Request(aContext.params, CetPanelContext());
     log::Info("cet.panel", "request=" + out["request"].dump(), aContext.cid);
     return out;
 }
