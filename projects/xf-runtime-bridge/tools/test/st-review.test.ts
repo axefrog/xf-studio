@@ -242,3 +242,36 @@ describe("not_ready samples (bridge 0.8.22) are counted apart, never invalid", (
     expect(matches(check.match, { ok: true, value: { face: 1 } })).toBe(false);
   });
 });
+
+describe("cet.panel's press refusals, anticipated", () => {
+  const run = async (press: (input: Record<string, unknown>) => { ok: boolean; code?: string; result?: unknown }) => {
+    const { stScript } = await import("../sessions/make-batches.ts");
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
+    // Its config and CET binding requirements are the prelude's (other tests): here the row's own steps.
+    const row = { ...(stScript(false, { panel: true, cpu: true }) as { rows: { id: string }[] }).rows.find((r) => r.id === "ST6-dark-paused")!, requires: [] };
+    const clock = new FakeClock();
+    const api = fakeApi(clock, {
+      "overlay.state": () => ({ ok: true, result: { theme: "dark", motion: { setting: "full", effective: "full" }, cet_open: true } }),
+      "bridge.info": () => ({ ok: true, result: { sid: "sid-1", status: { chip: "Paused" }, bridge: { writes_paused: true }, cet_panel: { chip: "Paused" } } }),
+      "cet.panel": (input) => press(input) as never,
+    });
+    const result = await go(script([row] as never), api, fakeHost(), clock, tempDir("xfb-str-"), { fixtures: { cet_overlay_key: "Ctrl+Grave" } });
+    return { row: result.rows[0], api, result };
+  };
+  test("no test hooks: the row fails saying to stage the autonomous package", async () => {
+    const { row } = await run(() => ({ ok: false, code: "test_hooks_off" }));
+    expect(row.verdict).toBe("FAIL");
+    expect(row.reason).toContain("test hook");
+  });
+  test("the player paused: the cleanup's Resume is refused, the runner leaves it paused without a cleanup failure", async () => {
+    const { api, result } = await run((input) => input.press === "resume_changes" ? { ok: false, code: "paused_by_player" } : { ok: true, result: { request: { id: 1 } } });
+    expect(api.calls.filter((c) => c.name === "cet.panel").map((c) => c.input.press)).toEqual(["pause_changes", "resume_changes"]);
+    expect(result.cleanupErrors).toEqual([]);
+    // The refusal took the anticipated branch, and nothing then waited for a resume that can't come.
+    const reports = JSON.stringify(result.rows[0].reports);
+    expect(reports).toContain("paused_by_player");
+    expect(result.rows[0].reports.some((r) => (r as { label?: string; kind?: string }).label === "ST6-dark-paused-resumed" && (r as { kind?: string }).kind === "attempt")).toBe(false);
+    expect(result.rows[0].reports.some((r) => (r as { label?: string; status?: string }).label === "ST6-dark-paused-resumed" && (r as { status?: string }).status === "skipped")).toBe(true);
+  });
+});

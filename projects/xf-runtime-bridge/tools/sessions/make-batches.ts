@@ -202,12 +202,28 @@ const overlayState = (row: string, name = "overlay"): Json => ({ label: `${row}-
 const captured = (label: string, row: string, bind: string) => ({ label, ref: ref(row, bind), captured: true });
 const check = (label: string, row: string, bind: string, path: string, match: Json) => ({ label, ref: ref(row, bind, path), match });
 /** The CET window's own Pause changes / Resume changes, through the cet.panel hook (the button's action). */
+// The bridge's refusals of a press, anticipated (claude/bridge-0822 after its review): press is a test hook
+// (test_hooks_off without the autonomous build's allow_test_hooks), a remote Resume never overrides the player's own
+// Pause (paused_by_player), and a kill cancels a pending request.
+const NO_HOOKS = "cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)";
+const PLAYER_PAUSED = "the player paused changes in the CET window themselves: a remote Resume never overrides that, so the row can't go on";
+// Each ends the row as that step's own failure (its label first, so the verdict is FAIL with the reason).
+const pressOutcomes = (label: string, target: "pause_changes" | "resume_changes"): Json[] => [
+  { name: "no_test_hooks", match: { code: "test_hooks_off" }, run: [{ end: "fail", reason: `${label}: ${NO_HOOKS}` }] },
+  ...(target === "resume_changes" ? [{ name: "paused_by_player", match: { code: "paused_by_player" }, run: [{ end: "fail", reason: `${label}: ${PLAYER_PAUSED}` }] }] : []),
+  { name: "killed", match: { code: ["killed", "cancelled"] }, run: [{ end: "fail", reason: `${label}: the bridge was stopped (or the request cancelled) before the press ran` }] },
+];
 const panelPress = (row: string, name: string, target: "pause_changes" | "resume_changes", extra: Json = {}): Json =>
-  ({ label: `${row}-${name}`, do: "run", command: "cet.panel", input: { press: target }, ...extra });
-/** Resume changes, however the row ended (cleanup), and confirm it. */
+  ({ label: `${row}-${name}`, do: "run", command: "cet.panel", input: { press: target }, outcomes: pressOutcomes(`${row}-${name}`, target), on_fail: "fail_row", ...extra });
+/**
+ * Resume changes, however the row ended (cleanup), and confirm it. If the player paused them themselves, the runner
+ * leaves them paused and says so (the bridge refuses a remote Resume then).
+ */
 const resumeChanges = (row: string): Json[] => [
-  panelPress(row, "resume-always", "resume_changes", { on_fail: "continue" }),
-  { label: `${row}-resumed`, do: "run", command: "bridge.info", input: {}, until: notPaused, interval_ms: 250, deadline_ms: 3000, on_fail: "continue" },
+  { label: `${row}-resume-always`, do: "run", command: "cet.panel", input: { press: "resume_changes" }, on_fail: "continue",
+    outcomes: [{ name: "paused_by_player", match: { code: "paused_by_player" }, result: "ok", run: [{ do: "set", value: true, bind: key(row, "player_paused") }, { do: "note", text: `${row}: the player paused changes in the CET window, so the runner leaves them paused (Resume changes there to go on).` }] }] },
+  { label: `${row}-resumed`, do: "run", command: "bridge.info", input: {}, until: notPaused, interval_ms: 250, deadline_ms: 3000, on_fail: "continue",
+    when: { match: { ref: ref(row, "player_paused"), exists: false } } },
 ];
 
 // ---- The ST rows -------------------------------------------------------------------------------------------
@@ -412,7 +428,7 @@ function writesRows(theme: Theme): Json[] {
   if (PANEL_HOOK) {
     rows.push({ id: row, title: `The CET window with the DIAGNOSTICS header open (${theme})`, requires, judged_by: STUDIO,
       steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
-        { label: `${row}-open-header`, do: "run", command: "cet.panel", input: { diagnostics_open: true }, on_fail: "fail_row" },
+        { label: `${row}-open-header`, do: "run", command: "cet.panel", input: { diagnostics_open: true }, deadline_ms: 8000, on_fail: "fail_row" },
         // The window drew the header open, with CET's overlay still open (scripted session 1's captures had no window).
         verify(row, "open", { path: "cet_panel.diagnostics_open", equals: true }), verify(row, "cet-open", cetIs(true), "overlay.state"),
         { label: `${row}-settle`, do: "wait", ms: 800 }, visible(row, "cet_window", theme, "window"),

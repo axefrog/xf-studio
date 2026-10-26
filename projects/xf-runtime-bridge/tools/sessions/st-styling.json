@@ -2825,6 +2825,35 @@
           "input": {
             "press": "pause_changes"
           },
+          "outcomes": [
+            {
+              "name": "no_test_hooks",
+              "match": {
+                "code": "test_hooks_off"
+              },
+              "run": [
+                {
+                  "end": "fail",
+                  "reason": "ST8-dark-paused-pause: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                }
+              ]
+            },
+            {
+              "name": "killed",
+              "match": {
+                "code": [
+                  "killed",
+                  "cancelled"
+                ]
+              },
+              "run": [
+                {
+                  "end": "fail",
+                  "reason": "ST8-dark-paused-pause: the bridge was stopped (or the request cancelled) before the press ran"
+                }
+              ]
+            }
+          ],
           "on_fail": "fail_row"
         },
         {
@@ -2956,7 +2985,27 @@
           "input": {
             "press": "resume_changes"
           },
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "outcomes": [
+            {
+              "name": "paused_by_player",
+              "match": {
+                "code": "paused_by_player"
+              },
+              "result": "ok",
+              "run": [
+                {
+                  "do": "set",
+                  "value": true,
+                  "bind": "ST8_dark_paused_player_paused"
+                },
+                {
+                  "do": "note",
+                  "text": "ST8-dark-paused: the player paused changes in the CET window, so the runner leaves them paused (Resume changes there to go on)."
+                }
+              ]
+            }
+          ]
         },
         {
           "label": "ST8-dark-paused-resumed",
@@ -2977,7 +3026,13 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST8_dark_paused_player_paused",
+              "exists": false
+            }
+          }
         },
         {
           "label": "ST8-dark-paused-hud-back",
@@ -4493,7 +4548,37 @@
                   "command": "cet.panel",
                   "input": {
                     "press": "pause_changes"
-                  }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "no_test_hooks",
+                      "match": {
+                        "code": "test_hooks_off"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST5-dark-pause: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "killed",
+                      "match": {
+                        "code": [
+                          "killed",
+                          "cancelled"
+                        ]
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST5-dark-pause: the bridge was stopped (or the request cancelled) before the press ran"
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "fail_row"
                 },
                 {
                   "do": "wait",
@@ -4515,7 +4600,49 @@
                   "command": "cet.panel",
                   "input": {
                     "press": "resume_changes"
-                  }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "no_test_hooks",
+                      "match": {
+                        "code": "test_hooks_off"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST5-dark-resume: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "paused_by_player",
+                      "match": {
+                        "code": "paused_by_player"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST5-dark-resume: the player paused changes in the CET window themselves: a remote Resume never overrides that, so the row can't go on"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "killed",
+                      "match": {
+                        "code": [
+                          "killed",
+                          "cancelled"
+                        ]
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST5-dark-resume: the bridge was stopped (or the request cancelled) before the press ran"
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "fail_row"
                 },
                 {
                   "do": "wait",
@@ -4609,7 +4736,27 @@
           "input": {
             "press": "resume_changes"
           },
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "outcomes": [
+            {
+              "name": "paused_by_player",
+              "match": {
+                "code": "paused_by_player"
+              },
+              "result": "ok",
+              "run": [
+                {
+                  "do": "set",
+                  "value": true,
+                  "bind": "ST5_dark_player_paused"
+                },
+                {
+                  "do": "note",
+                  "text": "ST5-dark: the player paused changes in the CET window, so the runner leaves them paused (Resume changes there to go on)."
+                }
+              ]
+            }
+          ]
         },
         {
           "label": "ST5-dark-resumed",
@@ -4630,7 +4777,13 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST5_dark_player_paused",
+              "exists": false
+            }
+          }
         },
         {
           "label": "ST5-dark-hud-back",
@@ -5712,6 +5865,35 @@
           "input": {
             "press": "pause_changes"
           },
+          "outcomes": [
+            {
+              "name": "no_test_hooks",
+              "match": {
+                "code": "test_hooks_off"
+              },
+              "run": [
+                {
+                  "end": "fail",
+                  "reason": "ST6-dark-paused-pause: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                }
+              ]
+            },
+            {
+              "name": "killed",
+              "match": {
+                "code": [
+                  "killed",
+                  "cancelled"
+                ]
+              },
+              "run": [
+                {
+                  "end": "fail",
+                  "reason": "ST6-dark-paused-pause: the bridge was stopped (or the request cancelled) before the press ran"
+                }
+              ]
+            }
+          ],
           "on_fail": "fail_row"
         },
         {
@@ -5854,7 +6036,27 @@
           "input": {
             "press": "resume_changes"
           },
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "outcomes": [
+            {
+              "name": "paused_by_player",
+              "match": {
+                "code": "paused_by_player"
+              },
+              "result": "ok",
+              "run": [
+                {
+                  "do": "set",
+                  "value": true,
+                  "bind": "ST6_dark_paused_player_paused"
+                },
+                {
+                  "do": "note",
+                  "text": "ST6-dark-paused: the player paused changes in the CET window, so the runner leaves them paused (Resume changes there to go on)."
+                }
+              ]
+            }
+          ]
         },
         {
           "label": "ST6-dark-paused-resumed",
@@ -5875,7 +6077,13 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST6_dark_paused_player_paused",
+              "exists": false
+            }
+          }
         },
         {
           "label": "ST6-dark-paused-cet-close",
@@ -7876,6 +8084,7 @@
           "input": {
             "diagnostics_open": true
           },
+          "deadline_ms": 8000,
           "on_fail": "fail_row"
         },
         {
@@ -10144,7 +10353,37 @@
                   "command": "cet.panel",
                   "input": {
                     "press": "pause_changes"
-                  }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "no_test_hooks",
+                      "match": {
+                        "code": "test_hooks_off"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST3-dark-settle-pause: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "killed",
+                      "match": {
+                        "code": [
+                          "killed",
+                          "cancelled"
+                        ]
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST3-dark-settle-pause: the bridge was stopped (or the request cancelled) before the press ran"
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "fail_row"
                 },
                 {
                   "do": "wait",
@@ -10166,7 +10405,49 @@
                   "command": "cet.panel",
                   "input": {
                     "press": "resume_changes"
-                  }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "no_test_hooks",
+                      "match": {
+                        "code": "test_hooks_off"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST3-dark-settle-resume: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "paused_by_player",
+                      "match": {
+                        "code": "paused_by_player"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST3-dark-settle-resume: the player paused changes in the CET window themselves: a remote Resume never overrides that, so the row can't go on"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "killed",
+                      "match": {
+                        "code": [
+                          "killed",
+                          "cancelled"
+                        ]
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST3-dark-settle-resume: the bridge was stopped (or the request cancelled) before the press ran"
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "fail_row"
                 },
                 {
                   "do": "wait",
@@ -10260,7 +10541,27 @@
           "input": {
             "press": "resume_changes"
           },
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "outcomes": [
+            {
+              "name": "paused_by_player",
+              "match": {
+                "code": "paused_by_player"
+              },
+              "result": "ok",
+              "run": [
+                {
+                  "do": "set",
+                  "value": true,
+                  "bind": "ST3_dark_settle_player_paused"
+                },
+                {
+                  "do": "note",
+                  "text": "ST3-dark-settle: the player paused changes in the CET window, so the runner leaves them paused (Resume changes there to go on)."
+                }
+              ]
+            }
+          ]
         },
         {
           "label": "ST3-dark-settle-resumed",
@@ -10281,7 +10582,13 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST3_dark_settle_player_paused",
+              "exists": false
+            }
+          }
         },
         {
           "label": "ST3-dark-settle-hud-back",
@@ -11205,6 +11512,35 @@
           "input": {
             "press": "pause_changes"
           },
+          "outcomes": [
+            {
+              "name": "no_test_hooks",
+              "match": {
+                "code": "test_hooks_off"
+              },
+              "run": [
+                {
+                  "end": "fail",
+                  "reason": "ST8-light-paused-pause: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                }
+              ]
+            },
+            {
+              "name": "killed",
+              "match": {
+                "code": [
+                  "killed",
+                  "cancelled"
+                ]
+              },
+              "run": [
+                {
+                  "end": "fail",
+                  "reason": "ST8-light-paused-pause: the bridge was stopped (or the request cancelled) before the press ran"
+                }
+              ]
+            }
+          ],
           "on_fail": "fail_row"
         },
         {
@@ -11336,7 +11672,27 @@
           "input": {
             "press": "resume_changes"
           },
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "outcomes": [
+            {
+              "name": "paused_by_player",
+              "match": {
+                "code": "paused_by_player"
+              },
+              "result": "ok",
+              "run": [
+                {
+                  "do": "set",
+                  "value": true,
+                  "bind": "ST8_light_paused_player_paused"
+                },
+                {
+                  "do": "note",
+                  "text": "ST8-light-paused: the player paused changes in the CET window, so the runner leaves them paused (Resume changes there to go on)."
+                }
+              ]
+            }
+          ]
         },
         {
           "label": "ST8-light-paused-resumed",
@@ -11357,7 +11713,13 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST8_light_paused_player_paused",
+              "exists": false
+            }
+          }
         },
         {
           "label": "ST8-light-paused-hud-back",
@@ -13564,7 +13926,37 @@
                   "command": "cet.panel",
                   "input": {
                     "press": "pause_changes"
-                  }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "no_test_hooks",
+                      "match": {
+                        "code": "test_hooks_off"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST5-light-pause: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "killed",
+                      "match": {
+                        "code": [
+                          "killed",
+                          "cancelled"
+                        ]
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST5-light-pause: the bridge was stopped (or the request cancelled) before the press ran"
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "fail_row"
                 },
                 {
                   "do": "wait",
@@ -13586,7 +13978,49 @@
                   "command": "cet.panel",
                   "input": {
                     "press": "resume_changes"
-                  }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "no_test_hooks",
+                      "match": {
+                        "code": "test_hooks_off"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST5-light-resume: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "paused_by_player",
+                      "match": {
+                        "code": "paused_by_player"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST5-light-resume: the player paused changes in the CET window themselves: a remote Resume never overrides that, so the row can't go on"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "killed",
+                      "match": {
+                        "code": [
+                          "killed",
+                          "cancelled"
+                        ]
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST5-light-resume: the bridge was stopped (or the request cancelled) before the press ran"
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "fail_row"
                 },
                 {
                   "do": "wait",
@@ -13680,7 +14114,27 @@
           "input": {
             "press": "resume_changes"
           },
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "outcomes": [
+            {
+              "name": "paused_by_player",
+              "match": {
+                "code": "paused_by_player"
+              },
+              "result": "ok",
+              "run": [
+                {
+                  "do": "set",
+                  "value": true,
+                  "bind": "ST5_light_player_paused"
+                },
+                {
+                  "do": "note",
+                  "text": "ST5-light: the player paused changes in the CET window, so the runner leaves them paused (Resume changes there to go on)."
+                }
+              ]
+            }
+          ]
         },
         {
           "label": "ST5-light-resumed",
@@ -13701,7 +14155,13 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST5_light_player_paused",
+              "exists": false
+            }
+          }
         },
         {
           "label": "ST5-light-hud-back",
@@ -14783,6 +15243,35 @@
           "input": {
             "press": "pause_changes"
           },
+          "outcomes": [
+            {
+              "name": "no_test_hooks",
+              "match": {
+                "code": "test_hooks_off"
+              },
+              "run": [
+                {
+                  "end": "fail",
+                  "reason": "ST6-light-paused-pause: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                }
+              ]
+            },
+            {
+              "name": "killed",
+              "match": {
+                "code": [
+                  "killed",
+                  "cancelled"
+                ]
+              },
+              "run": [
+                {
+                  "end": "fail",
+                  "reason": "ST6-light-paused-pause: the bridge was stopped (or the request cancelled) before the press ran"
+                }
+              ]
+            }
+          ],
           "on_fail": "fail_row"
         },
         {
@@ -14925,7 +15414,27 @@
           "input": {
             "press": "resume_changes"
           },
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "outcomes": [
+            {
+              "name": "paused_by_player",
+              "match": {
+                "code": "paused_by_player"
+              },
+              "result": "ok",
+              "run": [
+                {
+                  "do": "set",
+                  "value": true,
+                  "bind": "ST6_light_paused_player_paused"
+                },
+                {
+                  "do": "note",
+                  "text": "ST6-light-paused: the player paused changes in the CET window, so the runner leaves them paused (Resume changes there to go on)."
+                }
+              ]
+            }
+          ]
         },
         {
           "label": "ST6-light-paused-resumed",
@@ -14946,7 +15455,13 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST6_light_paused_player_paused",
+              "exists": false
+            }
+          }
         },
         {
           "label": "ST6-light-paused-cet-close",
@@ -16947,6 +17462,7 @@
           "input": {
             "diagnostics_open": true
           },
+          "deadline_ms": 8000,
           "on_fail": "fail_row"
         },
         {
@@ -18677,7 +19193,37 @@
                   "command": "cet.panel",
                   "input": {
                     "press": "pause_changes"
-                  }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "no_test_hooks",
+                      "match": {
+                        "code": "test_hooks_off"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST3-light-settle-pause: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "killed",
+                      "match": {
+                        "code": [
+                          "killed",
+                          "cancelled"
+                        ]
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST3-light-settle-pause: the bridge was stopped (or the request cancelled) before the press ran"
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "fail_row"
                 },
                 {
                   "do": "wait",
@@ -18699,7 +19245,49 @@
                   "command": "cet.panel",
                   "input": {
                     "press": "resume_changes"
-                  }
+                  },
+                  "outcomes": [
+                    {
+                      "name": "no_test_hooks",
+                      "match": {
+                        "code": "test_hooks_off"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST3-light-settle-resume: cet.panel's press is a test hook: stage the autonomous -writes package with allow_test_hooks (the preflight says so)"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "paused_by_player",
+                      "match": {
+                        "code": "paused_by_player"
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST3-light-settle-resume: the player paused changes in the CET window themselves: a remote Resume never overrides that, so the row can't go on"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "killed",
+                      "match": {
+                        "code": [
+                          "killed",
+                          "cancelled"
+                        ]
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "ST3-light-settle-resume: the bridge was stopped (or the request cancelled) before the press ran"
+                        }
+                      ]
+                    }
+                  ],
+                  "on_fail": "fail_row"
                 },
                 {
                   "do": "wait",
@@ -18793,7 +19381,27 @@
           "input": {
             "press": "resume_changes"
           },
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "outcomes": [
+            {
+              "name": "paused_by_player",
+              "match": {
+                "code": "paused_by_player"
+              },
+              "result": "ok",
+              "run": [
+                {
+                  "do": "set",
+                  "value": true,
+                  "bind": "ST3_light_settle_player_paused"
+                },
+                {
+                  "do": "note",
+                  "text": "ST3-light-settle: the player paused changes in the CET window, so the runner leaves them paused (Resume changes there to go on)."
+                }
+              ]
+            }
+          ]
         },
         {
           "label": "ST3-light-settle-resumed",
@@ -18814,7 +19422,13 @@
           },
           "interval_ms": 250,
           "deadline_ms": 3000,
-          "on_fail": "continue"
+          "on_fail": "continue",
+          "when": {
+            "match": {
+              "ref": "$ST3_light_settle_player_paused",
+              "exists": false
+            }
+          }
         },
         {
           "label": "ST3-light-settle-hud-back",

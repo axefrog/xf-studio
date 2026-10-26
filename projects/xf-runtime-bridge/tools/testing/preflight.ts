@@ -170,6 +170,8 @@ export async function preflight(options: PreflightOptions): Promise<PreflightRes
       const c = commandOf(st as Record<string, unknown>);
       // 0.8.22: overlay.set's diagnostics test figure is a test hook too.
       if (c === "overlay.set" && (st.input as { diagnostics_cpu_ms?: unknown } | undefined)?.diagnostics_cpu_ms !== undefined) return ["overlay.set diagnostics_cpu_ms"];
+      // A press on the CET window's Pause changes / Resume changes button is a test hook (the bridge refuses it test_hooks_off otherwise).
+      if (c === "cet.panel" && (st.input as { press?: unknown } | undefined)?.press !== undefined) return ["cet.panel press"];
       return c && (/^test\./.test(c) || ["game.catchup", "capture.arm", "game.lifecycle.probe"].includes(c)) ? [c] : [];
     }))];
     const builtWithHooks = manifest?.allow_test_hooks === true && manifest?.autonomous_test_hooks === true;
