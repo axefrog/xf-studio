@@ -166,7 +166,12 @@ export async function preflight(options: PreflightOptions): Promise<PreflightRes
     }
     // The test gates: the recorder (telemetry, always on), test probes and the event-armed captures need the autonomous
     // -writes package and allow_test_hooks in its config.
-    const hookCommands = [...new Set(scriptSteps.map((st) => commandOf(st as Record<string, unknown>)).filter((c): c is string => !!c && (/^test\./.test(c) || ["game.catchup", "capture.arm", "game.lifecycle.probe"].includes(c))))];
+    const hookCommands = [...new Set(scriptSteps.flatMap((st) => {
+      const c = commandOf(st as Record<string, unknown>);
+      // 0.8.22: overlay.set's diagnostics test figure is a test hook too.
+      if (c === "overlay.set" && (st.input as { diagnostics_cpu_ms?: unknown } | undefined)?.diagnostics_cpu_ms !== undefined) return ["overlay.set diagnostics_cpu_ms"];
+      return c && (/^test\./.test(c) || ["game.catchup", "capture.arm", "game.lifecycle.probe"].includes(c)) ? [c] : [];
+    }))];
     const builtWithHooks = manifest?.allow_test_hooks === true && manifest?.autonomous_test_hooks === true;
     const configHooks = stagedValues?.["bridge.allow_test_hooks"] === "true";
     if (manifest && stagedValues) {
