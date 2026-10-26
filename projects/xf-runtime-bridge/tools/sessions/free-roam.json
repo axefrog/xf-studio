@@ -17,6 +17,8 @@
   "rows": [
     {
       "id": "FR1-free-roam",
+      "manual": true,
+      "expected_s": 900,
       "title": "Free roam: walk about a block, then drive across a district, with the recorder on (the player plays; the row drives nothing)",
       "requires": [
         {

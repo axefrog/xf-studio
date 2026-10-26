@@ -96,7 +96,7 @@ describe("batch: anticipation through the session executor", () => {
     const clock = new FakeClock();
     const dir = tempDir("xfb-batch-");
     const api = fakeApi(clock, {}, { autoAnswer: "Fully visible" });
-    const rows: Row[] = [{ id: "ask", title: "asks", steps: [{ label: "q", do: "ask", text: "Visible?", choices: ["Fully visible", "Partly cut off"], deadline_ms: 30_000, bind: "answer" }],
+    const rows: Row[] = [{ id: "ask", title: "asks", manual: true, steps: [{ label: "q", do: "ask", text: "Visible?", choices: ["Fully visible", "Partly cut off"], deadline_ms: 30_000, bind: "answer" }],
       pass: [{ label: "whole", ref: "$answer.label", match: { equals: "Fully visible" } }] }];
     const result = await go(script(rows), api, fakeHost(), clock, dir);
     expect(result.rows[0].verdict).toBe("PASS");
@@ -119,7 +119,7 @@ describe("batch: anticipation through the session executor", () => {
     const clock = new FakeClock();
     const dir = tempDir("xfb-batch-");
     const api = fakeApi(clock);
-    const rows: Row[] = [{ id: "ask", title: "asks", steps: [{ label: "q", do: "ask", text: "Anyone?", deadline_ms: 20_000 }] }];
+    const rows: Row[] = [{ id: "ask", title: "asks", manual: true, steps: [{ label: "q", do: "ask", text: "Anyone?", deadline_ms: 20_000 }] }];
     const result = await go(script(rows), api, fakeHost(), clock, dir);
     expect(result.rows[0].verdict).toBe("SKIP");
     expect(clock.now()).toBeLessThan(25_000);

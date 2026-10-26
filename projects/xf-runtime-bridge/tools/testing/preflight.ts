@@ -246,6 +246,10 @@ export async function preflight(options: PreflightOptions): Promise<PreflightRes
     add(writer.busy ? "blocker" : "ok", "writer", writer.busy ? `Another tool holds the bridge's writer seat (bridge_busy): ${writer.detail}. Close it (the MCP server: /reload-plugins after its session) first.` : `the writer seat is free (${writer.detail})`);
   } else add("info", "writer", "The game isn't running: the writer seat is checked when the bridge first answers.");
 
+  // Rows that need the player (marked manual): named, so the session plan can put a person there for them.
+  const manual = rows.filter((r) => r.manual).map((r) => r.id);
+  add("info", "manual rows", manual.length ? `${manual.join(", ")} need the player (they ask and wait)` : "none: every row runs without the player");
+
   // Recording lifetimes: a row's own recorder must outlast the row (its expected span, or its waits added up).
   for (const entry of planned.rows) {
     const row = entry.row;

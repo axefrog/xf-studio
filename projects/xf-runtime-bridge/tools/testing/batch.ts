@@ -66,6 +66,8 @@ export type Row = {
   passive?: "whole-batch";
   /** The row's expected span in seconds (a player's free roam, a soak), for the recorder-lifetime warning. */
   expected_s?: number;
+  /** The row needs the player (an ask it waits on): allowed only when marked, and the preflight lists it. */
+  manual?: boolean;
 };
 export type BatchScript = {
   schema: string;
@@ -110,6 +112,7 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   "config.restore": { required: [], optional: [], help: "put config.ini back as it was before the run" },
   "actors.release_all": { required: [], optional: [], help: "release every actor the bridge directs (npc.status, then npc.release despawn)" },
   pick: { required: ["from"], optional: ["where", "index"], help: "an element of a list (a bound result's array) that matches where, the index-th such (default 0); value the element" },
+  "host.windows_animations": { required: [], optional: [], help: "Windows' own Animation effects setting (SPI_GETCLIENTAREAANIMATION), read, never changed; value {on}" },
   "recorder.span": { required: ["run"], optional: [], help: "a recorder run's span from the v channel: V's distance travelled over every catch-up page" },
   "overlay.restore": { required: [], optional: [], help: "put the overlay's live look back as this game session started it (the first overlay.set's undo)" },
 };
@@ -222,12 +225,13 @@ export function planBatch(script: BatchScript): PlannedBatch {
     return p;
   };
   const setup = plan("setup", script.setup);
+  if (JSON.stringify([script.setup ?? [], script.teardown ?? []]).includes('"do":"ask"')) problems.push("setup and teardown never ask the player (only a row marked manual: true may)");
   const ids = new Set<string>();
   const names = new Map<string, string>();
   const rows = script.rows.map((row, i) => {
     const where = `row ${i + 1}${row?.id ? ` (${row.id})` : ""}`;
     if (!row || typeof row !== "object") { problems.push(`${where}: a row must be an object`); return { row, plan: { id: "x", steps: [] }, failRow: new Set<string>() }; }
-    for (const key of Object.keys(row)) if (!["id", "title", "requires", "steps", "pass", "cleanup", "deadline_ms", "judged_by", "after", "halt_on", "facts", "passive", "expected_s"].includes(key)) problems.push(`${where}: unknown field ${key}`);
+    for (const key of Object.keys(row)) if (!["id", "title", "requires", "steps", "pass", "cleanup", "deadline_ms", "judged_by", "after", "halt_on", "facts", "passive", "expected_s", "manual"].includes(key)) problems.push(`${where}: unknown field ${key}`);
     for (const fact of row.facts ?? []) {
       if (typeof fact?.label !== "string" || typeof fact.ref !== "string" || !fact.ref.startsWith("$")) problems.push(`${where}: a fact is {label, ref: "$binding.path"}`);
       else if (!known.has(fact.ref.slice(1).split(".")[0])) problems.push(`${where}: fact ${fact.label} reads ${fact.ref}, which no step binds`);
@@ -250,6 +254,8 @@ export function planBatch(script: BatchScript): PlannedBatch {
     }
     if (row.after !== undefined && row.after !== "restart") problems.push(`${where}: after is restart`);
     if (row.passive !== undefined && row.passive !== "whole-batch") problems.push(`${where}: passive is whole-batch`);
+    // No row may need the player unless it says so: an ask waits for a person.
+    if (row.manual !== true && JSON.stringify([row.steps ?? [], row.cleanup ?? []]).includes('"do":"ask"')) problems.push(`${where}: an ask waits for the player: show the question without waiting (run ui.message), or mark the row manual: true`);
     // A recorder's lifetime is always the script's choice: the bridge's default (60 s) cut scripted session 1's free roam short.
     for (const start of JSON.stringify(row.steps ?? []).match(/\{"do":"run","command":"test\.record\.start","input":\{[^}]*\}/g) ?? []) {
       if (!/"duration_s":/.test(start)) problems.push(`${where}: test.record.start sets duration_s (the bridge's default is 60 s): size it to the row's expected span, at most 1800`);
@@ -665,6 +671,10 @@ export class SessionExecutor implements Executor {
           const index = Number(action.index ?? 0);
           if (index >= eligible.length) return { ok: false, code: "none_eligible", message: `Only ${eligible.length} of ${action.from.length} match${index ? ` (wanted the ${index + 1}th)` : ""}.`, value: { eligible: eligible.length, of: action.from.length } };
           return { ok: true, value: eligible[index] };
+        }
+        case "host.windows_animations": {
+          const on = await this.c.host.windowsAnimations();
+          return on === null ? { ok: false, code: "unreadable", message: "Windows' animation setting couldn't be read." } : { ok: true, value: { on } };
         }
         case "recorder.span": {
           const run = Number(action.run);

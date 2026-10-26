@@ -181,3 +181,66 @@ describe("2: a wait that ends early is not a timeout", () => {
     expect(row.reason).toContain("no answer within 10 minutes");
   });
 });
+
+describe("1: no row needs the player unless it says so", () => {
+  const ask = { do: "ask", text: "?", choices: ["Done"], deadline_ms: 60_000 };
+  test("an ask in a row is refused at planning unless the row is manual; never in setup or teardown", async () => {
+    const { planBatch } = await import("../testing/batch.ts");
+    const { script } = await import("./batch-fakes.ts");
+    const nested = { label: "both", together: [ask, { do: "wait", ms: 10 }] };
+    expect(planBatch(script([{ id: "r", title: "r", steps: [nested] }] as never)).problems.join("\n")).toContain("an ask waits for the player");
+    expect(planBatch(script([{ id: "r", title: "r", steps: [], cleanup: [ask] }] as never)).problems.join("\n")).toContain("an ask waits for the player");
+    expect(planBatch(script([{ id: "r", title: "r", manual: true, steps: [ask] }] as never)).problems).toEqual([]);
+    expect(planBatch({ ...script([{ id: "r", title: "r", steps: [] }]), setup: [ask] } as never).problems.join("\n")).toContain("never ask the player");
+  });
+
+  test("the preflight names the manual rows", async () => {
+    const { preflight } = await import("../testing/preflight.ts");
+    const { script } = await import("./batch-fakes.ts");
+    const { projectDir } = await import("./helpers.ts");
+    const run = (rows: unknown[]) => preflight({ script: script(rows as never), fixtures: {}, projectDir, runtimeDir: tempDir("xfb-rt-"), freeCommitBytes: async () => 40 * 1024 ** 3, gameRunning: async () => false, git: () => null });
+    const item = (await run([{ id: "auto", title: "a", steps: [] }, { id: "FR1", title: "f", manual: true, steps: [ask] }])).items.find((i) => i.check === "manual rows")!;
+    expect(item.detail).toContain("FR1");
+    expect(item.detail).not.toContain("auto");
+    expect((await run([{ id: "auto", title: "a", steps: [] }])).items.find((i) => i.check === "manual rows")!.detail).toContain("without the player");
+  });
+
+  test("the generated batches: no ask outside FR1, which is manual; ST13 has no reload; ST7-diagnostics waits for cet.panel", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { findCommand } = await import("../api/catalogue.ts");
+    const load = (name: string) => JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", name), "utf8"));
+    for (const name of ["st-styling.json", "borg4-smoke.json", "free-roam.json"]) {
+      const batch = load(name);
+      for (const row of batch.rows) expect(row.manual === true || !JSON.stringify(row).includes('"do":"ask"')).toBe(true);
+    }
+    const fr1 = load("free-roam.json").rows[0];
+    expect(fr1.manual).toBe(true);
+    const st = load("st-styling.json").rows as { id: string }[];
+    expect(JSON.stringify(st.find((r) => r.id === "ST13-dark"))).not.toContain("reload");
+    expect(st.some((r) => r.id.endsWith("-diagnostics"))).toBe(Boolean(findCommand("cet.panel")));
+  });
+
+  // ST9b reads Windows' setting and holds the overlay to it, with the generated row's own checks.
+  const st9b = async (windows: boolean | null, motion: Record<string, unknown>) => {
+    const { readFileSync } = await import("node:fs");
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
+    const generated = JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "st-styling.json"), "utf8")).rows.find((r: { id: string }) => r.id === "ST9b-dark");
+    const clock = new FakeClock();
+    const api = fakeApi(clock, { "overlay.state": () => ({ ok: true, result: { motion } }) });
+    const rows = [{ id: "ST9b-dark", title: "t", pass: generated.pass, steps: [
+      { label: "w", do: "host.windows_animations", bind: "ST9b_dark_windows" },
+      { label: "o", do: "run", command: "overlay.state", input: {}, bind: "ST9b_dark_overlay" },
+    ] }];
+    return (await go(script(rows as never), api, fakeHost({ windowsAnimations: windows }), clock, tempDir("xfb-s1-"))).rows[0];
+  };
+  test("ST9b: Windows off and the overlay reduced by it passes; the overlay disagreeing fails", async () => {
+    expect((await st9b(false, { windows_animations: false, reason: "windows_animations_off", effective: "reduced" })).verdict).toBe("PASS");
+    expect((await st9b(false, { windows_animations: true, reason: "none", effective: "full" })).verdict).toBe("FAIL");
+    expect((await st9b(true, { windows_animations: true, reason: "frame_generation", effective: "reduced" })).verdict).toBe("PASS");
+    expect((await st9b(true, { windows_animations: true, reason: "windows_animations_off", effective: "reduced" })).verdict).toBe("PARTIAL");
+  });
+  test("ST9b: an unreadable Windows setting doesn't pass", async () => {
+    expect((await st9b(null, { windows_animations: true, reason: "none" })).verdict).not.toBe("PASS");
+  });
+});

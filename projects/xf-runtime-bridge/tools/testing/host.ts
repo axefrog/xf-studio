@@ -43,6 +43,8 @@ export interface Host {
   systemHandles(): Promise<number | null>;
   /** The title of MO2's "Cannot launch program" dialog when one is up (an antivirus blocked the launch), or null. */
   launchBlocked(): Promise<string | null>;
+  /** Windows' Animation effects setting (SPI_GETCLIENTAREAANIMATION), read only; null when it can't be read. */
+  windowsAnimations(): Promise<boolean | null>;
 }
 
 // ---- Key names ----------------------------------------------------------------------------------------------
@@ -158,6 +160,7 @@ function openUser32() {
     SendInput: { args: [FFIType.u32, FFIType.ptr, FFIType.i32], returns: FFIType.u32 },
     GetForegroundWindow: { args: [], returns: FFIType.u64 },
     GetWindowThreadProcessId: { args: [FFIType.u64, FFIType.ptr], returns: FFIType.u32 },
+    SystemParametersInfoW: { args: [FFIType.u32, FFIType.u32, FFIType.ptr, FFIType.u32], returns: FFIType.i32 },
   }).symbols;
 }
 
@@ -248,6 +251,12 @@ export const windowsHost: Host = {
     const { code, out } = await powershell(`$p = Get-Process -Id ${Number(pid)} -ErrorAction SilentlyContinue; if ($p) { "$($p.PrivateMemorySize64) $($p.WorkingSet64) $($p.HandleCount)" }`);
     const [privateBytes, workingSet, handles] = out.trim().split(/\s+/).map(Number);
     return code === 0 && Number.isFinite(privateBytes) && privateBytes > 0 ? { private_bytes: privateBytes, working_set: workingSet, handles } : null;
+  },
+  async windowsAnimations() {
+    user32 ??= openUser32();
+    const value = new Int32Array(1);
+    // SPI_GETCLIENTAREAANIMATION (0x1042): what the bridge's motion auto follows; reading changes nothing.
+    return user32.SystemParametersInfoW(0x1042, 0, value, 0) ? value[0] !== 0 : null;
   },
   async launchBlocked() {
     const dialog = topLevelWindows().find((w) => /cannot launch program/i.test(w.title));

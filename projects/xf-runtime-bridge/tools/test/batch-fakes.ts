@@ -71,7 +71,7 @@ export function fakeApi(clock: FakeClock, handlers: Record<string, Handler> = {}
 }
 
 /** A fake host: a game process that comes and goes, key presses that may be refused, free commit. */
-export function fakeHost(options: { running?: boolean; foreground?: boolean; freeGb?: number; onLaunch?: () => void; launchBlocked?: string; noProcessAfterLaunch?: boolean } = {}) {
+export function fakeHost(options: { running?: boolean; foreground?: boolean; freeGb?: number; onLaunch?: () => void; launchBlocked?: string; noProcessAfterLaunch?: boolean; windowsAnimations?: boolean | null } = {}) {
   const log: string[] = [];
   let running = options.running ?? true;
   const host: Host & { log: string[]; free: number; crash: () => void } = {
@@ -90,6 +90,7 @@ export function fakeHost(options: { running?: boolean; foreground?: boolean; fre
     async processStats() { return { private_bytes: 8 * 1024 ** 3, working_set: 6 * 1024 ** 3, handles: 12_000 }; },
     async systemHandles() { return 500_000; },
     async launchBlocked() { return options.launchBlocked ?? null; },
+    async windowsAnimations() { return options.windowsAnimations === undefined ? true : options.windowsAnimations; },
   };
   return host;
 }

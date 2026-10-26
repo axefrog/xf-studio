@@ -37,6 +37,7 @@
 
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { findCommand } from "../api/catalogue.ts";
 import { closeSteps, launchSteps } from "../testing/batch.ts";
 
 type Json = Record<string, unknown>;
@@ -148,27 +149,27 @@ function firstRows(): Json[] {
     steps: [inPlay(row), ...look(row, "dark", "auto", false), cetLine(row),
       { label: `${row}-burst`, do: "burst", name: "ST8-cetline-connected-auto-dark", frames: 6, interval_ms: 240, clear_overlay: false, rect: "$win.regions.cet_line", bind: key(row, "burst") }],
     pass: [captured("the still dot", row, "burst")], cleanup: [hudBack(row)] });
+  // ST9's Windows half without the player: Windows' setting is read (never changed) and the overlay must agree with it.
   row = "ST9b-dark";
-  rows.push({ id: row, title: "Motion auto follows Windows' Animation effects within 2 s (ST9, the Windows half; the player changes the setting)",
-    requires: [...requires, { fixture: "allow_windows_animation_check", note: "the player turns Windows' Animation effects off and back; set allow_windows_animation_check in the fixtures to run it" }],
-    steps: [inPlay(row), ...look(row, "dark", "auto"),
-      { label: `${row}-off`, do: "ask", text: "ST9: please turn Windows' Settings > Accessibility > Visual effects > Animation effects OFF, then press Done.", choices: ["Done"], deadline_ms: 300_000 },
-      { label: `${row}-follows`, do: "run", command: "overlay.state", input: {}, until: { path: "motion.reason", equals: "windows_animations_off" }, interval_ms: 500, deadline_ms: 5000, bind: key(row, "off"), on_fail: "fail_row" },
-      { label: `${row}-on`, do: "ask", text: "ST9: thank you. Please turn Animation effects back ON, then press Done.", choices: ["Done"], deadline_ms: 300_000, on_fail: "continue" }],
-    pass: [check("reduced by Windows", row, "off", "motion.reason", { equals: "windows_animations_off" })] });
+  rows.push({ id: row, title: "Motion auto agrees with Windows' Animation effects as Windows reports it (ST9, the Windows half; read, not changed)", requires,
+    steps: [inPlay(row), ...look(row, "dark", "auto"), { label: `${row}-windows`, do: "host.windows_animations", bind: key(row, "windows") }],
+    pass: [
+      { label: "the overlay reads Windows' setting as Windows does", ref: ref(row, "overlay", "motion.windows_animations"), match: { equals: ref(row, "windows", "on") } },
+      { label: "auto follows it: reduced by Windows when off", ref: ref(row, "overlay"), match: { any: [
+        { all: [{ ref: ref(row, "windows", "on"), equals: false }, { path: "motion.reason", equals: "windows_animations_off" }] },
+        { all: [{ ref: ref(row, "windows", "on"), equals: true }, { not: { path: "motion.reason", equals: "windows_animations_off" } }] },
+      ] } },
+    ],
+    facts: [{ label: "Windows animation effects on", ref: ref(row, "windows", "on") }, { label: "motion", ref: ref(row, "overlay", "motion") }] });
   row = "ST13-dark";
   const state = (name: string): Json => ({ label: `${row}-${name}`, do: "run", command: "overlay.state", input: {}, bind: key(row, name) });
-  rows.push({ id: row, title: "cet_open follows CET's overlay with the XF box off: false, true, false, then true after CET's Reload all mods", requires,
+  // CET has no scripted Reload all mods (its button only), so the card's reload half is left out: no row needs the player.
+  rows.push({ id: row, title: "cet_open follows CET's overlay with the XF box off: false, true, false", requires,
     steps: [inPlay(row), ...look(row, "dark", "full", false), state("closed1"),
       press(`${row}-open`, "$fixture.cet_overlay_key"), { label: `${row}-opened`, do: "set", value: true, bind: "cetOpen" }, { label: `${row}-w1`, do: "wait", ms: 700 }, state("open1"),
-      ...cetClose(row, "close1"), { label: `${row}-w2`, do: "wait", ms: 700 }, state("closed2"),
-      press(`${row}-open2`, "$fixture.cet_overlay_key"), { label: `${row}-opened2`, do: "set", value: true, bind: "cetOpen" },
-      // The answer comes before the reload (a reload rebuilds the XF Runtime Bridge window and its question).
-      { label: `${row}-reload`, do: "ask", text: "ST13: press Done, then within 10 s press Reload all mods in the CET overlay (leave the overlay open).", choices: ["Done"], deadline_ms: 180_000 },
-      { label: `${row}-reloading`, do: "wait", ms: 12_000 },
-      { label: `${row}-after-reload`, do: "run", command: "overlay.state", input: {}, until: { path: "cet_open", equals: true }, interval_ms: 500, deadline_ms: 8000, bind: key(row, "reloaded"), on_fail: "continue" }],
+      ...cetClose(row, "close1"), { label: `${row}-w2`, do: "wait", ms: 700 }, state("closed2")],
     pass: [check("closed: false", row, "closed1", "cet_open", { equals: false }), check("open: true", row, "open1", "cet_open", { equals: true }),
-      check("closed again: false", row, "closed2", "cet_open", { equals: false }), check("after the reload, open: true", row, "reloaded", "cet_open", { equals: true })],
+      check("closed again: false", row, "closed2", "cet_open", { equals: false })],
     cleanup: [...cetClose(row)] });
   return rows;
 }
@@ -196,14 +197,12 @@ function writesRows(theme: Theme): Json[] {
   row = `${n}-${theme}`;
   rows.push({ id: row, title: `The XF box with diagnostics, motion full (${theme})`, requires, judged_by: STUDIO,
     steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row),
-      // The question shows in the box while it is captured (the card's "the question and its keys"); the player's answer is the visibility check.
-      { label: `${row}-ask-and-shoot`, together: [
-        { do: "ask", text: `${n}: is the XF box fully visible, or partly cut off?`, choices: ["Fully visible", "Partly cut off"], deadline_ms: 90_000, bind: key(row, "answer"), on_fail: "continue" },
-        { sequence: [{ do: "wait", ms: 800 }, { do: "capture", name: `${n}-xfbox-diagnostics-${theme}`, clear_overlay: false, bind: key(row, "shot") }] },
-      ] }],
+      // The question shows in the box for the capture (the card's "the question and its keys"); nobody is asked to answer.
+      { label: `${row}-question`, do: "run", command: "ui.message", input: { level: "ask", text: `${n}: a question for the capture (no answer needed).`, choices: ["Fully visible", "Partly cut off"], seconds: 30 }, bind: key(row, "q") },
+      { label: `${row}-settle`, do: "wait", ms: 800 },
+      { label: `${row}-shot`, do: "capture", name: `${n}-xfbox-diagnostics-${theme}`, clear_overlay: false, bind: key(row, "shot") }],
     pass: [check("the overlay draws", row, "overlay", "drawing_now", { equals: true }), check(`theme ${theme}`, row, "overlay", "theme", { equals: theme }),
-      check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the XF box", row, "shot"),
-      check("the player saw it whole", row, "answer", "label", { equals: "Fully visible" })],
+      check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the XF box", row, "shot")],
     cleanup: [{ label: `${row}-clear`, do: "run", command: "ui.message", input: { clear: true } }, hudBack(row)] });
 
   row = `ST4-${theme}-changes`;
@@ -267,14 +266,18 @@ function writesRows(theme: Theme): Json[] {
       check("answered", row, "answer", "complete", { equals: true }), captured("answered", row, "answered")],
     cleanup: [{ label: `${row}-clear`, do: "run", command: "ui.message", input: { clear: true } }, ...cetClose(row)] });
 
-  row = `ST7-${theme}-diagnostics`;
-  rows.push({ id: row, title: `The CET window with the DIAGNOSTICS header open (${theme}; the player opens it)`, requires, judged_by: STUDIO,
-    steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
-      { label: `${row}-ask`, do: "ask", text: `${row}: please click the DIAGNOSTICS header in the XF Runtime Bridge window to open it, then press Done.`, choices: ["Done"], deadline_ms: 180_000 },
-      { label: `${row}-settle`, do: "wait", ms: 500 },
-      ...cetShot(row, `ST7-cet-diagnostics-${theme}`, "diag")],
-    pass: [captured("Diagnostics open", row, "diag")],
-    cleanup: [...cetClose(row)] });
+  // The DIAGNOSTICS header opens without a person through the bridge's cet.panel command (diagnostics_open), which the
+  // bridge chat builds (spec'd for it): until the catalogue has it, the rows are left out rather than asking the player.
+  if (findCommand("cet.panel")) {
+    row = `ST7-${theme}-diagnostics`;
+    rows.push({ id: row, title: `The CET window with the DIAGNOSTICS header open (${theme})`, requires, judged_by: STUDIO,
+      steps: [inPlay(row), ...look(row, theme, "full"), windowOf(row), ...cetOpen(row),
+        { label: `${row}-open-header`, do: "run", command: "cet.panel", input: { diagnostics_open: true } },
+        { label: `${row}-settle`, do: "wait", ms: 2500 },
+        ...cetShot(row, `ST7-cet-diagnostics-${theme}`, "diag")],
+      pass: [captured("Diagnostics open", row, "diag")],
+      cleanup: [{ label: `${row}-close-header`, do: "run", command: "cet.panel", input: { diagnostics_open: false }, on_fail: "continue" }, ...cetClose(row)] });
+  }
 
   row = `ST11-${theme}`;
   rows.push({ id: row, title: `The ink panel's answer flash in photo mode (modal, a waiting question, Esc) (${theme})`, requires, judged_by: STUDIO,
@@ -538,6 +541,9 @@ function freeRoamScript(): Json {
     setup: [{ label: "commit", do: "host.commit", on_fail: "stop" }],
     rows: [{
       id: row,
+      // The player plays this one: it asks and waits for their answer.
+      manual: true,
+      expected_s: 900,
       title: "Free roam: walk about a block, then drive across a district, with the recorder on (the player plays; the row drives nothing)",
       requires: cfg({ "bridge.allow_writes": "true" }),
       steps: [
