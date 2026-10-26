@@ -64,6 +64,26 @@ describe("help tips", () => {
     expect(bubble.hidden).toBe(true);
     host.remove();
   });
+
+  test("the reason tip of an unavailable control follows the same rule: keyboard focus shows it, a script's focus does not", async () => {
+    const { installReasonTips } = await import("../src/studio-ui/reason-tip");
+    const Control = lightDocument.body.constructor as new (tag: string) => LightElement;
+    const control = new Control("button");
+    control.setAttribute("aria-disabled", "true"); control.setAttribute("data-reason", "Restore your previous settings first.");
+    lightDocument.body.append(control);
+    installReasonTips(lightDocument as never);
+    const bubble = lightDocument.body.querySelector(".reason-tip")!;
+    const fire = (type: string) => lightDocument.dispatchEvent(lightEvent(type, { target: control }));
+    control.focusVisible = false;
+    fire("focusin");
+    expect(bubble.hidden).toBe(true);
+    control.focusVisible = true;
+    fire("focusin");
+    expect(bubble.hidden).toBe(false);
+    fire("focusout");
+    expect(bubble.hidden).toBe(true);
+    control.remove();
+  });
 });
 
 describe("remembered folds", () => {

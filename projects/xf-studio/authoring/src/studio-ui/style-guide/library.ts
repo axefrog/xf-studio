@@ -283,7 +283,7 @@ export const LIBRARY: readonly LibraryEntry[] = [
     a11y: "A real button named \"About &lt;what&gt;\" whose text is its description; Escape closes.",
     do: "Keep it to what something is.", avoid: "Inline notes that only explain.", see: ["c-help-tips"] },
   { id: "lib-reason-tip", title: "Reason tip", category: "General", module: "reason-tip.ts", exports: ["installReasonTips"],
-    what: "Why an unavailable main action is unavailable, on focus, hover or a press.",
+    what: "Why an unavailable main action is unavailable, on keyboard focus, hover or a press.",
     anatomy: "One page-wide tip with a warning edge.", variants: "none.", states: "shown, lingering after a press.", sizes: "Up to 320 px wide.",
     when: "Automatic for every control marked by <code>applyCapability</code>.", combine: "With any button or icon button.",
     adapt: "Flips above when needed.", drives: "The capability's reason.", a11y: "The same reason is the control's accessible description.",

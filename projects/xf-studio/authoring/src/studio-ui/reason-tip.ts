@@ -42,7 +42,12 @@ export function installReasonTips(doc: Document = document) {
     event.preventDefault(); event.stopImmediatePropagation();
     show(control, true);
   }, true);
-  doc.addEventListener("focusin", event => { const control = target(event); if (control) show(control); else if (shownFor) hide(); });
+  // Keyboard focus only: focus a script or a click puts on the control (a panel focusing its first control) never opens the tip.
+  doc.addEventListener("focusin", event => {
+    const control = target(event);
+    if (!control) { if (shownFor) hide(); return; }
+    if (control.matches(":focus-visible")) show(control);
+  });
   doc.addEventListener("focusout", event => { if (event.target === shownFor) hide(); });
   doc.addEventListener("pointerover", event => { const control = target(event); if (control && control !== shownFor) show(control); });
   doc.addEventListener("pointerout", event => { if (shownFor && event.target instanceof Node && shownFor.contains(event.target) &&
