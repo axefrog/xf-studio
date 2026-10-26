@@ -8,6 +8,7 @@
 // Sweeping discards unmarked nodes' in-memory state; a swept node regenerates identically (I-3).
 
 import { idsIn as idFields } from './canon.ts';
+import type { ContextFrame } from './frames.ts';
 import type { Kernel } from './kernel.ts';
 import { splitWindowPath } from './kernel.ts';
 import { isId } from './id.ts';
@@ -29,7 +30,7 @@ const cmpId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 export class Retention {
   readonly seeds = new Map<Id, SeedRecord>();
   readonly streamed = new Set<Id>();
-  private cache: { revision: number; now: GameTime; marked: Set<Id>; maxMember: Map<string, number>; eventFacts: Set<Id> } | null = null;
+  private cache: { revision: number; now: GameTime; marked: Set<Id>; maxMember: Map<string, number>; eventFacts: Set<Id>; frameIds: Set<Id> } | null = null;
   private sweepList = new Worklist<{ id: Id }>();
   /** Ownership of unrecoverable location edges survives their unsaved event header, without rooting it. */
   private sweptEventLocations = new Set<Id>();
@@ -115,8 +116,8 @@ export class Retention {
     return (live && !ownEventEdge) || (!live && referenced);
   }
 
-  /** The active and blocked frames of demand roots and live seeds, and every ancestor frame of those (spec 7.3, 14.1). */
-  rootFrameIds(): Set<Id> {
+  /** The active and blocked frames of demand roots and live seeds, retained frames, and every ancestor frame of those (spec 7.3, 14.1). */
+  private activeFrameIds(): Set<Id> {
     const k = this.k;
     const rootActors = new Set<Id>(k.frames.demandRoots);
     for (const s of this.seeds.values()) {
@@ -126,28 +127,37 @@ export class Retention {
     const frameIds = new Set<Id>();
     for (const f of k.frames.all()) {
       if (rootActors.has(f.actor) && k.frames.eligible(f)) for (const a of k.frames.ancestorsOrSelf(f.id)) frameIds.add(a);
-    }
-    // Retained frames (v4.17, V4-54) are roots while active or blocked, whoever their actor is; once satisfied or abandoned one is kept only
-    // while a persisted record refers to it, which here is a canon event's `served`.
-    let served: Set<Id> | undefined;
-    for (const f of k.frames.all()) {
-      if (!f.retain) continue;
-      if (k.frames.eligible(f)) {
-        for (const a of k.frames.ancestorsOrSelf(f.id)) frameIds.add(a);
-        continue;
-      }
-      if (served === undefined) {
-        served = new Set<Id>();
-        const canon = new Set(k.events.canonEvents());
-        for (const c of k.store.allContributions()) {
-          const sc = c.target.scope;
-          if (c.target.slot === 'served' && c.form.f === 'const' && typeof c.form.value === 'string' && sc && 'nodes' in sc && sc.nodes.some((n) => canon.has(n))) served.add(c.form.value);
-        }
-        for (const p of k.store.allPins()) if (p.slot === 'served' && typeof p.value === 'string' && canon.has(p.node)) served.add(p.value);
-      }
-      if (served.has(f.id)) for (const a of k.frames.ancestorsOrSelf(f.id)) frameIds.add(a);
+      // Retained frames (v4.17, V4-54) are roots while active or blocked, whoever their actor is.
+      else if (f.retain && k.frames.eligible(f)) for (const a of k.frames.ancestorsOrSelf(f.id)) frameIds.add(a);
     }
     return frameIds;
+  }
+
+  /**
+   * The frames a save holds: the active ones (above) and the satisfied or abandoned retained frames that any persisted record refers to
+   * (S0 10.4, 14.1). A reference is an Id the marking reached (a pin, an edge, a belief, the facts of a retained event, an outstanding
+   * batch) or an Id in a process's persisted state; a kept frame's own links are then marked in turn, until nothing more is named.
+   */
+  rootFrameIds(): Set<Id> {
+    return this.compute().frameIds;
+  }
+
+  private frameLinks(f: ContextFrame): Id[] {
+    const expand = (idStr: string): Id => this.k.expandId(idStr);
+    const out: Id[] = [];
+    for (const i of [f.actor, f.origin, f.payload.place, f.cause, ...f.focus.nodes, ...f.parents.map((p) => p.frame)]) if (i !== undefined) out.push(i);
+    out.push(...idFields(f.payload.goal, expand), ...idFields(f.own, expand));
+    return out;
+  }
+
+  /** Every Id the persisted states of the processes name. */
+  private namedByProcessStates(): Set<Id> {
+    const out = new Set<Id>();
+    for (const st of this.k.evolution.states.values()) {
+      for (const i of idFields(st.state)) out.add(i);
+      for (const i of idFields(st.digest)) out.add(i);
+    }
+    return out;
   }
 
   /** Whether a pin is in effect now (spec 6.1, 6.2, 6.3, SPEC-NOTES 5). */
@@ -207,14 +217,9 @@ export class Retention {
     for (const st of k.evolution.states.values()) {
       for (const b of st.outstanding) push(...idFields(b.ops, expand));
     }
-    // Frames of demand roots and live seeds, with every ancestor. The Id fields of a frame are its links, its
-    // focus, its goal's targets and every Id its interests name (SPEC-NOTES 33).
-    for (const fid of this.rootFrameIds()) {
-      const f = k.frames.frame(fid)!;
-      push(f.actor, f.origin, f.payload.place, f.cause, ...f.focus.nodes);
-      for (const p of f.parents) push(p.frame);
-      push(...idFields(f.payload.goal, expand), ...idFields(f.own, expand));
-    }
+    // Frames of demand roots, live seeds and retained frames, with every ancestor. The Id fields of a frame are its links, its
+    // focus, its goal's targets and every Id its interests name (SPEC-NOTES 33). Kept ended frames add theirs in `compute`.
+    for (const fid of this.activeFrameIds()) { const fr = this.k.frames.frame(fid); if (fr) push(...this.frameLinks(fr)); }
     push(...this.streamed);
     return out;
   }
@@ -227,7 +232,7 @@ export class Retention {
   /** Own event constants that persisted consumers cannot regenerate after replay. */
   eventFacts(): ReadonlySet<Id> { return this.compute().eventFacts; }
 
-  private compute(): { marked: Set<Id>; maxMember: Map<string, number>; eventFacts: Set<Id> } {
+  private compute(): { marked: Set<Id>; maxMember: Map<string, number>; eventFacts: Set<Id>; frameIds: Set<Id> } {
     if (this.cache && this.cache.revision === this.k.revision && this.cache.now === this.k.now) return this.cache;
     const store = this.k.store;
     const marked = new Set<Id>();
@@ -240,6 +245,7 @@ export class Retention {
     };
     const traversedEvents = new Set<Id>();
     const eventFacts = new Set<Id>();
+    const drain = (): void => {
     while (stack.length > 0) {
       const id = stack.pop()!;
       const firstVisit = !marked.has(id);
@@ -273,6 +279,25 @@ export class Retention {
         if (store.header(o)?.origin.by === 'value') follow(o);
       }
     }
+    };
+    drain();
+    // Ended retained frames some persisted record refers to are kept (S0 10.4, 14.1), and what they link to is marked with them.
+    const frameIds = this.activeFrameIds();
+    let named: Set<Id> | undefined;
+    for (;;) {
+      const added: Id[] = [];
+      for (const f of this.k.frames.all()) {
+        if (!f.retain || frameIds.has(f.id)) continue;
+        if (!marked.has(f.id)) {
+          named ??= this.namedByProcessStates();
+          if (!named.has(f.id)) continue;
+        }
+        for (const a of this.k.frames.ancestorsOrSelf(f.id)) if (!frameIds.has(a)) { frameIds.add(a); added.push(a); }
+      }
+      if (added.length === 0) break;
+      for (const a of added) { const fr = this.k.frames.frame(a); if (fr) follow(...this.frameLinks(fr)); }
+      drain();
+    }
     const maxMember = new Map<string, number>();
     for (const id of marked) {
       const h = store.header(id);
@@ -282,7 +307,7 @@ export class Retention {
         if (cur === undefined || h.origin.index > cur) maxMember.set(key, h.origin.index);
       }
     }
-    this.cache = { revision: this.k.revision, now: this.k.now, marked, maxMember, eventFacts };
+    this.cache = { revision: this.k.revision, now: this.k.now, marked, maxMember, eventFacts, frameIds };
     return this.cache;
   }
 

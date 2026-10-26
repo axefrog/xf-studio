@@ -272,8 +272,13 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
   const classIdx = (aff: 'A1' | 'A2' | 'A3'): number => ({ A1: 2, A2: 3, A3: 4 })[aff];
   const intentDef = (id: string): IntentDef => cfg.intents.find((i) => i.id === id)!;
   const WRONG_KINDS = [...sim.w.kinds.kinds.values()].filter((k) => k.fills.some((f) => f.fn === 'wrong')).map((k) => k.name);
-  const settled = new Set<Id>();
-  const ownCreators = new Set<Id>([sim.w.s1, ...['city.events', 'city.mirror', 'order.norms', 'group.decide', 'scene.acts', 'people.goals'].map((p) => processCause(p))]);
+
+  /** A person (a resident, or a node of kind `xf:person`) who is alive at `t`. */
+  const livingPerson = (n: Id, t: GameTime): boolean => {
+    if (sim.people.view(n)) return sim.people.alive(n, t);
+    sim.k.persistence.recoverIfSaved(n);
+    return sim.k.persistence.restoreReferencedHeader(n)?.kind === 'xf:person' && sim.k.value(n, 'alive', t) !== 'no';
+  };
 
   /** Who may hold a seat of a group at `t` (S1 7.8): a living adult member, aged 25 or more, of profile role gang, in no other seat, not barred. */
   const eligible = (g: G, group: Id, r: Id, t: GameTime, w: number, taken: ReadonlySet<Id>): boolean => {
@@ -367,41 +372,18 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
       for (const e of grudges) st.cursors.grudges = Math.max(st.cursors.grudges, e.seq);
       const lifecycle: IntentChange[] = [];
       const outAgainst: GroupDigest['against'] = {};
+      const prevDigest = c.digest<GroupDigest>(procId);
       // the wrongs of seeds and of the port, found by query and taken once by their canonical origin (S1 7.8): a kit's minted beating or a replayed enforcement pulses like a simulated one
       const seen = new Set(st.seen);
       const queried: EventFact[] = [];
       if (WRONG_KINDS.length > 0) {
-        // The events of other creators than S1's own are found by their headers, not by a query over every event: S1's own events are thousands,
-        // seeds' and the port's are few. `settled` holds only facts that never change (an event of S1's, of another kind, or too old to be taken),
-        // so it is a cache that a reload may lose without changing a result.
-        const lowest = sim.windowStart(Math.max(0, w - 6));
-        const found: Array<{ id: Id; time: GameTime }> = [];
-        // every window looks at the live events; the first window of a session also looks at the saved ones, which a sweep may have taken out of memory
-        const candidates = settled.size === 0 ? sim.k.persistence.discoveryIdsOfKind('core:event') : [...sim.k.store.eachIdOfKind('core:event')];
-        for (const id of candidates) {
-          if (settled.has(id) || seen.has(id)) continue;
-          const h = sim.k.persistence.restoreReferencedHeader(id);
-          if (!h || h.origin.by !== 'minted' || ownCreators.has(h.origin.creator) || /^item:\d+$/.test(h.origin.name)) { settled.add(id); continue; }
-          const kind = sim.k.value(id, 'kind');
-          const time = sim.k.value(id, 'time');
-          if (typeof kind !== 'string' || typeof time !== 'number') continue;
-          if (!WRONG_KINDS.includes(kind) || time < lowest) { settled.add(id); continue; }
-          if (time <= T - 1) found.push({ id, time });
-        }
-        found.sort((a, b) => a.time - b.time || cmp(a.id, b.id));
-        const taken = found
-          .map((x) => ({ id: x.id, ev: sim.policies.viewEvent(x.id) }))
-          .filter((x) => x.ev !== undefined && x.ev.creator !== undefined && !ownCreators.has(x.ev.creator));
-        for (const { id, ev: e } of taken) {
-          const cell = e!.place !== undefined ? sim.w.index.cells[e!.place] : undefined;
-          if (!cell) continue;
+        // The events of other creators than S1's own come from the index of them (foreign.ts), a few at a time, not from a query over every event.
+        for (const { id, ev: e } of sim.foreign.scan(WRONG_KINDS, w, T, seen)) {
+          const f = sim.foreign.factOf(id, e, w);
+          if (!f) continue;
           seen.add(id);
           st.seen.push(id);
-          const pub = cell.public === 'public' && e!.witnesses.length >= sim.data.norms.publicMinWitnesses;
-          queried.push({
-            id, kind: e!.kind, size: 1, w, time: e!.time, cell: e!.place!, district: cell.district, public: pub, witnesses: e!.witnesses.length, policeChild: false, creator: 'sim',
-            outcome: (e!.outcome as EventFact['outcome'] | undefined) ?? 'done', parties: partiesOf(sim, e!.participants, e!.time), effects: e!.effects.map((x) => ({ ...x })),
-          });
+          queried.push(f);
         }
         if (st.seen.length > 256) st.seen = st.seen.slice(st.seen.length - 256);
       }
@@ -433,6 +415,11 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
         for (const row of fc.items) {
           if (row.district !== g.district || row.kind !== 'shakedown') continue;
           g.books.cash = g.books.cash + def.perShakedown * sim.city.offenderShare(g.district, 'shakedown', mine) * row.n * keep;
+        }
+        // each consumed `shakedown` fact that is a goal act, came out `done` and has a member of the group (or the group) as its aggressor adds `perShakedown`: a goal act is not in the counts
+        for (const f of facts) {
+          if (f.goal === undefined || f.kind !== 'shakedown' || f.outcome !== 'done') continue;
+          if (f.parties.some((p) => (p.role === 'aggressor' || p.role === 'aggressor-group') && (p.role === 'aggressor-group' ? p.who : p.group) === id)) g.books.cash += def.perShakedown;
         }
 
         // (3) seats: bars end, holders are removed, successions, draws (S1 7.8)
@@ -570,7 +557,10 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
             const sev = Math.min(1, cfg.pulses.sev[Math.min(4, f.size) - 1]! * (cfg.effectW[effect] ?? 0.5) * (holders.has(to) || heldBefore.has(to) ? cfg.leaderSev : 1));
             if (gTo === id && gBy !== id) {
               const wardTo = to;
-              put('care_of_members', { at: f.time, sev, latched: false, src: f.id }, cfg.pulses.careU0, cfg.pulses.careTauDays);
+              // the pulse keeps the member wronged and who wronged them: `protect-members` takes its ward from it (S1 7.8)
+              const cp: Pulse = { at: f.time, sev, latched: false, src: f.id, ward: wardTo };
+              if (by !== undefined) cp.wrongdoer = by;
+              put('care_of_members', cp, cfg.pulses.careU0, cfg.pulses.careTauDays);
               if (f.public || holders.has(to) || heldBefore.has(to)) put('reputation', { at: f.time, sev, latched: false, src: f.id }, cfg.pulses.repU0, cfg.pulses.repTauDays);
               const byAff = gBy === undefined ? undefined : affOfGroup(sim, gBy);
               if (byAff !== undefined && st.groups[gBy!] !== undefined && by !== sim.w.v) {
@@ -634,7 +624,6 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
         };
         const tempo = c.settings.tempo;
         const reach = tempo === 'off' ? undefined : cfg.punish.tempo[tempo];
-        const against = (i: Extract<Intent, { state: 'active' }>): string => (i.rung === 2 ? 'price' : i.rung === 3 ? 'hunt' : lastWarningObserved(i) ? 'ranks' : 'warned');
         const lastWarning = (i: Extract<Intent, { state: 'active' }>): Id | undefined => i.warnings?.[i.warnings.length - 1];
         const lastWarningObserved = (i: Extract<Intent, { state: 'active' }>): boolean => {
           const x = lastWarning(i);
@@ -648,7 +637,6 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
             it.warnKinds = [...(it.warnKinds ?? []), f.kind].slice(-4);
           }
         }
-        const prevAgainst = it.state === 'active' && it.name === 'punish' ? against(it) : 'none';
         const settledNow = grudges.filter((e) => e.group === id && e.op === 'settled');
         const clearedNow = grudges.filter((e) => e.group === id && e.op === 'cleared');
         const notice = (kindName: string, name: string, parts: Array<{ who: Id; role: string }>, cause: Id[]): Id => {
@@ -753,7 +741,8 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
                 } else if (idf.id === 'protect-members') src = g.pulse.care_of_members;
                 // the decision is an event; the intention's id is its Id (S1 7.8)
                 const decisionId = mintedId(proc, id, `decide/${idf.id}/${w}`);
-                const ward = src?.ward;
+                // the ward is the member wronged, if a person and alive when the group decides (S1 7.8)
+                const ward = src?.ward !== undefined && livingPerson(src.ward, T) ? src.ward : undefined;
                 const wrongdoer = src?.wrongdoer;
                 const active: Extract<Intent, { state: 'active' }> = { state: 'active', id: decisionId, name: idf.id, drive, since: w + 1, expires: w + 1 + duration, motive: q64(op.w[drive] ?? 0) };
                 if (rival !== undefined) active.rival = rival;
@@ -804,11 +793,14 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
         if (Object.keys(b).length === 0) delete boost[g.district]![mine];
         if (boost[g.district] && Object.keys(boost[g.district]!).length === 0) delete boost[g.district];
         // the intention against V others read (S1 7.8.1) and its transitions: a change of what `intentAgainst` answers
-        const nowAgainst = now.state === 'active' && now.name === 'punish' ? against(now) : 'none';
-        if (nowAgainst !== prevAgainst) changes.push({ key: `against|${id}`, t: T + W, value: nowAgainst, prev: prevAgainst });
+        // (the answer is compared with the one last published, so that a warning's being perceived since then, which changes no intention, is a transition too)
         outAgainst[id] = now.state === 'active' && now.name === 'punish' && now.cause !== undefined
           ? { id: now.id, group: id, target: sim.w.v, rung: (['ranks', 'price', 'hunt'] as const)[(now.rung ?? 1) - 1]!, since: now.since, expires: now.expires, ...(lastWarning(now) !== undefined ? { warning: lastWarning(now)! } : {}), warned: lastWarningObserved(now), cause: now.cause }
           : null;
+        const againstName = (a: AgainstRec | null | undefined): string => (a ? (a.rung === 'ranks' && !a.warned ? 'warned' : a.rung) : 'none');
+        const prevAgainst = againstName(prevDigest?.against?.[id]);
+        const nowAgainst = againstName(outAgainst[id]);
+        if (nowAgainst !== prevAgainst) changes.push({ key: `against|${id}`, t: T + W, value: nowAgainst, prev: prevAgainst });
         outGroups[id] = {
           aff: g.aff, U, W: op.W, D: op.D, band: g.gapBand, intent: now.state === 'active' ? `active:${now.name ?? now.id}` : now.state, ...(now.state === 'active' ? { until: now.expires } : {}),
           seats: g.seats.map((s) => ({ seat: s.seat, holder: s.holder })), interregnum: g.interregnum !== undefined, district: g.district,
@@ -821,7 +813,7 @@ export function groupsProcess(sim: Sim): S1Process<GroupState, GroupDigest> {
             : null,
         };
       }
-      const prev = c.digest<GroupDigest>(procId);
+      const prev = prevDigest;
       return {
         ops, state: st,
         digest: {

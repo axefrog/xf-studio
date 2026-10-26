@@ -49,6 +49,7 @@ import { recipeClasses } from './fit.ts';
 import { hrec } from '../canon.ts';
 import { PACK_ID } from './world-schema.ts';
 import { itemTime } from '../summary.ts';
+import { ForeignEvents } from './foreign.ts';
 
 export interface SimOptions extends WorldOptions {
   /** Build only these processes (a test that wants one process alone). */
@@ -74,6 +75,8 @@ export class Sim {
   readonly divergence: Divergence;
   readonly reads: Reads;
   readonly protection: Protection;
+  /** The index of the events seeds and the port made (S1 7.8, 7.10), kept by the groups and goals processes' scans. */
+  readonly foreign: ForeignEvents;
   /** The state rules S1 registers for the story patterns (S1 9.1a). */
   readonly stateRules: StateRule[];
   /** The canon characters of the main story (S1 4.4), joined to mirrored nodes by game key. */
@@ -98,6 +101,7 @@ export class Sim {
     this.policies = new Policies(this);
     this.tiePolicy = new TiePolicy(this);
     this.vFrames = new VFrames(this);
+    this.foreign = new ForeignEvents(this);
     this.divergence = new Divergence(this);
     this.reads = new Reads(this);
     this.protection = new Protection(this);

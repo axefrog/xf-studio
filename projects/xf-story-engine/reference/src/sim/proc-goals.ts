@@ -15,7 +15,6 @@ import type { GameTime, Id, Selector } from '../types.ts';
 import { invCum, q64 } from './arith.ts';
 import type { Duty, DutyDef } from './data.ts';
 import { applicableFills } from './fills.ts';
-import { ForeignEvents } from './foreign.ts';
 import { type DigestBase, type EventFact, type Feed, type Transition, feedAfter, pushFeed, pushTransitions } from './occ.ts';
 import { groupOf } from './outcomes.ts';
 import type { PostRec } from './outcomes.ts';
@@ -111,7 +110,8 @@ export function goalsProcess(sim: Sim): S1Process<GoalsState, GoalsDigest> {
   const k = sim.k;
   const v = sim.w.v;
   const WRONG_KINDS = [...sim.w.kinds.kinds.values()].filter((kd) => kd.fills.some((f) => f.fn === 'wrong')).map((kd) => kd.name);
-  const foreign = new ForeignEvents(sim, [...new Set([...WRONG_KINDS, ...DEBT_KINDS])]);
+  const KINDS = [...new Set([...WRONG_KINDS, ...DEBT_KINDS])];
+  const foreign = sim.foreign;
   const classIdx = (aff: string): number => ({ A1: 2, A2: 3, A3: 4 })[aff as 'A1']!;
   const dutyOf = (intent: string, duty: Duty): DutyDef | undefined => gcfg.intents.find((i) => i.id === intent)?.duties?.find((d) => d.duty === duty);
 
@@ -227,7 +227,7 @@ export function goalsProcess(sim: Sim): S1Process<GoalsState, GoalsDigest> {
       const seen = new Set(st.seen);
       const facts: EventFact[] = [...fe.items, ...fm.items, ...fn.items];
       const repairs: Array<{ a: Id; b: Id; id: Id; time: GameTime }> = [];
-      for (const { id, ev: e } of foreign.scan(w, T, seen)) {
+      for (const { id, ev: e } of foreign.scan(KINDS, w, T, seen)) {
         seen.add(id);
         st.seen.push(id);
         if (e.kind === 'favour' || e.kind === 'promise') {

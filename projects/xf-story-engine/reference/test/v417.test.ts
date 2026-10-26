@@ -315,14 +315,62 @@ describe('F-30: retained frames (V4-54)', () => {
     expect(fresh.persistence.chain.get('B')!.ops.some((o) => o.op === 'FrameState' && o.id === f.id)).toBe(true);
   });
 
-  test('a satisfied retained frame no event refers to is dropped from the next save', () => {
+  test('a retained frame an earlier save holds is never dropped: its terminal status is written, and a swept frame recovers silently', () => {
     const k = kernel('F-30b');
     const actor = k.mint(k.root('city', 'core:place'), cause, 'actor', 'core:person');
     const f = k.frames.open({ id: H(s('frame'), s('goal')), actor, level: 'goal', origin: actor, weight: 1, cause, retain: true });
     k.persistence.save('A');
     k.frames.setStatus(f.id, 'satisfied', cause);
     const b = k.persistence.save('B');
-    expect(b.ops).toContainEqual({ op: 'FrameState', id: f.id, frame: null });
+    // the terminal status is written as a change to a saved record, never as a null
+    expect(b.ops).not.toContainEqual({ op: 'FrameState', id: f.id, frame: null });
+    const written = b.ops.find((o) => o.op === 'FrameState' && o.id === f.id);
+    expect(written && written.op === 'FrameState' ? written.frame?.status : undefined).toBe('satisfied');
+    // a reload holds what the run that went on holds
+    const fresh = replacement(k, 'F-30b2', 'B');
+    expect(fresh.frames.frame(f.id)).toEqual(k.frames.frame(f.id));
+    // a frame taken out of memory comes back as saved when something reaches it, with no change and no relevance
+    const saved = structuredClone(fresh.frames.frame(f.id)!);
+    fresh.frames.remove(f.id);
+    expect(fresh.frames.frame(f.id)).toBeUndefined();
+    const before = fresh.pending.length;
+    fresh.persistence.recoverIfSaved(f.id);
+    expect(fresh.frames.frame(f.id)).toEqual(saved);
+    expect(fresh.pending.length).toBe(before);
+  });
+
+  test('an ended retained frame that no save holds and no record refers to is not added to a save', () => {
+    const k = kernel('F-30b3');
+    const actor = k.mint(k.root('city', 'core:place'), cause, 'actor', 'core:person');
+    const f = k.frames.open({ id: H(s('frame'), s('goal')), actor, level: 'goal', origin: actor, weight: 1, cause, retain: true });
+    k.frames.setStatus(f.id, 'abandoned', cause);
+    const a = k.persistence.save('A');
+    expect(a.ops.some((o) => o.op === 'FrameState' && o.id === f.id)).toBe(false);
+  });
+
+  test('an ended retained frame a non-canon retained event names is kept, with its links, and a process state that names it keeps it too', () => {
+    const k = kernel('F-30e');
+    const actor = k.mint(k.root('city', 'core:place'), cause, 'actor', 'core:person');
+    const other = k.mint(k.root('city', 'core:place'), cause, 'other', 'core:person');
+    const f = k.frames.open({ id: H(s('frame'), s('goal')), actor, level: 'goal', origin: actor, weight: 1, cause, retain: true, focus: { nodes: [other] } });
+    const g = k.frames.open({ id: H(s('frame'), s('goal2')), actor, level: 'goal', origin: actor, weight: 1, cause, retain: true });
+    k.frames.setStatus(f.id, 'satisfied', cause);
+    k.frames.setStatus(g.id, 'abandoned', cause);
+    expect(k.retention.rootFrameIds().has(f.id)).toBe(false);
+    // an event that is not canon, retained by an edge it causes, names the frame in `served`
+    const ev = k.events.mintEvent({ creator: actor, cause, name: 'act', time: 5, kind: 'shakedown', served: f.id });
+    k.persistence.save('A');
+    expect(k.retention.rootFrameIds().has(f.id)).toBe(false);
+    k.addEdge({ type: 'core:located-in', from: actor, to: k.root('city', 'core:place'), cause: ev });
+    expect(k.retention.rootFrameIds().has(f.id)).toBe(true);
+    expect(k.retention.marked().has(other)).toBe(true);
+    // a process whose persisted state names the other frame keeps it
+    k.evolution.register({ id: 'holder', tier: 0, period: 1, run: () => [] });
+    k.evolution.states.set('holder', { id: 'holder', state: { frames: [g.id] }, outstanding: [] });
+    k.bump();
+    expect(k.retention.rootFrameIds().has(g.id)).toBe(true);
+    const b = k.persistence.save('B');
+    expect(b.ops.some((o) => o.op === 'FrameState' && o.id === g.id)).toBe(true);
   });
 
   test('a retained frame with focus tier 3 is refused', () => {

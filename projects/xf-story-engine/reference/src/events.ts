@@ -103,6 +103,9 @@ export class Events {
     this.k.store.referencesVersion++;
   }
 
+  /** Told of each event whose header is new, with the spec it was minted from (a layer's index of what it must find again; not persisted). */
+  readonly mintObservers: Array<(id: Id, spec: EventSpec) => void> = [];
+
   /**
    * Mint an event. Adds its fields as simulation contributions, a `core:located-in` edge to its place,
    * and emits one `event` change (not also `minted`, `contribution` or `edge`: SPEC-NOTES 30).
@@ -204,7 +207,10 @@ export class Events {
     const nid = H(hs('mint'), hid(spec.creator), hid(spec.cause), hs(spec.name));
     // Reusing a header is silent: the occurrence was announced when it first happened.
     const have = k.persistence.restoreReferencedHeader(nid) !== undefined;
-    if (!have) k.mintSilent(spec.creator, spec.cause, spec.name, 'core:event');
+    if (!have) {
+      k.mintSilent(spec.creator, spec.cause, spec.name, 'core:event');
+      for (const o of this.mintObservers) o(nid, spec);
+    }
     if (provenance) this.setMaterialisation(nid, provenance);
     // A surviving constant proves only that constant exists. Check the complete owned payload,
     // including member fields, and repair the spatial link from the original stored description.

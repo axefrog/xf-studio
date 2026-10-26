@@ -307,6 +307,8 @@ export class Persistence {
       for (const id of new Set(idsIn(references, (s) => this.k.expandId(s)))) {
         if (this.recovered.ids.has(id)) continue;
         const c = this.base.contributions.get(id), e = this.base.edges.get(id), p = this.base.pins.get(id);
+        const fr = this.base.frames.get(id);
+        if (fr && !this.k.frames.frame(id)) this.recoverFrame(fr);
         if (c) this.recoverContribution(id);
         else if (e) this.recoverEdge(id);
         else if (p) {
@@ -321,6 +323,14 @@ export class Persistence {
       this.recovered.membership = this.k.store.referencesVersion;
       this.recovering = false;
     }
+  }
+
+  /** A saved frame that is not in memory comes back as saved, silently: no change, no relevance (S0 14.1, recovery is replay). */
+  private recoverFrame(saved: ContextFrame): void {
+    const f = clone(saved);
+    this.k.frames.insert(f);
+    if (this.k.frames.eligible(f)) this.k.frames.worklist.push({ t: 'pull', frame: f.id });
+    this.k.bump();
   }
 
   /** An owned edge may leave memory only if its complete interval and endpoints are recoverable. */
@@ -486,6 +496,9 @@ export class Persistence {
     for (const m of k.events.materialisationRecords()) if (marked.has(m.event)) v.materialisations.set(m.event, clone(m));
     for (const s of k.summaries.records()) v.summaries.set(s.summary, clone(s));
     for (const fid of k.retention.rootFrameIds()) v.frames.set(fid, clone(k.frames.frame(fid)!));
+    // The chain is append-only truth (S0 14.1): a retained frame an earlier save holds is never dropped. Its terminal status is written
+    // with the change, whether or not a record still refers to it, and a frame a sweep took out of memory stays as saved.
+    for (const [id, was] of base.frames) if (was.retain && !v.frames.has(id)) v.frames.set(id, clone(k.frames.frame(id) ?? was));
     for (const s of k.retention.seeds.values()) v.seeds.set(s.id, clone(s));
     for (const p of k.evolution.snapshotStates()) v.processes.set(p.id, clone(p));
     v.settings = k.settings.all();
