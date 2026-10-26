@@ -18,6 +18,7 @@ import { findCommand, type Permission } from "../api/catalogue.ts";
 import { lockAlive, readSessionLock } from "../session-lock.ts";
 import { builtinTeardown, commandOf, launchSteps, closeSteps, planBatch, simulateConfig, type BatchScript } from "./batch.ts";
 import { readIni, stagedConfigPath, stagedDllPath, stagedManifestPath } from "./config-ini.ts";
+import { currentProcessBreakawayBlocked, JOB_BREAKAWAY_MESSAGE } from "./host.ts";
 import { decodeCetBinding, keysLabel, parseCetBindings, parseKeys } from "./host.ts";
 import { resolveRefs, type Step } from "./plan.ts";
 
@@ -42,6 +43,8 @@ export type PreflightOptions = {
   runtimeDir: string;
   freeCommitBytes: () => Promise<number | null>;
   gameRunning: () => Promise<boolean>;
+  /** Inspect the current runner process; tests supply a fake. */
+  breakawayBlocked?: () => Promise<boolean>;
   /** Asks the bridge whether another writer holds it; only called while the game runs. */
   writerBusy?: () => Promise<{ busy: boolean; detail: string }>;
   /** Commit hashes and runtime files changed since; tests pass their own. */
@@ -84,6 +87,10 @@ export function dllHasString(dll: Buffer, name: string): "whole" | "tail" | "emb
 export async function preflight(options: PreflightOptions): Promise<PreflightResult> {
   const items: PreflightItem[] = [];
   const add = (status: PreflightStatus, check: string, detail: string) => items.push({ status, check, detail });
+  try {
+    const blocked = await (options.breakawayBlocked ?? (async () => currentProcessBreakawayBlocked()))();
+    add(blocked ? "blocker" : "ok", "Windows job", blocked ? JOB_BREAKAWAY_MESSAGE : "the runner's Windows job permits launching through MO2");
+  } catch (error) { add("blocker", "Windows job", String((error as Error)?.message ?? error)); }
   const text = options.readText ?? read;
   const bytes = options.readBytes ?? readBytes;
   const git = options.git ?? ((args: string[]) => {

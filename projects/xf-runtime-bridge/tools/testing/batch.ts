@@ -440,8 +440,7 @@ export function preludeSteps(needs: Record<string, string>, restart: boolean, lo
     // build, or config.ini, since it started): otherwise it closes, and the start below launches the staged one.
     { label: "candidate", when: { check: { do: "host.running" }, match: { path: "running", equals: true } }, sequence: [
       { label: "candidate-bridge", do: "run", command: "bridge.ping", input: {}, until: { ok: true }, interval_ms: 2000, deadline_ms: 120_000, on_fail: "continue" },
-      { label: "candidate-check", do: "bridge.candidate", on_fail: "continue", outcomes: [
-        { name: "nothing_staged", match: { code: "no_candidate" }, result: "ok" },
+      { label: "candidate-check", do: "bridge.candidate", outcomes: [
         { name: "stale", match: { path: "matches", equals: false }, run: [
           { do: "note", text: "The running game's bridge isn't the staged candidate (an earlier build or settings): the runner restarts it." },
           ...closeSteps(),
@@ -453,6 +452,8 @@ export function preludeSteps(needs: Record<string, string>, restart: boolean, lo
     { label: "start", sequence: startSteps(), when: { check: { do: "host.running" }, match: { path: "running", equals: false } } },
     // Always: a game that is already running (an earlier attempt's, or the player's) is adopted and made ready.
     ...readySteps(load),
+    // A restart (including a game appearing during the MO2 wait) isn't proof of the loaded build.
+    { label: "candidate-ready", do: "bridge.candidate", success: { path: "matches", equals: true } },
   ] as Step[];
 }
 
@@ -586,6 +587,7 @@ export class SessionExecutor implements Executor {
   /** Every API path the executor takes (commands, schema-2 steps, questions, releases) goes through this, so a handed_over refusal is seen on any of them. */
   private readonly api: Pick<CommandApi, "run">;
   private handedOver = false;
+  private tearingDown = false;
   /** The overlay's look as this game session started it: each key from the first overlay.set that changed it. */
   private overlayUndo: Record<string, unknown> = {};
 
@@ -593,7 +595,7 @@ export class SessionExecutor implements Executor {
     this.api = {
       run: (async (name: string, input: unknown, options?: Parameters<CommandApi["run"]>[2]) => {
         const out = await c.api.run(name, input, options);
-        if (!out.ok && out.error.code === "handed_over") this.handedOver = true;
+        if (!this.tearingDown && !out.ok && out.error.code === "handed_over") this.handedOver = true;
         return out;
       }) as CommandApi["run"],
     };
@@ -603,6 +605,7 @@ export class SessionExecutor implements Executor {
 
   /** The teardown's start: earlier stops no longer gate actions (each teardown step is tried and recorded). */
   clearStops() {
+    this.tearingDown = true;
     this.stopReason = undefined;
     this.handedOver = false;
     // The stopped commit monitor is detached too: its trip stays on the batch's halt (the report), and must not refuse the
@@ -939,6 +942,7 @@ export class SessionExecutor implements Executor {
     if (typeof staged !== "string" || !existsSync(stagedManifestPath(staged))) return { ok: false, code: "no_candidate", message: "No staged manifest to compare with (fixtures staged_mod)." };
     let manifest: { version?: string; commit?: string; source_tree_clean?: boolean };
     try { manifest = JSON.parse(readFileSync(stagedManifestPath(staged), "utf8")); } catch { return { ok: false, code: "no_candidate", message: "The staged manifest couldn't be read." }; }
+    if (!manifest.version || !manifest.commit || typeof manifest.source_tree_clean !== "boolean") return { ok: false, code: "no_candidate", message: "The staged manifest lacks version, commit or build cleanliness evidence." };
     const config = existsSync(stagedConfigPath(staged)) ? readIni(readFileSync(stagedConfigPath(staged), "utf8")) : {};
     const info = await this.api.run("bridge.info", {}, { source: "session", signal: context.signal });
     if (!info.ok) return { ok: false, code: info.error.code, message: info.error.message };
@@ -947,9 +951,10 @@ export class SessionExecutor implements Executor {
     const commit = (live.build_commit ?? "").toLowerCase(), want = (manifest.commit ?? "").toLowerCase();
     const n = Math.min(commit.length, want.length);
     if (want && (n < 7 || commit.slice(0, n) !== want.slice(0, n))) mismatches.push(`build ${commit.slice(0, 8) || "?"} is running, the staged build is ${want.slice(0, 8)}`);
-    if (typeof manifest.source_tree_clean === "boolean" && typeof live.build_dirty === "boolean" && live.build_dirty === manifest.source_tree_clean) mismatches.push(`the running build is ${live.build_dirty ? "dirty" : "clean"}, the staged one ${manifest.source_tree_clean ? "clean" : "dirty"}`);
-    if (manifest.version && live.plugin_version && manifest.version !== live.plugin_version) mismatches.push(`version ${live.plugin_version} is running, ${manifest.version} is staged`);
-    if (config["bridge.allow_writes"] !== undefined && live.bridge?.allow_writes !== undefined && String(live.bridge.allow_writes) !== config["bridge.allow_writes"]) mismatches.push(`allow_writes ${live.bridge.allow_writes} was loaded, config.ini says ${config["bridge.allow_writes"]}`);
+    if (typeof live.build_dirty !== "boolean" || live.build_dirty === manifest.source_tree_clean) mismatches.push(`the running build is ${typeof live.build_dirty !== "boolean" ? "unknown" : live.build_dirty ? "dirty" : "clean"}, the staged one ${manifest.source_tree_clean ? "clean" : "dirty"}`);
+    if (manifest.version !== live.plugin_version) mismatches.push(`version ${live.plugin_version ?? "?"} is running, ${manifest.version} is staged`);
+    if (config["bridge.allow_writes"] !== undefined && String(live.bridge?.allow_writes) !== config["bridge.allow_writes"]) mismatches.push(`allow_writes ${live.bridge?.allow_writes ?? "?"} was loaded, config.ini says ${config["bridge.allow_writes"]}`);
+    if (config["bridge.allow_write_classes"] !== undefined && !Array.isArray(live.bridge?.write_classes)) mismatches.push("the running bridge did not report its write classes");
     if (config["bridge.allow_write_classes"] !== undefined && Array.isArray(live.bridge?.write_classes)) {
       const want = new Set(config["bridge.allow_write_classes"].split(",").map((c) => c.trim()).filter(Boolean));
       const have = new Set(live.bridge.write_classes);
@@ -1295,6 +1300,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       record.checks = (row.pass ?? []).map((check) => evaluateCheck(check, bindings, (name) => !before.has(name) || before.get(name) !== bindings[name]));
       Object.assign(record, verdictOf(result, record.checks, failRow, row.judged_by));
       if (result.release_failed?.length) {
+        if (DONE_VERDICTS.has(record.verdict)) record.verdict = "PARTIAL";
         record.cleanup_failed = result.release_failed;
         record.reason = `${record.reason ? `${record.reason}; ` : ""}cleanup failed: ${result.release_failed.join("; ")}`;
         cleanupErrors.push(`${row.id}'s cleanup: ${result.release_failed.join("; ")}`);
@@ -1377,7 +1383,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   await attemptCleanup("teardown", async () => {
     teardown = await runPlan(teardownPlan, { executor: teardownExecutor, clock, bindings });
     // Each teardown step that failed is an unresolved cleanup: never an ok run.
-    for (const e of teardown.reports) if (e.kind === "step" && e.status === "failed" && !String(e.step).includes("/")) cleanupErrors.push(`teardown ${e.label ?? e.step}: ${e.code ?? "failed"}${e.message ? ` (${String(e.message).slice(0, 160)})` : ""}`);
+    for (const e of teardown.reports) if (e.kind === "step" && e.status === "failed") cleanupErrors.push(`teardown ${e.label ?? e.step}: ${e.code ?? "failed"}${e.message ? ` (${String(e.message).slice(0, 160)})` : ""}`);
   });
   await attemptCleanup("closing note", () => executor.run({ do: "note", text: `XF session ${halt ? "stopped" : "complete"}: ${script.title ?? script.name}` }, { signal: new AbortController().signal, deadline: clock.now() + 10_000, plan: "end", step: "end", attempt: 1, raw: { do: "note" } }));
   // A fast exit: close the game cleanly, so the fix can go in and the next attempt starts fresh.

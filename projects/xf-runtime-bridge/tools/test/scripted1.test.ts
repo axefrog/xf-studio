@@ -120,7 +120,7 @@ describe("3: every recorder's lifetime is set, and sized to its row", () => {
       { id: "free", title: "free", expected_s: 900, steps: [{ do: "run", command: "test.record.start", input: { channels: ["v"], duration_s: 600 } }] },
       { id: "fine", title: "fine", steps: [{ do: "run", command: "test.record.start", input: { channels: ["v"], duration_s: 300 } }, { do: "wait", ms: 60_000 }] },
     ];
-    const result = await preflight({ script: script(rows), fixtures: {}, projectDir, runtimeDir: tempDir("xfb-rt-"), freeCommitBytes: async () => 40 * 1024 ** 3, gameRunning: async () => false, git: () => null });
+    const result = await preflight({ script: script(rows), fixtures: {}, projectDir, runtimeDir: tempDir("xfb-rt-"), freeCommitBytes: async () => 40 * 1024 ** 3, gameRunning: async () => false, breakawayBlocked: async () => false, git: () => null });
     const of = (id: string) => result.items.find((i) => i.check === `recording ${id}`)!;
     expect(of("short").status).toBe("warn");
     expect(of("free").status).toBe("warn");
@@ -199,7 +199,7 @@ describe("1: no row needs the player unless it says so", () => {
     const { preflight } = await import("../testing/preflight.ts");
     const { script } = await import("./batch-fakes.ts");
     const { projectDir } = await import("./helpers.ts");
-    const run = (rows: unknown[]) => preflight({ script: script(rows as never), fixtures: {}, projectDir, runtimeDir: tempDir("xfb-rt-"), freeCommitBytes: async () => 40 * 1024 ** 3, gameRunning: async () => false, git: () => null });
+    const run = (rows: unknown[]) => preflight({ script: script(rows as never), fixtures: {}, projectDir, runtimeDir: tempDir("xfb-rt-"), freeCommitBytes: async () => 40 * 1024 ** 3, gameRunning: async () => false, breakawayBlocked: async () => false, git: () => null });
     const item = (await run([{ id: "auto", title: "a", steps: [] }, { id: "FR1", title: "f", manual: true, steps: [ask] }])).items.find((i) => i.check === "manual rows")!;
     expect(item.detail).toContain("FR1");
     expect(item.detail).not.toContain("auto");

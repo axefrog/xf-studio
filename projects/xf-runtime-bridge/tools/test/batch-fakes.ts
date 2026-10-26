@@ -2,7 +2,7 @@
 // whose game process comes and goes. Shared by batch.test.ts and batch-halt.test.ts.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { CommandApi } from "../api/command-api.ts";
+import type { CommandApi, CommandOutcome } from "../api/command-api.ts";
 import { encodePng } from "../capture/image.ts";
 import { runBatch, type BatchScript, type Row } from "../testing/batch.ts";
 import { stagedConfigPath } from "../testing/config-ini.ts";
@@ -20,9 +20,10 @@ export function fakeApi(clock: FakeClock, handlers: Record<string, Handler> = {}
   const counts = new Map<string, number>();
   const push = (kind: string, data: Record<string, unknown>) => events.push({ seq: events.length + 1, kind, t_ms: clock.now(), data });
   const builtin: Record<string, Handler> = {
-    "bridge.info": () => ({ ok: true, result: { sid: api.sid, plugin_version: "0.8.22" } }),
+    "bridge.info": () => ({ ok: true, result: { sid: api.sid, plugin_version: "0.8.22", build_commit: "a".repeat(40), build_dirty: false,
+      bridge: { allow_writes: true, write_classes: ["photo", "world", "save"] } } }),
     "test.record.start": () => ({ ok: true, result: { run: ++recorderRuns } }),
-    "game.catchup": (input) => ({ ok: true, result: { cursor: { after: (input.cursor?.after ?? 0) + 1 }, counts: { v: 3 }, gaps: [] } }),
+    "game.catchup": (input) => ({ ok: true, result: { cursor: { record: (input.cursor?.record ?? 0) + 1 }, counts: { v: 3 }, gaps: [] } }),
     "bridge.ping": () => ({ ok: true, result: { pong: true } }),
     "session.events": (input) => {
       const after = events.filter((e) => e.seq > (input.since ?? 0)).slice(0, input.limit ?? 500);
@@ -48,7 +49,7 @@ export function fakeApi(clock: FakeClock, handlers: Record<string, Handler> = {}
     calls,
     events,
     push,
-    async run(name: string, input: Record<string, any> = {}, opts: { captureRoot?: string } = {}) {
+    async run(name: string, input: Record<string, any> = {}, opts: { captureRoot?: string } = {}): Promise<CommandOutcome> {
       calls.push({ name, input });
       const n = (counts.get(name) ?? 0) + 1;
       counts.set(name, n);
@@ -100,9 +101,11 @@ export function stagedMod(dir: string) {
   const mod = join(dir, "mod");
   mkdirSync(join(mod, "red4ext", "plugins", "XFRuntimeBridge"), { recursive: true });
   writeFileSync(stagedConfigPath(mod), STAGED_INI);
+  writeFileSync(join(mod, "red4ext", "plugins", "XFRuntimeBridge", "manifest.json"), JSON.stringify({ version: "0.8.22", commit: "a".repeat(40), source_tree_clean: true }));
   return mod;
 }
 
 export const script = (rows: Row[], extra: Partial<BatchScript> = {}): BatchScript => ({ schema: "xfb/session-script-3", name: "t", rows, ...extra });
 export const go = (s: BatchScript, api: ReturnType<typeof fakeApi>, host: Host, clock: FakeClock, dir: string, extra: Record<string, unknown> = {}) =>
-  runBatch(s, { api: api as unknown as CommandApi, host, outDir: join(dir, "out"), clock, echo: false, log: () => {}, fixtures: extra.fixtures as Record<string, unknown> | undefined, readCetBindings: () => null, ...extra });
+  runBatch(s, { api: api as unknown as CommandApi, host, outDir: join(dir, "out"), clock, echo: false, log: () => {}, readCetBindings: () => null, ...extra,
+    fixtures: { staged_mod: stagedMod(join(dir, "default-staged")), ...(extra.fixtures as Record<string, unknown> | undefined) } });

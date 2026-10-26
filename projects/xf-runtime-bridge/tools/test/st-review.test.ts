@@ -34,7 +34,7 @@ describe("a state check that isn't met says what was there", () => {
     const { FakeClock } = await import("./fake-clock.ts");
     const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
     const clock = new FakeClock();
-    const api = fakeApi(clock, { "bridge.info": () => ({ ok: true, result: { sid: "sid-1", status: { chip: "Changes allowed", tone: "write" }, bridge: { writes_paused: false } } }) });
+    const api = fakeApi(clock, { "bridge.info": () => ({ ok: true, result: { sid: "sid-1", plugin_version: "0.8.22", build_commit: "a".repeat(40), build_dirty: false, status: { chip: "Changes allowed", tone: "write" }, bridge: { allow_writes: true, write_classes: ["photo", "world", "save"], writes_paused: false } } }) });
     const rows = [{ id: "r", title: "r", steps: [
       { label: "r-is-paused", do: "run", command: "bridge.info", input: {}, until: { all: [{ path: "status.chip", equals: "Paused" }, { path: "bridge.writes_paused", equals: true }] }, interval_ms: 250, deadline_ms: 2000, on_fail: "fail_row" },
       { label: "shot", do: "capture", name: "paused", clear_overlay: false },
@@ -271,7 +271,7 @@ describe("cet.panel's press refusals, anticipated", () => {
     const clock = new FakeClock();
     const api = fakeApi(clock, {
       "overlay.state": () => ({ ok: true, result: { theme: "dark", motion: { setting: "full", effective: "full" }, cet_open: true } }),
-      "bridge.info": () => ({ ok: true, result: { sid: "sid-1", status: { chip: "Paused" }, bridge: { writes_paused: true }, cet_panel: { chip: "Paused" } } }),
+      "bridge.info": () => ({ ok: true, result: { sid: "sid-1", plugin_version: "0.8.22", build_commit: "a".repeat(40), build_dirty: false, status: { chip: "Paused" }, bridge: { allow_writes: true, write_classes: ["photo", "world", "save"], writes_paused: true }, cet_panel: { chip: "Paused" } } }),
       "cet.panel": (input) => press(input) as never,
     });
     const result = await go(script([row] as never), api, fakeHost(), clock, tempDir("xfb-str-"), { fixtures: { cet_overlay_key: "Ctrl+Grave" } });
@@ -303,7 +303,7 @@ describe("bridge 65b8da29: cet.panel requests and tap readiness", () => {
     const clock = new FakeClock();
     const api = fakeApi(clock, {
       "overlay.state": () => ({ ok: true, result: { theme: "light", motion: { setting: "full", effective: "full" }, cet_open: false } }),
-      "bridge.info": () => ({ ok: true, result: { sid: "sid-1", status_surface: "cet_line", status: { chip: "Changes allowed" }, bridge: { writes_paused: false }, cet_panel: { requests, pending: 0, reported: true } } }),
+      "bridge.info": () => ({ ok: true, result: { sid: "sid-1", plugin_version: "0.8.22", build_commit: "a".repeat(40), build_dirty: false, status_surface: "cet_line", status: { chip: "Changes allowed" }, bridge: { allow_writes: true, write_classes: ["photo", "world", "save"], writes_paused: false }, cet_panel: { requests, pending: 0, reported: true } } }),
       "cet.panel": () => ({ ok: true, result: { queued: true, id: 7, request: { id: 7, press: "pause_changes" } } }),
     });
     return (await go(script([row] as never), api, fakeHost(), clock, tempDir("xfb-str-"))).rows[0];
@@ -341,7 +341,7 @@ describe("bridge 65b8da29: cet.panel requests and tap readiness", () => {
     expect((await judge([])).verdict).toBe("PASS");
     const failed = await judge(["voice"]);
     expect(failed.verdict).not.toBe("PASS");
-    expect(JSON.stringify(failed.facts)).toContain("run 1: voice");
+    expect(JSON.stringify(failed.facts)).toContain("run sid-1:1: voice");
   });
 });
 

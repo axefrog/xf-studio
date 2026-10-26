@@ -361,7 +361,7 @@ describe("preflight", () => {
     { id: "r2", title: "r2", requires: [{ config: "overlay.theme", equals: "light" }], steps: [{ do: "run", command: "photo.open", input: {} }] },
   ]);
   const run = (fixtures: Record<string, unknown>, extra: Partial<Parameters<typeof preflight>[0]> = {}) => preflight({
-    script: st, fixtures, projectDir, runtimeDir: tempDir("xfb-rt-"), freeCommitBytes: async () => 30 * 1024 ** 3, gameRunning: async () => false, git: () => null, ...extra,
+    script: st, fixtures, projectDir, runtimeDir: tempDir("xfb-rt-"), freeCommitBytes: async () => 30 * 1024 ** 3, gameRunning: async () => false, breakawayBlocked: async () => false, git: () => null, ...extra,
   });
 
   test("ready: planned fixes with their restarts, keys decoded, frame generation named", async () => {

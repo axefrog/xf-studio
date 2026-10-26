@@ -10,6 +10,8 @@ function fake(states = ["", "starting", "ready"]) {
   const shells: string[] = [], forwarded: unknown[] = [];
   let log = "", dialog: string | null = null;
   const port: Mo2Port = {
+    gameProcess: async () => null,
+    breakawayBlocked: async () => false,
     async shell(command) { shells.push(command); return { code: 0, out: command.includes("Invoke-CimMethod") ? "" : states.shift() ?? "starting" }; },
     async forward(...args) { forwarded.push(args); return null; },
     dialog: () => dialog,

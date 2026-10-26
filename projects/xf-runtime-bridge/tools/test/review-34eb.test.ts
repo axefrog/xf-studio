@@ -46,7 +46,7 @@ describe("H2: whole-batch rows are judged again on every attempt, over every att
     const second = await attempt(dir, [], ["b"]);
     const row = second.rows.find((r) => r.id === "B318-1")!;
     expect(row.verdict).not.toBe("PASS");
-    expect(JSON.stringify(row.facts)).toContain("attempt 1: run 1: voice");
+    expect(JSON.stringify(row.facts)).toContain("attempt 1: run sid-1:1: voice");
   });
   test("an earlier PASS doesn't survive a later attempt whose evidence fails", async () => {
     const dir = tempDir("xfb-r34-");
@@ -100,7 +100,7 @@ describe("H4: a change claimed inside a burst is timed against its frames", () =
     const requests: { id: number; press: string; press_status: string }[] = [];
     const api = fakeApi(clock, {
       "overlay.state": () => ({ ok: true, result: { theme: "dark", motion: { setting: "full", effective: "full" }, cet_open: false, drawing_now: true } }),
-      "bridge.info": () => ({ ok: true, result: { sid: "sid-1", status_surface: "xf_box", status: { chip: paused ? "Paused" : "Changes allowed" }, bridge: { writes_paused: paused }, cet_panel: { requests } } }),
+      "bridge.info": () => ({ ok: true, result: { sid: "sid-1", plugin_version: "0.8.22", build_commit: "a".repeat(40), build_dirty: false, status_surface: "xf_box", status: { chip: paused ? "Paused" : "Changes allowed" }, bridge: { allow_writes: true, write_classes: ["photo", "world", "save"], writes_paused: paused }, cet_panel: { requests } } }),
       "cet.panel": (input) => { paused = input.press === "pause_changes"; requests.push({ id: ++id, press: input.press, press_status: "done" }); return { ok: true, result: { queued: true, id } }; },
       "capture.screenshot": () => ({ ok: true, result: { crop: { region: "pixels" }, full: { path: pic }, view: { path: pic } } }),
       "capture.burst": () => ({ ok: true, result: { started_at: new Date(Date.now() + burstStartOffsetMs).toISOString(), crop: { region: "pixels" }, timing: { first_to_last_ms: 2300 },
@@ -157,7 +157,8 @@ describe("M6: a recorder rollover drains and acknowledges the old run before sta
     const api = fakeApi(clock, {
       "test.record.start": () => { order.push("start"); if (unread) return { ok: false, code: "recording_busy" }; active = true; unread = true; return { ok: true, result: { run: ++runs } }; },
       "test.record.stop": () => { order.push("stop"); active = false; return { ok: true, result: {} }; },
-      "game.catchup": (input) => { order.push("drain"); unread = active; return { ok: true, result: { cursor: { after: (input.cursor?.after ?? 0) + 1 }, counts: { v: 3 }, gaps: [] } }; },
+      "game.catchup": () => { order.push("drain"); return { ok: true, result: { cursor: { record: 1 }, counts: { v: 3 }, gaps: [] } }; },
+      "test.record.read": (input) => { order.push("ack"); if (input.since === 1 && !active) unread = false; return { ok: true, result: {} }; },
     });
     // A row longer than the recorder's lifetime, then another: the second row's start rolls the recorder over.
     const rows = [{ id: "long", title: "long", steps: [1, 2, 3].map((i) => ({ label: `w${i}`, do: "wait", ms: 580_000, deadline_ms: 590_000 })) }, { id: "next", title: "next", steps: [{ label: "w", do: "wait", ms: 10 }] }];

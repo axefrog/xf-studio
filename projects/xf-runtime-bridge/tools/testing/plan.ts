@@ -588,12 +588,12 @@ async function runStep(run: Run, step: Step, path: string, inherited?: unknown, 
     if (run.signal.aborted) { record("failed", { code: "cancelled" }); return { status: "failed", reason: "cancelled" }; }
   }
   if (board !== undefined) run.bindings.board = board;
-  if (step.when && !(await guardHolds(run, step, vpath, board, limit))) {
+  if (step.when && !(await guardHolds(run, step, vpath, board, until))) {
     if ((step.when.otherwise ?? "skip") === "skip") { record("skipped", { guard: "unmet" }); return { status: "ok" }; }
     const unmet: Outcome = { ok: false, code: "precondition", message: "The precondition was not met." };
     // fallback: the step's fallback (and branches) act on it; fail: straight to on_fail, since the step never started.
-    if (step.when.otherwise === "fallback") return finish(run, step, vpath, visit, unmet, board, record, { guard: "unmet" }, limit);
-    return finish(run, { ...step, fallback: undefined, outcomes: undefined }, vpath, visit, unmet, board, record, { guard: "unmet" }, limit);
+    if (step.when.otherwise === "fallback") return finish(run, step, vpath, visit, unmet, board, record, { guard: "unmet" }, until);
+    return finish(run, { ...step, fallback: undefined, outcomes: undefined }, vpath, visit, unmet, board, record, { guard: "unmet" }, until);
   }
   let outcome: Outcome = { ok: false, code: "not_run" };
   let route = 1;
@@ -621,7 +621,7 @@ async function runStep(run: Run, step: Step, path: string, inherited?: unknown, 
     outcome = result.status === "ok" ? { ...(result.outcome ?? { ok: true }), ok: true } : (result.outcome ?? { ok: false, code: "route_failed" });
   }
   if (until < limit && run.clock.now() >= until && !succeeded(step, outcome, run.bindings)) outcome = { ...outcome, ok: false, code: "deadline", message: `The block's ${step.deadline_ms} ms ran out.` };
-  return finish(run, step, vpath, visit, outcome, board, record, { route }, limit);
+  return finish(run, step, vpath, visit, outcome, board, record, { route }, until);
 }
 
 /** Branches, the fallback and on_fail, after the step's routes. */
@@ -744,9 +744,12 @@ export async function runPlan(plan: Plan, options: RunPlanOptions): Promise<Plan
       const releaseRun: Run = { ...run, steps: 0, signal: own.signal, halt: undefined, deadline: clock.now() + (options.finallyDeadlineMs ?? 30_000) };
       for (const [i, step] of plan.finally.entries()) {
         const at = step.label ?? `finally/${i + 1}`;
+        const reportStart = run.reports.length;
         try {
           const result = await runStep(releaseRun, { ...step, on_fail: "continue" }, `finally/${i + 1}`, null);
-          if (result.status !== "ok" || result.outcome?.ok === false) releaseFailed.push(`${at}: ${result.outcome?.code ?? result.reason ?? "failed"}`);
+          const failed = run.reports.slice(reportStart).filter((e) => e.kind === "step" && e.status === "failed");
+          for (const e of failed) releaseFailed.push(`${e.label ?? e.step}: ${e.code ?? e.reason ?? "failed"}`);
+          if (!failed.length && (result.status !== "ok" || result.outcome?.ok === false)) releaseFailed.push(`${at}: ${result.outcome?.code ?? result.reason ?? "failed"}`);
         } catch (error) {
           run.reportErrors.push(`finally/${i + 1}: ${String((error as Error)?.message ?? error)}`);
           releaseFailed.push(`${at}: ${String((error as Error)?.message ?? error)}`);

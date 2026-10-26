@@ -134,7 +134,7 @@ export class Telemetry {
   /** A load ended the run: read it to its end before the next starts. */
   private stale = false;
   /** Every recorder run this batch started, whose readiness it must have seen reported. */
-  private readonly startedRuns: number[] = [];
+  private readonly startedRuns: string[] = [];
   private readonly notReadyByRun: Record<string, Record<string, number>> = {};
 
   /** When the attempt started (wall clock: log files carry wall-clock times), and the logs kept so far. */
@@ -191,8 +191,9 @@ export class Telemetry {
     // The run this session still has (it rolls over, or a load ended it): stopped, read to its end and so acknowledged,
     // before the next starts (the bridge refuses a start, recording_busy, while a run's records are unread).
     if (this.run !== undefined && sid === this.sid) {
-      this.noteStatus(this.run, await this.read("test.record.stop"));
-      await this.drain(`recorder run ${this.run} (to its end)`, (name, value) => writeFileSync(join(this.dir, `run-${this.run}-end-${name}`), JSON.stringify(value, null, 2) + "\n")).catch(() => null);
+      this.stale = true;
+      const ended = await this.endRecorder(`recorder run ${this.run} (to its end)`, `run-${this.run}-end-`);
+      if (!ended.ok) return { restarted: false, unavailable: ended.code };
     }
     this.stale = false;
     let started = await this.read("test.record.start", { channels: ALL_CHANNELS, duration_s: RECORDER_S });
@@ -206,8 +207,8 @@ export class Telemetry {
       return { restarted: false, unavailable: this.unavailable };
     }
     this.run = (started.value as { run?: number }).run;
-    if (this.run !== undefined && !this.startedRuns.includes(this.run)) this.startedRuns.push(this.run);
     this.sid = sid;
+    if (this.run !== undefined && !this.startedRuns.includes(this.runKey(this.run))) this.startedRuns.push(this.runKey(this.run));
     this.startedMs = this.o.clock.now();
     this.cursor = undefined;
     this.unavailable = undefined;
@@ -301,7 +302,7 @@ export class Telemetry {
       const read = await this.read("game.catchup", this.cursor ? { cursor: this.cursor } : { run });
       if (!read.ok) {
         this.total.unread.push(`${rowKey}: run ${run}: ${read.code}`);
-        this.forget();
+        this.stale = true;
         return { ok: false, run, code: read.code };
       }
       const value = read.value as { cursor?: unknown; counts?: unknown; gaps?: string[]; more?: boolean; count_detail?: Record<string, { records?: number; invalid?: number; valid?: number }>;
@@ -355,11 +356,31 @@ export class Telemetry {
     this.stale = true;
   }
 
-  /** The bridge refused the run (another recorder replaced it): nothing of it is left to read. */
-  private forget() {
-    this.run = undefined;
-    this.cursor = undefined;
+  /** Stop, durably save the tail, then acknowledge the final saved sequence. Keep the run on any failure. */
+  private async endRecorder(rowKey: string, prefix: string): Promise<{ ok: boolean; code?: string }> {
+    const run = this.run!;
+    try {
+      const stopped = await this.read("test.record.stop");
+      this.noteStatus(run, stopped);
+      if (!stopped.ok) return { ok: false, code: `test.record.stop: ${stopped.code}` };
+      const drained = await this.drain(rowKey, (name, value) => writeFileSync(join(this.dir, `${prefix}${name}`), JSON.stringify(value, null, 2) + "\n"));
+      if (!drained.ok || drained.incomplete) return { ok: false, code: drained.code ?? "recorder drain incomplete" };
+      const since = (this.cursor as { record?: number } | undefined)?.record;
+      if (!Number.isSafeInteger(since) || since! < 0) throw new Error("final recorder cursor is missing");
+      const ack = await this.read("test.record.read", { run, since, limit: 1 });
+      this.noteStatus(run, ack);
+      if (!ack.ok) throw new Error(`test.record.read: ${ack.code}`);
+      this.run = undefined;
+      this.cursor = undefined;
+      return { ok: true };
+    } catch (error) {
+      const code = String((error as Error)?.message ?? error);
+      this.total.unread.push(`${rowKey}: run ${run}: final acknowledgement failed: ${code}`);
+      return { ok: false, code };
+    }
   }
+
+  private runKey(run: number): string { return `${this.sid}:${run}`; }
 
   /** The batch's recorder history so far (whole-batch passive rows read it as $telemetry). */
   /** The recorder's own status for this run (its not_ready counts; a read that acknowledges nothing). */
@@ -371,17 +392,18 @@ export class Telemetry {
 
   /** Keeps a run's not_ready counts (the status's counters are the run's totals so far: the latest reading wins). */
   private noteStatus(run: number, read: { ok: boolean; value?: unknown }) {
+    const key = this.runKey(run);
     const status = read.ok ? (read.value as { not_ready?: number; tap_not_ready?: string[]; complete_coverage?: boolean; channel_stats?: Record<string, { not_ready?: number; ready?: boolean }> } | undefined) : undefined;
     if (status && Array.isArray(status.tap_not_ready)) {
       const taps = this.total.taps;
       const ready = Object.fromEntries(Object.entries(status.channel_stats ?? {}).filter(([, c]) => typeof c?.ready === "boolean").map(([ch, c]) => [ch, c.ready!]));
-      taps.runs[String(run)] = { ready, tap_not_ready: [...status.tap_not_ready], complete_coverage: status.complete_coverage !== false };
+      taps.runs[key] = { ready, tap_not_ready: [...status.tap_not_ready], complete_coverage: status.complete_coverage !== false };
       taps.never_ready = Object.entries(taps.runs).flatMap(([r, t]) => t.tap_not_ready.map((ch) => `run ${r}: ${ch}`));
     }
     if (typeof status?.not_ready !== "number") return;
     const t = this.total.not_ready;
-    t.runs[String(run)] = status.not_ready;
-    this.notReadyByRun[String(run)] = Object.fromEntries(Object.entries(status.channel_stats ?? {}).filter(([, c]) => typeof c?.not_ready === "number").map(([ch, c]) => [ch, c.not_ready!]));
+    t.runs[key] = status.not_ready;
+    this.notReadyByRun[key] = Object.fromEntries(Object.entries(status.channel_stats ?? {}).filter(([, c]) => typeof c?.not_ready === "number").map(([ch, c]) => [ch, c.not_ready!]));
     t.total = Object.values(t.runs).reduce((a, b) => a + b, 0);
     t.by_channel = {};
     for (const channels of Object.values(this.notReadyByRun)) for (const [ch, n] of Object.entries(channels)) t.by_channel[ch] = (t.by_channel[ch] ?? 0) + n;
@@ -390,7 +412,7 @@ export class Telemetry {
   summary(): TelemetrySummary {
     const out = structuredClone(this.total);
     out.taps.unknown = this.startedRuns.flatMap((run) => {
-      const entry = out.taps.runs[String(run)];
+      const entry = out.taps.runs[run];
       if (!entry) return [`run ${run}: no readiness report (the recorder's status couldn't be read)`];
       return TAP_CHANNELS.filter((ch) => typeof entry.ready[ch] !== "boolean").map((ch) => `run ${run}: ${ch}: no readiness reported`);
     });
@@ -401,20 +423,18 @@ export class Telemetry {
   async finish() {
     // Stopped first, so the last drain reaches the run's real end (nothing more is recorded after it) and acknowledges it.
     const run = this.run;
-    const stopped = await this.read("test.record.stop").catch(() => ({ ok: false as const }));
-    if (run !== undefined) this.noteStatus(run, stopped);
     if (run !== undefined) {
-      await this.drain("end", (name, value) => writeFileSync(join(this.dir, `final-${name}`), JSON.stringify(value, null, 2) + "\n")).catch(() => null);
+      const ended = await this.endRecorder("end", "final-");
+      if (!ended.ok) this.total.unread.push(`end: run ${run}: ${ended.code}`);
     }
-    this.run = undefined;
     // This attempt's evidence, for the whole-batch rows of every later attempt (mergeSummaries).
-    writeFileSync(join(this.dir, "summary.json"), JSON.stringify(this.total, null, 2) + "\n");
+    writeFileSync(join(this.dir, "summary.json"), JSON.stringify(this.summary(), null, 2) + "\n");
   }
 }
 
 /**
  * The whole-batch evidence over several attempts, each attempt's summary in order. Counts add up, lists join, and
- * what names a run is prefixed with its attempt ("attempt 1: run 3: voice"; not_ready and taps runs as "a1:3"), since
+ * what names a run is prefixed with its attempt ("attempt 1: run <sid>:3: voice"; not_ready and taps runs as "a1:<sid>:3"), since
  * run numbers start again with each game session. An attempt with no summary (it never finished) is listed in
  * missing_attempts: its evidence is unknown, never read as clean.
  */

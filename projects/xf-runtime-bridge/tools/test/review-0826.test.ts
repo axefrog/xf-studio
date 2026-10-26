@@ -204,6 +204,7 @@ describe("M11: the preflight certifies only a binary its manifest describes, wit
   };
   const check = (fixtures: Record<string, unknown>, rows: Row[] = [{ id: "r", title: "r", steps: [{ do: "run", command: "ui.hud", input: { show: false } }] }]) =>
     preflight({ script: script(rows), fixtures, projectDir, runtimeDir: tempDir("xfb-rt-"), freeCommitBytes: async () => 40 * 1024 ** 3, gameRunning: async () => false,
+      breakawayBlocked: async () => false,
       // The staged commit's source "registers" everything: only a tied manifest may use that.
       git: (args) => (args[0] === "grep" || args[0] === "cat-file" ? "" : null) });
 

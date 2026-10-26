@@ -15,6 +15,7 @@ import { parseReading } from "../commit-tripwire.ts";
 import { INPUT_SIZE, isExtendedKey, keyboardInput, scanCodeFor, virtualKey } from "../input/photo-key.ts";
 
 export const GAME_PROCESS = "Cyberpunk2077";
+export const JOB_BREAKAWAY_MESSAGE = "start the runner from PowerShell: this shell's job forbids breakaway, so MO2 can't create the hooked game (ERROR_ACCESS_DENIED)";
 
 /** replace: the plan means to start a second copy over a running game (never set by the prelude, which adopts). */
 export type LaunchSpec = { exe: string; profile: string; executable: string; arguments?: string; replace?: boolean };
@@ -167,6 +168,27 @@ function openUser32() {
   }).symbols;
 }
 
+/** Inspect this Bun process, not a child shell (whose job membership could differ).
+ * JobObjectExtendedLimitInformation = 9; x64 JOBOBJECT_EXTENDED_LIMIT_INFORMATION is 144 bytes,
+ * with BasicLimitInformation.LimitFlags at byte 16. Query failures refuse launch.
+ * https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-queryinformationjobobject
+ */
+export function currentProcessBreakawayBlocked(): boolean {
+  const kernel = dlopen("kernel32.dll", {
+    GetCurrentProcess: { args: [], returns: FFIType.u64 },
+    IsProcessInJob: { args: [FFIType.u64, FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
+    QueryInformationJobObject: { args: [FFIType.u64, FFIType.i32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 },
+  });
+  try {
+    const inJob = new Uint32Array(1);
+    if (!kernel.symbols.IsProcessInJob(kernel.symbols.GetCurrentProcess(), 0n, inJob)) throw new Error("could not inspect the runner's Windows job");
+    if (!inJob[0]) return false;
+    const limits = Buffer.alloc(144);
+    if (!kernel.symbols.QueryInformationJobObject(0n, 9, limits, limits.length, null)) throw new Error("could not read the runner's Windows job limits");
+    return (limits.readUInt32LE(16) & 0x800) === 0;
+  } finally { kernel.close(); }
+}
+
 function foregroundImage(): string | null {
   user32 ??= openUser32();
   const hwnd = user32.GetForegroundWindow() as bigint;
@@ -180,6 +202,8 @@ const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 type LogCursor = { size: number; ino: number };
 export interface Mo2Port {
+  gameProcess(): Promise<{ pid: number } | null>;
+  breakawayBlocked(): Promise<boolean>;
   shell(command: string): Promise<{ code: number | null; out: string }>;
   forward(exe: string, args: string[]): Promise<string | null>;
   dialog(): string | null;
@@ -208,6 +232,10 @@ export function createMo2Launcher(port: Mo2Port) {
       const command = `ModOrganizer.exe ${args.map(windowsArgument).join(" ")}`;
       const cancelled = () => ({ started: false, command });
       if (signal?.aborted) return cancelled();
+      try {
+        if (await port.breakawayBlocked()) return { started: false, command, error: JOB_BREAKAWAY_MESSAGE };
+      } catch (error) { return { started: false, command, error: String((error as Error)?.message ?? error) }; }
+      if (signal?.aborted) return cancelled();
       // Match this installation, not another MO2 instance on the same desktop.
       const query = `$p = Get-Process -Name ModOrganizer -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq ${psString(spec.exe)} }; if ($p) { if ($p | Where-Object { $_.MainWindowHandle -ne 0 }) { 'ready' } else { 'starting' } }`;
       const status = await port.shell(query);
@@ -230,6 +258,9 @@ export function createMo2Launcher(port: Mo2Port) {
       if (!ready) return { started: false, command, error: "MO2's window did not appear within 30 seconds" };
       const path = join(dirname(spec.exe), "logs", "mo_interface.log");
       attempt = { path, cursor: port.cursor(path) };
+      // A game can appear while MO2's window is starting. Check at the last async boundary before forwarding.
+      const running = await port.gameProcess();
+      if (running && !spec.replace) return { started: false, command, error: `already_running: ${GAME_PROCESS}.exe is running (pid ${running.pid}); adopt it instead of launching another` };
       if (signal?.aborted) return cancelled();
       const error = await port.forward(spec.exe, args);
       return error ? { started: false, command, error } : { started: true, command };
@@ -257,6 +288,8 @@ export function mo2LogAppended(path: string, cursor: LogCursor | null): string {
 
 const mo2 = createMo2Launcher({
   shell: powershell, now: Date.now, sleep: pause,
+  gameProcess: () => windowsHost.gameProcess(),
+  breakawayBlocked: async () => currentProcessBreakawayBlocked(),
   dialog: () => topLevelWindows().find((w) => /cannot launch program/i.test(w.title))?.title ?? null,
   cursor: mo2LogCursor, appended: mo2LogAppended,
   async forward(exe, args) {
