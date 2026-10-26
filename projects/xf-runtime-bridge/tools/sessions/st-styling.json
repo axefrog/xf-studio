@@ -862,7 +862,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.18,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_text",
+            "min": 0.002
+          },
           "until": {
             "ok": true
           },
@@ -876,7 +879,6 @@
           "name": "ST8-cetline-connected-auto-dark",
           "frames": 6,
           "interval_ms": 240,
-          "route": "screen",
           "clear_overlay": false,
           "rect": "$win.regions.cet_line",
           "bind": "ST8_dark_auto_burst"
@@ -897,7 +899,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.18,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_text",
+            "min": 0.002
+          },
           "bind": "ST8_dark_auto_frame_burst",
           "on_fail": "fail_row"
         }
@@ -2331,7 +2336,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.18,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_text",
+            "min": 0.002
+          },
           "until": {
             "ok": true
           },
@@ -2345,7 +2353,6 @@
           "name": "ST8-cetline-connected-dark",
           "frames": 13,
           "interval_ms": 200,
-          "route": "screen",
           "clear_overlay": false,
           "rect": "$win.regions.cet_line",
           "bind": "ST8_dark_connected_burst"
@@ -2366,7 +2373,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.18,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_text",
+            "min": 0.002
+          },
           "bind": "ST8_dark_connected_frame_burst",
           "on_fail": "fail_row"
         }
@@ -2923,7 +2933,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.18,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_text",
+            "min": 0.002
+          },
           "until": {
             "ok": true
           },
@@ -2935,7 +2948,6 @@
           "label": "ST8-dark-paused-shot",
           "do": "capture",
           "name": "ST8-cetline-paused-dark",
-          "route": "screen",
           "clear_overlay": false,
           "bind": "ST8_dark_paused_shot"
         },
@@ -2955,7 +2967,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.18,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_text",
+            "min": 0.002
+          },
           "bind": "ST8_dark_paused_frame_shot",
           "on_fail": "fail_row"
         }
@@ -11313,7 +11328,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.03,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_plate",
+            "min": 0.05
+          },
           "until": {
             "ok": true
           },
@@ -11327,7 +11345,6 @@
           "name": "ST8-cetline-connected-light",
           "frames": 13,
           "interval_ms": 200,
-          "route": "screen",
           "clear_overlay": false,
           "rect": "$win.regions.cet_line",
           "bind": "ST8_light_connected_burst"
@@ -11348,7 +11365,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.03,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_plate",
+            "min": 0.05
+          },
           "bind": "ST8_light_connected_frame_burst",
           "on_fail": "fail_row"
         }
@@ -11905,7 +11925,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.03,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_plate",
+            "min": 0.05
+          },
           "until": {
             "ok": true
           },
@@ -11917,7 +11940,6 @@
           "label": "ST8-light-paused-shot",
           "do": "capture",
           "name": "ST8-cetline-paused-light",
-          "route": "screen",
           "clear_overlay": false,
           "bind": "ST8_light_paused_shot"
         },
@@ -11937,7 +11959,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.03,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_plate",
+            "min": 0.05
+          },
           "bind": "ST8_light_paused_frame_shot",
           "on_fail": "fail_row"
         }
@@ -20653,7 +20678,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.18,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_text",
+            "min": 0.002
+          },
           "until": {
             "ok": true
           },
@@ -20665,7 +20693,6 @@
           "label": "ST7-dark-stopped-line-shot",
           "do": "capture",
           "name": "ST8-cetline-stopped-dark",
-          "route": "screen",
           "clear_overlay": false,
           "bind": "ST7_dark_stopped_line"
         },
@@ -20685,7 +20712,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.18,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_text",
+            "min": 0.002
+          },
           "bind": "ST7_dark_stopped_frame_line",
           "on_fail": "fail_row"
         }
@@ -22976,7 +23006,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.03,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_plate",
+            "min": 0.05
+          },
           "until": {
             "ok": true
           },
@@ -22988,7 +23021,6 @@
           "label": "ST7-light-stopped-line-shot",
           "do": "capture",
           "name": "ST8-cetline-stopped-light",
-          "route": "screen",
           "clear_overlay": false,
           "bind": "ST7_light_stopped_line"
         },
@@ -23008,7 +23040,10 @@
           ],
           "rect": "$win.regions.cet_line",
           "min_plate": 0.03,
-          "route": "screen",
+          "luma_rule": {
+            "kind": "light_plate",
+            "min": 0.05
+          },
           "bind": "ST7_light_stopped_frame_line",
           "on_fail": "fail_row"
         }

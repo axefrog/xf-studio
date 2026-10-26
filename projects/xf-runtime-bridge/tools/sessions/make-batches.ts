@@ -102,9 +102,12 @@ const INK_YELLOW = [255, 205, 62];
 const INK_RED = [255, 91, 83];
 /** How much of each surface's crop its plate fills when it shows (capture.surface's notes: the CET line's crop is mostly scene). */
 const MIN_PLATE: Record<Surface, Record<Theme, number>> = { xf_box: { dark: 0.15, light: 0.15 }, cet_window: { dark: 0.15, light: 0.15 }, cet_line: { dark: 0.18, light: 0.03 } };
-// ST8's rerun emitted CET draw receipts inside this crop but PrintWindow omitted the pixels (including while
-// foreground). Read the displayed frame for CET-line evidence; the screen adapter refuses focus loss.
-const surfaceOf = (surface: Surface, theme: Theme): Json => ({ ...COLOURS[theme], rect: `$win.regions.${surface}`, min_plate: MIN_PLATE[surface][theme], ...(surface === "cet_line" ? { route: "screen" } : {}) });
+// The CET line's plate is translucent, so its pixels never match WindowBg and the plate rule can't see it (the ST re-runs
+// measured the same 12.4 % with and without it). It is judged by brightness instead (batch.ts LumaRule): light text in
+// dark, the cream plate in light. PrintWindow does capture the line (the re-run's first probe simply came before it
+// drew), so these probes keep the default route and don't need the game in front.
+const LUMA_RULE: Record<Theme, Json> = { dark: { kind: "light_text", min: 0.002 }, light: { kind: "light_plate", min: 0.05 } };
+const surfaceOf = (surface: Surface, theme: Theme): Json => ({ ...COLOURS[theme], rect: `$win.regions.${surface}`, min_plate: MIN_PLATE[surface][theme], ...(surface === "cet_line" ? { luma_rule: LUMA_RULE[theme] } : {}) });
 
 /** The named state, through the bridge, before a capture: if it isn't there, the row fails with what was there instead. */
 const verify = (row: string, name: string, until: Json, command = "bridge.info"): Json =>
@@ -282,7 +285,7 @@ function firstRows(): Json[] {
     steps: [inPlay(row), ...look(row, "dark", "auto", false), cetLine(row),
       verify(row, "line", { all: [onSurface("cet_line"), chip("Changes allowed")] }), verify(row, "cet-closed", cetIs(false), "overlay.state"),
       visible(row, "cet_line", "dark", "line"),
-      { label: `${row}-burst`, do: "burst", name: "ST8-cetline-connected-auto-dark", frames: 6, interval_ms: 240, route: "screen", clear_overlay: false, rect: "$win.regions.cet_line", bind: key(row, "burst") },
+      { label: `${row}-burst`, do: "burst", name: "ST8-cetline-connected-auto-dark", frames: 6, interval_ms: 240, clear_overlay: false, rect: "$win.regions.cet_line", bind: key(row, "burst") },
       inFrame(row, "burst", "cet_line", "dark")],
     pass: [check("reduced by frame generation", row, "overlay", "motion.reason", { equals: "frame_generation" }), captured("the still dot (6 x 240 ms)", row, "burst"), framed(row, "burst"),
       check("spaced as planned (about 1.2 s)", row, "burst", "timing.first_to_last_ms", { min: 1000 })], cleanup: [hudBack(row)] });
@@ -320,7 +323,7 @@ function writesRows(theme: Theme): Json[] {
     steps: [inPlay(row), ...look(row, theme, "full", false), cetLine(row),
       verify(row, "line", { all: [onSurface("cet_line"), chip("Changes allowed")] }), verify(row, "cet-closed", cetIs(false), "overlay.state"),
       visible(row, "cet_line", theme, "line"),
-      { label: `${row}-burst`, do: "burst", name: `ST8-cetline-connected-${theme}`, frames: 13, interval_ms: 200, route: "screen", clear_overlay: false, rect: "$win.regions.cet_line", bind: key(row, "burst") },
+      { label: `${row}-burst`, do: "burst", name: `ST8-cetline-connected-${theme}`, frames: 13, interval_ms: 200, clear_overlay: false, rect: "$win.regions.cet_line", bind: key(row, "burst") },
       inFrame(row, "burst", "cet_line", theme)],
     pass: [check("motion full in force", row, "overlay", "motion.effective", { equals: "full" }), captured("the pulse burst (13 x 200 ms, one 2.4 s period)", row, "burst"), framed(row, "burst"),
       check("spaced as planned (about 2.4 s)", row, "burst", "timing.first_to_last_ms", { min: 2200 })],
@@ -334,7 +337,7 @@ function writesRows(theme: Theme): Json[] {
         // The line takes the new status with its next info refresh (2 s).
         { label: `${row}-paused-repaint`, do: "wait", ms: 2500 },
         visible(row, "cet_line", theme, "line"),
-        { label: `${row}-shot`, do: "capture", name: `ST8-cetline-paused-${theme}`, route: "screen", clear_overlay: false, bind: key(row, "shot") },
+        { label: `${row}-shot`, do: "capture", name: `ST8-cetline-paused-${theme}`, clear_overlay: false, bind: key(row, "shot") },
         inFrame(row, "shot", "cet_line", theme)],
       pass: [check("the bridge's changes are paused", row, "is_paused", "bridge.writes_paused", { equals: true }), captured("the paused line", row, "shot"), framed(row, "shot")],
       cleanup: [...resumeChanges(row), hudBack(row)] });
@@ -557,7 +560,7 @@ function stoppedRow(theme: Theme, writes: boolean): Json {
       { label: `${row}-wait`, do: "wait", ms: 800 }, visible(row, "cet_window", theme, "window"),
       ...cetShot(row, `ST7-cet-stopped-${theme}`, "stopped", theme), ...cetShot(row, `ST6-cet-chip-stopped-${theme}`, "chip", theme),
       ...cetClose(row, "cet-close-for-line"), { label: `${row}-line-wait`, do: "wait", ms: 800 }, visible(row, "cet_line", theme, "line"),
-      { label: `${row}-line-shot`, do: "capture", name: `ST8-cetline-stopped-${theme}`, route: "screen", clear_overlay: false, bind: key(row, "line") },
+      { label: `${row}-line-shot`, do: "capture", name: `ST8-cetline-stopped-${theme}`, clear_overlay: false, bind: key(row, "line") },
       inFrame(row, "line", "cet_line", theme)],
     pass: [captured("stopped, with Reconnect", row, "stopped"), captured("the Stopped chip", row, "chip"), captured("the stopped CET line", row, "line"),
       framed(row, "stopped"), framed(row, "chip"), framed(row, "line")],

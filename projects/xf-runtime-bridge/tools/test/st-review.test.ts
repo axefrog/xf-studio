@@ -158,7 +158,7 @@ describe("the ST batch shows its named states", () => {
     return stScript(rerun, hooks) as { rows: { id: string; judged_by?: string; steps: Step[]; cleanup?: Step[] }[] };
   };
 
-  test("CET line probes, stills and bursts read displayed pixels in both generated batches", async () => {
+  test("CET line probes, stills and bursts keep the default route (PrintWindow shows the line) and probes judge it by brightness", async () => {
     for (const rerun of [false, true]) {
       const script = await build({ panel: true, cpu: true }, rerun);
       const steps = script.rows.flatMap((r) => flat(r.steps));
@@ -166,7 +166,8 @@ describe("the ST batch shows its named states", () => {
         ((s.do === "capture" || s.do === "burst") && String(s.name).startsWith("ST8-cetline-")) ||
         (s.do === "capture.surface" && s.name !== undefined && s.rect === "$win.regions.cet_line"));
       expect(lines.length).toBeGreaterThan(5);
-      for (const line of lines) expect(line.route).toBe("screen");
+      for (const line of lines) expect(line.route).toBeUndefined();
+      for (const probe of lines.filter((s) => s.do === "capture.surface")) expect((probe.luma_rule as { kind: string }).kind).toMatch(/^light_(text|plate)$/);
       for (const row of script.rows.filter((r) => /^ST8-/.test(r.id))) {
         const line = flat(row.steps).find((s) => s.command === "ui.hud");
         expect(line?.input).toEqual({ show: false, cet_label: true });
@@ -341,5 +342,26 @@ describe("bridge 65b8da29: cet.panel requests and tap readiness", () => {
     const failed = await judge(["voice"]);
     expect(failed.verdict).not.toBe("PASS");
     expect(JSON.stringify(failed.facts)).toContain("run 1: voice");
+  });
+});
+
+describe("the CET line's brightness rule (translucent plate)", () => {
+  const { surfaceStats } = require("../testing/batch.ts");
+  const frame = (w: number, h: number, fill: [number, number, number], spots: number, spot: [number, number, number]) => {
+    const rgb = new Uint8Array(w * h * 3);
+    for (let i = 0; i < w * h; i++) rgb.set(i < spots ? spot : fill, i * 3);
+    return { width: w, height: h, rgb };
+  };
+  const base = { plate: [27, 29, 34] as [number, number, number], text: [230, 232, 236] as [number, number, number] };
+  test("dark: a dark scene with no line is absent, light text at 0.5 % is present", () => {
+    expect(surfaceStats(frame(400, 100, [20, 24, 30], 0, [0, 0, 0]), { ...base, lumaRule: { kind: "light_text", min: 0.002 } }).present).toBe(false);
+    expect(surfaceStats(frame(400, 100, [20, 24, 30], 200, [200, 202, 206]), { ...base, lumaRule: { kind: "light_text", min: 0.002 } }).present).toBe(true);
+  });
+  test("dark: a scene that matches the plate colour no longer counts as the line", () => {
+    expect(surfaceStats(frame(400, 100, [27, 29, 34], 0, [0, 0, 0]), { ...base, minPlate: 0.18, lumaRule: { kind: "light_text", min: 0.002 } }).present).toBe(false);
+  });
+  test("light: a cream plate over 5 % is present, a dark scene is not", () => {
+    expect(surfaceStats(frame(400, 100, [30, 30, 30], 8000, [240, 236, 226]), { ...base, lumaRule: { kind: "light_plate", min: 0.05 } }).present).toBe(true);
+    expect(surfaceStats(frame(400, 100, [30, 30, 30], 80, [240, 236, 226]), { ...base, lumaRule: { kind: "light_plate", min: 0.05 } }).present).toBe(false);
   });
 });

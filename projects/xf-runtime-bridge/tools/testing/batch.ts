@@ -110,7 +110,7 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   set: { required: ["value"], optional: [], help: "keep a value (with bind)" },
   "capture.compare": { required: ["a", "b"], optional: ["rect", "min_changed", "max_changed"], help: "how much two captures differ in an area (diff of their full files)" },
   "ink.rect": { required: ["events", "window"], optional: ["margin"], help: "the ink panel's rectangle in window pixels, from the last laid-out ink_tree event of an events window (panel_rect in the root's units, root_px and screen); value {x, y, width, height}" },
-  "capture.surface": { required: ["plate", "text"], optional: ["capture", "rect", "name", "route", "min_plate", "min_text", "tolerance", "plate_alt"],
+  "capture.surface": { required: ["plate", "text"], optional: ["capture", "rect", "name", "route", "min_plate", "min_text", "tolerance", "plate_alt", "luma_rule"],
     help: "is a themed surface in frame: the share of its plate and text colours in an area, in a capture, every frame of a burst, or a fresh probe capture (name); fails surface_missing" },
   "host.running": { required: [], optional: [], help: "is the game running; value {running, pid}" },
   "host.launch": { required: [], optional: [], help: "start the game through MO2 with the fixture's profile and arguments" },
@@ -142,19 +142,30 @@ type Rgb = [number, number, number];
  * 29-78 %) from every frame without it (at most 12 %); the CET line's crop is mostly scene, so its rows pass their own
  * min_plate (dark 0.18, light 0.03). Text is measured and reported, and required only when min_text says so.
  */
-export function surfaceStats(pixels: { width: number; height: number; rgb: Uint8Array }, o: { plate: Rgb; plateAlt?: Rgb[]; text: Rgb; tolerance?: number; minPlate?: number; minText?: number }) {
+/** A brightness rule for a translucent surface whose plate never matches its theme colour exactly (the CET line: its plate
+ * blends with the scene behind it). light_text: the share of greyish pixels at least as bright as light text (luma >= 150,
+ * channel spread <= 45); light_plate: the share of a cream plate (luma >= 215, spread <= 30). Calibrated on the ST8 frames
+ * of scripted session 1 and the ST re-runs at the CET line's crop: dark, 0.00 % without the line and 0.43-0.92 % with it;
+ * light, a 0.2 % cream plate without it and 12-43 % with it. */
+export type LumaRule = { kind: "light_text" | "light_plate"; min: number };
+export function surfaceStats(pixels: { width: number; height: number; rgb: Uint8Array }, o: { plate: Rgb; plateAlt?: Rgb[]; text: Rgb; tolerance?: number; minPlate?: number; minText?: number; lumaRule?: LumaRule }) {
   const tol = o.tolerance ?? 7, textTol = tol * 2;
-  let plate = 0, text = 0;
+  let plate = 0, text = 0, luma = 0;
   const n = pixels.width * pixels.height;
   // plate_alt: colours that count as the surface too (the ink panel's answers are yellow, or red while they flash).
   const plates = [o.plate, ...(o.plateAlt ?? [])];
   for (let i = 0; i < n; i++) {
     const r = pixels.rgb[i * 3], g = pixels.rgb[i * 3 + 1], b = pixels.rgb[i * 3 + 2];
+    if (o.lumaRule) {
+      const l = (r + g + b) / 3, spread = Math.max(r, g, b) - Math.min(r, g, b);
+      if (o.lumaRule.kind === "light_text" ? l >= 150 && spread <= 45 : l >= 215 && spread <= 30) luma++;
+    }
     if (plates.some((c) => Math.abs(r - c[0]) <= tol && Math.abs(g - c[1]) <= tol && Math.abs(b - c[2]) <= tol)) plate++;
     else if (Math.abs(r - o.text[0]) <= textTol && Math.abs(g - o.text[1]) <= textTol && Math.abs(b - o.text[2]) <= textTol) text++;
   }
-  const plate_fraction = n ? plate / n : 0, text_fraction = n ? text / n : 0;
-  return { plate_fraction: Math.round(plate_fraction * 10000) / 10000, text_fraction: Math.round(text_fraction * 100000) / 100000, present: plate_fraction >= (o.minPlate ?? 0.15) && text_fraction >= (o.minText ?? 0) };
+  const plate_fraction = n ? plate / n : 0, text_fraction = n ? text / n : 0, luma_fraction = n ? luma / n : 0;
+  const present = o.lumaRule ? luma_fraction >= o.lumaRule.min : plate_fraction >= (o.minPlate ?? 0.15) && text_fraction >= (o.minText ?? 0);
+  return { plate_fraction: Math.round(plate_fraction * 10000) / 10000, text_fraction: Math.round(text_fraction * 100000) / 100000, ...(o.lumaRule ? { luma_fraction: Math.round(luma_fraction * 100000) / 100000, luma_rule: o.lumaRule.kind } : {}), present };
 }
 
 /**
@@ -905,7 +916,7 @@ export class SessionExecutor implements Executor {
     const region = Array.isArray(burst?.frames) ? burst.crop?.region : shot?.crop?.region;
     if (region && region !== "full") cropped = true;
     if (!files.length || files.some((f) => typeof f !== "string" || !existsSync(f))) return { ok: false, code: "no_capture", message: "The capture's files are needed." };
-    const options = { plate: action.plate as Rgb, plateAlt: action.plate_alt as Rgb[] | undefined, text: action.text as Rgb, tolerance: Number(action.tolerance ?? 7), minPlate: Number(action.min_plate ?? 0.15), minText: Number(action.min_text ?? 0) };
+    const options = { plate: action.plate as Rgb, plateAlt: action.plate_alt as Rgb[] | undefined, text: action.text as Rgb, tolerance: Number(action.tolerance ?? 7), minPlate: Number(action.min_plate ?? 0.15), minText: Number(action.min_text ?? 0), lumaRule: action.luma_rule as LumaRule | undefined };
     const per = files.map((file) => {
       let pixels = decodePng(readFileSync(file as string));
       if (rect && !cropped) pixels = crop(pixels, { x: Math.max(0, rect.x), y: Math.max(0, rect.y), width: Math.min(rect.width, pixels.width - Math.max(0, rect.x)), height: Math.min(rect.height, pixels.height - Math.max(0, rect.y)) });
