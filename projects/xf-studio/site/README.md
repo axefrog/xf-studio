@@ -70,7 +70,7 @@ A strict meta Content-Security-Policy allows only same-origin styles, scripts an
 
 ## Content policy
 
-The site may publish only `.html`, `.css`, `.js`, `.svg`, `.xml` and `.txt` (`ALLOWED_EXTENSIONS`), within the byte budgets in `site.config.json`. The self-contained style guide has a separate 1.25 MiB file budget (it grows with the component library, the in-game surfaces and their live specimens; the guide is about 1.05 MiB, with its stylesheets minified) and intentionally uses inline CSS, live demo script and specimen styles. The public site's own pages retain their stricter Content-Security-Policy and page checks. Guide publication requires a byte-exact copy of the generated Studio source and a fresh rebuild from its design inputs.
+The site may publish only `.html`, `.css`, `.js`, `.svg`, `.xml` and `.txt` (`ALLOWED_EXTENSIONS`), within the byte budgets in `site.config.json`. The self-contained style guide has a separate 1.25 MiB file budget (it grows with the component library, the in-game surfaces and their live specimens; the guide is about 1.08 MiB) and intentionally uses inline CSS, live demo script and specimen styles. The public site's own pages retain their stricter Content-Security-Policy and page checks. Guide publication requires a byte-exact copy of the generated Studio source and a fresh rebuild from its design inputs.
 
 - No extracted game or mod assets, game-derived renders, Studio viewport screenshots (the preview head is game-derived), personal saves, libraries, inventories or credentials.
 - Visuals are original CSS/SVG and are labelled as illustrations, not renders.
@@ -126,7 +126,7 @@ These are manual owner decisions, not performed by any script here:
 - deployments time out after 10 minutes;
 - soft limits of 100 GB bandwidth per month and 10 builds per hour.
 
-Pages must not be used for commercial transactions, SaaS or sensitive data. The hand-written pages and assets use under 100 KiB, the published style guide about 1.05 MiB and the generated knowledge pages (about 3.8 MiB for 52 pages; the largest, photo mode, about 180 KiB) grow with the knowledge base. Each page has its own budget, which is what a visitor pays for; the 12 MiB total is a tripwire against an accidental dump (assets, game data), not a size target, so ordinary knowledge growth stays well inside it. Release downloads are hosted by GitHub Releases, never by Pages.
+Pages must not be used for commercial transactions, SaaS or sensitive data. The hand-written pages and assets use under 100 KiB, the published style guide about 1.08 MiB and the generated knowledge pages (about 3.8 MiB for 52 pages; the largest, photo mode, about 180 KiB) grow with the knowledge base. Each page has its own budget, which is what a visitor pays for; the 12 MiB total is a tripwire against an accidental dump (assets, game data), not a size target, so ordinary knowledge growth stays well inside it. Release downloads are hosted by GitHub Releases, never by Pages.
 
 **Troubleshooting.**
 

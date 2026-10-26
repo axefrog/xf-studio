@@ -137,6 +137,7 @@ export function loadKnowledge(options: KnowledgeOptions): Knowledge {
   const published = new Set(topics.filter(topic => topic.written && PUBLISHED.includes(topic.maturity)).map(topic => topic.slug));
   for (const topic of topics) if (topic.written && !published.has(topic.slug)) skipped.push({ slug: topic.slug, reason: `maturity ${topic.maturity}` });
 
+  let readmeIds: Set<string> | undefined;
   /** Link resolver for Markdown in `fromDir` (repository-relative), as seen from a page in the published knowledge folder. */
   const link = (source: string) => (href: string) => {
     if (/^[a-z][a-z0-9+.-]*:/i.test(href)) {
@@ -158,6 +159,8 @@ export function loadKnowledge(options: KnowledgeOptions): Knowledge {
       const heading = decodeURIComponent(hash.slice(1));
       if (!hash) return "./";
       if (Object.hasOwn(INDEX_ANCHORS, heading)) return `./#${INDEX_ANCHORS[heading]}`;
+      readmeIds ??= new Set(renderMarkdown(readme, { link: href => href, fragment: true, source: `${dirPath}/README.md` }).headings.map(h => h.id));
+      if (!readmeIds.has(heading)) throw Error(`${source}: link ${href} points at a heading that ${dirPath}/README.md does not have`);
     }
     const page = new RegExp(`^${dirPath}/([\\w.-]+)\\.md$`).exec(target);
     if (page && published.has(page[1])) return `${page[1]}.html${hash}`;

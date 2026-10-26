@@ -34,7 +34,7 @@ const README = `# Test knowledge base
 `;
 const ALPHA = `# Alpha \`chain\`
 
-**Maturity: Draft.** Rules follow the [knowledge rules](README.md); see [beta](beta.md) and [the evidence](../research/x.md#details). Grades: [shared grades](README.md#rules-for-knowledge-pages); [topic table](README.md#topics); [constructor](README.md#constructor).
+**Maturity: Draft.** Rules follow the [knowledge rules](README.md); see [beta](beta.md) and [the evidence](../research/x.md#details). Grades: [shared grades](README.md#rules-for-knowledge-pages); [topic table](README.md#topics).
 
 ## 1. What ArchiveXL/CCXL does
 
@@ -90,7 +90,6 @@ describe("knowledge generator", () => {
     // A README heading is carried over only where the index publishes its content (the grade legend); any other goes to the README on GitHub.
     expect(html).toContain('<a href="./#evidence-grades">shared grades</a>');
     expect(html).toContain(`<a href="${blob}/knowledge/README.md#topics">topic table</a>`);
-    expect(html).toContain(`<a href="${blob}/knowledge/README.md#constructor">constructor</a>`);
     expect(html).toContain(`<a href="${blob}/knowledge/beta.md">beta</a>`);
     expect(html).toContain(`<a href="${blob}/research/x.md#details">the evidence</a>`);
     expect(html).toContain(`<a href="${config.repoUrl}/tree/${config.repoBranch}/research">folder</a>`);
@@ -122,6 +121,9 @@ describe("knowledge generator", () => {
     expect(() => load({ ...withLink("../research/consumers/cc/raw.json"), "research/consumers/cc/raw.json": "{}" })).toThrow("private or raw-data location");
     expect(() => load(withLink("../../outside.md"))).toThrow("leaves the repository");
     expect(() => load(withLink("javascript:alert(1)"))).toThrow("not allowed");
+    // A README heading link must name a heading the README really has (inherited object keys such as "constructor" are not headings).
+    expect(() => load(withLink("README.md#no-such-heading"))).toThrow("points at a heading that knowledge/README.md does not have");
+    expect(() => load(withLink("README.md#constructor"))).toThrow("points at a heading that knowledge/README.md does not have");
     // With git tracking known, an ignored (untracked) file cannot be linked either.
     const root = fixture(withLink("../research/x.md"));
     expect(() => loadKnowledge({ repoRoot: root, repoUrl: config.repoUrl, repoBranch: "main", tracked: new Set(["knowledge/README.md"]), dateOf: () => null }))
