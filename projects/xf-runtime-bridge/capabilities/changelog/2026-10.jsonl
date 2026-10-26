@@ -22,3 +22,4 @@
 {"at":"2026-10-26T10:19:30+10:00","by":"runtime-bridge","kind":"detail","items":["world.scene-read"],"summary":"Row SN1: pass (session 15) on The raw scene."}
 {"at":"2026-10-26T10:19:30+10:00","by":"runtime-bridge","kind":"detail","items":["player.status"],"summary":"Row SS1: pass (session 15) on V's status (senses)."}
 {"at":"2026-10-26T10:19:31+10:00","by":"runtime-bridge","kind":"detail","items":["player.status"],"summary":"Row SS6: pass (session 15) on V's status (senses)."}
+{"at":"2026-10-26T10:26:07+10:00","by":"runtime-bridge","kind":"detail","items":["npc.crowd-substitution"],"summary":"Row CRS2: partial (borg-4) on Crowd substitution."}
