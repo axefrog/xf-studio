@@ -3174,6 +3174,15 @@ Tools not yet sorted into an area above.
 | `cursor.supervisor_recent[].source_s` | number | any | Source time |
 | `cursor.supervisor_recent[].actor` (required) | string | at most 80 characters | Actor key |
 | `cursor.supervisor_recent[].detail` (required) | string | at most 160 characters | What it said |
+| `cursor.supervisor_unmatched_writes` | array of object | at most 16 items | Session writes not yet paired with a supervisor action; preserve returned value |
+| `cursor.supervisor_unmatched_writes[].seq` (required) | integer | 0 to 9007199254740991 | Session event sequence |
+| `cursor.supervisor_unmatched_writes[].kind` (required) | string | at most 32 characters | write or refused |
+| `cursor.supervisor_unmatched_writes[].cid` (required) | string | 1 to 128 characters | Correlation id |
+| `cursor.supervisor_unmatched_writes[].method` | string | at most 64 characters | Method |
+| `cursor.supervisor_unmatched_writes[].code` | string | at most 64 characters | Result code |
+| `cursor.supervisor_unmatched_writes[].source_s` | number | any | Source time |
+| `cursor.supervisor_unmatched_actions` | array of string | at most 16 items; each 1 to 128 characters | Supervisor action cids not yet paired with a write; preserve returned value |
+| `cursor.supervisor_totals_partial` | boolean | `true`, `false` | The cursor predates run totals, so they miss earlier receipts; preserve returned value |
 | `cursor.last_v_seq` | integer | 0 to 9007199254740991 | Recorder sequence of the newest V sample seen; preserve returned value |
 | `cursor.last_v_source_s` | number | any | Source time of the newest V sample seen; preserve returned value |
 | `cursor.incident_counters` | object | the fields below | The incident counters at the cursor, so incompleteness describes the interval since it; preserve returned value |

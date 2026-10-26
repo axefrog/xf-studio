@@ -24,6 +24,9 @@ function supervisionByActor(supervision: any[]): Record<string, { violations: nu
 export type SupervisorTotals = { violations: number; actions: number; refused: number; cancellations: number; writes: number };
 export type SupervisorRecent = { receipt_seq: number; event: string; source_s?: number; actor: string; detail: string };
 export const SUPERVISOR_RECENT_MAX = 8;
+/** A write or refusal the session reported, kept in the cursor until a supervisor action names its cid (review 1). */
+export type SupervisorWrite = { seq: number; kind: string; cid: string; method?: string; code?: string; source_s?: number };
+export const SUPERVISOR_UNMATCHED_MAX = 16;
 function recentOf(v: Json): SupervisorRecent {
   const cid = v.response?.cid ?? v.response?.id;
   const detail = v.event === "supervisor.violation" ? `violation ${v.violation ?? "?"}, policy ${v.policy ?? "?"}`
@@ -123,6 +126,11 @@ export type TimelineCursor = FileCursor & {
   /** 0.8.22: the run's supervisor receipts and writes so far, and its latest receipts, across every call on this cursor. */
   supervisor_totals?: SupervisorTotals;
   supervisor_recent?: SupervisorRecent[];
+  /** Writes and action cids not yet paired (a write and its action can come in different calls), bounded. */
+  supervisor_unmatched_writes?: SupervisorWrite[];
+  supervisor_unmatched_actions?: string[];
+  /** The cursor came from before run totals (a 0.8.21 or older shape): its totals miss what was reported before. */
+  supervisor_totals_partial?: boolean;
   source_counters?: SourceCounters;
   /** The newest recorder V sample seen so far, so a page with no V row can still say how old the last one is. */
   last_v_seq?: number; last_v_source_s?: number;
@@ -141,6 +149,11 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   if ((st !== undefined && !(st && typeof st === "object" && ["violations", "actions", "refused", "cancellations", "writes"].every(k => seq(st[k])))) ||
     (sr !== undefined && !(Array.isArray(sr) && sr.length <= SUPERVISOR_RECENT_MAX && sr.every((r: Json) => r && seq(r.receipt_seq) && typeof r.event === "string" && typeof r.actor === "string" && typeof r.detail === "string"))))
     throw new Error("Invalid supervisor totals cursor");
+  const uw = saved?.supervisor_unmatched_writes as Json | undefined, ua = saved?.supervisor_unmatched_actions as Json | undefined;
+  if ((uw !== undefined && !(Array.isArray(uw) && uw.length <= SUPERVISOR_UNMATCHED_MAX && uw.every((w: Json) => w && seq(w.seq) && typeof w.kind === "string" && typeof w.cid === "string" && w.cid))) ||
+    (ua !== undefined && !(Array.isArray(ua) && ua.length <= SUPERVISOR_UNMATCHED_MAX && ua.every((c: unknown) => typeof c === "string" && c))) ||
+    (saved?.supervisor_totals_partial !== undefined && typeof saved.supervisor_totals_partial !== "boolean"))
+    throw new Error("Invalid supervisor write reconciliation cursor");
   const sc = saved?.source_counters as Json | undefined;
   if (sc !== undefined && !(sc && typeof sc === "object" && seq(sc.dropped) && seq(sc.invalid) && seq(sc.missed_deadlines) && typeof sc.file_error === "boolean")) throw new Error("Invalid source counter baseline");
   const ic = saved?.incident_counters as Json | undefined;
@@ -325,10 +338,21 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   }
   if (supervision.some(v => v.event === "supervisor.gap")) gaps.push("supervisor_history_lost");
   // The supervisor's own writes (world.pause, npc.stop, ...): the session's write and refused events whose cid an action names.
-  const actionCids = new Set<string>();
-  for (const v of supervision) if (v.event === "supervisor.action") for (const c of [v.response?.cid, v.response?.id]) if (typeof c === "string" && c) actionCids.add(c);
-  const supervisorWrites = events.filter(e => (e.kind === "write" || e.kind === "refused") && actionCids.has(e.data?.cid))
-    .map(e => ({ seq: e.seq, kind: e.kind, method: e.data?.method ?? null, code: e.data?.code ?? null, cid: e.data?.cid, source_s: e.source_s ?? null }));
+  // A write and its action can be read by different calls, so the unpaired ones of both kinds wait in the cursor (bounded), and
+  // each write is paired, and counted, once.
+  const writeOf = (e: Json): SupervisorWrite => ({ seq: e.seq, kind: e.kind, cid: e.data.cid, ...(typeof e.data.method === "string" ? { method: e.data.method } : {}),
+    ...(typeof e.data.code === "string" ? { code: e.data.code } : {}), ...(Number.isFinite(e.source_s) ? { source_s: e.source_s } : {}) });
+  const pageWrites = events.filter(e => (e.kind === "write" || e.kind === "refused") && typeof e.data?.cid === "string" && e.data.cid).map(writeOf);
+  const actionCids = new Set<string>(saved?.supervisor_unmatched_actions ?? []);
+  for (const v of supervision) if (v.event === "supervisor.action") {
+    const c = typeof v.response?.cid === "string" && v.response.cid ? v.response.cid : v.response?.id;
+    if (typeof c === "string" && c) actionCids.add(c);
+  }
+  const supervisorWrites: SupervisorWrite[] = [], pairedCids = new Set<string>(), pairedSeqs = new Set<number>();
+  const candidates = [...(saved?.supervisor_unmatched_writes ?? []), ...pageWrites];
+  for (const w of candidates) if (actionCids.has(w.cid) && !pairedCids.has(w.cid) && !pairedSeqs.has(w.seq)) { supervisorWrites.push(w); pairedCids.add(w.cid); pairedSeqs.add(w.seq); }
+  cursor.supervisor_unmatched_writes = candidates.filter(w => !pairedSeqs.has(w.seq)).slice(-SUPERVISOR_UNMATCHED_MAX);
+  cursor.supervisor_unmatched_actions = [...actionCids].filter(c => !pairedCids.has(c)).slice(-SUPERVISOR_UNMATCHED_MAX);
   const pageCounts = { violations: supervision.filter(v => v.event === "supervisor.violation").length, actions: supervision.filter(v => v.event === "supervisor.action").length,
     refused: supervision.filter(v => v.event === "supervisor.action" && v.response?.ok === false).length, cancellations: supervision.filter(v => v.event === "supervisor.cleared").length };
   const before: SupervisorTotals = saved?.supervisor_totals ?? { violations: 0, actions: 0, refused: 0, cancellations: 0, writes: 0 };
@@ -337,12 +361,18 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
   const recent = [...(saved?.supervisor_recent ?? []), ...supervision.filter(v => seq(v.receipt_seq) && v.receipt_seq).map(recentOf)].slice(-SUPERVISOR_RECENT_MAX);
   cursor.supervisor_totals = runTotals;
   cursor.supervisor_recent = recent;
+  // Review 2: a cursor that has read history but carries no totals is from before them; its totals stay incomplete for good.
+  const totalsPartial = !!saved && (saved.supervisor_totals_partial === true ||
+    (saved.supervisor_totals === undefined && (saved.record > 0 || saved.event > 0 || (saved.supervisor_seen?.length ?? 0) > 0)));
+  if (totalsPartial) cursor.supervisor_totals_partial = true; else delete cursor.supervisor_totals_partial;
   const fresh = supervision.length
     ? `while you were away: ${plural(supervision.length, "new supervisor receipt")} (${totalsText({ ...pageCounts, writes: supervisorWrites.length })})`
     : alreadyReported.size ? `while you were away: no new supervisor receipts (${plural(alreadyReported.size, "receipt")} on these feeds already reported by an earlier catch-up)`
     : "while you were away: no supervisor receipts observed";
-  const runText = runTotals.violations + runTotals.actions + runTotals.cancellations + runTotals.writes > 0 || recent.length
-    ? `; this run so far: ${totalsText(runTotals)}${outOfScope ? `; ${plural(outOfScope, "receipt")} outside this run's world or interval left out` : ""}` : outOfScope ? `; ${plural(outOfScope, "receipt")} outside this run's world or interval left out` : "";
+  const scopeText = outOfScope ? `; ${plural(outOfScope, "receipt")} outside this run's world or interval left out` : "";
+  const runText = totalsPartial
+    ? `; this run so far (incomplete: the cursor is older than the run totals, so receipts reported before it are not counted): ${totalsText(runTotals)}${scopeText}`
+    : runTotals.violations + runTotals.actions + runTotals.cancellations + runTotals.writes > 0 || recent.length ? `; this run so far: ${totalsText(runTotals)}${scopeText}` : scopeText;
   cursor.contact_observed = saved?.contact_observed === true || contactObserved;
   cursor.vehicle_hit_observed = saved?.vehicle_hit_observed === true || vehicleHitObserved;
   const incidentCover = incidentCoverage(records, events, saved?.incident_counters, gaps);
@@ -396,8 +426,9 @@ export async function catchUp(api: TestApi, options: TimelineOptions): Promise<J
     supervisor_summary: { message: fresh + runText,
       scope: { world_generation: cursor.world, start_s: status.start_s, end_s: status.end_s }, excluded_out_of_scope: outOfScope,
       counts: pageCounts, already_reported: alreadyReported.size, writes: supervisorWrites, run_totals: runTotals, recent,
+      run_totals_complete: !totalsPartial && !cursor.supervisor_reconciliation_lost,
       by_actor: supervisionByActor(supervision),
-      receipts: compact(supervision), omitted: options.detail ? 0 : Math.max(0, supervision.length - 24), history_complete: !gaps.length && !recordMore && !eventMore },
+      receipts: compact(supervision), omitted: options.detail ? 0 : Math.max(0, supervision.length - 24), history_complete: !gaps.length && !recordMore && !eventMore && !totalsPartial },
     contact_summary: { message: contactObserved ? "contact observed" : `no contact observed (covered paths: ${coveredPaths.join(", ") || "explicit session receipts only"})`,
       observed_since_cursor: contactObserved, observed_in_run: cursor.contact_observed, vehicle_hit_observed_in_run: cursor.vehicle_hit_observed,
       covered_paths: coveredPaths, commissioned: false, continuous: false, no_contact_proof: false,

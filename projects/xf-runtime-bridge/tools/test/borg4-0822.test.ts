@@ -180,6 +180,60 @@ test("the commit tripwire's handover carries why, so the refusals and the sessio
 
 // Review of 3365edc2..83431583 (Sol): four findings, each reproduced here first.
 
+test("review 1: a supervisor write and its action in different catch-ups are linked once, in either order", async () => {
+  const action = (seq: number, cid: string) => ({ seq, kind: "supervisor.action", source_s: 1.05, data: receipt(seq + 10, "supervisor.action", { action: "pause_world", method: "world.pause",
+    response: { cid, id: cid, ok: true } }) });
+  const write = (seq: number, cid: string) => ({ seq, kind: "write", source_s: 1.04, data: { cid, code: "ok", method: "world.pause", ms: 39 } });
+  // The write first; its action arrives in the next call.
+  const f = recorder({ rows: 4, sourceNow: 1 });
+  f.state.events.push(write(1, "m1-1"));
+  const first = await catchUp(f.api, { run: 1, digest: false });
+  expect(first.supervisor_summary.writes).toEqual([]);
+  f.state.events.push(action(2, "m1-1"));
+  const second = await catchUp(f.api, { cursor: first.cursor, digest: false });
+  expect(second.supervisor_summary.writes.map((w: Json) => w.cid)).toEqual(["m1-1"]);
+  expect(second.supervisor_summary.run_totals.writes).toBe(1);
+  const third = await catchUp(f.api, { cursor: second.cursor, digest: false });
+  expect(third.supervisor_summary.run_totals.writes).toBe(1);
+  expect(third.supervisor_summary.writes).toEqual([]);
+  // The action first; its write arrives in the next call.
+  const g = recorder({ rows: 4, sourceNow: 1 });
+  g.state.events.push(action(1, "m2-1"));
+  const a = await catchUp(g.api, { run: 1, digest: false });
+  expect(a.supervisor_summary.run_totals.writes).toBe(0);
+  g.state.events.push(write(2, "m2-1"), write(3, "cli-9"));
+  const b = await catchUp(g.api, { cursor: a.cursor, digest: false });
+  expect(b.supervisor_summary.writes.map((w: Json) => w.cid)).toEqual(["m2-1"]);
+  expect(b.supervisor_summary.run_totals.writes).toBe(1);
+  // The cursor stays what game_catchup takes back, and its unmatched lists stay bounded.
+  const schema = TIMELINE_COMMANDS.find(c => c.name === "game.catchup")!.input;
+  expect(validate(schema, { cursor: b.cursor })).toEqual([]);
+  for (let i = 0; i < 40; i++) g.state.events.push(write(4 + i, `cli-${i}`));
+  const c = await catchUp(g.api, { cursor: b.cursor, digest: false });
+  expect(c.cursor.supervisor_unmatched_writes.length).toBeLessThanOrEqual(16);
+  expect(validate(schema, { cursor: c.cursor })).toEqual([]);
+});
+
+test("review 2: a cursor from before run totals is read as incomplete totals, never as a complete zero", async () => {
+  const f = recorder({ rows: 8, sourceNow: 1 });
+  // The shape of Borg 4's saved cursor (catchup-last.json): supervisor_seen, but no supervisor_totals or supervisor_recent.
+  const old = { schema: "xfb/timeline-cursor-1" as const, sid: "s", run: 1, world: 2, record: 8, event: 0, file_chunk: 1, file_offset: 0,
+    supervisor_seen: [1, 2, 3, 4, 5], supervisor_retired_through: 0, contact_observed: false, vehicle_hit_observed: false,
+    last_v: { position: [7, 0, 0], vitals: { health: 100, in_combat: false }, heat: JSON.stringify({ stage: 0 }), vehicle: { mounted: false }, busy: "" },
+    source_counters: { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false }, last_v_seq: 8, last_v_source_s: 0.8 };
+  const page = await catchUp(f.api, { cursor: old, digest: false });
+  expect(page.supervisor_summary.run_totals_complete).toBe(false);
+  expect(page.supervisor_summary.history_complete).toBe(false);
+  expect(page.supervisor_summary.message).toContain("incomplete");
+  // It stays incomplete on every later call with that cursor's descendants, and a fresh cursor is complete.
+  const next = await catchUp(f.api, { cursor: page.cursor, digest: false });
+  expect(next.supervisor_summary.run_totals_complete).toBe(false);
+  const schema = TIMELINE_COMMANDS.find(c => c.name === "game.catchup")!.input;
+  expect(validate(schema, { cursor: next.cursor })).toEqual([]);
+  const fresh = await catchUp(f.api, { run: 1, digest: false });
+  expect(fresh.supervisor_summary.run_totals_complete).toBe(true);
+});
+
 test("review 3: a lost witness report cancels an arm on an incident event, and leaves other session arms alone", async () => {
   for (const arm of [{ event: "witness.report" }, { event: "witness.report", channel: "incidents" }, { event: "incident.declared" }]) {
     const f = recorder({ rows: 10, sourceNow: 2 });
