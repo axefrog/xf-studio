@@ -8,6 +8,7 @@
 
 import type { Change, GameTime, Id, Selector } from '../types.ts';
 import type { GoalsDigest, GoalView } from './proc-goals.ts';
+import type { PostRec } from './outcomes.ts';
 import type { GroupDigest } from './proc-groups.ts';
 import { groupOf } from './outcomes.ts';
 import type { Sim } from './sim.ts';
@@ -52,18 +53,25 @@ const cut = (xs: StateFill[], limit: number): { fills: StateFill[]; truncated: b
 /** A goal frame's fill: its owner and what it is aimed at, never V as owner (S1 7.10 never gives V a goal). */
 const goalFill = (g: GoalView, W: number, args: Record<string, Id>): StateFill => ({ filler: { frame: g.id }, args, at: g.opened * W, causes: [g.source].slice(0, 8) });
 
-/** The goal frames of a rule, as the digest holds them, filtered and mapped to a fill. */
-function frameRule(fn: string, id: string, pick: (g: GoalView, W: number) => StateFill | undefined): StateRule {
-  const all = (sim: Sim): StateFill[] => goalsOf(sim).flatMap((g) => { const f = pick(g, sim.data.time.W); return f ? [f] : []; });
+/**
+ * The goal frames of a rule, as the digest holds them, filtered and mapped to a fill. Each function says which states of a goal it is true in: a
+ * blocked goal is still wanted (and owed) but is not pursued, and does not threaten.
+ */
+function frameRule(fn: string, id: string, states: ReadonlyArray<GoalView['state']>, pick: (g: GoalView, W: number) => StateFill | undefined): StateRule {
+  const all = (sim: Sim): StateFill[] => goalsOf(sim).flatMap((g) => { const f = states.includes(g.state) ? pick(g, sim.data.time.W) : undefined; return f ? [f] : []; });
   return {
     fn, id, durable: true, changes: FRAME_CHANGES,
-    fromChange: (c, sim) => (c.c === 'frame' && c.level === 'goal' && c.new === 'active' ? byId(all(sim).filter((f) => 'frame' in f.filler && f.filler.frame === c.frame)) : []),
-    endsBy: (c, f) => c.c === 'frame' && 'frame' in f && c.frame === f.frame && (c.new === 'satisfied' || c.new === 'abandoned'),
+    fromChange: (c, sim) => (c.c === 'frame' && c.level === 'goal' && (c.new === 'active' || c.new === 'blocked') ? byId(all(sim).filter((f) => 'frame' in f.filler && f.filler.frame === c.frame)) : []),
+    endsBy: (c, f) => {
+      if (c.c !== 'frame' || !('frame' in f) || c.frame !== f.frame) return false;
+      return c.new === 'satisfied' || c.new === 'abandoned' || !states.includes(c.new as GoalView['state']) && (c.new === 'active' || c.new === 'blocked');
+    },
     search: (arg, node, _t, sim, limit) => cut(byId(all(sim).filter((f) => Object.entries(f.args).some(([k, v]) => k === arg && v === node))), limit),
     holdsAt: (f, t, sim) => {
       if (!('frame' in f)) return 'no';
       const g = goalsOf(sim).find((x) => x.id === f.frame);
-      return g !== undefined && g.opened * sim.data.time.W <= t ? 'yes' : t >= sim.k.now ? 'no' : 'maybe';
+      if (g !== undefined && states.includes(g.state) && g.opened * sim.data.time.W <= t) return 'yes';
+      return t >= sim.k.now ? 'no' : 'maybe';
     },
   };
 }
@@ -123,16 +131,32 @@ export function stateRules(sim: Sim): StateRule[] {
 
   // want, pursue, threaten, protect: goal frames, and a group's intention with its object
   const aimed = (g: GoalView): Id | undefined => g.target ?? g.item ?? g.ward;
-  rules.push(frameRule('want', 'want.goal', (g, W) => (aimed(g) !== undefined ? goalFill(g, W, { who: g.owner, what: aimed(g)! }) : undefined)));
+  rules.push(frameRule('want', 'want.goal', ['active', 'blocked'], (g, W) => (aimed(g) !== undefined ? goalFill(g, W, { who: g.owner, what: aimed(g)! }) : undefined)));
   rules.push(intentRule('want', 'want.intent', ['collect-fee', 'protect-members', 'retaliate', 'punish'], (group, a) => { const o = objectOf(group, a); return o === undefined ? undefined : { who: group, what: o }; }));
-  rules.push(frameRule('pursue', 'pursue.goal', (g, W) => (aimed(g) !== undefined ? goalFill(g, W, { who: g.owner, target: aimed(g)! }) : undefined)));
+  rules.push(frameRule('pursue', 'pursue.goal', ['active'], (g, W) => (aimed(g) !== undefined ? goalFill(g, W, { who: g.owner, target: aimed(g)! }) : undefined)));
   rules.push(intentRule('pursue', 'pursue.intent', ['collect-fee', 'protect-members', 'retaliate', 'punish'], (group, a) => { const o = objectOf(group, a); return o === undefined ? undefined : { who: group, target: o }; }));
-  rules.push(frameRule('threaten', 'threaten.goal', (g, W) => (g.target !== undefined && g.target !== v && g.acts.some((k) => (sim.w.kinds.get(k)?.effects ?? []).some((e) => HARM.includes(e.effect))) ? goalFill(g, W, { by: g.owner, to: g.target }) : undefined)));
-  rules.push(frameRule('protect', 'protect.goal', (g, W) => (g.ward !== undefined && g.post !== undefined ? goalFill(g, W, { guard: g.owner, ward: g.ward }) : undefined)));
+  rules.push(frameRule('threaten', 'threaten.goal', ['active'], (g, W) => (g.target !== undefined && g.target !== v && g.acts.some((k) => (sim.w.kinds.get(k)?.effects ?? []).some((e) => HARM.includes(e.effect))) ? goalFill(g, W, { by: g.owner, to: g.target }) : undefined)));
+  // protect(guard, ward) by a goal: the post history says when a guard stood for a ward, so a guard whose post has ended no longer protects (S1 4.5, 9.1a)
+  const posts = (): PostRec[] => sim.k.evolution.digestPeek<GoalsDigest>('people.goals')?.posts ?? [];
+  const W = sim.data.time.W;
+  const postFill = (p: PostRec): StateFill => ({ filler: { frame: p.goal }, args: { guard: p.person, ward: p.ward! }, at: p.from * W, causes: [p.goal] });
+  const standing = (p: PostRec, t: GameTime): boolean => p.ward !== undefined && p.from * W <= t && (p.until === undefined || t < p.until * W);
+  rules.push({
+    fn: 'protect', id: 'protect.goal', durable: true, changes: FRAME_CHANGES,
+    fromChange: (c) => (c.c === 'frame' && c.level === 'goal' && c.new === 'active' ? byId(posts().filter((p) => p.goal === c.frame && p.until === undefined && p.ward !== undefined).map(postFill)) : []),
+    endsBy: (c, f) => c.c === 'frame' && 'frame' in f && c.frame === f.frame && c.new !== 'active',
+    search: (arg, node, t, _s, limit) => cut(byId(posts().filter((p) => standing(p, t) && (arg === 'guard' ? p.person : p.ward) === node).map(postFill)), limit),
+    holdsAt: (f, t) => {
+      if (!('frame' in f)) return 'no';
+      const mine = posts().filter((p) => p.goal === f.frame && p.ward !== undefined);
+      if (mine.length === 0) return t >= sim.k.now ? 'no' : 'maybe';
+      return mine.some((p) => standing(p, t)) ? 'yes' : 'no';
+    },
+  });
   rules.push(intentRule('protect', 'protect.intent', ['protect-members'], (group, a) => (a.ward === undefined ? undefined : { guard: group, ward: a.ward })));
 
   // obligate(debtor, creditor): an open collect goal; a membership (debtor the member, creditor the group)
-  rules.push(frameRule('obligate', 'obligate.collect', (g, W) => (g.kind === 'collect' && g.target !== undefined ? goalFill(g, W, { debtor: g.target, creditor: g.owner }) : undefined)));
+  rules.push(frameRule('obligate', 'obligate.collect', ['active', 'blocked'], (g, W) => (g.kind === 'collect' && g.target !== undefined ? goalFill(g, W, { debtor: g.target, creditor: g.owner }) : undefined)));
   rules.push({
     fn: 'obligate', id: 'obligate.member', durable: true, changes: EDGE_CHANGES('core:member-of'),
     fromChange: (c) => (c.c === 'edge' && c.edge.type === 'core:member-of' && !c.ended ? [{ filler: { edge: c.edge.id }, args: { debtor: c.edge.from, creditor: c.edge.to }, at: c.edge.valid.from, causes: [c.edge.cause] }] : []),
@@ -157,22 +181,21 @@ export function stateRules(sim: Sim): StateRule[] {
     },
     holdsAt: (f, t) => ('edge' in f && f.edge.startsWith('member:') ? (groupOf(sim, f.edge.slice(7), t) !== undefined ? 'yes' : 'no') : 'maybe'),
   });
+  // leads(who, group): the `xf:leads` edge itself, by its own Id and its recorded interval; searched from the holder or from the group
+  const leadsAt = (e: { valid: { from: GameTime; to?: GameTime } }, t: GameTime): boolean => e.valid.from <= t && (e.valid.to === undefined || t < e.valid.to);
   rules.push({
     fn: 'leads', id: 'leads.seat', durable: true, changes: EDGE_CHANGES('xf:leads'),
     fromChange: (c) => (c.c === 'edge' && c.edge.type === 'xf:leads' && !c.ended ? [{ filler: { edge: c.edge.id }, args: { who: c.edge.from, group: c.edge.to }, at: c.edge.valid.from, causes: [c.edge.cause] }] : []),
     endsBy: (c, f) => c.c === 'edge' && 'edge' in f && c.edge.id === f.edge && c.ended,
-    search: (arg, node, _t, _s, limit) => {
-      const out: StateFill[] = [];
-      for (const [group, g] of Object.entries(groupsOf(sim)).sort((a, b) => cmp(a[0], b[0]))) {
-        for (const s of g.seats) if (s.holder !== null && (arg === 'who' ? s.holder === node : group === node)) out.push({ filler: { edge: `seat:${group}:${s.seat}` }, args: { who: s.holder, group }, at: 0, causes: [] });
-      }
-      return cut(out, limit);
+    search: (arg, node, t, _s, limit) => {
+      sim.k.persistence.recoverIfSaved(node);
+      const edges = arg === 'who' ? sim.k.store.edgesFrom(node) : sim.k.store.edgesTo(node);
+      return cut(byId(edges.filter((e) => e.type === 'xf:leads' && leadsAt(e, t)).map((e) => ({ filler: { edge: e.id }, args: { who: e.from, group: e.to }, at: e.valid.from, causes: [e.cause] }))), limit);
     },
     holdsAt: (f, t) => {
-      if (!('edge' in f) || !f.edge.startsWith('seat:')) return 'maybe';
-      const [, group, seat] = f.edge.split(':');
-      const s = groupsOf(sim)[group!]?.seats[Number(seat)];
-      return s !== undefined && s.holder !== null && t >= 0 ? 'yes' : 'no';
+      if (!('edge' in f)) return 'no';
+      const e = sim.k.persistence.restoreEdge(f.edge);
+      return e === undefined ? 'maybe' : leadsAt(e, t) ? 'yes' : 'no';
     },
   });
 

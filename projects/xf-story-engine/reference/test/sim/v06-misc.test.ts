@@ -91,7 +91,7 @@ describe('SF1-L-9: an accepted offer moves no reputation', () => {
     for (let n = 1; sim.people.view(npc)!.affc !== 0; n++) npc = sim.people.residentAt(d.cellIds[1]!, n);
     return sim.k.events.mintEvent({
       creator: sim.w.port, cause: sim.w.port, name, time: 1000, kind: 'promise', place: d.cellIds[1]!,
-      participants: [{ who: sim.w.v, role: 'actor' }, { who: npc, role: 'promisee' }], effects: [], causes: [],
+      participants: [{ who: sim.w.v, role: 'promiser' }, { who: npc, role: 'promisee' }], effects: [], causes: [],
       witnesses: Array.from({ length: 3 }, (_, i) => H(hs('wit'), hs(name), hi(i))),
       ...(outcome ? { outcome } : {}),
     });

@@ -78,13 +78,13 @@ describe('SF1-L-4: aggregate against residents', () => {
   });
 });
 
-/** A V act as an event: V is the actor, with a victim and witnesses, in a cell of the district. */
+/** A V act as an event: V is in the kind's agent role, with a victim and witnesses, in a cell of the district. */
 function actOn(sim: Sim, name: string, kind: string, effect: 'harm' | 'kill' | 'help' | 'take' | 'give' | 'expose', victim: Id, opts: { cell?: Id; witnesses?: number; outcome?: 'done' | 'failed'; time?: number } = {}): Id {
   const d = sim.w.districts[0]!;
   const witnesses = Array.from({ length: opts.witnesses ?? 3 }, (_, i) => H(hs('wit'), hs(name), hi(i)));
   return sim.k.events.mintEvent({
     creator: sim.w.port, cause: sim.w.port, name, time: opts.time ?? 1000, kind, place: opts.cell ?? d.cellIds[0]!,
-    participants: [{ who: sim.w.v, role: 'actor' }, { who: victim, role: 'victim' }], effects: [{ on: victim, effect }], witnesses, outcome: opts.outcome ?? 'done',
+    participants: [{ who: sim.w.v, role: ({ promise: 'promiser', favour: 'giver' } as Record<string, string>)[kind] ?? 'aggressor' }, { who: victim, role: ({ promise: 'promisee', favour: 'receiver' } as Record<string, string>)[kind] ?? 'victim' }], effects: [{ on: victim, effect }], witnesses, outcome: opts.outcome ?? 'done',
   });
 }
 

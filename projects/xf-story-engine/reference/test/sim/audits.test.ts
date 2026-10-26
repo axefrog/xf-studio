@@ -95,7 +95,7 @@ describe('SF1-Q-1: the audits as shipped', () => {
     const victim = sim.people.residentAt(d.cellIds[1]!, 0);
     const mint = (kind: string, name: string) => sim.k.events.mintEvent({
       creator: sim.w.port, cause: sim.w.port, name, time: 1000, kind, place: d.cellIds[0]!,
-      participants: [{ who: sim.w.v, role: 'actor' }, { who: victim, role: 'victim' }], effects: [{ on: victim, effect: 'harm' }], witnesses: [witness],
+      participants: [{ who: sim.w.v, role: 'aggressor' }, { who: victim, role: 'victim' }], effects: [{ on: victim, effect: 'harm' }], witnesses: [witness],
     });
     mint('meta:nudge', 'meta1');
     sim.k.settle();

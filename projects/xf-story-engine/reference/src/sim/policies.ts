@@ -35,7 +35,6 @@ export interface EventView {
 
 const CLASS_NAMES = ['civilian', 'ncpd', 'A1', 'A2', 'A3', 'other'] as const;
 // v0.6: `protagonist` is the role of V in a seed's `response` (S1 5.3): what V answered is an act of V's
-const ACTOR_ROLES = ['actor', 'aggressor', 'enforcer', 'protagonist'];
 const RAW = new Set<string>(RAW_KIND_NAMES);
 const TIES = new Set<string>(TIE_KIND_NAMES);
 const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -74,7 +73,7 @@ export class Policies {
       own: {
         reactsTo: [
           // V's acts
-          { slot: '*', scope: { nodes: [v] }, where: [{ path: '@role', op: 'in', arg: ACTOR_ROLES }] },
+          { slot: '*', scope: { nodes: [v] }, where: [{ path: '@role', op: 'in', arg: this.sim.w.kinds.allAgentRoles() }] },
           // the readings a correction reaches
           { kind: 'xf:person', slot: 'alive' }, { kind: 'xf:person', slot: 'affiliation' }, { kind: 'xf:person', slot: 'quest-linked' },
           // what V's mirrored state and the journal say
@@ -286,7 +285,7 @@ export class Policies {
         // the cap of memorable beliefs a person holds is kept by not promoting further low-salience beliefs (S1 8.5)
         if (memorable && salience < sim.data.minds.salienceMemorable && k.beliefs.activeOf(observer).filter((b) => b.memorable).length >= sim.data.minds.memorableCap) memorable = false;
         const kd = sim.w.kinds.get(ev.kind);
-        const agentRoles = [...ACTOR_ROLES, ...(kd?.agentRoles ?? [])];
+        const agentRoles = sim.w.kinds.agentRolesOf(ev.kind);
         const actor = ev.participants.find((p) => agentRoles.includes(p.role) && p.who !== observer);
         const base = { at: ev.time, confidence: 1, evidence: [origin], source: { by: 'observed' as const, event: ev.id }, memorable, ...(salience ? { salience } : {}) };
         // v0.6 (S1 8.3, S1-5): news (a promise, a warning) has no effect to form a `did.<effect>` belief from, so it forms `did.<kind>` about its agent, valued by the event: knowledge of a plan or a threat is then a belief that can be told
@@ -528,7 +527,8 @@ export class Policies {
     // v0.6 (S1 8.6): a plan made is neither kept nor broken: a promise with no outcome moves no reputation, and a missing outcome is never read as `done`
     if (ev.kind === 'promise' && ev.outcome !== 'done' && ev.outcome !== 'failed') return;
     const v = this.sim.w.v;
-    if (!ev.participants.some((p) => p.who === v && ACTOR_ROLES.includes(p.role))) return;
+    const agentRoles = this.sim.w.kinds.agentRolesOf(ev.kind);
+    if (!ev.participants.some((p) => p.who === v && agentRoles.includes(p.role))) return;
     const cfg = this.sim.data.ledger;
     const origin = this.origin(ev);
     const district = this.districtOfPlace(ev.place);

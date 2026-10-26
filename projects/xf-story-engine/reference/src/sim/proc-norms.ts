@@ -195,12 +195,17 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
           s.compliers ??= [{ from: 0, mask: complianceMask(norm.share, norm.taue, norm.taun, norm.beh0, norm.perc0) }];
           const enforcerGroup = sim.w.group(d.id, norm.enforcer.aff);
           // (a) the fresh external public events set their signals
+          const answers: Array<{ event: Id; target: Id; time: GameTime }> = [];
           for (const e of external) {
             if (!e.kind.startsWith(`enf.${norm.id}.`)) continue;
             const cell = sim.w.index.cells[e.place];
             if (!cell || cell.district !== d.id) continue;
             seen.add(e.id);
             st.seen.push(e.id);
+            // an external enforcement that came out `done` answers the refusal of its target, as one of S1's own does (S1 7.5)
+            const view = sim.policies.viewEvent(e.id);
+            const target = view?.participants.find((x) => x.role === 'target')?.who;
+            if (view !== undefined && target !== undefined && (view.outcome === undefined || view.outcome === 'done')) answers.push({ event: e.id, target, time: e.time });
             const wc = c.pctx.value(e.id, 'witnesses#count', e.time);
             const witnesses = typeof wc === 'number' ? wc : 0;
             if (cell.public === 'public' && witnesses >= cfg.publicMinWitnesses) {
@@ -222,6 +227,16 @@ export function normsProcess(sim: Sim): S1Process<NormsState, NormsDigest> {
               s.pending.push({ event: f.id, refuser, w });
               if (s.pending.length > cfg.pendingCap) s.pending.shift();
             }
+          }
+          // (a'') what external enforcement answered is no longer waiting: it is discharged before it can expire into a signal
+          for (const a of answers) {
+            const hit = s.pending.findIndex((x) => {
+              const t0 = c.pctx.value(x.event, 'time');
+              return x.refuser === a.target && (typeof t0 !== 'number' || a.time >= t0);
+            });
+            if (hit < 0) continue;
+            c.log({ w, proc: procId, kind: 'decision', reason: 'refusal-answered', refs: [s.pending[hit]!.event, a.target] });
+            s.pending.splice(hit, 1);
           }
           const waited = s.pending.filter((e) => w - e.w >= cfg.sanctionWindow);
           if (waited.length > 0) {

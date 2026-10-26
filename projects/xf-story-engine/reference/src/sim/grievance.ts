@@ -16,7 +16,6 @@ import type { EventView, Policies } from './policies.ts';
 
 const HARM = ['harm', 'kill', 'take', 'expose'];
 const GRIEVANCE_PATHS = ['did.harm', 'did.kill', 'did.take', 'did.expose'];
-const ACTOR_ROLES = ['actor', 'aggressor', 'enforcer', 'protagonist'];
 
 /** The groups `group.decide` runs (S1 7.8): the Tyger Claws and The Mox in every simulated district that lists them. */
 function runGroups(p: Policies): Id[] {
@@ -28,7 +27,7 @@ function runGroups(p: Policies): Id[] {
 
 /** The kind's agent roles, as the registry has them, and for a kind S1 does not own, the kernel's (a seed's `response`). */
 function agentRoles(p: Policies, kind: string): string[] {
-  return [...ACTOR_ROLES, ...(p.sim.w.kinds.get(kind)?.agentRoles ?? [])];
+  return p.sim.w.kinds.agentRolesOf(kind);
 }
 
 /** Whether an event is an act of V's (S1 8.9): V in one of its kind's agent roles. Nothing else counts. */

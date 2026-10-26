@@ -431,7 +431,7 @@ export function eventsProcess(sim: Sim): S1Process<EventsState, EventsDigest> {
             continue;
           }
           // the item a goal act names must still be where it was: the working holder map is checked in admission order (S1 7.2, 4.9)
-          const item = cast.find((e) => e.role === 'item')?.who;
+          const item = cd.goal?.item ?? cast.find((e) => e.role === 'item')?.who;
           if (item !== undefined && holderOf(item).holder !== cast.find((e) => e.role === 'victim')?.who) {
             c.log({ w, proc: procId, kind: 'admission', reason: 'no-cast', refs: [d.id] });
             st.counters.noCast++;

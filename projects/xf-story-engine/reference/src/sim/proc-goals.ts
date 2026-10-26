@@ -587,7 +587,8 @@ export function goalsProcess(sim: Sim): S1Process<GoalsState, GoalsDigest> {
           if (act !== undefined) {
             const isItem = k.persistence.restoreReferencedHeader(on)?.kind === 'xf:item';
             if (act === 'presence') { if (isPerson(on)) { acts = [act]; ward = on; } }
-            else if (isItem) { acts = [act]; if (act === 'theft') item = on; }
+            // an effect on an item names the item, whatever the act: whoever holds it when the act comes is its victim, and no one else is ever drawn in their place (S1 7.10)
+            else if (isItem) { acts = [act]; item = on; }
             else if (isPerson(on)) { acts = [act]; target = on; }
           }
         }

@@ -161,10 +161,15 @@ describe('F-28: belief changes (V4-52)', () => {
     k.beliefs.set(mk({ evidence: [ev[1]], source: { by: 'observed', event: ev[1]! }, refreshed: 21 }) as never);
     expect(changes().map((c) => c.op)).toEqual(['revised']);
     k.pending.length = 0;
-    // a value change that replaces the belief is a revision of the question's memorable belief
+    // a value change that replaces the belief drops the old memorable belief and sets the new one (S0 10.5): `revised` is for the same record
+    const old = k.beliefs.get(alice, bob, 'age')!;
     k.beliefs.set(mk({ value: 40, confidence: 0.9, evidence: [ev[2]], source: { by: 'observed', event: ev[2]! }, formed: 30, refreshed: 30 }) as never);
-    expect(changes().map((c) => c.op)).toEqual(['revised']);
-    expect(changes()[0]!.evidence).toEqual([ev[2]]);
+    expect(changes().map((c) => c.op)).toEqual(['dropped', 'set']);
+    expect(changes()[0]!.belief).toBe(old.id);
+    expect(changes()[0]!.evidence).toEqual([ev[0], ev[1]]);
+    expect(changes()[1]!.belief).toBe(k.beliefs.get(alice, bob, 'age')!.id);
+    expect(changes()[1]!.belief).not.toBe(old.id);
+    expect(changes()[1]!.evidence).toEqual([ev[2]]);
     k.pending.length = 0;
     const b = k.beliefs.get(alice, bob, 'age')!;
     expect(k.beliefs.drop(alice, b.id)).toBe(true);

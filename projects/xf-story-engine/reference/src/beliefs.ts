@@ -239,8 +239,9 @@ export class Beliefs {
       case 'added': if (b.memorable) this.announce('set', b); break;
       case 'corroborated': if (existing!.memorable) this.announce('revised', existing!); break;
       case 'replaced':
-        if (existing!.memorable) this.announce(b.memorable ? 'revised' : 'dropped', b.memorable ? b : existing!);
-        else if (b.memorable) this.announce('set', b);
+        // a replaced memorable belief is dropped (S0 10.5) and its replacement, if memorable, is a belief set: `revised` is for a change to the same record
+        if (existing!.memorable) this.announce('dropped', existing!);
+        if (b.memorable) this.announce('set', b);
         break;
       default: break;
     }

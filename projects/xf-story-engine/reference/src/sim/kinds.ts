@@ -160,6 +160,8 @@ const cityRoleNames = (name: string, prevents: boolean): string[] => {
 const AGENT_ROLES: Record<string, string[]> = {
   theft: ['aggressor'], assault: ['aggressor'], shakedown: ['aggressor'], 'gang-clash': ['aggressor'], 'psycho-break': ['aggressor'], 'police-action': ['responder'], tell: ['teller'],
   presence: ['guard'], 'call-in': ['creditor'], warning: ['warner'], price: ['warner'], search: ['searcher'], confront: ['confronter'],
+  // a kind a seed produces and S1 reads without owning it (S1 5.1, 16.2): V answering an offer acts in it as the protagonist
+  response: ['protagonist'], favour: ['giver'], repair: ['repairer'], expose: ['exposer'], confess: ['confessor'],
 };
 
 const city = (d: CityKindDef): KindDef1 => {
@@ -228,6 +230,16 @@ export class KindRegistry {
     for (const n of SOCIAL_KIND_NAMES.filter((x) => x !== 'tell')) this.kinds.set(n, plain(n, 'social', ['s2']));
     // v0.6 (S1 5.3, 8.3): a promise is news: witnesses remember and tell it although it has no effect; severity 0.5, pulse 0.4
     this.kinds.set('promise', plain('promise', 'social', ['s2'], { tags: ['news'], severity: 0.5, pulse: 0.4, roleNames: ['promiser', 'promisee'], agentRoles: ['promiser'] }));
+  }
+
+  /** The roles in which a participant of an event of this kind acts, as the kind declares them (S1 5.1): never a guess from a role's name. */
+  agentRolesOf(name: string): string[] {
+    return this.kinds.get(name)?.agentRoles ?? AGENT_ROLES[name] ?? [];
+  }
+
+  /** Every role any kind declares as an agent role, for a watch that listens for V's acts whatever their kind. */
+  allAgentRoles(): string[] {
+    return [...new Set([...[...this.kinds.values()].flatMap((k) => k.agentRoles), ...Object.values(AGENT_ROLES).flat()])].sort();
   }
 
   /** `producers(kind)` and `eventKind(name)` for S3 (S1 9.2): from v0.6 with the roles, fills, outcomes and agent roles. */
