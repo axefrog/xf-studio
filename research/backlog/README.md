@@ -300,7 +300,6 @@ Existing brow, lash, hair and piercing *preview context* is not permission to bu
 
 Polish on existing features, not new work. Each is one line; the code-health ledger keeps only Medium and above.
 
-- **Vortex discovery misses a `--user-data` install.** The Studio reads Vortex's state only from `%APPDATA%\Vortex`. A Vortex started with `--user-data` (like the test bed, `knowledge/vortex.md` §8.6) comes back as `state: null`, although its deployment manifest is still found and attributed. Find the data folder the way Vortex itself does: its `--user-data`, shared mode, then the default. Then test against the Vortex test bed. *26 Oct*
 - **WebView2 runs with `--disable-web-security`** (DESK-09): Electrobun's native wrapper hard-codes the flag and no setting removes it; the CSP, session cookie and navigation rules still hold. Raise it upstream, or bundle CEF at the cost of a much larger installer.
 
 ## Working rules for this queue
