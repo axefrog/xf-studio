@@ -52,3 +52,4 @@
 {"at":"2026-10-26T23:21:47+10:00","by":"holotable","kind":"added","items":["link.display-feed"],"summary":"holotable asks for: The display access class and canvas.feed.","digests":{"link.display-feed":"785d97716bb54994"}}
 {"at":"2026-10-26T23:21:47+10:00","by":"holotable","kind":"added","items":["recorder.observe-result"],"summary":"holotable asks for: Published probe and scene results (observe.result).","digests":{"recorder.observe-result":"a75f31e1c0ac85bf"}}
 {"at":"2026-10-26T23:21:47+10:00","by":"holotable","kind":"added","items":["surfaces.canvas-plate"],"summary":"holotable asks for: The XfCanvasPlate token.","digests":{"surfaces.canvas-plate":"9c0878d151d8dfa3"}}
+{"at":"2026-10-27T01:03:47+10:00","by":"holotable","kind":"added","items":["recorder.status"],"summary":"holotable asks for: Read-only recorder status.","digests":{"recorder.status":"437e491e171f5e55"}}

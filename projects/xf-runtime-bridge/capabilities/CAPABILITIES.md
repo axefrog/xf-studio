@@ -2,52 +2,52 @@
 
 # Bridge capabilities
 
-> **Generated page; do not edit.** The data is in [registry.json](registry.json), [items/](items) and [changelog/](changelog), and the rules in [README.md](README.md). As of 2026-10-26, the newest changelog line.
+> **Generated page; do not edit.** The data is in [registry.json](registry.json), [items/](items) and [changelog/](changelog), and the rules in [README.md](README.md). As of 2026-10-27, the newest changelog line.
 
 ## Summary
 
-166 capabilities in 16 areas.
+167 capabilities in 16 areas.
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 12 | 9 | 16 | 2 | 0 | 127 | 0 | 0 |
+| items | 13 | 9 | 16 | 2 | 0 | 127 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
-| items | 39 | 18 | 82 | 27 | 0 |
+| items | 40 | 18 | 82 | 27 | 0 |
 
 | Health | unknown | works | caveats | degraded | broken |
 |---|---:|---:|---:|---:|---:|
-| items | 51 | 70 | 43 | 0 | 2 |
+| items | 52 | 70 | 43 | 0 | 2 |
 
 | Priority | P0 | P1 | P2 | P3 |
 |---|---:|---:|---:|---:|
-| items | 0 | 12 | 49 | 105 |
+| items | 0 | 12 | 49 | 106 |
 
 ### Evidence debt
 
-Built, merged or released capabilities with no game evidence (none or offline): 18. Age is in days to 2026-10-26.
+Built, merged or released capabilities with no game evidence (none or offline): 18. Age is in days to 2026-10-27.
 
 | Capability | Stage | Evidence | Since (version) | Age |
 |---|---|---|---|---:|
-| [`capture.event-armed`](#capture.event-armed) Event-armed captures | merged | none | 2026-10-26 (0.8.14) | 0 d |
-| [`capture.expectations`](#capture.expectations) Pre-capture checks | merged | offline | 2026-10-26 (0.6.0) | 0 d |
-| [`character.live-pose`](#character.live-pose) Live posing (L0) | merged | offline | 2026-10-26 (0.3.0) | 0 d |
-| [`incidents.spawn-link`](#incidents.spawn-link) Actors joining an incident | merged | offline | 2026-10-26 (0.8.21) | 0 d |
-| [`lifecycle.options-read`](#lifecycle.options-read) Graphics settings record | merged | offline | 2026-10-26 (0.3.0) | 0 d |
-| [`npc.gestures`](#npc.gestures) Gestures | merged | offline | 2026-10-26 (0.8.8) | 0 d |
-| [`photo.camera-place`](#photo.camera-place) Placing photo mode's camera directly | merged | offline | 2026-10-26 (0.5.2) | 0 d |
-| [`photo.camera-preset`](#photo.camera-preset) Rewriting a camera preset | merged | offline | 2026-10-26 (0.6.0) | 0 d |
-| [`photo.poses`](#photo.poses) V's photo-mode pose | merged | offline | 2026-10-26 (0.3.0) | 0 d |
-| [`safety.contact-alerts`](#safety.contact-alerts) Contact alerts | merged | offline | 2026-10-26 (0.8.15) | 0 d |
-| [`supervisor.actor-entries`](#supervisor.actor-entries) Supervising XF actors | merged | offline | 2026-10-26 (0.8.19) | 0 d |
-| [`supervisor.plan-module`](#supervisor.plan-module) Plans | merged | offline | 2026-10-26 | 0 d |
-| [`supervisor.while-away`](#supervisor.while-away) While you were away | merged | offline | 2026-10-26 (0.8.15) | 0 d |
-| [`tooling.capability-registry`](#tooling.capability-registry) The capability registry | merged | offline | 2026-10-26 | 0 d |
-| [`tooling.lint`](#tooling.lint) Lints and contracts | merged | offline | 2026-10-26 (0.3.0) | 0 d |
-| [`tooling.preflight`](#tooling.preflight) Session preflight | merged | offline | 2026-10-26 | 0 d |
-| [`tooling.selftest`](#tooling.selftest) Self-test host and unit checks | merged | offline | 2026-10-26 (0.2.0) | 0 d |
-| [`world.doors`](#world.doors) Doors | merged | offline | 2026-10-26 (0.8.12) | 0 d |
+| [`capture.event-armed`](#capture.event-armed) Event-armed captures | merged | none | 2026-10-26 (0.8.14) | 1 d |
+| [`capture.expectations`](#capture.expectations) Pre-capture checks | merged | offline | 2026-10-26 (0.6.0) | 1 d |
+| [`character.live-pose`](#character.live-pose) Live posing (L0) | merged | offline | 2026-10-26 (0.3.0) | 1 d |
+| [`incidents.spawn-link`](#incidents.spawn-link) Actors joining an incident | merged | offline | 2026-10-26 (0.8.21) | 1 d |
+| [`lifecycle.options-read`](#lifecycle.options-read) Graphics settings record | merged | offline | 2026-10-26 (0.3.0) | 1 d |
+| [`npc.gestures`](#npc.gestures) Gestures | merged | offline | 2026-10-26 (0.8.8) | 1 d |
+| [`photo.camera-place`](#photo.camera-place) Placing photo mode's camera directly | merged | offline | 2026-10-26 (0.5.2) | 1 d |
+| [`photo.camera-preset`](#photo.camera-preset) Rewriting a camera preset | merged | offline | 2026-10-26 (0.6.0) | 1 d |
+| [`photo.poses`](#photo.poses) V's photo-mode pose | merged | offline | 2026-10-26 (0.3.0) | 1 d |
+| [`safety.contact-alerts`](#safety.contact-alerts) Contact alerts | merged | offline | 2026-10-26 (0.8.15) | 1 d |
+| [`supervisor.actor-entries`](#supervisor.actor-entries) Supervising XF actors | merged | offline | 2026-10-26 (0.8.19) | 1 d |
+| [`supervisor.plan-module`](#supervisor.plan-module) Plans | merged | offline | 2026-10-26 | 1 d |
+| [`supervisor.while-away`](#supervisor.while-away) While you were away | merged | offline | 2026-10-26 (0.8.15) | 1 d |
+| [`tooling.capability-registry`](#tooling.capability-registry) The capability registry | merged | offline | 2026-10-26 | 1 d |
+| [`tooling.lint`](#tooling.lint) Lints and contracts | merged | offline | 2026-10-26 (0.3.0) | 1 d |
+| [`tooling.preflight`](#tooling.preflight) Session preflight | merged | offline | 2026-10-26 | 1 d |
+| [`tooling.selftest`](#tooling.selftest) Self-test host and unit checks | merged | offline | 2026-10-26 (0.2.0) | 1 d |
+| [`world.doors`](#world.doors) Doors | merged | offline | 2026-10-26 (0.8.12) | 1 d |
 
 ### Open known issues
 
@@ -194,7 +194,7 @@ Per consumer, blocking first.
 
 #### XF · Holotable
 
-8 open (0 blocking, 6 needs, 2 wants).
+9 open (0 blocking, 7 needs, 2 wants).
 
 | Level | Ref | Milestone | Capability | Stage | Evidence | Need |
 |---|---|---|---|---|---|---|
@@ -204,6 +204,7 @@ Per consumer, blocking first.
 | needs | want 11 | M7 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) | requested | none | Show and hide while playing, without opening CET (CET blocks input). |
 | needs | want 12 | M7 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) | requested | none | Lets the overlay work with no other XF program running (bridge proposal B). |
 | needs | want 13 | M8 | [`link.display-feed`](#link.display-feed) | requested | none | Bridge proposal C. Story Engine layers reach the overlay through it. |
+| needs | milestone 6 | M6 | [`recorder.status`](#recorder.status) | requested | none | Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run. |
 | wants | want 15 | M6 | [`recorder.observe-result`](#recorder.observe-result) | requested | none | Lets Holotable draw what sessions already asked, at no extra game cost. |
 | wants | want plate | M7 | [`surfaces.canvas-plate`](#surfaces.canvas-plate) | requested | none | The design comes from the UI component track; the bridge exposes the token to canvas@1. |
 
@@ -2374,7 +2375,7 @@ showroom.spawn, showroom.light, showroom.rotate, showroom.clear and showroom.sta
 
 ## Recorder and catch-up
 
-Continuous channels, taps, session events and catching up on what happened between turns. (area `recorder`, 9 capabilities)
+Continuous channels, taps, session events and catching up on what happened between turns. (area `recorder`, 10 capabilities)
 
 | Capability | Kind | Stage | Evidence | Health | Priority |
 |---|---|---|---|---|---|
@@ -2387,6 +2388,7 @@ Continuous channels, taps, session events and catching up on what happened betwe
 | [`recorder.game-events-probe`](#recorder.game-events-probe) Game-events probe | research | merged | partial | caveats | P3 |
 | [`recorder.world-event-feed`](#recorder.world-event-feed) World event feed | sense | proposed | none | unknown | P2 |
 | [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | requested | none | unknown | P3 |
+| [`recorder.status`](#recorder.status) Read-only recorder status | sense | requested | none | unknown | P3 |
 
 <a id="recorder.session-events"></a>
 
@@ -2543,6 +2545,17 @@ A bounded observe.result session event with the command, the caller's cid and th
 
 - **Demand (holotable, wants, want 15, M6):** Lets Holotable draw what sessions already asked, at no extra game cost.
 - **Updated:** 2026-10-26
+
+<a id="recorder.status"></a>
+
+### Read-only recorder status
+
+`recorder.status` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+
+A read-only command answered on the bridge thread (no game-thread call, no lease, no ack) that reports whether the recorder is active and its current run: { active, run, session, world, channels, start, latest, stopReason }, so an observer can find the run to read with game.catchup.
+
+- **Demand (holotable, needs, milestone 6, M6):** Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run.
+- **Updated:** 2026-10-27
 
 ## Supervisor and plans
 

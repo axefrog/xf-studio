@@ -130,5 +130,27 @@
       }
     ],
     "updated": "2026-10-26"
+  },
+  {
+    "id": "recorder.status",
+    "title": "Read-only recorder status",
+    "summary": "A read-only command answered on the bridge thread (no game-thread call, no lease, no ack) that reports whether the recorder is active and its current run: { active, run, session, world, channels, start, latest, stopReason }, so an observer can find the run to read with game.catchup.",
+    "area": "recorder",
+    "kind": "sense",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "needs",
+        "ref": "milestone 6",
+        "milestone": "M6",
+        "note": "Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run.",
+        "since": "2026-10-27"
+      }
+    ],
+    "updated": "2026-10-27"
   }
 ]
