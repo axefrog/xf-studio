@@ -41,7 +41,7 @@ describe("batch: verdicts", () => {
     expect(result.rows[3].reason).toContain("not_foreground");
     const manifest = JSON.parse(readFileSync(result.manifestPath, "utf8"));
     expect(manifest.schema).toBe("xfb/session-report-3");
-    expect(manifest.run.counts).toEqual({ PASS: 2, FAIL: 1, PARTIAL: 1, SKIP: 1 });
+    expect(manifest.run.counts).toEqual({ PASS: 2, CAPTURED: 0, FAIL: 1, PARTIAL: 1, SKIP: 1 });
     const report = readFileSync(result.reportPath, "utf8");
     expect(report).toContain("| fail | fails | FAIL |");
   });

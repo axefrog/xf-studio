@@ -51,3 +51,28 @@ describe("a state check that isn't met says what was there", () => {
     expect(observed({ path: "status.chip", equals: "Stopped" }, { ok: false, code: "killed", message: "bridge stopped by kill switch" })).toContain("refused killed");
   });
 });
+
+describe("a row judged by the UI review is never PASS on a capture's existence", () => {
+  test("its checks holding make it CAPTURED, awaiting the review; a row without judged_by stays PASS", async () => {
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
+    const clock = new FakeClock();
+    const shot = (id: string, judged?: string) => ({ id, title: id, ...(judged ? { judged_by: judged } : {}), steps: [{ label: "s", do: "capture", name: id, clear_overlay: false, bind: `${id}_shot` }],
+      pass: [{ label: "captured", ref: `$${id}_shot`, captured: true }] });
+    const dir = tempDir("xfb-str-");
+    const result = await go(script([shot("judged", "XF · Studio's UI review"), shot("plain")] as never), fakeApi(clock), fakeHost(), clock, dir);
+    expect(result.rows.map((r) => r.verdict)).toEqual(["CAPTURED", "PASS"]);
+    expect(result.rows[0].reason).toContain("awaiting XF · Studio's UI review");
+    expect(result.ok).toBe(true);
+    const { readFileSync } = await import("node:fs");
+    const manifest = JSON.parse(readFileSync(join(dir, "out", "manifest.json"), "utf8"));
+    expect(manifest.run.counts.CAPTURED).toBe(1);
+    expect(readFileSync(join(dir, "out", "report.md"), "utf8")).toContain("CAPTURED (awaiting review) 1");
+  });
+  test("verdictOf: a judged row that fails stays FAIL", async () => {
+    const { verdictOf } = await import("../testing/batch.ts");
+    const close = { status: "done", outcome: "completed" } as never;
+    expect(verdictOf(close, [{ label: "x", result: "fail" } as never], new Set(), "review").verdict).toBe("FAIL");
+    expect(verdictOf(close, [{ label: "x", result: "pass" } as never], new Set(), "review").verdict).toBe("CAPTURED");
+  });
+});

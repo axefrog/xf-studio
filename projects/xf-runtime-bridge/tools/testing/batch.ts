@@ -2,7 +2,9 @@
 //
 // A script is setup steps, a list of rows and teardown steps. Each row has an id, a title, requirements, steps (plan
 // steps: retry, alternatives, branches, fallback and deadlines), pass checks and cleanup steps, and ends with one
-// verdict: PASS, FAIL, PARTIAL or SKIP(reason), with its evidence files. One row's failure never stalls the batch: a
+// verdict: PASS, CAPTURED, FAIL, PARTIAL or SKIP(reason), with its evidence files. CAPTURED is a row judged by someone
+// else (judged_by, XF · Studio's UI review): its state checks and captures held, and it awaits that review; such a
+// row is never PASS on a capture's existence. One row's failure never stalls the batch: a
 // failed step skips its row (on_fail skip_row, the default), fails it (fail_row: the step's failure is the finding),
 // carries on (continue) or stops the batch (stop), and the next row starts after the row's cleanup.
 //
@@ -84,7 +86,9 @@ export type BatchScript = {
   /** More plugin log patterns (regular expressions) that count as a draw_call halt. */
   halt_patterns?: string[];
 };
-export type Verdict = "PASS" | "FAIL" | "PARTIAL" | "SKIP";
+export type Verdict = "PASS" | "CAPTURED" | "FAIL" | "PARTIAL" | "SKIP";
+/** A verdict that counts as done (nothing to re-run): PASS, or CAPTURED awaiting its review. */
+export const DONE_VERDICTS: ReadonlySet<Verdict> = new Set(["PASS", "CAPTURED"]);
 
 // ---- Action kinds ---------------------------------------------------------------------------------------
 
@@ -821,9 +825,16 @@ export function evaluateCheck(check: PassCheck, bindings: Record<string, unknown
  * The row's verdict from its plan's close and its checks. FAIL: a fail_row step failed, or every evaluated check
  * failed. PARTIAL: some checks passed and some didn't (or couldn't be evaluated), or the row couldn't finish but a
  * check passed. SKIP(reason): the row couldn't be set up and no check passed. PASS: the plan completed and every
- * check passed (with no checks: the plan completed).
+ * check passed (with no checks: the plan completed). CAPTURED instead of PASS when the row is judged by someone else
+ * (judgedBy): the states and captures held, and what they show awaits that review.
  */
-export function verdictOf(close: Pick<PlanResult, "status" | "outcome" | "reason" | "last_step">, checks: CheckResult[], failRow: Set<string>): { verdict: Verdict; reason?: string } {
+export function verdictOf(close: Pick<PlanResult, "status" | "outcome" | "reason" | "last_step">, checks: CheckResult[], failRow: Set<string>, judgedBy?: string): { verdict: Verdict; reason?: string } {
+  const out = rawVerdict(close, checks, failRow);
+  if (out.verdict !== "PASS" || !judgedBy) return out;
+  return { verdict: "CAPTURED", reason: `awaiting ${judgedBy}${out.reason ? `; ${out.reason}` : ""}` };
+}
+
+function rawVerdict(close: Pick<PlanResult, "status" | "outcome" | "reason" | "last_step">, checks: CheckResult[], failRow: Set<string>): { verdict: Verdict; reason?: string } {
   const passed = checks.filter((c) => c.result === "pass").length;
   const failed = checks.filter((c) => c.result === "fail");
   const unevaluated = checks.filter((c) => c.result === "not_evaluated");
@@ -897,7 +908,7 @@ export function parseHaltOn(text: string | string[] | undefined): HaltPolicy {
 
 /** A failure's signature for the repeated check: the plan's failing code, without the row's own labels. */
 export function failureSignature(record: RowRecord): string | undefined {
-  if (record.verdict === "PASS" || !record.close || record.close.status === "done") return undefined;
+  if (DONE_VERDICTS.has(record.verdict) || !record.close || record.close.status === "done") return undefined;
   const code = /^[^:]+: ([a-z_]+)/.exec(record.close.reason ?? "")?.[1];
   return code && !["cancelled", "deadline"].includes(code) ? code : record.close.reason?.includes("deadline") ? "deadline" : code;
 }
@@ -1098,7 +1109,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       record.close = reportOf(result);
       record.reports.push(...result.reports);
       record.checks = (row.pass ?? []).map((check) => evaluateCheck(check, bindings, (name) => !before.has(name) || before.get(name) !== bindings[name]));
-      Object.assign(record, verdictOf(result, record.checks, failRow));
+      Object.assign(record, verdictOf(result, record.checks, failRow, row.judged_by));
       record.evidence = [...executor.evidence];
       record.telemetry = await telemetry.collect(row.id);
       if (row.facts) record.facts = row.facts.map((fact) => {
@@ -1165,7 +1176,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       record.reports.push(...result.reports);
       record.checks = (row.pass ?? []).map((check) => evaluateCheck(check, bindings, (name) => name === "telemetry" || !before.has(name) || before.get(name) !== bindings[name]));
       record.reason = undefined;
-      Object.assign(record, verdictOf(result, record.checks, failRow));
+      Object.assign(record, verdictOf(result, record.checks, failRow, row.judged_by));
       if (row.facts) record.facts = row.facts.map((fact) => { const missing: string[] = []; const value = resolveRefs(fact.ref, bindings, missing); return { label: fact.label, value: missing.length ? null : value }; });
       log(`${record.verdict.padEnd(7)} ${row.id} (over the whole batch)${record.reason ? `: ${record.reason}` : ""}`);
     });
@@ -1214,7 +1225,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   }, null, 2) + "\n"));
   await attemptCleanup("closing the connection", async () => { options.api.close(); options.observer?.close?.(); });
   const outcome = signal.aborted ? "interrupted" : halt ? "stopped" : "complete";
-  return { ok: !halt && !signal.aborted && !cleanupErrors.length && records.every((r) => r.verdict === "PASS" || r.reason === "not selected"), outcome, halt: halt?.reason, haltInfo: halt, attempt, remaining: left, rows: records, cleanupErrors, ...paths, resumePath };
+  return { ok: !halt && !signal.aborted && !cleanupErrors.length && records.every((r) => DONE_VERDICTS.has(r.verdict) || r.reason === "not selected"), outcome, halt: halt?.reason, haltInfo: halt, attempt, remaining: left, rows: records, cleanupErrors, ...paths, resumePath };
 }
 
 // ---- Reports ---------------------------------------------------------------------------------------------
@@ -1259,7 +1270,7 @@ function writeReports(script: BatchScript, options: BatchRunOptions, s: ReportSt
     const history = [...(before?.earlier ?? []), ...(before && ranHere ? [Object.fromEntries(Object.entries(before).filter(([k]) => k !== "earlier" && k !== "reports")) as Omit<RowRecord, "earlier" | "reports">] : [])];
     return history.length ? { ...latest, earlier: history } : latest;
   });
-  const counts = Object.fromEntries((["PASS", "FAIL", "PARTIAL", "SKIP"] as const).map((v) => [v, merged.filter((r) => r.verdict === v).length]));
+  const counts = Object.fromEntries((["PASS", "CAPTURED", "FAIL", "PARTIAL", "SKIP"] as const).map((v) => [v, merged.filter((r) => r.verdict === v).length]));
   const all = [...(s.setup?.reports ?? []), ...s.rows.flatMap((r) => r.reports), ...(s.teardown?.reports ?? [])];
   const outcome = s.interrupted ? "interrupted" : s.halt ? "halted" : s.finished ? "complete" : "running";
   const thisAttempt = {
@@ -1279,7 +1290,7 @@ function writeReports(script: BatchScript, options: BatchRunOptions, s: ReportSt
     rows: merged,
     notes: [
       "Screenshots are external window captures (what was on screen, after ReShade and overlays), 8-bit; each capture's result in the reports records the window size, crop and scale.",
-      "A verdict covers the named state checks and that the evidence was captured; what a capture shows is judged by the row's judged_by where named.",
+      "PASS covers the row's own checks. A row with judged_by is at best CAPTURED: its named states were verified through the bridge before each capture and its surfaces found in frame, and what the captures show awaits that review.",
       "Report entries are keyed by plan, step and attempt; a step revisited by a goto carries ~n. Each row's telemetry folder holds its slice of the recorder, the plugin log, overlay_state, bridge_info and memory.",
     ],
   };
@@ -1288,7 +1299,7 @@ function writeReports(script: BatchScript, options: BatchRunOptions, s: ReportSt
   const lines = [
     `# ${script.title ?? script.name}`,
     "",
-    `${attempts.length} attempt${attempts.length > 1 ? "s" : ""}, the latest ${s.startedAt}${s.finished ? ` to ${new Date().toISOString()}` : " (in progress)"}: ${outcome}. PASS ${counts.PASS}, FAIL ${counts.FAIL}, PARTIAL ${counts.PARTIAL}, SKIP ${counts.SKIP}.${script.card ? ` Card: ${script.card}.` : ""}`,
+    `${attempts.length} attempt${attempts.length > 1 ? "s" : ""}, the latest ${s.startedAt}${s.finished ? ` to ${new Date().toISOString()}` : " (in progress)"}: ${outcome}. PASS ${counts.PASS}, CAPTURED (awaiting review) ${counts.CAPTURED}, FAIL ${counts.FAIL}, PARTIAL ${counts.PARTIAL}, SKIP ${counts.SKIP}.${script.card ? ` Card: ${script.card}.` : ""}`,
     ...(s.cleanupErrors.length ? ["", `**Cleanup failed:** ${s.cleanupErrors.join("; ")}`] : []),
     ...(s.halt ? ["", `**Halted (${s.halt.kind}):** ${s.halt.reason}`, ...s.halt.evidence.slice(0, 8).map((e) => `- ${e}`), "", s.remaining.length ? `Still to run: ${s.remaining.join(", ")} (resume.json has the command).` : ""] : []),
     "",

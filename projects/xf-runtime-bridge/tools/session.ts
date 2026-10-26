@@ -67,7 +67,8 @@
 // bind, and on_fail: skip_row (the default: the row couldn't be set up), fail_row (the step's failure is the
 // row's FAIL), continue or stop (the batch). Every attempt has a deadline (60 s unless the step names one).
 //
-// Each row ends PASS, FAIL, PARTIAL or SKIP(reason), with its evidence files in the manifest. Before a row, the
+// Each row ends PASS, CAPTURED (judged by someone else: awaiting that review), FAIL, PARTIAL or SKIP(reason), with its
+// evidence files in the manifest. Before a row, the
 // runner sets the staged config.ini keys the row requires (a backup first; restored at the end) and restarts the
 // game through MO2 when they changed (theme, motion and the overlay are read at load), so rows are ordered to batch
 // a config: the dry run prints the restarts. --preflight checks the staged build, its config, the CET key bindings,
