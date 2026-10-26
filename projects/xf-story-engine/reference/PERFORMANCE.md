@@ -640,3 +640,22 @@ confirms producer/consumer interpretation only, not an in-game result.
 The task footprint is below 0.5 GB, with no task payload above 5 GB. Scratch
 spools/logs are regenerable and removed at handoff; the commands and counts remain
 in the [producer notes](HOLOTABLE.md).
+
+## Shadow recording host
+
+Measured offline on 27 October 2026 with Bun 1.4.4 under the 4 GB guard. The
+named street recording spans about 652 QPC seconds, 6,524 V samples and eight
+completed S1 windows. Final paired runs took 4.87 and 5.75 s inside the adapter:
+4.18/5.08 s advancing S1, 0.32/0.33 s resolving recorded readings/observing/
+publishing, and maximum complete windows of 1.60/1.46 s. The guarded combined
+recording/standalone comparison peaked at 0.7 GB. An earlier cold run took
+13.76 s inside the adapter; these shared-host observations are not controlled
+benchmark deltas or live latency evidence.
+
+Advancing S1 is the next measured cost; file publication does not dominate this
+sample. The adapter keeps only the V sample needed by snapshotAt, avoiding
+quadratic replay-trail reconstruction. The twelve recording spools match byte
+for byte across reruns. Timing diagnostics stay out of deterministic files.
+The private recording has no actors; simulated-source tests cover the actor/live
+paths. [Shadow notes](SHADOW.md) state the feed gaps and exact limits. Scratch
+spools and logs are removed at handoff; no task-owned output exceeds 5 GB.

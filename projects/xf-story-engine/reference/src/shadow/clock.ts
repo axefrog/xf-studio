@@ -8,7 +8,7 @@ export class ShadowClock {
   constructor(readonly meta: Session['meta'], readonly defaultStart = 0) {
     if (!Number.isFinite(defaultStart)) throw Error('Invalid default game start');
   }
-  at(t: number, gameTime?: number): { game: number; derived: boolean } {
+  at(t: number, gameTime?: number, holdRecorded = false): { game: number; derived: boolean } {
     if (!Number.isFinite(t)) throw Error('Invalid QPC clock');
     let game: number, derived = false;
     const recorded = this.meta.gameTimeSamples?.filter(x => x.source <= t).at(-1);
@@ -17,7 +17,10 @@ export class ShadowClock {
     } else {
       derived = true;
       const anchor = this.anchor && (!recorded || this.anchor.source >= recorded.source) ? this.anchor : recorded;
-      if (anchor) { game = anchor.game + (t - anchor.source) * 8; this.rules.add('QPC × 8 from recorded game time'); }
+      if (anchor && (holdRecorded || recorded && anchor === recorded)) {
+        game = anchor.game; derived = false; this.rules.add('recorded game time held between samples');
+      }
+      else if (anchor) { game = anchor.game + (t - anchor.source) * 8; this.rules.add('QPC × 8 from recorded game time'); }
       else { game = this.defaultStart + (t - this.meta.start) * 8; this.rules.add('QPC × 8 from declared default game epoch'); }
     }
     if (game < this.previous) throw Error('Game clock moved backwards; start a separate shadow run');

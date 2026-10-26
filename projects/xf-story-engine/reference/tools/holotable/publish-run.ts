@@ -45,9 +45,10 @@ export class RunPublisher {
   private manifest(layer: string, kinds: Manifest['kinds']): Manifest {
     const binding = this.run.mode === 'recording' ? { clock: 'recording' as const, session: this.run.session, run: this.run.run }
       : { clock: 'game' as const, standalone: { set: this.run.set, title: this.run.title, from: this.run.from, to: this.run.to, clock: 'game' as const } };
+    const { clock, ...identity } = binding;
     return { schema: 'xfh/layer-1', producer: 'story-engine', layer, title: layer.replaceAll('-', ' ') + (layer === 'places' && this.run.schematic ? ' (schematic layout)' : ''),
-      ...(this.run.schematic ? { description: 'Districts use real place ids; synthetic cells and their contents use a schematic layout, not measured street geometry.' } : {}), content: 'full', clock: binding.clock, kinds,
-      ...binding };
+      ...(this.run.schematic ? { description: 'Districts use real place ids; synthetic cells and their contents use a schematic layout, not measured street geometry.' } : {}), content: 'full', clock, kinds,
+      ...identity };
   }
   private create(m: Manifest): LayerState {
     const line = spoolLine(m);

@@ -2343,3 +2343,73 @@ Final review-round validation (26 October 2026), with each suite or heavy file r
 | S1_FULL digest-v4 | 2 | 0 | 0 | 0.742 s |
 
 `bun run check`, the recovery-inventory audit and `git diff --check` pass. The final S2 vector recheck, including nonempty facts, casts and promises with growth metadata, passes all six tests. Both frozen kernel digests and the S3 transcript remain unchanged; M3's committed evaluation records are untouched. The largest final guarded peak was 1.5 GB (default); no final guard trip occurred. The footprint report found no task-owned payload over 5 GB. Scratch logs and runners are removed at wrap-up; no child job is left running.
+
+## Shadow host v0 (D-34/D-35, 27 October 2026)
+
+The host is confined to `src/shadow/` and `tools/shadow/`; no kernel, S1,
+seeding or procedural implementation was changed. The coordinator approved
+extending the existing Holotable publisher with a recording-bound manifest mode.
+Its standalone mode keeps the original manifest field order and bytes.
+
+The source is Holotable's reader/model/query, including its live source. There
+is no second recording parser. V supplies mirrored position/district/cell;
+actors supply identity handles, entity bindings and position as unidentified
+mirrored people. Record, affiliation, crowd, death, combat and crime events are
+absent from this recorder contract; the V combat flag does not become a raw
+event. Typed incidents and per-channel omitted-row counts await Holotable.
+Until that model lands, omitted source channels are listed as unquantified.
+The host reserves raw `game.incident` and `game.witness.report` through public
+registries (no fills/effects), candidates for S1's next input-vocabulary pass.
+S1's current mirror does not derive those kinds. `game.crime` is not registered.
+**Open point for the incident follow-up:** the schema's `core:event-kind` enum is
+fixed at `Sim.create`; registry reservations alone do not admit those raw kinds.
+Schema admission needs an explicit engine interface decision once Holotable's
+typed-incident contract is on main. The coordinator deferred that interface
+change; this host neither modifies schema internals nor submits these kinds.
+The follow-up contract is isolated at Holotable commit `688b14c6` (awaiting its
+independent review): `ActorSample` gains explicit validity, yaw, command state
+and prepared fields; `TimelineEvent.kind === 'incident'` carries typed
+`IncidentReport` or `IncidentCoverage`; `meta.channels` becomes per-channel
+read/kept/dropped/reason counts. The switch point is the shadow feed boundary:
+admit typed reports through the existing port after schema admission, account for
+coverage separately, and replace the unquantified-channel summary with those
+authoritative counts. The current build imports main only and has no speculative
+branch imports or parser.
+
+The clock uses explicit game time or holds recorded anchors between samples;
+actor observations hold an explicit game clock, including during a pause. The
+coordinator-approved fallback is eight game seconds per QPC second from the
+session's QPC start, with declared default game epoch zero. Epoch zero is not
+wall time or a claim about the save's calendar. Window items are stamped with
+the triggering observation's QPC time and keep game time in a facet. Final
+partial windows remain queued, with their input count reported. Backwards game
+clocks and changed live session/run/world identities require separate runs.
+
+Live mode owns one read-only bridge client, admits only recorder.status and
+game.catchup(now:false), and uses Holotable's one-Hz catch-up policy. A private,
+bounded scratch log preserves exact receipts/cursors plus the normalized batches
+actually consumed. Offline batch-log replay reproduces the spool without a bridge.
+S2/S3 packs and physical scene staging are not installed by this host.
+
+The named recording produces eight windows and twelve byte-identical rerun
+spools. It and the alternate combat recording have zero actor samples. The named
+run's 1,597 people and one event are simulated, not mirrored game observations;
+its V lies in Little China, which has a real district binding but no simulation
+cells in this slice. Counts, remaining feed gaps and the test commands are in
+[SHADOW.md](SHADOW.md). No game session or runtime commissioning is claimed.
+
+Same-process replay explicitly disables `People.shared` while a shadow batch
+executes, restoring the caller's setting in `finally`. A warmed population memo
+can skip materialising caches that the diagnostic observer deliberately reports;
+two eight-window recording executions otherwise differed in coarse role captions.
+This is an adapter cache policy, matching the existing observer-on/off proof's
+equal-cold policy, not a change to population semantics or the engine core.
+
+Validation: default suite **1,720 passed, 46 skipped, 0 failed** (345.10 s,
+1.4 GB guarded peak). After the final adapter-only corrections, shadow plus both
+frozen-digest files passed **15 tests, 3 skipped, 0 failed**. Typecheck, Markdown
+links, private-path scan/self-test and diff whitespace checks pass. The scans also
+cover untracked deliverables. The named recording's twelve spools and deterministic
+summaries match across independent hosts in one process and pass Holotable's
+independent validator. A full standalone week matches the original publisher from
+`origin/main` byte for byte. No core source or frozen digest was changed.

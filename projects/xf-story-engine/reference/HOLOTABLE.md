@@ -1,9 +1,11 @@
-# Offline Holotable layers, v0
+# Holotable layers, v0
 
 The reference model can publish a diagnostic run to Holotable's append-only
 `xfh/layer-1` / `xfh/item-1` JSON-lines spool. This is offline model evidence;
 it neither runs the game nor deploys content. All layers use producer
-`story-engine`, full content, the game clock, and one standalone timeline set.
+`story-engine` and full content. The standalone fixture uses the game clock and
+one timeline set. [Shadow mode](SHADOW.md) instead binds manifests to the source
+recording's session/run and uses recording QPC time, through the same publisher.
 
 From the reference directory, under the repository memory guard:
 

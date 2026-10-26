@@ -12,5 +12,5 @@
     "noUncheckedIndexedAccess": false,
     "exactOptionalPropertyTypes": false
   },
-  "include": ["src", "test", "tools/holotable"]
+  "include": ["src", "test", "tools/holotable", "tools/shadow"]
 }

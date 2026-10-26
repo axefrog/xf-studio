@@ -21,6 +21,21 @@ This page answers requirement S1 of the [runtime requirements](../research/story
 
 **Bridge 0.8.20 incidents [source/offline, 26 October 2026]:** the autonomous build groups the producers below (stimulus broadcasts, deaths and defeats, combat targets, reprimands, vehicle thefts, combat barks) into **incidents** with a stable id, a kind (theft, assault, accident, street fight, police stop, gunfire, other), the people in them, a place and a time, and reports the ones V saw or heard as `witness.report` (`test.events`, `session.events`, the recorder's `incidents` channel; `incidents.list`). Passive: nothing is sent into the game and nobody's ties or beliefs change. Sources, rules and bounds: [section 13](#13-incidents-what-v-witnessed-bridge-0820).
 
+**Recorder feed boundary [source/offline, 27 October 2026]:** hook availability
+does not imply a recorded channel. The current recorder's channel catalogue has
+no death, combat or crime event channel; actors carry handles/entity/position,
+not record, affiliation or crowd. Holotable's current model carries V and actors
+but not typed incident reports or per-channel omitted-row counts. The Story
+Engine's [shadow host](../projects/xf-story-engine/reference/SHADOW.md) therefore
+mirrors V and unidentified actors only, lists those absent fields explicitly and
+reports the remaining source channels as unquantified. The two private recordings
+inspected for that host contain zero actor samples; synthetic offline fixtures
+exercise actor mapping and live-log replay. This is a feed-coverage limit, not
+evidence that no actors or incidents existed in the game. Sources:
+[recorder catalogue](../projects/xf-runtime-bridge/native/src/core/Recording.cpp),
+[Holotable model](../projects/xf-holotable/src/model.ts) and
+[adapter tests](../projects/xf-story-engine/reference/test/shadow/shadow.test.ts).
+
 ## 1. The short answers
 
 | Family | Best hook for a feed | Carries | Rate | Grade | Bridge today |

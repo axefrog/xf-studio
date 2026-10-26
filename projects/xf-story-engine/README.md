@@ -85,14 +85,18 @@ The model's runtime dependency is `@noble/hashes` (BLAKE3). The source audits us
 
 ## Running the tests
 
-The reference model also has an [offline Holotable spool writer](reference/HOLOTABLE.md).
+The reference model also has a [Holotable spool writer](reference/HOLOTABLE.md)
+and a [read-only shadow host](reference/SHADOW.md) for recordings and live feeds.
+Shadow mode maps V and unidentified actors through Holotable's reader and S1's
+mirror port; typed incidents await Holotable's model. It never acts in game.
 It publishes existing simulation, seeding and procedural state as full-content
 diagnostic layers on one standalone game-time timeline. A shared SF3-60-style
 Kabuki week is the first output fixture. Observation never opens detail or evaluates
 a draw; tests compare records, digests, draw transcripts and saves with and without
 it. Real district ids come from Holotable's world pack; synthetic cells use an
 explicitly labelled schematic grid within the real bounds. This is an offline
-reference-model facility, not live game integration.
+reference-model fixture. Shadow mode's live reader has simulated-source offline
+tests; no live game session is claimed.
 
 From `projects/xf-story-engine/reference/`:
 

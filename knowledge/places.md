@@ -478,6 +478,17 @@ For a booked session on the [runtime bridge](../projects/xf-runtime-bridge/READM
 8. **The 26 records with no area** (the nine regions, and 17 places: Akebono, Brooklyn, NCX, Santa Clara, the map-only Dogtown record and a dozen shops, garages and cafés in Arroyo, Rancho Coronado, Northside and the Glen): whether a script or a quest pushes them, or whether they are unused.
 9. **The doors and triggers that lead into interior areas**, and what `treatAsInterior`'s 37 unset placements are for.
 
+**Shadow mapping [offline, 27 October 2026]:** the reference host uses Holotable's
+real district polygons, with the existing writer's schematic XY grid inside
+Kabuki. The grid's thin display slab does not bound street elevation; two sampled
+heights inside the real district band map to the same schematic cell. Northside
+and Little China retain real district bindings but have no simulated cells in
+this slice. The named recording stays in Little China, so its summary explicitly
+counts every V observation as a real district without a simulation cell. Neither
+the absent cell nor the schematic box is a measured navigable game surface.
+Evidence: [mapping tests](../projects/xf-story-engine/reference/test/shadow/shadow.test.ts)
+and [shadow host notes](../projects/xf-story-engine/reference/SHADOW.md).
+
 ## Related pages
 
 [Population and affiliations](population-and-affiliations.md) · [Open-world activities](open-world-activities.md) · [Player channels](player-channels.md) · [World and streaming](world-and-streaming.md) · [NPC reactions](npc-reactions.md) · [Quests and story](quests-and-story.md) · [P2 game-substrate plan](../research/story-engine/p2-game-substrate.md) · [Design seeds](../research/story-engine/design-seeds.md) · [World and interactive ideas](../research/backlog/world-and-interactive-ideas.md)
