@@ -63,3 +63,14 @@ export function mainWindowPlacement(userData: string, env: Record<string, string
   const position = trialWindowPosition(userData, env);
   return { position, activate: position === null };
 }
+
+/**
+ * Whether this launch exists only because the setup opened the app it had just installed. Electrobun 2.0.2's setup program
+ * starts the installed app unconditionally when it finishes (`launchInstalledApp` in its `extractor/main.zig`), through a plain
+ * spawn that inherits the setup's environment, with no switch to stop it. `tools/refresh-installed.ps1` sets
+ * `XFS_INSTALL_REFRESH=1` for the setup it runs, so that launch ends at once, before any window, server or file. A person never
+ * sets it.
+ */
+export function installRefreshRequested(env: Record<string, string | undefined>): boolean {
+  return env.XFS_INSTALL_REFRESH === "1";
+}

@@ -5,8 +5,9 @@
 # the single setup program.
 #
 # - Pull request touching the desktop app: tests and build only; nothing is uploaded.
-# - Manual run (Actions -> Desktop release -> Run workflow): also uploads the unsigned build as a
-#   14-day workflow artifact. No tag, release or Pages change.
+# - Manual run (Actions -> Desktop release -> Run workflow), and the nightly run (03:17 UTC, on main, the default branch's
+#   latest commit; a backstop so a packaging break shows within a day): also upload the unsigned build as a
+#   14-day workflow artifact. No tag, release or Pages change (the release job below runs only for a pushed tag).
 # - Pushed tag v<version>: the tag must equal projects/xf-studio/authoring/desktop/package.json
 #   "version", the tagged commit must be on main, and projects/xf-studio/CHANGELOG.md must have a
 #   complete section for that version, and the repository must have a top-level LICENSE. Creates a DRAFT
@@ -34,6 +35,8 @@ on:
       - "LICENSE"
       - ".github/workflows/desktop-release.yml"
   workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
 
 permissions:
   contents: read

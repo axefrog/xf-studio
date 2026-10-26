@@ -9,9 +9,17 @@ import { DesktopWorkspaceClose, desktopFlushScript } from "./workspace-close";
 import { createHostLog } from "./host-log";
 import { detectWebView2, WEBVIEW2_DOWNLOAD_URL } from "./webview2";
 import { ensureWebView2 } from "./webview2-install";
-import { blankWindowNotice, BLANK_WINDOW_TIMEOUT_MS, MISSING_WEBVIEW2_TIMEOUT_MS, mainWindowPlacement } from "./startup-watchdog";
+import { blankWindowNotice, BLANK_WINDOW_TIMEOUT_MS, installRefreshRequested, MISSING_WEBVIEW2_TIMEOUT_MS, mainWindowPlacement } from "./startup-watchdog";
 import { claimSingleInstance, INSTANCE_HEADER, INSTANCE_ROUTE, windowsMutex } from "./single-instance";
 import { mkdirSync } from "node:fs";
+
+// The launch Electrobun's setup makes of the app it just installed, during a scripted refresh (tools/refresh-installed.ps1),
+// ends here: before the log, the data folder, the instance lock, any window or server.
+if (installRefreshRequested(process.env)) {
+  Utils.quit(0);
+  setTimeout(() => process.exit(0), 3000);
+  await new Promise(() => {});
+}
 
 // The packaged app has no console: startup facts and failures go to the structured
 // diagnostics log in the app's data folder, and the user never faces a silent blank window.

@@ -24,6 +24,7 @@ Workflow: [`.github/workflows/desktop-release.yml`](../../.github/workflows/desk
 |---|---|---|
 | Pull request touching `desktop/`, the changelog or the workflow | Metadata, private-input refusal, install, Electrobun toolchain/devkit, both typechecks, the full authoring suite (including desktop tests), `build:canary` with `verify-canary.ts`, staging | Nothing uploaded |
 | Manual run (`workflow_dispatch`) | Same | 14-day workflow artifact: the single setup program, `build-info.json`, `THIRD_PARTY_NOTICES.md`, `SHA256SUMS.txt` |
+| Nightly schedule (03:17 UTC, `main`) | Same as a manual run | The same 14-day artifact; a backstop so a packaging break on `main` shows within a day. The release job stays tag-only |
 | Pushed `v*` tag | Same, plus: tag equals the version and the changelog section is complete; then a separate job checks the tag is on `main` and has no existing release, re-verifies the checksums after transfer, composes the notes, attests the setup program, `build-info.json` and the notices, and creates the draft | Draft GitHub release (pre-release for `-alpha`/`-beta`/`-rc`) |
 
 Gates and properties:

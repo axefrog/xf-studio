@@ -4,7 +4,7 @@ import { readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { detectWebView2, parseRegVersion, WEBVIEW2_KEYS } from "../webview2";
-import { blankWindowNotice, mainWindowPlacement, trialWindowPosition } from "../startup-watchdog";
+import { blankWindowNotice, installRefreshRequested, mainWindowPlacement, trialWindowPosition } from "../startup-watchdog";
 import { createHostLog } from "../host-log";
 import { DesktopWorkspaceClose } from "../workspace-close";
 import { createDesktopServer } from "../server";
@@ -205,4 +205,10 @@ test("the page's hand-written scripts parse (a stray quote in welcome copy once 
   const transpiler = new Bun.Transpiler({ loader: "js" });
   for (const file of ["bootstrap.js", "boot-watchdog.js"])
     expect(() => transpiler.transformSync(readFileSync(resolve(import.meta.dir, "..", file), "utf8"))).not.toThrow();
+});
+
+test("only the scripted refresh's own environment ends a launch at once", () => {
+  expect(installRefreshRequested({ XFS_INSTALL_REFRESH: "1" })).toBe(true);
+  for (const value of [undefined, "", "0", "true", "yes", " 1"]) expect(installRefreshRequested({ XFS_INSTALL_REFRESH: value })).toBe(false);
+  expect(installRefreshRequested({})).toBe(false);
 });
