@@ -216,6 +216,20 @@ export function resolveRefs(value: unknown, bindings: Record<string, unknown>, m
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 /** Whether an outcome matches. Values in the match may be $references into the bindings. */
+/** What an outcome showed at the paths a match reads (or its refusal), for a failure that says what was there instead. */
+export function observed(match: Match, outcome: Outcome): string {
+  const paths = new Set<string>();
+  const walk = (m: Match | undefined) => {
+    if (!m) return;
+    if (m.path !== undefined) paths.add(m.path);
+    m.all?.forEach(walk); m.any?.forEach(walk); walk(m.not);
+  };
+  walk(match);
+  const shown = [...paths].map((path) => `${path} ${JSON.stringify(selectPath(outcome.value, path)) ?? "missing"}`);
+  if (!outcome.ok) shown.unshift(`refused ${outcome.code ?? "?"}${outcome.message ? ` (${outcome.message.slice(0, 120)})` : ""}`);
+  return (shown.join(", ") || JSON.stringify(outcome.value) || "nothing").slice(0, 400);
+}
+
 export function matches(match: Match, outcome: Outcome, bindings: Record<string, unknown> = {}): boolean {
   if (match.all && !match.all.every((m) => matches(m, outcome, bindings))) return false;
   if (match.any && !match.any.some((m) => matches(m, outcome, bindings))) return false;
@@ -505,7 +519,7 @@ async function primary(run: Run, step: Step, path: string, board: unknown, limit
         outcome = await perform(run, raw, path, attempt, Math.max(1, stopAt - run.clock.now()), board, step.bind, limit);
         if (matches(step.until, outcome, run.bindings)) { outcome = { ...outcome, ok: true }; break; }
         if (outcome.halt || run.signal.aborted || ["cancelled", "halted"].includes(outcome.code ?? "")) break;
-        if (run.clock.now() + (step.interval_ms ?? 1000) >= stopAt) { outcome = { ok: false, code: "deadline", message: `Not reached within ${deadlineMs} ms.`, value: outcome.value }; break; }
+        if (run.clock.now() + (step.interval_ms ?? 1000) >= stopAt) { outcome = { ok: false, code: "deadline", message: `Not reached within ${deadlineMs} ms (last seen: ${observed(step.until, outcome)}).`, value: outcome.value }; break; }
         await run.clock.sleep(Math.min(step.interval_ms ?? 1000, Math.max(0, stopAt - run.clock.now())), run.signal);
       }
     } else {

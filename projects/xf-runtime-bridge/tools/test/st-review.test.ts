@@ -28,3 +28,26 @@ describe("bursts keep their spacing", () => {
     expect(actionOf({ do: "run", until: { ok: true }, interval_ms: 240 } as never)).toEqual({ do: "run" });
   });
 });
+
+describe("a state check that isn't met says what was there", () => {
+  test("verifying Paused against a bridge showing Changes allowed fails the row with the chip it saw", async () => {
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
+    const clock = new FakeClock();
+    const api = fakeApi(clock, { "bridge.info": () => ({ ok: true, result: { sid: "sid-1", status: { chip: "Changes allowed", tone: "write" }, bridge: { writes_paused: false } } }) });
+    const rows = [{ id: "r", title: "r", steps: [
+      { label: "r-is-paused", do: "run", command: "bridge.info", input: {}, until: { all: [{ path: "status.chip", equals: "Paused" }, { path: "bridge.writes_paused", equals: true }] }, interval_ms: 250, deadline_ms: 2000, on_fail: "fail_row" },
+      { label: "shot", do: "capture", name: "paused", clear_overlay: false },
+    ] }];
+    const row = (await go(script(rows as never), api, fakeHost(), clock, tempDir("xfb-str-"))).rows[0];
+    expect(row.verdict).toBe("FAIL");
+    expect(row.reason).toContain('status.chip "Changes allowed"');
+    expect(row.reason).toContain("bridge.writes_paused false");
+    expect(api.calls.some((c) => c.name === "capture.screenshot")).toBe(false);
+  });
+
+  test("a refusal is named (a stopped bridge answers killed)", async () => {
+    const { observed } = await import("../testing/plan.ts");
+    expect(observed({ path: "status.chip", equals: "Stopped" }, { ok: false, code: "killed", message: "bridge stopped by kill switch" })).toContain("refused killed");
+  });
+});
