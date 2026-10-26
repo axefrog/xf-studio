@@ -22,6 +22,7 @@ import type { ViewGraph } from "../platform/core/view-graph";
 import type { ViewAction, ViewActions } from "./view-actions";
 import type { SceneAction, SceneCommands } from "./profiles/scene-commands";
 import type { LayoutTabAction } from "./profiles/tab-defaults";
+import type { PanelAction } from "./profiles/panel-actions";
 import type { StarterAction } from "./starters/starter-actions";
 import type { ShapeStarters } from "./starters/shape-starters";
 import type { EmptyChoiceRequest, EmptyChoicesPort } from "./profiles/empty-choices";
@@ -70,6 +71,7 @@ export type StudioOwnerActions = {
   savedV: Naming<SavedAppearanceAction, { character: string }>;
   scenes: SceneAction;
   tabs: LayoutTabAction;
+  panels: PanelAction;
   starters: StarterAction;
   characterContext: Naming<CharacterContextAction, { character: string }>;
   views: ViewAction;
@@ -137,6 +139,7 @@ type Services = { document: AuthoringDocument;
    * operation one commit and one step; the defaults' commands through the outbox.
    */
   tabs?: { capability(action: LayoutTabAction): StudioCapability; dispatch(action: LayoutTabAction): undefined };
+  panels?: { capability(action: PanelAction): StudioCapability; dispatch(action: PanelAction): undefined };
   /**
    * The live feature's starter shapes (`StarterActions` over `ShapeStarters`, profiles design §6): choosing the default, saving a layer's
    * shape, renaming and deleting the person's own.
@@ -922,6 +925,10 @@ export class StudioApplication {
       tabs: {
         capability: action => app.services.tabs?.capability(action) ?? missing("The layout tabs are still loading."),
         dispatch: action => app.services.tabs!.dispatch(action),
+      },
+      panels: {
+        capability: action => app.services.panels?.capability(action) ?? missing("The panel commands are still loading."),
+        dispatch: action => app.services.panels!.dispatch(action),
       },
       starters: {
         capability: action => app.services.starters?.capability(action) ?? missing("The starters are still loading."),

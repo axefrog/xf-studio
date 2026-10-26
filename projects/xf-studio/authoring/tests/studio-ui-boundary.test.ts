@@ -26,6 +26,8 @@ const views = readdirSync(join(root, "features")).map(id => join(root, "features
  * else from the core must be `import type`. Exceptions are recorded in research/authoring/ui-architecture-boundary.md.
  */
 const CORE_VALUES = new Map<string, readonly string[]>([
+  // The shared pure dock engine: only the existing compatibility export imports it by value.
+  ["platform/core/dock-layout", ["*"]],
   // The theme, the dock's recovery gate, and the remembered scroll anchor's validation (view-state.ts reads stored anchors through it).
   ["app/ui-preferences", ["effectiveTheme", "parseScrollAnchor", "recoverDockLayout"]],
   ["legacy/eye-makeup/mod-branding", ["EYE_MAKEUP_MOD", "MOD_NAME_HINT"]],

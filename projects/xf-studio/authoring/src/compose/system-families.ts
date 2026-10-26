@@ -17,6 +17,7 @@ import type { SavedAppearanceAction } from "../character/saved-appearance-action
 import type { ViewAction } from "../app/view-actions";
 import type { SceneAction } from "../app/profiles/scene-commands";
 import type { LayoutTabAction } from "../app/profiles/tab-defaults";
+import type { PanelAction } from "../app/profiles/panel-actions";
 import type { StarterAction } from "../app/starters/starter-actions";
 import type { PartPresetRequest } from "../library/part-presets";
 import type { EmptyChoiceRequest } from "../app/profiles/empty-choices";
@@ -34,6 +35,7 @@ const QUALITY_ID = familyId("quality");
 const SAVED_V_ID = familyId("savedV");
 const SCENES_ID = familyId("scenes");
 const TABS_ID = familyId("tabs");
+const PANELS_ID = familyId("panels");
 const STARTERS_ID = familyId("starters");
 const VIEWS_ID = familyId("views");
 const LIBRARY_ID = familyId("library");
@@ -130,6 +132,12 @@ export const TABS_FAMILY: SystemFamily<LayoutTabAction, ActionScope, typeof TABS
     "tabs.reopen": true, "tabs.duplicate": true, "tabs.arrange": true, "tabs.new": true, "tabs.reset": true, "tabs.saveAsDefault": true,
     "tabs.updateDefault": true, "defaults.rename": true, "defaults.delete": true, "defaults.restore": true },
     { "tabs.rename": { name: "characters" }, "tabs.move": { to: "index" }, "tabs.saveAsDefault": { name: "characters" }, "defaults.rename": { name: "characters" } }),
+});
+/** Recorded membership/binding live in the session's view scope; reveal is navigation. */
+export const PANELS_FAMILY: SystemFamily<PanelAction, ActionScope, typeof PANELS_ID> = Object.freeze({
+  owner: "system", id: PANELS_ID, label: "Panels",
+  actions: actionTable<PanelAction, ActionScope>(ACTION_DESCRIPTORS, { "panels.add": true, "panels.show": true, "panels.remove": true,
+    "panels.setBinding": true, "panels.reveal": true, "panels.setTypeVisible": true }),
 });
 
 /**

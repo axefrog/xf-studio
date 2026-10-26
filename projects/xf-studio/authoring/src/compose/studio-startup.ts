@@ -45,6 +45,7 @@ import type { AttachedHead } from "../preview/browser/browser-head-attachment";
 import { createSceneEditors } from "../preview/browser/scene-editors";
 import { CharacterWarmStart } from "../character/browser/character-warm-start";
 import { CreatorCatalogue } from "../character/creator-catalogue";
+import { panelCommands } from "./panel-commands";
 import { createBrowserCreatorDevice } from "../character/browser/browser-cc-catalogue-device";
 import { readSavedV } from "../saves/save-reader";
 import { rasterRegion } from "../engines/layered-makeup/region";
@@ -343,7 +344,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
-  core.app.attach({ targetCheck: targets });
+  core.app.attach({ targetCheck: targets, panels: panelCommands(sessionState, targets) });
   const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.named()), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
@@ -539,7 +540,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       unavailableReason: () => { const head = viewportDevice.attachment.snapshot().head; return head.error ?? head.message; },
     },
     fileDevice: workspaceFiles, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
-    panelInstance: panel => sessionState.instance(panel),
+    panelInstance: panel => sessionState.inputInstance(panel),
     tabs: layoutTabsPort(sessionState, layoutTabs, services), starters: starterActions.port(),
     emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
       createLookCapability: collection => core.app.capability({ kind: "preset.edit", collection, command: { kind: "add" } }),

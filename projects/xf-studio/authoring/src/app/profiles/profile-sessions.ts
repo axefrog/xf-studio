@@ -4,12 +4,12 @@
  * one step of the session's View and lighting history (`view:<profile>`, §3.7), so Undo can never put a view into a missing tab.
  *
  * - **One history.** The session holds the `view:<profile>` scope over a target that is the graph's plus its own (`@tabs`: the order, the
- *   closed-tab fragments and the shown tab; `@tab:<id>`: a tab's name, origin and other fields; `@content:<id>`: its arrangement and panel
- *   instances). The graph records through it (`ViewGraphOwner`): its own edits (a light, a camera jump) are steps as before, and the graph
+ *   closed-tab fragments and the shown tab; `@tab:<id>`: a tab's header; `@content:<id>`: whole-tab content; `@panel:` and `@binding:`:
+ *   individual membership and binding fields). The graph records through it (`ViewGraphOwner`): its own edits (a light, a camera jump) are steps as before, and the graph
  *   edits inside a session operation join that operation's one step. An Undo or Redo is checked as a whole before anything changes: every
  *   tab in the order exists, nothing else does, and every view is in one of them (CORE-94's rule, extended to tabs).
  * - **What is never an Undo step** (decisions D1 and D15 of experiment 044): focus (the shown tab, view order, the focused panel, the editing
- *   context), the arrangement the dock saves (`arrange`), the panel instances the dock makes when it first shows a panel in a tab, and what
+ *   context), the arrangement the dock saves, the temporary phase-2 input adapter's first instance, and what
  *   a scene shows (`scene.setLook`, `scene.setSubject`). A step holds a tab's arrangement and instances only when it makes, closes or
  *   resets the tab, so undoing a rename never moves a panel. After an Undo or Redo the shown tab stays, unless the step took it away (the
  *   tab the step's state showed is shown, else its neighbour) or brought back the tab its state showed.
@@ -17,7 +17,7 @@
  *   tab, its views, a value copy of every node they named and their focus numbers; the last 5 are kept), reopen (under its own IDs, in its place, with its views' focus
  *   numbers: byte-identical to before the close), reset (the content before it becomes a fragment, then the new content fills the tab),
  *   rename, move, duplicate (fresh IDs everywhere, scenes included: it shares nothing), the origin Save as default gives a tab, show
- *   (navigation), and adding and closing views. Those that name a default run through `TabDefaults` (tab-defaults.ts).
+ *   (navigation), adding/parking/showing panels, changing their binding, and adding and closing views. Defaults go through `TabDefaults`.
  *   Tabs holding a view this build can't show (a newer build's) can't be closed or reset; a duplicate leaves those views out.
  * - **Settled before anyone hears.** An operation validates whole before it changes anything (a refusal changes nothing), and the graph's,
  *   focus's and the session's notifications are held until it has settled (tabs, views, focus and its step); an Undo or Redo too. Each
@@ -35,8 +35,7 @@
  *   tab and arranging one are navigation.
  * - **Scenes** name the subject and look they show (`subject`, `look`) and count their changes (`gen`); the graph holds their display
  *   state. A scene the session hasn't seen yet shows what the first scene showing anything shows.
- * - **The dock** works with panel IDs (`head` for the main view, `view.<id>` for another, a panel contribution's ID otherwise); a tab stores
- *   instance IDs. With one instance of each panel type in a tab (phase 2) the two convert both ways losslessly.
+ * - **The dock** uses instance IDs, as stored. Named phase-2 input/output adapters retain the existing one-controller UI until P3-iii/viii.
  */
 import type { Capability } from "../../platform/api/capability";
 import { refusal } from "../../platform/api/capability";
@@ -52,8 +51,10 @@ import { ViewGraphError, type AddedNode, type ViewGraph, type ViewGraphOwner, ty
 import type { LookRef } from "../../library/collection-documents";
 import type { DockLayout } from "../ui-preferences";
 import { FIRST_TAB_NAME, rewriteDock, viewOfPanel } from "./profiles-migration-data";
-import { CLOSED_TAB_LIMIT, PROFILE_SESSION_SCHEMA, type ClosedTab, type LayoutTab, type PanelInstance, type ProfileSessionData, type SessionScene, type SessionView,
+import { CLOSED_TAB_LIMIT, PROFILE_SESSION_SCHEMA, panelBindingOf, type PanelBinding, type ClosedTab, type LayoutTab, type PanelInstance, type ProfileSessionData, type SessionScene, type SessionView,
   type TabId, WORKSPACE_PROFILES_SCHEMA, type WorkspaceProfiles } from "./profile-session";
+import { addPanelDock, changePanelDock, dockWith, openIn, panelDock } from "./panel-dock";
+import { closePanel, type ParkedPlace } from "../../platform/core/dock-layout";
 
 /** What a scene shows. */
 export type SceneTarget = { readonly subject?: SubjectRef; readonly look?: LookRef; readonly gen: number };
@@ -97,8 +98,13 @@ type HeldClosed = Omit<ClosedTab, "tab"> & { readonly tab: HeldTab };
 type Header = Omit<LayoutTab, "dock" | "panels">;
 type Content = Pick<HeldTab, "dock" | "panels" | typeof CONTENT_ID>;
 type Tabs = { readonly order: readonly TabId[]; readonly closed: readonly HeldClosed[]; readonly shown?: TabId };
+export type PanelTabTarget = { readonly profile: string; readonly tab: TabId; readonly tabVersion: number };
+export type PanelTarget = PanelTabTarget & { readonly instance: string; readonly version: number };
+type PanelMembership = { panel: PanelInstance; open: Record<"wide" | "compact", boolean>; places: Partial<Record<"wide" | "compact", ParkedPlace>> } | undefined;
+const PANEL = "@panel:", BINDING = "@binding:";
+const panelKey = (prefix: string, tab: string, instance: string) => prefix + JSON.stringify([tab, instance]);
 const TABS = "@tabs", HEADER = "@tab:", CONTENT = "@content:", CONTENT_ID = "@content", VIEW_PLACEMENT = "@viewPlacement:";
-const sessionKey = (key: string) => key === TABS || key.startsWith(HEADER) || key.startsWith(CONTENT) || key.startsWith(VIEW_PLACEMENT);
+const sessionKey = (key: string) => key === TABS || [HEADER, CONTENT, VIEW_PLACEMENT, PANEL, BINDING].some(prefix => key.startsWith(prefix));
 const STRUCTURE = "@structure";
 const clone = <T>(value: T): T => structuredClone(value);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -166,6 +172,9 @@ export class ProfileSessions {
   private openingRevision = 0;
   /** While an operation runs: graph and placement values before it (their checkpoints join the operation's one step). */
   private collecting?: Map<string, unknown>;
+  private structuralVersion = 0;
+  private readonly tabVersions = new Map<string, number>();
+  private readonly panelVersions = new Map<string, number>();
 
   constructor(deps: ProfileSessionsDeps) {
     const { data } = deps;
@@ -232,10 +241,24 @@ export class ProfileSessions {
   viewOpening(): ViewOpening | undefined { return this.opening && clone(this.opening); }
   /** The tab a view is in: the graph's (each view names its tab), else the shown tab. */
   viewTab(view: ViewId): TabId { return this.graph.tabOf(view) ?? this.tabId(); }
-  /** A panel instance of any tab (instance IDs are unique in the session), with its tab. Read while painting: not detached (read-only). */
+  /** A panel instance of any tab, detached. Reads never allocate an identity or mutate the session. */
   panel(id: string): (PanelInstance & { readonly tab: TabId }) | undefined {
-    for (const tab of this.tabs) { const found = tab.panels.find(panel => panel.id === id); if (found) return { ...found, tab: tab.id }; }
+    for (const tab of this.tabs) { const found = tab.panels.find(panel => panel.id === id); if (found) return clone({ ...found, tab: tab.id }); }
     return undefined;
+  }
+  instances(type: string, tab: TabId = this.tabId()): readonly PanelInstance[] { return clone(this.tabs.find(item => item.id === tab)?.panels.filter(panel => panel.type === type) ?? []); }
+  panelTabTarget(tab: TabId): PanelTabTarget { this.existing(tab); return { profile: this.profile, tab, tabVersion: this.tabVersions.get(tab) ?? 0 }; }
+  panelTarget(instance: string): PanelTarget {
+    const panel = this.panel(instance);
+    if (!panel) throw new TabRefusal("missing_target", "That panel is no longer in this tab.");
+    return { ...this.panelTabTarget(panel.tab), instance, version: this.panelVersions.get(instance) ?? 0 };
+  }
+  checkPanelTarget(target: PanelTabTarget | PanelTarget) {
+    if (!target || typeof target !== "object") throw new TabRefusal("missing_target", "Name the destination panel or tab.");
+    if (target.profile !== this.profile || !this.tab(target.tab) || target.tabVersion !== (this.tabVersions.get(target.tab) ?? 0))
+      throw new TabRefusal("missing_target", "That layout tab changed. Open the command again.");
+    if ("instance" in target && (this.panel(target.instance)?.tab !== target.tab || target.version !== (this.panelVersions.get(target.instance) ?? 0)))
+      throw new TabRefusal("missing_target", "That panel changed. Open the command again.");
   }
 
   /** What a scene shows. A scene the session hasn't seen yet (a view's scene forked meanwhile) shows what the first scene showing anything shows. */
@@ -267,8 +290,12 @@ export class ProfileSessions {
   }
 
   // ----- The dock -----
-  /** A tab's arrangement (default: the shown tab's) with the dock's panel IDs (null: the default arrangement). */
+  /** The instance-ID arrangement, detached (null: empty). Types are only catalogue/factory keys. */
   dock(tab: TabId = this.tabId()): DockLayout | null {
+    return clone(this.tabs.find(item => item.id === tab)?.dock ?? null);
+  }
+  /** Temporary phase-2 output adapter for the one-controller-per-type UI. Remove in P3-viii. */
+  legacyDock(tab: TabId = this.tabId()): DockLayout | null {
     const found = this.tabs.find(item => item.id === tab);
     if (!found?.dock) return null;
     const byInstance = new Map(found.panels.map(panel => [panel.id, panel]));
@@ -279,11 +306,20 @@ export class ProfileSessions {
       return panel.type === "view" && target && "view" in target ? viewPanel(target.view) : panel.type;
     });
   }
-  /** The instance of a panel type (or a view's panel) in a tab (default: the shown tab), made the first time the type is shown there. */
-  instance(panel: string, tab: TabId = this.tabId()): string { return this.instanceOf(panel, tab).id; }
+  /** Temporary type-level input adapter, removed in P3-viii. This lookup never creates an instance. */
+  instance(panel: string, tab: TabId = this.tabId()): string {
+    const view = viewOfPanel(panel), found = this.tabs.find(item => item.id === tab)?.panels.find(item => item.id === panel || (view
+      ? item.type === "view" && item.binding?.policy === "pinned" && "view" in item.binding.target && item.binding.target.view === view
+      : item.type === panel));
+    return found?.id ?? "";
+  }
+  /** Temporary phase-2 mounting/input adapter only: explicitly creates the one instance a legacy controller requests. Remove in P3-viii. */
+  inputInstance(panel: string, tab: TabId = this.tabId()): string { return this.instanceOf(panel, tab).id; }
   private instanceOf(panel: string, tab: TabId): PanelInstance {
     const index = this.tabs.findIndex(item => item.id === tab);
     if (index < 0) throw new TabRefusal("missing_target", "That tab is closed.");
+    const exact = this.tabs[index]!.panels.find(item => item.id === panel);
+    if (exact) return exact;
     const view = viewOfPanel(panel), found = this.tabs[index]!.panels.find(item => view
       ? item.type === "view" && item.binding?.policy === "pinned" && "view" in item.binding.target && item.binding.target.view === view
       : item.type === panel);
@@ -304,6 +340,60 @@ export class ProfileSessions {
     if (same(dock, this.tabs[index]!.dock) && this.tabs[index]!.panels.length === panels) return;
     this.tabs[index] = { ...this.tabs[index]!, dock };
     this.changed();
+  }
+  /** Instance-only arrangement input; unlike the temporary `arrange` adapter this cannot invent panels. */
+  arrangeInstances(tab: TabId, layout: DockLayout | null) {
+    const at = this.index(tab), known = new Set(this.tabs[at]!.panels.map(panel => panel.id));
+    if (layout) rewriteDock(layout, id => { if (!known.has(id)) throw new TabRefusal("missing_target", "That arrangement names a missing panel."); return id; });
+    if (same(this.tabs[at]!.dock, layout)) return;
+    this.tabs[at] = { ...this.tabs[at]!, dock: clone(layout) }; this.changed();
+  }
+  /** Fresh semantic addition; factory already projects type keys to this instance and its siblings. */
+  addPanel(tab: TabId, type: string, options: { binding?: PanelBinding; factory?: (id: string) => DockLayout | null } = {}): string {
+    const at = this.index(tab);
+    if (!/^[a-z0-9.-]{1,64}$/i.test(type) || type === "view") throw new TabRefusal("invalid_value", "Use the new-view operation for a 3D pane.");
+    if (options.binding && !panelBindingOf(options.binding)) throw new TabRefusal("invalid_value", "That binding can't be read.");
+    const id = this.freshInstance(type), panel: PanelInstance = { id, type, ...(options.binding ? { binding: clone(options.binding) } : {}) };
+    const factory = options.factory?.(id) ?? null;
+    this.operate("Add panel", "panels.add", () => {
+      this.collecting!.set(panelKey(PANEL, tab, id), undefined);
+      this.tabs[at] = { ...this.tabs[at]!, panels: [...this.tabs[at]!.panels, panel],
+        dock: addPanelDock(this.tabs[at]!.dock, id, this.tabs[at]!.panels.filter(panel => panel.type === type).map(panel => panel.id), factory) };
+      this.placed([id]);
+    });
+    return id;
+  }
+  /** Park/show exact retained identities in one step, in both size classes. */
+  setPanelsOpen(tab: TabId, instances: readonly string[], open: boolean, factory: DockLayout | null | ((panel: PanelInstance) => DockLayout | null) = null) {
+    const at = this.index(tab), ids = [...new Set(instances)];
+    if (ids.some(id => !this.tabs[at]!.panels.some(panel => panel.id === id))) throw new TabRefusal("missing_target", "That panel is no longer in this tab.");
+    const changing = ids.filter(id => (["wide", "compact"] as const).some(size => openIn(this.tabs[at]!.dock, id, size) !== open));
+    if (!changing.length) return;
+    const fallbacks = new Map(changing.map(id => [id, typeof factory === "function" ? factory(this.panel(id)!) : factory]));
+    this.operate(open ? "Show panel" : "Remove panel", open ? "panels.show" : "panels.remove", () => {
+      for (const id of changing) {
+        this.collecting!.set(panelKey(PANEL, tab, id), this.readKey(panelKey(PANEL, tab, id)));
+        this.tabs[at] = { ...this.tabs[at]!, dock: changePanelDock(this.tabs[at]!.dock, id, open ? "show" : "remove", fallbacks.get(id)) };
+      }
+    });
+  }
+  setPanelBinding(tab: TabId, instance: string, binding: PanelBinding) {
+    const at = this.index(tab), panel = this.tabs[at]!.panels.find(panel => panel.id === instance);
+    if (!panel) throw new TabRefusal("missing_target", "That panel is no longer in this tab.");
+    if (panel.type === "view") throw new TabRefusal("incompatible_mode", "A 3D pane keeps its view identity.");
+    if (!panelBindingOf(binding)) throw new TabRefusal("invalid_value", "That binding can't be read.");
+    if (same(panel.binding, binding)) return;
+    this.operate("Change panel binding", "panels.setBinding", () => {
+      this.collecting!.set(panelKey(BINDING, tab, instance), clone(panel.binding));
+      this.tabs[at] = { ...this.tabs[at]!, panels: this.tabs[at]!.panels.map(item => item.id === instance ? { ...item, binding: clone(binding) } : item) };
+    });
+  }
+  revealPanel(tab: TabId, instance: string) {
+    const at = this.index(tab);
+    if (!(["wide", "compact"] as const).some(size => openIn(this.tabs[at]!.dock, instance, size))) throw new TabRefusal("missing_target", "Show this panel first.");
+    const release = this.holdAll();
+    try { this.tabs[at] = { ...this.tabs[at]!, dock: changePanelDock(this.tabs[at]!.dock, instance, "reveal") }; this.focus.showTab(tab); this.focus.focusPanel(instance); this.changed(); }
+    finally { release(); }
   }
 
   // ----- Operations -----
@@ -411,6 +501,18 @@ export class ProfileSessions {
     this.existing(tab);
     return this.operate("New view", "tabs.addView", () => this.graph.addView(from, share, { tab, label: "New view", ...(options.title ? { title: options.title } : {}) }));
   }
+  /** D13: the graph view and its fixed-identity pane are one structural action. */
+  addViewPane(tab: TabId, from: ViewId, share: Readonly<Partial<Record<ViewSlot, boolean>>>): ViewId {
+    this.existing(tab);
+    if (!this.graph.has(from)) throw new TabRefusal("missing_target", "That source view is closed.");
+    return this.operate("Add 3D view", "panels.add", () => {
+      const view = this.addView(from, share, { tab }), at = this.index(tab), id = this.freshInstance("view");
+      this.collecting!.set(panelKey(PANEL, tab, id), undefined);
+      this.tabs[at] = { ...this.tabs[at]!, panels: [...this.tabs[at]!.panels, { id, type: "view", binding: { policy: "pinned", target: { view } } }],
+        dock: addPanelDock(this.tabs[at]!.dock, id, this.instances("view", tab).map(panel => panel.id), null) };
+      this.placed([id]); return view;
+    });
+  }
   /** A first view in an existing tab, from a contributed baseline, with fresh identities throughout (U6). */
   openView(tab: TabId, baseline: ViewGraphData, subject: SubjectRef): ViewId {
     this.existing(tab);
@@ -440,7 +542,9 @@ export class ProfileSessions {
     this.opening = { ...clone(placement), revision: ++this.openingRevision };
     this.focus.showTab(placement.tab);
     this.focus.focusView(placement.view);
-    this.focus.focusPanel(this.instance(viewPanel(placement.view), placement.tab));
+    const instance = this.instanceOf(viewPanel(placement.view), placement.tab).id, at = this.index(placement.tab);
+    this.tabs[at] = { ...this.tabs[at]!, dock: changePanelDock(this.tabs[at]!.dock, instance, "show") };
+    this.focus.focusPanel(instance);
   }
   closeView(view: ViewId) {
     if (!this.graph.has(view)) throw new TabRefusal("missing_target", "That view is closed.");
@@ -517,14 +621,18 @@ export class ProfileSessions {
     if (this.collecting) return work();
     const release = this.holdAll();
     try {
-      const before = this.sessionValues(), collected = new Map<string, unknown>();
+      const previous = clone(this.tabs), before = this.sessionValues(), collected = new Map<string, unknown>();
       this.collecting = collected;
       let result: T;
       try { result = work(); }
       finally { this.collecting = undefined; }
       const after = this.sessionValues();
-      const keys = [...new Set([...before.keys(), ...after.keys()])].filter(key => !same(before.get(key), after.get(key)));
+      const panelTabs = new Set([...collected.keys()].filter(key => key.startsWith(PANEL) || key.startsWith(BINDING))
+        .map(key => (JSON.parse(key.slice(key.startsWith(PANEL) ? PANEL.length : BINDING.length)) as [string, string])[0]));
+      const keys = [...new Set([...before.keys(), ...after.keys()])].filter(key => !same(before.get(key), after.get(key))
+        && !(key.startsWith(CONTENT) && panelTabs.has(key.slice(CONTENT.length))));
       const all = [...keys, ...collected.keys()];
+      this.updatePanelVersions(previous);
       // Pending before the step is published: whatever a history listener throws, the session's listeners hear (on release).
       this.changed();
       if (all.length) {
@@ -532,7 +640,7 @@ export class ProfileSessions {
           // A recorded operation is an edit (§3.7): its history becomes the editing context, so global Undo reaches it.
           this.focus.edited(this.scope.id);
           this.scope.checkpoint(all, { label, actionKind },
-            { read: key => sessionKey(key) ? before.get(key) : collected.get(key), timed: false, distinct: true });
+            { read: key => before.has(key) ? before.get(key) : collected.get(key), timed: false, distinct: true });
         }
         // A change the history doesn't hold would leave its steps naming tabs and views that no longer exist (CORE-94).
         else this.scope.clear();
@@ -547,6 +655,17 @@ export class ProfileSessions {
     return values;
   }
   private readKey(key: string): unknown {
+    if (key.startsWith(PANEL) || key.startsWith(BINDING)) {
+      const binding = key.startsWith(BINDING), [tab, instance] = JSON.parse(key.slice(binding ? BINDING.length : PANEL.length)) as [string, string];
+      const content = this.tabs.find(item => item.id === tab), panel = content?.panels.find(item => item.id === instance);
+      if (binding) return clone(panel?.binding);
+      if (!panel) return undefined;
+      const dock = panelDock(content!.dock);
+      return clone({ panel, open: { wide: openIn(content!.dock, instance, "wide"), compact: openIn(content!.dock, instance, "compact") },
+        places: Object.fromEntries((["wide", "compact"] as const).flatMap(size => {
+          const place = closePanel(dock[size], instance).lastPlace?.[instance]; return place ? [[size, place]] : [];
+        })) } satisfies PanelMembership);
+    }
     if (key.startsWith(VIEW_PLACEMENT)) {
       const view = key.slice(VIEW_PLACEMENT.length);
       if (!this.graph.has(view)) return undefined;
@@ -606,13 +725,45 @@ export class ProfileSessions {
         // What the step holds of the state outside Undo (arrangements and instances, what scenes show, focus numbers) is as it was when it
         // was recorded: a tab or fragment it brings in takes that state from what it takes away, so nothing done since is lost.
         const closed = this.replayedFragments(tabs ? tabs.closed : this.closed, order, contents, key => key in values);
+        // Replay only the named fields and this instance's membership/place; never restore a whole pre-drag dock.
+        for (const key of keys) if (key.startsWith(PANEL) || key.startsWith(BINDING)) {
+          const binding = key.startsWith(BINDING), [tab, instance] = JSON.parse(key.slice(binding ? BINDING.length : PANEL.length)) as [string, string];
+          const content = contents.get(tab);
+          if (!content || !live.has(tab)) return false;
+          const current = content.panels.find(panel => panel.id === instance);
+          if (binding) {
+            if (!current || current.type === "view" || values[key] !== undefined && !panelBindingOf(values[key])) return false;
+            const { binding: _old, ...rest } = current;
+            contents.set(tab, { ...content, panels: content.panels.map(panel => panel.id === instance
+              ? { ...rest, ...(values[key] ? { binding: clone(values[key]) as PanelBinding } : {}) } : panel) });
+          } else {
+            const wanted = values[key] as PanelMembership;
+            if (wanted && wanted.panel.id !== instance) return false;
+            let dock = content.dock;
+            if (!wanted) dock = changePanelDock(dock, instance, "erase");
+            else for (const size of ["wide", "compact"] as const) {
+              if (openIn(dock, instance, size) === wanted.open[size]) continue;
+              const state = panelDock(dock), place = wanted.places[size];
+              if (wanted.open[size] && !state[size].lastPlace?.[instance] && place && !("closed" in place))
+                state[size].lastPlace = { ...state[size].lastPlace, [instance]: place };
+              const changed = panelDock(changePanelDock(dockWith(dock, state), instance, wanted.open[size] ? "show" : "remove"));
+              state[size] = changed[size]; dock = dockWith(dock, state);
+            }
+            contents.set(tab, { ...content, dock, panels: wanted ? current ? content.panels : [...content.panels, wanted.panel]
+              : content.panels.filter(panel => panel.id !== instance) });
+          }
+        }
+        const identities = [...contents.values()].flatMap(content => content.panels.map(panel => panel.id));
+        if (new Set(identities).size !== identities.length) return false;
         if (Object.keys(graphValues).length && !this.graphTarget.apply(graphValues, cause)) return false;
         // Settled whole (tabs, fragments and the shown tab) before anyone hears; listeners hear once the move has settled (`settled`).
         this.releaseReplay ??= this.holdAll();
         const removed = new Map(this.tabs.map((tab, at) => [tab.id, at] as const).filter(([id]) => !live.has(id)));
         const back = order.filter(id => !this.tabs.some(tab => tab.id === id));
+        const previous = this.tabs;
         this.tabs = order.map(id => clone({ ...headers.get(id)!, ...contents.get(id)! }) as HeldTab);
         this.closed = clone(closed);
+        this.updatePanelVersions(previous);
         this.settleShown({ ...(tabs?.shown ? { shown: tabs.shown } : {}), back, removed });
         for (const { placement } of placements) this.presentView(placement);
         this.changed();
@@ -674,6 +825,20 @@ export class ProfileSessions {
   }
 
   // ----- Helpers -----
+  /** Structural captures are monotonic even across Undo/back-to-equal bindings and close/reopen. Arrangement/focus never stale them. */
+  private updatePanelVersions(previous: readonly HeldTab[]) {
+    for (const id of new Set([...previous.map(tab => tab.id), ...this.tabs.map(tab => tab.id)])) {
+      const before = previous.find(tab => tab.id === id), after = this.tabs.find(tab => tab.id === id);
+      if (before?.[CONTENT_ID] !== after?.[CONTENT_ID]) this.tabVersions.set(id, ++this.structuralVersion);
+      for (const instance of new Set([...(before?.panels ?? []).map(panel => panel.id), ...(after?.panels ?? []).map(panel => panel.id)])) {
+        const a = before?.panels.find(panel => panel.id === instance), b = after?.panels.find(panel => panel.id === instance);
+        if (!a || !b || !same(a.binding, b.binding) || (["wide", "compact"] as const).some(size => openIn(before?.dock ?? null, instance, size) !== openIn(after?.dock ?? null, instance, size)))
+          this.panelVersions.set(instance, ++this.structuralVersion);
+      }
+    }
+    const focused = this.focus.focusedPanel();
+    if (focused) { const panel = this.panel(focused); if (!panel || !(["wide", "compact"] as const).some(size => openIn(this.dock(panel.tab), focused, size))) this.focus.focusPanel(undefined); }
+  }
   private index(tab: TabId): number {
     const at = this.tabs.findIndex(item => item.id === tab);
     if (at < 0) throw new TabRefusal("missing_target", "That tab is closed.");

@@ -32,6 +32,7 @@ import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
 import { FocusService } from "../src/platform/core/focus";
 import { createHistoryService, lookScope } from "../src/platform/core/history-service";
+import { panelCommands } from "../src/compose/panel-commands";
 import { WORKSPACE_STORAGE_BUDGET } from "../src/app/workspace/workspace-budget";
 import { createStudioViewGraph, sessionViewGraph } from "../src/preview/preview-view-graph";
 import { fixtureHost } from "./fixtures/creator-host";
@@ -111,7 +112,7 @@ async function world() {
   state.subscribe(() => editor.show(state.scene(drawn()).look));
   core.app.attach({ scenes: sceneCommands(state, services) });
   const targets = createTargetResolver({ state, history, services, contexts: type => STUDIO_CATALOGUE.context(type) });
-  core.app.attach({ targetCheck: targets });
+  core.app.attach({ targetCheck: targets, panels: panelCommands(state, targets) });
   const app = named(core.app, targets);
 
   // Each V's character context, as a scene showing it holds one, its catalogue ready.
@@ -125,6 +126,33 @@ async function world() {
 }
 
 describe("three Vs of both bodies, three looks, five views in two tabs, three pinned Character panels", () => {
+  test("P3-i registered panel actions retain repeated identity and independent pins across park, history, close/reopen and restart", async () => {
+    const w = await world(), { state: s } = w, tab = w.t1;
+    for (let index = 0; index < 3; index++) {
+      expect(w.app.dispatch({ kind: "panels.add", destination: s.panelTabTarget(tab), type: "presets",
+        binding: { policy: "pinned", target: { scene: w.sceneOf(w.ids[index]!) } } })).toMatchObject({ ok: true });
+    }
+    const inspectors = s.instances("presets", tab).filter(panel => panel.binding?.policy === "pinned");
+    expect(inspectors).toHaveLength(3);
+    expect(inspectors.map(panel => w.targets.named(panel.id).look)).toEqual(w.L);
+    const id = inspectors[1]!.id, capture = s.panelTarget(id);
+    expect(w.app.dispatch({ kind: "panels.remove", destination: capture })).toMatchObject({ ok: true });
+    expect(s.panel(id)?.binding).toEqual(inspectors[1]!.binding);
+    expect(w.app.dispatch({ kind: "history.undo", scope: `view:${s.profile}` })).toMatchObject({ ok: true });
+    expect(w.app.dispatch({ kind: "panels.remove", destination: capture })).toMatchObject({ ok: false, code: "missing_target" });
+    const exact = s.tab(tab); s.close(tab); s.reopen(); expect(s.tab(tab)).toEqual(exact);
+    const restart = openSession(profileSessionOf(s.session())!, { profile: s.profile });
+    expect(restart.instances("presets", tab)).toEqual(s.instances("presets", tab)); expect(restart.dock(tab)).toEqual(s.dock(tab));
+    const source = w.ids[0]!, scene = w.sceneOf(source), count = s.graph.viewIds().length, depth = s.graph.history().depth;
+    expect(w.app.dispatch({ kind: "panels.add", destination: s.panelTabTarget(tab), type: "view",
+      source: { view: source, scene, sceneGen: s.scene(scene).gen, shareScene: true } })).toMatchObject({ ok: true });
+    expect(s.graph.history().depth).toBe(depth + 1); expect(s.graph.viewIds()).toHaveLength(count + 1);
+    const view = s.graph.viewIds().at(-1)!, pane = s.instances("view", tab).find(panel => panel.binding?.policy === "pinned" && "view" in panel.binding.target && panel.binding.target.view === view)!;
+    expect(s.graph.node(view, "scene").id).toBe(scene); expect(s.graph.node(view, "camera").id).not.toBe(s.graph.node(source, "camera").id);
+    expect(w.app.dispatch({ kind: "history.undo", scope: `view:${s.profile}` })).toMatchObject({ ok: true }); expect(s.panel(pane.id)).toBeUndefined();
+    expect(w.app.dispatch({ kind: "history.redo", scope: `view:${s.profile}` })).toMatchObject({ ok: true }); expect(s.panel(pane.id)?.id).toBe(pane.id);
+    await w.outbox.settle();
+  });
   test("resolution: each pin names its own V; follow-focus and key bindings follow the shown tab's views only", async () => {
     const w = await world();
     expect(w.services.characters.list().map(v => v.body)).toEqual(["female", "female", "male"]);

@@ -35,6 +35,8 @@ import type { DockLayout } from "../src/app/ui-preferences";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { memoryOutboxStorage, storeDocuments } from "./fixtures/platform-doubles";
 import { openSession, seededRandom } from "./fixtures/profile-sessions";
+import { panelDock, dockWith, openIn } from "../src/app/profiles/panel-dock";
+import { applyDrop } from "../src/platform/core/dock-layout";
 
 const COLLECTION = "11111111-1111-4111-8111-111111111111";
 const LOOK = { collection: COLLECTION, look: "22222222-2222-4222-8222-222222222222" };
@@ -105,6 +107,25 @@ function shape(fragment: LayoutFragment): string {
 }
 
 describe("the fragment round trip", () => {
+  test("P3-i repeated inspectors, local pins, parked records and independent sizes round-trip through defaults and restart", () => {
+    const w = windowOn(), tab = w.s.tabId(), scene = w.s.graph.node(w.s.graph.viewIds()[0]!, "scene").id;
+    const a = w.s.addPanel(tab, "presets", { binding: { policy: "pinned", target: { scene } } });
+    const b = w.s.addPanel(tab, "presets", { binding: { policy: "pinned", target: { look: LOOK } } });
+    const dock = panelDock(w.s.dock(tab));
+    dock.wide = applyDrop(dock.wide, { kind: "panel", panelId: a }, { kind: "float", x: 81, y: 92, w: 370, h: 410 });
+    dock.compact = applyDrop(dock.compact, { kind: "panel", panelId: b }, { kind: "float", x: 211, y: 38, w: 310, h: 480 });
+    w.s.arrangeInstances(tab, dockWith(w.s.dock(tab), dock)); w.s.setPanelsOpen(tab, [b], false);
+    const saved = fragmentOfTab(w.s.session(), tab, { name: "Repeated" })!;
+    const content = instantiateFragment(saved, fillOf(substitutionOf(saved, { subjects: [V1], looks: [LOOK], scenes: [] }) as Exclude<Substitution, { issue: string }>), w.s, { name: "Repeated" });
+    const made = w.s.newTab(content), again = fragmentOfTab(w.s.session(), made, { name: "Repeated" });
+    expect(again).toEqual(saved);
+    const repeated = w.s.instances("presets", made); expect(repeated.length).toBeGreaterThanOrEqual(2);
+    expect(repeated.some(panel => panel.id === a || panel.id === b)).toBe(false);
+    const restart = openSession(profileSessionOf(w.s.session())!);
+    expect(restart.dock(made)).toEqual(w.s.dock(made));
+    expect(restart.instances("presets", made)).toEqual(repeated);
+    expect(repeated.some(panel => !openIn(restart.dock(made), panel.id, "wide"))).toBe(true);
+  });
   test("every contributed default, made into a tab with every slot filled and saved again, is the same bytes", () => {
     for (const item of STUDIO_LAYOUT_DEFAULTS) {
       const w = windowOn();

@@ -33,6 +33,9 @@ import { fillOf, fragmentOfTab, instantiateFragment, substitutionOf, type SceneC
 import { STUDIO_LAYOUT_DEFAULTS } from "../src/compose/layout-defaults";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { openSession, seededRandom } from "./fixtures/profile-sessions";
+import { PanelActions, type PanelAction } from "../src/app/profiles/panel-actions";
+import { panelDock, dockWith, openIn } from "../src/app/profiles/panel-dock";
+import { applyDrop, locate } from "../src/platform/core/dock-layout";
 
 const LOOK = { collection: "11111111-1111-4111-8111-111111111111", look: "22222222-2222-4222-8222-222222222222" };
 const OTHER_LOOK = { collection: "11111111-1111-4111-8111-111111111111", look: "33333333-3333-4333-8333-333333333333" };
@@ -384,6 +387,135 @@ describe("T1: seeded random runs against an independent model", () => {
   }, 20_000); // 40 seeded runs: about 3 s alone, past 5 s while the full suite shares the machine.
 });
 
+describe("P3-i instance operations and minimal replay", () => {
+  const setup = (seed = 192) => {
+    const data = startData(seed), s = openSession({ ...data, tabs: data.tabs.map(tab => ({ ...tab, panels: tab.panels.map(panel => panel.type === "presets"
+      ? { ...panel, state: { search: "kept", folds: ["looks"] } } : panel) })) }, { random: seededRandom(seed + 7919) }), tab = s.tabId();
+    const actions = new PanelActions(s, { types: () => [{ id: "presets", context: { kind: "look" } }, { id: "layers", context: { kind: "look" } }],
+      factory: () => null, world: () => ({ views: {}, scenes: {}, focus: {}, subject: () => true, look: () => true }) });
+    return { s, tab, actions };
+  };
+  const float = (s: ProfileSessions, tab: string, id: string, x: number) => {
+    const state = panelDock(s.dock(tab));
+    for (const size of ["wide", "compact"] as const) state[size] = applyDrop(state[size], { kind: "panel", panelId: id }, { kind: "float", x, y: x + 1, w: 330, h: 420 });
+    s.arrangeInstances(tab, dockWith(s.dock(tab), state));
+  };
+  const position = (s: ProfileSessions, tab: string, id: string) => {
+    const state = panelDock(s.dock(tab));
+    return (["wide", "compact"] as const).map(size => { const at = locate(state[size], id); const window = state[size].floating.find(item => item.id === at?.windowId); return window && { x: window.x, y: window.y, w: window.w, h: window.h }; });
+  };
+  test("reads are detached and never allocate; raw dock IDs retain repeated types; only the named input adapter accepts types", () => {
+    const { s, tab } = setup(), before = json(s), count = s.tab(tab)!.panels.length;
+    expect(s.instance("unknown", tab)).toBe(""); expect(s.instances("unknown", tab)).toEqual([]);
+    const first = s.instances("presets", tab)[0]!;
+    (s.panel(first.id)! as { state: unknown }).state = { polluted: true };
+    const dock = s.dock(tab)!; (dock as { version: number }).version = 99;
+    expect(json(s)).toBe(before); expect(s.tab(tab)!.panels.length).toBe(count);
+    const second = s.addPanel(tab, "presets");
+    const ids = [first.id, second]; s.arrangeInstances(tab, dockOf(ids));
+    expect(s.dock(tab)).toEqual(dockOf(ids)); expect(s.instances("presets", tab)).toHaveLength(2);
+    const saved = s.session(), restart = openSession(profileSessionOf(saved)!);
+    expect(restart.dock(tab)).toEqual(s.dock(tab)); expect(restart.instances("presets", tab)).toEqual(s.instances("presets", tab));
+  });
+  test("binding Undo never moves a dragged panel; remove and add Undo retain every survivor's latest position", () => {
+    const { s, tab } = setup(), first = s.instance("presets", tab), other = s.instance("layers", tab);
+    s.setPanelBinding(tab, first, { policy: "pinned", target: { look: LOOK } });
+    float(s, tab, first, 91); const boundPlace = position(s, tab, first);
+    expect(s.graph.undo()).toBe(true); expect(position(s, tab, first)).toEqual(boundPlace); expect(s.panel(first)?.binding).toBeUndefined();
+    expect(s.graph.redo()).toBe(true); expect(position(s, tab, first)).toEqual(boundPlace);
+    s.setPanelsOpen(tab, [first], false); float(s, tab, other, 311);
+    const survivor = position(s, tab, other);
+    expect(s.graph.undo()).toBe(true); expect(position(s, tab, first)).toEqual(boundPlace); expect(position(s, tab, other)).toEqual(survivor);
+    expect(s.graph.redo()).toBe(true); expect(s.panel(first)?.binding).toEqual({ policy: "pinned", target: { look: LOOK } });
+    s.setPanelsOpen(tab, [first], true); expect(position(s, tab, first)).toEqual(boundPlace);
+    const added = s.addPanel(tab, "presets"); float(s, tab, other, 471);
+    expect(s.graph.undo()).toBe(true); expect(s.panel(added)).toBeUndefined(); expect(position(s, tab, other)[0]?.x).toBe(471);
+    expect(s.graph.redo()).toBe(true); expect(s.panel(added)?.id).toBe(added); expect(position(s, tab, other)[0]?.x).toBe(471);
+  });
+  test("park, close/Undo/reopen and reset preserve exact IDs, pins, instance state and both size classes", () => {
+    const { s, tab } = setup(), id = s.addPanel(tab, "presets", { binding: { policy: "pinned", target: { look: OTHER_LOOK } } });
+    float(s, tab, id, 177); s.setPanelsOpen(tab, [id], false);
+    const exact = s.tab(tab)!; s.close(tab); expect(s.graph.undo()).toBe(true); expect(s.tab(tab)).toEqual(exact);
+    expect(s.graph.redo()).toBe(true); s.reopen(); expect(s.tab(tab)).toEqual(exact);
+    s.reset(tab, contentFrom(s, MAIN_VIEW, false)); expect(s.graph.undo()).toBe(true); expect(s.tab(tab)).toEqual(exact);
+    s.setPanelsOpen(tab, [id], true); expect(position(s, tab, id)[1]?.x).toBe(177);
+    const after = s.tab(tab)!; s.reset(tab, contentFrom(s, MAIN_VIEW, false)); s.reopen(); expect(s.tabList().find(item => item.panels.some(panel => panel.id === id))?.panels).toEqual(after.panels);
+  });
+  test("actions revalidate structural captures; refusals, readonly, invalid pins and unavailable contributions never mutate or record", () => {
+    const { s, tab, actions } = setup(), first = s.instance("presets", tab), destination = s.panelTarget(first);
+    const stale: PanelAction = { kind: "panels.setBinding", destination, binding: { policy: "pinned", target: { look: OTHER_LOOK } } };
+    actions.dispatch({ kind: "panels.setBinding", destination, binding: { policy: "pinned", target: { look: LOOK } } });
+    s.graph.undo();
+    const refused: PanelAction[] = [stale,
+      { kind: "panels.add", destination: s.panelTabTarget(tab), type: "missing" },
+      { kind: "panels.setBinding", destination: s.panelTarget(first), binding: { policy: "pinned", target: { subject: { kind: "character", id: "c-1" } } } },
+      { kind: "panels.show", destination: { ...s.panelTarget(first), profile: "other" } }];
+    for (const action of refused) { const before = json(s), history = s.graph.history(); expect(actions.capability(action).available).toBe(false);
+      expect(() => actions.dispatch(action)).toThrow(); expect(json(s)).toBe(before); expect(s.graph.history()).toEqual(history); }
+    const beforePark = s.panelTarget(first); s.setPanelsOpen(tab, [first], false); s.setPanelsOpen(tab, [first], true);
+    expect(actions.capability({ kind: "panels.remove", destination: beforePark })).toMatchObject({ available: false, code: "missing_target" });
+    const beforeClose = s.panelTarget(first); s.close(tab); s.graph.undo();
+    expect(actions.capability({ kind: "panels.remove", destination: beforeClose })).toMatchObject({ available: false, code: "missing_target" });
+    const revealDepth = s.graph.history().depth; s.focus.focusPanel(first);
+    actions.dispatch({ kind: "panels.reveal", destination: s.panelTarget(first) }); expect(s.graph.history().depth).toBe(revealDepth);
+    s.setPanelsOpen(tab, [first], false); expect(s.focus.focusedPanel()).toBeUndefined();
+    const readonly = new PanelActions(s, { types: () => [{ id: "presets" }], factory: () => null,
+      world: () => ({ views: {}, scenes: {}, focus: {}, subject: () => true, look: () => true }), access: () => ({ available: false, reason: "Read only" }) });
+    const before = json(s), history = s.graph.history();
+    expect(() => readonly.dispatch({ kind: "panels.remove", destination: s.panelTarget(first) })).toThrow("Read only");
+    expect(json(s)).toBe(before); expect(s.graph.history()).toEqual(history);
+    const character = s.addPanel(tab, "character"), subjectActions = new PanelActions(s, { types: () => [{ id: "character", context: { kind: "subject", subjects: ["character"] } }],
+      factory: () => null, world: () => ({ views: {}, scenes: { location: { kind: "location", gen: 0 } }, focus: {}, subject: () => true, look: () => true }) });
+    const wrongScene: PanelAction = { kind: "panels.setBinding", destination: s.panelTarget(character), binding: { policy: "pinned", target: { scene: "location" } } };
+    const unchanged = json(s), depth = s.graph.history().depth;
+    expect(subjectActions.capability(wrongScene)).toMatchObject({ available: false, code: "incompatible_mode" });
+    expect(() => subjectActions.dispatch(wrongScene)).toThrow(); expect(json(s)).toBe(unchanged); expect(s.graph.history().depth).toBe(depth);
+  });
+  test("type hide/show is one step; pane park keeps the graph view and Add another creates a fresh graph and pane identity atomically", () => {
+    const { s, tab, actions } = setup(), second = s.addPanel(tab, "presets"), first = s.instance("presets", tab);
+    const depth = s.graph.history().depth;
+    actions.dispatch({ kind: "panels.setTypeVisible", destination: s.panelTabTarget(tab), type: "presets", visible: false,
+      instances: s.instances("presets", tab).map(panel => s.panelTarget(panel.id)) });
+    expect(s.graph.history().depth).toBe(depth + 1); expect(openIn(s.dock(tab), first, "wide")).toBe(false); expect(openIn(s.dock(tab), second, "compact")).toBe(false);
+    expect(s.graph.undo()).toBe(true); expect(openIn(s.dock(tab), second, "compact")).toBe(true);
+    const count = s.graph.viewIds().length, view = s.addViewPane(tab, MAIN_VIEW, { scene: true, lights: true });
+    const pane = s.instances("view", tab).find(panel => panel.binding?.policy === "pinned" && "view" in panel.binding.target && panel.binding.target.view === view)!;
+    expect(s.graph.viewIds()).toHaveLength(count + 1); expect(s.graph.undo()).toBe(true); expect(s.panel(pane.id)).toBeUndefined(); expect(s.graph.has(view)).toBe(false);
+    expect(s.graph.redo()).toBe(true); expect(s.panel(pane.id)?.id).toBe(pane.id);
+    s.setPanelsOpen(tab, [pane.id], false); expect(s.graph.has(view)).toBe(true); expect(s.graph.undo()).toBe(true);
+  });
+  test("seeded independent membership/binding model with drags, scenes, reset and history interleavings", () => {
+    for (const seed of [21, 47, 192, 377, 902]) {
+      const { s, tab } = setup(seed), random = seededRandom(seed), first = s.instance("presets", tab), survivor = s.instance("layers", tab);
+      type Item = { id: string; open: boolean; binding?: import("../src/app/profiles/profile-session").PanelBinding };
+      let expected: Item[] = [{ id: first, open: true }], past: Item[][] = [], future: Item[][] = [];
+      // The independent model records semantic state only. A survivor's dragged place is outside its history.
+      for (let step = 0; step < 90; step++) {
+        const roll = random();
+        if (roll < .16 && past.length) { future.push(structuredClone(expected)); expected = past.pop()!; expect(s.graph.undo()).toBe(true); }
+        else if (roll < .26 && future.length) { past.push(structuredClone(expected)); expected = future.pop()!; expect(s.graph.redo()).toBe(true); }
+        else if (roll < .35) {
+          const content = s.tab(tab)!; s.reset(tab, contentFrom(s, MAIN_VIEW, false)); expect(s.graph.undo()).toBe(true); expect(s.tab(tab)).toEqual(content);
+          // Drop the reset's redo by an actual semantic step on the original content below.
+          const item = pick(random, expected), binding = { policy: "pinned" as const, target: { look: { ...LOOK, look: `retained-${step}` } } };
+          past.push(structuredClone(expected)); future = []; s.setPanelBinding(tab, item.id, binding); item.binding = binding;
+        } else {
+          const item = pick(random, expected), mode = random();
+          if (mode < .3 && expected.length < 5) { past.push(structuredClone(expected)); future = []; const id = s.addPanel(tab, "presets"); expected.push({ id, open: true }); }
+          else if (mode < .65) { past.push(structuredClone(expected)); future = []; s.setPanelsOpen(tab, [item.id], !item.open); item.open = !item.open; }
+          else { const binding = { policy: "pinned" as const, target: { look: random() < .5 ? LOOK : OTHER_LOOK } };
+            if (JSON.stringify(item.binding) !== JSON.stringify(binding)) { past.push(structuredClone(expected)); future = []; s.setPanelBinding(tab, item.id, binding); item.binding = binding; } }
+        }
+        const x = 100 + step * 3; float(s, tab, survivor, x);
+        const scene = s.graph.node(MAIN_VIEW, "scene").id; s.setLook(scene, step % 2 ? LOOK : OTHER_LOOK);
+        const actual = s.instances("presets", tab).map(panel => ({ id: panel.id, open: openIn(s.dock(tab), panel.id, "wide"), ...(panel.binding ? { binding: panel.binding } : {}) }));
+        expect(actual).toEqual(expected); expect(position(s, tab, survivor)[0]?.x).toBe(x); invariants(s);
+        for (const item of expected) expect(openIn(s.dock(tab), item.id, "compact")).toBe(item.open);
+      }
+    }
+  });
+});
+
 describe("the phase's gates", () => {
   test("close, then Undo, restores the session byte for byte; so does close, then Reopen (the views' focus numbers come back)", () => {
     const s = open(3), [first, second] = s.tabList();
@@ -472,7 +604,7 @@ describe("one history over the session and the graph", () => {
     s.rename(tab, "Mine"); s.arrange(tab, dockOf(["layers", "head"]));
     expect(s.graph.undo()).toBe(true);
     expect(s.tab(tab)!.name).not.toBe("Mine");
-    expect(s.dock(tab)).toEqual(dockOf(["layers", "head"]));
+    expect(s.legacyDock(tab)).toEqual(dockOf(["layers", "head"]));
   });
 
   test("the tabs.* actions: each names its tab, is refused plainly when it can't run, and acts once allowed", () => {
@@ -494,10 +626,10 @@ describe("one history over the session and the graph", () => {
     expect(core.app.dispatch({ kind: "tabs.reopen" })).toMatchObject({ ok: true });
     expect(core.app.dispatch({ kind: "tabs.show", tab })).toMatchObject({ ok: true });
     expect(core.app.dispatch({ kind: "tabs.arrange", tab, layout: dockOf(["presets"]) })).toMatchObject({ ok: true });
-    expect(s.dock(tab)).toEqual(dockOf(["presets"]));
+    expect(s.legacyDock(tab)).toEqual(dockOf(["presets"]));
     // The dock reset to its default arrangement.
     expect(core.app.dispatch({ kind: "tabs.arrange", tab, layout: null })).toMatchObject({ ok: true });
-    expect(s.dock(tab)).toBeNull();
+    expect(s.legacyDock(tab)).toBeNull();
   });
 });
 
@@ -514,7 +646,7 @@ describe("operations", () => {
     const pinned = copy.panels.filter(panel => panel.type === "view").map(panel => (panel.binding as { target: { view: string } }).target.view);
     expect(pinned.every(view => own(id).includes(view))).toBe(true);
     const views = (text: string) => text.replaceAll(/"(head|view\.[a-z0-9-]+)"/g, '"view.*"');
-    expect(views(JSON.stringify(s.dock(id)))).toBe(views(JSON.stringify(s.dock(tab))));
+    expect(views(JSON.stringify(s.legacyDock(id)))).toBe(views(JSON.stringify(s.legacyDock(tab))));
   });
 
   test("reset: the content before it is kept as a fragment beside the tab; Undo restores it all; reopening the fragment makes a tab of its own", () => {
@@ -766,7 +898,7 @@ describe("replays keep what Undo doesn't hold (review P2-1, finding 3)", () => {
     const restarted = openSession(profileSessionOf(JSON.parse(JSON.stringify(s.session())))!);
     for (const session of [s, restarted]) {
       session.reopen(second!.id);
-      expect(session.dock(second!.id)).toEqual(dockOf(["layers", "presets"]));
+      expect(session.legacyDock(second!.id)).toEqual(dockOf(["layers", "presets"]));
     }
   });
 
@@ -796,9 +928,9 @@ describe("replays keep what Undo doesn't hold (review P2-1, finding 3)", () => {
     expect(s.graph.undo()).toBe(true);
     expect(s.closedTabs().at(-1)!.tab).toMatchObject({ dock: arranged.dock, panels: arranged.panels });
     expect(s.graph.undo()).toBe(true);
-    expect(s.dock(second!.id)).toEqual(dockOf(["history"]));
+    expect(s.legacyDock(second!.id)).toEqual(dockOf(["history"]));
     expect(s.graph.redo()).toBe(true); expect(s.graph.redo()).toBe(true);
-    expect(s.dock(second!.id)).toEqual(dockOf(["history"]));
+    expect(s.legacyDock(second!.id)).toEqual(dockOf(["history"]));
   });
 
   test("reset, Undo, arrange the tab, Redo, Reopen the fragment: the content before the reset comes back as last arranged", () => {
@@ -808,16 +940,16 @@ describe("replays keep what Undo doesn't hold (review P2-1, finding 3)", () => {
     s.arrange(tab, dockOf(["head", "layers"]));
     expect(s.graph.redo()).toBe(true);
     const id = s.reopen();
-    expect(s.dock(id)).toEqual(dockOf(["head", "layers"]));
+    expect(s.legacyDock(id)).toEqual(dockOf(["head", "layers"]));
   });
 });
 
 test("legacy preferences never relay into the tab arrangement", () => {
-  const s = open(77), before = s.dock();
+  const s = open(77), before = s.legacyDock();
   const preferences = new UIPreferenceActions(freshWorkspace().uiPreferences);
   preferences.dispatch({ kind: "layout.set", layout: dockOf(["layers"]) });
   preferences.dispatch({ kind: "theme.set", theme: "dark" });
-  expect(s.dock()).toEqual(before);
+  expect(s.legacyDock()).toEqual(before);
 });
 
 describe("the editing context (review P2-1, finding 5)", () => {
@@ -894,7 +1026,7 @@ describe("review P2-1-2: committed changes are always heard, one move at a time,
     const restarted = openSession(profileSessionOf(JSON.parse(JSON.stringify(s.session())))!);
     for (const session of [s, restarted]) {
       session.reopen(tab);
-      expect(session.dock(tab)).toEqual(dockOf(["presets"]));
+      expect(session.legacyDock(tab)).toEqual(dockOf(["presets"]));
     }
     // Its identity is the session's own: nothing of it is stored or read out.
     expect(json(s)).not.toContain("@content");

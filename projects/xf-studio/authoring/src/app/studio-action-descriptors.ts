@@ -92,6 +92,15 @@ export const ACTION_DESCRIPTORS = {
   // Deleting an own default is a tombstone; restoring it is the Undo notice's action.
   "defaults.delete": desc("workspace", "library", "recovery", { default: target("string") }),
   "defaults.restore": desc("workspace", "library", "recovery", { default: target("string") }),
+  // Panels record exactly one transaction in the named profile session; reveal is navigation.
+  "panels.add": desc("workspace", "workspace", "transaction", { destination: target("object"), type: target("string"),
+    binding: { ...input("object"), required: false }, source: { ...target("object"), required: false } }),
+  "panels.show": desc("workspace", "workspace", "transaction", { destination: target("object") }),
+  "panels.remove": desc("workspace", "workspace", "transaction", { destination: target("object") }),
+  "panels.setBinding": desc("workspace", "workspace", "transaction", { destination: target("object"), binding: input("object") }),
+  "panels.reveal": desc("workspace", "workspace", "none", { destination: target("object") }),
+  "panels.setTypeVisible": desc("workspace", "workspace", "transaction", { destination: target("object"), type: target("string"),
+    visible: input("boolean"), instances: target("object") }),
   // Starter shapes (app/starters/starter-actions.ts): which starter new layers and looks use, and the person's own (library documents through the
   // outbox). Deleting one is a tombstone; restoring it is the Undo notice's action. Adding a layer from a starter is `layer.edit`.
   "starters.setDefault": desc("workspace", "workspace", "none", { starter: target("string") }),

@@ -23,7 +23,7 @@ export function layoutTabsPort(session: ProfileSessions, defaults: TabDefaults,
   services: Pick<ProfileServices, "defaults" | "characters" | "collections" | "profiles">): LayoutTabsPort {
   return Object.freeze({
     snapshot: () => ({ tabs: session.tabList(), shown: session.tabId(), closed: session.closedTabs(), lastDefault: session.lastDefault(), opening: session.viewOpening() }),
-    dock: (tab?: string) => session.dock(tab), defaults: () => services.defaults.list(),
+    dock: (tab?: string) => session.legacyDock(tab), defaults: () => services.defaults.list(),
     substitution: (id: string, choice?: SubstitutionChoice) => defaults.substitution(id, choice),
     subject: (ref: SubjectRef) => ref.kind === "character" ? services.characters.character(ref.id)?.label ?? "Unnamed V" : ref.kind,
     look: (ref: LookRef) => services.collections.look(ref)?.name ?? "Unnamed look",

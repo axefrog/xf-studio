@@ -43,6 +43,8 @@ async function fixture(count: number) {
     if (!made.ok) throw Error(made.reason);
   }
   const session = openSession(sessionOfWorkspace(workspace, { tab: "U6" }), { profile: p.profile, history });
+  // The phase-2 mount adapter creates controllers' instances before painting; snapshots themselves never allocate them.
+  for (const panel of ["head", "presets", "layers", "uv", "finish", "shape", "edge", "warp", "library"]) session.inputInstance(panel);
   const resolver = createTargetResolver({ state: session, history, services, contexts: type => STUDIO_CATALOGUE.context(type) });
   const scenes = sceneCommands(session, services), dispatched: string[] = [];
   let writable = true, createAllowed: import("../src/platform/api/capability").Capability = { available: true };

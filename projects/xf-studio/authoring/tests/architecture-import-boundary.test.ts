@@ -351,8 +351,12 @@ test("platform code imports only the platform: nothing from features, engines, c
   expect(platform).toContain("platform/scene/feature-renderers");
   expect(platformViolations(DISK)).toEqual([]);
   expect(source("platform/api/scene")).toMatch(/import type \* as THREE from "three"/);
-  for (const name of platform.filter(name => !name.startsWith("platform/scene/")))
-    expect(source(name), `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
+  for (const name of platform.filter(name => !name.startsWith("platform/scene/"))) {
+    // The shared pure dock model has persisted `window` fields and locally bound variables of that name.
+    // The lexical scan rejects actual global access while distinguishing those data keys and locals.
+    if (name === "platform/core/dock-layout") expect(pageGlobals(source(name)), name).toEqual([]);
+    else expect(source(name), `${name} reads browser globals`).not.toMatch(BROWSER_GLOBALS);
+  }
 });
 
 /** The subsystems whose root (pure) and `render/` modules the scene host builds on: materials, the character, motion, the preview and saves. */
@@ -418,7 +422,9 @@ const EXPORTER_LEGACY = new Map([
   ["legacy/eye-makeup/export/plate-reach", "the plate reach record type: moves with the partial-export filter"],
 ]);
 /** Platform internals no feature reaches, even through other modules: only `platform/api` is a feature's. */
-const PLATFORM_INTERNALS = /^platform\/(?:core|scene|export)(?:\/|$)/;
+// The dock's pure data engine is shared with session operations and re-exported by studio-ui/dock/layout (P3-i).
+// Direct feature imports of platform/core are still refused by the rule below.
+const PLATFORM_INTERNALS = /^platform\/(?!core\/dock-layout$)(?:core|scene|export)(?:\/|$)/;
 
 /**
  * The engine rules (§1 layout, CORE-78): an engine imports only engines and `platform/api`; only an engine's `render/` imports Three
