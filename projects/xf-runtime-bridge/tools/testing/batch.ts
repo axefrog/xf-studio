@@ -448,6 +448,13 @@ export type BatchContext = {
 };
 
 const GB = 1024 ** 3;
+/**
+ * A refusal that says to wait ("Wait for its npc.spawned event and try again", "try again in a moment"): the state it
+ * names is on its way, so the runner waits and retries the same command (1 s, then 2 s apart, for at most 15 s and
+ * never past the step's deadline) before the step sees a failure.
+ */
+export const WAIT_AND_RETRY = /\bwait for\b|\btry again in a moment\b|\bwait a moment\b|\bin a few frames\b/i;
+const WAIT_AND_RETRY_MS = 15_000;
 const CANCELLED: Outcome = { ok: false, code: "cancelled", message: "The step was cancelled before its side effect." };
 const HANDED_OVER = "The game was handed to the player (session.handover: the commit tripwire, the player or another tool), so every change is refused until session.resume. The batch stopped here.";
 
@@ -665,7 +672,18 @@ export class SessionExecutor implements Executor {
 
   private async runCommand(command: string, input: Record<string, unknown>, expectError: string | undefined, context: ExecContext): Promise<Outcome> {
     const observing = this.c.observer && ["capture.screenshot", "capture.burst"].includes(command) && input.clear_overlay === false;
-    const outcome = await (observing ? this.c.observer! : this.api).run(command, input, { source: "session", captureRoot: this.rowDir, signal: context.signal });
+    const api = observing ? this.c.observer! : this.api;
+    let outcome = await api.run(command, input, { source: "session", captureRoot: this.rowDir, signal: context.signal });
+    // Waited through: a refusal that names what to wait for is retried while that time lasts.
+    const waitUntil = Math.min(this.c.clock.now() + WAIT_AND_RETRY_MS, context.deadline - 500);
+    let waited = 0;
+    for (let pause = 1000; !outcome.ok && outcome.error.code !== expectError && outcome.error.code !== "handed_over" && WAIT_AND_RETRY.test(outcome.error.message ?? "") &&
+      this.c.clock.now() + pause < waitUntil && !context.signal.aborted; pause = Math.min(2000, pause * 2)) {
+      await this.c.clock.sleep(pause, context.signal);
+      waited += pause;
+      outcome = await api.run(command, input, { source: "session", captureRoot: this.rowDir, signal: context.signal });
+    }
+    if (!outcome.ok && waited) outcome = { ...outcome, error: { ...outcome.error, message: `${outcome.error.message} (still so after waiting ${Math.round(waited / 1000)} s)` } };
     if (!outcome.ok) {
       if (outcome.error.code === "handed_over") return { ok: false, code: "handed_over", message: outcome.error.message, halt: HANDED_OVER };
       if (expectError && outcome.error.code === expectError) return { ok: true, code: outcome.error.code, value: { refused: outcome.error } };

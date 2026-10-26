@@ -396,3 +396,43 @@ describe("whole-batch passive rows, and the telemetry they judge", () => {
     expect(result.rows[0].telemetry!.log_lines).toBe(1);
   });
 });
+
+describe("refusals that say to wait are waited through (DI2's npc_not_spawned)", () => {
+  const notYet = { ok: false as const, code: "npc_not_spawned", message: "That actor hasn't appeared yet. Wait for its npc.spawned event and try again." };
+  test("a wait-for refusal is retried until it clears, within its bound", async () => {
+    const clock = new FakeClock();
+    const api = fakeApi(clock, { "npc.move": (_i, n) => (n <= 2 ? notYet : { ok: true, result: { moving: true } }) });
+    const result = await go(script([{ id: "r", title: "r", steps: [{ do: "run", command: "npc.move", input: { who: "a1", to: "v" } }] }]), api, fakeHost(), clock, tempDir("xfb-batch-"));
+    expect(result.rows[0].verdict).toBe("PASS");
+    expect(api.calls.filter((c) => c.name === "npc.move").length).toBe(3);
+  });
+
+  test("one that never clears fails after at most 15 s, saying it waited", async () => {
+    const clock = new FakeClock();
+    const api = fakeApi(clock, { "npc.move": () => notYet });
+    const result = await go(script([{ id: "r", title: "r", steps: [{ do: "run", command: "npc.move", input: { who: "a1", to: "v" } }] }]), api, fakeHost(), clock, tempDir("xfb-batch-"));
+    expect(result.rows[0].verdict).toBe("SKIP");
+    expect(result.rows[0].reason).toContain("still so after waiting");
+    expect(clock.now()).toBeLessThan(40_000);
+  });
+
+  test("a refusal that doesn't say to wait isn't retried", async () => {
+    const clock = new FakeClock();
+    const api = fakeApi(clock, { "npc.move": () => ({ ok: false, code: "too_far", message: "That place is too far." }) });
+    await go(script([{ id: "r", title: "r", steps: [{ do: "run", command: "npc.move", input: { who: "a1", to: "v" } }] }]), api, fakeHost(), clock, tempDir("xfb-batch-"));
+    expect(api.calls.filter((c) => c.name === "npc.move").length).toBe(1);
+  });
+
+  test("the DI fixtures wait for both actors' npc.spawned, each on its own cursor, before declaring or moving anyone", () => {
+    const smoke = JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "borg4-smoke.json"), "utf8"));
+    for (const id of ["DI2", "DI3"]) {
+      const steps = smoke.rows.find((r: Row) => r.id === id).steps as { label?: string; do: string; kind?: string; cursor?: string; command?: string }[];
+      const spawnedWaits = steps.filter((st) => st.do === "await" && st.kind === "npc.spawned");
+      expect(spawnedWaits.length).toBe(2);
+      expect(new Set(spawnedWaits.map((st) => st.cursor)).size).toBe(2);
+      const lastWait = Math.max(...spawnedWaits.map((st) => steps.indexOf(st as never)));
+      expect(steps.findIndex((st) => st.command === "incidents.declare")).toBeGreaterThan(lastWait);
+      expect(steps.findIndex((st) => st.command === "npc.move")).toBeGreaterThan(lastWait);
+    }
+  });
+});

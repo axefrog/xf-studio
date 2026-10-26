@@ -432,9 +432,16 @@ function smokeScript(): Json {
     cleanup: [{ label: `${row}-release`, do: "run", command: "npc.release", input: { who: ref(row, "fighter", "who"), how: "despawn" }, when: { match: { ref: ref(row, "fighter"), exists: true } } }] });
 
   // beforeDeclare runs once the actors stand and before the incident is declared (DI3 turns V away there).
+  // Actors appear over a few frames after npc.spawn answers (an action on one before its npc.spawned is refused
+  // npc_not_spawned), so the fixture waits for both npc.spawned events before it declares or moves anyone.
   const fixture = (r: string, id: string, beforeDeclare: Json[] = []): Json[] => [
+    // One cursor per wait: a wait advances its cursor past what it read, which would hide the other actor's event.
+    { label: `${r}-spawn-cursor-mark`, do: "cursor", bind: key(r, "markCursor") },
+    { label: `${r}-spawn-cursor-thief`, do: "cursor", bind: key(r, "thiefCursor") },
     { label: `${r}-mark`, do: "run", command: "npc.spawn", input: { cast: "woman_corpo", ahead_m: 7, side_m: -1.5, label: "Mark" }, bind: key(r, "mark") },
     { label: `${r}-thief`, do: "run", command: "npc.spawn", input: { cast: "man_lowlife", ahead_m: 7, side_m: 2.5, label: "Thief" }, bind: key(r, "thief") },
+    { label: `${r}-mark-in`, do: "await", cursor: ref(r, "markCursor"), kind: "npc.spawned", subject: ref(r, "mark", "who"), timeout_s: 20, bind: key(r, "markIn") },
+    { label: `${r}-thief-in`, do: "await", cursor: ref(r, "thiefCursor"), kind: "npc.spawned", subject: ref(r, "thief", "who"), timeout_s: 20, bind: key(r, "thiefIn") },
     ...beforeDeclare,
     // An id is refused (duplicate_id) while the bridge remembers it: a second id is the other route.
     { label: `${r}-declare`, do: "run", command: "incidents.declare", input: { id, kind: "pickpocket", roles: { [ref(r, "thief", "who")]: "thief", [ref(r, "mark", "who")]: "mark" }, ttl_s: 45 }, bind: key(r, "declared"),

@@ -597,6 +597,16 @@
           ]
         },
         {
+          "label": "DI2-spawn-cursor-mark",
+          "do": "cursor",
+          "bind": "DI2_markCursor"
+        },
+        {
+          "label": "DI2-spawn-cursor-thief",
+          "do": "cursor",
+          "bind": "DI2_thiefCursor"
+        },
+        {
           "label": "DI2-mark",
           "do": "run",
           "command": "npc.spawn",
@@ -619,6 +629,24 @@
             "label": "Thief"
           },
           "bind": "DI2_thief"
+        },
+        {
+          "label": "DI2-mark-in",
+          "do": "await",
+          "cursor": "$DI2_markCursor",
+          "kind": "npc.spawned",
+          "subject": "$DI2_mark.who",
+          "timeout_s": 20,
+          "bind": "DI2_markIn"
+        },
+        {
+          "label": "DI2-thief-in",
+          "do": "await",
+          "cursor": "$DI2_thiefCursor",
+          "kind": "npc.spawned",
+          "subject": "$DI2_thief.who",
+          "timeout_s": 20,
+          "bind": "DI2_thiefIn"
         },
         {
           "label": "DI2-declare",
@@ -807,6 +835,16 @@
           ]
         },
         {
+          "label": "DI3-spawn-cursor-mark",
+          "do": "cursor",
+          "bind": "DI3_markCursor"
+        },
+        {
+          "label": "DI3-spawn-cursor-thief",
+          "do": "cursor",
+          "bind": "DI3_thiefCursor"
+        },
+        {
           "label": "DI3-mark",
           "do": "run",
           "command": "npc.spawn",
@@ -829,6 +867,24 @@
             "label": "Thief"
           },
           "bind": "DI3_thief"
+        },
+        {
+          "label": "DI3-mark-in",
+          "do": "await",
+          "cursor": "$DI3_markCursor",
+          "kind": "npc.spawned",
+          "subject": "$DI3_mark.who",
+          "timeout_s": 20,
+          "bind": "DI3_markIn"
+        },
+        {
+          "label": "DI3-thief-in",
+          "do": "await",
+          "cursor": "$DI3_thiefCursor",
+          "kind": "npc.spawned",
+          "subject": "$DI3_thief.who",
+          "timeout_s": 20,
+          "bind": "DI3_thiefIn"
         },
         {
           "label": "DI3-away",
