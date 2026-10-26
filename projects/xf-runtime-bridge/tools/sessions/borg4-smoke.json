@@ -73,32 +73,14 @@
           "bind": "B318_1_rec",
           "outcomes": [
             {
-              "name": "already_recording",
+              "name": "batch_recorder",
               "match": {
-                "code": "recording_active"
+                "code": "recording_busy"
               },
               "run": [
                 {
-                  "do": "run",
-                  "command": "test.record.stop",
-                  "input": {}
-                },
-                {
-                  "do": "run",
-                  "command": "test.record.start",
-                  "input": {
-                    "channels": [
-                      "v",
-                      "actors",
-                      "subtitles",
-                      "voice",
-                      "face",
-                      "ui",
-                      "contacts",
-                      "supervisor"
-                    ],
-                    "duration_s": 300
-                  },
+                  "do": "set",
+                  "value": "$recorder",
                   "bind": "B318_1_rec"
                 }
               ]

@@ -29,7 +29,7 @@ import { checkMatch, checkPlan, describePlan, matches, realClock, resolveRefs, r
 import { planTestStep, TEST_STEP_KINDS, TestSession } from "./script.ts";
 import { captureCursor, waitForEvent } from "./windows.ts";
 import { tripReason } from "../commit-tripwire.ts";
-import { DEFAULT_HALT_PATTERNS, Telemetry, type RowTelemetry } from "./telemetry.ts";
+import { ALL_CHANNELS, DEFAULT_HALT_PATTERNS, Telemetry, type RowTelemetry } from "./telemetry.ts";
 
 export const SCRIPT_SCHEMA_3 = "xfb/session-script-3";
 export const REPORT_SCHEMA_3 = "xfb/session-report-3";
@@ -55,6 +55,8 @@ export type Row = {
   after?: "restart";
   /** This row's own halt kinds, instead of the batch's ([] for none). */
   halt_on?: string[];
+  /** Values the row's record and the report list (a recorder run id, a distance): {label, ref}. */
+  facts?: { label: string; ref: string }[];
 };
 export type BatchScript = {
   schema: string;
@@ -98,6 +100,7 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   "config.read": { required: [], optional: [], help: "the staged config.ini's values" },
   "config.restore": { required: [], optional: [], help: "put config.ini back as it was before the run" },
   "actors.release_all": { required: [], optional: [], help: "release every actor the bridge directs (npc.status, then npc.release despawn)" },
+  "recorder.span": { required: ["run"], optional: [], help: "a recorder run's span from the v channel: V's distance travelled over every catch-up page" },
   "overlay.restore": { required: [], optional: [], help: "put the overlay's live look back as this game session started it (the first overlay.set's undo)" },
 };
 
@@ -203,7 +206,11 @@ export function planBatch(script: BatchScript): PlannedBatch {
   const rows = script.rows.map((row, i) => {
     const where = `row ${i + 1}${row?.id ? ` (${row.id})` : ""}`;
     if (!row || typeof row !== "object") { problems.push(`${where}: a row must be an object`); return { row, plan: { id: "x", steps: [] }, failRow: new Set<string>() }; }
-    for (const key of Object.keys(row)) if (!["id", "title", "requires", "steps", "pass", "cleanup", "deadline_ms", "judged_by", "after", "halt_on"].includes(key)) problems.push(`${where}: unknown field ${key}`);
+    for (const key of Object.keys(row)) if (!["id", "title", "requires", "steps", "pass", "cleanup", "deadline_ms", "judged_by", "after", "halt_on", "facts"].includes(key)) problems.push(`${where}: unknown field ${key}`);
+    for (const fact of row.facts ?? []) {
+      if (typeof fact?.label !== "string" || typeof fact.ref !== "string" || !fact.ref.startsWith("$")) problems.push(`${where}: a fact is {label, ref: "$binding.path"}`);
+      else if (!known.has(fact.ref.slice(1).split(".")[0])) problems.push(`${where}: fact ${fact.label} reads ${fact.ref}, which no step binds`);
+    }
     if (typeof row.id !== "string" || !/^[A-Za-z0-9._-]{1,60}$/.test(row.id)) problems.push(`${where}: id must be 1-60 letters, digits, '.', '_' or '-'`);
     if (ids.has(row.id)) problems.push(`${where}: id is used more than once`);
     ids.add(row.id);
@@ -568,6 +575,24 @@ export class SessionExecutor implements Executor {
           const fine = restored.restored || restored.reason === "unchanged by this run";
           return { ok: fine, ...(fine ? {} : { code: "not_restored", message: restored.reason }), value: restored };
         }
+        case "recorder.span": {
+          const run = Number(action.run);
+          let input: Record<string, unknown> = { run, now: false };
+          let distance = 0, pages = 0, more = true;
+          let first: unknown, last: unknown;
+          while (more && pages < 50 && !context.signal.aborted) {
+            const page = await this.api.run("game.catchup", input, { source: "session", signal: context.signal });
+            if (!page.ok) return { ok: false, code: page.error.code, message: page.error.message };
+            pages++;
+            const value = page.result as { v?: { distance_m?: number; latest?: unknown; path?: unknown[] }; more?: boolean; cursor?: unknown };
+            distance += Number(value.v?.distance_m ?? 0);
+            first ??= value.v?.path?.[0];
+            last = value.v?.latest ?? last;
+            more = value.more === true;
+            input = { cursor: value.cursor, now: false };
+          }
+          return { ok: true, value: { run, distance_m: Math.round(distance * 10) / 10, pages, complete: !more, first, last } };
+        }
         case "overlay.restore": {
           const keys = Object.keys(this.overlayUndo);
           if (!keys.length) return { ok: true, value: { restored: false, reason: "this game session's look wasn't changed live" } };
@@ -714,6 +739,7 @@ export type RowRecord = {
   judged_by?: string;
   evidence: string[];
   checks: CheckResult[];
+  facts?: { label: string; value: unknown }[];
   prelude?: { status: string; reason?: string };
   close?: { outcome: string; status: string; reason?: string; last_step?: string };
   telemetry?: RowTelemetry;
@@ -945,6 +971,8 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       // Telemetry: the recorder again after a restart (a new bridge session), and the row's slice from here.
       const recorder = await telemetry.ensureRecorder();
       if (recorder.restarted) log(`     recorder run ${recorder.run} on every channel`);
+      // A row that would start its own recorder can reuse the batch's ($recorder.run), which covers every channel.
+      if (recorder.run !== undefined) bindings.recorder = { run: recorder.run, channels: ALL_CHANNELS };
       const before = new Map(Object.entries(bindings));
       const result = await plan(rowPlan);
       record.close = reportOf(result);
@@ -953,6 +981,11 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       Object.assign(record, verdictOf(result, record.checks, failRow));
       record.evidence = [...executor.evidence];
       record.telemetry = await telemetry.collect(row.id);
+      if (row.facts) record.facts = row.facts.map((fact) => {
+        const missing: string[] = [];
+        const value = resolveRefs(fact.ref, bindings, missing);
+        return { label: fact.label, value: missing.length ? null : value };
+      });
       record.ms = Math.round(clock.now() - started);
       log(`${record.verdict.padEnd(7)} ${row.id}${record.reason ? `: ${record.reason}` : ""}`);
       if (monitor.reason) stopWith("tripwire", monitor.reason, row.id);
@@ -1127,6 +1160,7 @@ function writeReports(script: BatchScript, options: BatchRunOptions, s: ReportSt
     "",
     ...attempts.map((a) => `- Attempt ${a.attempt} (${a.started_at}): ${a.outcome}${a.halt ? `, halted (${a.halt.kind}): ${a.halt.reason}` : ""}; ran ${a.rows_run.length} rows.`),
     "",
+    ...(merged.some((r) => r.facts?.length) ? ["## Row facts", "", ...merged.filter((r) => r.facts?.length).map((r) => `- ${r.id}: ${r.facts!.map((f) => `${f.label} ${JSON.stringify(f.value)}`).join("; ")}`), ""] : []),
     "## Detours taken this attempt (the friction log's automatic part)",
     "",
     ...(thisAttempt.detours.length ? thisAttempt.detours.map((d) => `- ${d}`) : ["- none: every step took its first route"]),

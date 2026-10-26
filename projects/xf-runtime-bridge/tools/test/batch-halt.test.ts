@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseHaltOn, type Row } from "../testing/batch.ts";
+import { parseHaltOn, planBatch, type Row } from "../testing/batch.ts";
 import { nextAttemptArgs, readResume, waitForSignal } from "../testing/loop.ts";
 import { fakeApi, fakeHost, go, script, stagedMod } from "./batch-fakes.ts";
 import { FakeClock } from "./fake-clock.ts";
@@ -214,5 +214,69 @@ describe("the overlay's look, live (overlay.set)", () => {
     expect(host.log.filter((l) => l === "close" || l === "launch")).toEqual(["close", "launch"]);
     expect(api.calls.filter((c) => c.name === "overlay.set").length).toBeGreaterThanOrEqual(2);
     expect(result.rows[0].reports.some((r) => r.branch === "needs_restart")).toBe(true);
+  });
+});
+
+describe("FR1: free roam for the replay (free-roam.json)", () => {
+  const fr = () => JSON.parse(readFileSync(join(import.meta.dir, "..", "sessions", "free-roam.json"), "utf8"));
+  test("its plan: recorder, question, handover, a 10-minute answer, resume, stop, span; passive", () => {
+    const script = fr();
+    expect(planBatch(script).problems).toEqual([]);
+    expect(script.rows.map((r: Row) => r.id)).toEqual(["FR1-free-roam"]);
+    const row = script.rows[0] as Row;
+    const at = (label: string) => row.steps.findIndex((st) => st.label === `FR1-free-roam-${label}`);
+    const order = ["recorder", "cursor", "ask", "handover", "answer", "resume", "stop", "span"].map(at);
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    const recorder = row.steps[at("recorder")] as unknown as { input: { channels: string[] }; alternatives: { input: { channels: string[] } }[][]; outcomes: unknown[] };
+    expect(recorder.input.channels).toEqual(["v", "actors", "camera", "incidents", "supervisor"]);
+    expect(recorder.alternatives[0][0].input.channels).toEqual(["v", "actors", "camera", "incidents"]);
+    expect(recorder.outcomes[0]).toMatchObject({ match: { code: "recording_busy" } });
+    const ask = row.steps[at("ask")] as { input: { level: string; choices: string[]; text: string } };
+    expect(ask.input).toMatchObject({ level: "ask", choices: ["Done", "Skip"] });
+    expect(ask.input.text).toContain("walk about a block, then drive across a district");
+    const answer = row.steps[at("answer")] as { timeout_s: number; outcomes: { name: string }[]; fallback: { end: string }[] };
+    expect(answer.timeout_s).toBe(600);
+    expect(answer.outcomes.map((o) => o.name)).toEqual(["done", "skipped"]);
+    expect(answer.fallback[0].end).toBe("fail");
+    expect(row.cleanup!.some((st) => st.command === "session.resume")).toBe(true);
+    // Passive: nothing but the message, the handover, the recorder and reads.
+    const commands = JSON.stringify(row).match(/"command":"[a-z.]+"/g)!.map((c) => c.slice(11, -1));
+    expect([...new Set(commands)].sort()).toEqual(["game.wait", "photo.exit", "session.handover", "session.resume", "test.record.start", "test.record.stop", "ui.message"]);
+  });
+
+  const runFr = async (answer: string, startCode?: string) => {
+    const clock = new FakeClock();
+    const dir = tempDir("xfb-batch-");
+    const api = fakeApi(clock, {
+      // With startCode, the batch's telemetry recorder starts (run 7) and the row's own start is refused with it.
+      ...(startCode ? { "test.record.start": (_i: unknown, n: number) => (n === 1 ? { ok: true as const, result: { run: 7 } } : { ok: false as const, code: startCode }) } : {}),
+      "game.catchup": (input) => ({ ok: true, result: { cursor: { after: 1 }, counts: { v: 3 }, gaps: [], more: false, ...(input.run !== undefined || input.cursor ? { v: { distance_m: 812.4, path: [[0, 0, 0]], latest: { position: [800, 120, 0] } } } : {}) } }),
+    }, { autoAnswer: answer });
+    const result = await go(fr(), api, fakeHost(), clock, dir, { fixtures: { staged_mod: stagedMod(dir) } });
+    return { row: result.rows[0], api, report: readFileSync(result.reportPath, "utf8") };
+  };
+
+  test("Done after a drive: PASS, with the run id and V's distance in the row's facts and the report", async () => {
+    const { row, api, report } = await runFr("Done");
+    expect(row.verdict).toBe("PASS");
+    // The fake lets the row start its own recorder (run 2) beside the batch's (run 1).
+    expect(row.facts).toEqual([{ label: "recorder run", value: 2 }, { label: "V's distance (m)", value: 812.4 }, { label: "catch-up pages", value: 1 }]);
+    expect(report).toContain("FR1-free-roam: recorder run 2; V's distance (m) 812.4");
+    const names = api.calls.map((c) => c.name);
+    expect(names.indexOf("session.handover")).toBeLessThan(names.lastIndexOf("session.resume"));
+  });
+
+  test("Skip is a SKIP with its reason, and the game still goes back to the bridge", async () => {
+    const { row, api } = await runFr("Skip");
+    expect(row.verdict).toBe("SKIP");
+    expect(row.reason).toContain("the player chose Skip");
+    expect(api.calls.filter((c) => c.name === "session.resume").length).toBeGreaterThan(0);
+  });
+
+  test("the batch's recorder already running (recording_busy) is reused, and covers the row", async () => {
+    const { row } = await runFr("Done", "recording_busy");
+    expect(row.verdict).toBe("PASS");
+    expect(row.facts![0]).toEqual({ label: "recorder run", value: 7 });
   });
 });

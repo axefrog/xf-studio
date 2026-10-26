@@ -381,7 +381,8 @@ function smokeScript(): Json {
   rows.push({ id: row, title: "No invalid heartbeats: the recorder on all channels for 2 minutes", requires: writes,
     steps: [inPlay(row),
       { label: `${row}-start`, do: "run", command: "test.record.start", input: { channels: ["v", "actors", "subtitles", "voice", "face", "ui", "contacts", "supervisor"], duration_s: 300 }, bind: key(row, "rec"),
-        outcomes: [{ name: "already_recording", match: { code: "recording_active" }, run: [{ do: "run", command: "test.record.stop", input: {} }, { do: "run", command: "test.record.start", input: { channels: ["v", "actors", "subtitles", "voice", "face", "ui", "contacts", "supervisor"], duration_s: 300 }, bind: key(row, "rec") }] }] },
+        // The batch's telemetry recorder (every channel) is usually running already: the bridge refuses a second with recording_busy.
+        outcomes: [{ name: "batch_recorder", match: { code: "recording_busy" }, run: [{ do: "set", value: "$recorder", bind: key(row, "rec") }] }] },
       { label: `${row}-two-minutes`, do: "wait", ms: 120_000, deadline_ms: 125_000 },
       { label: `${row}-catchup`, do: "run", command: "game.catchup", input: { run: ref(row, "rec", "run") }, bind: key(row, "catch"), retry: { times: 2, backoff_ms: 2000 } }],
     pass: [check("no gaps", row, "catch", "gaps", { equals: [] }),
@@ -484,8 +485,71 @@ function smokeScript(): Json {
   };
 }
 
+// ---- Free roam for XF · Holotable's replay -----------------------------------------------------------------
+
+/**
+ * free-roam.json: one passive row, FR1, for the replay proof of concept (every recorded run so far had V standing
+ * still). The recorder runs on v, actors, camera and incidents (and supervisor where the build takes it; the batch's
+ * own recorder, on every channel, is reused when it already runs), the player is asked to walk a block and drive
+ * across a district, the session is handed over so no XF automation touches the game meanwhile, and the answer is
+ * waited for up to 10 minutes. Then resume, stop the recorder, and read the run's span from the v channel.
+ */
+function freeRoamScript(): Json {
+  const row = "FR1-free-roam";
+  const channels = ["v", "actors", "camera", "incidents"];
+  const start = (withSupervisor: boolean): Json => ({ do: "run", command: "test.record.start", input: { channels: withSupervisor ? [...channels, "supervisor"] : channels, duration_s: 1800 }, bind: key(row, "rec") });
+  const answered = (label: string) => ({ path: "events", some: { all: [{ path: "kind", equals: "answer" }, { path: "data.label", equals: label }] } });
+  return {
+    schema: "xfb/session-script-3",
+    name: "free-roam",
+    title: "Free roam for XF · Holotable's live world view (FR1)",
+    card: "research/runtime/runtime-bridge-test-card.md#before-the-session-coordinator",
+    requires: [
+      "The XF test profile with the autonomous -writes build (the recorder needs allow_test_hooks); V in the open with a vehicle to hand.",
+      "A private fixtures file (--fixtures) as for the other batches. Passive: no XF actors, no writes beyond the message, the handover and the recorder.",
+    ],
+    setup: [{ label: "commit", do: "host.commit", on_fail: "stop" }],
+    rows: [{
+      id: row,
+      title: "Free roam: walk about a block, then drive across a district, with the recorder on and the session handed over",
+      requires: cfg({ "bridge.allow_writes": "true" }),
+      steps: [
+        inPlay(row),
+        { label: `${row}-recorder`, ...start(true),
+          // Without the supervisor channel where the build refuses it; the batch's recorder when one already runs.
+          alternatives: [[start(false)]],
+          outcomes: [{ name: "batch_recorder", match: { code: "recording_busy" }, run: [{ do: "set", value: "$recorder", bind: key(row, "rec") }] }] },
+        { label: `${row}-cursor`, do: "cursor", bind: key(row, "cursor") },
+        { label: `${row}-ask`, do: "run", command: "ui.message", input: { level: "ask", text: "Free roam for the live world view: walk about a block, then drive across a district. Answer Done when finished (about 5 minutes).", choices: ["Done", "Skip"], seconds: 600 }, bind: key(row, "q") },
+        { label: `${row}-handover`, do: "run", command: "session.handover", input: { note: "FR1 free roam: the player walks and drives; no XF automation until Done" } },
+        { label: `${row}-answer`, do: "await", cursor: ref(row, "cursor"), kind: "answer", message_id: ref(row, "q", "id"), timeout_s: 600, deadline_ms: 610_000, bind: key(row, "answer"),
+          outcomes: [
+            { name: "done", match: answered("Done") },
+            { name: "skipped", match: answered("Skip"), run: [{ end: "fail", reason: "the player chose Skip" }] },
+          ],
+          fallback: [{ end: "fail", reason: "no answer within 10 minutes" }] },
+        { label: `${row}-resume`, do: "run", command: "session.resume", input: {} },
+        { label: `${row}-stop`, do: "run", command: "test.record.stop", input: {}, on_fail: "continue" },
+        { label: `${row}-span`, do: "recorder.span", run: ref(row, "rec", "run"), bind: key(row, "span") },
+      ],
+      pass: [
+        // The run as the span read it: a Skip or a missed deadline never reaches the span, so the row is a SKIP, not a partial pass.
+        { label: "a recorder run", ref: ref(row, "span"), match: { path: "run", exists: true } },
+        { label: "V moved at least 100 m", ref: ref(row, "span"), match: { path: "distance_m", min: 100 } },
+      ],
+      facts: [{ label: "recorder run", ref: ref(row, "rec", "run") }, { label: "V's distance (m)", ref: ref(row, "span", "distance_m") }, { label: "catch-up pages", ref: ref(row, "span", "pages") }],
+      // However the row ends (Skip, the deadline, a stop), the game goes back to the bridge and the question comes down.
+      cleanup: [
+        { label: `${row}-resume-always`, do: "run", command: "session.resume", input: {} },
+        { label: `${row}-clear`, do: "run", command: "ui.message", input: { clear: true } },
+      ],
+    }],
+    teardown: [],
+  };
+}
+
 const here = import.meta.dir;
-for (const [file, script] of [["st-styling.json", stScript()], ["borg4-smoke.json", smokeScript()]] as const) {
+for (const [file, script] of [["st-styling.json", stScript()], ["borg4-smoke.json", smokeScript()], ["free-roam.json", freeRoamScript()]] as const) {
   writeFileSync(join(here, file), JSON.stringify(script, null, 2) + "\n");
   console.log(`wrote ${file}: ${(script.rows as unknown[]).length} rows`);
 }

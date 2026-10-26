@@ -1,0 +1,264 @@
+{
+  "schema": "xfb/session-script-3",
+  "name": "free-roam",
+  "title": "Free roam for XF · Holotable's live world view (FR1)",
+  "card": "research/runtime/runtime-bridge-test-card.md#before-the-session-coordinator",
+  "requires": [
+    "The XF test profile with the autonomous -writes build (the recorder needs allow_test_hooks); V in the open with a vehicle to hand.",
+    "A private fixtures file (--fixtures) as for the other batches. Passive: no XF actors, no writes beyond the message, the handover and the recorder."
+  ],
+  "setup": [
+    {
+      "label": "commit",
+      "do": "host.commit",
+      "on_fail": "stop"
+    }
+  ],
+  "rows": [
+    {
+      "id": "FR1-free-roam",
+      "title": "Free roam: walk about a block, then drive across a district, with the recorder on and the session handed over",
+      "requires": [
+        {
+          "config": "bridge.allow_writes",
+          "equals": "true"
+        }
+      ],
+      "steps": [
+        {
+          "label": "FR1-free-roam-play",
+          "do": "run",
+          "command": "game.wait",
+          "input": {
+            "phase": "gameplay",
+            "timeout_ms": 20000
+          },
+          "deadline_ms": 25000,
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "photo.exit",
+                "input": {}
+              },
+              {
+                "do": "run",
+                "command": "game.wait",
+                "input": {
+                  "phase": "gameplay",
+                  "timeout_ms": 20000
+                },
+                "deadline_ms": 25000
+              }
+            ]
+          ]
+        },
+        {
+          "label": "FR1-free-roam-recorder",
+          "do": "run",
+          "command": "test.record.start",
+          "input": {
+            "channels": [
+              "v",
+              "actors",
+              "camera",
+              "incidents",
+              "supervisor"
+            ],
+            "duration_s": 1800
+          },
+          "bind": "FR1_free_roam_rec",
+          "alternatives": [
+            [
+              {
+                "do": "run",
+                "command": "test.record.start",
+                "input": {
+                  "channels": [
+                    "v",
+                    "actors",
+                    "camera",
+                    "incidents"
+                  ],
+                  "duration_s": 1800
+                },
+                "bind": "FR1_free_roam_rec"
+              }
+            ]
+          ],
+          "outcomes": [
+            {
+              "name": "batch_recorder",
+              "match": {
+                "code": "recording_busy"
+              },
+              "run": [
+                {
+                  "do": "set",
+                  "value": "$recorder",
+                  "bind": "FR1_free_roam_rec"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "label": "FR1-free-roam-cursor",
+          "do": "cursor",
+          "bind": "FR1_free_roam_cursor"
+        },
+        {
+          "label": "FR1-free-roam-ask",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "level": "ask",
+            "text": "Free roam for the live world view: walk about a block, then drive across a district. Answer Done when finished (about 5 minutes).",
+            "choices": [
+              "Done",
+              "Skip"
+            ],
+            "seconds": 600
+          },
+          "bind": "FR1_free_roam_q"
+        },
+        {
+          "label": "FR1-free-roam-handover",
+          "do": "run",
+          "command": "session.handover",
+          "input": {
+            "note": "FR1 free roam: the player walks and drives; no XF automation until Done"
+          }
+        },
+        {
+          "label": "FR1-free-roam-answer",
+          "do": "await",
+          "cursor": "$FR1_free_roam_cursor",
+          "kind": "answer",
+          "message_id": "$FR1_free_roam_q.id",
+          "timeout_s": 600,
+          "deadline_ms": 610000,
+          "bind": "FR1_free_roam_answer",
+          "outcomes": [
+            {
+              "name": "done",
+              "match": {
+                "path": "events",
+                "some": {
+                  "all": [
+                    {
+                      "path": "kind",
+                      "equals": "answer"
+                    },
+                    {
+                      "path": "data.label",
+                      "equals": "Done"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "skipped",
+              "match": {
+                "path": "events",
+                "some": {
+                  "all": [
+                    {
+                      "path": "kind",
+                      "equals": "answer"
+                    },
+                    {
+                      "path": "data.label",
+                      "equals": "Skip"
+                    }
+                  ]
+                }
+              },
+              "run": [
+                {
+                  "end": "fail",
+                  "reason": "the player chose Skip"
+                }
+              ]
+            }
+          ],
+          "fallback": [
+            {
+              "end": "fail",
+              "reason": "no answer within 10 minutes"
+            }
+          ]
+        },
+        {
+          "label": "FR1-free-roam-resume",
+          "do": "run",
+          "command": "session.resume",
+          "input": {}
+        },
+        {
+          "label": "FR1-free-roam-stop",
+          "do": "run",
+          "command": "test.record.stop",
+          "input": {},
+          "on_fail": "continue"
+        },
+        {
+          "label": "FR1-free-roam-span",
+          "do": "recorder.span",
+          "run": "$FR1_free_roam_rec.run",
+          "bind": "FR1_free_roam_span"
+        }
+      ],
+      "pass": [
+        {
+          "label": "a recorder run",
+          "ref": "$FR1_free_roam_span",
+          "match": {
+            "path": "run",
+            "exists": true
+          }
+        },
+        {
+          "label": "V moved at least 100 m",
+          "ref": "$FR1_free_roam_span",
+          "match": {
+            "path": "distance_m",
+            "min": 100
+          }
+        }
+      ],
+      "facts": [
+        {
+          "label": "recorder run",
+          "ref": "$FR1_free_roam_rec.run"
+        },
+        {
+          "label": "V's distance (m)",
+          "ref": "$FR1_free_roam_span.distance_m"
+        },
+        {
+          "label": "catch-up pages",
+          "ref": "$FR1_free_roam_span.pages"
+        }
+      ],
+      "cleanup": [
+        {
+          "label": "FR1-free-roam-resume-always",
+          "do": "run",
+          "command": "session.resume",
+          "input": {}
+        },
+        {
+          "label": "FR1-free-roam-clear",
+          "do": "run",
+          "command": "ui.message",
+          "input": {
+            "clear": true
+          }
+        }
+      ]
+    }
+  ],
+  "teardown": []
+}
