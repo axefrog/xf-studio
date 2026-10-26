@@ -77,8 +77,13 @@ export function holotablePanel(ctx: Ctx): PanelController {
     h("div", { class: "control-line" }, story, storyNote), inspector.element, limits);
 
   // Gestures: orbit, zoom, pick. The viewpoint is this view's own; the selection is the service's.
-  let drag: { id: number; x: number; y: number; yaw: number; pitch: number; moved: boolean } | null = null;
-  svg.addEventListener("pointerdown", event => { drag = { id: event.pointerId, x: event.clientX, y: event.clientY, yaw: orbit.yaw, pitch: orbit.pitch, moved: false }; svg.setPointerCapture(event.pointerId); });
+  // The mark under the pointer is read on press: pointer capture retargets the release to the drawing itself.
+  let drag: { id: number; x: number; y: number; yaw: number; pitch: number; moved: boolean; mark: string | null } | null = null;
+  svg.addEventListener("pointerdown", event => {
+    const mark = (event.target as Element | null)?.closest?.("[data-id]")?.getAttribute("data-id") ?? null;
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, yaw: orbit.yaw, pitch: orbit.pitch, moved: false, mark };
+    svg.setPointerCapture(event.pointerId);
+  });
   svg.addEventListener("pointermove", event => {
     if (!drag || event.pointerId !== drag.id) return;
     const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
@@ -88,9 +93,9 @@ export function holotablePanel(ctx: Ctx): PanelController {
   });
   const endDrag = (event: PointerEvent) => {
     if (!drag || event.pointerId !== drag.id) return;
-    const picked = !drag.moved ? (event.target as Element | null)?.getAttribute?.("data-id") : null;
+    const picked = !drag.moved ? drag.mark : null;
     drag = null;
-    if (picked !== undefined && picked !== null) void ctx.dispatch({ kind: "holo.select", id: picked }, { quiet: true });
+    if (picked) void ctx.dispatch({ kind: "holo.select", id: picked }, { quiet: true });
   };
   svg.addEventListener("pointerup", endDrag);
   svg.addEventListener("pointercancel", () => { drag = null; });
@@ -103,25 +108,49 @@ export function holotablePanel(ctx: Ctx): PanelController {
     drawnKey = ""; ctx.changed();
   });
 
+  // The drawing reuses its nodes: each frame sets the attributes that changed on pooled lines and labels, instead of building
+  // hundreds of elements per playback tick. The edge ticks change only with the drawing's size.
+  const chrome = document.createElementNS(NS, "g"), linesLayer = document.createElementNS(NS, "g"), marksLayer = document.createElementNS(NS, "g"), textLayer = document.createElementNS(NS, "g");
+  svg.append(chrome, linesLayer, marksLayer, textLayer);
+  let chromeSize = "";
+  const pooled = (layer: SVGGElement, tag: "polyline" | "text", index: number): SVGElement => {
+    let e = layer.children[index] as SVGElement | undefined;
+    if (!e) { e = document.createElementNS(NS, tag); layer.append(e); }
+    return e;
+  };
+  const set = (e: Element, name: string, value: string) => { if (e.getAttribute(name) !== value) e.setAttribute(name, value); };
+  const trim = (layer: SVGGElement, used: number) => { while (layer.children.length > used) layer.lastElementChild!.remove(); };
+
   function draw(state: HoloState) {
-    const open = state.open; if (!open) { svg.replaceChildren(); return; }
+    const open = state.open;
+    if (!open) { trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); chromeSize = ""; return; }
     const width = svg.clientWidth || 800, height = svg.clientHeight || 480;
     const scene = project(open.session, open.world, state.t, state.layers, orbit, width, height, state.selected);
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    const nodes: Element[] = scene.primitives.map(p => node(p));
-    // Instrument chrome: edge ticks and a true scale bar.
-    for (let x = 0; x < width; x += 40) nodes.push(line([[x, 0], [x, x % 200 ? 4 : 9]], "grid", 0.8), line([[x, height], [x, height - (x % 200 ? 4 : 9)]], "grid", 0.8));
-    for (let y = 0; y < height; y += 40) nodes.push(line([[0, y], [y % 200 ? 4 : 9, y]], "grid", 0.8), line([[width, y], [width - (y % 200 ? 4 : 9), y]], "grid", 0.8));
+    set(svg, "viewBox", `0 0 ${width} ${height}`);
+    if (chromeSize !== `${width}x${height}`) {
+      chromeSize = `${width}x${height}`;
+      const ticks: Element[] = [];
+      for (let x = 0; x < width; x += 40) ticks.push(line([[x, 0], [x, x % 200 ? 4 : 9]], "grid", 0.8), line([[x, height], [x, height - (x % 200 ? 4 : 9)]], "grid", 0.8));
+      for (let y = 0; y < height; y += 40) ticks.push(line([[0, y], [y % 200 ? 4 : 9, y]], "grid", 0.8), line([[width, y], [width - (y % 200 ? 4 : 9), y]], "grid", 0.8));
+      chrome.replaceChildren(...ticks);
+    }
     const bx = width - 24 - scene.barPx, by = height - 22;
-    nodes.push(line([[bx, by - 4], [bx, by], [bx + scene.barPx, by], [bx + scene.barPx, by - 4]], "label-muted", 1));
-    nodes.push(text([bx + scene.barPx, by - 8], `${scene.metresPerBar} m`, "label-muted", "end"));
-    if (scene.inGap) nodes.push(text([16, 24], "No samples at this moment: nothing here proves what happened", "label-muted"));
-    svg.replaceChildren(...nodes);
+    const lineList = scene.primitives.filter((p): p is Extract<Primitive, { kind: "line" }> => p.kind === "line");
+    lineList.push({ kind: "line", points: [[bx, by - 4], [bx, by], [bx + scene.barPx, by], [bx + scene.barPx, by - 4]], style: "label-muted", opacity: 1 });
+    lineList.forEach((p, i) => paintLine(pooled(linesLayer, "polyline", i), p.points, p.style, p.opacity));
+    trim(linesLayer, lineList.length);
+    const textList: { at: readonly [number, number]; text: string; style: Style; anchor?: "end" }[] =
+      scene.primitives.filter((p): p is Extract<Primitive, { kind: "text" }> => p.kind === "text").map(p => ({ at: p.at, text: p.text, style: p.style }));
+    textList.push({ at: [bx + scene.barPx, by - 8], text: `${scene.metresPerBar} m`, style: "label-muted", anchor: "end" });
+    if (scene.inGap) textList.push({ at: [16, 24], text: "No samples at this moment: nothing here proves what happened", style: "label-muted" });
+    else if (scene.camStale && state.layers.camera) textList.push({ at: [16, 24], text: "No fresh camera sample at this moment", style: "label-muted" });
+    textList.forEach((p, i) => paintText(pooled(textLayer, "text", i), p.at, p.text, p.style, p.anchor));
+    trim(textLayer, textList.length);
+    // Markers are few (V and the placed events): rebuilt each frame.
+    marksLayer.replaceChildren(...scene.primitives.filter(p => p.kind === "marker").map(p => marker(p as Extract<Primitive, { kind: "marker" }>)));
   }
 
-  function node(p: Primitive): Element {
-    if (p.kind === "line") return line(p.points, p.style, p.opacity);
-    if (p.kind === "text") return text(p.at, p.text, p.style);
+  function marker(p: Extract<Primitive, { kind: "marker" }>): Element {
     const g = document.createElementNS(NS, "g");
     if (p.id) { g.setAttribute("data-id", p.id); g.setAttribute("style", "cursor:pointer"); }
     const [x, y] = p.at, s = p.size, colour = STROKES[p.style];
@@ -137,18 +166,17 @@ export function holotablePanel(ctx: Ctx): PanelController {
     if (p.style === "event-selected") { const ring = document.createElementNS(NS, "circle"); ring.setAttribute("cx", String(x)); ring.setAttribute("cy", String(y)); ring.setAttribute("r", String(s + 5)); ring.setAttribute("style", "fill:none;stroke:var(--signal);stroke-width:2"); g.append(ring); }
     return g;
   }
-  function line(points: readonly (readonly [number, number])[], style: Style, opacity: number): Element {
-    const e = document.createElementNS(NS, "polyline");
-    e.setAttribute("points", points.map(q => `${f1(q[0])},${f1(q[1])}`).join(" "));
-    e.setAttribute("style", `fill:none;stroke:${STROKES[style]};stroke-width:${style === "trail" ? 2 : style === "gap" ? 3 : 1};opacity:${opacity.toFixed(2)}${DASH[style] ? `;stroke-dasharray:${DASH[style]}` : ""}`);
-    return e;
+  function paintLine(e: Element, points: readonly (readonly [number, number])[], style: Style, opacity: number) {
+    set(e, "points", points.map(q => `${f1(q[0])},${f1(q[1])}`).join(" "));
+    set(e, "style", `fill:none;stroke:${STROKES[style]};stroke-width:${style === "trail" ? 2 : style === "gap" ? 3 : 1};opacity:${opacity.toFixed(2)}${DASH[style] ? `;stroke-dasharray:${DASH[style]}` : ""}`);
   }
-  function text(at: readonly [number, number], value: string, style: Style, anchor: "start" | "end" = "start"): Element {
-    const e = document.createElementNS(NS, "text");
-    e.setAttribute("x", f1(at[0])); e.setAttribute("y", f1(at[1])); e.setAttribute("text-anchor", anchor);
-    e.setAttribute("style", `fill:${STROKES[style]};font:11px var(--font-mono);paint-order:stroke;stroke:var(--bg-app);stroke-width:3px;stroke-linejoin:round`);
-    e.textContent = value;
-    return e;
+  function line(points: readonly (readonly [number, number])[], style: Style, opacity: number): Element {
+    const e = document.createElementNS(NS, "polyline"); paintLine(e, points, style, opacity); return e;
+  }
+  function paintText(e: Element, at: readonly [number, number], value: string, style: Style, anchor: "start" | "end" = "start") {
+    set(e, "x", f1(at[0])); set(e, "y", f1(at[1])); set(e, "text-anchor", anchor);
+    set(e, "style", `fill:${STROKES[style]};font:11px var(--font-mono);paint-order:stroke;stroke:var(--bg-app);stroke-width:3px;stroke-linejoin:round`);
+    if (e.textContent !== value) e.textContent = value;
   }
 
   function inspectorRows(state: HoloState): HTMLElement {
@@ -208,7 +236,7 @@ export function holotablePanel(ctx: Ctx): PanelController {
       if (s) {
         const v = projectV(state);
         setText(readout, `${f1(state.t - s.meta.from)} s of ${f1(s.meta.to - s.meta.from)} s${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}`);
-        setText(limits, `This recording: ${s.meta.dropped} dropped, ${s.meta.missedDeadlines} missed, largest gap ${f1(s.meta.largestGapS)} s. Districts and cells come from offline game data, an estimate of the live world.`);
+        setText(limits, `${s.meta.problems.length ? `This recording is damaged: ${s.meta.problems.join("; ")}. ` : ""}This recording: ${s.meta.dropped} dropped, ${s.meta.missedDeadlines} missed, largest gap ${f1(s.meta.largestGapS)} s. Districts and cells come from offline game data, an estimate of the live world.`);
       } else { setText(readout, ""); setText(limits, ""); }
       const dk = JSON.stringify([state.revision, orbit, svg.clientWidth, svg.clientHeight]);
       if (dk !== drawnKey) { drawnKey = dk; draw(state); }

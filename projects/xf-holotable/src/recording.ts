@@ -35,6 +35,21 @@ export function listRuns(root: string): RunRef[] {
 
 /** Reads a run directory into a Session. Throws on identity or sequence violations rather than guessing. */
 export function readRun(dir: string, signal?: AbortSignal): Session {
+  const parse = parseRun(dir, signal);
+  for (let step = parse.next(); ; step = parse.next()) if (step.done) return step.value;
+}
+
+/** As `readRun`, giving way to the event loop after each chunk, so a cancel that arrives meanwhile stops the read. */
+export async function readRunAsync(dir: string, signal?: AbortSignal): Promise<Session> {
+  const parse = parseRun(dir, signal);
+  for (let step = parse.next(); ; step = parse.next()) {
+    if (step.done) return step.value;
+    await new Promise(resolve => setImmediate(resolve));
+  }
+}
+
+/** The parser, one chunk per step. */
+function* parseRun(dir: string, signal?: AbortSignal): Generator<void, Session> {
   const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8")) as Json;
   if (manifest.schema !== "xfb/recording-1") throw new Error(`Not a recorder manifest: ${manifest.schema}`);
   if (basename(dir) !== `run-${manifest.run}` || basename(join(dir, "..")) !== manifest.session) throw new Error("Recording folder does not match its manifest");
@@ -42,36 +57,44 @@ export function readRun(dir: string, signal?: AbortSignal): Session {
     schema: "xfh/session-1", session: manifest.session, run: manifest.run, worldGeneration: manifest.world_generation,
     pluginVersion: manifest.plugin_version ?? "", start: manifest.start_s, end: manifest.end_s, channels: manifest.channels ?? [],
     complete: manifest.complete === true, dropped: manifest.dropped ?? 0, missedDeadlines: manifest.missed_deadlines ?? 0,
-    largestGapS: manifest.largest_gap_s ?? 0, coverage: manifest.coverage ?? "", from: manifest.start_s, to: manifest.end_s,
+    largestGapS: manifest.largest_gap_s ?? 0, coverage: manifest.coverage ?? "", from: manifest.start_s, to: manifest.end_s, problems: [],
   };
   const session: Session = { meta, v: [], camera: [], events: [], gaps: [] };
   const cite = (seq: number): Cite => `recorder:${meta.session}:${meta.run}:${seq}`;
-  const lines = new Map<string, Json>();
-  let last = 0;
+  const lines = new Map<string, Json>(), invalidV: number[] = [];
+  let last = 0, lastT = meta.start;
   const chunks: Json[] = manifest.chunks ?? [];
-  for (const { file } of chunks) {
+  for (const [index, { file }] of chunks.entries()) {
     signal?.throwIfAborted();
     if (!/^chunk-\d+\.jsonl$/.test(file)) throw new Error(`Unexpected chunk name ${file}`);
     const path = join(dir, file);
-    if (!existsSync(path)) break; // A crashed run can lack its last chunks: what exists is still evidence.
+    if (!existsSync(path)) {
+      // A crashed or damaged run can lack chunks: what exists is still evidence, and the loss is said, never hidden.
+      meta.problems.push(`${chunks.length - index} of ${chunks.length} chunks are missing from ${file} on`);
+      meta.complete = false;
+      session.gaps.push({ from: lastT, to: meta.end, reason: "missing", fromSeq: last, toSeq: last });
+      break;
+    }
     const buf = readFileSync(path);
     if (buf.length > CHUNK_CAP) throw new Error(`Chunk over the recorder's cap: ${file}`);
     let offset = 0;
     while (offset < buf.length) {
       const end = buf.indexOf(10, offset);
-      if (end < 0) break; // An incomplete writer tail is never parsed.
+      if (end < 0) { meta.problems.push(`the last row of ${file} is unfinished`); meta.complete = false; break; } // never parsed
       if (end - offset > ROW_CAP) throw new Error("Row exceeds the recorder's envelope cap");
       const row = JSON.parse(buf.subarray(offset, end).toString("utf8")) as Json;
       offset = end + 1;
       if (row.session !== meta.session || row.run !== meta.run || row.world_generation !== meta.worldGeneration || !Number.isSafeInteger(row.seq) || !Number.isFinite(row.source_s)) throw new Error(`Row identity mismatch at seq ${row.seq}`);
       if (row.seq <= last) throw new Error(`Sequence went backwards at ${row.seq}`);
       if (last && row.seq !== last + 1) session.gaps.push({ from: row.source_s, to: row.source_s, reason: "sequence", fromSeq: last, toSeq: row.seq });
-      last = row.seq;
-      if (row.valid === false) continue;
+      last = row.seq; lastT = row.source_s;
+      if (row.valid === false) { if (row.channel === "v") invalidV.push(row.source_s); continue; }
       ingest(row, session, cite, lines);
     }
+    yield;
   }
-  timeGaps(session);
+  signal?.throwIfAborted();
+  timeGaps(session, invalidV);
   session.events.sort((a, b) => a.t - b.t || a.seq - b.seq);
   if (session.v.length) { meta.from = session.v[0].t; meta.to = session.v[session.v.length - 1].t; }
   return session;
@@ -112,7 +135,8 @@ function ingest(row: Json, s: Session, cite: (seq: number) => Cite, lines: Map<s
       // One timeline event per line, at its request; the words are `full` content.
       if (d.event !== "line.requested" || lines.has(d.line_id)) return;
       lines.set(d.line_id, d);
-      push(s, { kind: "line", t, seq, summary: `Line spoken (${d.type})`, detail: `${d.speaker_name ?? "Someone"}: ${d.text}`, level: "full", cite: cite(seq) });
+      // The recorder sees the request and the widget, never the sound: say what was observed.
+      push(s, { kind: "line", t, seq, summary: `Subtitle requested (${d.type})`, detail: `${d.speaker_name ?? "Someone"}: ${d.text}`, level: "full", cite: cite(seq) });
       return;
     }
     case "voice": {
@@ -124,11 +148,18 @@ function ingest(row: Json, s: Session, cite: (seq: number) => Cite, lines: Map<s
 
 function push(s: Session, e: Omit<TimelineEvent, "id">) { s.events.push({ id: `e${s.events.length + 1}`, ...e }); }
 
-/** Pauses in V's 10 Hz samples become time gaps; sequence gaps keep their place from the surrounding samples. */
-function timeGaps(s: Session) {
+/**
+ * Pauses in V's 10 Hz samples become time gaps, and an invalid V sample a gap between the valid samples either side of it; sequence
+ * gaps keep their place from the surrounding samples. Every gap is anchored on V samples, so the trail breaks exactly there.
+ */
+function timeGaps(s: Session, invalidV: number[]) {
   for (let i = 1; i < s.v.length; i++) {
     const a = s.v[i - 1], b = s.v[i];
     if (b.t - a.t > TIME_GAP_S) s.gaps.push({ from: a.t, to: b.t, reason: "time", fromSeq: a.seq, toSeq: b.seq });
+  }
+  for (const t of invalidV) {
+    const a = lastAtOrBefore(s.v, t), b = s.v.find(x => x.t > t);
+    if (a && b && !s.gaps.some(g => g.from === a.t && g.to === b.t)) s.gaps.push({ from: a.t, to: b.t, reason: "invalid", fromSeq: a.seq, toSeq: b.seq });
   }
   for (const g of s.gaps) if (g.reason === "sequence") {
     const before = lastAtOrBefore(s.v, g.from - 1e-9), after = s.v.find(x => x.seq > g.toSeq - 1);

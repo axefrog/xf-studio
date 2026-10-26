@@ -17,13 +17,15 @@ export interface HoloEvent {
   readonly id: string; readonly kind: string; readonly t: number; readonly seq: number; readonly at?: Vec3;
   readonly summary: string; readonly detail?: string; readonly level: ContentLevel; readonly cite: string;
 }
-export interface HoloGap { readonly from: number; readonly to: number; readonly reason: "sequence" | "time" }
+export interface HoloGap { readonly from: number; readonly to: number; readonly reason: "sequence" | "time" | "invalid" | "missing" }
 export interface HoloSession {
   readonly meta: {
     readonly session: string; readonly run: number; readonly start: number; readonly end: number; readonly channels: readonly string[];
     /** The sampled span (V's first and last samples): what replay covers. */
     readonly from: number; readonly to: number;
     readonly complete: boolean; readonly dropped: number; readonly missedDeadlines: number; readonly largestGapS: number; readonly coverage: string;
+    /** Damage found while reading (missing chunks, an unfinished last row). */
+    readonly problems: readonly string[];
   };
   readonly v: readonly HoloVSample[];
   readonly camera: readonly HoloCameraSample[];

@@ -83,12 +83,41 @@ describe("world", () => {
 });
 
 describe("service", () => {
-  test("opens only runs inside its recordings folder", () => {
+  test("opens only runs inside its recordings folder", async () => {
     const f = fx = writeFixture();
     const { handlers } = createService({ recordingsRoot: f.root, worldPackPath: join(f.root, "missing.json") });
     const signal = new AbortController().signal;
-    expect((handlers["session.open"]({ dir: f.dir }, signal) as any).meta.session).toBe("abc123");
-    expect(() => handlers["session.open"]({ dir: join(f.root, "elsewhere") }, signal)).toThrow(/recordings folder/);
-    expect((handlers["world.around"]({ dir: f.dir }, signal) as any).areas).toEqual([]);
+    expect((await handlers["session.open"]({ dir: f.dir }, signal) as any).meta.session).toBe("abc123");
+    await expect(handlers["session.open"]({ dir: join(f.root, "elsewhere") }, signal)).rejects.toThrow(/recordings folder/);
+    expect((await handlers["world.around"]({ dir: f.dir }, signal) as any).areas).toEqual([]);
+  });
+
+  test("a cancelled open rejects without publishing, and a later open still loads", async () => {
+    const f = fx = writeFixture();
+    const { handlers, sessions } = createService({ recordingsRoot: f.root, worldPackPath: join(f.root, "missing.json") });
+    const ctl = new AbortController(); ctl.abort();
+    await expect(handlers["session.open"]({ dir: f.dir }, ctl.signal)).rejects.toThrow(/Cancelled/);
+    expect((await handlers["session.open"]({ dir: f.dir }, new AbortController().signal) as any).v.length).toBe(50);
+    expect(sessions.size).toBe(1);
+  });
+});
+
+describe("damage and invalid samples are disclosed", () => {
+  test("an invalid V sample splits the trail", () => {
+    const f = fx = writeFixture({ invalidAt: 25 });
+    expect(trailUntil(readRun(f.dir), Infinity).length).toBe(2);
+  });
+  test("a missing chunk makes the run incomplete and says so", () => {
+    const f = fx = writeFixture({ missingChunk: true });
+    const s = readRun(f.dir);
+    expect(s.meta.complete).toBe(false);
+    expect(s.meta.problems.join(" ")).toMatch(/missing/);
+    expect(s.gaps.some(g => g.reason === "missing")).toBe(true);
+  });
+  test("an unfinished last row is disclosed, never parsed", () => {
+    const f = fx = writeFixture({ unfinishedTail: true });
+    const s = readRun(f.dir);
+    expect(s.meta.problems.join(" ")).toMatch(/unfinished/);
+    expect(s.v.length).toBe(50);
   });
 });

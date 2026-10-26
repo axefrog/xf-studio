@@ -36,7 +36,7 @@ export interface TimelineEvent {
 }
 
 /** A stretch with no samples (a missed deadline, a drop, a sequence jump): absence is never proof. */
-export interface Gap { from: number; to: number; reason: "sequence" | "time"; fromSeq: number; toSeq: number }
+export interface Gap { from: number; to: number; reason: "sequence" | "time" | "invalid" | "missing"; fromSeq: number; toSeq: number }
 
 export interface SessionMeta {
   schema: "xfh/session-1";
@@ -47,6 +47,8 @@ export interface SessionMeta {
   complete: boolean; dropped: number; missedDeadlines: number; largestGapS: number;
   /** What the recording cannot prove, from its own manifest. */
   coverage: string;
+  /** Damage found while reading (a chunk the manifest lists is missing, an unfinished last row): the run is then not complete. */
+  problems: string[];
 }
 
 export interface Session {

@@ -66,7 +66,7 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
   return { point, line, scale, position: c };
 }
 
-export interface Scene { primitives: Primitive[]; v?: HoloVSample; cam?: HoloCameraSample; recent: HoloEvent[]; inGap: boolean; metresPerBar: number; barPx: number }
+export interface Scene { primitives: Primitive[]; v?: HoloVSample; cam?: HoloCameraSample; camStale: boolean; vStale: boolean; recent: HoloEvent[]; inGap: boolean; metresPerBar: number; barPx: number }
 
 /** The model at moment t, projected for an orbit around V (or the first sample, before V's first sample). */
 export function project(s: HoloSession, world: HoloWorld, t: number, layers: Readonly<Record<HoloLayer, boolean>>, orbit: Orbit,
@@ -84,14 +84,19 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
     lines([[target[0] - span, snap(target[1]) + k, z], [target[0] + span, snap(target[1]) + k, z]], "grid", strong * 0.5);
     lines([[snap(target[0]) + k, target[1] - span, z], [snap(target[0]) + k, target[1] + span, z]], "grid", strong * 0.5);
   }
-  if (layers.cells) for (const c of world.cells) box(c, (ps, o) => lines(ps, "cell", o * fade(ps[0])));
+  if (layers.cells) for (const c of world.cells) {
+    const cx = (c.min[0] + c.max[0]) / 2, cy = (c.min[1] + c.max[1]) / 2;
+    if (Math.hypot(cx - target[0], cy - target[1]) <= CELL_RADIUS) box(c, (ps, o) => lines(ps, "cell", o * fade(ps[0])));
+  }
   if (layers.areas) for (const a of world.areas) plate(a, target, (ps, style, o) => lines(ps, style, o * fade(ps[0]), true));
   if (layers.v) for (const run of trail(s, t)) lines(run.map(p => [p[0], p[1], p[2] + 0.3] as Vec3), "trail", 0.85);
   if (layers.gaps) for (const g of s.gaps) if (g.from <= t) {
     const a = at(s.v, g.from), b = at(s.v, g.to);
     if (a && b && b.t <= t) lines([a.position, b.position], "gap", 1);
   }
-  if (layers.camera && cam) frustum(cam, C, out);
+  // Each channel is judged on its own freshness: a camera sample older than STALE_S isn't drawn as current.
+  const camStale = !!cam && t - cam.t > STALE_S;
+  if (layers.camera && cam && !camStale) frustum(cam, C, out);
   if (layers.events) for (const e of s.events) if (e.at && e.t <= t) {
     const p = C.point(e.at); if (!p) continue;
     const isSel = e.id === selected;
@@ -110,8 +115,14 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
   }
   // A scale bar that tells the truth: the largest round distance that fits in 140 px at V.
   const ppm = C.scale(target), choice = [5, 10, 20, 50, 100, 200, 500].filter(m => m * ppm <= 140).pop() ?? 5;
-  return { primitives: out, v, cam, recent: s.events.filter(e => e.t <= t && t - e.t <= 5), inGap: s.gaps.some(g => g.from < t && t < g.to), metresPerBar: choice, barPx: choice * ppm };
+  return { primitives: out, v, cam, camStale, vStale: !!v && t - v.t > STALE_S, recent: s.events.filter(e => e.t <= t && t - e.t <= 5),
+    inGap: s.gaps.some(g => g.from < t && t < g.to), metresPerBar: choice, barPx: choice * ppm };
 }
+
+/** A sample older than this at the moment shown is stale: drawn faded or not at all, and said so. */
+export const STALE_S = 0.5;
+/** Streaming cells further than this from V aren't drawn: hundreds of overlapping boxes say nothing at a glance. */
+const CELL_RADIUS = 450;
 
 const snap = (x: number) => Math.round(x / 20) * 20;
 

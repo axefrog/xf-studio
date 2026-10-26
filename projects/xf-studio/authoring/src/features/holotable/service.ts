@@ -66,8 +66,13 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     if (!answer.ok || !data?.ok) throw Object.assign(new Error(data?.error?.message ?? `The Holotable service answered ${answer.status}.`), { code: answer.status === 404 ? "unavailable" : "failed" });
     return data.result as T;
   };
+  // Listing and opening are separate requests: a refresh never cancels an open in flight. Each supersedes only its own kind.
+  let listing: AbortController | null = null;
+  /** The level the open in flight was asked for (null: none in flight). A newer request for the committed level supersedes it. */
+  let pendingLevel: ContentLevel | null = null;
   const fresh = () => { loading?.abort(); loading = new AbortController(); return loading.signal; };
-  signal.addEventListener("abort", () => loading?.abort(), { once: true });
+  const freshList = () => { listing?.abort(); listing = new AbortController(); return listing.signal; };
+  signal.addEventListener("abort", () => { loading?.abort(); listing?.abort(); }, { once: true });
   const failed = (e: unknown, cancel: AbortSignal) => {
     if (cancel.aborted || signal.aborted) return;
     const code = (e as { code?: string })?.code;
@@ -75,7 +80,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
   };
 
   async function refresh() {
-    const cancel = fresh();
+    const cancel = freshList();
     set({ phase: state.open ? state.phase : "listing", message: "Looking for recordings…" });
     try {
       const runs = await call<HoloRun[]>("runs.list", {}, cancel);
@@ -85,18 +90,25 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
   }
   async function open(dir: string, level: ContentLevel, keepTime: boolean) {
     const cancel = fresh();
+    pendingLevel = level;
     pause();
     set({ phase: "opening", message: "Opening the recording…" });
     try {
       const [session, world] = await Promise.all([call<HoloSession>("session.open", { dir, level }, cancel), call<HoloWorld>("world.around", { dir }, cancel)]);
       if (cancel.aborted) return;
+      pendingLevel = null;
       const t = keepTime && state.open?.dir === dir ? state.t : session.meta.from;
       set({ open: { dir, session, world }, phase: "ready", message: "", t, level, selected: keepTime ? state.selected : null });
-    } catch (e) { failed(e, cancel); }
+    } catch (e) { if (!cancel.aborted) pendingLevel = null; failed(e, cancel); }
+  }
+  /** Asking again for the level already shown cancels a switch still loading, so a late answer can never show what was taken back. */
+  function setLevel(level: ContentLevel) {
+    if (level !== state.level) return open(state.open!.dir, level, true);
+    if (pendingLevel !== null && pendingLevel !== level) { loading?.abort(); loading = null; pendingLevel = null; set({ phase: "ready", message: "" }); }
   }
   function pause() { stopTimer?.(); stopTimer = null; if (state.playing) set({ playing: false }); }
   function play() {
-    const s = state.open?.session; if (!s) return;
+    const s = state.open?.session; if (!s || stopTimer) return; // one timer, however often Play is asked
     if (state.t >= s.meta.to) set({ t: s.meta.from });
     set({ playing: true });
     stopTimer = every(STEP_MS, () => {
@@ -130,7 +142,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       }
       case "holo.play": if (action.on) play(); else pause(); break;
       case "holo.layer": set({ layers: { ...state.layers, [action.id]: action.on } }); break;
-      case "holo.level": if (action.level !== state.level) await open(state.open!.dir, action.level, true); break;
+      case "holo.level": await setLevel(action.level); break;
       case "holo.select": set({ selected: action.id }); break;
     }
     return { ok: true };

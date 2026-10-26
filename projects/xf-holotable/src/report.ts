@@ -18,6 +18,7 @@ export function report(s: Session, t: number, level: ContentLevel, world?: World
   if (snap.district) out.push(`Place  ${snap.district} (offline outline: an estimate)`);
   if (snap.inGap) out.push("Gap    no samples at this moment: nothing here proves what happened");
   for (const e of snap.recent) out.push(`${f1(e.t - m.from).padStart(6)} s  ${e.summary}${e.detail ? ` — ${e.detail}` : ""}  [${e.cite}]`);
+  if (m.problems.length) out.push(`Damage ${m.problems.join("; ")}`);
   out.push(`Limits ${m.dropped} dropped, ${m.missedDeadlines} missed deadlines, largest gap ${f1(m.largestGapS)} s; ${m.coverage}`);
   return out.join("\n");
 }

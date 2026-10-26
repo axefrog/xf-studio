@@ -5,7 +5,7 @@ import { ORBITS, project, trail } from "../src/features/holotable/view/projectio
 import type { HoloSession } from "../src/features/holotable/types";
 
 const session = (level: "structure" | "full"): HoloSession => ({
-  meta: { session: "s1", run: 1, start: 100, end: 110, from: 100, to: 110, channels: ["v"], complete: true, dropped: 0, missedDeadlines: 0, largestGapS: 0.1, coverage: "test" },
+  meta: { session: "s1", run: 1, start: 100, end: 110, from: 100, to: 110, channels: ["v"], complete: true, dropped: 0, missedDeadlines: 0, largestGapS: 0.1, coverage: "test", problems: [] },
   v: Array.from({ length: 101 }, (_, i) => ({ t: 100 + i * 0.1, seq: i + 1, position: [i, 0, 10] as const, yaw: 0, speed: 1, health: 100, healthMax: 100, inCombat: false, vehicle: false, busy: "" })),
   camera: [{ t: 100, seq: 1, position: [0, -5, 12], forward: [0, 1, 0], up: [0, 0, 1], fov: 40, aspect: 1.8 }],
   events: [{ id: "e1", kind: "line", t: 101, seq: 9, summary: "Line spoken", ...(level === "full" ? { detail: "Someone: hello" } : {}), level: "full", cite: "recorder:s1:1:9" },
@@ -61,6 +61,36 @@ describe("Holotable service", () => {
     expect(service.snapshot().playing).toBe(false);
   });
 
+  test("a switch back to hidden story content supersedes a switch to shown that is still loading", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const base = fakeTransport();
+    const slowFull: HoloTransport = async (method, params, signal) => {
+      if (method === "session.open" && params.level === "full") { await gate; signal.throwIfAborted(); }
+      return base(method, params, signal);
+    };
+    const service = createHolotable({ transport: slowFull }, new AbortController().signal);
+    service.shown(); await flush();
+    await service.dispatch({ kind: "holo.open", dir: "D1" });
+    const toFull = service.dispatch({ kind: "holo.level", level: "full" });
+    await service.dispatch({ kind: "holo.level", level: "structure" });
+    release(); await toFull; await flush();
+    expect(service.snapshot().level).toBe("structure");
+    expect(JSON.stringify(service.snapshot().open)).not.toContain("hello");
+  });
+
+  test("Play twice keeps one timer; Pause stops it", async () => {
+    let timers = 0;
+    const service = createHolotable({ transport: fakeTransport(), every: () => { timers++; return () => { timers--; }; } }, new AbortController().signal);
+    service.shown(); await flush();
+    await service.dispatch({ kind: "holo.open", dir: "D1" });
+    await service.dispatch({ kind: "holo.play", on: true });
+    await service.dispatch({ kind: "holo.play", on: true });
+    expect(timers).toBe(1);
+    await service.dispatch({ kind: "holo.play", on: false });
+    expect(timers).toBe(0);
+  });
+
   test("refuses with a reason before a recording is open", () => {
     const service = createHolotable({ transport: null }, new AbortController().signal);
     expect(service.capability({ kind: "holo.play", on: true }).available).toBe(false);
@@ -84,7 +114,7 @@ describe("Holotable projection", () => {
 });
 
 describe("Holotable host endpoint", () => {
-  const post = (body: unknown, signal?: AbortSignal) => new Request("http://127.0.0.1/api/holotable", { method: "POST", body: JSON.stringify(body), signal });
+  const post = (body: unknown, signal?: AbortSignal, host = "127.0.0.1") => new Request(`http://${host}/api/holotable`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal });
   function fakeSpawner(counter: { spawned: number; killed: number; sent: string[] }): HolotableSpawner {
     return (_script, onLine) => {
       counter.spawned++;
@@ -125,6 +155,38 @@ describe("Holotable host endpoint", () => {
     expect((await pending).status).toBe(499);
     expect(counter.sent.some(line => JSON.parse(line).method === "cancel")).toBe(true);
     handler.dispose();
+  });
+
+  test("refuses other host names, other origins and non-JSON before spawning", async () => {
+    const counter = { spawned: 0, killed: 0, sent: [] as string[] };
+    const handler = createHolotableHandler({ script: import.meta.path, spawn: fakeSpawner(counter) });
+    expect((await handler.handle(post({ method: "runs.list" }, undefined, "evil.example"))).status).toBe(403);
+    const crossSite = new Request("http://127.0.0.1/api/holotable", { method: "POST", headers: { "content-type": "application/json", Origin: "http://evil.example" }, body: "{}" });
+    expect((await handler.handle(crossSite)).status).toBe(403);
+    const form = new Request("http://127.0.0.1/api/holotable", { method: "POST", headers: { "content-type": "text/plain" }, body: '{"method":"runs.list"}' });
+    expect((await handler.handle(form)).status).toBe(415);
+    expect(counter.spawned).toBe(0);
+  });
+
+  test("an old child's late exit fails only its own requests", async () => {
+    const exits: (() => void)[] = [];
+    let held = 0;
+    const spawn: HolotableSpawner = (_script, onLine) => {
+      let resolveExit!: (code: number) => void;
+      const exited = new Promise<number>(resolve => { resolveExit = resolve; });
+      exits.push(() => resolveExit(0));
+      return { send(line) { const req = JSON.parse(line); if (req.method === "hold") { held++; return; } queueMicrotask(() => onLine(JSON.stringify({ id: req.id, ok: true, result: req.method }))); }, exited, kill() { /* exits later */ } };
+    };
+    const handler = createHolotableHandler({ script: import.meta.path, spawn, idleMs: 60_000 });
+    await handler.handle(post({ method: "runs.list" }));
+    handler.dispose(); // the first child is told to stop but hasn't exited yet
+    const second = handler.handle(post({ method: "hold" }));
+    await flush();
+    exits[0](); await flush();
+    expect(held).toBe(1);
+    let settled = false; void second.then(() => { settled = true; }); await flush();
+    expect(settled).toBe(false);
+    exits[1](); expect((await second).status).toBe(502);
   });
 
   test("stops the child after the idle time", async () => {
