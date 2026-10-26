@@ -202,7 +202,7 @@
     "area": "link",
     "kind": "service",
     "stage": "merged",
-    "evidence": "proven",
+    "evidence": "partial",
     "health": "caveats",
     "priority": "P3",
     "since": "0.2.0",

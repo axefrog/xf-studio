@@ -14,7 +14,7 @@
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
-| items | 33 | 20 | 79 | 28 | 0 |
+| items | 33 | 20 | 80 | 27 | 0 |
 
 | Health | unknown | works | caveats | degraded | broken |
 |---|---:|---:|---:|---:|---:|
@@ -223,7 +223,7 @@ The pipe, discovery, the writer seat and reader slots, the command catalogue, re
 | [`link.script-gate`](#link.script-gate) Script-layer gate across loads | safety | merged | partial | works | P3 |
 | [`link.observers`](#link.observers) One writer and read-only observers | service | merged | partial | caveats | P2 |
 | [`link.catalogue`](#link.catalogue) One command catalogue | service | merged | proven | works | P3 |
-| [`link.undo`](#link.undo) Undo on every write | service | merged | proven | caveats | P3 |
+| [`link.undo`](#link.undo) Undo on every write | service | merged | partial | caveats | P3 |
 
 <a id="link.pipe"></a>
 
@@ -333,7 +333,7 @@ Every command is defined once (name, plain text, input schema, permission class,
 
 ### Undo on every write
 
-`link.undo` · service · stage **merged** · evidence **proven** · health **caveats** · P3
+`link.undo` · service · stage **merged** · evidence **partial** · health **caveats** · P3
 
 Each write logs what it changed with its reversal and returns a machine-readable undo the caller can send back to put the game as it was.
 
@@ -1560,7 +1560,7 @@ npc.substitute replaces a plain passer-by of the street crowd with an XF actor o
 - **Code:** `native/src/core/NpcSubstitute.cpp`
 - **Demand (story-engine, needs, V17, M5):** Adopt crowd people into the simulation (route a: substitution with the same look), keep identity across reloads through the resident key and respawn parameters, release cleanly.
 - **Row CRS1:** unrun
-- **Row CRS2:** unrun: Borg 4's swap fell back on the look (asked creole_11, got a king_of_the_stoop appearance).
+- **Row CRS2:** partial (borg-4, 0.8.22 1cd681c3, 2026-10-26): The swap ran, but the look fell back: asked for the original's creole_11 appearance, got a king_of_the_stoop one.
 - **Row CRS3:** pass (borg-4, 0.8.22 1cd681c3, 2026-10-26): Swapped 19 m away out of V's view within 0.8 s; the maintainer saw nothing odd.
 - **Row CRS7:** partial (borg-4, 0.8.22 1cd681c3, 2026-10-26): Released with restore as a despawn (not a dissolve); a fresh crowd person came 2.9 s later rather than the original.
 - **Row CRS12:** unrun: Borg 4 saw the npc_busy, npc_protected and too_far refusals right, not the community refusal.
