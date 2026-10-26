@@ -244,7 +244,10 @@ export function knownCodes(projectDir = PROJECT_DIR): Set<string> {
     for (const file of files) for (const match of readFileSync(file, "utf8").matchAll(pattern)) codes.add(match[1]);
   };
   const toolsDir = join(projectDir, "tools");
-  const skipTools = (path: string) => /[\\/](test|docs|node_modules)$/.test(path);
+  // The session runner's own outcome codes (its plans, executor, host adapter, telemetry and scripts) are not refusals any
+  // MCP tool raises, so they don't join the vocabulary.
+  const skipTools = (path: string) => /[\\/](test|docs|node_modules|sessions)$/.test(path) ||
+    /[\\/]testing[\\/](plan|batch|host|loop|telemetry|preflight|config-ini)\.ts$/.test(path);
   scan(filesUnder(toolsDir, ".ts", skipTools), /planError\(\s*"([a-z][a-z0-9_]*)"/g);
   scan(filesUnder(toolsDir, ".ts", skipTools), /\bcode:\s*"([a-z][a-z0-9]*_[a-z0-9_]*)"/g);
   scan(filesUnder(join(projectDir, "native", "src"), ".cpp", (path) => /[\\/]selftest$/.test(path)), /MethodError\(\s*"([a-z][a-z0-9_]*)"/g);
