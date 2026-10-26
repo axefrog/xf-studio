@@ -6,11 +6,14 @@ import { defaultLocalSettings } from "../src/setup/local-settings";
 import { discoverSources } from "../src/game/host/source-discovery";
 import { compareWithDeployment } from "../src/installation/vortex-deployment";
 import { isLocalDrivePath } from "../src/platform/api/path-containment";
-import { inspectVortexSetup, isLocalFolder, readVortexManifests, readVortexStateFolder } from "../src/installation/host/vortex-host";
+import { inspectVortexSetup as inspectHostVortexSetup, isLocalFolder, readVortexManifests, readVortexStateFolder } from "../src/installation/host/vortex-host";
 import { readVortexGameState, resolveVortexInstallPath, stateFromPairs } from "../src/installation/vortex-state";
 import { tempDir } from "./temp-dir";
 
 const fixtures = join(import.meta.dir, "fixtures", "vortex");
+// Fixture inspections must never discover this computer's own Vortex launchers or processes.
+const inspectVortexSetup: typeof inspectHostVortexSetup = (game, env, options = {}, gameId) => inspectHostVortexSetup(game, env,
+  { ...options, dataFacts: options.dataFacts ?? { platform: process.platform === "win32" ? "win32" : "posix", appData: env("APPDATA"), programData: env("ProgramData") } }, gameId);
 const withFolder = (run: (base: string) => void) => {
   const base = tempDir("xfs-vortex-test-");
   try { run(base); } finally { rmSync(base, { recursive: true, force: true }); }
@@ -328,7 +331,7 @@ test("the staging guard uses the host's path rules on Windows and Linux (VORTEX-
       assert.equal(isLocalFolder("C:/mods"), ${windows});
       assert.equal(isLocalFolder("/opt/xfs-mods"), ${!windows});
       assert.equal(isLocalFolder(${JSON.stringify(share)}), false);
-      const setup = await inspectVortexSetup(${JSON.stringify(game)}, () => undefined);
+      const setup = await inspectVortexSetup(${JSON.stringify(game)}, () => undefined, { dataFacts: { platform: ${JSON.stringify(platform === "win32" ? "win32" : "posix")} } });
       assert.equal(setup.stagingPath, ${JSON.stringify(share)});
       assert.equal(setup.stagingMarker, null);
       assert.ok(setup.problems.includes("The staging folder isn't on a local drive, so XF Studio didn't look inside it."));
@@ -345,8 +348,17 @@ test("the Vortex check tool leaves the profile's name out of what testers paste 
   const named = stateFromPairs([...pairs, ["persistent###profiles###p1###name", JSON.stringify("Jane Doe private profile")],
     ["settings###gameMode###discovered###cyberpunk2077###path", JSON.stringify(game)]]).state;
   put(join(appData, "Vortex", "temp", "state_backups_full", "hourly.json"), JSON.stringify(named));
-  const run = Bun.spawnSync([process.execPath, join(import.meta.dir, "..", "tools", "vortex-check.ts"), "--game-root", game],
-    { env: { ...process.env, APPDATA: appData, ProgramData: join(base, "none") } });
+  const script = `
+    import { mock } from "bun:test";
+    mock.module(${JSON.stringify(new URL("../src/installation/host/vortex-data-host.ts", import.meta.url).href)}, () => ({
+      gatherVortexDataFacts: async () => ({ platform: ${JSON.stringify(process.platform === "win32" ? "win32" : "posix")}, appData: ${JSON.stringify(appData)} }),
+      readWindowsVortexLaunches: async () => ({})
+    }));
+    process.argv = [process.execPath, "vortex-check", "--game-root", ${JSON.stringify(game)}];
+    await import(${JSON.stringify(new URL("../tools/vortex-check.ts", import.meta.url).href)});
+  `;
+  const run = Bun.spawnSync([process.execPath, "--eval", script],
+    { env: { ...process.env, APPDATA: appData, ProgramData: join(base, "none"), USERPROFILE: base, PUBLIC: base } });
   const output = run.stdout.toString();
   expect(run.exitCode, run.stderr.toString()).toBe(0);
   expect(JSON.parse(output).state.profileFound).toBe(true);
@@ -355,7 +367,7 @@ test("the Vortex check tool leaves the profile's name out of what testers paste 
 
 test("Vortex parsing modules stay pure", () => {
   const IMPORTS = /\bfrom\s+["']([^"']+)["']|\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
-  for (const name of ["installation/vortex-deployment", "installation/vortex-state", "formats/leveldb-read"]) {
+  for (const name of ["installation/vortex-deployment", "installation/vortex-state", "installation/vortex-data", "formats/leveldb-read"]) {
     const text = readFileSync(join(import.meta.dir, "..", "src", `${name}.ts`), "utf8");
     for (const match of text.matchAll(IMPORTS)) expect(match[1] ?? match[2], `${name}`).not.toMatch(/^node:|-host$|^\.\/source-discovery$/);
   }

@@ -1,0 +1,15 @@
+{
+  "platform": "win32",
+  "appData": "C:\\Fixture\\Roaming",
+  "programData": "C:\\Fixture\\ProgramData",
+  "processes": [
+    { "executable": "C:\\Fixture\\Vortex App\\Vortex.exe", "commandLine": "\"C:\\Fixture\\Vortex App\\Vortex.exe\" --user-data \"C:\\Fixture\\Live Data\" --profile fixture" },
+    { "executable": "C:\\Fixture\\Vortex App\\Vortex.exe", "commandLine": "\"C:\\Fixture\\Vortex App\\Vortex.exe\" --type=renderer --user-data-dir=C:\\Fixture\\Electron" }
+  ],
+  "shortcuts": [
+    { "target": "C:\\Fixture\\Vortex App\\Vortex.exe", "arguments": "--user-data=\"C:\\Fixture\\Shortcut Data\"" }
+  ],
+  "startupUserData": "C:\\Fixture\\Startup Data",
+  "userMultiUser": true,
+  "lastRunUserData": "C:\\Fixture\\Previous Data"
+}

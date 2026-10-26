@@ -25,6 +25,7 @@ console.log(JSON.stringify({
   deployed: setup.deployed,
   manifests: setup.manifests.map(({ instance: _instance, ...row }) => ({ ...row, deploymentTime: row.deploymentTimeMs ? new Date(row.deploymentTimeMs).toISOString() : null })),
   state: setup.state ? { location: setup.state.kind, source: setup.state.source, databaseMode: setup.state.databaseMode, current: setup.state.current, gaps: setup.state.gaps,
+    discovery: setup.stateSelection ? { source: setup.stateSelection.candidate.source, reason: setup.stateSelection.candidate.reason, matchedBy: setup.stateSelection.matchedBy } : null,
     backupTime: setup.state.backupTimeMs ? new Date(setup.state.backupTimeMs).toISOString() : null,
     profileFound: !!game?.profile, profileActive: game?.profileActive, installedMods: game?.mods.size,
     deploymentMethod: game?.deploymentMethod } : null,

@@ -78,6 +78,12 @@ export interface VortexGameState {
   readonly problems: readonly string[];
 }
 
+/** Application.ts reads user.multiUser from the base DB, then checks the shared DB for a false veto. */
+export function readVortexMultiUser(state: unknown): boolean | undefined {
+  const value = at(state, "user", "multiUser");
+  return value === undefined ? undefined : Boolean(value);
+}
+
 /** Interpret a nested Vortex state (from `stateFromPairs` or a JSON backup) for one game. */
 export function readVortexGameState(state: unknown, gameId: string): VortexGameState {
   const problems: string[] = [];
