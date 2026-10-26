@@ -131,6 +131,16 @@
     "since": "0.8.15",
     "changed_in": "0.8.16",
     "depends_on": ["link.pipe"],
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "needs",
+        "ref": "want 14",
+        "milestone": "M6",
+        "note": "The headless service as a read-only observer (readOnly: true). The runner, the Story Engine and Holotable each want a slot, so please raise the default from 3 to 6 after measuring.",
+        "since": "2026-10-26"
+      }
+    ],
     "surface": { "config": ["[bridge] max_read_only_connections"], "code": ["native/src/core/PipeServer.cpp", "tools/api/command-api.ts"] },
     "verification": {
       "rows": [

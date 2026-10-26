@@ -194,6 +194,16 @@
     "since": "0.8.14",
     "changed_in": "0.8.22",
     "depends_on": ["recorder.source-recorder", "recorder.session-events"],
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "needs",
+        "ref": "proposal 5.1",
+        "milestone": "M6",
+        "note": "The live feed reads catch-up with detail: true and its cursor, at most once a second, backing off when there is no more.",
+        "since": "2026-10-26"
+      }
+    ],
     "surface": { "commands": ["game.catchup"], "code": ["tools/testing/timeline.ts", "tools/testing/recording-replay.ts"] },
     "verification": {
       "rows": [

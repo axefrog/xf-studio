@@ -6,23 +6,23 @@
 
 ## Summary
 
-160 capabilities in 16 areas.
+166 capabilities in 16 areas.
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 6 | 9 | 16 | 2 | 0 | 127 | 0 | 0 |
+| items | 12 | 9 | 16 | 2 | 0 | 127 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
-| items | 33 | 18 | 82 | 27 | 0 |
+| items | 39 | 18 | 82 | 27 | 0 |
 
 | Health | unknown | works | caveats | degraded | broken |
 |---|---:|---:|---:|---:|---:|
-| items | 45 | 70 | 43 | 0 | 2 |
+| items | 51 | 70 | 43 | 0 | 2 |
 
 | Priority | P0 | P1 | P2 | P3 |
 |---|---:|---:|---:|---:|
-| items | 0 | 12 | 49 | 99 |
+| items | 0 | 12 | 49 | 105 |
 
 ### Evidence debt
 
@@ -192,6 +192,21 @@ Per consumer, blocking first.
 | wants |  |  | [`tooling.mcp-server`](#tooling.mcp-server) | merged | partial | MCP as an optional, off-by-default XF Studio capability: the desktop app hosts the same tools behind a switch. |
 | wants |  |  | [`core.lighting-plugin`](#core.lighting-plugin) | proposed | offline | A bridge-applied photo-mode rig that matches the Studio's lighting (banked until the product reaches 1.0). |
 
+#### XF · Holotable
+
+8 open (0 blocking, 6 needs, 2 wants).
+
+| Level | Ref | Milestone | Capability | Stage | Evidence | Need |
+|---|---|---|---|---|---|---|
+| needs | want 14 | M6 | [`link.observers`](#link.observers) | merged | partial | The headless service as a read-only observer (readOnly: true). The runner, the Story Engine and Holotable each want a slot, so please raise the default from 3 to 6 after measuring. |
+| needs | proposal 5.1 | M6 | [`recorder.catchup`](#recorder.catchup) | merged | partial | The live feed reads catch-up with detail: true and its cursor, at most once a second, backing off when there is no more. |
+| needs | want 10 | M7 | [`surfaces.canvas`](#surfaces.canvas) | requested | none | Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building. |
+| needs | want 11 | M7 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) | requested | none | Show and hide while playing, without opening CET (CET blocks input). |
+| needs | want 12 | M7 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) | requested | none | Lets the overlay work with no other XF program running (bridge proposal B). |
+| needs | want 13 | M8 | [`link.display-feed`](#link.display-feed) | requested | none | Bridge proposal C. Story Engine layers reach the overlay through it. |
+| wants | want 15 | M6 | [`recorder.observe-result`](#recorder.observe-result) | requested | none | Lets Holotable draw what sessions already asked, at no extra game cost. |
+| wants | want plate | M7 | [`surfaces.canvas-plate`](#surfaces.canvas-plate) | requested | none | The design comes from the UI component track; the bridge exposes the token to canvas@1. |
+
 #### Photo Mode Tools
 
 1 open (0 blocking, 0 needs, 1 wants).
@@ -212,7 +227,7 @@ Per consumer, blocking first.
 
 ## Link and protocol
 
-The pipe, discovery, the writer seat and reader slots, the command catalogue, refusals and undo. (area `link`, 6 capabilities)
+The pipe, discovery, the writer seat and reader slots, the command catalogue, refusals and undo. (area `link`, 7 capabilities)
 
 | Capability | Kind | Stage | Evidence | Health | Priority |
 |---|---|---|---|---|---|
@@ -222,6 +237,7 @@ The pipe, discovery, the writer seat and reader slots, the command catalogue, re
 | [`link.observers`](#link.observers) One writer and read-only observers | service | merged | partial | caveats | P2 |
 | [`link.catalogue`](#link.catalogue) One command catalogue | service | merged | proven | works | P3 |
 | [`link.undo`](#link.undo) Undo on every write | service | merged | partial | caveats | P3 |
+| [`link.display-feed`](#link.display-feed) The display access class and canvas.feed | service | requested | none | unknown | P3 |
 
 <a id="link.pipe"></a>
 
@@ -295,6 +311,7 @@ One exclusive writer connection plus a bounded pool of independent read-only con
 - **Depends on:** [`link.pipe`](#link.pipe)
 - **Config:** `[bridge] max_read_only_connections`
 - **Code:** `native/src/core/PipeServer.cpp`, `tools/api/command-api.ts`
+- **Demand (holotable, needs, want 14, M6):** The headless service as a read-only observer (readOnly: true). The runner, the Story Engine and Holotable each want a slot, so please raise the default from 3 to 6 after measuring.
 - **Row MC1:** unrun
 - **Row MC2:** partial (borg-2, 0.8.16 c96779ee, 2026-10-25): In practice: a read-only catch-up client ran beside the MCP writer all session with no bridge_busy and no effect on the writer; the row was not run as written.
 - **Row MC3:** unrun
@@ -345,6 +362,17 @@ Each write logs what it changed with its reversal and returns a machine-readable
 - **Quirk:** A vehicle door's lock can't be read back, so a lock change keeps its save hold until a save loads (RB-225).
 - **Issue (low, fixed-unverified, BR2):** Undos returned by the DM toolkit named spawned things by a dynamic id that the same commands' input validation refused, so they could not be replayed (Borg 1, DV2). Fixed in 0.8.14 (debug-id undo validation), unverified.
 - **Docs:** [projects/xf-runtime-bridge/README.md#bridge-in-one-paragraph](../../../projects/xf-runtime-bridge/README.md#bridge-in-one-paragraph), [research/runtime/runtime-bridge-test-card.md#recorder-and-taps-borg-mode-session](../../../research/runtime/runtime-bridge-test-card.md#recorder-and-taps-borg-mode-session)
+- **Updated:** 2026-10-26
+
+<a id="link.display-feed"></a>
+
+### The display access class and canvas.feed
+
+`link.display-feed` · service · stage **requested** · evidence **none** · health **unknown** · P3
+
+A display access class and a canvas.feed command usable from read-only connections, so producers such as the Story Engine can draw in game in bounded batches (1-4 Hz).
+
+- **Demand (holotable, needs, want 13, M8):** Bridge proposal C. Story Engine layers reach the overlay through it.
 - **Updated:** 2026-10-26
 
 ## Safety
@@ -2346,7 +2374,7 @@ showroom.spawn, showroom.light, showroom.rotate, showroom.clear and showroom.sta
 
 ## Recorder and catch-up
 
-Continuous channels, taps, session events and catching up on what happened between turns. (area `recorder`, 8 capabilities)
+Continuous channels, taps, session events and catching up on what happened between turns. (area `recorder`, 9 capabilities)
 
 | Capability | Kind | Stage | Evidence | Health | Priority |
 |---|---|---|---|---|---|
@@ -2358,6 +2386,7 @@ Continuous channels, taps, session events and catching up on what happened betwe
 | [`recorder.catchup`](#recorder.catchup) Catch-up | service | merged | partial | works | P2 |
 | [`recorder.game-events-probe`](#recorder.game-events-probe) Game-events probe | research | merged | partial | caveats | P3 |
 | [`recorder.world-event-feed`](#recorder.world-event-feed) World event feed | sense | proposed | none | unknown | P2 |
+| [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | requested | none | unknown | P3 |
 
 <a id="recorder.session-events"></a>
 
@@ -2463,6 +2492,7 @@ game.catchup reads everything since a cursor in one call (recorder channels, ses
 - **Depends on:** [`recorder.source-recorder`](#recorder.source-recorder), [`recorder.session-events`](#recorder.session-events)
 - **Commands:** `game.catchup`
 - **Code:** `tools/testing/timeline.ts`, `tools/testing/recording-replay.ts`
+- **Demand (holotable, needs, proposal 5.1, M6):** The live feed reads catch-up with detail: true and its cursor, at most once a second, backing off when there is no more.
 - **Row TL1:** partial (borg-2, 0.8.16 c96779ee, 2026-10-25): Worked, but with the ui channel on each page fell behind real time and 'V latest' was minutes stale.
 - **Row B217-2:** pass (borg-3, 0.8.17 356f04c4, 2026-10-25): Behind real time by 392 records with backlog; live V position; caught up in three calls.
 - **Row B217-5:** pass (borg-3, 0.8.17 356f04c4, 2026-10-25)
@@ -2501,6 +2531,17 @@ A subscribable feed of what happens in the world: V's district and interior chan
 - **Depends on:** [`recorder.game-events-probe`](#recorder.game-events-probe)
 - **Demand (story-engine, needs, S1, M4):** A world event feed; the graded hooks and a minimal set of twelve event kinds are designed. Gaps: interior entry is polled, no 'any fact changed' hook, dialogue picks inferred.
 - **Docs:** [knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed](../../../knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed), [knowledge/game-events.md#11-what-the-bridge-has-and-what-it-should-add](../../../knowledge/game-events.md#11-what-the-bridge-has-and-what-it-should-add)
+- **Updated:** 2026-10-26
+
+<a id="recorder.observe-result"></a>
+
+### Published probe and scene results (observe.result)
+
+`recorder.observe-result` · service · stage **requested** · evidence **none** · health **unknown** · P3
+
+A bounded observe.result session event with the command, the caller's cid and the result whenever a writer calls world_probe, scene_read or world_district, adding no game-thread work.
+
+- **Demand (holotable, wants, want 15, M6):** Lets Holotable draw what sessions already asked, at no extra game cost.
 - **Updated:** 2026-10-26
 
 ## Supervisor and plans
@@ -2634,7 +2675,7 @@ The hand-written primitives plans are made of, parameterised by roles, places an
 
 ## In-game surfaces
 
-The ink panel, the XF overlay box, the CET window and line, their themes and motion. (area `surfaces`, 12 capabilities)
+The ink panel, the XF overlay box, the CET window and line, their themes and motion. (area `surfaces`, 16 capabilities)
 
 | Capability | Kind | Stage | Evidence | Health | Priority |
 |---|---|---|---|---|---|
@@ -2650,6 +2691,10 @@ The ink panel, the XF overlay box, the CET window and line, their themes and mot
 | ↳ [`surfaces.motion`](#surfaces.motion) The motion setting | surface | merged | partial | works | P1 |
 | [`surfaces.overlay-set`](#surfaces.overlay-set) Overlay settings live | surface | merged | partial | unknown | P1 |
 | [`surfaces.overlay-state`](#surfaces.overlay-state) Overlay state | sense | merged | partial | caveats | P1 |
+| [`surfaces.canvas`](#surfaces.canvas) World-space canvas (canvas@1) | surface | requested | none | unknown | P3 |
+| [`surfaces.canvas-keys`](#surfaces.canvas-keys) Canvas keys and canvas.visible | surface | requested | none | unknown | P3 |
+| [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) Read-only Lua snapshot for CET modules | sense | requested | none | unknown | P3 |
+| [`surfaces.canvas-plate`](#surfaces.canvas-plate) The XfCanvasPlate token | surface | requested | none | unknown | P3 |
 
 <a id="surfaces.ink-panel"></a>
 
@@ -2886,6 +2931,50 @@ overlay.state reports the XF box (on or off, hooked, drawing or why not, back bu
 - **Row ST13:** unrun: cet_open with the XF box off.
 - **Issue (medium, fixed-unverified, 2949a677):** cet_open stayed false with CET's overlay open: the host heard CET only on ticks while it was enabled. Fixed in 2949a677 (the native tells it directly; null until the CET layer reports), unverified.
 - **Docs:** [research/runtime/runtime-bridge-test-card.md#in-game-styling-0822](../../../research/runtime/runtime-bridge-test-card.md#in-game-styling-0822)
+- **Updated:** 2026-10-26
+
+<a id="surfaces.canvas"></a>
+
+### World-space canvas (canvas@1)
+
+`surfaces.canvas` · surface · stage **requested** · evidence **none** · health **unknown** · P3
+
+A world-space canvas in the native overlay host: primitives, anchors, caps and a per-tick camera snapshot, with the radar view, so producers draw in game with no per-layer game-side code.
+
+- **Demand (holotable, needs, want 10, M7):** Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building.
+- **Updated:** 2026-10-26
+
+<a id="surfaces.canvas-keys"></a>
+
+### Canvas keys and canvas.visible
+
+`surfaces.canvas-keys` · surface · stage **requested** · evidence **none** · health **unknown** · P3
+
+Show, hide and mode keys for the canvas through the bridge's own key route, rebindable in CET, with a canvas.visible state.
+
+- **Demand (holotable, needs, want 11, M7):** Show and hide while playing, without opening CET (CET blocks input).
+- **Updated:** 2026-10-26
+
+<a id="surfaces.lua-snapshot"></a>
+
+### Read-only Lua snapshot for CET modules
+
+`surfaces.lua-snapshot` · sense · stage **requested** · evidence **none** · health **unknown** · P3
+
+A read-only snapshot for Holotable's CET module: V, XF actors, incidents, supervisor holds and recorder gaps, refreshed a few times a second.
+
+- **Demand (holotable, needs, want 12, M7):** Lets the overlay work with no other XF program running (bridge proposal B).
+- **Updated:** 2026-10-26
+
+<a id="surfaces.canvas-plate"></a>
+
+### The XfCanvasPlate token
+
+`surfaces.canvas-plate` · surface · stage **requested** · evidence **none** · health **unknown** · P3
+
+A canvas plate style token (the translucent backing behind overlay panels and labels, about 72 % opacity) themed with XF Studio's tokens in dark and light.
+
+- **Demand (holotable, wants, want plate, M7):** The design comes from the UI component track; the bridge exposes the token to canvas@1.
 - **Updated:** 2026-10-26
 
 ## Host tooling
