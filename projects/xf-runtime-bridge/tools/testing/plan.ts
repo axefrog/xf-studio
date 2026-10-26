@@ -544,7 +544,9 @@ async function guardHolds(run: Run, step: Step, path: string, board: unknown, li
   const guard = step.when!;
   const stopAt = Math.min(run.clock.now() + (guard.wait_ms ?? 0), limit, run.deadline);
   for (let attempt = 1; ; attempt++) {
-    const outcome = guard.check ? await perform(run, guard.check, `${path}/when`, attempt, Math.max(1, (guard.wait_ms ?? 0) || DEFAULT_DEADLINE_MS), board, undefined, limit) : { ok: true, value: run.bindings };
+    // Each read gets only the guard's time that is left (an absolute end), never its whole wait again.
+    const readMs = guard.wait_ms ? Math.max(1, stopAt - run.clock.now()) : (run.options.defaultDeadlineMs ?? DEFAULT_DEADLINE_MS);
+    const outcome = guard.check ? await perform(run, guard.check, `${path}/when`, attempt, readMs, board, undefined, limit) : { ok: true, value: run.bindings };
     const met = matches(guard.match, outcome, run.bindings);
     if (met || run.clock.now() >= stopAt || run.halt || run.signal.aborted) return met;
     await run.clock.sleep(Math.min(guard.interval_ms ?? 500, Math.max(1, stopAt - run.clock.now())), run.signal);
@@ -564,26 +566,28 @@ async function runStep(run: Run, step: Step, path: string, inherited?: unknown, 
     record(step.end === "ok" ? "ok" : "failed", { end: step.end, reason: step.reason });
     return { status: "ended", end: step.end, reason: step.reason };
   }
+  // A block's deadline_ms is an absolute limit for everything inside it (each action's own is per attempt), from the
+  // moment the block starts: its own blackboard read included.
+  const until = (step.together || step.sequence) && step.deadline_ms !== undefined ? Math.min(limit, run.clock.now() + step.deadline_ms) : limit;
   // The blackboard: one read per step, shared by all its roles (a together step's children inherit it).
   let board = inherited;
   if (board === undefined && run.options.executor.snapshot && !run.signal.aborted) {
     // Bounded like any action: a read that hangs can't hold the plan past its deadline or a cancel.
-    const limit = linked(run.signal, Math.max(0, Math.min(run.options.defaultDeadlineMs ?? DEFAULT_DEADLINE_MS, run.deadline - run.clock.now())), run.clock);
+    // ... and by the enclosing block's absolute limit (a block's deadline_ms holds for everything inside it).
+    const readLimit = linked(run.signal, Math.max(0, Math.min(run.options.defaultDeadlineMs ?? DEFAULT_DEADLINE_MS, run.deadline - run.clock.now(), until - run.clock.now())), run.clock);
     try {
       board = await Promise.race([
-        run.options.executor.snapshot({ signal: limit.signal, plan: run.plan.id, step: vpath }),
-        limit.expired.then(() => ({ unavailable: run.signal.aborted ? "cancelled" : "the blackboard read ran out of time" })),
+        run.options.executor.snapshot({ signal: readLimit.signal, plan: run.plan.id, step: vpath }),
+        readLimit.expired.then(() => ({ unavailable: run.signal.aborted ? "cancelled" : "the blackboard read ran out of time" })),
       ]);
     } catch (error) {
       board = { unavailable: String(error) };
     } finally {
-      limit.done();
+      readLimit.done();
     }
     if (run.signal.aborted) { record("failed", { code: "cancelled" }); return { status: "failed", reason: "cancelled" }; }
   }
   if (board !== undefined) run.bindings.board = board;
-  // A block's deadline_ms is an absolute limit for everything inside it (each action's own is per attempt).
-  const until = (step.together || step.sequence) && step.deadline_ms !== undefined ? Math.min(limit, run.clock.now() + step.deadline_ms) : limit;
   if (step.when && !(await guardHolds(run, step, vpath, board, limit))) {
     if ((step.when.otherwise ?? "skip") === "skip") { record("skipped", { guard: "unmet" }); return { status: "ok" }; }
     const unmet: Outcome = { ok: false, code: "precondition", message: "The precondition was not met." };
@@ -631,7 +635,7 @@ async function finish(run: Run, step: Step, path: string, visit: number, outcome
   // A cancel ends the plan here: no branch or fallback acts on a world that is going away.
   if (run.signal.aborted) { record("failed", { ...extra, code: "cancelled" }); return { status: "failed", outcome, reason: "cancelled" }; }
   for (const [b, branch] of (step.outcomes ?? []).entries()) {
-    const subject = branch.observe ? await perform(run, branch.observe, `${path}/b${b + 1}/observe`, 1, DEFAULT_DEADLINE_MS, board, undefined, limit) : outcome;
+    const subject = branch.observe ? await perform(run, branch.observe, `${path}/b${b + 1}/observe`, 1, run.options.defaultDeadlineMs ?? DEFAULT_DEADLINE_MS, board, undefined, limit) : outcome;
     if (!matches(branch.match, subject, run.bindings)) continue;
     anticipated = true;
     branchName = branch.name ?? `branch ${b + 1}`;

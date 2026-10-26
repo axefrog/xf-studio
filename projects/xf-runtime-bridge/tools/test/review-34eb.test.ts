@@ -269,3 +269,25 @@ describe("M10: ST11's crop comes from where the ink panel reports it went, and t
     }
   });
 });
+
+describe("M11: a guard's and a block's time is absolute, slow reads included", () => {
+  test("a guard waiting 1 s with 400 ms reads ends at 1 s, not a read later", async () => {
+    const { runPlan } = await import("../testing/plan.ts");
+    const { FakeClock } = await import("./fake-clock.ts");
+    const clock = new FakeClock();
+    const executor = { run: async (a: { do: string }, ctx: { signal: AbortSignal }) => { if (a.do === "slow") await clock.sleep(400, ctx.signal); return { ok: true, value: { ready: false } }; } };
+    await runPlan({ id: "p", steps: [{ do: "act", when: { check: { do: "slow" }, match: { path: "ready", equals: true }, wait_ms: 1000, interval_ms: 500 } }] } as never, { executor: executor as never, clock });
+    expect(clock.now()).toBeLessThanOrEqual(1001);
+  });
+  test("a block's deadline bounds the blackboard read of a step inside it", async () => {
+    const { runPlan } = await import("../testing/plan.ts");
+    const { FakeClock } = await import("./fake-clock.ts");
+    const clock = new FakeClock();
+    const executor = {
+      run: async () => ({ ok: true }),
+      snapshot: async (ctx: { signal: AbortSignal }) => { await clock.sleep(5000, ctx.signal); return { slow: true }; },
+    };
+    await runPlan({ id: "p", steps: [{ label: "block", deadline_ms: 1000, sequence: [{ do: "act" }] }] } as never, { executor: executor as never, clock });
+    expect(clock.now()).toBeLessThanOrEqual(1001);
+  });
+});
