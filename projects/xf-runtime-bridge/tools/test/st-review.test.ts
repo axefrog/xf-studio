@@ -113,12 +113,13 @@ describe("the surface is in frame (capture.surface)", () => {
       "capture.screenshot": () => ({ ok: true, result: { crop: { region: "rect" }, full: { path: file(`probe${++probes}`, probes >= 3) }, view: { path: file("v", true) } } }),
     });
     const rows = [{ id: "r", title: "r", steps: [
-      { label: "r-visible", do: "capture.surface", name: "r-probe", rect: { x: 0, y: 0, width: 40, height: 20 }, ...DARK, until: { ok: true }, interval_ms: 250, deadline_ms: 3000, on_fail: "fail_row" },
+      { label: "r-visible", do: "capture.surface", name: "r-probe", route: "screen", rect: { x: 0, y: 0, width: 40, height: 20 }, ...DARK, until: { ok: true }, interval_ms: 250, deadline_ms: 3000, on_fail: "fail_row" },
       { label: "r-burst", do: "burst", name: "pulse", frames: 4, interval_ms: 200, clear_overlay: false, rect: { x: 0, y: 0, width: 40, height: 20 }, bind: "b" },
       { label: "r-in-frame", do: "capture.surface", capture: "$b", ...DARK, on_fail: "fail_row" },
     ] }];
     const row = (await go(script(rows as never), api, fakeHost(), clock, dir)).rows[0];
     expect(probes).toBe(3);
+    expect(api.calls.filter((c) => c.name === "capture.screenshot").every((c) => c.input.route === "screen")).toBe(true);
     expect(row.verdict).toBe("FAIL");
     expect(row.reason).toContain("in frames 1, 2 of 4");
   });
@@ -156,6 +157,24 @@ describe("the ST batch shows its named states", () => {
     const { stScript } = await import("../sessions/make-batches.ts");
     return stScript(rerun, hooks) as { rows: { id: string; judged_by?: string; steps: Step[]; cleanup?: Step[] }[] };
   };
+
+  test("CET line probes, stills and bursts read displayed pixels in both generated batches", async () => {
+    for (const rerun of [false, true]) {
+      const script = await build({ panel: true, cpu: true }, rerun);
+      const steps = script.rows.flatMap((r) => flat(r.steps));
+      const lines = steps.filter((s) =>
+        ((s.do === "capture" || s.do === "burst") && String(s.name).startsWith("ST8-cetline-")) ||
+        (s.do === "capture.surface" && s.name !== undefined && s.rect === "$win.regions.cet_line"));
+      expect(lines.length).toBeGreaterThan(5);
+      for (const line of lines) expect(line.route).toBe("screen");
+      for (const row of script.rows.filter((r) => /^ST8-/.test(r.id))) {
+        const line = flat(row.steps).find((s) => s.command === "ui.hud");
+        expect(line?.input).toEqual({ show: false, cet_label: true });
+        const look = flat(row.steps).find((s) => s.command === "overlay.set");
+        expect((look?.input as { enabled?: boolean }).enabled).toBe(false);
+      }
+    }
+  });
 
   test("with the hooks, every judged row verifies its state before each capture, finds its surface after, and probes before each burst", async () => {
     for (const hooks of [{ panel: true, cpu: true }, { panel: false, cpu: false }]) {

@@ -110,7 +110,7 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   set: { required: ["value"], optional: [], help: "keep a value (with bind)" },
   "capture.compare": { required: ["a", "b"], optional: ["rect", "min_changed", "max_changed"], help: "how much two captures differ in an area (diff of their full files)" },
   "ink.rect": { required: ["events", "window"], optional: ["margin"], help: "the ink panel's rectangle in window pixels, from the last laid-out ink_tree event of an events window (panel_rect in the root's units, root_px and screen); value {x, y, width, height}" },
-  "capture.surface": { required: ["plate", "text"], optional: ["capture", "rect", "name", "min_plate", "min_text", "tolerance", "plate_alt"],
+  "capture.surface": { required: ["plate", "text"], optional: ["capture", "rect", "name", "route", "min_plate", "min_text", "tolerance", "plate_alt"],
     help: "is a themed surface in frame: the share of its plate and text colours in an area, in a capture, every frame of a burst, or a fresh probe capture (name); fails surface_missing" },
   "host.running": { required: [], optional: [], help: "is the game running; value {running, pid}" },
   "host.launch": { required: [], optional: [], help: "start the game through MO2 with the fixture's profile and arguments" },
@@ -365,14 +365,14 @@ export function configNeeds(row: Row, values: IniValues): Record<string, string>
 export const BOOTED_PHASES = ["main_menu", "gameplay", "menu", "paused", "photo_mode", "character_menu"];
 /** What a starting game answers before it is ready: waited through, never a reason to stop. */
 export const STILL_STARTING = ["game_not_running", "timeout", "busy", "bridge_busy", "game_loading", "rate_limited", "not_ready"];
-export const LAUNCH_BLOCKED = "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder.";
+export const LAUNCH_BLOCKED = "MO2 cannot launch the game; inspect the new Windows error in mo_interface.log.";
 
 /** Launch through MO2 and wait for the game's process; MO2's "Cannot launch program" dialog fails at once. */
 export function startSteps(): Step[] {
   return [
     { label: "launch", do: "host.launch", outcomes: [{ name: "already_running", match: { code: "already_running" }, result: "ok" }] },
     { label: "process", do: "host.running", until: { any: [{ path: "running", equals: true }, { path: "launch_blocked", exists: true }] }, interval_ms: 2000, deadline_ms: 120_000,
-      outcomes: [{ name: "launch_blocked", match: { path: "launch_blocked", exists: true }, run: [{ end: "fail", reason: LAUNCH_BLOCKED }] }] },
+      outcomes: [{ name: "launch_blocked", match: { path: "launch_blocked", exists: true }, result: "fail" }] },
   ] as Step[];
 }
 
@@ -679,9 +679,9 @@ export class SessionExecutor implements Executor {
           return await this.surface(action, context);
         case "host.running": {
           const pid = await this.gamePid();
-          // MO2's own error dialog while nothing runs: the launch was blocked (an antivirus), so waiting is pointless.
+          // A launch failure's current log diagnosis ends the wait; don't guess antivirus from the dialog's title.
           const blocked = pid === undefined ? await this.c.host.launchBlocked().catch(() => null) : null;
-          return { ok: true, value: { running: pid !== undefined, ...(pid !== undefined ? { pid } : {}), ...(blocked ? { launch_blocked: blocked } : {}) } };
+          return { ok: !blocked, ...(blocked ? { code: "launch_blocked", message: blocked } : {}), value: { running: pid !== undefined, ...(pid !== undefined ? { pid } : {}), ...(blocked ? { launch_blocked: blocked } : {}) } };
         }
         case "host.launch": {
           const mo2 = this.c.fixtures.mo2 as { exe?: string; profile?: string; executable?: string; arguments?: string } | undefined;
@@ -892,7 +892,7 @@ export class SessionExecutor implements Executor {
     let cropped = false;
     if (subject === undefined) {
       if (typeof action.name !== "string") return { ok: false, code: "bad_input", message: "capture.surface needs a capture or a probe name." };
-      const probe = await this.runCommand("capture.screenshot", { name: action.name, clear_overlay: false, ...(rect ? { rect } : {}) }, undefined, context);
+      const probe = await this.runCommand("capture.screenshot", { name: action.name, clear_overlay: false, ...(action.route ? { route: action.route } : {}), ...(rect ? { rect } : {}) }, undefined, context);
       if (!probe.ok) return probe;
       subject = probe.value;
       cropped = true;

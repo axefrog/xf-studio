@@ -7,6 +7,8 @@
 // while XFB_NO_INPUT=1 (the test preload sets it), so no test can press a key on this desktop.
 
 import { spawn } from "node:child_process";
+import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { dlopen, FFIType } from "bun:ffi";
 import { mainWindowOf, processImageName, topLevelWindows } from "../capture/win32.ts";
 import { parseReading } from "../commit-tripwire.ts";
@@ -41,7 +43,7 @@ export interface Host {
   processStats(pid: number): Promise<{ private_bytes: number; working_set: number; handles: number } | null>;
   /** Every process's handles summed (the kernel's growth showed there in Borg 4), or null. */
   systemHandles(): Promise<number | null>;
-  /** The title of MO2's "Cannot launch program" dialog when one is up (an antivirus blocked the launch), or null. */
+  /** MO2's launch failure, including fresh interface-log diagnostics when available, or null. */
   launchBlocked(): Promise<string | null>;
   /** Windows' Animation effects setting (SPI_GETCLIENTAREAANIMATION), read only; null when it can't be read. */
   windowsAnimations(): Promise<boolean | null>;
@@ -148,6 +150,7 @@ function powershell(command: string, timeoutMs = 20_000): Promise<{ code: number
     const child = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", command], { windowsHide: true });
     let out = "";
     child.stdout.on("data", (chunk) => (out += chunk));
+    child.stderr.on("data", (chunk) => (out += chunk));
     const timer = setTimeout(() => child.kill(), timeoutMs);
     child.on("close", (code) => { clearTimeout(timer); resolve({ code, out }); });
     child.on("error", () => { clearTimeout(timer); resolve({ code: null, out }); });
@@ -173,7 +176,99 @@ function foregroundImage(): string | null {
   return processImageName(pid[0])?.replace(/\.exe$/i, "") ?? null;
 }
 
-const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+type LogCursor = { size: number; ino: number };
+export interface Mo2Port {
+  shell(command: string): Promise<{ code: number | null; out: string }>;
+  forward(exe: string, args: string[]): Promise<string | null>;
+  dialog(): string | null;
+  cursor(path: string): LogCursor | null;
+  appended(path: string, cursor: LogCursor | null): string;
+  now(): number;
+  sleep(ms: number): Promise<void>;
+}
+const psString = (s: string) => `'${s.replace(/'/g, "''")}'`;
+/** Windows CommandLineToArgvW quoting, then the whole command is quoted separately for PowerShell. */
+export const windowsArgument = (s: string) => `"${s.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, '$1$1')}"`;
+
+export function mo2Failure(log: string): string {
+  const lines = log.split(/\r?\n/).filter((s) => /ERROR_[A-Z_]+|Error \d+|MO elevated:|failed|cannot launch/i.test(s));
+  const detail = lines.slice(-8).join("\n");
+  if (/ERROR_ACCESS_DENIED|Error 5\b/i.test(detail)) return `MO2 was started from a restricted process; starting it via WMI avoids that restriction. ${detail}`;
+  return detail || "MO2 cannot launch the game; no new Windows error was found in mo_interface.log.";
+}
+
+/** One launch attempt owns its log cursor. No old access-denied error is attributed to a later attempt. */
+export function createMo2Launcher(port: Mo2Port) {
+  let attempt: { path: string; cursor: LogCursor | null } | undefined;
+  return {
+    async launch(spec: LaunchSpec, signal?: AbortSignal): ReturnType<Host["launch"]> {
+      const args = ["-p", spec.profile, "run", "-e", spec.executable, ...(spec.arguments ? ["--arguments", spec.arguments] : [])];
+      const command = `ModOrganizer.exe ${args.map(windowsArgument).join(" ")}`;
+      const cancelled = () => ({ started: false, command });
+      if (signal?.aborted) return cancelled();
+      // Match this installation, not another MO2 instance on the same desktop.
+      const query = `$p = Get-Process -Name ModOrganizer -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq ${psString(spec.exe)} }; if ($p) { if ($p | Where-Object { $_.MainWindowHandle -ne 0 }) { 'ready' } else { 'starting' } }`;
+      const status = await port.shell(query);
+      if (signal?.aborted) return cancelled();
+      if (status.code !== 0) return { started: false, command, error: "could not inspect MO2's process" };
+      if (!status.out.trim()) {
+        const line = [spec.exe, "-p", spec.profile].map(windowsArgument).join(" ");
+        const created = await port.shell(`$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = ${psString(line)}; CurrentDirectory = ${psString(dirname(spec.exe))} }; if ($r.ReturnValue -ne 0) { throw "WMI process creation failed: $($r.ReturnValue)" }`);
+        if (created.code !== 0) return { started: false, command, error: `WMI could not start MO2: ${created.out.trim()}` };
+      }
+      const deadline = port.now() + 30_000;
+      let ready = status.out.trim() === "ready";
+      while (!ready && port.now() < deadline && !signal?.aborted) {
+        await port.sleep(250);
+        if (signal?.aborted) return cancelled();
+        const polled = await port.shell(query);
+        ready = polled.code === 0 && polled.out.trim() === "ready";
+      }
+      if (signal?.aborted) return cancelled();
+      if (!ready) return { started: false, command, error: "MO2's window did not appear within 30 seconds" };
+      const path = join(dirname(spec.exe), "logs", "mo_interface.log");
+      attempt = { path, cursor: port.cursor(path) };
+      if (signal?.aborted) return cancelled();
+      const error = await port.forward(spec.exe, args);
+      return error ? { started: false, command, error } : { started: true, command };
+    },
+    async blocked() {
+      if (!port.dialog()) return null;
+      return mo2Failure(attempt ? port.appended(attempt.path, attempt.cursor) : "");
+    },
+  };
+}
+
+export function mo2LogCursor(path: string): LogCursor | null {
+  try { const s = statSync(path); return { size: s.size, ino: s.ino }; } catch { return null; }
+}
+export function mo2LogAppended(path: string, cursor: LogCursor | null): string {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, "r");
+    const s = fstatSync(fd);
+    const start = Math.max(cursor && cursor.ino === s.ino && cursor.size <= s.size ? cursor.size : 0, s.size - 65536);
+    const b = Buffer.alloc(s.size - start);
+    return b.subarray(0, readSync(fd, b, 0, b.length, start)).toString("utf8");
+  } catch { return ""; } finally { if (fd !== undefined) closeSync(fd); }
+}
+
+const mo2 = createMo2Launcher({
+  shell: powershell, now: Date.now, sleep: pause,
+  dialog: () => topLevelWindows().find((w) => /cannot launch program/i.test(w.title))?.title ?? null,
+  cursor: mo2LogCursor, appended: mo2LogAppended,
+  async forward(exe, args) {
+    const child = spawn(exe, args, { detached: true, stdio: "ignore", windowsHide: true });
+    const error = await new Promise<string | null>((resolve) => {
+      child.once("spawn", () => resolve(null));
+      child.once("error", (e) => resolve(`${(e as NodeJS.ErrnoException).code ?? "error"}: ${e.message}`));
+    });
+    if (!error) child.unref();
+    return error;
+  },
+});
 
 export const windowsHost: Host = {
   async gameProcess() {
@@ -187,18 +282,8 @@ export const windowsHost: Host = {
     const running = await this.gameProcess();
     if (running && !spec.replace) return { started: false, command: "", error: `already_running: ${GAME_PROCESS}.exe is running (pid ${running.pid}); adopt it instead of launching another` };
     if (signal?.aborted) return { started: false, command: "" };
-    // MO2's own command line keeps the profile even when MO2 is open, and --arguments replaces the configured ones.
-    const args = ["-p", spec.profile, "run", "-e", spec.executable, ...(spec.arguments ? ["--arguments", spec.arguments] : [])];
-    const command = `ModOrganizer.exe ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ")}`;
-    // A missing or blocked executable fails asynchronously (ENOENT, EACCES): wait for spawn or error before answering.
-    const child = spawn(spec.exe, args, { detached: true, stdio: "ignore" });
-    const error = await new Promise<string | null>((resolve) => {
-      child.once("spawn", () => resolve(null));
-      child.once("error", (e) => resolve(`${(e as NodeJS.ErrnoException).code ?? "error"}: ${e.message}`));
-    });
-    if (error) return { started: false, command, error };
-    child.unref();
-    return { started: true, command };
+    if (!existsSync(spec.exe)) return { started: false, command: "", error: "ENOENT: the MO2 executable does not exist" };
+    return mo2.launch(spec, signal);
   },
   async requestClose(pid, signal) {
     if (signal?.aborted) return false;
@@ -259,8 +344,7 @@ export const windowsHost: Host = {
     return user32.SystemParametersInfoW(0x1042, 0, value, 0) ? value[0] !== 0 : null;
   },
   async launchBlocked() {
-    const dialog = topLevelWindows().find((w) => /cannot launch program/i.test(w.title));
-    return dialog ? dialog.title : null;
+    return mo2.blocked();
   },
   async systemHandles() {
     const { code, out } = await powershell("(Get-Process | Measure-Object HandleCount -Sum).Sum");

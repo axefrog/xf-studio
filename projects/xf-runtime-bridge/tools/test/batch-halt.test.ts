@@ -334,9 +334,10 @@ describe("the prelude starts a game patiently and adopts a healthy one", () => {
   test("5: MO2's Cannot launch program dialog fails at once, with what to do", async () => {
     const clock = new FakeClock();
     const dir = tempDir("xfb-batch-");
-    const host = fakeHost({ running: false, noProcessAfterLaunch: true, launchBlocked: "Cannot launch program" });
+    const host = fakeHost({ running: false, noProcessAfterLaunch: true, launchBlocked: "ERROR_ACCESS_DENIED: MO2 was started from a restricted process; starting it via WMI" });
     const result = await go(script(loadRow), fakeApi(clock), host, clock, dir, { fixtures: { staged_mod: stagedMod(dir), mo2: { exe: "m", profile: "p", executable: "g" } } });
-    expect(result.rows[0].reason).toContain("Windows Defender (or another antivirus) blocked MO2");
+    expect(result.rows[0].reason).toContain("ERROR_ACCESS_DENIED");
+    expect(result.rows[0].reason).toContain("starting it via WMI");
     expect(clock.now()).toBeLessThan(60_000);
   });
 });
