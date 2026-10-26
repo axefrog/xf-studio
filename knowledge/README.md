@@ -2,6 +2,8 @@
 
 This is the R&D lab's distilled reference for how Cyberpunk 2077's engine, resources and modding frameworks fit together. It is written primarily for agents: CP2077 modding knowledge is thin in training data, so every agent should be able to start here instead of rediscovering it. The project's standing mandate is that R&D runs permanently alongside product work, like a research lab beside a commercial team. The knowledge built here is what makes body customisation, world integration and quest tooling possible later.
 
+Offline Story Engine reference-model performance, fixture scales and validation are recorded in [the test-performance guide](../projects/xf-story-engine/reference/PERFORMANCE.md). These are model measurements, not Cyberpunk runtime evidence.
+
 ## Published on the public site
 
 Draft and Solid pages are published as the [Knowledge section](https://axefrog.github.io/xf-studio/knowledge/) of the public site, generated from these files on every site build ([how](../projects/xf-studio/site/README.md#knowledge-section)). Each published page gets a banner saying it is research in progress that may be wrong, the grade legend below, its last-commit date, and links to its source and to open an issue. Write with that audience in mind:

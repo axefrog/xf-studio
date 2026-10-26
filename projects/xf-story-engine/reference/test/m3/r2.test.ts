@@ -10,11 +10,14 @@ import { stateById } from '../../src/m3/states.ts';
 import { buildWorld } from '../../src/m3/world.ts';
 import { readSeedFact } from '../../src/seeding/eval.ts';
 
+import { kabukiFixture } from '../sim/kabuki-fixture.ts';
+const index = kabukiFixture(0.25);
+
 setDefaultTimeout(120_000);
 
 const early = stateById('S-early-quiet');
 const run = (policy: string, name = 'r2', windows = 40, seedOver = {}) => {
-  const r = new Run({ name, layer3: false, packs: [r2Pack({}, seedOver)] }, early, policies[policy]!);
+  const r = new Run({ index, name, layer3: false, packs: [r2Pack({}, seedOver)] }, early, policies[policy]!);
   r.runWindows(windows);
   return { r, inst: r.instancesOf(R2_ID)[0]! };
 };
@@ -22,7 +25,7 @@ const exitOf = (r: Run, inst: ReturnType<typeof run>['inst']): number => readSee
 
 describe('R2 compiles, casts and plays', () => {
   test('the legacy R2 compiles with only v1.11 asker advice and nothing later than the core', () => {
-    const w = buildWorld({ name: 'r2-lint', layer3: false, packs: [r2Pack()] });
+    const w = buildWorld({ index, name: 'r2-lint', layer3: false, packs: [r2Pack()] });
     const out = w.l2.compile(R2_PACK, r2Pack().seeds[0]!);
     expect(out.findings.map((f) => [f.code, f.level])).toEqual([['L-141', 'warning']]);
     expect(w.findings).toEqual([]);
@@ -30,7 +33,7 @@ describe('R2 compiles, casts and plays', () => {
   });
 
   test('the seed waits until the story and the street allow it, casts from the generated residents, and offers', () => {
-    const waiting = new Run({ name: 'r2-wait', layer3: false, packs: [r2Pack()] }, stateById('S-prologue'), policies.decline!);
+    const waiting = new Run({ index, name: 'r2-wait', layer3: false, packs: [r2Pack()] }, stateById('S-prologue'), policies.decline!);
     waiting.runWindows(20);
     const wi = waiting.instancesOf(R2_ID)[0]!;
     expect(wi.st.state).toBe('waiting');

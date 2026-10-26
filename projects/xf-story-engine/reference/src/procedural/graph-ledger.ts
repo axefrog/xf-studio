@@ -1,4 +1,6 @@
 import { H, s } from '../id.ts';
+import { GraphHistory } from './graph-history.ts';
+import { instanceView } from './views.ts';
 import type { Pattern } from '../seeding/pattern-types.ts';
 import { realising } from '../seeding/pattern-reads.ts';
 import { actingArgument } from '../seeding/pattern-lint.ts';
@@ -10,8 +12,19 @@ import { cmp } from './keys.ts';
 /** Derived signs and thread projections; only perception stamps and ring entries are written. */
 export class GraphLedger {
   private logged = new Map<string, string>();
+  private historyIndex?: GraphHistory;
+  private projectionKey = '';
+  private stampKey = '';
+  private projection: Thread[] = [];
+  private history(): GraphHistory { return this.historyIndex ??= new GraphHistory(this.host); }
+  private age(threads: Thread[], now: number): Thread[] {
+    return threads.map((t) => ({ ...t, instances: [...t.instances],
+      ...(t.patterns ? { patterns: [...t.patterns] } : {}), ...(t.tokens ? { tokens: [...t.tokens] } : {}), status: !t.aware ? 'unseen' : now - t.lastPresented <= this.host.data.threads.attendedWindow ? 'attended'
+      : now - t.lastPresented <= this.host.data.threads.simmerWindow ? 'simmering' : 'dormant' }));
+  }
   constructor(readonly host: Layer3) {}
-  reset(): void { this.logged.clear(); }
+  invalidate(): void { this.stampKey = ''; }
+  reset(): void { this.logged.clear(); this.projectionKey = ''; this.invalidate(); }
   modality(channel: string): string {
     return this.host.l2.reg.channels.get(channel)?.modality ?? (['bark', 'call', 'approach'].includes(channel) ? 'audio' : 'visual');
   }
@@ -43,9 +56,28 @@ export class GraphLedger {
     return !!p && !!g && p.show.junctures.every((k) => g.junctures[k]?.perceived)
       && p.edges.filter((_, i) => this.shown(e, i)).length >= p.show.edges;
   }
-  refresh(): Thread[] {
+  refresh(internal = false): Thread[] {
     const h = this.host, pool = h.state.pool.filter((e) => e.graph && !e.graph.retired && e.graph.state !== 'lapsed'), now = h.l2.playTotal();
+    const history = this.history(); history.refresh();
+    // Terminal history stays in S2's archive, outside the projection. Fingerprint only live or
+    // closing consumers, the bounded pool, and edits seen by the incremental evidence index.
+    const consumers = h.l2.all().filter((i) => !terminal(i.st.state) || i.st.deliveries.some((d) => ['closing', 'coda'].includes(d.what) && ['queued', 'released'].includes(d.state)));
+    const stamp = () => JSON.stringify([h.k.now, h.k.revision, history.version, h.state.skeletons,
+      consumers.map((i) => [i.id, i.st]), h.data]);
+    const key = () => JSON.stringify([h.k.now, h.state.pool, h.state.skeletons, consumers.map((i) => [i.id, i.st]), history.version,
+      [...h.sifter.patterns.values()], h.l2.reg.vocabulary, [...h.l2.reg.channels], h.data]);
+    // An overfull ring deliberately replays missing members in projection order, as before.
+    const ringComplete = this.projection.every((t) => !t.tokens?.length || h.state.skeletons.ring.some((r) => r.thread === t.id
+      && r.tokens.length >= Math.min(t.tokens!.length, h.data.sower.skeletonTokens)));
+    if (ringComplete && internal && this.stampKey && this.stampKey === stamp()) return this.age(this.projection, now);
+    if (ringComplete && this.projectionKey === key()) { this.stampKey = stamp(); return this.age(this.projection, now); }
+    h.invalidatePool();
     const gained = new Set<string>();
+    const byStory = new Map<string, PoolEntry[]>();
+    for (const e of pool) if (e.story) {
+      if (!byStory.has(e.story)) byStory.set(e.story, []);
+      byStory.get(e.story)!.push(e);
+    }
     // Child stories can become visible during this refresh; bounded fixed point, never recursive reads.
     for (let pass = 0; pass < h.data.sifter.lineageDepth; pass++) for (const e of pool) {
       const p = h.sifter.patterns.get(e.pattern)!.graph!, g = e.graph!;
@@ -53,7 +85,7 @@ export class GraphLedger {
         if (!j.filler || j.perceived) continue;
         let exposure = h.l2.exposure(j.filler.id);
         if (j.filler.fn === 'story') {
-          const child = pool.find((o) => o.story === j.filler!.id);
+          const child = byStory.get(j.filler.id)?.[0];
           if (child && this.aware(child)) exposure = { grade: 'presented', at: Math.max(...Object.values(child.graph!.junctures).flatMap((x) => x.perceived ? [x.perceived.at] : [])) };
         } else if (!('event' in j.filler.ref)) {
           exposure = (j.filler.causes ?? []).map((n) => h.l2.exposure(n)).filter((x) => x && x.grade !== 'ambient').sort((a, b) => a!.at - b!.at)[0];
@@ -72,12 +104,17 @@ export class GraphLedger {
         else if (state.state === 'pending' && (!state.pending || !h.l2.instance(state.pending) || terminal(h.l2.instance(state.pending)!.st.state))) { state.state = 'ready'; state.pending = undefined; }
       }
     }
-    const all = h.lv.instances().filter((v) => (!terminal(v.state) || v.closingPending) && !h.l2.instance(v.id)?.st.document.nudge), base = threads(all, now, h.data);
+    const all = consumers.filter((i) => !i.st.document.nudge).map(instanceView), base = threads(all, now, h.data);
     const closing = new Set(h.state.pool.flatMap((e) => e.graph?.seeds.filter((s) => s.for === 'closing').map((s) => s.seed) ?? []));
     for (const i of all) if (i.growsFrom?.juncture === '@closing') closing.add(i.id);
     const budgetBase = threads(all.filter((i) => !closing.has(i.id)), now, h.data);
     const byId = new Map(all.map((i) => [i.id, i])), baseBySeed = new Map(budgetBase.flatMap((t) => t.instances.map((id) => [id, t] as const)));
-    const acts = h.k.events.canonEvents().map((id) => h.kv.event(id)).filter((ev) => ev && h.sifter.graph.world.acts(ev, h.k.vId));
+    const poolIds = new Set(pool.map((e) => e.id)), grown = new Map<string, string[]>();
+    for (const i of all) if (i.growsFrom?.instance) {
+      const parent = i.growsFrom.instance;
+      if (!grown.has(parent)) grown.set(parent, []);
+      grown.get(parent)!.push(i.id);
+    }
     const parents = new Map<string, string>();
     const root = (id: string): string => { if (!parents.has(id)) parents.set(id, id); let r = id; while (parents.get(r) !== r) r = parents.get(r)!; return r; };
     const union = (a: string, b: string) => { a = root(a); b = root(b); parents.set(cmp(a, b) < 0 ? b : a, cmp(a, b) < 0 ? a : b); };
@@ -85,9 +122,10 @@ export class GraphLedger {
     for (const e of pool) {
       root(e.id);
       for (const seed of e.graph!.seeds) if (byId.has(seed.seed)) union(e.id, seed.seed);
-      for (const i of all) if (i.growsFrom?.instance === e.id) union(e.id, i.id);
-      for (const layer of e.graph!.layers) if (layer.cross && pool.some((p) => p.id === layer.with)) union(e.id, layer.with);
-      for (const child of pool) if (child.id !== e.id && child.story && Object.values(e.graph!.junctures).some((j) => j.filler?.id === child.story)) union(e.id, child.id);
+      for (const id of grown.get(e.id) ?? []) union(e.id, id);
+      for (const layer of e.graph!.layers) if (layer.cross && poolIds.has(layer.with)) union(e.id, layer.with);
+      for (const j of Object.values(e.graph!.junctures)) if (j.filler)
+        for (const child of byStory.get(j.filler.id) ?? []) if (child.id !== e.id) union(e.id, child.id);
     }
     const groups = new Map<string, { seeds: string[]; members: InstanceView[]; entries: PoolEntry[] }>();
     for (const i of all) { const r = root(i.id); if (!groups.has(r)) groups.set(r, { seeds: [], members: [], entries: [] }); groups.get(r)!.seeds.push(i.id); groups.get(r)!.members.push(i); }
@@ -104,7 +142,7 @@ export class GraphLedger {
       const pullAt = Math.max(-Infinity, ...responses.map((r) => r.game), ...members.flatMap((i) => {
         const st = h.l2.instance(i.id)!.st;
         return st.deliveries.filter((d) => d.pull).flatMap((d) => st.receipts.filter((r) => r.delivery === d.id && r.grade !== 'ambient').map((r) => r.presentedAt ?? r.at));
-      }), ...acts.filter((ev) => ev && (ev.participants.some((p) => nodes.has(p.who)) || ev.effects.some((e) => nodes.has(e.on)) || !!ev.place && nodes.has(ev.place))).map((ev) => ev!.time));
+      }), ...[...nodes].map((node) => history.actTimes.get(node) ?? -Infinity));
       const t: Thread = { id, instances: group.seeds, patterns: group.entries.map((e) => e.id), aware, lastPresented, pullAt,
         engineSown: members.some((i) => !closing.has(i.id)) && members.filter((i) => !closing.has(i.id)).every((i) => i.source.by === 'director'),
         active: members.some((i) => !terminal(i.state)) || group.entries.some((e) => ['live', 'forming', 'aftermath'].includes(e.graph!.state)),
@@ -113,7 +151,7 @@ export class GraphLedger {
       for (const e of group.entries) if (h.sifter.patterns.get(e.pattern)!.graph!.family === 'shape' && e.graph!.state === 'forming'
         && Object.values(e.graph!.junctures).filter((j) => j.perceived).length >= 2 && pullAt > -Infinity
         && pool.filter((x) => h.sifter.patterns.get(x.pattern)!.graph!.family === 'shape' && x.graph!.state === 'live').length < h.data.sifter.maxLiveShapes) e.graph!.state = 'live';
-      t.tokens = this.tokens(t);
+      t.tokens = this.tokenRows(t, history);
       const last = group.entries.filter((e) => e.graph!.outcome).sort((a, b) => b.graph!.outcome!.at - a.graph!.outcome!.at || b.seq - a.seq)[0];
       if (!t.active && last) t.tokens.push(`end:${last.graph!.outcome!.kind}/${last.pattern.split(':').pop()}`);
       const encoded = JSON.stringify(t.tokens);
@@ -128,9 +166,16 @@ export class GraphLedger {
       }
       result.push(t);
     }
+    this.projectionKey = key();
+    this.projection = this.age(result, now);
+    this.stampKey = stamp();
     return result;
   }
   tokens(t: Thread, predicted?: { id: string; fn: string; args: Record<string, string>; link?: string }): string[] {
+    const history = this.history(); history.refresh();
+    return this.tokenRows(t, history, predicted);
+  }
+  private tokenRows(t: Thread, history: GraphHistory, predicted?: { id: string; fn: string; args: Record<string, string>; link?: string }): string[] {
     const h = this.host, rows = new Map<string, { id: string; at: number; play: number; fn: string; args: Record<string, string>; stance?: string }>();
     const canonical = (ev: EventView) => {
       const precedence = h.l2.reg.vocabulary?.tokenPrecedence ?? [];
@@ -171,7 +216,7 @@ export class GraphLedger {
     const ordered = [...rows.values()].sort((a, b) => a.at - b.at || a.play - b.play || cmp(a.id, b.id)), masks = new Map<string, string>(), counts = new Map<string, number>();
     const mask = (n: string): string => {
       if (n === h.k.vId) return 'P'; if (masks.has(n)) return masks.get(n)!;
-      const kind = h.kv.kind(n), known = h.l2.exposedNodeAt(n, 'presented');
+      const kind = h.kv.kind(n), known = history.knownTimes.get(n);
       const prefix = kind && h.kv.isKind(kind, 'core:person') ? known !== undefined && known < (ordered[0]?.at ?? 0) ? 'K' : 'N'
         : kind && h.kv.isKind(kind, 'core:group') ? 'G' : kind && h.kv.isKind(kind, 'core:place') ? 'L' : 'I';
       const index = (counts.get(prefix) ?? 0) + 1; counts.set(prefix, index); masks.set(n, prefix + index); return prefix + index;

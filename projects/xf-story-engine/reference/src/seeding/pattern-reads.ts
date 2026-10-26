@@ -7,7 +7,51 @@ import { implicitPattern } from './seed-patterns.ts';
 import { agentRoles } from './actors.ts';
 
 const rank = { ambient: 0, presented: 1, confirmed: 2 };
+const unexposed = new WeakMap<Layer2, Set<Id>>();
+function negativeExposures(l2: Layer2): Set<Id> {
+  const prior = unexposed.get(l2); if (prior) return prior;
+  const cache = new Set<Id>(); unexposed.set(l2, cache);
+  const invalidate = (node?: Id) => {
+    if (node === undefined) { cache.clear(); return; }
+    let h = l2.k.store.header(node);
+    while (h && (h.origin.by === 'member' || h.origin.by === 'value')) { node = h.origin.owner; h = l2.k.store.header(node); }
+    cache.delete(node);
+  };
+  l2.k.store.factObservers.push(invalidate);
+  l2.k.events.projectionObservers.push(invalidate);
+  l2.k.changeObservers.push((c) => { if (c.c === 'pin' || c.c === 'reading') invalidate(c.node); });
+  return cache;
+}
+/** Absence of V from constant participant/witness fields proves a negative independently of a
+ * summary descriptor's changing time, place or kind. Uncertain constraints keep the general read. */
+function remainsUnexposed(l2: Layer2, event: Id, facts: NonNullable<ReturnType<typeof eventFacts>>): boolean {
+  const k = l2.k, fields = /^(participants|witnesses|who|role)(#|\[|$)/;
+  if (facts.participants.some((p) => p.who === k.vId) || facts.witnesses.includes(k.vId)
+    || k.store.pinsOfNode(event).some((p) => p.reason === 'observed' && !k.store.isWithdrawn(p.id))
+    || k.store.generalContributions().some((c) => c.target.slot === '*' || fields.test(c.target.slot))) return false;
+  for (const field of ['participants#count', 'witnesses#count'])
+    if (!k.store.contributionsNaming(event).some((c) => c.target.slot === field && c.form.f === 'const' && c.mode === 'constrain'
+      && !c.target.where?.length && c.valid.from === undefined && c.valid.to === undefined)
+      && !k.store.livePinsOn(event, field).some((p) => typeof p.value === 'number')) return false;
+  const nodes = [event];
+  for (let n = 0; n < nodes.length; n++) {
+    const node = nodes[n], h = k.store.header(node); if (!h) return false;
+    nodes.push(...k.store.ownedOf(node));
+    if (h.origin.by === 'member' && h.origin.owner === event
+      && ((h.origin.slot === 'participants' && h.origin.index >= facts.participants.length)
+        || (h.origin.slot === 'witnesses' && h.origin.index >= facts.witnesses.length))) return false;
+    for (const slot of k.schema.kind(h.kind).slots.filter((s) => fields.test(s.key)))
+      if (slot.temporal || slot.conditioned || slot.derive || slot.mode === 'mirrored') return false;
+    for (const c of k.store.contributionsNaming(node).filter((c) => c.target.slot === '*' || fields.test(c.target.slot)))
+      if (c.form.f !== 'const' || c.mode !== 'constrain' || c.target.where?.length || c.valid.from !== undefined || c.valid.to !== undefined) return false;
+    for (const p of k.store.pinsOfNode(node)) if (fields.test(p.slot) && p.region !== undefined) return false;
+  }
+  return true;
+}
 export function exposure(l2: Layer2, event: Id): { grade: ExposureGrade; at: number; play?: number } | undefined {
+  l2.k.persistence.recoverIfSaved(event);
+  const cache = negativeExposures(l2), receipts = [...l2.global.receipts, ...l2.all().flatMap((i) => i.st.receipts)];
+  if (cache.has(event) && !receipts.some((r) => r.cites.includes(event))) return undefined;
   const facts = eventFacts(l2, event);
   if (!facts) return undefined;
   const entries: Array<{ grade: ExposureGrade; at: number; play?: number }> = [];
@@ -16,9 +60,9 @@ export function exposure(l2: Layer2, event: Id): { grade: ExposureGrade; at: num
   if (facts.participants.some((p) => p.who === l2.k.vId && agents.includes(p.role))) entries.push({ grade: 'confirmed', at: facts.time });
   else if (facts.witnesses.includes(l2.k.vId)) entries.push({ grade: 'presented', at: facts.time });
   if (observedAt !== undefined) entries.push({ grade: 'presented', at: observedAt });
-  for (const r of [...l2.global.receipts, ...l2.all().flatMap((i) => i.st.receipts)])
+  for (const r of receipts)
     if (r.cites.includes(event)) entries.push({ grade: r.grade, at: r.presentedAt ?? r.at, play: r.playTotal });
-  if (!entries.length) return undefined;
+  if (!entries.length) { if (remainsUnexposed(l2, event, facts)) cache.add(event); return undefined; }
   const grade = entries.reduce((best, e) => rank[e.grade] > rank[best] ? e.grade : best, entries[0].grade);
   const visible = entries.filter((e) => rank[e.grade] >= rank.presented);
   const at = Math.min(...(visible.length ? visible : entries).map((e) => e.at));

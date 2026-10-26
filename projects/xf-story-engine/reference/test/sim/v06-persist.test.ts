@@ -50,7 +50,7 @@ describe('SF1-Y-8: demand independence', () => {
     const run = (cellIndex: number) => {
       const sim = make('SF1-Y-8');
       sim.k.reading(sim.w.vState, 'cell', sim.w.districts[0]!.cellIds[cellIndex]!, sim.k.now);
-      sim.advance(FULL ? 420 : 160);
+      sim.advance(FULL ? 420 : 120);
       return sim;
     };
     const a = run(0);
@@ -73,20 +73,20 @@ describe('SF1-Y-9: reload', () => {
   test('save with active goals and a post; load into a fresh engine under another epoch, play clock and wall clock; run on: no frame change on load, the same frames, posts and acts as without the save; a forgetting sweep removes no active or blocked goal frame', () => {
     const name = 'SF1-Y-9';
     const ref = make(name);
-    ref.advance(FULL ? 300 : 120);
+    ref.advance(FULL ? 300 : 60);
     // wait for goals with posts: a second round of the same world until a goal with a post is live (the duties of an intention)
     const goalsAt = (s: Sim): { goals: Array<{ state: string; id: Id }>; posts: unknown[] } => s.stateOf('people.goals')!;
     expect(goalsAt(ref).goals.filter((g) => g.state !== 'ended').length).toBeGreaterThan(0);
     ref.k.persistence.save('A');
     const keyOf = chainOf(ref);
     expect(keyOf.has('A')).toBe(true);
-    ref.advance(FULL ? 200 : 80);
+    ref.advance(FULL ? 200 : 40);
     const loaded = transfer(ref, 'A', () => make(name), 11);
     const changes = watchChanges(loaded);
     loaded.k.newEpoch();
     // no frame change on load: the goal frames are restored from their records, never opened again
     expect(changes.filter((c) => c.c === 'frame')).toHaveLength(0);
-    loaded.advance(FULL ? 200 : 80);
+    loaded.advance(FULL ? 200 : 40);
     // the frames that are alive agree (the ended ones a save held or a record refers to are in the reload too: e2e-v06 compares them in full)
     expect(observation(loaded, false)).toEqual(observation(ref, false));
     // a forgetting sweep removes no active or blocked goal frame
@@ -139,8 +139,8 @@ describe('the three-way property over goals, posts, items and intentions', () =>
     const b = make(name, 10, true);
     const checks: number[] = [];
     for (let step = 0; step < (FULL ? 6 : 3); step++) {
-      a.advance(FULL ? 70 : 45);
-      b.advance(FULL ? 70 : 45);
+      a.advance(FULL ? 70 : 36);
+      b.advance(FULL ? 70 : 36);
       // b: sweep what a save could recover, and carry on
       // at the first step the seat holders of the Claws die, so that seats pass on and their edges end: past intervals for the reads to answer
       if (step === 0) {

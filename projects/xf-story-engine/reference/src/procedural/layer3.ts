@@ -58,6 +58,10 @@ export class Layer3 {
   counts: Counts = { A: 0, L: 0, C: 0, S: 0 };
   private boundarySeen = -1;
   private inTick = false;
+  private poolDirty = true;
+  private snapshot?: { at: number; revision: number; holds: string; nodes: string[]; pool: Layer3State['pool']; evidence: Layer3State['evidence'] };
+  /** Pool writes outside the ledger come through the sifter or an atomic sow. */
+  invalidatePool(): void { this.poolDirty = true; this.ledger.invalidate(); }
   private evidenceSeen = new Set<string>();
   private pullSeen = new Set<string>();
   private asked = false;
@@ -90,7 +94,7 @@ export class Layer3 {
       this.data,
       () => this.state,
       this.writeLog,
-      () => this.flush(),
+      () => { this.invalidatePool(); this.flush(); },
     );
     this.sower = new Sower(
       l2,
@@ -106,10 +110,12 @@ export class Layer3 {
         try {
           return this.l2.atomicSow(req, (id) => {
             apply(id);
+            this.invalidatePool();
             this.flush();
           }, validate);
         } catch (e) {
           this.state = before;
+          this.invalidatePool();
           throw e;
         }
       },
@@ -167,6 +173,7 @@ export class Layer3 {
     });
   };
   installPatterns(input: Array<SiftPattern | Pattern>): Finding[] {
+    this.invalidatePool();
     const patterns = input.map((p) => 'junctures' in p ? patternDocument(p) : p);
     for (const p of patterns) if (p.graph) this.l2.reg.patterns.set(p.id, structuredClone(p.graph));
     this.syncTempo();
@@ -317,7 +324,7 @@ export class Layer3 {
           this.tick(f);
           this.k.settle();
         },
-        beforeSecond ?? (() => {}),
+        beforeSecond ? (at) => { this.invalidatePool(); beforeSecond(at); } : (() => {}),
       );
       this.refresh();
       this.flush();
@@ -340,7 +347,9 @@ export class Layer3 {
         this.l2.playTotal() + this.data.pacing.arcNoNewThread,
       );
     this.refresh();
+    const slot = this.state.slots.open.next;
     this.sower.resolve(this.counts);
+    if (slot !== this.state.slots.open.next) this.invalidatePool();
   }
   /** Also usable by a host that advances game windows without play time (sleep/wait/catch-up). */
   boundary(): void {
@@ -351,6 +360,7 @@ export class Layer3 {
   onDilemma(d: import('../frames.ts').Dilemma): void {
     this.syncTempo();
     if (!this.sifter.active) return;
+    this.invalidatePool();
     for (const p of this.sifter.patterns.values()) if (p.graph && Object.values(p.graph.junctures).some((j) => j.fn === 'demand'))
       this.state.buffer.push({ pattern: p.id, version: p.version, dilemma: structuredClone(d),
         event: { id: d.id, creator: this.keys.director, cause: d.cause, name: '@dilemma', kind: '@dilemma', time: this.k.now, participants: [], effects: [], causes: [], witnesses: [] } });
@@ -376,17 +386,19 @@ export class Layer3 {
     this.director.reconcileHolds(
       new Set(this.l2.all().flatMap((i) => i.st.deliveries.filter((d) => d.state === 'queued').map((d) => d.id))),
     );
-    this.threadView = [...this.sifter.patterns.values()].some((p) => p.graph) ? this.ledger.refresh() : threads(this.lv.instances(), this.l2.playTotal(), this.data);
+    this.threadView = [...this.sifter.patterns.values()].some((p) => p.graph) ? this.ledger.refresh(this.inTick) : threads(this.lv.instances(), this.l2.playTotal(), this.data);
     this.counts = counts(this.threadView);
     const b = this.data.threads,
       c = this.counts;
     if (c.A > b.maxAttended || c.L > b.maxLive || c.C > b.maxClimactic || c.S > b.maxSimmering)
       this.writeLog('budget', 'over-budget', { ...c });
+    let withdrew = false;
     this.state.pending = this.state.pending.filter((p) => {
       const inst = this.lv.instance(p.instance);
       if (!inst || terminal(inst.state) || inst.displays.length) return false;
       if (this.l2.playTotal() - p.sownAt <= b.pendingLifetime) return true;
       this.l2.sourceWithdraw(p.instance, 'pending', this.keys.withdraw(p.instance));
+      withdrew = true;
       this.writeLog(
         'withdraw',
         'pending',
@@ -396,9 +408,13 @@ export class Layer3 {
       );
       return false;
     });
-    this.threadView = [...this.sifter.patterns.values()].some((p) => p.graph) ? this.ledger.refresh() : threads(this.lv.instances(), this.l2.playTotal(), this.data);
-    this.counts = counts(this.threadView);
+    if (withdrew) {
+      this.threadView = [...this.sifter.patterns.values()].some((p) => p.graph) ? this.ledger.refresh(this.inTick) : threads(this.lv.instances(), this.l2.playTotal(), this.data);
+      this.counts = counts(this.threadView);
+    }
+    const closings = this.state.pool.map((e) => e.graph?.closing);
     this.sower.graph?.refresh();
+    if (this.state.pool.some((e, i) => e.graph?.closing !== closings[i])) this.invalidatePool();
     this.asked = false;
     for (const inst of this.l2.all())
       for (const d of inst.st.deliveries)
@@ -488,6 +504,19 @@ export class Layer3 {
   logGraphRepair(entry: string, seed: string): void { this.writeLog('match', 'sow-repaired', { entry, seed }, [seed]); }
   flush(): void {
     if (!this.sifter) return;
+    const holds = JSON.stringify(this.l2.all().map((i) => [i.id, i.st.state,
+      i.st.deliveries.some((d) => ['closing', 'coda'].includes(d.what) && ['queued', 'released'].includes(d.state)),
+      Object.entries(i.st.roles).map(([key, role]) => [key, role.cast, bound(i.st.document.roles[key].identity).value])]));
+    const cached = this.snapshot, record = this.k.retention.seeds.get(this.keys.record);
+    if (this.inTick && !this.poolDirty && cached && cached.at === this.k.now && cached.revision === this.k.revision
+      && cached.holds === holds && record && record.actor === undefined && record.nodes.length === cached.nodes.length
+      && record.nodes.every((n, i) => n === cached.nodes[i])) {
+      this.k.assertWritable();
+      // These detached subtrees cannot be edited by subsequent live-state writes. Save and
+      // public flush boundaries always rebuild them; controlled ticks copy only the small state.
+      record.state = { ...structuredClone({ ...this.state, pool: [], evidence: [] }), pool: cached.pool, evidence: cached.evidence };
+      return;
+    }
     const nodes = new Set<string>();
     for (const e of this.state.pool) {
       for (const s of e.stages) nodes.add(s.event);
@@ -530,9 +559,18 @@ export class Layer3 {
       }
     }
     this.state.evidence = [...evidence.values()].filter((e) => held.has(e.id)).sort((a, b) => cmp(a.id, b.id));
-    this.k.retention.setSeed({ id: this.keys.record, state: structuredClone(this.state), nodes: [...nodes].sort(cmp) });
+    const sorted = [...nodes].sort(cmp), prior = this.k.retention.seeds.get(this.keys.record);
+    // The record's state is persisted data; only its explicit nodes participate in retention.
+    // Keep the snapshot fresh without invalidating the whole kernel when its roots did not change.
+    const snapshot = structuredClone(this.state);
+    this.k.assertWritable();
+    if (prior && prior.actor === undefined && prior.nodes.length === sorted.length && prior.nodes.every((n, i) => n === sorted[i])) prior.state = snapshot;
+    else this.k.retention.setSeed({ id: this.keys.record, state: snapshot, nodes: sorted });
+    this.snapshot = { at: this.k.now, revision: this.k.revision, holds, nodes: sorted, pool: snapshot.pool, evidence: snapshot.evidence };
+    this.poolDirty = false;
   }
   private onLoad(): void {
+    this.invalidatePool(); this.snapshot = undefined;
     const saved = this.k.retention.seeds.get(this.keys.record)?.state as Layer3State | undefined;
     if (saved && saved.schema !== 1 && saved.schema !== 2) throw new Error('Layer3State schema is not supported yet');
     this.state = saved ? structuredClone(saved) : emptyState(this.l2.playTotal(), this.data.schedule.slotGap);

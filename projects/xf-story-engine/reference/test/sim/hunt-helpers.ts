@@ -54,8 +54,10 @@ export interface HuntOptions {
 
 /** The goal acts of the ring, oldest first: window, Id, kind and what they cite. */
 export function actsOf(sim: Sim): Array<{ w: number; id: Id; kind: string; served?: Id; punish?: { group: Id; intent: Id; rung: number }; causes?: Id[]; cell: Id }> {
-  const st = sim.stateOf<EventsState>('city.events')!;
-  return st.ring.filter((r) => r.event?.served !== undefined).map((r) => ({ w: r.w, id: r.id, kind: r.kind, served: r.event!.served, ...(r.event!.punish ? { punish: r.event!.punish } : {}), ...(r.event!.causes ? { causes: r.event!.causes } : {}), cell: r.cell }));
+  // Project before copying: the harness needs these ring fields, not a deep copy
+  // of the entire growing calendar and occurrence metadata on every window.
+  const st = sim.k.evolution.states.get('city.events')!.state as EventsState;
+  return structuredClone(st.ring.filter((r) => r.event?.served !== undefined).map((r) => ({ w: r.w, id: r.id, kind: r.kind, served: r.event!.served, ...(r.event!.punish ? { punish: r.event!.punish } : {}), ...(r.event!.causes ? { causes: r.event!.causes } : {}), cell: r.cell })));
 }
 
 export function startHunt(o: HuntOptions): Hunt {

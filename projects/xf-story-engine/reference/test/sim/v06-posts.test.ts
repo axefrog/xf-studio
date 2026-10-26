@@ -147,7 +147,9 @@ describe('SF1-Y-11: duty draws', () => {
 
   /** A world where group A1 has an active retaliation against a member `x` of A2, the wrongdoer, ward `wd`. */
   function retaliation(name: string, tweak: (d: import('../../src/sim/data.ts').S1Data) => void = () => {}) {
-    const sim = bigSim(name, tweak, ['group.decide', 'people.goals']);
+    // The kin-exclusion case needs a second eligible strike member after the
+    // first draw is excluded; keep this fixture's original population.
+    const sim = bigSim(name, tweak, ['group.decide', 'people.goals'], 8);
     const GA = gnode(sim, 'A1');
     sim.setState('group.decide', () => {});
     const g = sim.stateOf<GroupState>('group.decide')!.groups[GA]!;

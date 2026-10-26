@@ -97,8 +97,9 @@ The review regressions include six A2 checks for same-second tie reopening and a
 The legacy 26-probe simulation runner stops at obsolete R3-01: saved kernel event facts already mask
 that counterfactual at HEAD, as confirmed in SPEC-NOTES 195; its migration is deferred. All 64 dedicated
 S3/kernel probes and the default sweep property's 28 historical plus three discovery probes pass.
-The default suite takes about three minutes (about 190 s, peak about 1.1 GB) under the memory guard; SPEC-NOTES 196 records
-earlier before and after timings. Run it under the repository memory guard with a 4 GB limit, using the full Python interpreter path as the repository rules require. From this directory on Windows:
+The default suite checks the behaviours on smaller fixtures; `S1_FULL=1` restores the original populations and long spans.
+[Test performance](reference/PERFORMANCE.md) records per-file and per-test measurements, the scale choices and full-profile validation;
+SPEC-NOTES 196 records earlier timings. Run it under the repository memory guard with a 4 GB limit, using the full Python interpreter path as the repository rules require. From this directory on Windows:
 
 ```powershell
 & "$env:LOCALAPPDATA/Python/pythoncore-3.14-64/python.exe" ../../../tools/memory_guard.py --limit 4 -- bun test

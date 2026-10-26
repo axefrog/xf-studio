@@ -40,6 +40,8 @@ const isId = (v: unknown): boolean => typeof v === 'string' && /^[0-9a-f]{32}$/.
 
 export class EventKinds {
   private entries = new Map<string, EventKindEntry>();
+  /** Derived projections invalidate when the catalogue gains a declaration. */
+  version = 0;
 
   /** Register a kind. A refused registration throws and registers nothing. Registering the same name again replaces nothing and throws. */
   register(entry: Omit<EventKindEntry, 'tags' | 'producers'> & { tags?: string[]; producers?: string[] }): void {
@@ -63,6 +65,7 @@ export class EventKinds {
     if (entry.fills !== undefined) stored.fills = structuredClone(entry.fills);
     if (entry.dataFields !== undefined) stored.dataFields = structuredClone(entry.dataFields);
     this.entries.set(entry.name, stored);
+    this.version++;
   }
 
   /** The entry, as a copy. */

@@ -225,6 +225,8 @@ export class Kernel {
 
   // ---- revision and changes ----
 
+  /** Synchronous invalidation only; observers never produce domain writes. */
+  readonly changeObservers: Array<(change: Change) => void> = [];
   bump(): number {
     return ++this.revision;
   }
@@ -235,6 +237,7 @@ export class Kernel {
    */
   emit(change: Change, time: GameTime = this.now): void {
     // Callers can retain and edit nested contribution records. A queued change is an independent snapshot, including its form and selector.
+    for (const observe of this.changeObservers) observe(change);
     const snapshot: Change = structuredClone(change);
     const pc: PendingChange = { change: snapshot, time: Math.min(time, this.now), revision: this.revision, epoch: this.epoch };
     // An open staged batch is silent: its changes wait for the commit (spec 14.2a).

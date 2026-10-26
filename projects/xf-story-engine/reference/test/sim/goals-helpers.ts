@@ -94,7 +94,7 @@ export function plantGoal(sim: Sim, over: Partial<GoalRec> & Pick<GoalRec, 'owne
 }
 
 /** FX-3 with `scale` times the people: enough gang members for a group to give duties to (FX-3's 90 residents hold three adult gang members of the first group, and two of them sit in its seats). */
-export function bigSlice(scale = 8): WorldIndex {
+export function bigSlice(scale = process.env.S1_FULL === '1' ? 8 : 4): WorldIndex {
   const ix = structuredClone(fx3Slice());
   const d = Object.values(ix.districts)[0]!;
   d.entry.total = d.entry.total * scale;
@@ -107,4 +107,4 @@ export function bigSlice(scale = 8): WorldIndex {
 }
 
 /** The same world over the larger slice. */
-export const bigSim = (name: string, tweak: (d: S1Data) => void = () => {}, only = ['people.goals']): Sim => Sim.create({ worldSeed: seedOf(name), index: bigSlice(), data: quietData(tweak), only });
+export const bigSim = (name: string, tweak: (d: S1Data) => void = () => {}, only = ['people.goals'], scale?: number): Sim => Sim.create({ worldSeed: seedOf(name), index: bigSlice(scale), data: quietData(tweak), only });

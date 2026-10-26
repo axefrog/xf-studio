@@ -80,8 +80,17 @@ export function buildPacketFiles(m: PacketManifest, supplied: Array<{ file: stri
 
   // A3: the Radiant-style generator over fresh worlds (V stands in a market block)
   const A3: Hook[] = [];
+  let a3Run: Run | undefined;
+  let a3World = -1;
   for (let i = 0; A3.length < Math.max(E.length, A1.length, m.n) + 8 && i < 400; i++) {
-    const run = new Run({ name: `a3-${Math.floor(i / 3)}`, layer3: false, packs: [], ...(m.names === 'wide' ? { s1: wide } : {}) }, stateById('S-early-quiet'), policies.decline!);
+    // Each world supplies three read-only slot draws. Rebuilding the same world
+    // for every draw repeats resident generation and kernel setup needlessly.
+    const world = Math.floor(i / 3);
+    if (world !== a3World) {
+      a3World = world;
+      a3Run = new Run({ name: `a3-${world}`, layer3: false, packs: [], ...(m.names === 'wide' ? { s1: wide } : {}) }, stateById('S-early-quiet'), policies.decline!);
+    }
+    const run = a3Run!;
     const job = radiantJob(run.w, (id) => run.nameOf(id), `a3-${Math.floor(i / 3)}`, i % 3, 'g1', m.a3Rule);
     if (job && distinct(job.names)) A3.push({ arm: 'A3', text: job.text, meta: { world: `a3-${Math.floor(i / 3)}`, template: job.template } });
   }

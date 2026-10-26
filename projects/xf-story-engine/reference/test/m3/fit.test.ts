@@ -13,7 +13,11 @@ import { STATES, stateById } from '../../src/m3/states.ts';
 import { recordOf, transcript } from '../../src/m3/transcript.ts';
 import { randomWithinGates } from '../../src/m3/arms.ts';
 
+import { kabukiFixture } from '../sim/kabuki-fixture.ts';
+
 setDefaultTimeout(300_000);
+const index = kabukiFixture(0.25);
+const smallIndex = kabukiFixture();
 
 type Arm = 'absent' | 'attached-off' | 'on';
 const FULL = process.env.S1_FULL === '1';
@@ -21,7 +25,7 @@ const ids = FULL ? STATES.map((s) => s.id) : ['S-early-quiet', 'S-mid-squeezed']
 
 function arm(which: Arm, state: string, policy = 'decline'): Run {
   const opts = which === 'absent' ? { layer3: false } : { layer3: true, tempo: which === 'on' ? ('restless' as const) : ('off' as const), patterns: hookPatterns() };
-  return new Run({ name: `fit-${state}`, packs: [r2Pack(), hookPack()], ...opts } as never, stateById(state), policies[policy]!);
+  return new Run({ index: state === 'S-early-quiet' ? index : smallIndex, name: `fit-${state}`, packs: [r2Pack(), hookPack()], ...opts } as never, stateById(state), policies[policy]!);
 }
 
 describe('R2 fitted with sowing off and on', () => {
@@ -93,7 +97,7 @@ describe('R2 fitted with sowing off and on', () => {
 
   test('the random-within-gates setting changes nothing about the authored seed either', () => {
     const base = arm('on', 'S-early-quiet');
-    const rnd = new Run({ name: 'fit-S-early-quiet', layer3: true, tempo: 'restless', packs: [r2Pack(), hookPack()], patterns: hookPatterns(), l3Data: randomWithinGates(l3Default()) }, stateById('S-early-quiet'), policies.decline!);
+    const rnd = new Run({ index, name: 'fit-S-early-quiet', layer3: true, tempo: 'restless', packs: [r2Pack(), hookPack()], patterns: hookPatterns(), l3Data: randomWithinGates(l3Default()) }, stateById('S-early-quiet'), policies.decline!);
     base.runWindows(20);
     rnd.runWindows(20);
     expect(semanticOfR2(rnd)).toEqual(semanticOfR2(base));
@@ -113,7 +117,7 @@ describe('the run driver is deterministic and its outputs are clean', () => {
 
   test('the transcript header names the state and the street', () => {
     const r = arm('absent', 'S-mid-squeezed', 'accept-first');
-    r.runWindows(10);
+    r.runWindows(FULL ? 10 : 4);
     const t = transcript(r);
     expect(t).toContain('story state: S-mid-squeezed');
     expect(t).toContain('ledger.m0');

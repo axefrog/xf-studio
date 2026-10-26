@@ -51,6 +51,8 @@ export interface EventCanonRecord {
 }
 
 export class Events {
+  /** Derived projections receive canon and ownership changes, including silent replay. */
+  readonly projectionObservers: Array<(event: Id | undefined, canon?: boolean) => void> = [];
   private canonRecords = new Map<Id, CanonEntry[]>();
   private materialisations = new Map<Id, EventProvenance>();
   /** Summary items published as events in this session (V4-47). Not persisted: the publishing layer keeps its own record. */
@@ -94,12 +96,14 @@ export class Events {
       throw new Error(`materialisation owner already declared: ${event}`);
     if (have) return;
     this.materialisations.set(event, { ...provenance });
+    for (const observe of this.projectionObservers) observe(event);
     this.k.store.changeMaterialisations.set(event, { event, provenance: { ...provenance } });
     this.k.retention.invalidate();
   }
 
   forgetMaterialisation(event: Id): void {
     this.materialisations.delete(event);
+    for (const observe of this.projectionObservers) observe(event);
     this.k.store.referencesVersion++;
   }
 
@@ -398,6 +402,7 @@ export class Events {
     const entries = this.canonRecords.get(event) ?? [];
     entries.push({ reason, fields: [...fields], pins });
     this.canonRecords.set(event, entries);
+    for (const observe of this.projectionObservers) observe(event, true);
     k.bump();
     return pins;
   }
@@ -432,11 +437,13 @@ export class Events {
 
   setCanonRecord(rec: EventCanonRecord): void {
     this.canonRecords.set(rec.event, rec.entries.map((x) => ({ ...x, fields: [...x.fields], pins: [...x.pins] })));
+    for (const observe of this.projectionObservers) observe(rec.event, true);
   }
 
   /** Replacement clears canon and materialisation records, session publications and the minting cache (S0 14.3). */
   clear(): void {
     this.canonRecords.clear();
+    for (const observe of this.projectionObservers) observe(undefined);
     this.materialisations.clear();
     this.minted.clear();
     this.published.clear();
@@ -450,6 +457,7 @@ export class Events {
   restoreFrom(cap: unknown): void {
     const c = structuredClone(cap) as { canon: Map<Id, CanonEntry[]>; published: Set<Id>; materialisations: Map<Id, EventProvenance> };
     this.canonRecords = c.canon;
+    for (const observe of this.projectionObservers) observe(undefined);
     this.materialisations = c.materialisations;
     this.published.clear();
     for (const id of c.published) this.published.add(id);

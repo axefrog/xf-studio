@@ -15,6 +15,7 @@ import { attachLayer2 } from '../sim/layer2-wire.ts';
 import { ReplayPort } from '../sim/port.ts';
 import { Sim } from '../sim/sim.ts';
 import { makeKabukiSlice } from '../sim/slices.ts';
+import type { WorldIndex } from '../sim/index-types.ts';
 import { factsTable } from './facts.ts';
 
 let slice: ReturnType<typeof makeKabukiSlice> | undefined;
@@ -30,6 +31,8 @@ export interface WorldOpts {
   /** Changes to S1's tunables for the run (recorded by name in the transcript). */
   s1?: (d: S1Data) => void;
   l3Data?: Layer3Data;
+  /** Optional fixture index; the evaluation harness defaults to the Kabuki slice. */
+  index?: WorldIndex;
 }
 
 export interface M3World {
@@ -45,7 +48,7 @@ export function buildWorld(o: WorldOpts): M3World {
   slice ??= makeKabukiSlice();
   const data = defaultData();
   o.s1?.(data);
-  const sim = Sim.create({ worldSeed: H(s('m3'), s(o.name)), index: slice, data });
+  const sim = Sim.create({ worldSeed: H(s('m3'), s(o.name)), index: o.index ?? slice, data });
   // S2's casting searches the kernel for residents, and S1 realises a resident only when something touches its block. Demand every block
   // of the simulated district once, as the host would for a district V stands in, so that a seed can cast from the people who live there.
   for (const d of sim.w.districts) for (const cell of d.cellIds) sim.people.residentsOfBlock(cell);

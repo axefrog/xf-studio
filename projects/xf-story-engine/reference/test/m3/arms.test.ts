@@ -13,10 +13,13 @@ import { Run, policies } from '../../src/m3/driver.ts';
 import { R2_ID, r2Pack } from '../../src/m3/r2.ts';
 import { stateById } from '../../src/m3/states.ts';
 
+import { kabukiFixture } from '../sim/kabuki-fixture.ts';
+const index = kabukiFixture(0.25);
+
 setDefaultTimeout(120_000);
 
 describe('A3, the Radiant-style baseline', () => {
-  const run = new Run({ name: 'a3-test', layer3: false, packs: [] }, stateById('S-early-quiet'), policies.decline!);
+  const run = new Run({ index, name: 'a3-test', layer3: false, packs: [] }, stateById('S-early-quiet'), policies.decline!);
   const jobs = Array.from({ length: 24 }, (_, i) => radiantJob(run.w, (id) => run.nameOf(id), 'a3-test', i));
 
   test('every draw fills a template from real residents, with no placeholder left', () => {
@@ -41,7 +44,7 @@ describe('A3, the Radiant-style baseline', () => {
     expect(reads).toEqual(['priceLevel']);
     for (const banned of ['ledger', 'normGap', 'band', 'regime', 'weekLines', 'ringEntry', 'beliefs', 'occurrences']) expect(source.includes(`.${banned}(`) || source.includes(`'${banned}'`), banned).toBe(false);
     // a world at the very start, with no incident yet recorded, gives the same job as one a day on, apart from the price it reads
-    const later = new Run({ name: 'a3-test', layer3: false, packs: [] }, stateById('S-early-quiet'), policies.decline!);
+    const later = new Run({ index, name: 'a3-test', layer3: false, packs: [] }, stateById('S-early-quiet'), policies.decline!);
     later.runWindows(10);
     expect(radiantJob(later.w, (id) => later.nameOf(id), 'a3-test', 3)).toEqual(jobs[3]);
   });
@@ -257,7 +260,7 @@ describe('adversarial synthetic players on R2 (B14, first pass)', () => {
   test('every policy ends the seed or leaves it answerable, and nothing is gained by farming', () => {
     const outcomes: Record<string, string> = {};
     for (const p of ['accept-first', 'accept-middle', 'accept-last', 'decline', 'ignore']) {
-      const r = new Run({ name: 'b14', layer3: false, packs: [r2Pack({}, { unattended: { after: { clock: 'game', s: 21_600 }, outcome: [{ fact: 'exit', set: 5 }] } })] }, stateById('S-mid-squeezed'), policies[p]!);
+      const r = new Run({ index, name: 'b14', layer3: false, packs: [r2Pack({}, { unattended: { after: { clock: 'game', s: 21_600 }, outcome: [{ fact: 'exit', set: 5 }] } })] }, stateById('S-mid-squeezed'), policies[p]!);
       r.runWindows(60);
       const inst = r.instancesOf(R2_ID)[0]!;
       outcomes[p] = inst.st.state;

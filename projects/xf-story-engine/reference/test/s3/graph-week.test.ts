@@ -2,7 +2,7 @@
 import { expect, test, setDefaultTimeout } from 'bun:test';
 import { H, s } from '../../src/id.ts';
 import { Sim } from '../../src/sim/sim.ts';
-import { makeKabukiSlice } from '../../src/sim/slices.ts';
+import { kabukiFixture } from '../sim/kabuki-fixture.ts';
 import { attachLayer2 } from '../../src/sim/layer2-wire.ts';
 import { ScriptPort } from '../../src/seeding/port.ts';
 import { Layer3 } from '../../src/procedural/layer3.ts';
@@ -16,7 +16,7 @@ import { fillerId } from '../../src/procedural/graph-world.ts';
 
 setDefaultTimeout(180_000);
 const FULL = process.env.S1_FULL === '1';
-const index = makeKabukiSlice();
+const index = kabukiFixture();
 function week(answer: 'pay' | 'standup' | 'decline', reload = false) {
   const sim = Sim.create({ worldSeed: H(s('SF3-60'), s(answer)), index, only: ['city.mirror'] });
   const port = new ScriptPort(), l2 = attachLayer2(sim, { port, facts: factsTable() });
@@ -132,8 +132,12 @@ function week(answer: 'pay' | 'standup' | 'decline', reload = false) {
     expect(l3.state.pool.some((e) => e.pattern === patterns[1].id && e.id !== protection.id && e.bindings['?gd'] === sim.w.v)).toBe(true);
   }
   const steps = FULL ? 1008 : 14;
+  // Smaller calls alone do not shorten the run: settle processes every intervening
+  // window. Keep the scripted stances and both reloads at either scale, but reserve
+  // the week of subsequent history for S1_FULL.
+  const horizon = FULL ? 604800 : steps * 600;
   for (let n = 1; n <= steps; n++) {
-    sim.k.settle({ to: 3600 + Math.floor(n * 604800 / steps) }); l3.refresh();
+    sim.k.settle({ to: 3600 + Math.floor(n * horizon / steps) }); l3.refresh();
     if (reload && n === Math.floor(steps / 2)) { sim.k.persistence.save('midweek'); sim.k.newEpoch(); sim.k.persistence.load('midweek'); }
   }
   l3.flush();

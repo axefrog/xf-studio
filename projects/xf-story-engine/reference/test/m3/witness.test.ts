@@ -22,6 +22,9 @@ import type { ReplayLine } from '../../src/sim/port.ts';
 import { WIDE_NAMES } from '../../src/sim/names.ts';
 import type { Id } from '../../src/types.ts';
 
+import { kabukiFixture } from '../sim/kabuki-fixture.ts';
+const index = kabukiFixture(0.25);
+
 setDefaultTimeout(600_000);
 const FULL = process.env.S1_FULL === '1';
 const early = stateById('S-early-quiet');
@@ -48,7 +51,7 @@ const place = (r: Run): Id => r.w.sim.w.index.names!['g1']!;
 describe('the report of what V saw is passive: it changes nothing of S1\'s record', () => {
   /** A world with one theft near V, and then the given report of it (or none), settled for a few windows. */
   function world(report: 'none' | 'tell' | 'disclosure'): { r: Run; a: Id; b: Id } {
-    const r = new Run({ name: 'witness-passive', layer3: false, packs: [], s1: wide }, early, policies.decline!);
+    const r = new Run({ index, name: 'witness-passive', layer3: false, packs: [], s1: wide }, early, policies.decline!);
     const [a, b] = residents(r, 2) as [Id, Id];
     r.runWindows(1);
     const t = r.windowNo * WINDOW + 1;
@@ -105,7 +108,7 @@ describe('the report is of one incident: the second stage matches that kind of i
    * Returns, for each pattern, the entries the sifter completed (by the bindings it matched).
    */
   function play(reports: (r: Run, ids: { a1: Id; a2: Id; b: Id; c: Id; theft1: Id; theft2: Id; accident: Id }) => ReplayLine[]) {
-    const r = new Run({ name: 'witness-overlap', layer3: true, tempo: 'steady', packs: [offerKitPack()], patterns: offerPatterns(), s1: wide }, early, policies.decline!);
+    const r = new Run({ index, name: 'witness-overlap', layer3: true, tempo: 'steady', packs: [offerKitPack()], patterns: offerPatterns(), s1: wide }, early, policies.decline!);
     const [a1, a2, b, c] = residents(r, 4) as [Id, Id, Id, Id];
     r.runWindows(1);
     const t = r.windowNo * WINDOW + 1;

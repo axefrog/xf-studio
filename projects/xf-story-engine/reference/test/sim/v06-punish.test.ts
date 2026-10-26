@@ -12,6 +12,7 @@ import { actsOf, goalsDigest, groupDigest, minted, procDraw, startHunt } from '.
 import { bigSim, watchChanges, W } from './goals-helpers.ts';
 
 setDefaultTimeout(180_000);
+const FULL = process.env.S1_FULL === '1';
 
 const against = (b: Belief[]): Belief[] => b.filter((x) => x.path === 'against');
 
@@ -102,8 +103,8 @@ describe('SF1-D-4: no climb unperceived', () => {
   const fast = (d: import('../../src/sim/data.ts').S1Data): void => { d.goals.rate.warning = 500; d.goals.rate.price = 500; d.goals.rate.search = 500; };
 
   test('with no observed pin the intention stays at rung 1 and harms no one, and ends expired with a relent.punish', () => {
-    const h = startHunt({ name: 'SF1-D-4a', delay: null, tweak: (d) => { fast(d); d.groups.punish.tempo.restless.duration = 400; } });
-    h.step(520);
+    const h = startHunt({ name: 'SF1-D-4a', delay: null, tweak: (d) => { fast(d); d.groups.punish.tempo.restless.duration = FULL ? 400 : 120; } });
+    h.step(FULL ? 520 : 240);
     const { sim, GA } = h;
     const acts = actsOf(sim);
     expect(acts.length).toBeGreaterThan(0);
@@ -120,7 +121,7 @@ describe('SF1-D-4: no climb unperceived', () => {
   test('with the warning observed, after the dwell a climb is possible each window with chance 0.05 x 1.5; rung 2 opens a price warner and one searcher', () => {
     const h = startHunt({ name: 'SF1-D-4b', delay: 20, tweak: (d) => { fast(d); d.groups.punish.climbP = 1 / 0.075 * 0.5; } });
     const { sim, GA } = h;
-    h.step(400);
+    h.step(FULL ? 400 : 240);
     const a = groupDigest(sim).groups[GA]!.active;
     expect(a?.rung).toBeGreaterThanOrEqual(2);
     const kinds = new Set(actsOf(sim).map((x) => x.kind));
@@ -146,7 +147,7 @@ describe('SF1-D-5: reach follows tempo', () => {
       const h = startHunt({ name: `SF1-D-5-${tempo}`, tempo, delay: 5, tweak: quick });
       let max = 0;
       let started = false;
-      for (let i = 0; i < 700; i++) {
+      for (let i = 0; i < (FULL ? 700 : 240); i++) {
         h.step(1);
         const a = groupDigest(h.sim).groups[h.GA]!.active;
         if (a?.name === 'punish') {

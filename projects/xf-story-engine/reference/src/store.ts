@@ -18,6 +18,19 @@ const slotKeyOf = (node: Id, slot: string): string => `${node}|${slot}`;
 export class Store {
   /** Physical record membership, for the recovery gate's no-op cache (not domain state). */
   referencesVersion = 0;
+  /** Derived readers subscribe to physical fact edits; undefined replaces or broadly changes their inputs. */
+  readonly factObservers: Array<(node: Id | undefined) => void> = [];
+  private factChanged(node?: Id): void {
+    if (!this.factObservers.length) return;
+    const seen = new Set<Id>();
+    while (node && !seen.has(node)) {
+      seen.add(node);
+      const h = this.header(node);
+      if (!h || (h.origin.by !== 'member' && h.origin.by !== 'value')) break;
+      node = h.origin.owner;
+    }
+    for (const observe of this.factObservers) observe(node);
+  }
   /** Non-regenerable edits and their identity metadata. Neither is a retention root. */
   readonly changedEdges = new Set<Id>();
   readonly changedContributions = new Set<Id>();
@@ -37,6 +50,11 @@ export class Store {
   }
 
   recordChanged(record: Edge | Contribution, dependencyOf?: Id): readonly NodeHeader[] {
+    if (!('type' in record)) {
+      const scope = record.target.scope;
+      if (scope && 'nodes' in scope) for (const node of scope.nodes) this.factChanged(node);
+      else this.factChanged();
+    }
     if (dependencyOf !== undefined) {
       let refs = this.changeDependencies.get(dependencyOf);
       if (!refs) this.changeDependencies.set(dependencyOf, refs = new Set());
@@ -92,6 +110,7 @@ export class Store {
 
   /** Put the tables back as `capture` found them. */
   restoreFrom(cap: unknown): void {
+    this.factChanged();
     this.referencesVersion++;
     const c = structuredClone(cap) as Record<string, any>;
     const swap = <T>(into: Map<string, T> | Set<string>, from: Map<string, T> | Set<string>): void => {
@@ -124,6 +143,7 @@ export class Store {
 
   /** Drop every record (a load replaces all branch-local state, spec 14.3). */
   clear(): void {
+    this.factChanged();
     this.referencesVersion++;
     this.changedEdges.clear(); this.changedContributions.clear(); this.changeHeaders.clear(); this.recordHeaders.clear();
     this.changeMaterialisations.clear();
@@ -153,6 +173,7 @@ export class Store {
     if (this.headers.has(h.id)) return false;
     this.referencesVersion++;
     this.headers.set(h.id, h);
+    this.factChanged(h.id);
     let set = this.headersByKind.get(h.kind);
     if (!set) this.headersByKind.set(h.kind, (set = new Set()));
     set.add(h.id);
@@ -174,6 +195,7 @@ export class Store {
     const h = this.headers.get(id);
     if (!h) return;
     this.referencesVersion++;
+    this.factChanged(id);
     this.headers.delete(id);
     this.nodes.delete(id);
     this.headersByKind.get(h.kind)?.delete(id);
@@ -224,6 +246,7 @@ export class Store {
     if (this.pinsById.has(p.id)) return false;
     this.referencesVersion++;
     this.pinsById.set(p.id, p);
+    this.factChanged(p.node);
     const k = slotKeyOf(p.node, p.slot);
     let list = this.pinIndex.get(k);
     if (!list) this.pinIndex.set(k, (list = []));
@@ -332,6 +355,7 @@ export class Store {
     const p = this.pinsById.get(id);
     if (!p) return;
     this.referencesVersion++;
+    this.factChanged(p.node);
     this.pinsById.delete(id);
     this.withdrawn.delete(id);
     const k = slotKeyOf(p.node, p.slot);
@@ -375,6 +399,7 @@ export class Store {
       const nextReading = readings.find((r) => r.valid.from > o.valid.from);
       if (nextReading) shorten(o, nextReading.valid.from);
     }
+    if (changed.length) this.factChanged(node);
     return changed;
   }
 
@@ -385,6 +410,8 @@ export class Store {
     this.referencesVersion++;
     this.rememberIdentity(c);
     this.contribs.set(c.id, c);
+    if (c.target.scope && 'nodes' in c.target.scope) for (const node of c.target.scope.nodes) this.factChanged(node);
+    else this.factChanged();
     const named = c.target.scope && 'nodes' in c.target.scope ? c.target.scope.nodes : null;
     if (named) {
       for (const n of named) {
@@ -407,6 +434,8 @@ export class Store {
     const c = this.contribs.get(id);
     if (!c) return;
     this.referencesVersion++;
+    if (c.target.scope && 'nodes' in c.target.scope) for (const node of c.target.scope.nodes) this.factChanged(node);
+    else this.factChanged();
     this.contribs.delete(id);
     const named = c.target.scope && 'nodes' in c.target.scope ? c.target.scope.nodes : null;
     const drop = (list: Id[] | undefined) => {

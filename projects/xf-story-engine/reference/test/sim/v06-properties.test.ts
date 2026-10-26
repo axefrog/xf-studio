@@ -23,89 +23,97 @@ const HARM = ['harm', 'kill', 'take', 'expose'];
 
 describe('goals and intentions under generated scripts (S1 14.3)', () => {
   const SEEDS = FULL ? 12 : 3;
-  const N = FULL ? 1100 : 700;
+  const N = FULL ? 1100 : 240;
 
-  test('random acts of V against a group, a random walk of tempo, warnings observed at random lags or never: no price, search or confront ever precedes an observed warning of its intention, no rung exceeds the tempo in force, and no S1 output harms V', () => {
-    for (let s = 0; s < SEEDS; s++) {
-      const rng = lcg(1000 + s);
-      const sim = bigSim(`SF1-prop-d30-${s}`, (d) => {
-        d.goals.attempts = 600;
-        d.goals.rate.warning = 40; d.goals.rate.price = 40; d.goals.rate.search = 40;
-        d.groups.punish.rungDwell = 5 + Math.floor(rng() * 60);
-        d.groups.punish.climbP = 0.2 + rng() * 5;
-      }, ['city.events', 'city.mirror', 'group.decide', 'people.goals', 'scene.acts']);
-      const GA = gnode(sim, 'A1');
-      sim.k.settings.set({ tempo: (['restless', 'steady', 'calm'] as const)[Math.floor(rng() * 3)]! });
-      sim.setState('group.decide', () => {});
-      const g0 = sim.stateOf<GroupState>('group.decide')!.groups[GA]!;
-      const holders = new Set(g0.seats.map((x) => x.holder));
-      const gang = adults(sim, 2, 'gang').filter((r) => !holders.has(r));
-      sim.setState('group.decide', (st) => {
-        for (const seat of (st as GroupState).groups[GA]!.seats) if (seat.holder !== null) seat.lean = 'retribution';
-      });
-      const markets = sim.w.districts[0]!.cellIds.filter((c) => sim.w.cell(c).public === 'public');
-      const port = new ReplayPort(sim);
-      // V acts against the group at random windows: a death of one of its members
-      const deaths = 1 + Math.floor(rng() * 3);
-      const lines = Array.from({ length: deaths }, (_, i) => ({
-        t: (8 + Math.floor(rng() * (N / 2))) * W + 30 + i, op: 'event' as const, kind: 'game.death', place: markets[Math.floor(rng() * markets.length)]!,
-        participants: [{ who: gang[i]!, role: 'victim' }, { who: 'v', role: 'actor' }], effects: [{ on: gang[i]!, effect: 'kill' as const }], witnesses: 6,
-      }));
-      port.submit([{ t: 0, op: 'reading', node: 'v', slot: 'cell', value: markets[0]! }, ...lines]);
-      const lags = new Map<Id, number | null>();
-      const acts = new Map<Id, { w: number; kind: string; time: number; punish?: { intent: Id; rung: number } }>();
-      const tempos: Array<{ w: number; t: keyof typeof MAX_RUNG }> = [];
-      for (let w = 0; w < N; w++) {
-        if (w % 90 === 45) {
-          const t = (['off', 'calm', 'steady', 'restless'] as const)[Math.floor(rng() * 4)]!;
-          sim.k.settings.set({ tempo: t });
-          tempos.push({ w, t });
-        }
-        sim.advance(1);
-        for (const a of actsOf(sim)) {
-          if (acts.has(a.id)) continue;
-          acts.set(a.id, { w: a.w, kind: a.kind, time: sim.policies.viewEvent(a.id)?.time ?? a.w * W, ...(a.punish ? { punish: { intent: a.punish.intent, rung: a.punish.rung } } : {}) });
-          if (a.kind === 'warning' || a.kind === 'price') lags.set(a.id, rng() < 0.4 ? null : 1 + Math.floor(rng() * 60));
-        }
-        for (const [id, lag] of lags) {
-          if (lag === null) continue;
-          const at = acts.get(id)!.w + lag;
-          if (at === sim.windowNow()) {
-            if (!sim.k.persistence.restoreReferencedHeader(id)) sim.remint(id);
-            sim.k.pin({ node: id, slot: 'outcome', value: 'done', reason: 'observed', at: sim.k.now, cause: H(hs('layer2')), evidence: id });
-          }
-        }
+  const runScript = (s: number, N: number, scale?: number): number => {
+    const rng = lcg(1000 + s);
+    const sim = bigSim(`SF1-prop-d30-${s}`, (d) => {
+      d.goals.attempts = 600;
+      d.goals.rate.warning = 40; d.goals.rate.price = 40; d.goals.rate.search = 40;
+      d.groups.punish.rungDwell = 5 + Math.floor(rng() * 60);
+      d.groups.punish.climbP = 0.2 + rng() * 5;
+    }, ['city.events', 'city.mirror', 'group.decide', 'people.goals', 'scene.acts'], scale);
+    const GA = gnode(sim, 'A1');
+    sim.k.settings.set({ tempo: (['restless', 'steady', 'calm'] as const)[Math.floor(rng() * 3)]! });
+    sim.setState('group.decide', () => {});
+    const g0 = sim.stateOf<GroupState>('group.decide')!.groups[GA]!;
+    const holders = new Set(g0.seats.map((x) => x.holder));
+    const gang = adults(sim, 2, 'gang').filter((r) => !holders.has(r));
+    sim.setState('group.decide', (st) => {
+      for (const seat of (st as GroupState).groups[GA]!.seats) if (seat.holder !== null) seat.lean = 'retribution';
+    });
+    const markets = sim.w.districts[0]!.cellIds.filter((c) => sim.w.cell(c).public === 'public');
+    const port = new ReplayPort(sim);
+    // V acts against the group at random windows: a death of one of its members
+    const deaths = 1 + Math.floor(rng() * 3);
+    const lines = Array.from({ length: deaths }, (_, i) => ({
+      t: (8 + Math.floor(rng() * (N / 2))) * W + 30 + i, op: 'event' as const, kind: 'game.death', place: markets[Math.floor(rng() * markets.length)]!,
+      participants: [{ who: gang[i]!, role: 'victim' }, { who: 'v', role: 'actor' }], effects: [{ on: gang[i]!, effect: 'kill' as const }], witnesses: 6,
+    }));
+    port.submit([{ t: 0, op: 'reading', node: 'v', slot: 'cell', value: markets[0]! }, ...lines]);
+    const lags = new Map<Id, number | null>();
+    const acts = new Map<Id, { w: number; kind: string; time: number; punish?: { intent: Id; rung: number } }>();
+    const tempos: Array<{ w: number; t: keyof typeof MAX_RUNG }> = [];
+    for (let w = 0; w < N; w++) {
+      if (w % 90 === 45) {
+        const t = (['off', 'calm', 'steady', 'restless'] as const)[Math.floor(rng() * 4)]!;
+        sim.k.settings.set({ tempo: t });
+        tempos.push({ w, t });
       }
-      const all = [...acts.entries()];
-      for (const [id, a] of all) {
-        if (a.punish === undefined) continue;
-        // within the reach the tempo in force sets
-        const t = sim.k.settings.at(a.time).tempo as keyof typeof MAX_RUNG;
-        expect(a.punish.rung, `${a.kind} at ${a.time} under ${t}`).toBeLessThanOrEqual(MAX_RUNG[t]);
-        // a price, a search and a confront need an earlier warning or price of the intention that was observed by then
-        if (a.kind !== 'warning') {
-          const earlier = all.filter(([, b]) => b.punish?.intent === a.punish!.intent && (b.kind === 'warning' || b.kind === 'price') && b.time <= a.time);
-          expect(earlier.some(([wid]) => sim.k.observedAt(wid, a.time) !== undefined), `${a.kind} ${id} before any observed warning`).toBe(true);
+      sim.advance(1);
+      for (const a of actsOf(sim)) {
+        if (acts.has(a.id)) continue;
+        acts.set(a.id, { w: a.w, kind: a.kind, time: sim.policies.viewEvent(a.id)?.time ?? a.w * W, ...(a.punish ? { punish: { intent: a.punish.intent, rung: a.punish.rung } } : {}) });
+        if (a.kind === 'warning' || a.kind === 'price') lags.set(a.id, rng() < 0.4 ? null : 1 + Math.floor(rng() * 60));
+      }
+      for (const [id, lag] of lags) {
+        if (lag === null) continue;
+        const at = acts.get(id)!.w + lag;
+        if (at === sim.windowNow()) {
+          if (!sim.k.persistence.restoreReferencedHeader(id)) sim.remint(id);
+          sim.k.pin({ node: id, slot: 'outcome', value: 'done', reason: 'observed', at: sim.k.now, cause: H(hs('layer2')), evidence: id });
         }
-      }
-      // a confront needs the same, and its price
-      for (const c of minted(sim, 'confront')) {
-        const ev = sim.policies.viewEvent(c)!;
-        expect(ev.effects).toEqual([]);
-        const intent = ev.causes.find((x) => sim.policies.viewEvent(x)?.kind === 'decide.punish');
-        expect(intent).toBeDefined();
-        const warnings = all.filter(([, b]) => b.punish?.intent === intent && (b.kind === 'warning' || b.kind === 'price'));
-        expect(warnings.some(([wid]) => sim.k.observedAt(wid, ev.time) !== undefined)).toBe(true);
-        expect(MAX_RUNG[sim.k.settings.at(ev.time).tempo as keyof typeof MAX_RUNG]).toBeGreaterThanOrEqual(3);
-      }
-      // nothing S1 minted harms V or binds V to a victim or target role
-      for (const e of sim.k.store.idsOfKind('core:event')) {
-        const v = sim.policies.viewEvent(e);
-        if (!v || v.creator === sim.w.port) continue;
-        expect(v.effects.some((x) => x.on === sim.w.v && HARM.includes(x.effect))).toBe(false);
-        expect(v.participants.some((x) => x.who === sim.w.v && (x.role === 'victim' || x.role === 'target'))).toBe(false);
       }
     }
+    const all = [...acts.entries()];
+    for (const [id, a] of all) {
+      if (a.punish === undefined) continue;
+      // within the reach the tempo in force sets
+      const t = sim.k.settings.at(a.time).tempo as keyof typeof MAX_RUNG;
+      expect(a.punish.rung, `${a.kind} at ${a.time} under ${t}`).toBeLessThanOrEqual(MAX_RUNG[t]);
+      // a price, a search and a confront need an earlier warning or price of the intention that was observed by then
+      if (a.kind !== 'warning') {
+        const earlier = all.filter(([, b]) => b.punish?.intent === a.punish!.intent && (b.kind === 'warning' || b.kind === 'price') && b.time <= a.time);
+        expect(earlier.some(([wid]) => sim.k.observedAt(wid, a.time) !== undefined), `${a.kind} ${id} before any observed warning`).toBe(true);
+      }
+    }
+    // a confront needs the same, and its price
+    const confronts = minted(sim, 'confront');
+    for (const c of confronts) {
+      const ev = sim.policies.viewEvent(c)!;
+      expect(ev.effects).toEqual([]);
+      const intent = ev.causes.find((x) => sim.policies.viewEvent(x)?.kind === 'decide.punish');
+      expect(intent).toBeDefined();
+      const warnings = all.filter(([, b]) => b.punish?.intent === intent && (b.kind === 'warning' || b.kind === 'price'));
+      expect(warnings.some(([wid]) => sim.k.observedAt(wid, ev.time) !== undefined)).toBe(true);
+      expect(MAX_RUNG[sim.k.settings.at(ev.time).tempo as keyof typeof MAX_RUNG]).toBeGreaterThanOrEqual(3);
+    }
+    // nothing S1 minted harms V or binds V to a victim or target role
+    for (const e of sim.k.store.idsOfKind('core:event')) {
+      const v = sim.policies.viewEvent(e);
+      if (!v || v.creator === sim.w.port) continue;
+      expect(v.effects.some((x) => x.on === sim.w.v && HARM.includes(x.effect))).toBe(false);
+      expect(v.participants.some((x) => x.who === sim.w.v && (x.role === 'victim' || x.role === 'target'))).toBe(false);
+    }
+    return confronts.length;
+  };
+
+  test('random acts of V against a group, a random walk of tempo, warnings observed at random lags or never: no price, search or confront ever precedes an observed warning of its intention, no rung exceeds the tempo in force, and no S1 output harms V', () => {
+    for (let s = 0; s < SEEDS; s++) runScript(s, N);
+  });
+
+  test('the bounded seed-0 script reaches a confrontation and checks its warning, effects, intention and tempo', () => {
+    expect(runScript(0, 700, 8)).toBeGreaterThan(0);
   });
 
   test('random removals of seat holders: every seat\'s holders form one unbroken record of edges and successions', () => {
@@ -114,7 +122,7 @@ describe('goals and intentions under generated scripts (S1 14.3)', () => {
       const sim = bigSim(`SF1-prop-seats-${s}`, (d) => { d.goals.attempts = 600; }, ['city.events', 'group.decide']);
       const GA = gnode(sim, 'A1');
       sim.setState('group.decide', () => {});
-      for (let w = 0; w < (FULL ? 900 : 500); w++) {
+      for (let w = 0; w < (FULL ? 900 : 160); w++) {
         sim.advance(1);
         // at random windows, kill a current holder of a seat of the group (a death pin)
         if (rng() < 0.02) {

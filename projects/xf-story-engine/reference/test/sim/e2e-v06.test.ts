@@ -14,7 +14,7 @@ import type { PendingChild } from '../../src/sim/occ.ts';
 import { itemDescriptor } from '../../src/sim/proc-acts.ts';
 import { ReplayPort } from '../../src/sim/port.ts';
 import { Sim } from '../../src/sim/sim.ts';
-import { makeKabukiSlice } from '../../src/sim/slices.ts';
+import { kabukiFixture } from './kabuki-fixture.ts';
 import { child as childOf, inject, seedOf } from './helpers.ts';
 import { transfer } from './feed.ts';
 import { sameHistoricalEdges } from './records.ts';
@@ -92,7 +92,8 @@ describe('SF1-E4 (fix-round variant): a child outlives the posts its parent was 
 const kabuki = (name: string, tweak: (d: S1Data) => void = () => {}): Sim => {
   const data = defaultData();
   tweak(data);
-  return Sim.create({ worldSeed: seedOf(name), index: makeKabukiSlice(), data });
+  const index = kabukiFixture();
+  return Sim.create({ worldSeed: seedOf(name), index, data });
 };
 
 /** What the layer holds, as one comparable value (all processes, the goal frames that are alive, the record's entries). */
@@ -137,7 +138,7 @@ function sameFrames(reloaded: Sim, unbroken: Sim): number {
 describe('SF1-E5 (v0.6): the Friday fee under protection', () => {
   // the Claws' treasury runs low early, so that collect-fee starts and its collectors work the market
   const poor = (d: S1Data): void => { d.groups.groups.find((g) => g.aff === 'A1')!.books.cash = 600; };
-  const N = SOAK ? 2016 : FULL ? 504 : 330;
+  const N = SOAK ? 2016 : FULL ? 504 : 160;
   const SEEDS = SOAK ? 20 : FULL ? 2 : 1;
 
   test('A, B and D agree; collectors work their posts; goals, acts and the protagonist stay within bounds; a run with V at the market differs only in scene.acts', () => {
@@ -205,12 +206,13 @@ describe('SF1-E6 (v0.6): a hunt, end to end', () => {
   const TEMPOS = SOAK ? (['restless', 'steady', 'calm', 'off'] as const) : FULL ? (['restless', 'steady'] as const) : (['restless'] as const);
   const SEEDS = SOAK ? 3 : 1;
   // The specification's scale has the game's own pace: the killing at window 300, a dwell of 144 windows, V's response 300 windows after the price. The other scales
-  // keep every step and shorten the waits (the killing at window 100, a dwell of 48, the response 100 windows after the price), so that a hunt runs to its end inside the run.
-  const KILL = SOAK ? 300 : 100;
-  const DWELL = SOAK ? 144 : 48;
-  const PAY = SOAK ? 300 : 100;
-  const RELOADS = SOAK ? [330, 520] : [KILL + 50, KILL + 160];
-  const N = SOAK ? 1300 : FULL ? 560 : 420;
+  // keep every step and shorten the waits. The default uses an earlier killing,
+  // shorter dwell and payment lag; FULL retains its existing 100/48/100 timing.
+  const KILL = SOAK ? 300 : FULL ? 100 : 20;
+  const DWELL = SOAK ? 144 : FULL ? 48 : 12;
+  const PAY = SOAK ? 300 : FULL ? 100 : 24;
+  const RELOADS = SOAK ? [330, 520] : FULL ? [KILL + 50, KILL + 160] : [KILL + 20, KILL + 70];
+  const N = SOAK ? 1300 : FULL ? 560 : 180;
   /** A run goes on past `N` until the scheduled response has been made and the intention has ended `paid`, or for at most this long more. */
   const EXTRA = SOAK ? 0 : 500;
 

@@ -14,7 +14,10 @@ import { readSeedFact } from '../../src/seeding/eval.ts';
 import { WIDE_NAMES } from '../../src/sim/names.ts';
 import type { Id } from '../../src/types.ts';
 
+import { kabukiFixture } from '../sim/kabuki-fixture.ts';
+
 setDefaultTimeout(300_000);
+const index = kabukiFixture(0.25);
 // The default suite plays each kit once (see "the kits played"); `S1_FULL=1` plays every kit under every answer and the world-picks-the-wording test over all kits.
 const FULL = process.env.S1_FULL === '1';
 
@@ -23,7 +26,7 @@ const names = (d: import('../../src/sim/data.ts').S1Data): void => { d.people.na
 
 describe('the kits as data', () => {
   test('every legacy kit compiles with only asker advice, and every pattern loads with no finding', () => {
-    const w = buildWorld({ name: 'kits-lint', layer3: true, packs: [pack], patterns: offerPatterns(), s1: names });
+    const w = buildWorld({ index, name: 'kits-lint', layer3: true, packs: [pack], patterns: offerPatterns(), s1: names });
     expect(w.findings).toEqual([]);
     for (const seed of pack.seeds) {
       expect(seed.maturity).toBe('ready');
@@ -116,8 +119,8 @@ describe('the kits played', () => {
     return [claws ? collector! : found[1] ?? found[0]!, found[0]!];
   }
 
-  function sow(kitId: string, name: string, policy: string, windows = 40) {
-    const r = new Run({ name, layer3: true, tempo: 'steady', packs: [pack], s1: names }, early, policies[policy]!);
+  function sow(kitId: string, name: string, policy: string, windows = FULL ? 40 : 8) {
+    const r = new Run({ index, name, layer3: true, tempo: 'steady', packs: [pack], s1: names }, early, policies[policy]!);
     const [subject, other] = people(r, kitId === 'fee-shortfall');
     const k = KITS.find((x) => x.id === kitId)!;
     const roles: Record<string, { identity: Id }> = k.roles.subject ? { subject: { identity: subject }, other: { identity: other } } : { other: { identity: other } };
@@ -180,13 +183,13 @@ describe('the kits played', () => {
   test('the world picks the wording: the same kit offered in a crackdown and in a quiet district reads differently', () => {
     const seen = new Map<string, Set<string>>();
     for (const state of FULL ? ['S-early-quiet', 'S-mid-crackdown', 'S-mid-squeezed'] : ['S-early-quiet', 'S-mid-crackdown']) {
-      const r = new Run({ name: 'kit-world', layer3: true, tempo: 'steady', packs: [pack], s1: names }, stateById(state), policies.decline!);
+      const r = new Run({ index, name: 'kit-world', layer3: true, tempo: 'steady', packs: [pack], s1: names }, stateById(state), policies.decline!);
       const [subject, other] = people(r, false);
       for (const kit of FULL ? ['goods-back', 'assault-why'] : ['goods-back']) {
         const res = r.w.l2.sowRequest({ template: `${OFFER_PACK}:${kit}`, pack: OFFER_PACK, overlay: { roles: { subject: { identity: subject }, other: { identity: other } } }, localName: `${kit}-${state}`, decision: H(hs('world-test'), hs(kit), hs(state)) });
         expect(res.ok).toBe(true);
       }
-      r.runWindows(60);
+      r.runWindows(FULL ? 60 : 8);
       for (const d of r.deliveries.filter((x) => x.what === 'offer')) {
         const key = `${d.template}`;
         const set = seen.get(key) ?? new Set<string>();

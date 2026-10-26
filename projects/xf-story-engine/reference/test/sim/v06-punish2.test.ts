@@ -10,6 +10,7 @@ import { bigSim, W } from './goals-helpers.ts';
 import { actsOf, goalsDigest, groupDigest, minted, startHunt, stepOne } from './hunt-helpers.ts';
 
 setDefaultTimeout(240_000);
+const FULL = process.env.S1_FULL === '1';
 
 const against = (b: Belief[]): Belief[] => b.filter((x) => x.path === 'against');
 const quick = (d: S1Data): void => {
@@ -155,7 +156,7 @@ describe('SF1-D-7: an encounter', () => {
       const h = startHunt({ name: 'SF1-D-7', delay: 3, tweak: quick });
       const c = near ? h.cell : h.sim.w.districts[0]!.cellIds[2]!;
       h.sim.k.reading(h.sim.w.vState, 'cell', c, h.sim.k.now);
-      h.step(900);
+      h.step(FULL ? 900 : 450);
       return h;
     };
     const near = run(true);
@@ -177,6 +178,7 @@ describe('SF1-D-7: an encounter', () => {
       times.push(Math.floor(ev.time / W));
     }
     times.sort((a, b) => a - b);
+    expect(times.length, 'multiple encounters exercise the 144-window spacing check').toBeGreaterThan(1);
     for (let i = 1; i < times.length; i++) expect(times[i]! - times[i - 1]!).toBeGreaterThanOrEqual(144);
     // published once: each is one event, minted once
     expect(new Set(confronts).size).toBe(confronts.length);
@@ -206,7 +208,11 @@ describe('SF1-D-9: never V\'s mind', () => {
 
 describe('SF1-D-10: reload in the middle of a hunt', () => {
   test('a hunt saved at rung 2, loaded under another epoch, play clock and wall clock: the same climb, duties, acts and end as without the reload', () => {
-    const slow = (d: S1Data): void => { quick(d); d.groups.punish.rungDwell = 12; };
+    const slow = (d: S1Data): void => {
+      quick(d); d.groups.punish.rungDwell = 12;
+      // The default still crosses the intention's expiry after loading at rung 2.
+      if (!FULL) d.groups.punish.tempo.restless.duration = 180;
+    };
     const opts = { name: 'SF1-D-10', delay: 4, tweak: slow } as const;
     const ref = startHunt(opts);
     for (let i = 0; i < 700 && (groupDigest(ref.sim)?.groups[ref.GA]?.active?.rung ?? 0) < 2; i++) ref.step(1);
@@ -219,10 +225,11 @@ describe('SF1-D-10: reload in the middle of a hunt', () => {
     for (const [key, r] of chainOf(ref.sim)) chainOf(fresh.sim).set(key, structuredClone(r));
     for (let i = 0; i < 9; i++) fresh.sim.k.newEpoch();
     fresh.sim.k.persistence.load('D10');
-    for (let i = 0; i < 450; i++) {
+    for (let i = 0; i < (FULL ? 450 : 200); i++) {
       stepOne(ref.sim, ref.delay, ref.seen);
       stepOne(fresh.sim, ref.delay, seen);
     }
+    if (!FULL) expect(groupDigest(ref.sim).groups[ref.GA]!.active, 'the shorter fixture crossed the intention end').toBeNull();
     const obs = (s: typeof ref.sim): unknown => JSON.parse(JSON.stringify([s.stateOf('people.goals'), s.stateOf('group.decide'), s.stateOf('city.events'), actsOf(s), s.k.frames.all().filter((f) => f.retain === true && (f.status === 'active' || f.status === 'blocked')).map((f) => [f.id, f.status])]));
     expect(obs(fresh.sim)).toEqual(obs(ref.sim));
     expect(minted(fresh.sim, 'confront')).toEqual(minted(ref.sim, 'confront'));
