@@ -49,6 +49,13 @@ export type KnowledgeOptions = {
 
 /** Repository areas that hold private or raw third-party data and are never linked from the public site, even where tracked. */
 export const PRIVATE_LINK_PREFIXES = ["research/consumers/", "inventory/", "local/", "captures/"];
+/**
+ * README headings whose content the knowledge index publishes, mapped to the id of that content on knowledge/index.html.
+ * The index renders the grade legend and the Topics table, not the whole README, so a link to "Rules for knowledge pages" (whose
+ * shared evidence grades are what pages cite) lands on the legend. A link to any other README heading goes to the README on GitHub.
+ */
+export const LEGEND_ID = "evidence-grades";
+export const INDEX_ANCHORS: Record<string, string> = { "rules-for-knowledge-pages": LEGEND_ID };
 const MATURITIES: Maturity[] = ["Seed", "Draft", "Solid"];
 const PUBLISHED: Maturity[] = ["Draft", "Solid"];
 
@@ -145,7 +152,13 @@ export function loadKnowledge(options: KnowledgeOptions): Knowledge {
     const lower = target.toLowerCase() + "/";
     if (PRIVATE_LINK_PREFIXES.some(prefix => lower.startsWith(prefix)) || /^experiments\/[^/]+\/generated\//.test(lower))
       throw Error(`${source}: links into a private or raw-data location, which the public site never publishes: ${href}`);
-    if (target === dirPath || target === `${dirPath}/README.md`) return `./${hash}`;
+    if (target === dirPath) return `./${hash}`;
+    if (target === `${dirPath}/README.md`) {
+      // The index publishes only part of the README, so a heading id is carried over only where the index has that content.
+      const heading = decodeURIComponent(hash.slice(1));
+      if (!hash) return "./";
+      if (Object.hasOwn(INDEX_ANCHORS, heading)) return `./#${INDEX_ANCHORS[heading]}`;
+    }
     const page = new RegExp(`^${dirPath}/([\\w.-]+)\\.md$`).exec(target);
     if (page && published.has(page[1])) return `${page[1]}.html${hash}`;
     const full = join(options.repoRoot, target);
@@ -185,7 +198,7 @@ export function caveatHtml(issueUrl: string, editUrl?: string): string {
 
 export function legendHtml(grades: Grade[]): string {
   const items = grades.map(grade => `<div><dt><span class="grade" data-grade="${escapeHtml(grade.name)}">${escapeHtml(grade.name)}</span></dt><dd>${escapeHtml(grade.description.charAt(0).toUpperCase() + grade.description.slice(1))}.</dd></div>`).join("\n");
-  return `<div class="grade-legend" id="evidence-grades">
+  return `<div class="grade-legend" id="${LEGEND_ID}">
 <p class="grade-legend-title">Evidence grades</p>
 <dl>
 ${items}

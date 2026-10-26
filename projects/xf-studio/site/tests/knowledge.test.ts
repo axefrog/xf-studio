@@ -34,7 +34,7 @@ const README = `# Test knowledge base
 `;
 const ALPHA = `# Alpha \`chain\`
 
-**Maturity: Draft.** Rules follow the [knowledge rules](README.md); see [beta](beta.md) and [the evidence](../research/x.md#details).
+**Maturity: Draft.** Rules follow the [knowledge rules](README.md); see [beta](beta.md) and [the evidence](../research/x.md#details). Grades: [shared grades](README.md#rules-for-knowledge-pages); [topic table](README.md#topics); [constructor](README.md#constructor).
 
 ## 1. What ArchiveXL/CCXL does
 
@@ -87,6 +87,10 @@ describe("knowledge generator", () => {
     expect(page.headings.map(heading => heading.id)).toEqual(["1-what-archivexlccxl-does", "1-what-archivexlccxl-does-1"]);
     // README → knowledge index; unpublished (Seed) sibling and research files → GitHub; folders → tree.
     expect(html).toContain('<a href="./">knowledge rules</a>');
+    // A README heading is carried over only where the index publishes its content (the grade legend); any other goes to the README on GitHub.
+    expect(html).toContain('<a href="./#evidence-grades">shared grades</a>');
+    expect(html).toContain(`<a href="${blob}/knowledge/README.md#topics">topic table</a>`);
+    expect(html).toContain(`<a href="${blob}/knowledge/README.md#constructor">constructor</a>`);
     expect(html).toContain(`<a href="${blob}/knowledge/beta.md">beta</a>`);
     expect(html).toContain(`<a href="${blob}/research/x.md#details">the evidence</a>`);
     expect(html).toContain(`<a href="${config.repoUrl}/tree/${config.repoBranch}/research">folder</a>`);
