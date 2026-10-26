@@ -561,6 +561,15 @@ export class SessionExecutor implements Executor {
       if (TEST_STEP_KINDS.has(kind)) {
         // Schema-2 steps resolve and checkpoint their own references (cursors advance in place).
         const result = await this.testing.execute({ ...context.raw, label: context.step, ...(context.bind ? { bind: context.bind } : { bind: `step_${context.step.replace(/[^A-Za-z0-9]/g, "_")}` }) }, context.signal);
+        // A wait that ended says how: its deadline (timeout), or early (the question withdrawn, the history incomplete,
+        // a refusal), which is not the same thing as nobody answering.
+        if (!result.ok && (kind === "await" || kind === "events")) {
+          const window = result.result as { timed_out?: boolean; aborted?: boolean; complete?: boolean; cursor?: { missing?: string[] } } | undefined;
+          const why = window?.cursor?.missing?.join("; ");
+          if (window?.timed_out) return { ok: false, code: "timeout", message: "The wait reached its deadline with nothing matching.", value: window };
+          if (window?.aborted) return { ok: false, code: "cancelled", message: "The wait was cancelled.", value: window };
+          return { ok: false, code: "wait_ended_early", message: `The wait ended before its deadline${why ? ` (${why})` : " (the question was withdrawn, or the bridge refused the wait)"}.`, value: window };
+        }
         return { ok: result.ok, code: result.error?.code, message: result.error?.message, value: result.result };
       }
       const command = commandOf(action);
@@ -755,7 +764,8 @@ export class SessionExecutor implements Executor {
     const answer = window.events.find((e) => e.kind === "answer" && e.data?.message_id === id);
     if (!answer) {
       await this.api.run("ui.message", { withdraw: id }, { source: "session" }).catch(() => undefined);
-      return { ok: false, code: "no_answer", message: "Nobody answered in time.", value: { message_id: id } };
+      if (window.timed_out) return { ok: false, code: "no_answer", message: "Nobody answered in time.", value: { message_id: id } };
+      return { ok: false, code: "wait_ended_early", message: "The question went before anyone answered (withdrawn, or the wait refused).", value: { message_id: id, missing: window.cursor.missing } };
     }
     return { ok: true, value: { message_id: id, label: answer.data?.label, choice: answer.data?.choice, via: answer.data?.via } };
   }

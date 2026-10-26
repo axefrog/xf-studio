@@ -17,7 +17,7 @@
   "rows": [
     {
       "id": "FR1-free-roam",
-      "title": "Free roam: walk about a block, then drive across a district, with the recorder on and the session handed over",
+      "title": "Free roam: walk about a block, then drive across a district, with the recorder on (the player plays; the row drives nothing)",
       "requires": [
         {
           "config": "bridge.allow_writes",
@@ -123,14 +123,6 @@
           "bind": "FR1_free_roam_q"
         },
         {
-          "label": "FR1-free-roam-handover",
-          "do": "run",
-          "command": "session.handover",
-          "input": {
-            "note": "FR1 free roam: the player walks and drives; no XF automation until Done"
-          }
-        },
-        {
           "label": "FR1-free-roam-answer",
           "do": "await",
           "cursor": "$FR1_free_roam_cursor",
@@ -181,20 +173,26 @@
                   "reason": "the player chose Skip"
                 }
               ]
+            },
+            {
+              "name": "no_answer",
+              "match": {
+                "code": "timeout"
+              },
+              "run": [
+                {
+                  "end": "fail",
+                  "reason": "no answer within 10 minutes"
+                }
+              ]
             }
           ],
           "fallback": [
             {
               "end": "fail",
-              "reason": "no answer within 10 minutes"
+              "reason": "the wait for the answer ended before its deadline (the question withdrawn, or the wait refused): see the row's reports"
             }
           ]
-        },
-        {
-          "label": "FR1-free-roam-resume",
-          "do": "run",
-          "command": "session.resume",
-          "input": {}
         },
         {
           "label": "FR1-free-roam-stop",
@@ -244,17 +242,23 @@
       ],
       "cleanup": [
         {
-          "label": "FR1-free-roam-resume-always",
-          "do": "run",
-          "command": "session.resume",
-          "input": {}
-        },
-        {
           "label": "FR1-free-roam-clear",
           "do": "run",
           "command": "ui.message",
           "input": {
             "clear": true
+          }
+        },
+        {
+          "label": "FR1-free-roam-stop-always",
+          "do": "run",
+          "command": "test.record.stop",
+          "input": {},
+          "when": {
+            "match": {
+              "ref": "$FR1_free_roam_span",
+              "exists": false
+            }
           }
         }
       ]

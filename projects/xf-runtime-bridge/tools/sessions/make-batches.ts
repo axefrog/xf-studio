@@ -517,8 +517,9 @@ function smokeScript(): Json {
  * free-roam.json: one passive row, FR1, for the replay proof of concept (every recorded run so far had V standing
  * still). The recorder runs on v, actors, camera and incidents (and supervisor where the build takes it; the batch's
  * own recorder, on every channel, is reused when it already runs), the player is asked to walk a block and drive
- * across a district, the session is handed over so no XF automation touches the game meanwhile, and the answer is
- * waited for up to 10 minutes. Then resume, stop the recorder, and read the run's span from the v channel.
+ * across a district (the row drives nothing meanwhile, so it doesn't hand over: a handover's notice would also take the
+ * question down), and the answer is waited for up to 10 minutes; a wait that ends early is never read as "no
+ * answer". Then stop the recorder and read the run's span from the v channel.
  */
 function freeRoamScript(): Json {
   const row = "FR1-free-roam";
@@ -537,7 +538,7 @@ function freeRoamScript(): Json {
     setup: [{ label: "commit", do: "host.commit", on_fail: "stop" }],
     rows: [{
       id: row,
-      title: "Free roam: walk about a block, then drive across a district, with the recorder on and the session handed over",
+      title: "Free roam: walk about a block, then drive across a district, with the recorder on (the player plays; the row drives nothing)",
       requires: cfg({ "bridge.allow_writes": "true" }),
       steps: [
         inPlay(row),
@@ -547,14 +548,14 @@ function freeRoamScript(): Json {
           outcomes: [{ name: "batch_recorder", match: { code: "recording_busy" }, run: [{ do: "set", value: "$recorder", bind: key(row, "rec") }] }] },
         { label: `${row}-cursor`, do: "cursor", bind: key(row, "cursor") },
         { label: `${row}-ask`, do: "run", command: "ui.message", input: { level: "ask", text: "Free roam for the live world view: walk about a block, then drive across a district. Answer Done when finished (about 5 minutes).", choices: ["Done", "Skip"], seconds: 600 }, bind: key(row, "q") },
-        { label: `${row}-handover`, do: "run", command: "session.handover", input: { note: "FR1 free roam: the player walks and drives; no XF automation until Done" } },
         { label: `${row}-answer`, do: "await", cursor: ref(row, "cursor"), kind: "answer", message_id: ref(row, "q", "id"), timeout_s: 600, deadline_ms: 610_000, bind: key(row, "answer"),
           outcomes: [
             { name: "done", match: answered("Done") },
             { name: "skipped", match: answered("Skip"), run: [{ end: "fail", reason: "the player chose Skip" }] },
+            { name: "no_answer", match: { code: "timeout" }, run: [{ end: "fail", reason: "no answer within 10 minutes" }] },
           ],
-          fallback: [{ end: "fail", reason: "no answer within 10 minutes" }] },
-        { label: `${row}-resume`, do: "run", command: "session.resume", input: {} },
+          // Anything else ended the wait early: never read as "no answer".
+          fallback: [{ end: "fail", reason: "the wait for the answer ended before its deadline (the question withdrawn, or the wait refused): see the row's reports" }] },
         { label: `${row}-stop`, do: "run", command: "test.record.stop", input: {}, on_fail: "continue" },
         { label: `${row}-span`, do: "recorder.span", run: ref(row, "rec", "run"), bind: key(row, "span") },
       ],
@@ -564,10 +565,10 @@ function freeRoamScript(): Json {
         { label: "V moved at least 100 m", ref: ref(row, "span"), match: { path: "distance_m", min: 100 } },
       ],
       facts: [{ label: "recorder run", ref: ref(row, "rec", "run") }, { label: "V's distance (m)", ref: ref(row, "span", "distance_m") }, { label: "catch-up pages", ref: ref(row, "span", "pages") }],
-      // However the row ends (Skip, the deadline, a stop), the game goes back to the bridge and the question comes down.
+      // However the row ends (Skip, the deadline, a stop), the question comes down and the recorder stops.
       cleanup: [
-        { label: `${row}-resume-always`, do: "run", command: "session.resume", input: {} },
         { label: `${row}-clear`, do: "run", command: "ui.message", input: { clear: true } },
+        { label: `${row}-stop-always`, do: "run", command: "test.record.stop", input: {}, when: { match: { ref: ref(row, "span"), exists: false } } },
       ],
     }],
     teardown: [],

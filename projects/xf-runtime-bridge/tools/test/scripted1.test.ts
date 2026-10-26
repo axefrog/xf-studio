@@ -154,3 +154,30 @@ describe("4: bursts crop to the surface they judge, within the capture tool's me
     expect(small.x + small.width).toBeLessThanOrEqual(1920);
   });
 });
+
+describe("2: a wait that ends early is not a timeout", () => {
+  const run = async (sessionWait: Record<string, unknown> | "never") => {
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script } = await import("./batch-fakes.ts");
+    const clock = new FakeClock();
+    const api = fakeApi(clock, sessionWait === "never" ? {} : { "session.wait": () => ({ ok: true, result: sessionWait }) });
+    const rows = [{ id: "r", title: "r", steps: [
+      { label: "cursor", do: "cursor", bind: "c" },
+      { label: "q", do: "run", command: "ui.message", input: { level: "ask", text: "?", choices: ["Done"], seconds: 600 }, bind: "q" },
+      { label: "answer", do: "await", cursor: "$c", kind: "answer", message_id: "$q.id", timeout_s: 600, deadline_ms: 610_000,
+        outcomes: [{ name: "no_answer", match: { code: "timeout" }, run: [{ end: "fail", reason: "no answer within 10 minutes" }] }],
+        fallback: [{ end: "fail", reason: "ended early" }] },
+    ] }];
+    const result = await go(script(rows as never), api, fakeHost(), clock, tempDir("xfb-s1-"));
+    return { row: result.rows[0], at: clock.now() };
+  };
+  test("the question withdrawn (question_gone) ends the wait early, and says so", async () => {
+    const { row, at } = await run({ question_gone: true });
+    expect(row.reason).toContain("ended early");
+    expect(at).toBeLessThan(60_000);
+  });
+  test("nothing for the whole deadline is the timeout", async () => {
+    const { row } = await run("never");
+    expect(row.reason).toContain("no answer within 10 minutes");
+  });
+});
