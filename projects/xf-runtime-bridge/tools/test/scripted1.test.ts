@@ -53,3 +53,26 @@ describe("6: the handover notice never stacks", () => {
     api.close();
   });
 });
+
+describe("7: the host never launches a second game", () => {
+  test("launch refuses while Cyberpunk2077.exe runs (adopt it), and starts nothing", async () => {
+    const { windowsHost } = await import("../testing/host.ts");
+    const host = Object.create(windowsHost) as typeof windowsHost;
+    host.gameProcess = async () => ({ pid: 76_000 });
+    const result = await host.launch({ exe: "C:/no/such/ModOrganizer.exe", profile: "p", executable: "g" });
+    expect(result.started).toBe(false);
+    expect(result.error).toContain("already_running");
+    expect(result.error).toContain("76000");
+  });
+
+  test("the prelude adopts a running game: its launch step answers already_running, which is fine, and nothing is launched", async () => {
+    const { FakeClock } = await import("./fake-clock.ts");
+    const { fakeApi, fakeHost, go, script, stagedMod } = await import("./batch-fakes.ts");
+    const clock = new FakeClock();
+    const dir = tempDir("xfb-s1-");
+    const host = fakeHost({ running: true });
+    const result = await go(script([{ id: "r", title: "r", requires: [{ config: "bridge.allow_writes", equals: "true" }], steps: [{ do: "set", value: 1 }] }]), fakeApi(clock), host, clock, dir, { fixtures: { staged_mod: stagedMod(dir), mo2: { exe: "m", profile: "p", executable: "g" } } });
+    expect(result.rows[0].verdict).toBe("PASS");
+    expect(host.log).toEqual([]);
+  });
+});

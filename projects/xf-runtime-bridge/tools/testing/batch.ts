@@ -574,6 +574,7 @@ export class SessionExecutor implements Executor {
           const started = await this.c.host.launch({ exe: mo2.exe, profile: mo2.profile, executable: mo2.executable, arguments: mo2.arguments }, context.signal);
           // A new game session starts from config.ini: nothing live to put back from the last one.
           if (started.started) this.overlayUndo = {};
+          if (!started.started && started.error?.startsWith("already_running")) return { ok: false, code: "already_running", message: started.error };
           if (!started.started) return context.signal.aborted ? CANCELLED : { ok: false, code: "launch_failed", message: `MO2 didn't start${started.error ? ` (${started.error})` : ""}: check mo2.exe in the fixtures.` };
           return { ok: true, value: { command: started.command } };
         }

@@ -14,7 +14,8 @@ import { INPUT_SIZE, isExtendedKey, keyboardInput, scanCodeFor, virtualKey } fro
 
 export const GAME_PROCESS = "Cyberpunk2077";
 
-export type LaunchSpec = { exe: string; profile: string; executable: string; arguments?: string };
+/** replace: the plan means to start a second copy over a running game (never set by the prelude, which adopts). */
+export type LaunchSpec = { exe: string; profile: string; executable: string; arguments?: string; replace?: boolean };
 export type WindowState = { pid: number; width: number; height: number; x: number; y: number; foreground: boolean; covers_monitor: boolean; minimized: boolean };
 export type Monitor = { name: string; x: number; y: number; width: number; height: number; primary: boolean };
 export type KeyResult = { sent: boolean; keys: string; refused?: string; foreground?: string | null };
@@ -150,6 +151,10 @@ export const windowsHost: Host = {
     return Number.isInteger(pid) && pid > 0 ? { pid } : null;
   },
   async launch(spec, signal) {
+    if (signal?.aborted) return { started: false, command: "" };
+    // Never a second copy (scripted session 1 started one by hand): a running game is adopted, not launched over.
+    const running = await this.gameProcess();
+    if (running && !spec.replace) return { started: false, command: "", error: `already_running: ${GAME_PROCESS}.exe is running (pid ${running.pid}); adopt it instead of launching another` };
     if (signal?.aborted) return { started: false, command: "" };
     // MO2's own command line keeps the profile even when MO2 is open, and --arguments replaces the configured ones.
     const args = ["-p", spec.profile, "run", "-e", spec.executable, ...(spec.arguments ? ["--arguments", spec.arguments] : [])];
