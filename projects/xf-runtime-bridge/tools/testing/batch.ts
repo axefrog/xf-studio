@@ -989,6 +989,8 @@ export type RowRecord = {
   id: string;
   title: string;
   verdict: Verdict;
+  /** Cleanup steps that failed: what they were to undo may still be in place (the run is then never ok). */
+  cleanup_failed?: string[];
   reason?: string;
   judged_by?: string;
   evidence: string[];
@@ -1244,6 +1246,11 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       record.reports.push(...result.reports);
       record.checks = (row.pass ?? []).map((check) => evaluateCheck(check, bindings, (name) => !before.has(name) || before.get(name) !== bindings[name]));
       Object.assign(record, verdictOf(result, record.checks, failRow, row.judged_by));
+      if (result.release_failed?.length) {
+        record.cleanup_failed = result.release_failed;
+        record.reason = `${record.reason ? `${record.reason}; ` : ""}cleanup failed: ${result.release_failed.join("; ")}`;
+        cleanupErrors.push(`${row.id}'s cleanup: ${result.release_failed.join("; ")}`);
+      }
       record.evidence = [...executor.evidence];
       record.telemetry = await telemetry.collect(row.id);
       if (row.facts) record.facts = row.facts.map((fact) => {
@@ -1319,7 +1326,11 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   executor.clearStops();
   const teardownExecutor: Executor = { run: async (action, context) => ({ ...(await executor.run(action, context)), halt: undefined }) };
   let teardown: PlanResult | undefined;
-  await attemptCleanup("teardown", async () => { teardown = await runPlan(teardownPlan, { executor: teardownExecutor, clock, bindings }); });
+  await attemptCleanup("teardown", async () => {
+    teardown = await runPlan(teardownPlan, { executor: teardownExecutor, clock, bindings });
+    // Each teardown step that failed is an unresolved cleanup: never an ok run.
+    for (const e of teardown.reports) if (e.kind === "step" && e.status === "failed" && !String(e.step).includes("/")) cleanupErrors.push(`teardown ${e.label ?? e.step}: ${e.code ?? "failed"}${e.message ? ` (${String(e.message).slice(0, 160)})` : ""}`);
+  });
   await attemptCleanup("closing note", () => executor.run({ do: "note", text: `XF session ${halt ? "stopped" : "complete"}: ${script.title ?? script.name}` }, { signal: new AbortController().signal, deadline: clock.now() + 10_000, plan: "end", step: "end", attempt: 1, raw: { do: "note" } }));
   // A fast exit: close the game cleanly, so the fix can go in and the next attempt starts fresh.
   await attemptCleanup("closing the game", async () => {

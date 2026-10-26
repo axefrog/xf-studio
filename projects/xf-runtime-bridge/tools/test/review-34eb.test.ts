@@ -225,3 +225,25 @@ describe("M8: the Diagnostics undo is drawn before CET closes", () => {
     expect(wait).toContain("$ST7_light_diagnostics_undo_req.id");
   });
 });
+
+describe("M9: a cleanup that fails is never a clean close or an ok run", () => {
+  test("the plan: a failed release step makes the close partial and is listed", async () => {
+    const { runPlan } = await import("../testing/plan.ts");
+    const { FakeClock } = await import("./fake-clock.ts");
+    const executor = { run: async (a: { do: string }) => (a.do === "bad" ? { ok: false, code: "refused" } : { ok: true }) };
+    const result = await runPlan({ id: "p", steps: [{ do: "good" }], finally: [{ label: "undo", do: "bad" }, { do: "good" }] } as never, { executor: executor as never, clock: new FakeClock() });
+    expect(result.outcome).toBe("partial");
+    expect(result.release_failed).toEqual(["undo: refused"]);
+  });
+  test("a row whose cleanup fails is marked, and so is a failing teardown step; the run isn't ok", async () => {
+    const { clock, fakeApi, fakeHost, go, script } = await fakes();
+    const api = fakeApi(clock, { "photo.exit": () => ({ ok: false, code: "not_in_photo_mode" }), "supervisor.clear": () => ({ ok: false, code: "unavailable" }) });
+    const rows = [{ id: "r", title: "r", steps: [{ label: "w", do: "wait", ms: 10 }], cleanup: [{ label: "r-exit", do: "run", command: "photo.exit", input: {} }] }];
+    const result = await go(script(rows as never), api, fakeHost(), clock, tempDir("xfb-r34-"));
+    expect(result.rows[0].cleanup_failed).toEqual(["r-exit: not_in_photo_mode"]);
+    expect(result.rows[0].reason).toContain("cleanup failed");
+    expect(result.cleanupErrors.join("\n")).toContain("r's cleanup");
+    expect(result.cleanupErrors.join("\n")).toContain("teardown supervisor");
+    expect(result.ok).toBe(false);
+  });
+});

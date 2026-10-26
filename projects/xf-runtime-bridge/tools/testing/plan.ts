@@ -159,6 +159,8 @@ export type PlanResult = {
   reports: ReportEntry[];
   /** Report callbacks that threw (isolated: the plan, its release and its close went on). */
   report_errors?: string[];
+  /** Release (finally) steps that failed: what they were to undo may still be in place; the close is then never completed. */
+  release_failed?: string[];
 };
 export type DecisionRequest = { plan: string; step?: string; reason?: string; question: string; choices: string[] };
 export type RunPlanOptions = {
@@ -696,6 +698,7 @@ export async function runPlan(plan: Plan, options: RunPlanOptions): Promise<Plan
   let decision: string | undefined;
   let lastStep: string | undefined;
   // Whatever happens in the steps (an exception included), the release runs and the one close is reported.
+  const releaseFailed: string[] = [];
   try {
   while (index < plan.steps.length) {
     if (signal.aborted) { status = "cancelled"; reason = "cancelled"; break; }
@@ -736,12 +739,20 @@ export async function runPlan(plan: Plan, options: RunPlanOptions): Promise<Plan
       // Its own step budget: a plan that ran out of steps (a goto loop) must still release.
       const releaseRun: Run = { ...run, steps: 0, signal: own.signal, halt: undefined, deadline: clock.now() + (options.finallyDeadlineMs ?? 30_000) };
       for (const [i, step] of plan.finally.entries()) {
-        try { await runStep(releaseRun, { ...step, on_fail: "continue" }, `finally/${i + 1}`, null); } catch (error) { run.reportErrors.push(`finally/${i + 1}: ${String((error as Error)?.message ?? error)}`); }
+        const at = step.label ?? `finally/${i + 1}`;
+        try {
+          const result = await runStep(releaseRun, { ...step, on_fail: "continue" }, `finally/${i + 1}`, null);
+          if (result.status !== "ok" || result.outcome?.ok === false) releaseFailed.push(`${at}: ${result.outcome?.code ?? result.reason ?? "failed"}`);
+        } catch (error) {
+          run.reportErrors.push(`finally/${i + 1}: ${String((error as Error)?.message ?? error)}`);
+          releaseFailed.push(`${at}: ${String((error as Error)?.message ?? error)}`);
+        }
       }
       run.steps += releaseRun.steps;
     }
   }
-  const outcome: Closing = status === "done" ? (run.continued ? "partial" : "completed") : decision !== undefined && decision !== "dissolve" && decision !== "abandon" ? "partial" : "abandoned";
+  const outcome: Closing = status === "done" ? (run.continued || releaseFailed.length ? "partial" : "completed") : decision !== undefined && decision !== "dissolve" && decision !== "abandon" ? "partial" : "abandoned";
   emit(run, { kind: "close", step: "close", attempt: 1, outcome, status, reason, last_step: lastStep, decision, ...(run.reportErrors.length ? { report_errors: run.reportErrors.length } : {}) });
-  return { plan: plan.id, status, outcome, reason, last_step: lastStep, decision, bindings, reports: run.reports, ...(run.reportErrors.length ? { report_errors: run.reportErrors } : {}) };
+  return { plan: plan.id, status, outcome, reason, last_step: lastStep, decision, bindings, reports: run.reports, ...(run.reportErrors.length ? { report_errors: run.reportErrors } : {}),
+    ...(releaseFailed.length ? { release_failed: releaseFailed } : {}) };
 }
