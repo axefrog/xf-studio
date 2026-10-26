@@ -145,11 +145,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -163,6 +186,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -173,16 +244,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -197,7 +283,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -207,9 +310,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -441,11 +549,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -459,6 +590,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -469,16 +648,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -493,7 +687,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -503,9 +714,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -746,11 +962,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -764,6 +1003,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -774,16 +1061,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -798,7 +1100,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -808,9 +1127,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -1053,11 +1377,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -1071,6 +1418,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -1081,16 +1476,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -1105,7 +1515,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -1115,9 +1542,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -1546,11 +1978,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -1564,6 +2019,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -1574,16 +2077,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -1598,7 +2116,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -1608,9 +2143,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -1855,11 +2395,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -1873,6 +2436,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -1883,16 +2494,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -1907,7 +2533,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -1917,9 +2560,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -2175,11 +2823,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -2193,6 +2864,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -2203,16 +2922,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -2227,7 +2961,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -2237,9 +2988,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -2534,11 +3290,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -2552,6 +3331,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -2562,16 +3389,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -2586,7 +3428,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -2596,9 +3455,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -2843,11 +3707,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -2861,6 +3748,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -2871,16 +3806,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -2895,7 +3845,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -2905,9 +3872,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -3201,11 +4173,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -3219,6 +4214,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -3229,16 +4272,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -3253,7 +4311,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -3263,9 +4338,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -3652,11 +4732,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -3670,6 +4773,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -3680,16 +4831,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -3704,7 +4870,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -3714,9 +4897,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -4060,11 +5248,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -4078,6 +5289,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -4088,16 +5347,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -4112,7 +5386,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -4122,9 +5413,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -4717,11 +6013,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -4735,6 +6054,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -4745,16 +6112,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -4769,7 +6151,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -4779,9 +6178,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -5139,11 +6543,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -5157,6 +6584,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -5167,16 +6642,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -5191,7 +6681,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -5201,9 +6708,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -5608,11 +7120,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -5626,6 +7161,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -5636,16 +7219,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -5660,7 +7258,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -5670,9 +7285,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -6029,11 +7649,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -6047,6 +7690,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -6057,16 +7748,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -6081,7 +7787,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -6091,9 +7814,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -6408,11 +8136,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -6426,6 +8177,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -6436,16 +8235,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -6460,7 +8274,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -6470,9 +8301,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -6717,11 +8553,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -6735,6 +8594,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -6745,16 +8652,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -6769,7 +8691,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -6779,9 +8718,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -7037,11 +8981,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -7055,6 +9022,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -7065,16 +9080,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -7089,7 +9119,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -7099,9 +9146,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -7396,11 +9448,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -7414,6 +9489,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -7424,16 +9547,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -7448,7 +9586,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -7458,9 +9613,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -7705,11 +9865,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -7723,6 +9906,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -7733,16 +9964,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -7757,7 +10003,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -7767,9 +10030,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -8063,11 +10331,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -8081,6 +10372,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -8091,16 +10430,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -8115,7 +10469,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -8125,9 +10496,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -8514,11 +10890,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -8532,6 +10931,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -8542,16 +10989,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -8566,7 +11028,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -8576,9 +11055,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -8922,11 +11406,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -8940,6 +11447,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -8950,16 +11505,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -8974,7 +11544,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -8984,9 +11571,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -9579,11 +12171,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -9597,6 +12212,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -9607,16 +12270,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -9631,7 +12309,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -9641,9 +12336,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -10001,11 +12701,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -10019,6 +12742,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -10029,16 +12800,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -10053,7 +12839,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -10063,9 +12866,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -10467,11 +13275,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -10485,6 +13316,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -10495,16 +13374,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -10519,7 +13413,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -10529,9 +13440,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -10847,11 +13763,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -10865,6 +13804,54 @@
                   "deadline_ms": 180000
                 },
                 {
+                  "label": "booted",
+                  "do": "run",
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
+                      "main_menu",
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
+                  },
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
+                },
+                {
                   "label": "load",
                   "do": "run",
                   "command": "game.load",
@@ -10875,16 +13862,31 @@
                   },
                   "bind": "load",
                   "deadline_ms": 150000,
+                  "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
+                    "match": {
+                      "path": "phase",
+                      "equals": "main_menu"
+                    }
+                  },
                   "retry": {
-                    "times": 2,
-                    "backoff_ms": 5000,
+                    "times": 12,
+                    "backoff_ms": 3000,
+                    "factor": 1.5,
+                    "max_backoff_ms": 15000,
                     "on": {
                       "code": [
+                        "game_not_running",
                         "timeout",
                         "busy",
                         "bridge_busy",
                         "game_loading",
-                        "rate_limited"
+                        "rate_limited",
+                        "not_ready"
                       ]
                     }
                   },
@@ -10899,7 +13901,24 @@
                           "continue_wait_s": 85
                         },
                         "bind": "load",
-                        "deadline_ms": 150000
+                        "deadline_ms": 150000,
+                        "retry": {
+                          "times": 12,
+                          "backoff_ms": 3000,
+                          "factor": 1.5,
+                          "max_backoff_ms": 15000,
+                          "on": {
+                            "code": [
+                              "game_not_running",
+                              "timeout",
+                              "busy",
+                              "bridge_busy",
+                              "game_loading",
+                              "rate_limited",
+                              "not_ready"
+                            ]
+                          }
+                        }
                       }
                     ]
                   ]
@@ -10909,9 +13928,14 @@
                   "do": "host.key",
                   "keys": "Space",
                   "when": {
+                    "check": {
+                      "do": "run",
+                      "command": "game.status",
+                      "input": {}
+                    },
                     "match": {
-                      "ref": "$load.reached",
-                      "equals": "press_any_key"
+                      "path": "prompt_state",
+                      "equals": "initial_continue"
                     }
                   },
                   "retry": {
@@ -11326,11 +14350,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -11344,17 +14391,52 @@
                   "deadline_ms": 180000
                 },
                 {
-                  "label": "menu",
+                  "label": "booted",
                   "do": "run",
-                  "command": "game.wait",
-                  "input": {
-                    "phase": [
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
                       "main_menu",
-                      "gameplay"
-                    ],
-                    "timeout_ms": 120000
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
                   },
-                  "deadline_ms": 130000
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
                 },
                 {
                   "do": "run",
@@ -11673,11 +14755,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -11691,17 +14796,52 @@
                   "deadline_ms": 180000
                 },
                 {
-                  "label": "menu",
+                  "label": "booted",
                   "do": "run",
-                  "command": "game.wait",
-                  "input": {
-                    "phase": [
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
                       "main_menu",
-                      "gameplay"
-                    ],
-                    "timeout_ms": 120000
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
                   },
-                  "deadline_ms": 130000
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
                 },
                 {
                   "do": "run",
@@ -11885,11 +15025,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -11903,17 +15066,52 @@
                   "deadline_ms": 180000
                 },
                 {
-                  "label": "menu",
+                  "label": "booted",
                   "do": "run",
-                  "command": "game.wait",
-                  "input": {
-                    "phase": [
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
                       "main_menu",
-                      "gameplay"
-                    ],
-                    "timeout_ms": 120000
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
                   },
-                  "deadline_ms": 130000
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
                 },
                 {
                   "do": "run",
@@ -12232,11 +15430,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -12250,17 +15471,52 @@
                   "deadline_ms": 180000
                 },
                 {
-                  "label": "menu",
+                  "label": "booted",
                   "do": "run",
-                  "command": "game.wait",
-                  "input": {
-                    "phase": [
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
                       "main_menu",
-                      "gameplay"
-                    ],
-                    "timeout_ms": 120000
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
                   },
-                  "deadline_ms": 130000
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
                 },
                 {
                   "do": "run",
@@ -12444,11 +15700,34 @@
                   "label": "process",
                   "do": "host.running",
                   "until": {
-                    "path": "running",
-                    "equals": true
+                    "any": [
+                      {
+                        "path": "running",
+                        "equals": true
+                      },
+                      {
+                        "path": "launch_blocked",
+                        "exists": true
+                      }
+                    ]
                   },
                   "interval_ms": 2000,
-                  "deadline_ms": 120000
+                  "deadline_ms": 120000,
+                  "outcomes": [
+                    {
+                      "name": "launch_blocked",
+                      "match": {
+                        "path": "launch_blocked",
+                        "exists": true
+                      },
+                      "run": [
+                        {
+                          "end": "fail",
+                          "reason": "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder."
+                        }
+                      ]
+                    }
+                  ]
                 },
                 {
                   "label": "bridge",
@@ -12462,17 +15741,52 @@
                   "deadline_ms": 180000
                 },
                 {
-                  "label": "menu",
+                  "label": "booted",
                   "do": "run",
-                  "command": "game.wait",
-                  "input": {
-                    "phase": [
+                  "command": "game.status",
+                  "input": {},
+                  "until": {
+                    "path": "phase",
+                    "one_of": [
                       "main_menu",
-                      "gameplay"
-                    ],
-                    "timeout_ms": 120000
+                      "gameplay",
+                      "menu",
+                      "paused",
+                      "photo_mode",
+                      "character_menu"
+                    ]
                   },
-                  "deadline_ms": 130000
+                  "interval_ms": 2500,
+                  "deadline_ms": 240000,
+                  "bind": "boot",
+                  "alternatives": [
+                    [
+                      {
+                        "do": "host.key",
+                        "keys": "Space",
+                        "on_fail": "continue"
+                      },
+                      {
+                        "do": "run",
+                        "command": "game.status",
+                        "input": {},
+                        "until": {
+                          "path": "phase",
+                          "one_of": [
+                            "main_menu",
+                            "gameplay",
+                            "menu",
+                            "paused",
+                            "photo_mode",
+                            "character_menu"
+                          ]
+                        },
+                        "interval_ms": 2500,
+                        "deadline_ms": 60000,
+                        "bind": "boot"
+                      }
+                    ]
+                  ]
                 },
                 {
                   "do": "run",

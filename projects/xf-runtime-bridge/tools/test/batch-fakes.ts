@@ -71,7 +71,7 @@ export function fakeApi(clock: FakeClock, handlers: Record<string, Handler> = {}
 }
 
 /** A fake host: a game process that comes and goes, key presses that may be refused, free commit. */
-export function fakeHost(options: { running?: boolean; foreground?: boolean; freeGb?: number; onLaunch?: () => void } = {}) {
+export function fakeHost(options: { running?: boolean; foreground?: boolean; freeGb?: number; onLaunch?: () => void; launchBlocked?: string; noProcessAfterLaunch?: boolean } = {}) {
   const log: string[] = [];
   let running = options.running ?? true;
   const host: Host & { log: string[]; free: number; crash: () => void } = {
@@ -79,7 +79,7 @@ export function fakeHost(options: { running?: boolean; foreground?: boolean; fre
     crash: () => { running = false; },
     free: (options.freeGb ?? 40) * 1024 ** 3,
     async gameProcess() { return running ? { pid: 4242 } : null; },
-    async launch() { log.push("launch"); running = true; options.onLaunch?.(); return { started: true, command: "ModOrganizer.exe -p test run -e game" }; },
+    async launch() { log.push("launch"); running = !options.noProcessAfterLaunch; options.onLaunch?.(); return { started: true, command: "ModOrganizer.exe -p test run -e game" }; },
     async requestClose() { log.push("close"); running = false; return true; },
     async foreground() { return options.foreground === false ? "Explorer" : "Cyberpunk2077"; },
     async pressKeys(vks, label) { log.push(`key ${label}`); return options.foreground === false ? { sent: false, keys: label, refused: "the foreground window is Explorer, not the game" } : { sent: true, keys: label }; },
@@ -89,6 +89,7 @@ export function fakeHost(options: { running?: boolean; foreground?: boolean; fre
     async freeCommitBytes() { return host.free; },
     async processStats() { return { private_bytes: 8 * 1024 ** 3, working_set: 6 * 1024 ** 3, handles: 12_000 }; },
     async systemHandles() { return 500_000; },
+    async launchBlocked() { return options.launchBlocked ?? null; },
   };
   return host;
 }

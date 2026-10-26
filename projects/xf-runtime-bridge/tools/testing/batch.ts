@@ -263,25 +263,57 @@ export function configNeeds(row: Row, values: IniValues): Record<string, string>
   return needs;
 }
 
-/** Launch through MO2, wait for the process and the bridge, then load the save and press past the start prompt (or, read-only, wait for the menu). */
-export function launchSteps(load: boolean): Step[] {
+/** Phases in which the game has finished starting (the main menu, or a world). */
+export const BOOTED_PHASES = ["main_menu", "gameplay", "menu", "paused", "photo_mode", "character_menu"];
+/** What a starting game answers before it is ready: waited through, never a reason to stop. */
+export const STILL_STARTING = ["game_not_running", "timeout", "busy", "bridge_busy", "game_loading", "rate_limited", "not_ready"];
+export const LAUNCH_BLOCKED = "Windows Defender (or another antivirus) blocked MO2 from starting the game: add an exclusion for MO2's folder.";
+
+/** Launch through MO2 and wait for the game's process; MO2's "Cannot launch program" dialog fails at once. */
+export function startSteps(): Step[] {
   return [
     { label: "launch", do: "host.launch", outcomes: [{ name: "already_running", match: { code: "already_running" }, result: "ok" }] },
-    { label: "process", do: "host.running", until: { path: "running", equals: true }, interval_ms: 2000, deadline_ms: 120_000 },
+    { label: "process", do: "host.running", until: { any: [{ path: "running", equals: true }, { path: "launch_blocked", exists: true }] }, interval_ms: 2000, deadline_ms: 120_000,
+      outcomes: [{ name: "launch_blocked", match: { path: "launch_blocked", exists: true }, run: [{ end: "fail", reason: LAUNCH_BLOCKED }] }] },
+  ] as Step[];
+}
+
+/**
+ * A running game made ready, whoever launched it (so a next attempt adopts a healthy game): the bridge answering,
+ * the game past its start (the main menu or a world, up to 240 s, pressing past a start screen if it waits there),
+ * then (with load) the save loaded from the main menu (a game that hasn't finished starting is waited for and
+ * retried, never a stop), the press-any-key prompt passed, and normal play.
+ */
+export function readySteps(load: boolean): Step[] {
+  const status = { do: "run", command: "game.status", input: {} };
+  const booted = (deadline: number) => ({ do: "run", command: "game.status", input: {}, until: { path: "phase", one_of: BOOTED_PHASES }, interval_ms: 2500, deadline_ms: deadline, bind: "boot" });
+  const loadRetry = { times: 12, backoff_ms: 3000, factor: 1.5, max_backoff_ms: 15_000, on: { code: STILL_STARTING } };
+  return [
     { label: "bridge", do: "run", command: "bridge.ping", input: {}, until: { ok: true }, interval_ms: 2000, deadline_ms: 180_000 },
+    { label: "booted", ...booted(240_000),
+      alternatives: [[
+        { do: "host.key", keys: "Space", on_fail: "continue" },
+        booted(60_000),
+      ]] },
     ...(load
       ? [
           { label: "load", do: "run", command: "game.load", input: { name: "$fixture.save", discard_unsaved: true, continue_wait_s: 85 }, bind: "load", deadline_ms: 150_000,
-            retry: { times: 2, backoff_ms: 5000, on: { code: ["timeout", "busy", "bridge_busy", "game_loading", "rate_limited"] } },
-            alternatives: [[{ do: "run", command: "game.load", input: { latest: true, discard_unsaved: true, continue_wait_s: 85 }, bind: "load", deadline_ms: 150_000 }]] },
-          { label: "press-any-key", do: "host.key", keys: "Space", when: { match: { ref: "$load.reached", equals: "press_any_key" } },
+            when: { check: status, match: { path: "phase", equals: "main_menu" } },
+            retry: loadRetry,
+            alternatives: [[{ do: "run", command: "game.load", input: { latest: true, discard_unsaved: true, continue_wait_s: 85 }, bind: "load", deadline_ms: 150_000, retry: loadRetry }]] },
+          { label: "press-any-key", do: "host.key", keys: "Space", when: { check: status, match: { path: "prompt_state", equals: "initial_continue" } },
             retry: { times: 5, backoff_ms: 3000, on: { code: "not_foreground" } },
             outcomes: [{ name: "behind", match: { code: "not_foreground" }, run: [{ do: "note", text: "The game isn't in front, so the runner can't press past the start prompt: click into the game (or press Space)." }] }],
             on_fail: "continue" as const },
           { label: "gameplay", do: "run", command: "game.wait", input: { phase: "gameplay", timeout_ms: 180_000 }, deadline_ms: 190_000 },
         ]
-      : [{ label: "menu", do: "run", command: "game.wait", input: { phase: ["main_menu", "gameplay"], timeout_ms: 120_000 }, deadline_ms: 130_000 }]),
+      : []),
   ] as Step[];
+}
+
+/** Launch through MO2, then make the game ready (readySteps). */
+export function launchSteps(load: boolean): Step[] {
+  return [...startSteps(), ...readySteps(load)];
 }
 
 /** Close the game cleanly: its window's close, then (if it asks) Enter to confirm; then wait for the process to end. */
@@ -296,8 +328,10 @@ export function preludeSteps(needs: Record<string, string>, restart: boolean, lo
   const changes = Object.keys(needs).length > 0;
   return [
     ...(changes ? [{ label: "config", do: "config.set", values: needs }] : []),
-    ...(changes || restart ? [{ label: "restart", sequence: [...closeSteps(), ...launchSteps(load)], when: { check: { do: "host.running" }, match: { path: "running", equals: true } } }] : []),
-    { label: "start", sequence: launchSteps(load), when: { check: { do: "host.running" }, match: { path: "running", equals: false } } },
+    ...(changes || restart ? [{ label: "restart", sequence: [...closeSteps(), ...startSteps()], when: { check: { do: "host.running" }, match: { path: "running", equals: true } } }] : []),
+    { label: "start", sequence: startSteps(), when: { check: { do: "host.running" }, match: { path: "running", equals: false } } },
+    // Always: a game that is already running (an earlier attempt's, or the player's) is adopted and made ready.
+    ...readySteps(load),
   ] as Step[];
 }
 
@@ -512,7 +546,9 @@ export class SessionExecutor implements Executor {
           return this.compare(action);
         case "host.running": {
           const pid = await this.gamePid();
-          return { ok: true, value: { running: pid !== undefined, ...(pid !== undefined ? { pid } : {}) } };
+          // MO2's own error dialog while nothing runs: the launch was blocked (an antivirus), so waiting is pointless.
+          const blocked = pid === undefined ? await this.c.host.launchBlocked().catch(() => null) : null;
+          return { ok: true, value: { running: pid !== undefined, ...(pid !== undefined ? { pid } : {}), ...(blocked ? { launch_blocked: blocked } : {}) } };
         }
         case "host.launch": {
           const mo2 = this.c.fixtures.mo2 as { exe?: string; profile?: string; executable?: string; arguments?: string } | undefined;
@@ -1041,7 +1077,10 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   await attemptCleanup("closing note", () => executor.run({ do: "note", text: `XF session ${halt ? "stopped" : "complete"}: ${script.title ?? script.name}` }, { signal: new AbortController().signal, deadline: clock.now() + 10_000, plan: "end", step: "end", attempt: 1, raw: { do: "note" } }));
   // A fast exit: close the game cleanly, so the fix can go in and the next attempt starts fresh.
   await attemptCleanup("closing the game", async () => {
-    if (halt && halt.kind !== "handed_over" && options.closeOnHalt !== false && (await options.host.gameProcess())) {
+    // A prelude that stopped with a healthy game (its bridge answers) leaves it running: the next attempt adopts it.
+    const adoptable = halt?.kind === "prelude" && (await options.host.gameProcess()) && (await options.api.run("bridge.ping", {}, { source: "session" })).ok;
+    if (adoptable) log("Keeping the game: it runs and its bridge answers, so the next attempt adopts it.");
+    if (halt && halt.kind !== "handed_over" && !adoptable && options.closeOnHalt !== false && (await options.host.gameProcess())) {
       log("Closing the game after the halt.");
       const closed = await runPlan({ id: "halt-close", steps: closeSteps() }, { executor: teardownExecutor, clock });
       teardown?.reports.push(...closed.reports);

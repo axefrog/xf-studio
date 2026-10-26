@@ -106,7 +106,9 @@ describe("batch: fast exit on a significant bug", () => {
     expect(lost.haltInfo).toMatchObject({ kind: "bridge_lost", row: "a" });
     alive = true;
     const kill: Row[] = [{ id: "kill", title: "kills on purpose", after: "restart", steps: [{ do: "run", command: "ui.state", input: {} }] }];
-    const fine = await go(script(kill), fakeApi(clock, { "bridge.ping": () => ({ ok: false, code: "no_bridge" }) }), fakeHost({ running: true }), clock, tempDir("xfb-batch-"), { haltOn: parseHaltOn("bridge_lost") });
+    // The bridge answers for the prelude, then the row switches it off on purpose.
+    let up = true;
+    const fine = await go(script(kill), fakeApi(clock, { "bridge.ping": () => (up ? { ok: true, result: {} } : { ok: false, code: "no_bridge" }), "ui.state": () => { up = false; return { ok: true, result: {} }; } }), fakeHost({ running: true }), clock, tempDir("xfb-batch-"), { haltOn: parseHaltOn("bridge_lost") });
     expect(fine.haltInfo).toBeUndefined();
   });
 
@@ -278,5 +280,63 @@ describe("FR1: free roam for the replay (free-roam.json)", () => {
     const { row } = await runFr("Done", "recording_busy");
     expect(row.verdict).toBe("PASS");
     expect(row.facts![0]).toEqual({ label: "recorder run", value: 7 });
+  });
+});
+
+describe("the prelude starts a game patiently and adopts a healthy one", () => {
+  const loadRow: Row[] = [{ id: "r", title: "r", requires: [{ config: "bridge.allow_writes", equals: "true" }], steps: [{ do: "set", value: 1 }] }];
+  const booting = (clock: FakeClock, opts: { startingFor: number; loadRefusals: number }) => {
+    let phase = "starting";
+    const api = fakeApi(clock, {
+      // The bridge answers early, but the game keeps saying it hasn't finished starting for a while.
+      "game.status": (_i, n) => (n <= opts.startingFor ? { ok: false, code: "game_not_running", message: "The game hasn't finished starting. Wait for the main menu, then try again." } : { ok: true, result: { phase } }),
+      "game.load": (_i, n) => {
+        if (n <= opts.loadRefusals) return { ok: false, code: "game_not_running", message: "The game hasn't finished starting. Wait for the main menu, then try again." };
+        phase = "gameplay";
+        return { ok: true, result: { reached: "gameplay" } };
+      },
+    });
+    return { api, setPhase: (p: string) => { phase = p; } };
+  };
+
+  test("1 and 2: after the launch it waits for the main menu, and a load refused game_not_running is retried, never a halt", async () => {
+    const clock = new FakeClock();
+    const dir = tempDir("xfb-batch-");
+    const { api, setPhase } = booting(clock, { startingFor: 6, loadRefusals: 3 });
+    setPhase("main_menu");
+    const host = fakeHost({ running: false });
+    const result = await go(script(loadRow), api, host, clock, dir, { fixtures: { staged_mod: stagedMod(dir), mo2: { exe: "m", profile: "p", executable: "g" } } });
+    expect(result.haltInfo).toBeUndefined();
+    expect(result.rows[0].verdict).toBe("PASS");
+    expect(api.calls.filter((c) => c.name === "game.load").length).toBe(4);
+    expect(host.log).toEqual(["launch"]);
+  });
+
+  test("4: a prelude that fails with a healthy game keeps it, and the next attempt adopts it instead of relaunching", async () => {
+    const clock = new FakeClock();
+    const dir = tempDir("xfb-batch-");
+    const mod = stagedMod(dir);
+    const host = fakeHost({ running: false });
+    // Attempt 1: the save can't be loaded (a missing save), so the prelude stops; the game itself is healthy.
+    const first = await go(script(loadRow), fakeApi(clock, { "game.status": () => ({ ok: true, result: { phase: "main_menu" } }), "game.load": () => ({ ok: false, code: "save_unknown", message: "no such save" }) }), host, clock, dir,
+      { fixtures: { staged_mod: mod, mo2: { exe: "m", profile: "p", executable: "g" } } });
+    expect(first.haltInfo?.kind).toBe("prelude");
+    expect(host.log).toEqual(["launch"]);
+    // Attempt 2 (the same game still running, at the main menu): adopted, the save loaded, no second launch.
+    const { api } = booting(clock, { startingFor: 0, loadRefusals: 0 });
+    const statusAtMenu = { ...api, run: (name: string, input: Record<string, unknown> = {}, o = {}) => (name === "game.status" && !api.calls.some((c) => c.name === "game.load") ? Promise.resolve({ ok: true, command: name, cid: "c", result: { phase: "main_menu" } }) : api.run(name, input as never, o)) };
+    const second = await go(script(loadRow), statusAtMenu as never, host, clock, dir, { fixtures: { staged_mod: mod, mo2: { exe: "m", profile: "p", executable: "g" } }, rows: first.remaining });
+    expect(second.rows[0].verdict).toBe("PASS");
+    expect(host.log).toEqual(["launch"]);
+    expect(api.calls.some((c) => c.name === "game.load")).toBe(true);
+  });
+
+  test("5: MO2's Cannot launch program dialog fails at once, with what to do", async () => {
+    const clock = new FakeClock();
+    const dir = tempDir("xfb-batch-");
+    const host = fakeHost({ running: false, noProcessAfterLaunch: true, launchBlocked: "Cannot launch program" });
+    const result = await go(script(loadRow), fakeApi(clock), host, clock, dir, { fixtures: { staged_mod: stagedMod(dir), mo2: { exe: "m", profile: "p", executable: "g" } } });
+    expect(result.rows[0].reason).toContain("Windows Defender (or another antivirus) blocked MO2");
+    expect(clock.now()).toBeLessThan(60_000);
   });
 });

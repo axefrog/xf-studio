@@ -184,8 +184,11 @@ describe("batch: the prelude (config.set and the game's lifecycle)", () => {
     const clock = new FakeClock();
     const dir = tempDir("xfb-batch-");
     const mod = stagedMod(dir);
-    const api = fakeApi(clock, { "bridge.ping": (_i, n) => (n < 3 ? { ok: false, code: "no_bridge" } : { ok: true, result: {} }) });
-    const host = fakeHost({ running: true });
+    // After the restart the game sits at the main menu until the save loads.
+    let phase = "gameplay";
+    const api = fakeApi(clock, { "bridge.ping": (_i, n) => (n < 3 ? { ok: false, code: "no_bridge" } : { ok: true, result: {} }),
+      "game.status": () => ({ ok: true, result: { phase } }), "game.load": () => { phase = "gameplay"; return { ok: true, result: { reached: "gameplay" } }; } });
+    const host = fakeHost({ running: true, onLaunch: () => { phase = "main_menu"; } });
     let seen: Record<string, string> = {};
     const rows: Row[] = [
       { id: "dark", title: "dark, overlay on", requires: [{ config: "overlay.enabled", equals: "true" }, { config: "overlay.motion", equals: "full" }], steps: [{ do: "config.read", bind: "cfg" }],
@@ -211,7 +214,8 @@ describe("batch: the prelude (config.set and the game's lifecycle)", () => {
     await go(script(rows), api, host, clock, dir, { fixtures: { staged_mod: mod, mo2: { exe: "mo2.exe", profile: "test", executable: "game" } } });
     expect(host.log).toEqual(["launch"]);
     expect(api.calls.some((c) => c.name === "game.load")).toBe(false);
-    expect(api.calls.some((c) => c.name === "game.wait" && Array.isArray(c.input.phase) && c.input.phase.includes("main_menu"))).toBe(true);
+    // Read-only: the game past its start (the main menu) is enough; no load.
+    expect(api.calls.some((c) => c.name === "game.status")).toBe(true);
   });
 
   test("after: restart restarts before the next row even when its config is the same", async () => {

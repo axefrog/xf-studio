@@ -8,7 +8,7 @@
 
 import { spawn } from "node:child_process";
 import { dlopen, FFIType } from "bun:ffi";
-import { mainWindowOf, processImageName } from "../capture/win32.ts";
+import { mainWindowOf, processImageName, topLevelWindows } from "../capture/win32.ts";
 import { parseReading } from "../commit-tripwire.ts";
 import { INPUT_SIZE, isExtendedKey, keyboardInput, scanCodeFor, virtualKey } from "../input/photo-key.ts";
 
@@ -40,6 +40,8 @@ export interface Host {
   processStats(pid: number): Promise<{ private_bytes: number; working_set: number; handles: number } | null>;
   /** Every process's handles summed (the kernel's growth showed there in Borg 4), or null. */
   systemHandles(): Promise<number | null>;
+  /** The title of MO2's "Cannot launch program" dialog when one is up (an antivirus blocked the launch), or null. */
+  launchBlocked(): Promise<string | null>;
 }
 
 // ---- Key names ----------------------------------------------------------------------------------------------
@@ -213,6 +215,10 @@ export const windowsHost: Host = {
     const { code, out } = await powershell(`$p = Get-Process -Id ${Number(pid)} -ErrorAction SilentlyContinue; if ($p) { "$($p.PrivateMemorySize64) $($p.WorkingSet64) $($p.HandleCount)" }`);
     const [privateBytes, workingSet, handles] = out.trim().split(/\s+/).map(Number);
     return code === 0 && Number.isFinite(privateBytes) && privateBytes > 0 ? { private_bytes: privateBytes, working_set: workingSet, handles } : null;
+  },
+  async launchBlocked() {
+    const dialog = topLevelWindows().find((w) => /cannot launch program/i.test(w.title));
+    return dialog ? dialog.title : null;
   },
   async systemHandles() {
     const { code, out } = await powershell("(Get-Process | Measure-Object HandleCount -Sum).Sum");
