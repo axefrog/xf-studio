@@ -180,6 +180,25 @@ test("the commit tripwire's handover carries why, so the refusals and the sessio
 
 // Review of 3365edc2..83431583 (Sol): four findings, each reproduced here first.
 
+test("review 3: a lost witness report cancels an arm on an incident event, and leaves other session arms alone", async () => {
+  for (const arm of [{ event: "witness.report" }, { event: "witness.report", channel: "incidents" }, { event: "incident.declared" }]) {
+    const f = recorder({ rows: 10, sourceNow: 2 });
+    const arms = new EventCaptures(catchupApi(f), clock());
+    await arms.arm({ run: 1, ...arm, capture: "screenshot" }, f.api);
+    f.state.events.push({ seq: 1, kind: "witness.gap", source_s: 2, data: { event: "witness.gap", incident: 7 } });
+    await arms.poll();
+    expect(arms.status().armed, arm.event).toBe(false);
+    expect(lastStatus(arms), arm.event).toContain("incident_report_gap");
+  }
+  const f = recorder({ rows: 10, sourceNow: 2 });
+  const arms = new EventCaptures(catchupApi(f), clock());
+  await arms.arm({ run: 1, event: "dm.quest", capture: "screenshot" }, f.api);
+  f.state.events.push({ seq: 1, kind: "witness.gap", source_s: 2, data: { event: "witness.gap", incident: 7 } });
+  await arms.poll();
+  expect(arms.status().armed).toBe(true);
+  arms.cancel();
+});
+
 test("review 4: recorder loss found by the recheck after the delay is in the capture's receipt", async () => {
   const f = recorder({ rows: 30, sourceNow: 7 });
   const calls: string[] = [], c = clock();

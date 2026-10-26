@@ -61,6 +61,14 @@ export class EventCaptures {
     const channel = arm.input.channel;
     if (gaps.includes("session_history_lost") && !channel) lost.push("session_history_lost: session events were dropped before they were read");
     if (gaps.includes("supervisor_history_lost") && arm.input.event.startsWith("supervisor.")) lost.push("supervisor_history_lost: the supervisor dropped receipts");
+    // An incident event (witness.*, incident.*, or any arm on the incidents channel) is lost with the incident's own reports and
+    // evidence, on either feed; other arms ignore that loss.
+    if (channel === "incidents" || /^(witness|incident)\./.test(arm.input.event)) {
+      const cover: Json = page.incident_summary?.coverage ?? {};
+      const ids: unknown[] = Array.isArray(cover.report_gap_incidents) ? cover.report_gap_incidents : [];
+      if (gaps.includes("incident_report_gap")) lost.push(`incident_report_gap: witness report(s) were lost${ids.length ? ` (incident ${ids.join(", ")})` : ""}`);
+      if (gaps.includes("incident_evidence_dropped")) lost.push(`incident_evidence_dropped: incident evidence was dropped (${cover.evidence_dropped_by_plugin ?? "?"} by the plugin, ${cover.evidence_dropped_by_tap ?? "?"} by the taps)`);
+    }
     if (!channel) return lost;
     const on = `the trigger's recorder channel ${channel}`;
     if (gaps.includes("recorder_history_lost")) lost.push(`recorder_history_lost: recorder rows were overwritten before they were read (${on})`);
