@@ -157,6 +157,8 @@ test("inspecting a Vortex setup matches the deploying installation by instance i
   const backup = (instance: string) => JSON.stringify({ ...stateFromPairs([...pairs,
     ["app###instanceId", JSON.stringify(instance)], ["settings###gameMode###discovered###cyberpunk2077###path", JSON.stringify(game)]]).state });
   put(join(appData, "Vortex", "temp", "state_backups_full", "hourly.json"), backup("fixture-instance-0001"));
+  // Readable but incomplete DB: the backup enriches it. A backup alone is never a valid lead.
+  put(join(appData, "Vortex", "state.v2", "CURRENT"), "MANIFEST-000001\n");
   put(join(programData, "vortex", "temp", "state_backups_full", "hourly.json"), backup("another-instance"));
   const env = (name: string) => ({ APPDATA: appData, ProgramData: programData, USERNAME: "user" } as Record<string, string>)[name];
   const setup = await inspectVortexSetup(game, env);
@@ -348,11 +350,12 @@ test("the Vortex check tool leaves the profile's name out of what testers paste 
   const named = stateFromPairs([...pairs, ["persistent###profiles###p1###name", JSON.stringify("Jane Doe private profile")],
     ["settings###gameMode###discovered###cyberpunk2077###path", JSON.stringify(game)]]).state;
   put(join(appData, "Vortex", "temp", "state_backups_full", "hourly.json"), JSON.stringify(named));
+  put(join(appData, "Vortex", "state.v2", "CURRENT"), "MANIFEST-000001\n");
   const script = `
     import { mock } from "bun:test";
     mock.module(${JSON.stringify(new URL("../src/installation/host/vortex-data-host.ts", import.meta.url).href)}, () => ({
       gatherVortexDataFacts: async () => ({ platform: ${JSON.stringify(process.platform === "win32" ? "win32" : "posix")}, appData: ${JSON.stringify(appData)} }),
-      readWindowsVortexLaunches: async () => ({})
+      vortexShortcutDiscovery: { revision: 0, snapshot: () => [], start: () => {} }
     }));
     process.argv = [process.execPath, "vortex-check", "--game-root", ${JSON.stringify(game)}];
     await import(${JSON.stringify(new URL("../tools/vortex-check.ts", import.meta.url).href)});

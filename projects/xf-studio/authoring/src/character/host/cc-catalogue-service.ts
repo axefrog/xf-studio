@@ -39,6 +39,7 @@ import { type CharacterRequest, savedOfRequest } from "../character-detail-reque
 import { type CharacterInput, customLabel, type loadMergedCco } from "../character-resolver";
 import { personalDataIn } from "../../app/private-data";
 import { modMakers } from "./mod-makers";
+import { vortexShortcutDiscovery } from "../../installation/host/vortex-data-host";
 import type { Installation, InstallationOptions } from "../../game/host/resolver-host";
 
 export type CreatorRoute = Omit<InstallationOptions, "cacheDir" | "log">;
@@ -63,6 +64,8 @@ export type CreatorHostOptions = {
    * without a mount plan, such as a test's).
    */
   makers?: (installation: Installation, route: CreatorRoute) => ReadonlyMap<string, ModMaker> | Promise<ReadonlyMap<string, ModMaker>>;
+  /** Background discovery moves the normal catalogue identity on when new maker evidence arrives. */
+  makerRevision?: () => number;
   /** How long after a catalogue is ready its swatches start being worked out in the background (ms; default 1,500). */
   swatchDelayMs?: number;
   /** The game's on-screen language, part of the catalogue's key (default: the game's own settings, `currentGameLanguage`). */
@@ -155,7 +158,7 @@ export class CreatorCatalogueHost {
 
   /** The catalogue's key: the installation fingerprint and the game's on-screen language (NATIVE-51). */
   private key(): string {
-    return `${this.options.fingerprint()}\n${(this.options.language ?? currentGameLanguage)() ?? ""}`;
+    return `${this.options.fingerprint()}\n${(this.options.language ?? currentGameLanguage)() ?? ""}\n${this.options.makerRevision?.() ?? vortexShortcutDiscovery.revision}`;
   }
   private backoff(entry: Entry): void {
     entry.failures++;

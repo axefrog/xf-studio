@@ -25,7 +25,7 @@ import { combineVortexManifests, parseVortexManifest, vortexManifestModType, vor
   type VortexManifest } from "../vortex-deployment";
 import { readVortexGameState, readVortexMultiUser, resolveVortexInstallPath, stateFromPairs, type VortexGameState } from "../vortex-state";
 import { resolveVortexDataFolders, type VortexDataCandidate, type VortexDataFacts, type VortexDataFolder } from "../vortex-data";
-import { gatherVortexDataFacts, readWindowsVortexLaunches } from "./vortex-data-host";
+import { gatherVortexDataFacts, vortexShortcutDiscovery, type VortexShortcutDiscovery } from "./vortex-data-host";
 
 /** Vortex's id for Cyberpunk 2077 [source: cyberpunk2077_ext_redux `src/index.metadata.ts`]. */
 export const VORTEX_CYBERPUNK_GAME_ID = "cyberpunk2077";
@@ -39,6 +39,9 @@ export type VortexReadOptions = {
   signal?: AbortSignal;
   /** Inject already gathered facts (also keeps fixture tests independent of this computer's Vortex). */
   dataFacts?: VortexDataFacts;
+  /** The host session owns the once-only background shortcut scan. Fixtures inject their own owner. */
+  shortcutDiscovery?: VortexShortcutDiscovery;
+  factsReader?: typeof gatherVortexDataFacts;
   /** Stop reading state files at this time (on `now`'s clock); what isn't read by then is a gap. */
   deadline?: number;
   now?: () => number;
@@ -225,39 +228,55 @@ export async function inspectVortexSetup(gameRoot: string, env: (name: string) =
   const problems = [...manifestRead.problems];
   const deployment = manifestRead.deployment;
   const primary = deployment?.manifests.find(row => row.modType === "")?.manifest ?? deployment?.manifests[0]?.manifest ?? null;
-  // Read the base/shared mode markers with the same bounded, read-only state reader.
-  const markers = new Map<string, VortexStateRead | null>();
-  for (const folder of vortexDataFolders(env)) {
-    if (folder.kind === "shared" && !(options.dataFacts?.userMultiUser ?? markers.get("user")?.multiUser)) continue;
-    if (isLocalFolder(folder.path)) markers.set(folder.kind, await readVortexStateFolder(folder, gameId, options));
-  }
   const signal = options.signal ?? new AbortController().signal;
   const now = options.now ?? Date.now;
   const remaining = options.deadline === undefined ? 5000 : Math.max(0, options.deadline - now());
   let facts = options.dataFacts;
   if (!facts) {
-    try { facts = remaining > 0 ? await gatherVortexDataFacts(env, signal, async roots => {
-      const timeLeft = options.deadline === undefined ? 4000 : options.deadline - now();
-      try { return timeLeft > 0 ? await readWindowsVortexLaunches(roots, signal, timeLeft) : {}; }
-      catch { signal.throwIfAborted(); return {}; }
-    }) : undefined; }
+    // Fast metadata has a small slice; keep at least 250 ms for validating cold state files.
+    const budget = Math.min(100, Math.max(0, remaining - 250));
+    const fastSignal = AbortSignal.any([signal, AbortSignal.timeout(Math.max(1, budget))]);
+    try { facts = budget > 0 ? await (options.factsReader ?? gatherVortexDataFacts)(env, fastSignal) : undefined; }
     catch { signal.throwIfAborted(); facts = { platform: process.platform === "win32" ? "win32" : "posix", appData: env("APPDATA"), programData: env("ProgramData") }; }
   }
   facts ??= { platform: process.platform === "win32" ? "win32" : "posix", appData: env("APPDATA"), programData: env("ProgramData") };
-  const candidates = resolveVortexDataFolders({ ...facts,
-    userMultiUser: facts.userMultiUser ?? markers.get("user")?.multiUser,
+  const shortcuts = options.shortcutDiscovery ?? (options.dataFacts ? undefined : vortexShortcutDiscovery);
+  facts = { ...facts, shortcuts: [...(facts.shortcuts ?? []), ...(shortcuts?.snapshot() ?? [])] };
+  const reads = new Map<string, VortexStateRead | null>();
+  let instanceFound = false;
+  const read = async (folder: VortexDataFolder) => {
+    signal.throwIfAborted();
+    if (!isLocalFolder(folder.path)) { problems.push("A Vortex data-folder lead isn't on a local drive and was skipped."); return null; }
+    if (!reads.has(folder.path)) reads.set(folder.path, await readVortexStateFolder(folder, gameId, options));
+    return reads.get(folder.path) ?? null;
+  };
+  // Validate explicit cheap leads immediately, before spending any time on base/shared markers.
+  let earlierModeLead = false;
+  for (const candidate of resolveVortexDataFolders(facts, { join, resolve, isAbsolute })) {
+    if (!["process", "startup", "shortcut"].includes(candidate.source)) continue;
+    if (candidate.kind === "custom") {
+      const row = await read(candidate);
+      if (!earlierModeLead && row?.databaseReadable && primary?.instance && row.game.instanceId === primary.instance) { instanceFound = true; break; }
+    } else earlierModeLead = true; // Resolve an earlier launch's base/shared choice before accepting a later lead.
+  }
+  const markers = new Map<string, VortexStateRead | null>();
+  for (const folder of vortexDataFolders(env)) {
+    if (instanceFound) break;
+    if (folder.kind === "shared" && !(facts.userMultiUser ?? markers.get("user")?.multiUser)) continue;
+    markers.set(folder.kind, await read(folder));
+  }
+  const candidates = resolveVortexDataFolders({ ...facts, userMultiUser: facts.userMultiUser ?? markers.get("user")?.multiUser,
     sharedMultiUser: facts.sharedMultiUser ?? markers.get("shared")?.multiUser }, { join, resolve, isAbsolute });
   const states: { read: VortexStateRead; candidate: VortexDataCandidate }[] = [];
   for (const candidate of candidates) {
-    options.signal?.throwIfAborted();
-    if (!isLocalFolder(candidate.path)) { problems.push("A Vortex data-folder lead isn't on a local drive and was skipped."); continue; }
-    const row = await readVortexStateFolder(candidate, gameId, options);
-    // Historical log leads require a readable database, not just a backup left in a moved folder.
-    if (candidate.source === "last-run-log") {
-      try { if (!(await stat(join(candidate.path, "state.v2"))).isDirectory() || !row?.databaseReadable) continue; }
-      catch { continue; }
+    if (instanceFound && !reads.has(candidate.path)) continue;
+    const row = await read(candidate);
+    // Every discovery source requires a readable state.v2. A backup can enrich a readable,
+    // incomplete DB, but a leftover backup alone never validates a data-folder lead.
+    if (row?.databaseReadable) {
+      states.push({ read: row.kind === candidate.kind ? row : { ...row, kind: candidate.kind }, candidate });
+      if (primary?.instance && row.game.instanceId === primary.instance) instanceFound = true;
     }
-    if (row) states.push({ read: row, candidate });
   }
   // The installation that deployed is the one whose instance id the manifest carries; otherwise the one managing this folder.
   const instance = states.find(row => primary?.instance && row.read.game.instanceId === primary.instance);
@@ -274,6 +293,7 @@ export async function inspectVortexSetup(gameRoot: string, env: (name: string) =
     stagingMarker = { instance: typeof marker?.instance === "string" ? marker.instance : null, game: typeof marker?.game === "string" ? marker.game : null };
   } catch { options.signal?.throwIfAborted(); }
   options.signal?.throwIfAborted();
+  shortcuts?.start(env);
   if (primary?.gameId && primary.gameId !== gameId) problems.push(`The deployment manifest belongs to Vortex game "${primary.gameId}".`);
   return { schema: "xfs/vortex-setup-1", deployed: !!deployment,
     manifests: deployment?.manifests.map(row => ({ fileName: row.fileName, modType: row.modType, deploymentMethod: row.manifest.deploymentMethod,

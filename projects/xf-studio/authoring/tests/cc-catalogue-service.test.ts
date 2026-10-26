@@ -36,6 +36,23 @@ async function service(options: { fingerprint?: () => string; route?: boolean } 
 const settle = () => new Promise(resolve => setTimeout(resolve, 5));
 
 describe("the creator catalogue service", () => {
+  test("background maker discovery refreshes the normal catalogue identity on the next state question", async () => {
+    const source = await fixtureSource(true);
+    let revision = 0, makerReads = 0;
+    const host = new CreatorCatalogueHost({ route: () => ({ gameRoot: root, launchRoute: "direct", wolvenKitCli: "wk" }), fingerprint: () => "one",
+      resolverCache: join(root, "makers"), open: () => ({}) as never, makerRevision: () => revision,
+      makers: () => { makerReads++; return new Map(); },
+      load: async () => ({ source, catalogue: source.catalogue, evidence: { language: { code: "en-us", from: "default" }, texts: [], tweakDb: null, customResources: 1 } }) });
+    await host.ensure("female");
+    const first = host.state("female").panel!.identity;
+    expect(makerReads).toBe(1);
+    revision++;
+    expect(host.state("female").phase).toBe("preparing");
+    await host.ensure("female");
+    expect(host.state("female").panel!.identity).not.toBe(first);
+    expect(makerReads).toBe(2);
+  });
+
   test("a colour row's swatches and icons come from the built catalogue's swatch source; the view's current choice carries its swatch", async () => {
     const source = await fixtureSource(true);
     const asked: string[] = [];

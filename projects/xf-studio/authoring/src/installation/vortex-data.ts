@@ -69,18 +69,19 @@ export function resolveVortexDataFolders(facts: VortexDataFacts, paths: VortexDa
   const shared = facts.platform === "win32" && facts.programData && facts.userMultiUser === true && facts.sharedMultiUser !== false
     ? paths.join(facts.programData, "vortex") : undefined;
   const result: VortexDataCandidate[] = [];
+  const absolute = (path: string) => paths.isAbsolute(path) && (facts.platform !== "win32" || /^(?:[a-z]:[\\/]|[\\/]{2}[^\\/])/i.test(path));
   const add = (path: string | undefined, source: VortexDataSource, reason: string, kind: VortexDataFolder["kind"] = "custom") => {
-    if (!path || !paths.isAbsolute(path)) return;
+    if (!path || !absolute(path)) return;
     path = paths.resolve(path);
     const key = (value: string) => facts.platform === "win32" ? value.toLowerCase() : value;
     if (kind === "custom") {
-      if (base && paths.isAbsolute(base) && key(paths.resolve(base)) === key(path)) kind = "user";
-      else if (facts.platform === "win32" && facts.programData && paths.isAbsolute(facts.programData) && key(paths.resolve(facts.programData, "vortex")) === key(path)) kind = "shared";
+      if (base && absolute(base) && key(paths.resolve(base)) === key(path)) kind = "user";
+      else if (facts.platform === "win32" && facts.programData && absolute(facts.programData) && key(paths.resolve(facts.programData, "vortex")) === key(path)) kind = "shared";
     }
     if (!result.some(row => key(row.path) === key(path))) result.push({ path, kind, source, reason });
   };
   const launch = (executable: string, args: readonly string[], source: "process" | "shortcut") => {
-    if (!/(?:^|[\\/])vortex\.exe$/i.test(executable) || !paths.isAbsolute(executable)) return;
+    if (!/(?:^|[\\/])vortex\.exe$/i.test(executable) || !absolute(executable)) return;
     // Electron children and command-line state editors aren't a running UI instance.
     if (args.some(arg => /^--(?:type|run|get|set|del)(?:=|$)/.test(arg) || ["-g", "-s"].includes(arg))) return;
     let custom: string | undefined;
