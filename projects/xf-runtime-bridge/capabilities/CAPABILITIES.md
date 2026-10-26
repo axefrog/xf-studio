@@ -6,23 +6,23 @@
 
 ## Summary
 
-167 capabilities in 16 areas.
+168 capabilities in 16 areas.
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 13 | 9 | 16 | 2 | 0 | 127 | 0 | 0 |
+| items | 14 | 9 | 16 | 2 | 0 | 127 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
-| items | 40 | 18 | 82 | 27 | 0 |
+| items | 41 | 18 | 82 | 27 | 0 |
 
 | Health | unknown | works | caveats | degraded | broken |
 |---|---:|---:|---:|---:|---:|
-| items | 52 | 70 | 43 | 0 | 2 |
+| items | 53 | 70 | 43 | 0 | 2 |
 
 | Priority | P0 | P1 | P2 | P3 |
 |---|---:|---:|---:|---:|
-| items | 0 | 12 | 49 | 106 |
+| items | 0 | 12 | 49 | 107 |
 
 ### Evidence debt
 
@@ -194,7 +194,7 @@ Per consumer, blocking first.
 
 #### XF · Holotable
 
-9 open (0 blocking, 7 needs, 2 wants).
+10 open (0 blocking, 7 needs, 3 wants).
 
 | Level | Ref | Milestone | Capability | Stage | Evidence | Need |
 |---|---|---|---|---|---|---|
@@ -207,6 +207,7 @@ Per consumer, blocking first.
 | needs | milestone 6 | M6 | [`recorder.status`](#recorder.status) | requested | none | Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run. |
 | wants | want 15 | M6 | [`recorder.observe-result`](#recorder.observe-result) | requested | none | Lets Holotable draw what sessions already asked, at no extra game cost. |
 | wants | want plate | M7 | [`surfaces.canvas-plate`](#surfaces.canvas-plate) | requested | none | The design comes from the UI component track; the bridge exposes the token to canvas@1. |
+| wants | agent-layers clock | M6b | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) | requested | none | Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today. |
 
 #### Photo Mode Tools
 
@@ -2375,7 +2376,7 @@ showroom.spawn, showroom.light, showroom.rotate, showroom.clear and showroom.sta
 
 ## Recorder and catch-up
 
-Continuous channels, taps, session events and catching up on what happened between turns. (area `recorder`, 10 capabilities)
+Continuous channels, taps, session events and catching up on what happened between turns. (area `recorder`, 11 capabilities)
 
 | Capability | Kind | Stage | Evidence | Health | Priority |
 |---|---|---|---|---|---|
@@ -2389,6 +2390,7 @@ Continuous channels, taps, session events and catching up on what happened betwe
 | [`recorder.world-event-feed`](#recorder.world-event-feed) World event feed | sense | proposed | none | unknown | P2 |
 | [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | requested | none | unknown | P3 |
 | [`recorder.status`](#recorder.status) Read-only recorder status | sense | requested | none | unknown | P3 |
+| [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | service | requested | none | unknown | P3 |
 
 <a id="recorder.session-events"></a>
 
@@ -2555,6 +2557,17 @@ A bounded observe.result session event with the command, the caller's cid and th
 A read-only command answered on the bridge thread (no game-thread call, no lease, no ack) that reports whether the recorder is active and its current run: { active, run, session, world, channels, start, latest, stopReason }, so an observer can find the run to read with game.catchup.
 
 - **Demand (holotable, needs, milestone 6, M6):** Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run.
+- **Updated:** 2026-10-27
+
+<a id="recorder.manifest-wall-clock"></a>
+
+### Wall-clock time in the run manifest
+
+`recorder.manifest-wall-clock` · service · stage **requested** · evidence **none** · health **unknown** · P3
+
+The recorder run manifest carries a wall-clock mapping for its QPC clock (for example start_at, the ISO time at start_s), so replay tools can place wall-clock-timed items on the recording timeline.
+
+- **Demand (holotable, wants, agent-layers clock, M6b):** Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today.
 - **Updated:** 2026-10-27
 
 ## Supervisor and plans

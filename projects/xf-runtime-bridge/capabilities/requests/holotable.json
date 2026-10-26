@@ -152,5 +152,27 @@
       }
     ],
     "updated": "2026-10-27"
+  },
+  {
+    "id": "recorder.manifest-wall-clock",
+    "title": "Wall-clock time in the run manifest",
+    "summary": "The recorder run manifest carries a wall-clock mapping for its QPC clock (for example start_at, the ISO time at start_s), so replay tools can place wall-clock-timed items on the recording timeline.",
+    "area": "recorder",
+    "kind": "service",
+    "stage": "requested",
+    "evidence": "none",
+    "health": "unknown",
+    "priority": "P3",
+    "demand": [
+      {
+        "consumer": "holotable",
+        "level": "wants",
+        "ref": "agent-layers clock",
+        "milestone": "M6b",
+        "note": "Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today.",
+        "since": "2026-10-27"
+      }
+    ],
+    "updated": "2026-10-27"
   }
 ]
