@@ -36,18 +36,18 @@ export function solidCanvas(canvas: HTMLCanvasElement, changed: () => void) {
       clear(C.width, C.height); ctx.lineWidth = 1; ctx.strokeStyle = palette!.edge; ctx.fillStyle = palette!.face; ctx.setLineDash([]);
       last = solids; lastDpr = dpr;
       for (const instance of solids) {
-        const s = instance.source;
+        const s = instance.source, fillFaces = instance.extentPx >= 12;
         if (s.kind !== "box") {
-          const drawing = solidDrawing(s, C, instance.opacity);
-          ctx.beginPath(); for (const f of drawing.faces) path(f.points, true); ctx.globalAlpha = instance.opacity * 0.04; ctx.fill();
+          const drawing = solidDrawing(s, C, instance.opacity, fillFaces);
+          if (fillFaces) { ctx.beginPath(); for (const f of drawing.faces) path(f.points, true); ctx.globalAlpha = instance.opacity * 0.04; ctx.fill(); }
           ctx.beginPath(); for (const line of drawing.lines) path(line.points, false); ctx.globalAlpha = instance.opacity; ctx.stroke(); continue;
         }
         const g = solidGeometry(s), wholeInside = C.projectInto(g.corners, xy, depths);
-        for (let i = 0; i < g.faces.length; i++) {
+        if (fillFaces) for (let i = 0; i < g.faces.length; i++) {
           const f = g.faces[i], n = f.normal;
           front[i] = n[0] * (C.position[0] - f.center[0]) + n[1] * (C.position[1] - f.center[1]) + n[2] * (C.position[2] - f.center[2]) > 0 ? 1 : 0;
         }
-        for (const top of TOPS) {
+        if (fillFaces) for (const top of TOPS) {
           ctx.beginPath(); let any = false;
           for (let i = 0; i < g.faces.length; i++) {
             const f = g.faces[i]; if (!front[i] || f.top !== top) continue; any = true;

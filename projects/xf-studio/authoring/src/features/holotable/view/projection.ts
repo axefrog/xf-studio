@@ -158,7 +158,7 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
   if (!geometry) {
     const nearby = significantVisible(source, target, C);
     const visible = nearby.kept.sort((a, b) => distance2(b.solid.center, C.position) - distance2(a.solid.center, C.position));
-    geometry = { instances: visible.map(({ solid }) => ({ kind: "solid", id: solid.id, source: solid, opacity: fade(solid.center) })), cut: nearby.total - visible.length };
+    geometry = { instances: visible.map(({ solid, extent }) => ({ kind: "solid", id: solid.id, source: solid, opacity: fade(solid.center), extentPx: extent })), cut: nearby.total - visible.length };
     views.set(key, geometry); if (views.size > 2) views.delete(views.keys().next().value!);
   }
   out.push(...geometry.instances);
