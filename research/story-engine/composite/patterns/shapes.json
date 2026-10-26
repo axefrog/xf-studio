@@ -135,7 +135,7 @@
     {
       "id": "xf.composite:feud",
       "type": "pattern",
-      "version": 1,
+      "version": 2,
       "family": "shape",
       "scale": "concern",
       "summary": "A wrong is avenged, the vengeance is answered, and people with ties to both sides are caught between.",
@@ -202,7 +202,6 @@
       },
       "within": {"clock": "game", "days": 60},
       "show": {"junctures": ["answered", "countered"], "edges": 2},
-      "escalation": ["spread"],
       "links": {
         "chains": ["xf.composite:hunted", "xf.composite:reckoning"],
         "layers": ["xf.composite:protection", "xf.composite:squeeze", "xf.composite:rivalry"],
@@ -231,7 +230,7 @@
     {
       "id": "xf.composite:hunted",
       "type": "pattern",
-      "version": 2,
+      "version": 3,
       "family": "shape",
       "scale": "concern",
       "summary": "A group decides someone must pay, warns and puts the word out, and the hunted look for shelter or a way to lift it.",
@@ -260,6 +259,7 @@
         "warned": {
           "fn": "threaten",
           "args": {"by": "?w", "to": "?q"},
+          "fill": {"fixed": [{"kinds": ["warning"]}]},
           "requires": [{"rel": "member", "args": ["?w", "?h"]}],
           "note": "D-30's perceivable warning: word put out, a message, a demand, carried by a member (S1 v0.6 `warning`, `price`). No encounter before it reached the quarry",
           "changes": [
@@ -277,6 +277,7 @@
         "caught": {
           "fn": "threaten",
           "args": {"by": "?m", "to": "?q"},
+          "join": {"all": ["warned", "hunting"], "any": []},
           "optional": true,
           "fill": {"fixed": [{"kinds": ["confront"]}]},
           "requires": [{"rel": "member", "args": ["?m", "?h"]}],
@@ -302,7 +303,7 @@
       "edges": [
         {"from": "grudge", "to": "decided", "link": "motive"},
         {"from": "decided", "to": "warned", "link": "because", "shown": "must"},
-        {"from": "warned", "to": "hunting", "link": "enables"},
+        {"from": "decided", "to": "hunting", "link": "enables"},
         {"from": "warned", "to": "caught", "link": "enables", "shown": "must"},
         {"from": "hunting", "to": "caught", "link": "enables", "shown": "must"},
         {"from": "sheltered", "to": "caught", "link": "but"},

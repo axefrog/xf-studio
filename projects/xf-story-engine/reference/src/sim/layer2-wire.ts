@@ -4,10 +4,12 @@
 import { Layer2, type Layer2Options } from '../seeding/layer2.ts';
 import { L2Registry } from '../seeding/registries.ts';
 import type { Sim } from './sim.ts';
+import { patternWorld } from './pattern-world.ts';
 
 /** Build layer 2 on the kernel of a sim, with its reads attached. */
 export function attachLayer2(sim: Sim, opts: Omit<Layer2Options, 'worldRegistry'>): Layer2 {
   const reg = opts.reg ?? new L2Registry();
   reg.sim = sim.reads.port();
+  reg.patternWorld = patternWorld(sim);
   return new Layer2(sim.k, { ...opts, reg, worldRegistry: sim.reads });
 }

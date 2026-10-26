@@ -77,6 +77,7 @@ export class PackIndex {
     const o = f.offer;
     if (o) {
       for (const a of o.actions) out.push(a.foresight);
+      for (const a of [...o.actions, ...o.decline, o.nullPath]) if (a.say && 'text' in a.say) out.push(a.say.text);
       if (o.nullPath.content) out.push(o.nullPath.content);
       if (o.lapse.content) out.push(o.lapse.content);
       for (const d of o.decline) if (d.response !== undefined) out.push(d.response);

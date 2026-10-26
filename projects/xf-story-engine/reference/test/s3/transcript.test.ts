@@ -42,7 +42,7 @@ test('S3 frozen transcript: independently encoded identities, draw values and pe
     tombstones: persisted.tombstones, pending: persisted.pending, recent: persisted.recent,
   } };
   expect(named).toEqual({ id: expected.record, nodes: [], state: {
-    schema: 1, slots: { open: { next: 2 } }, nextSeq: 1, openLockUntil: 0, consumedOutcomes: [], pool: [], buffer: [],
+    schema: 2, slots: { open: { next: 2 } }, nextSeq: 1, openLockUntil: 0, consumedOutcomes: [], pool: [], buffer: [],
     tombstones: [{ pattern: p.id, key: expected.tombstone, until: 1301 }],
     pending: [{ instance: expected.instance, sownAt: expected.slot.time }],
     recent: [{ pattern: p.id, kit: t.id, at: expected.slot.time }],

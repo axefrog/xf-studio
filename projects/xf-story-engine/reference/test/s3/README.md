@@ -1,6 +1,6 @@
 # S3 core fixture index
 
-S3 v0.4's core runs in `src/procedural/`. The tests use Bun and explicit world seeds. No game is launched.
+S3 v0.6's core runs in `src/procedural/`. The tests use Bun and explicit world seeds. No game is launched.
 The coordinator owns independent pre-merge review; the project README records guarded full-suite validation.
 
 | Fixture   | Executable coverage                                                                                                                       |
@@ -34,6 +34,15 @@ The coordinator owns independent pre-merge review; the project README records gu
 | SF3-36    | `e2e.test.ts`: authored R1 at 215 versus 105 without S3; identical offer Id, cast, draws, decline and closure.                            |
 | SF3-37    | `script.test.ts`: the literal script, actual keyed slots and two distinct sowings; prose conflicts recorded in SPEC-NOTES 182.            |
 | SF3-38    | `e2e.test.ts`: real S1 simulation/mirror publication reversal, with reload; `sifter.test.ts` isolates the buffer.                         |
+
+| SF3-39-45 | `graph.test.ts`: graph debts, multi-function occurrences, relations/fixed identities, bounded causes, inert stories, horizons and relevance. |
+| SF3-46-52 | `graph-sower.test.ts`: realisation overlays, debt/signs, escalation refusal, nudge gates, features, skeletons and authored realising seeds. |
+| SF3-53-55 | `graph.test.ts`: world grievance about V, recognition-only shapes and off-tempo closing expiry; full hunted-path contradictions are in SPEC-NOTES. |
+| SF3-56-57 | `graph.test.ts` and the unchanged stage fixtures: single occurrence admission and exact stage identities/draws. |
+| SF3-58-59 | `graph-persist.test.ts`: old-schema migration, durable-state end copies and a generated three-way sweep/replacement-load property. |
+| SF3-60 | `graph-week.test.ts`: seven game days in Kabuki, squeeze/protection, R2-prime and three answers, each against a midweek reload. |
+| SF3-61-66 | `graph.test.ts`, `graph-persist.test.ts`: pending fills, copied durable evidence, horizon deadlines, alternative joins, V targets and seed-end causal hand-over. |
+| SF3-67-70 | `graph-sower.test.ts`, `graph.test.ts`: signs by modality, whole-plot refusal, fixed identities and all 29 library patterns. |
 
 `e2e.test.ts` also runs Kabuki with the real S1 event process and S2. A simulated assault completes a pattern, whose seed
 is cast, released, presented and resolved through S2. Five fresh-process crash positions are compared with uninterrupted

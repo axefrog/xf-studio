@@ -13,6 +13,10 @@ import { fitTerms, aimHolds, leadAim } from './fit.ts';
 import { Keys, cmp } from './keys.ts';
 import { Sifter } from './sifter.ts';
 import { Sower } from './sower.ts';
+import { GraphLedger } from './graph-ledger.ts';
+import { GraphSower } from './graph-sower.ts';
+import { patternDocument } from './graph-types.ts';
+import type { Pattern, Vocabulary } from '../seeding/pattern-types.ts';
 import { instanceView, kernelView, layer2View, type WorldRegistry } from './views.ts';
 import type {
   Counts,
@@ -34,9 +38,11 @@ export interface Layer3Options {
   registry: WorldRegistry;
   data?: Layer3Data;
   salt?: string;
-  patterns?: SiftPattern[];
+  patterns?: Array<SiftPattern | Pattern>;
+  vocabulary?: Vocabulary;
 }
 export class Layer3 {
+  readonly ledger = new GraphLedger(this);
   readonly k: Kernel;
   readonly keys: Keys;
   readonly data: Layer3Data;
@@ -60,7 +66,7 @@ export class Layer3 {
     readonly opts: Layer3Options,
   ) {
     for (const key of Object.keys(opts))
-      if (!['registry', 'data', 'salt', 'patterns'].includes(key)) throw new Error(`${key} is not supported yet`);
+      if (!['registry', 'data', 'salt', 'patterns', 'vocabulary'].includes(key)) throw new Error(`${key} is not supported yet`);
     this.k = l2.k;
     this.keys = new Keys(this.k.worldSeed, opts.salt);
     this.data = structuredClone(opts.data ?? defaultData());
@@ -73,7 +79,7 @@ export class Layer3 {
     if (this.k.layer3 || l2.hooks.fit || l2.hooks.weigh || l2.hooks.hold || l2.hooks.joint || l2.hooks.onRelease)
       throw new Error('Layer 3 hooks already have an owner');
     // An event-kind-only registry does not replace an attached world's spine authority.
-    if (opts.registry.isSpine) l2.worldRegistry = opts.registry;
+    if (opts.registry.isSpine) l2.worldRegistry = { ...l2.worldRegistry, ...opts.registry };
     this.k.root('director', 'core:seed');
     this.k.frames.demandRoots.add(this.keys.director);
     this.sifter = new Sifter(
@@ -109,6 +115,9 @@ export class Layer3 {
       },
     );
     this.attachHooks();
+    this.sifter.countsAsThread = (e) => this.ledger.aware(e);
+    this.sifter.beforeRetire = () => { this.threadView = this.ledger.refresh(); this.counts = counts(this.threadView); };
+    this.sower.graph = new GraphSower(this.sower, this);
     this.k.layer3 = this;
     this.k.persistence.installPack({ id: 'xf.s3.core@1', version: H(s('s3'), hrec(this.data)), contributions: [] });
     this.k.dispatcher.onRelevance((r) => {
@@ -121,8 +130,8 @@ export class Layer3 {
     });
     this.k.loadHooks.push(() => this.onLoad());
     this.sifter.active = this.k.settings.current().tempo !== 'off';
-    this.registerVocabulary(opts.patterns ?? []);
-    this.findings.push(...this.sifter.install(opts.patterns ?? []));
+    if (opts.vocabulary) l2.reg.vocabulary = structuredClone(opts.vocabulary);
+    this.findings.push(...this.installPatterns(opts.patterns ?? []));
     this.state.consumedOutcomes = this.l2.all().flatMap((inst) => inst.st.closed ? [inst.st.closed.event] : []);
     this.flush();
   }
@@ -157,12 +166,16 @@ export class Layer3 {
       data: structuredClone(data),
     });
   };
-  installPatterns(patterns: SiftPattern[]): Finding[] {
+  installPatterns(input: Array<SiftPattern | Pattern>): Finding[] {
+    const patterns = input.map((p) => 'junctures' in p ? patternDocument(p) : p);
+    for (const p of patterns) if (p.graph) this.l2.reg.patterns.set(p.id, structuredClone(p.graph));
     this.syncTempo();
     this.registerVocabulary(patterns);
     return this.sifter.install(patterns);
   }
   private registerVocabulary(patterns: SiftPattern[]): void {
+    if (patterns.some((p) => p.graph) && !this.k.eventKinds.eventKind('meta:story')) this.k.eventKinds.register({ name: 'meta:story', producers: ['s3'],
+      dataFields: { pattern: { t: 'text' }, instance: { t: 'ref' }, outcome: { t: 'text' }, kind: { t: 'enum', values: ['resolved', 'failed', 'parked'] }, depth: { t: 'int' } } });
     for (const [name, values] of [
       ['core:event-kind', ['meta:story']],
       ['core:participant-role', patterns.flatMap((p) => Object.keys(p.roles ?? {}).map((v) => v.slice(1)))],
@@ -335,6 +348,13 @@ export class Layer3 {
     const lag = Math.max(0, ...[...this.k.evolution.processes.values()].map((p) => p.lag ?? 0));
     if (this.sifter.boundary(boundary * this.k.config.wSim, lag)) this.boundarySeen = boundary;
   }
+  onDilemma(d: import('../frames.ts').Dilemma): void {
+    this.syncTempo();
+    if (!this.sifter.active) return;
+    for (const p of this.sifter.patterns.values()) if (p.graph && Object.values(p.graph.junctures).some((j) => j.fn === 'demand'))
+      this.state.buffer.push({ pattern: p.id, version: p.version, dilemma: structuredClone(d),
+        event: { id: d.id, creator: this.keys.director, cause: d.cause, name: '@dilemma', kind: '@dilemma', time: this.k.now, participants: [], effects: [], causes: [], witnesses: [] } });
+  }
   get pending(): number {
     if (!this.sifter) return 0;
     const lag = Math.max(0, ...[...this.k.evolution.processes.values()].map((p) => p.lag ?? 0));
@@ -356,7 +376,7 @@ export class Layer3 {
     this.director.reconcileHolds(
       new Set(this.l2.all().flatMap((i) => i.st.deliveries.filter((d) => d.state === 'queued').map((d) => d.id))),
     );
-    this.threadView = threads(this.lv.instances(), this.l2.playTotal(), this.data);
+    this.threadView = [...this.sifter.patterns.values()].some((p) => p.graph) ? this.ledger.refresh() : threads(this.lv.instances(), this.l2.playTotal(), this.data);
     this.counts = counts(this.threadView);
     const b = this.data.threads,
       c = this.counts;
@@ -376,8 +396,9 @@ export class Layer3 {
       );
       return false;
     });
-    this.threadView = threads(this.lv.instances(), this.l2.playTotal(), this.data);
+    this.threadView = [...this.sifter.patterns.values()].some((p) => p.graph) ? this.ledger.refresh() : threads(this.lv.instances(), this.l2.playTotal(), this.data);
     this.counts = counts(this.threadView);
+    this.sower.graph?.refresh();
     this.asked = false;
     for (const inst of this.l2.all())
       for (const d of inst.st.deliveries)
@@ -462,14 +483,21 @@ export class Layer3 {
     }
   }
   /** Persist only copied descriptors, with roots for both held matches and buffered emissions. */
+  writeSkeleton(thread: Thread): void { this.writeLog('match', 'skeleton', { thread: thread.id, tokens: thread.tokens }); }
+  logGraphGate(gate: number, entry: string, condition?: string): void { this.writeLog('sow', `gate-${gate}`, { entry, condition }); }
+  logGraphRepair(entry: string, seed: string): void { this.writeLog('match', 'sow-repaired', { entry, seed }, [seed]); }
   flush(): void {
     if (!this.sifter) return;
     const nodes = new Set<string>();
     for (const e of this.state.pool) {
       for (const s of e.stages) nodes.add(s.event);
       if (e.story) nodes.add(e.story);
+      if (e.graph) for (const j of Object.values(e.graph.junctures)) if (j.filler) {
+        if ('event' in j.filler.ref) nodes.add(j.filler.id);
+        else for (const cause of j.filler.causes ?? []) if (this.kv.event(cause)) nodes.add(cause);
+      }
     }
-    for (const b of this.state.buffer) nodes.add(b.event.id);
+    for (const b of this.state.buffer) if (!b.change && !b.dilemma) nodes.add(b.event.id);
     const evidence = new Map(this.state.evidence.map((e) => [e.id, e]));
     // S2 owns the handed-over roots. S3 keeps their entire event closure reconstructible until
     // the last live/closing consumer releases it, even after the pool entry has been reclaimed.
@@ -506,8 +534,11 @@ export class Layer3 {
   }
   private onLoad(): void {
     const saved = this.k.retention.seeds.get(this.keys.record)?.state as Layer3State | undefined;
-    if (saved && saved.schema !== 1) throw new Error('Layer3State schema is not supported yet');
+    if (saved && saved.schema !== 1 && saved.schema !== 2) throw new Error('Layer3State schema is not supported yet');
     this.state = saved ? structuredClone(saved) : emptyState(this.l2.playTotal(), this.data.schedule.slotGap);
+    if (saved?.schema === 1) { this.state.pool = []; this.state.buffer = []; this.state.nudges = []; this.state.skeletons = { seq: 0, ring: [] }; }
+    this.state.schema = 2;
+    this.state.nudges ??= []; this.state.skeletons ??= { seq: 0, ring: [] };
     this.state.buffer ??= [];
     this.state.evidence ??= [];
     this.state.consumedOutcomes ??= [];
@@ -519,6 +550,7 @@ export class Layer3 {
     this.log.length = 0;
     this.sower.rivals.length = 0;
     this.evidenceSeen.clear();
+    this.ledger.reset();
     this.pullSeen.clear();
     this.director = new Director(this.data, this.writeLog);
     this.boundarySeen = this.k.evolution.cursor;
@@ -536,7 +568,7 @@ export class Layer3 {
         this.sifter.drop(e, 'match-lost');
         continue;
       }
-      if (e.complete && !e.seed) {
+      if (!e.graph && e.complete && !e.seed) {
         const sown = this.lv.sownBy(this.keys.decision(this.keys.candidate(e.id, e.stages.length - 1)));
         if (sown.length) {
           e.seed = sown.sort(cmp)[0];
@@ -547,6 +579,7 @@ export class Layer3 {
       }
     }
     this.refresh();
+    this.sower.graph?.repair();
     this.flush();
   }
 }

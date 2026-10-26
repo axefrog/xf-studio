@@ -5,6 +5,7 @@
 // `lintKinds` is the load-time lint of S1 5.1: a pack is refused, with the kind named, when it breaks a rule.
 
 import type { FillDecl } from '../event-kinds.ts';
+import { SEED_KINDS } from '../seeding/kinds.ts';
 import type { Effect } from '../types.ts';
 import type { CityKindDef, ContentClass, S1Data } from './data.ts';
 import { type OutcomeRules, fillsOfEnforcement, fillsOfFixedKind, outcomeRulesOf } from './fills.ts';
@@ -231,6 +232,12 @@ export class KindRegistry {
     for (const n of SOCIAL_KIND_NAMES.filter((x) => x !== 'tell')) this.kinds.set(n, plain(n, 'social', ['s2']));
     // v0.6 (S1 5.3, 8.3): a promise is news: witnesses remember and tell it although it has no effect; severity 0.5, pulse 0.4
     this.kinds.set('promise', plain('promise', 'social', ['s2'], { tags: ['news'], severity: 0.5, pulse: 0.4, roleNames: ['promiser', 'promisee'], agentRoles: ['promiser'] }));
+    for (const e of SEED_KINDS) {
+      const previous = this.kinds.get(e.name);
+      if (!previous) continue; // S2 registers its own additional kinds when attached.
+      this.kinds.set(e.name, { ...previous, tags: e.tags, producers: e.producers, roleNames: e.roles ?? [], fills: e.fills ?? [],
+        agentRoles: e.name === 'offer' ? ['asker'] : e.name === 'response' ? ['protagonist'] : previous.agentRoles });
+    }
   }
 
   /** The roles in which a participant of an event of this kind acts, as the kind declares them (S1 5.1): never a guess from a role's name. */

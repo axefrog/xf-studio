@@ -22,13 +22,15 @@ const pack = offerKitPack();
 const names = (d: import('../../src/sim/data.ts').S1Data): void => { d.people.names = WIDE_NAMES; };
 
 describe('the kits as data', () => {
-  test('every kit compiles lint-clean at ready, and every pattern loads with no finding', () => {
+  test('every legacy kit compiles with only asker advice, and every pattern loads with no finding', () => {
     const w = buildWorld({ name: 'kits-lint', layer3: true, packs: [pack], patterns: offerPatterns(), s1: names });
     expect(w.findings).toEqual([]);
     for (const seed of pack.seeds) {
       expect(seed.maturity).toBe('ready');
       const out = w.l2.compile(OFFER_PACK, seed);
-      expect(out.findings, seed.id).toEqual([]);
+      expect(out.ok, seed.id).toBe(true);
+      expect(out.findings.length, seed.id).toBeGreaterThan(0);
+      expect(out.findings.every((f) => f.code === 'L-141' && f.level === 'warning'), seed.id).toBe(true);
     }
   });
 

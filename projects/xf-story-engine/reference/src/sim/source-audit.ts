@@ -149,7 +149,10 @@ export function lintLayerWrites(files: SourceFile[]): Finding[] {
         const at = (): string => `${f.path}:${file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1}`;
         if (ts.isIdentifier(node) && (node.text === 'punish' || node.text === 'lastPunish')) out.push({ audit: 'd30-grounds', where: at(), detail: `${node.text}: the state of a group's intention against V is S1's alone` });
         const lit = literal(node);
-        if (lit !== undefined && (lit === 'decide.punish' || lit === 'relent.punish' || lit === 'retribution-v')) out.push({ audit: 'd30-grounds', where: at(), detail: `${lit}: S1's alone` });
+        const comparison = !!node.parent && ts.isBinaryExpression(node.parent) && [ts.SyntaxKind.EqualsEqualsEqualsToken,
+          ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken]
+          .includes(node.parent.operatorToken.kind);
+        if (!comparison && lit !== undefined && (lit === 'decide.punish' || lit === 'relent.punish' || lit === 'retribution-v')) out.push({ audit: 'd30-grounds', where: at(), detail: `${lit}: S1's alone` });
         node.forEachChild(visit);
       };
       visit(file);

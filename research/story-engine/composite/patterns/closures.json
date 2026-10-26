@@ -135,13 +135,13 @@
     {
       "id": "xf.composite:settlement",
       "type": "pattern",
-      "version": 1,
+      "version": 2,
       "family": "closure",
       "scale": "goal",
       "summary": "A dispute is settled on terms: redress is made, the tie is partly mended, and the terms bind.",
       "roles": {
         "?a": {"kind": "actor", "note": "who was wronged, or is owed"},
-        "?b": {"kind": "actor", "note": "who makes redress"},
+        "?b": {"kind": "actor", "v": "may", "note": "who makes redress"},
         "?j": {"kind": "event", "note": "what the dispute is about"}
       },
       "junctures": {
@@ -149,19 +149,24 @@
         "terms": {
           "fn": "repay",
           "args": {"debtor": "?b", "creditor": "?a"},
+          "v": "offer",
           "realise": [{"wait": true}, {"offer": {}}],
           "changes": [{"tie": {"a": "?a", "b": "?b"}, "move": "up"}, {"belief": {"who": "?a", "about": "?b"}, "move": "revised"}]
         },
+        "declined": {"fn": "refuse", "args": {"who": "?b", "to": "?a"}, "optional": true, "realise": [{"wait": true}]},
         "renewed": {"fn": "bind", "args": {"a": "?a", "b": "?b"}, "optional": true},
         "newDuty": {"fn": "obligate", "args": {"debtor": "?b", "creditor": "?a"}, "optional": true}
       },
       "edges": [
         {"from": "dispute", "to": "terms", "link": "motive", "shown": "must"},
+        {"from": "dispute", "to": "declined", "link": "answers"},
         {"from": "terms", "to": "renewed", "link": "because"},
         {"from": "terms", "to": "newDuty", "link": "because"}
       ],
       "entry": ["dispute"],
       "outcomes": {
+        "refused": {"reached": ["declined"], "kind": "failed", "next": ["xf.composite:grievance"]},
+        "unanswered": {"reached": ["dispute"], "after": {"clock": "game", "days": 21}, "kind": "parked", "next": ["xf.composite:loose-end"]},
         "settled": {
           "reached": ["terms"],
           "kind": "resolved",
@@ -232,13 +237,13 @@
     {
       "id": "xf.composite:settled-without-you",
       "type": "pattern",
-      "version": 1,
+      "version": 2,
       "family": "closure",
       "scale": "goal",
-      "summary": "The protagonist said no, or never answered, and the world settled the matter on its own.",
+      "summary": "Someone was asked for help, the one asked said no or never answered, and the world settled the matter on its own.",
       "roles": {
         "?cl": {"kind": "actor", "note": "who asked"},
-        "?p": {"kind": "person", "identity": {"fixed": "v"}, "v": "may", "note": "the protagonist"},
+        "?p": {"kind": "person", "v": "may", "note": "the one asked; may be the protagonist"},
         "?o": {"kind": "actor", "note": "whoever helped instead"}
       },
       "junctures": {
@@ -294,11 +299,11 @@
       "risks": [
         {
           "failure": "fail:punished-decline",
-          "note": "The consequence of a decline is the stake resolving without the protagonist, by the client's own frame (AGY-26). It never reproaches, and it closes no door unrelated to the offer (AGY-28)."
+          "note": "The consequence of a decline is the stake resolving without the one asked, by the client's own frame (AGY-26). It never reproaches, and it closes no door unrelated to the offer (AGY-28)."
         },
         {
           "failure": "fail:invisible-cascade",
-          "note": "Only a perceived offer can be declined (AGY-16), and news that never reached the protagonist closes nothing."
+          "note": "Only a perceived offer can be declined (AGY-16), and news that never reached the one asked closes nothing."
         }
       ]
     },

@@ -214,7 +214,7 @@ describe('SF-46: R1 in text form', () => {
     const { w } = r1World('SF-46a');
     const res = w.l2.compile(R1_PACK, r1Seed());
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.findings).toEqual([]);
+    if (res.ok) expect(res.findings.map((f) => [f.code, f.level])).toEqual(Array.from({ length: 3 }, () => ['L-141', 'warning']));
     expect(w.l2.fit(R1_PACK, R1_ID).verdict).toBe('waits');
     openWindow(w);
     const fit = w.l2.fit(R1_PACK, R1_ID);

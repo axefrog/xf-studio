@@ -20,6 +20,7 @@ export interface EventClause {
   where?: Predicate[];
 }
 export interface SiftPattern {
+  graph?: import('../seeding/pattern-types.ts').Pattern;
   id: string;
   version: number;
   roles: Record<string, { kind: string; where?: Predicate[] }>;
@@ -31,13 +32,16 @@ export interface SiftPattern {
   telling: { form: Form; kit?: string; binds: Record<string, string> };
 }
 export interface Sowable {
-  serves: Form[];
+  serves: Array<Form | 'nudge'>;
+  fills?: Array<{ fn: string; args: Record<string, string>; cause?: string }>;
+  tells?: string; explains?: string;
   firstClass: 0 | 1 | 2 | 3 | 4;
   weight?: number;
   climactic?: boolean;
   tags?: string[];
 }
 export interface PoolEntry {
+  graph?: import('./graph-types.ts').GraphState;
   id: Id;
   bindingKey: Id;
   seq: number;
@@ -54,7 +58,7 @@ export interface PoolEntry {
   cooldownUntil: number;
 }
 export interface Layer3State {
-  schema: 1;
+  schema: 1 | 2;
   slots: { open: { next: number } };
   nextSeq: number;
   openLockUntil: number;
@@ -63,9 +67,11 @@ export interface Layer3State {
   pool: PoolEntry[];
   tombstones: Array<{ pattern: string; key: Id; until: GameTime }>;
   pending: Array<{ instance: Id; sownAt: number }>;
+  nudges: Array<{ instance: Id; sownAt: number }>;
+  skeletons: { seq: number; ring: Array<{ thread: Id; tokens: Id[]; play: number; seq: number }> };
   recent: Array<{ pattern: string; kit: string; place?: Id; at: number }>;
   // v0.3 specifies the buffer but omits its physical fields from §9.2 (SPEC-NOTES 175).
-  buffer: Array<{ pattern: string; version: number; event: EventView }>;
+  buffer: Array<{ pattern: string; version: number; event: EventView; change?: import('../types.ts').Change; dilemma?: import('../frames.ts').Dilemma }>;
   // Retention keeps addresses, not simulation contributions. Restore these silently after replay.
   evidence: EventView[];
 }
@@ -76,7 +82,7 @@ export interface InstanceView {
   source: { by: 'pack' | 'director' | 'plugin'; layer: string; decision?: Id };
   sowSeq: number;
   state: string;
-  growsFrom?: { parent?: Id; looseEnd?: { seed: Id } };
+  growsFrom?: { parent?: Id; looseEnd?: { seed: Id }; instance?: Id; juncture?: string };
   roles: Record<string, { cast?: Id; committed: boolean; anchor: boolean }>;
   beats: Array<{ key: string; kind?: string; state: string }>;
   displays: Array<{ delivery: Id; grade: ExposureGrade; playTotal: number }>;
@@ -172,6 +178,9 @@ export interface Layer3Data {
     maxWithin: number;
     candidateTtl: number;
     tombstoneSpans: number;
+    maxJunctures: number; maxEdges: number; maxFills: number; stateCandidates: number;
+    causeHops: number; causeWalkMax: number; lineageDepth: number; aftermathDays: number;
+    maxLiveShapes: number; maxLayers: number; maxSurface: number; relevanceGate: boolean;
   };
   sower: {
     lambda: number;
@@ -183,7 +192,9 @@ export interface Layer3Data {
     maxKitTries: number;
     cooldown: number;
     maxRefusals: number;
-    featureWeights: Record<Feature, number>;
+    kitJunctures: number; skeleton: number; skeletonCap: number; skeletonRing: number; skeletonTokens: number;
+    nudgeAfter: number; maxNudges: number; nudgeLifetime: number; portentLead: number;
+    featureWeights: Record<'F3' | 'F5' | 'F6' | 'F11', number> & Partial<Record<Feature, number>>;
     timelyH: number;
     irreversible: Effect[];
     harmful: Effect[];
@@ -191,16 +202,22 @@ export interface Layer3Data {
   };
   fit: { aesthetic: number; variety: number; yield: number; varietyOffers: number };
 }
-export type Feature = 'F3' | 'F5' | 'F6' | 'F11';
+export type Feature = 'F3' | 'F5' | 'F6' | 'F11' | 'F13' | 'F14' | 'F15' | 'F16';
 export interface Candidate {
   key: Id;
   entry: Id;
   pattern: string;
   stage: number;
-  features: Record<Feature, number>;
+  kind?: 'told' | 'surface' | 'explain' | 'realise';
+  juncture?: string; edge?: number; realisation?: 'offer' | 'nudge'; form?: Form | 'nudge';
+  thread?: Id; opens?: boolean; skeletonMatches?: number;
+  features: Record<'F3' | 'F5' | 'F6' | 'F11', number> & Partial<Record<Feature, number>>;
   place?: Id;
 }
 export interface Thread {
+  patterns?: Id[];
+  pullAt?: number;
+  tokens?: string[];
   id: Id;
   instances: Id[];
   aware: boolean;

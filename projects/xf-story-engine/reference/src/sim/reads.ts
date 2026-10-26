@@ -11,7 +11,7 @@ import type { EventsDigest } from './proc-events.ts';
 import { BAND_NAMES, PRICE_NAMES } from './proc-events.ts';
 import type { GroupDigest } from './proc-groups.ts';
 import type { GoalsDigest } from './proc-goals.ts';
-import { guardOf } from './outcomes.ts';
+import { guardOf, groupOf } from './outcomes.ts';
 import type { LedgerDigest } from './ledger.ts';
 import type { NormsDigest } from './proc-norms.ts';
 import type { SimReadPort } from '../seeding/registries.ts';
@@ -401,6 +401,14 @@ export class Reads {
   }
 
   // ---- registries for S3 (S1 9.2) ----
+
+  agentRoles(kind: string): string[] { return this.sim.w.kinds.agentRolesOf(kind).slice(); }
+  areTied(a: Id, b: Id, at: GameTime): boolean { return this.tiedAt(a, b, 'xf:tie', at) === 'yes'; }
+  intends(actor: Id, kind: string, at: GameTime): boolean {
+    const group = groupOf(this.sim, actor, at);
+    const active = group ? this.dg<GroupDigest>('group.decide')?.groups[group]?.active : undefined;
+    return !!active && (this.sim.data.groups.intents.find((i) => i.id === active.name)?.boost[kind] ?? 0) > 0;
+  }
 
   producers(kind: string): string[] {
     return this.sim.w.kinds.producers(kind);

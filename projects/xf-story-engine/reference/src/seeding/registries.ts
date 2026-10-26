@@ -18,6 +18,7 @@ export interface ContentClassDef {
 }
 
 export interface ChannelDef {
+  modality?: string;
   id: ChannelId;
   /** 0 ambient, 1 map pin or journal line, 2 message, 3 call, 4 approach (S2 section 8.1). */
   class: 0 | 1 | 2 | 3 | 4;
@@ -88,6 +89,14 @@ export interface SimReadPort {
 }
 
 export class L2Registry {
+  /** S4's act labels; pack prose cannot introduce emotions as act labels. */
+  readonly actLabels = new Set(['leave', 'pay', 'accept', 'decline', 'help', 'bargain', 'refuse', 'oppose', 'ignore', 'ask', 'continue', 'wait']);
+  /** The game port resolves transcripts/cuts; game dialogue is never embedded in packs. */
+  gameLine?: (ref: string, cut?: { from: number; to: number }) => string | undefined;
+  /** Pattern pack data for compilation and derived reads, never live pattern instances. */
+  readonly patterns = new Map<string, import('./pattern-types.ts').Pattern>();
+  vocabulary?: import('./pattern-types.ts').Vocabulary;
+  patternWorld?: import('./pattern-types.ts').PatternWorldPort;
   /** S4 may replace this deterministic structural classifier. Missing facets stay absent. */
   skeleton(seed: import('./types.ts').CompiledSeed | import('./types.ts').Seed, fragment: import('./types.ts').Fragment | undefined, channel: string): Record<string,string> {
     const out: Record<string,string> = {...fragment?.features,channel};

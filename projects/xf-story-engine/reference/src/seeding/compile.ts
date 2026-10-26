@@ -48,7 +48,8 @@ export function laterFindings(input: SeedInput, pack: PackIndex): Finding[] {
   if (input.projections !== undefined) out.push(later('Projections', 'projections', 'Use world requirements.'));
   if (input.forms !== undefined) out.push(later('Short and full forms', 'forms', 'Write alternative beats with conditions.'));
   if (input.parent !== undefined) out.push(later('A parent seed (scale ancestry)', 'parent'));
-  if (input.growsFrom !== undefined) out.push(later('Growing from another seed (scale ancestry)', 'growsFrom'));
+  if (input.growsFrom !== undefined && !(typeof input.growsFrom === 'object' && input.growsFrom !== null && 'instance' in input.growsFrom && 'juncture' in input.growsFrom))
+    out.push(later('Growing from another seed (scale ancestry)', 'growsFrom'));
   if (input.intent?.argues !== undefined) out.push(later('Premises ("argues")', 'intent.argues'));
   for (const [i, m] of (input.migrate ?? []).entries()) {
     if (m.policy === 'migrate') out.push(later('Migrating a live seed by a beat map', `migrate[${i}]`, 'Use "continue" or "withdraw".'));

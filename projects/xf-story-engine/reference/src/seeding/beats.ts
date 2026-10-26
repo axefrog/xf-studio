@@ -5,6 +5,8 @@ import type { GameTime, Id } from '../types.ts';
 import { ceilingOf } from '../settings.ts';
 import { atoms, playOf } from './doc.ts';
 import { applyEffects } from './effects.ts';
+import { nudgeLegal } from './nudge.ts';
+import { encounterAllowed } from './encounter.ts';
 import { evalPred, gameTick } from './eval.ts';
 import * as ids from './ids.ts';
 import type { Instance, Layer2 } from './layer2.ts';
@@ -251,12 +253,17 @@ export function skipBeat(l2: Layer2, inst: Instance, key: string, kind: 'omitted
 
 /** A beat completes: its `leaves` are written, and what it opens is opened (S2 section 7.3). */
 export function completeBeat(l2: Layer2, inst: Instance, key: string): void {
+  if (!encounterAllowed(l2, inst)) return;
   const rt = inst.st.beats[key]!;
   if (rt.state === 'done') return;
-  setBeat(l2, inst, key, 'done');
   const b = inst.st.document.beats[key]!;
   const frag = rt.fragment ? fragmentOf(inst, rt.fragment) : undefined;
-  applyEffects(l2, inst, [...(frag?.leaves ?? []), ...(b.leaves ?? [])], { origin: 'beat', tag: `${key}:${rt.releases}` });
+  if (!nudgeLegal(l2, inst, [...(frag?.leaves ?? []), ...(b.leaves ?? [])])) {
+    rt.state = 'available'; return;
+  }
+  setBeat(l2, inst, key, 'done');
+  applyEffects(l2, inst, frag?.leaves, { origin: 'fragment', tag: `${key}:${rt.releases}:fragment`, path: `beat/${key}/fragment` });
+  applyEffects(l2, inst, b.leaves, { origin: 'beat', tag: `${key}:${rt.releases}`, path: `beat/${key}/leaves` });
   for (const p of inst.st.document.promises ?? []) {
     if (p.opens === key && inst.st.promises[p.id] === 'unopened') inst.st.promises[p.id] = 'open';
   }
@@ -316,6 +323,9 @@ export function updateBeats(l2: Layer2, inst: Instance): boolean {
           deliverBeat(l2, inst, key);
           changed = true;
         }
+      } else if (rt.state === 'available' && doc.nudge) {
+        deliverBeat(l2, inst, key);
+        if (rt.state !== 'available') changed = true;
       } else if (rt.state === 'running') {
         if (runBeat(l2, inst, key)) changed = true;
       }

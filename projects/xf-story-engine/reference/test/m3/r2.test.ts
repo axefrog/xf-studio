@@ -21,10 +21,10 @@ const run = (policy: string, name = 'r2', windows = 40, seedOver = {}) => {
 const exitOf = (r: Run, inst: ReturnType<typeof run>['inst']): number => readSeedFact(r.w.l2, inst, 'exit');
 
 describe('R2 compiles, casts and plays', () => {
-  test('lint-clean at ready: no errors and no warnings, and nothing later than the core', () => {
+  test('the legacy R2 compiles with only v1.11 asker advice and nothing later than the core', () => {
     const w = buildWorld({ name: 'r2-lint', layer3: false, packs: [r2Pack()] });
     const out = w.l2.compile(R2_PACK, r2Pack().seeds[0]!);
-    expect(out.findings).toEqual([]);
+    expect(out.findings.map((f) => [f.code, f.level])).toEqual([['L-141', 'warning']]);
     expect(w.findings).toEqual([]);
     expect(r2Seed().maturity).toBe('ready');
   });

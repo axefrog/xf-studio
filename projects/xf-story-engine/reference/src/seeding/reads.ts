@@ -10,6 +10,12 @@ export type ReadFamily = 'city' | 'social';
 
 /** The reads S2 names, by family, with the names of their arguments in order (S2 2.16, 2.17). */
 export const READ_SHAPES: Record<string, { family: ReadFamily; args: readonly string[] }> = {
+  depth: { family: 'city', args: ['node'] },
+  intentAgainst: { family: 'social', args: ['group', 'subject'] },
+  wants: { family: 'social', args: ['person', 'kind'] },
+  guarded: { family: 'social', args: ['person'] },
+  leads: { family: 'social', args: ['who', 'group'] },
+  holds: { family: 'social', args: ['who', 'item'] },
   band: { family: 'city', args: ['cell'] },
   heatRank: { family: 'city', args: ['district'] },
   tension: { family: 'city', args: ['a', 'b'] },

@@ -5,3 +5,6 @@ export { fitTerms, leadAim, aimHolds } from './fit.ts';
 export { Director, threads, counts } from './director.ts';
 export { patternFindings, sowableFindings } from './lint.ts';
 export type * from './types.ts';
+export { readVocabulary, readPatternFamilies } from './library.ts';
+export type * from '../seeding/pattern-types.ts';
+export { lintPattern, abstractionIndex, actingArgument } from '../seeding/pattern-lint.ts';

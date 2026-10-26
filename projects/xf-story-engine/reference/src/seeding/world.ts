@@ -8,6 +8,8 @@ import { contains } from '../region.ts';
 import type { Contribution, Form, Id, Layer, Query, QueryScope, Selector, Value } from '../types.ts';
 import { valuesEqual } from '../value.ts';
 import { bound } from './doc.ts';
+import { encounterAllowed } from './encounter.ts';
+import { nudgeLegal } from './nudge.ts';
 import type { Instance, Layer2 } from './layer2.ts';
 import type { WorldRequirement } from './types.ts';
 
@@ -64,6 +66,7 @@ function contributionSpec(l2: Layer2, inst: Instance, index: number, w: WorldReq
  * watch, or undefined when it names a role that is not cast, or is open.
  */
 export function installRequirement(l2: Layer2, inst: Instance, index: number, batch?: StagedBatch, fromTime?: number, silent = false, staged: Record<string, Id> = {}): Installed | undefined {
+  if (!silent && (!encounterAllowed(l2, inst) || !nudgeLegal(l2, inst))) return undefined;
   const w = inst.st.document.world![index]!;
   const nodes = requirementNodes(l2, inst, w, staged);
   if (!nodes || (nodes.nodes.length === 0 && !('selector' in w.target))) return undefined;

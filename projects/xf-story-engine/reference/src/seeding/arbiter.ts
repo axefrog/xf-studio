@@ -8,6 +8,9 @@ import type { Contribution, Form, GameTime, Id, Region } from '../types.ts';
 import { ceilingOf } from '../settings.ts';
 import { bound, playOf } from './doc.ts';
 import { applyEffects } from './effects.ts';
+import { nudgeLegal } from './nudge.ts';
+import { encounterAllowed } from './encounter.ts';
+import { freezeOptions } from './option-lines.ts';
 import { evalPred, gameTick, matchPattern, roleVerdict } from './eval.ts';
 import { claimWins, claimsConflict, effective, verdictOnNode } from './cast.ts';
 import * as ids from './ids.ts';
@@ -100,6 +103,7 @@ export function pickChannel(l2: Layer2, d: Delivery, frag: Fragment | undefined)
 }
 
 export interface SubmitOpts {
+  internal?: boolean;
   what?: string;
   suffix?: string;
   gated?: { class: string; intensity: number; ceiling: number; became: string };
@@ -146,6 +150,7 @@ export function submitDelivery(l2: Layer2, inst: Instance, beat: string | undefi
   const bd = beat ? st.document.beats[beat] : undefined;
   if (bd?.kind === 'aftermath') d.timing.purpose = 'escalate';
   if (opts.what === 'warning') d.timing.importance = 'high';
+  if (opts.internal) return d;
   // One delivery object per id: a request that expired unreleased keeps its id (no release happened), so its retry
   // takes its place; the record keeps the history (S2 section 6.2).
   const stale = st.deliveries.findIndex((x) => x.id === id);
@@ -596,6 +601,8 @@ function prepareAndRelease(l2: Layer2, inst: Instance, d: Delivery, channel: Cha
   d.timing = { ...d.timing, class: cls as TimingRequest['class'] };
   if (d.timing.kind === 'message' && cls !== 2) d.timing.kind = PLAIN_KIND[cls]!;
   d.words = l2.renderWords(inst, d);
+  const releasedOffer = d.fragment ? fragmentOf(inst, d.fragment)?.offer : undefined;
+  if (releasedOffer) freezeOptions(l2, inst, d, releasedOffer);
   const rt = d.beat ? st.beats[d.beat] : undefined;
   if (rt && (d.what === 'offer' || d.what === 'beat')) {
     if (rt.state === 'available') { rt.state = 'running'; rt.since = k.now; }
@@ -628,22 +635,26 @@ export function startDirect(l2: Layer2, inst: Instance, beat: string): void {
   const st = inst.st;
   const rt = st.beats[beat]!;
   const frag = rt.fragment ? fragmentOf(inst, rt.fragment) : undefined;
-  const d = submitDelivery(l2, inst, beat, frag, { what: 'beat' });
+  const silent = st.document.nudge === true;
+  const d = submitDelivery(l2, inst, beat, frag, { what: 'beat', internal: silent });
   d.state = 'queued';
   const r = prepare(l2, inst, d);
   if (!r.ok) {
     d.state = 'withdrawn';
     return;
   }
+  const writes = [...(frag?.leaves ?? []), ...(st.document.beats[beat].leaves ?? [])];
+  const legal = r.prepared.batch ? r.prepared.batch.write(() => nudgeLegal(l2, inst, writes)) : nudgeLegal(l2, inst, writes);
+  if (!legal) { r.prepared.batch?.discard(); return; }
   if (r.prepared.batch) r.prepared.batch.commit();
   for (const f of r.prepared.commits) f(inst);
   d.state = 'answered';
-  l2.arbiter.log.push({ at: l2.arbiter.play, delivery: d.id, seed: inst.id, class: 0, channel: '', score: 0, delta: 0 });
+  if (!silent) l2.arbiter.log.push({ at: l2.arbiter.play, delivery: d.id, seed: inst.id, class: 0, channel: '', score: 0, delta: 0 });
   rt.state = 'running';
   rt.since = l2.k.now;
   rt.releases++;
-  l2.record(inst, 'release', { delivery: d.id, direct: true });
-  if (st.state === 'cast') transition(l2, inst, 'running', 'T8', 'the first beat started without a channel');
+  if (!silent) l2.record(inst, 'release', { delivery: d.id, direct: true });
+  if (st.state === 'cast') transition(l2, inst, 'running', silent ? 'T8n' : 'T8', 'the first beat started without a channel');
   // A beat without an objective is done when its content is (S2 section 7.3); one with an objective keeps running
   // until the objective, a failure or a lapse ends it, through the normal running pass.
   if (!st.document.beats[beat]!.objective) l2.completeNow(inst, beat);
@@ -653,6 +664,7 @@ export function startDirect(l2: Layer2, inst: Instance, beat: string): void {
 type PrepareResult = { ok: true; prepared: Prepared } | { ok: false; reason: string; hard: boolean };
 
 function prepare(l2: Layer2, inst: Instance, d: Delivery): PrepareResult {
+  if (!encounterAllowed(l2, inst)) return { ok: false, reason: 'encounter authorisation no longer holds', hard: true };
   const st = inst.st;
   const k = l2.k;
   const t = k.now;
@@ -764,6 +776,26 @@ export function findDelivery(l2: Layer2, id: Id): { inst: Instance; d: Delivery 
 /** A display report from the game port (S2 section 8.5). */
 export function displayReport(l2: Layer2, r: DisplayReport): void {
   const hit = findDelivery(l2, r.delivery);
+  if (hit) authorisedStep(l2, hit.inst, undefined, () => displayAuthorised(l2, r));
+}
+
+export function authorisedStep<T>(l2: Layer2, inst: Instance, refused: T, apply: () => T): T {
+  if (!encounterAllowed(l2, inst)) return refused;
+  if (l2.k.batch) return apply();
+  const before = structuredClone(inst.st), global = structuredClone(l2.global), queue = structuredClone(l2.queue);
+  const batch = l2.k.stage();
+  try {
+    const result = batch.write(apply);
+    batch.write(() => l2.flush()); batch.commit(); return result;
+  } catch (error) {
+    if (batch.state === 'open') batch.discard();
+    inst.st = before; l2.global = global; l2.queue.clear(); for (const [id, triggers] of queue) l2.queue.set(id, triggers);
+    throw error;
+  }
+}
+
+function displayAuthorised(l2: Layer2, r: DisplayReport): void {
+  const hit = findDelivery(l2, r.delivery);
   if (!hit) return;
   const { inst, d } = hit;
   if (d.state === 'queued' || d.state === 'withdrawn' || d.state === 'answered') return;
@@ -815,6 +847,7 @@ function upsertReceipt(l2: Layer2, inst: Instance, d: Delivery, r: DisplayReport
   const st = inst.st;
   const cur = st.receipts.find((x) => x.delivery === d.id);
   const rec: Receipt = cur ?? { delivery: d.id, seed: inst.id, template: st.template.id, grade: r.grade, channels: [], cites: [], cue: {}, at: l2.k.now, playTotal: l2.playTotal() };
+  rec.presentedAt ??= l2.k.now;
   if (d.beat) rec.beat = d.beat;
   rec.what = d.what;
   if (d.fragment) rec.fragment = d.fragment;
@@ -825,6 +858,13 @@ function upsertReceipt(l2: Layer2, inst: Instance, d: Delivery, r: DisplayReport
     rec.playTotal = l2.playTotal();
   }
   if (!rec.channels.includes(r.channel)) rec.channels = [...rec.channels, r.channel].sort();
+  rec.cites = [...new Set([...rec.cites, ...Object.values(d.bindings).filter((n) =>
+    l2.k.schema.isKind(l2.k.persistence.restoreReferencedHeader(n)?.kind ?? '', 'core:event'))])].sort();
+  for (const event of rec.cites) {
+    const kind = l2.k.value(event, 'kind');
+    if ((kind !== 'warning' && kind !== 'price') || l2.k.observedAt(event, l2.k.now) !== undefined) continue;
+    l2.k.pin({ node: event, slot: 'kind', value: kind, reason: 'observed', cause: d.id, at: l2.k.now });
+  }
   if (r.cue) rec.cue = { ...rec.cue, ...Object.fromEntries(Object.entries(r.cue).filter(([, v]) => v !== undefined)) };
   if (!cur) st.receipts.push(rec);
 }
@@ -836,15 +876,17 @@ function offerDisplayed(l2: Layer2, inst: Instance, d: Delivery, r: DisplayRepor
   const rt = st.beats[beat]!;
   rt.offers++;
   l2.global.offerCount++;
+  const frag = d.fragment ? fragmentOf(inst, d.fragment) : undefined;
+  const asker = frag?.offer?.asker ? d.bindings[frag.offer.asker] ?? st.roles[frag.offer.asker]?.cast : undefined;
   // The offer event: minted only once the offer is displayed, with V as witness (S2 section 8.5).
   const ev = k.events.mintEvent({
     creator: inst.id, cause: inst.id, name: `offer:${beat}:${d.n}`, time: k.now, kind: 'offer',
-    participants: [{ who: k.vId, role: 'participant' }, ...(d.bindings[Object.keys(d.bindings)[0] ?? ''] ? [{ who: d.bindings[Object.keys(d.bindings).sort()[0]!]!, role: 'actor' }] : [])],
+    participants: [...(asker ? [{ who: asker, role: 'asker' }] : []), { who: k.vId, role: 'protagonist' }],
+    causes: Object.values(d.bindings).filter((n) => k.schema.isKind(k.persistence.restoreReferencedHeader(n)?.kind ?? '', 'core:event')),
     witnesses: [k.vId],
   });
   k.events.makeCanon(ev, 'observed', inst.id);
   d.offerEvent = ev;
-  const frag = d.fragment ? fragmentOf(inst, d.fragment) : undefined;
   if (frag?.offer) {
     if (frag.offer.lapse.after.clock === 'game') d.lapseGameAt = k.now + frag.offer.lapse.after.s;
     else d.lapseAt = l2.arbiter.play + frag.offer.lapse.after.s;
@@ -857,6 +899,11 @@ function offerDisplayed(l2: Layer2, inst: Instance, d: Delivery, r: DisplayRepor
 export type Response = { kind: 'action'; id: string } | { kind: 'decline'; id: string } | { kind: 'null' } | { kind: 'retract' };
 
 export function respondTo(l2: Layer2, id: Id, resp: Response): boolean {
+  const hit = findDelivery(l2, id);
+  return hit ? authorisedStep(l2, hit.inst, false, () => respondAuthorised(l2, id, resp)) : false;
+}
+
+function respondAuthorised(l2: Layer2, id: Id, resp: Response): boolean {
   const hit = findDelivery(l2, id);
   if (!hit) return false;
   const { inst, d } = hit;
@@ -897,25 +944,42 @@ export function respondTo(l2: Layer2, id: Id, resp: Response): boolean {
   if (resp.kind === 'action' && !action) return false;
   if (resp.kind === 'decline' && !decline) return false;
   const kindStr = resp.kind === 'null' ? 'null' : `${resp.kind}:${resp.id}`;
+  const chosen = d.options?.find((o) => o.key === kindStr);
+  if (chosen?.line && chosen.words !== undefined)
+    d.chosenLine = { words: chosen.words, voiced: chosen.voiced, line: structuredClone(chosen.line) };
   d.state = 'answered';
   rt.response = kindStr;
   rt.responseDelivery = d.id;
+  const asker = o.asker ? d.bindings[o.asker] ?? st.roles[o.asker]?.cast : undefined;
+  const cited = st.receipts.find((r) => r.delivery === d.id)?.cites ?? [];
   // The response event, with V as witness (S2 section 3.2).
   const ev = k.events.mintEvent({
     creator: inst.id, cause: inst.id, name: `response:${beat}:${d.n}`, time: k.now, kind: 'response',
-    participants: [{ who: k.vId, role: 'actor' }], witnesses: [k.vId], causes: d.offerEvent ? [d.offerEvent] : [],
+    participants: [{ who: k.vId, role: 'protagonist' }, ...(asker ? [{ who: asker, role: 'asker' }] : [])],
+    witnesses: [k.vId], causes: [...new Set([...(d.offerEvent ? [d.offerEvent] : []), ...cited])],
   });
   k.events.makeCanon(ev, 'observed', inst.id);
   const answering = answerTemplates(l2, inst, d, kindStr);
   if (answering.length > 0) d.responses = [...new Set([...(d.responses ?? []), ...answering])];
-  l2.record(inst, 'response', { event: ev, kind: kindStr, offer: d.offerEvent, sincePlay: l2.arbiter.play - (d.displayedAt ?? l2.arbiter.play), beat, ...(answering.length > 0 ? { templates: answering } : {}) });
+  l2.record(inst, 'response', { event: ev, kind: kindStr, ...(action ? { stance: action.stance } : {}), offer: d.offerEvent, sincePlay: l2.arbiter.play - (d.displayedAt ?? l2.arbiter.play), beat, ...(answering.length > 0 ? { templates: answering } : {}) });
 
   if (action) {
-    applyEffects(l2, inst, action.writes, { origin: 'action', tag: `${beat}:${d.n}:a` });
+    if (asker && ['help', 'bargain'].includes(action.stance)) {
+      const place = k.value(asker, 'where');
+      const promise = k.events.mintEvent({
+        creator: inst.id, cause: ev, name: `promise/${beat}/${d.n}`, time: k.now, kind: 'promise',
+        participants: [{ who: k.vId, role: 'promiser' }, { who: asker, role: 'promisee' },
+          ...(o.plan ?? []).flatMap((r) => { const n = d.bindings[r] ?? st.roles[r]?.cast; return n ? [{ who: n, role: 'subject' }] : []; })],
+        causes: [ev], ...(typeof place === 'string' ? { place } : {}),
+      });
+      k.events.makeCanon(promise, 'committed', ev);
+      l2.record(inst, 'minted', { event: promise, path: `promise/${beat}/${d.n}`, by: 'action', beat });
+    }
+    applyEffects(l2, inst, action.writes, { origin: 'action', tag: `${beat}:${d.n}:a`, path: `offer/${beat}/${d.n}/action/${action.id}/writes` });
     setBeat(l2, inst, beat, 'done');
     if (first) transition(l2, inst, 'running', 'T9', `V accepted "${action.id}"`);
   } else if (decline) {
-    applyEffects(l2, inst, decline.writes, { origin: 'decline', tag: `${beat}:${d.n}:d` });
+    applyEffects(l2, inst, decline.writes, { origin: 'decline', tag: `${beat}:${d.n}:d`, path: `offer/${beat}/${d.n}/decline/${decline.id}/writes` });
     // Its response content is delivered, unless a beat of the seed plays that same content (S2 section 7.4).
     if (decline.response !== undefined) {
       const playedByBeat = Object.values(st.document.beats).some((b) => playOf(b).refs.includes(typeof decline.response === 'string' ? decline.response : ''));
@@ -924,7 +988,7 @@ export function respondTo(l2: Layer2, id: Id, resp: Response): boolean {
     setBeat(l2, inst, beat, 'done');
     if (first) transition(l2, inst, 'unattended', 'T10', `V declined with "${decline.id}"`);
   } else {
-    applyEffects(l2, inst, o.nullPath.writes, { origin: 'null', tag: `${beat}:${d.n}:n` });
+    applyEffects(l2, inst, o.nullPath.writes, { origin: 'null', tag: `${beat}:${d.n}:n`, path: `offer/${beat}/${d.n}/null/writes` });
     if (o.nullPath.content !== undefined) submitDelivery(l2, inst, beat, undefined, { what: 'reply', suffix: `null${d.n}`, content: o.nullPath.content, pull: true });
     const canReoffer = doc.reoffer !== undefined && rt.offers < doc.reoffer.max;
     if (canReoffer) {
@@ -992,6 +1056,11 @@ function answerTemplates(l2: Layer2, inst: Instance, d: Delivery, answer: string
  * NPC as witnesses, and the NPC's belief set from V's own telling, so the belief really revises and the line no longer applies (SF-36).
  */
 export function replyTo(l2: Layer2, deliveryId: Id, template: string): boolean {
+  const hit = findDelivery(l2, deliveryId);
+  return hit ? authorisedStep(l2, hit.inst, false, () => replyAuthorised(l2, deliveryId, template)) : false;
+}
+
+function replyAuthorised(l2: Layer2, deliveryId: Id, template: string): boolean {
   const hit = findDelivery(l2, deliveryId);
   if (!hit || !hit.d.responses?.includes(template)) return false;
   const { inst, d } = hit;

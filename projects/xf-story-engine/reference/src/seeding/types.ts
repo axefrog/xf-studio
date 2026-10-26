@@ -161,11 +161,21 @@ export interface WorldRequirement {
 
 export type PersistClass = 'lasting' | 'resettable' | 'cosmetic';
 
+export interface SeedEventSpec {
+  kind: string;
+  place?: RoleKey;
+  participants?: Array<{ who: RoleKey | 'v'; role: string }>;
+  effects?: Array<{ on: RoleKey | 'v'; effect: Effect }>;
+  outcome?: 'done' | 'failed' | 'prevented';
+  causes?: RoleKey[];
+}
+
 export type EffectDecl = (
   | { fact: FactKey; set?: number; add?: number }
   | { game: { fact: string; set?: number; add?: number }; capability: 'story.write-vanilla' }
   | { reward: { table: string; tier: string; byRoute?: FactKey } }
   | { kernel: { on: RoleKey; effect: Effect } }
+  | { event: SeedEventSpec }
 ) & {
   persist?: PersistClass;
   carrier?: { kind: 'place' | 'media' | 'person'; at: RoleKey | Id; durability: Duration | 'permanent' };
@@ -235,16 +245,20 @@ export interface Beat {
 export interface Cost { bearer: RoleKey | 'client' | 'v' | 'third'; what: string; when: 'now' | 'later'; shown: 'trace' | 'named' | 'quiet' }
 
 export interface OfferSpec {
+  asker?: RoleKey;
+  plan?: RoleKey[];
   stakes: Array<{ bearer: RoleKey | 'client' | 'v'; what: string }>;
   withheld?: { what: string; discoverableBy: BeatKey };
-  actions: Array<{ id: string; stance: Stance; foresight: ContentRef; writes?: EffectDecl[]; costs?: Cost[] }>;
-  nullPath: { id: string; content?: ContentRef; writes?: EffectDecl[] };
+  actions: Array<{ id: string; stance: Stance; say?: OptionLine; label?: string; foresight: ContentRef; writes?: EffectDecl[]; costs?: Cost[] }>;
+  nullPath: { id: string; say?: OptionLine; label?: string; content?: ContentRef; writes?: EffectDecl[] };
   lapse: { after: Duration; then: 'unattended' | 'reoffer' | 'withdraw'; content?: ContentRef };
   /** `response` is omitted when an exit beat plays it (S2 section 2.9). */
-  decline: Array<{ id: string; response?: ContentRef; writes?: EffectDecl[] }>;
+  decline: Array<{ id: string; say?: OptionLine; label?: string; response?: ContentRef; writes?: EffectDecl[] }>;
   choice: 'flavour' | 'consequential' | 'unchoice';
   retractQuietly?: ContentRef;
 }
+
+export type OptionLine = { recorded: string } | { splice: Array<{ line: string; from: number; to: number }> } | { text: ContentRef };
 
 export type ActPattern = EventPattern;
 export interface ResponseTemplate {
@@ -324,7 +338,7 @@ export interface TextUnit {
 /** A text unit without its words: what an instance freezes (the words resolve against the active pack, S2 section 1.2). */
 export type TextMeta = Omit<TextUnit, 'text'>;
 
-export interface UnattendedPlan { after: Duration; outcome: EffectDecl[]; events?: Array<{ kind: string; place?: RoleKey; participants?: Array<{ who: RoleKey; role: string }> }> }
+export interface UnattendedPlan { after: Duration; outcome: EffectDecl[]; events?: SeedEventSpec[] }
 
 export interface Variation {
   modes?: Array<{ id: string; weight: number }>;
@@ -349,6 +363,8 @@ export interface Migration { from: number[]; policy: 'continue' | 'withdraw' | '
 export interface Seed {
   id: TemplateId;
   version: number;
+  realises?: import('./pattern-types.ts').Realises[];
+  nudge?: boolean;
   level: SeedLevel;
   turns: Turn[];
   effect?: string;
@@ -481,6 +497,8 @@ export interface DeliveryProvenance {
 export type DeliveryState = 'queued' | 'released' | 'displayed' | 'answered' | 'expired' | 'withdrawn';
 
 export interface Delivery {
+  options?: Array<{ key: string; words?: string; label?: string; voiced: boolean; line?: OptionLine }>;
+  chosenLine?: { words: string; voiced: boolean; line: OptionLine };
   id: Id;
   seed: Id;
   beat?: BeatKey;
@@ -529,6 +547,8 @@ export interface Delivery {
 }
 
 export interface Receipt {
+  /** Earliest presented stamp survives a later upgrade to confirmed. */
+  presentedAt?: GameTime;
   delivery: Id;
   beat?: string;
   what?: string;

@@ -2227,3 +2227,118 @@ What changed, and what each choice rests on. Where S1 or S0 left a choice, it is
 - **Records in SF1-E2, SF1-E5 and SF1-E6.** The `edges` section leaves out only the ended seat and holder edges (`HISTORY_EDGE_TYPES`), whose past is compared by the reads in both directions (`sameHistoricalEdges`); an ended edge of any other type is compared like the rest. E5's reload comparison and E6's cover every process's state and digest, the record, the live item edges and the retained frames in full (ended frames included, an unreferenced ended frame no save held excepted).
 - **SF1-E6 runs to its end.** The hunt goes on past the scale's `N` until V's scheduled response has been made and the intention has ended `paid` (a `relent.punish` is minted), and the checks that were conditional on a price are asserted outright at the tempos that allow one. Below the specification's scale the waits are shortened (killing at window 100, a dwell of 48 windows, the response 100 windows after the price); `S1_SOAK=1` keeps the game's own pace.
 - **Timeouts under `S1_FULL`.** The 2,048-seed sweep/replay hunt keeps all its seeds and gets 5,400 s (it ran 3,103 s against 3,072 s on the CI runner; about 25 minutes alone here, over 50 on a loaded machine, and the same on `origin/main`'s code and on this branch). The test of the week "the same words from a run that loaded in the middle" has 1,800 s under `S1_FULL` (60 s by default, where its small week runs in seconds).
+
+## S2 v1.11 / S3 v0.6 build
+
+### Checkpoint 1: pattern documents and static lint
+
+`projects/xf-story-engine/reference/src/seeding/pattern-types.ts` holds the shared graph data; `pattern-lint.ts` implements L-144 to L-159, reports abstraction and has a failing and passing fixture for every check. `projects/xf-story-engine/reference/src/procedural/library.ts` normalises the composite's author-facing vocabulary arrays and pattern-family files without changing their semantics. These operations read only supplied data; they neither look up world references nor create persisted operations. The existing matcher still runs the stage form at this checkpoint; graph loading and matching follow in later checkpoints.
+
+- **Library defects found by the lint, coordinator decisions applied.** `settled-without-you` fixed its protagonist role while defaulting to `use: library`, violating L-154. The coordinator chose to generalise it, retaining `v: may` and removing the fixed identity, with neutral summary and notes (version 2). `feud` declared escalation on a `story` juncture, whose function has no acting argument, violating L-156. Its escalation declaration is removed (version 2): shapes only recognise. No other library content changed. The 29 patterns now have no lint errors, including the actor-asks offers and coveted's refinement.
+- **SF-77 / SF3-70 warning count.** L-145's test (no `requires`, no fixed `fill`) yields **22 entry warnings**, not the vector's six: debt (2), protection (2), grievance, complication, reversal, revelation, escalation (2), betrayal (3), closing-choice, interception (2), test-of-creed, payoff, settlement, settled-without-you, reckoning and feud. The reference follows the rule and records the full list; it does not special-case library ids or suppress warnings to meet the vector's number.
+- **L-148's static continuation.** A compliance can reach an outcome from the offered juncture. Refusal and no answer must leave another reachable outcome or a timed outcome. Independent roots count: a pattern's entry list limits starts, not which junctures may become ready. L-153 applies to fixed outcomes, not outcomes still armed by `after`; for an outcome requiring several reached junctures, a later juncture must follow all of them to be solely after that outcome.
+- **S0/S1 interface comparison.** The built state rules take `Sim`, not S3's `KernelView`, as their context (`projects/xf-story-engine/reference/src/sim/fillers.ts`). The S3 adapter must bind that context without exposing mutation. `conceal`, state `befall`, `compete`, `tied`, norm non-complier `want` and split replies remain absent in the S0/S1 build; absent reads must not invent fillers. Event `roles`/`fills`, `outcome`/`served`/`data`, memorable-belief changes, retained goal frames and `observedAt` are present. The built layer owns its registry declarations; vocabulary `kindFills` are fixture documentation, never an override of S1's entries.
+
+Validation: 28 new pattern-lint tests (349 assertions) pass in 86 ms; `bun run check` passes. Guarded S2 + S3 + both frozen digest files: **539 passed, 3 skipped, 0 failed**, 27.94 s, peak 0.6 GB under a 4 GB guard. The frozen v3 `746601727380a3fdff647f873c91c971` and v4 `8fce55b19462a1e02f03ca5336bd8c16` are unchanged. No full or `S1_FULL` suite has run for this checkpoint.
+
+### Recovery inventory additions during S2/S3 build
+
+These are supplied-data projections or reads through the common recovery boundary; persisted state remains owned by the layer record. The inventory audit checks the routes from their implementations.
+
+| Operation | Recovery route |
+|---|---|
+| `beatFunction` | recoverIfSaved |
+| `encounterAllowed` | pure data, supplied predicate environment or gated kernel delegation |
+| `exposedNodeAt` | recoverIfSaved |
+| `exposure` | pure data, supplied predicate environment or gated kernel delegation |
+| `freezeOptions` | pure data, supplied predicate environment or gated kernel delegation |
+| `GraphWorld.causes` | layer-owned data or gated kernel delegation |
+| `GraphWorld.eventFills` | layer-owned data or gated kernel delegation |
+| `GraphWorld.relation` | recoverIfSaved |
+| `GraphWorld.relationSearch` | recoverIfSaved |
+| `GraphWorld.source` | recoverIfSaved |
+| `GraphWorld.stateFills` | layer-owned data or gated kernel delegation |
+| `GraphWorld.walk` | layer-owned data or gated kernel delegation |
+| `Layer2.beatFunction` | layer-owned data or gated kernel delegation |
+| `Layer2.exposedNodeAt` | layer-owned data or gated kernel delegation |
+| `Layer2.exposure` | layer-owned data or gated kernel delegation |
+| `Layer2.mintedBy` | layer-owned data or gated kernel delegation |
+| `Layer2.realisedBy` | layer-owned data or gated kernel delegation |
+| `Layer2.responseOf` | layer-owned data or gated kernel delegation |
+| `linkHolds` | recoverIfSaved |
+| `mintedBy` | via restoreReferencedHeader |
+| `nudgeLegal` | recoverIfSaved |
+| `patternWorld` | recoverIfSaved |
+| `patternWorld.relation` | layer-owned data or gated kernel delegation |
+| `patternWorld.relationSearch` | recoverIfSaved |
+| `patternWorld.stateRules` | layer-owned data or gated kernel delegation |
+| `Reads.areTied` | layer-owned data or gated kernel delegation |
+| `Reads.intends` | layer-owned data or gated kernel delegation |
+| `realisedBy` | recoverIfSaved |
+| `resolveEventSpec` | pure data, supplied predicate environment or gated kernel delegation |
+| `responseOf` | recoverIfSaved |
+
+### Graph integration recovery routes
+
+The graph owner accepts copied input and delegates world references to GraphWorld or the kernel recovery boundary. The following public methods add no independent persisted operation; their state is saved in the single layer-3 record.
+
+| Operation | Recovery route |
+|---|---|
+| `Layer3.writeSkeleton` | layer-owned data or gated kernel delegation |
+| `Sifter.boundary` | recoverIfSaved |
+
+### Graph integration: reference-model choices
+
+- **S3 sections 2, 6 and 7.** Graph documents share Sifter's pool, frame ownership, chronological input and retention record with the exact stage compatibility path. `GraphMatcher` advances copied junctures, queries durable state rules and indexed relations, tests causal links, fixes outcomes, feeds inert story events back into the buffer, and applies horizon-based endings separately from storage reclamation. The existing `sifter` data field is retained as the reference API spelling of the specification's `matcher`; its bounds now include the v0.6 fields. Stage fixture identities and draws are unchanged.
+- **S3 sections 5.7, 6.7, 6.8 and 9.** The graph ledger derives connected threads, signs and debt from records; perception stamps and the stance-free skeleton ring are persisted in schema 2. Schema 1 keeps schedule, lock, tombstones, pending and recent history, discarding the obsolete pool and buffer. New graph state belongs to the existing SeedState operation; no new persistence opcode is introduced. Graph-state evidence events are retention roots alongside ordinary filler events. The generated property runs unswept, swept and fresh replacement loads in incremental and snapshot modes, comparing instances, stamps, candidates and the ring. Its default is four seeds of four incidents per save mode; `S1_FULL` is twelve seeds of ten incidents.
+- **S0 dilemma interface.** The built S0 had only the S2 dilemma callback. The optional S3 callback now receives every new dilemma without changing S2 routing. Its by/of/what mapping follows the vocabulary: frame A's origin, the pressured actor, and the target. Dilemmas are buffered with occurrence time, never converted into game events.
+- **A state as a motive.** A later act served by the very retained frame that filled an earlier want, or performed by the holder of the very memorable belief that filled the earlier blame, bears out motive directly. Requiring those records to cite their own synthetic filler id would reject the debt and grievance fixtures. Other motive paths still require the declared cause/evidence walk. The record identity is checked, never an inferred feeling of the protagonist.
+- **Seed-end realisations, S2 2.24 / S3 SF3-66.** A seed-outcome with declared realises now cites its cast event roles, so its realisation can pass actual causal edges. A declaration alone never supplies a missing link. Ordinary seed outcomes (no realises) are byte-unchanged. This corrects the missing causal hand-over exposed by integration, not the library.
+- **S3 transcript.** `test/s3/transcript.json` and its independent identity/uniform encoder are untouched. The explicit persisted-state assertion moves only its schema literal from 1 to 2. The two kernel digests remain frozen at their existing values.
+- **SF3-60 fixture substrate.** The layered week uses Kabuki's generated residents, S1's live kernel and mirror, S2's real authored R2 text/choices and a fixture-only R2-prime declaration. As the vector requests, a durable stub registry supplies pre-existing fee duty and protection. All three stances run and compare a midweek reload with uninterrupted continuation. Both profiles cover seven game days; default refreshes at fourteen sampled points, `S1_FULL` at all 1,008 windows. It is offline evidence, not an in-game test or a rebuilt M3 evaluation packet.
+- **Library and fixture scope.** The warning-count discrepancy remains 22 versus the prose's six. Hunted and settlement now include the coordinator-decided corrections recorded below; SF3-53 executes the full hunt and collects the real settlement's offer. Debt's actors still default to protagonist-forbidden: its end-realisation integration test uses NPC casts and includes the mismatching-casts twin. No pattern-id exception overrides a role's protagonist policy.
+- **M3 records.** Run 1 and run 2's committed records are left unchanged. Their historical full rebuilds may differ with the preceding S0/S1 build, as that build already records; the v0.6 changes are not a new evaluation run.
+
+Additional graph operations are layer-owned projections or gated world reads: `GraphMatcher.onChange`, `GraphMatcher.boundary`, `GraphMatcher.selectors`; `GraphLedger.refresh`, `GraphLedger.signs`, `GraphLedger.shown`, `GraphLedger.debt`, `GraphLedger.aware`, `GraphLedger.tokens`, `GraphLedger.prediction`; and `GraphSower.collect`, `GraphSower.accepted`, `GraphSower.refused`, `GraphSower.repair`, `GraphSower.refresh`. Supplied filler descriptors and layer-owned seed ids are copied; arbitrary event/frame/belief/edge references resolve through GraphWorld, Layer2 or the common kernel recovery gate. `Layer3.onDilemma` only buffers copied input; `Layer3.logGraphGate` and `Layer3.logGraphRepair` only write inspector logs.
+
+`GraphWorld.acts` reads the registered acting roles, or a new pack kind's declared function arguments when the simulation registry has no entry. It validates actual recorded participation, including protagonist acts, without inferring intentions. SF3-60's stub registry includes the stallholder's durable belief citing the copied want filler: holding a goal alone does not prove the motive of an authored offer. Its stand-at-the-stall continuation uses a new collector, respecting protection's once tombstone on the resolved ward/threat pair.
+
+The S2 generated v1.11 properties cover 48 seeded nudge positions/witness/want cases, harmful writes over four effects and three origins, and 24 role renamings of a realises declaration. The final validation pass also closed the `root:v` spelling and cast-time protagonist loopholes in nudges and requires the obstacle contract even for a harmful write directly on an accepted action.
+
+- **SF3-49's nudge count.** The data contract and section 7.7 cap live nudges at three, although the vector describes four already live and a fifth refused. The regression checks refusal at the actual cap, plus the exact `nudgeAfter` boundary, V exclusion, served-goal source classification and withdrawal of an unstarted director nudge.
+- **Recorded protagonist participation.** `learn` may bind V as a witness without making V the event's actor. Actual protagonist acts, observed-act requirements and own-act legibility signs use the same declared acting-role read, including new pack kinds. The regression also rejects inferring motive merely because an actor holds an unrelated retained goal; the served frame or memorable evidence must bear it out.
+
+### Independent S2/S3 review: corrections and completed vectors
+
+- **Coordinator-decided library change: hunted v3.** `decided → hunting` enables replaces `warned → hunting`: searching is not harm, and S1 pursuit begins at the decision. `warned → caught` enables, shown `must`, stays: no encounter precedes its warning. `caught` requires `{ all: [warned, hunting], any: [] }`, leaving the optional shelter complication optional. `warned` fixes its kind to `warning`, excluding `price`. SF3-53 runs a durable stub S1 grievance, decision, pursuit, warning, price and confrontation through the buffered kernel stream, including the premature-confrontation control.
+- **Coordinator-decided library change: settlement v2.** A protagonist's way out is D-30's intended behaviour. `?b` permits V and `terms` has `v: offer`. Optional `declined` is `refuse(who: ?b, to: ?a)`, realisation `wait`, answering `dispute`. `refused` reaches it, kind `failed`, next `grievance`. `unanswered` reaches `dispute` after the existing 21 game days, kind `parked`, next `loose-end`. Everything else stays unchanged. Tests use this actual library pattern for the hunted way-out candidate, NPC payment, V refusal and unanswered lapse.
+- **Coordinator's SF-79 reading.** Core reoffer rules stay unchanged: only deferred, null or lapse can reoffer; an accepted offer never does. The vector's accepted writes at both `n` values are covered by an independent accepted `n=0` control plus null `n=0`, save/load, accepted `n=1`. Both unattended paths, beat and fragment writes execute and retain their declaration-path identities.
+- **S3 v0.6 gap, coordinator-decided rule for adoption in the next spec pass: story motive.** A story has no acting argument. A `motive` edge into it needs a recorded causal path to one of its constituent events, and that constituent's served frame or an acting NPC's memorable belief must bear that motive. Search only recorded constituents, with existing cause/query bounds. If the earlier filler is a story, its recorded constituent events are the endpoints. A V constituent may carry the causal path but supplies no inferred motive. Real grievance children now feed feud; causal-only and protagonist-motive controls fail.
+- **S3 v0.6 gap, coordinator-decided rule for adoption in the next spec pass: answering a state.** S2 citations carry events, while a copied state has a synthetic filler ID. A response may answer that state through an actually displayed offer citing its copied cause event, **only when that offer realises a juncture of the same instance**. Direct filler-ID answers remain valid. Tests reject unrelated citations and same-cause offers from another instance. Explain/surface kits bind a state's retained cause event, and link signs use those event citations rather than attempting to cast a synthetic belief/frame filler as an event. A declared seed-end repayment is a compliance for `answers`, with its direct cause still required (SF3-66).
+- **Coordinator's SF3-53 reading.** V knows their recorded act (`confirmed`). What is surfaced is the group's link to it: the unperceived decision or the telling that carried it. The real surface delivery for the decision ranks at the maximum F-16; the group's intention is unchanged. This is the intended reading of “surface candidates for the act the group blames V for”.
+- **Runtime gates and use sites.** Harm checks require an actual accepted action of an offer whose stake resolves to V, then recheck the obstacle contract against the resolved target at writing. One actor resolver falls back when S1 returns an empty role list. Encounter display, response, reply and completion steps check authorisation before mutation and commit their layer/kernel state atomically. L-142 checks ordinary text uses even when the same text is selectable in an option. Offer beats remain exempt from S3-K-6 regardless of their `realises` function.
+- **Matcher and projections.** Unless functions, filler kinds and state changes subscribe; state and event matches share occurrence/function consumption. Fixed roles validate kind, `must` and V policy. Relation search backtracks through remaining requirements within its bound. Perception and skeleton gains precede deterministic deadline/retirement decisions. Pull times derive from persisted receipts, responses and canon V acts. Thread grouping excludes obsolete terminal seed members, does not join missing story IDs, and prunes its logging cache. Live counts require running seed beats; parking closing seeds carry `@closing` growth provenance and add no budget. Skeletons count cited offers and all response occurrences using unconditional kind-fill precedence.
+- **Behavioural evidence.** New S2 vector tests execute offer fills, unattended end realisation, growth loose ends and declaration paths. SF-65 executes an actual failed `shakedown` under its stub S2 producer registry and checks its refusal fill. Attached S1 owns its shakedown producer, so the Kabuki R2-prime fixture uses its declared S2 refusal kind instead of impersonating S1. The week starts its new demand unpaid; each stance fills only its own continuation. It reloads during the displayed offer before choosing, as well as midweek. New S3 vectors execute demand-first queries, `but` and structured joins, depth/self-lineage bounds, real lagged publication, aftermath timing, fine/group relevance, actual two-modality explanations, computed features, layered tokens and ring-derived prediction, real feud children, closing sow/reload idempotence and cast disagreement.
+- **Non-vacuous properties.** The unswept world disables both automatic kernel retention sweeps and Sifter's boundary sweep; swept and fresh replacement-load worlds keep them. Both save modes exercise retained goal and memorable-belief lifecycles, a live nudge, pending state emissions, nonempty graphs and ring entries. Fresh load compares the complete saved S3 state and the exact retention-node union before continuation. Incidents are 4,000 game seconds apart, with a 0.01-day armed outcome and ten-day aftermath, keeping the default generated property small while covering all transitions. S2 generated cases now execute nudge/harm writes and end realisations instead of checking lint alone.
+
+New public helpers are covered by existing recovery owners: `acceptedBy` and `obstacleOffers` inspect supplied compiled data; `agentRoles` reads registry declarations; `harmAllowed` reads layer-owned casts/answers and delegates predicate evaluation through S2's recovered environment; `authorisedStep` gates through `encounterAllowed` and stages the kernel with the layer's own state. They introduce no new persistence opcode.
+
+The pending edits form two logical commits (the coordinator commits; no commits made by Codex):
+
+1. **S2 safety and runtime vectors.** `projects/xf-story-engine/reference/src/seeding/accepted.ts`, `actors.ts`, `arbiter.ts`, `effects.ts`, `layer2.ts`, `lint-v111.ts`, `lint.ts`, `nudge.ts`, `pattern-reads.ts`, `run.ts`; `test/s2/encounter-v111.test.ts`, `properties-v111.test.ts`, `review-v111.test.ts`, `vectors-v111.test.ts`; the corresponding S2/recovery/SF-79 notes here.
+2. **S3 matching, projection and completed composite vectors.** `projects/xf-story-engine/reference/src/procedural/graph-ledger.ts`, `graph-links.ts`, `graph-matcher.ts`, `graph-sower.ts`, `graph-world.ts`, `layer3.ts`, `lint.ts`, `sifter.ts`; `test/s3/graph-fixture.ts`, `graph-persist.test.ts`, `graph-sower.test.ts`, `graph-week.test.ts`, `review-graph.test.ts`, `vectors-graph.test.ts`; `research/story-engine/composite/patterns/closures.json` and `shapes.json`; the remaining S3/library/validation notes here. Paths under `src` and `test` are relative to this reference directory; the two library paths are relative to the repository root.
+
+Final review-round validation (26 October 2026), with each suite or heavy file run separately under the 4 GB memory guard:
+
+| Run | Passed | Skipped | Failed | Bun elapsed |
+|---|---:|---:|---:|---:|
+| Targeted S2, S3 and M3 | 697 | 37 | 0 | 275.07 s |
+| Default suite | 1,666 | 45 | 0 | 434.77 s |
+| S1_FULL graph-week | 1 | 0 | 0 | 101.53 s |
+| S1_FULL graph-persist | 4 | 0 | 0 | 67.82 s |
+| S1_FULL graph-sower | 11 | 0 | 0 | 0.582 s |
+| S1_FULL graph | 15 | 0 | 0 | 0.203 s |
+| S1_FULL digest | 8 | 0 | 0 | 5.16 s |
+| S1_FULL digest-v4 | 2 | 0 | 0 | 0.742 s |
+
+`bun run check`, the recovery-inventory audit and `git diff --check` pass. The final S2 vector recheck, including nonempty facts, casts and promises with growth metadata, passes all six tests. Both frozen kernel digests and the S3 transcript remain unchanged; M3's committed evaluation records are untouched. The largest final guarded peak was 1.5 GB (default); no final guard trip occurred. The footprint report found no task-owned payload over 5 GB. Scratch logs and runners are removed at wrap-up; no child job is left running.

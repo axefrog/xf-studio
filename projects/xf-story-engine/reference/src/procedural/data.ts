@@ -52,9 +52,11 @@ export function defaultData(): Layer3Data {
       poolTotal: 256,
       maxStages: 5,
       defaultWithin: 518400,
-      maxWithin: 2592000,
+      maxWithin: 7776000,
       candidateTtl: 259200,
       tombstoneSpans: 2,
+      maxJunctures: 8, maxEdges: 12, maxFills: 8, stateCandidates: 8, causeHops: 3, causeWalkMax: 64,
+      lineageDepth: 4, aftermathDays: 7, maxLiveShapes: 8, maxLayers: 8, maxSurface: 2, relevanceGate: true,
     },
     sower: {
       lambda: 1,
@@ -66,7 +68,9 @@ export function defaultData(): Layer3Data {
       maxKitTries: 3,
       cooldown: 600,
       maxRefusals: 3,
-      featureWeights: { F3: 1, F5: 1, F6: 1, F11: 1 },
+      featureWeights: { F3: 1, F5: 1, F6: 1, F11: 1, F13: 1, F14: 2, F15: 1, F16: 1 },
+      kitJunctures: 2, skeleton: 0.5, skeletonCap: 4, skeletonRing: 32, skeletonTokens: 8,
+      nudgeAfter: 21600, maxNudges: 3, nudgeLifetime: 3600, portentLead: 120,
       timelyH: 21600,
       irreversible: ['kill', 'expose'],
       harmful: ['harm', 'kill', 'take', 'expose', 'protect', 'rescue'],
@@ -94,19 +98,19 @@ export function dataProblems(d: Layer3Data): string[] {
   if (d.pacing.decayA < 0 || d.pacing.decayA > 1 || d.pacing.decayN < 0 || d.pacing.decayN > 1)
     out.push('Decay must be in [0,1]');
   for (const [key, value] of Object.entries(d.sifter))
-    if (!(value > 0 && Number.isInteger(value))) out.push(key + ' must be a positive integer');
+    if (key !== 'relevanceGate' && !(Number(value) > 0 && Number.isInteger(value))) out.push(key + ' must be a positive integer');
   for (const [key, value] of Object.entries(d.threads)) if (!(value > 0)) out.push(key + ' must be positive');
   for (const key of ['recentSown', 'recentKits', 'maxCandidateTries', 'maxKitTries', 'maxRefusals'] as const)
     if (!(d.sower[key] > 0 && Number.isInteger(d.sower[key]))) out.push(key + ' must be a positive integer');
   if (d.sower.recentKits > d.sower.recentSown) out.push('recentKits exceeds retained recentSown history');
-  if (Object.values(d.sower.featureWeights).some((w) => w < 0)) out.push('Feature weights must be nonnegative');
+  if (Object.values(d.sower.featureWeights).some((w) => w !== undefined && w < 0)) out.push('Feature weights must be nonnegative');
   if (!['glance', 'encounter', 'vignette', 'gig'].includes(d.sower.maxLevel))
     out.push('Arc and season sowing is not supported yet');
   return out;
 }
 export function emptyState(playTotal: number, gap: number): Layer3State {
   return {
-    schema: 1,
+    schema: 2,
     slots: { open: { next: Math.floor(playTotal / gap) } },
     nextSeq: 0,
     openLockUntil: 0,
@@ -114,6 +118,7 @@ export function emptyState(playTotal: number, gap: number): Layer3State {
     pool: [],
     tombstones: [],
     pending: [],
+    nudges: [], skeletons: { seq: 0, ring: [] },
     recent: [],
     buffer: [],
     evidence: [],

@@ -1,4 +1,7 @@
 import type { Kernel } from '../kernel.ts';
+import { H, s } from '../id.ts';
+import { hrec } from '../canon.ts';
+import { GraphMatcher } from './graph-matcher.ts';
 import type { Relevance } from '../relevance.ts';
 import type { Layer2 } from '../seeding/layer2.ts';
 import type { Finding } from '../seeding/types.ts';
@@ -17,6 +20,9 @@ import type {
 } from './types.ts';
 
 export class Sifter {
+  countsAsThread?: (e: PoolEntry) => boolean;
+  beforeRetire?: () => void;
+  readonly graph = new GraphMatcher(this);
   readonly patterns = new Map<string, SiftPattern>();
   /** Owned registration index, replaced in full whenever the loaded pattern set changes. */
   private readonly frameOwners = new Map<string, string>();
@@ -38,7 +44,7 @@ export class Sifter {
     for (const p of input.slice().sort((a, b) => cmp(a.id, b.id))) {
       const f = patternFindings(p, this.l2, this.view, this.data);
       findings.push(...f.map((x) => ({ ...x, at: p.id })));
-      if (!f.length && !next.has(p.id)) next.set(p.id, structuredClone(p));
+      if (!f.some((x) => x.level === 'error') && !next.has(p.id)) next.set(p.id, structuredClone(p));
       else if (next.has(p.id))
         findings.push({ code: 'S3-L-2', level: 'error', message: 'Duplicate pattern id.', at: p.id });
     }
@@ -83,7 +89,7 @@ export class Sifter {
       }
       const names = [...new Set(clauses(p).flatMap((c) => kinds(c, this.view)))].sort(cmp);
       const own = {
-        reactsTo: names.map((name) => ({
+        reactsTo: p.graph ? this.graph.selectors(p.graph) : names.map((name) => ({
           kind: 'core:event',
           slot: '*' as const,
           where: [{ path: 'kind', op: 'eq' as const, arg: name }],
@@ -110,12 +116,18 @@ export class Sifter {
     }
   }
   hear(r: Relevance): void {
-    if (!this.active || r.actor !== this.keys.director || r.type !== 'reactsTo' || r.change.c !== 'event') return;
+    if (!this.active || r.actor !== this.keys.director || r.type !== 'reactsTo' || r.change.c === 'contribution') return;
     const owner = this.frameOwners.get(r.frame);
     const p = owner ? this.patterns.get(owner) : undefined;
     if (!p) return;
+    if (r.change.c !== 'event') {
+      if (p.graph) this.state().buffer.push({ pattern: p.id, version: p.version, change: structuredClone(r.change),
+        event: { id: H(s('change'), hrec(r.change)), creator: this.keys.director, cause: this.keys.director, name: '@state',
+          kind: '@state', time: r.time, participants: [], causes: [], effects: [], witnesses: [] } });
+      return;
+    }
     const event = this.view.event(r.change.event);
-    if (!event || event.creator === this.keys.director || event.kind.startsWith('meta:')) return;
+    if (!event || ((event.creator === this.keys.director || event.kind.startsWith('meta:')) && !(p.graph && event.kind === 'meta:story'))) return;
     const st = this.state();
     if (st.buffer.some((b) => b.pattern === p.id && b.event.id === event.id)) return;
     st.buffer.push({
@@ -147,9 +159,22 @@ export class Sifter {
       st.buffer = st.buffer.filter((x) => x !== b);
       const p = this.patterns.get(b.pattern);
       const before = this.work;
-      if (this.active && p?.version === b.version) this.onEvent(p, b.event);
+      if (this.active && p?.version === b.version) {
+        if (p.graph && b.dilemma) {
+          const d = b.dilemma;
+          this.k.persistence.recoverIfSaved(d.frameA);
+          const source = this.k.frames.frame(d.frameA)?.origin;
+          if (source) this.graph.onChange(p, { c: 'minted', node: d.id, kind: 'core:event' }, undefined, b.event.time,
+            [{ ref: { dilemma: d.id }, id: d.id, at: b.event.time, fn: 'demand', args: { by: source, of: d.actor, what: d.target }, source: 'found', causes: [d.cause] }]);
+        }
+        else if (p.graph && b.change) this.graph.onChange(p, b.change, undefined, b.event.time);
+        else this.onEvent(p, b.event);
+      }
       cost += this.work - before;
     }
+    // Story events created during dispatch may themselves feed a bounded chain.
+    if (st.buffer.some((b) => b.event.time <= horizon)) return this.boundary(boundary, lag, budget);
+    this.graph.boundary(horizon);
     this.sweep(boundary, horizon);
     this.changed();
     return true;
@@ -239,6 +264,7 @@ export class Sifter {
     for (const e of st.pool.slice().sort((a, b) => a.seq - b.seq)) {
       const p = this.patterns.get(e.pattern);
       if (!p) continue;
+      if (e.graph) { if (e.graph.retired) st.pool = st.pool.filter((x) => x !== e); continue; }
       if (e.seed && reclaimSown) this.drop(e, 'match-sown');
       else if (
         (e.complete ? now : openHorizon) >
@@ -249,6 +275,11 @@ export class Sifter {
     st.tombstones = st.tombstones.filter((t) => openHorizon <= t.until);
   }
   onEvent(p: SiftPattern, event: EventView): void {
+    if (p.graph) {
+      this.graph.onChange(p, { c: 'event', event: event.id, kind: event.kind, participants: event.participants,
+        effects: event.effects, ...(event.place ? { place: event.place } : {}) }, event);
+      return;
+    }
     const st = this.state(),
       now = event.time;
     this.work++;

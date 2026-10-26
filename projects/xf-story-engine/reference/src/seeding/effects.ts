@@ -7,12 +7,36 @@ import type { GameTime, Id } from '../types.ts';
 import { readSeedFact } from './eval.ts';
 import * as ids from './ids.ts';
 import type { Instance, Layer2 } from './layer2.ts';
-import type { CosmeticMark, EffectDecl, PersistClass } from './types.ts';
+import type { CosmeticMark, EffectDecl, PersistClass, SeedEventSpec } from './types.ts';
+import { nudgeLegal } from './nudge.ts';
+import { encounterAllowed } from './encounter.ts';
+import { agentRoles } from './actors.ts';
+import { harmAllowed } from './accepted.ts';
 
 export interface EffectCtx {
   origin: 'action' | 'decline' | 'null' | 'beat' | 'fragment' | 'unattended' | 'reply';
   /** A unique, stable tag for the event ids of this application. */
   tag: string;
+  /** Full declaration path (v1.11); tag remains for existing cosmetic marks. */
+  path?: string;
+}
+
+/** Resolve the seed language's role references without silently dropping an uncast role. */
+export function resolveEventSpec(l2: Layer2, inst: Instance, e: SeedEventSpec): Omit<import('../events.ts').EventSpec, 'creator' | 'cause' | 'name' | 'time'> | undefined {
+  const node = (r: string): Id | undefined => r === 'v' ? l2.k.vId : inst.st.roles[r]?.cast;
+  const refs = [...(e.participants ?? []).map((p) => p.who), ...(e.effects ?? []).map((p) => p.on), ...(e.causes ?? []), ...(e.place ? [e.place] : [])];
+  if (refs.some((r) => node(r) === undefined)) return undefined;
+  const participants = (e.participants ?? []).map((p) => ({ who: node(p.who)!, role: p.role }));
+  const place = e.place ? node(e.place) : undefined;
+  return {
+    kind: e.kind,
+    ...(e.place ? { place: node(e.place)! } : {}),
+    participants,
+    witnesses: l2.worldRegistry.eventWitnesses?.(place, participants.map((p) => p.who), l2.k.now) ?? [],
+    effects: (e.effects ?? []).map((p) => ({ on: node(p.on)!, effect: p.effect })),
+    causes: (e.causes ?? []).map((r) => node(r)!),
+    ...(e.outcome ? { outcome: e.outcome } : {}),
+  };
 }
 
 /** The default persistence class (S2 section 2.5): route variables are lasting, the incidental resettable. */
@@ -63,9 +87,16 @@ export function writeSeedFact(l2: Layer2, inst: Instance, key: string, value: nu
  * on a port that cannot do it, is skipped with a record entry: nothing is lost silently (S2-I-5).
  */
 export function applyEffects(l2: Layer2, inst: Instance, effects: EffectDecl[] | undefined, ctx: EffectCtx): Id[] {
+  if (!encounterAllowed(l2, inst)) return [];
+  if (!nudgeLegal(l2, inst, effects)) return [];
   const k = l2.k;
   const minted: Id[] = [];
   (effects ?? []).forEach((e, i) => {
+    const harmful = 'kernel' in e ? [e.kernel] : 'event' in e ? e.event.effects ?? [] : [];
+    if (harmful.some((h) => (h.on === 'v' || inst.st.roles[h.on]?.cast === k.vId) && ['harm', 'kill', 'take', 'expose'].includes(h.effect))
+      && !harmAllowed(l2, inst, ctx.path)) {
+      l2.record(inst, 'write-refused', { rule: 'accepted-obstacle', path: ctx.path }); return;
+    }
     const cls = persistClassOf(inst, e);
     if ('fact' in e) {
       // A cosmetic effect is the canon event and its carrier, and no pin (S2 section 2.5): nothing reads it back.
@@ -89,14 +120,35 @@ export function applyEffects(l2: Layer2, inst: Instance, effects: EffectDecl[] |
       const route = e.reward.byRoute !== undefined ? readSeedFact(l2, inst, e.reward.byRoute) : undefined;
       l2.port.reward(e.reward.table, e.reward.tier, route);
       l2.record(inst, 'beat', { effect: 'reward', table: e.reward.table, tier: e.reward.tier });
+    } else if ('event' in e) {
+      const spec = resolveEventSpec(l2, inst, e.event);
+      if (!spec) {
+        l2.record(inst, 'unfilled', { effect: 'event', kind: e.event.kind, why: 'an event role is not cast' });
+        return;
+      }
+      // D-30: director-sown content cannot spread word of the protagonist's acts.
+      const told = spec.participants?.find((p) => p.role === 'told')?.who;
+      if (inst.st.source.by === 'director' && ['tell', 'expose', 'confess'].includes(spec.kind) && told) {
+        const subject = l2.k.events.mintedSpec(told);
+        const agents = subject ? agentRoles(l2, subject.kind) : [];
+        if (subject?.participants?.some((p) => p.who === k.vId && agents.includes(p.role))) {
+          l2.record(inst, 'write-refused', { effect: 'event', kind: spec.kind, rule: 'no-director-word-of-v', told });
+          return;
+        }
+      }
+      const path = `${ctx.path ?? ctx.tag}/${i}`;
+      const ev = k.events.mintEvent({ ...spec, creator: inst.id, cause: inst.id, name: `event:${path}`, time: k.now });
+      k.events.makeCanon(ev, 'committed', inst.id);
+      l2.record(inst, 'minted', { event: ev, path, by: ctx.origin, ...(ctx.path?.startsWith('beat/') ? { beat: ctx.path.split('/')[1] } : {}) });
+      minted.push(ev);
     } else if ('kernel' in e) {
-      const target = inst.st.roles[e.kernel.on]?.cast;
+      const target = e.kernel.on === 'v' ? k.vId : inst.st.roles[e.kernel.on]?.cast;
       if (target === undefined) {
         l2.record(inst, 'unfilled', { effect: 'kernel', skipped: e.kernel.on, why: 'the role is not cast' });
         return;
       }
       const ev = k.events.mintEvent({
-        creator: inst.id, cause: inst.id, name: `effect:${ctx.tag}:${i}`, time: k.now, kind: 'generic',
+        creator: inst.id, cause: inst.id, name: ctx.path ? `event:${ctx.path}/${i}` : `effect:${ctx.tag}:${i}`, time: k.now, kind: 'generic',
         participants: [{ who: inst.id, role: 'actor' }], effects: [{ on: target, effect: e.kernel.effect }],
       });
       k.events.makeCanon(ev, 'committed', inst.id);

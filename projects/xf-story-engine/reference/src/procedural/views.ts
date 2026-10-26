@@ -2,6 +2,8 @@ import type { Kernel } from '../kernel.ts';
 import type { Instance, Layer2 } from '../seeding/layer2.ts';
 import { verdictOnNode } from '../seeding/cast.ts';
 import type { EventView, InstanceView, KernelView, Layer2View } from './types.ts';
+import { cmp } from './keys.ts';
+import { decodeData } from '../event-kinds.ts';
 
 export function instanceView(inst: Instance): InstanceView {
   const st = inst.st;
@@ -81,10 +83,10 @@ export function kernelView(k: Kernel, l2: Layer2, registry: WorldRegistry): Kern
     isSpine: (n) => l2.isSpine(n),
     aesthetic: (n, f) => registry.aesthetic?.(n, f),
     eventKind: (n) => {
-      const r = registry.eventKind(n);
+      const r = registry.eventKind(n) ?? k.eventKinds.eventKind(n);
       return r ? structuredClone(r) : undefined;
     },
-    eventKinds: () => registry.names().slice(),
+    eventKinds: () => [...new Set([...registry.names(), ...k.eventKinds.names()])].sort(cmp),
     holds: (p, n, at = k.now) => verdictOnNode(l2, n, p, at) === 'yes',
     event: (id) => readEvent(k, id),
   };
@@ -137,6 +139,8 @@ export function readEvent(k: Kernel, id: string): EventView | undefined {
   if (outcome === 'done' || outcome === 'failed' || outcome === 'prevented') e.outcome = outcome;
   const served = k.value(id, 'served');
   if (typeof served === 'string') e.served = served;
+  const data = k.value(id, 'data');
+  if (typeof data === 'string') e.data = decodeData(data);
   const provenance = k.events.materialisationOf(id);
   if (provenance) e.provenance = provenance;
   return e;

@@ -56,7 +56,7 @@ export interface Layer2Hook {
 }
 
 /** The procedural sifter's bounded work, after dispatch and S2, before forgetting. */
-export interface Layer3KernelHook {readonly pending: number; run(budget: Budget): number}
+export interface Layer3KernelHook {readonly pending: number; run(budget: Budget): number; onDilemma?(d: Dilemma): void}
 
 export interface KernelOptions {
   schema: Schema;

@@ -668,6 +668,7 @@ export class Frames {
    * goal frame sits on the cast node, below the seed's role frame.
    */
   private routeDilemma(d: Dilemma): void {
+    this.k.layer3?.onDilemma?.(d);
     const l2 = this.k.layer2;
     if (!l2) return;
     const actors = l2.actors();

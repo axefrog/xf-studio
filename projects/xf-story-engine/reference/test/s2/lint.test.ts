@@ -36,9 +36,10 @@ const withReg = (fn: (reg: L2Registry) => void): WorldOpts => {
 };
 
 describe('the base seeds are lint-clean at ready', () => {
-  test('the mini seed and R1 pass every check', () => {
-    expect(lintOf(() => {})).toEqual([]);
-    expect(lintOf(() => {}, {}, r1Pack)).toEqual([]);
+  test('the legacy mini seed and R1 have only the v1.11 advice to name their askers', () => {
+    const mini = lintOf(() => {}), r1 = lintOf(() => {}, {}, r1Pack);
+    expect(mini.map((f) => [f.code, f.level])).toEqual([['L-141', 'warning']]);
+    expect(r1.map((f) => [f.code, f.level])).toEqual(Array.from({ length: 3 }, () => ['L-141', 'warning']));
   });
 });
 

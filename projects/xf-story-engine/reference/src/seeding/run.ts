@@ -162,10 +162,16 @@ export function closeSeed(l2: Layer2, inst: Instance, to: SeedStateName, row: st
     // `abandoned`, even if its plan makes `end` yes (S2 section 6.4).
     const resolved = to === 'resolved' && row === 'T12';
     const status: 'resolved' | 'abandoned' = resolved ? 'resolved' : 'abandoned';
-    const witnessed = endingExposed(inst, row);
+    const witnessed = !doc.nudge && endingExposed(inst, row);
     const ev = k.events.mintEvent({
       creator: inst.id, cause: inst.id, name: 'outcome', time: now, kind: 'seed-outcome',
       participants: [{ who: inst.id, role: 'participant' }], outcome: status === 'resolved' ? 'done' : 'failed',
+      ...(doc.realises?.length ? { causes: [...new Set(Object.values(st.roles).flatMap((r) => {
+        if (!r.cast) return [];
+        k.persistence.recoverIfSaved(r.cast);
+        const kind = k.store.header(r.cast)?.kind;
+        return kind && k.schema.hasFacet(kind, 'event') ? [r.cast] : [];
+      }))] } : {}),
     });
     k.events.makeCanon(ev, 'committed', inst.id);
     // Forced closures retire open promises (S2 section 6.4).
@@ -176,13 +182,22 @@ export function closeSeed(l2: Layer2, inst: Instance, to: SeedStateName, row: st
       }
     }
     const looseEnds = {
+      ...(doc.growsFrom && typeof doc.growsFrom === 'object' && 'instance' in doc.growsFrom ? { growsFrom: structuredClone(doc.growsFrom) } : {}),
       facts: Object.entries(doc.facts ?? {}).filter(([key, f]) => f.route && (f.route.consumers ?? []).every((c) => c === 'end' ? false : st.beats[c]?.state === 'locked')).map(([key]) => key).sort(),
       casts: Object.entries(st.frames.goals).map(([role]) => role).sort(),
       promises: retired,
     };
-    l2.record(inst, 'closure', { event: ev, status, witnessed, looseEnds });
+    if (doc.growsFrom && typeof doc.growsFrom === 'object' && 'instance' in doc.growsFrom) {
+      const growth = doc.growsFrom;
+      Object.assign(looseEnds, {
+        facts: looseEnds.facts.map((fact) => ({ fact, ...growth })),
+        casts: looseEnds.casts.map((role) => ({ role, node: st.roles[role]?.cast, ...growth })),
+        promises: looseEnds.promises.map((promise) => ({ promise, ...growth })),
+      });
+    }
+    l2.record(inst, 'closure', { event: ev, status, witnessed, looseEnds, ...(row === 'T12' ? { by: 'end' } : row === 'T13' ? { by: 'unattended' } : {}) });
     st.closed = { event: ev, status, witnessed };
-    if (!opts.quiet) {
+    if (!opts.quiet && !doc.nudge) {
       // Closing deliveries outlive the seed (S2 section 8.6): the closing trace, the window's close content, and news.
       if (doc.closing !== undefined && st.released) queueClosing(l2, inst, 'closing', doc.closing, 'close');
       const w = closeWindow(inst);
@@ -363,7 +378,7 @@ function step(l2: Layer2, inst: Instance): boolean {
     return true;
   }
   if (state === 'unattended' && durationElapsed(l2, st.entered.unattended, planPlayFrom(inst), doc.unattended.after)) {
-    applyEffects(l2, inst, doc.unattended.outcome, { origin: 'unattended', tag: 'unattended' });
+    applyEffects(l2, inst, doc.unattended.outcome, { origin: 'unattended', tag: 'unattended', path: 'unattended/outcome' });
     mintUnattendedEvents(l2, inst);
     transition(l2, inst, 'resolved', 'T13', 'the world settled it without V');
     return true;
@@ -377,17 +392,8 @@ function step(l2: Layer2, inst: Instance): boolean {
 }
 
 function mintUnattendedEvents(l2: Layer2, inst: Instance): void {
-  const k = l2.k;
-  (inst.st.document.unattended.events ?? []).forEach((e, i) => {
-    const place = e.place ? inst.st.roles[e.place]?.cast : undefined;
-    const spec: Parameters<typeof k.events.mintEvent>[0] = {
-      creator: inst.id, cause: inst.id, name: `unattended:${i}`, time: k.now, kind: e.kind,
-      participants: (e.participants ?? []).flatMap((p) => { const w = inst.st.roles[p.who]?.cast; return w ? [{ who: w, role: p.role }] : []; }),
-    };
-    if (place !== undefined) spec.place = place;
-    const ev = k.events.mintEvent(spec);
-    k.events.makeCanon(ev, 'committed', inst.id);
-  });
+  applyEffects(l2, inst, (inst.st.document.unattended.events ?? []).map((event) => ({ event })),
+    { origin: 'unattended', tag: 'unattended-events', path: 'unattended/events' });
 }
 
 // ---- casting every role (S2 section 5) ----
@@ -512,6 +518,7 @@ export function computeWakeups(l2: Layer2, inst: Instance): Wakeup[] {
     }
   }
   if (believes && !isTerminal(st.state)) add(nextBoundary, 'believes');
+  if (doc.nudge && !isTerminal(st.state)) add(nextBoundary, 'nudge-legality');
   for (const h of hours) {
     const day = 86_400;
     const base = Math.floor(now / day) * day;

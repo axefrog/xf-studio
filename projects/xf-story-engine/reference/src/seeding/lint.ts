@@ -7,6 +7,7 @@
 // engine refuse a seed in the lab).
 
 import { canonicalEqual } from '../canon.ts';
+import { lintV111 } from './lint-v111.ts';
 import { rootId } from '../id.ts';
 import type { Schema } from '../schema.ts';
 import { atoms, bound, effectSites, fragmentSites, playOf, predSites, type EffectSite } from './doc.ts';
@@ -21,6 +22,7 @@ import type {
 } from './types.ts';
 
 export interface LintCtx {
+  eventKinds?: import('../event-kinds.ts').EventKinds;
   pack: PackIndex;
   facts: FactsTable;
   reg: L2Registry;
@@ -166,6 +168,8 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
   const frags = seedFragments();
   const closure = ctx.pack.closure(c);
   const effects = effectSites(c, fragOf);
+  out.list.push(...lintV111(c, ctx));
+  effects.push(...(c.unattended.events ?? []).map((event, i) => ({ effect: { event }, at: `unattended.events[${i}]`, origin: 'unattended' as const })));
   const sites = [...predSites(c), ...closure.fragments.flatMap((f) => fragmentSites(f))];
 
   // ---- L-01: names ----
@@ -227,7 +231,7 @@ export function lintSeed(c: CompiledSeed, ctx: LintCtx): Finding[] {
   for (const e of effects) {
     const x = e.effect;
     if ('fact' in x && !c.facts?.[x.fact]) out.error('L-01', `"${x.fact}" is not a fact of this seed.`, e.at, { engine: true, fix: `Declare "${x.fact}" under facts.` });
-    if ('kernel' in x) undeclaredRole(x.kernel.on, e.at);
+    if ('kernel' in x && x.kernel.on !== 'v') undeclaredRole(x.kernel.on, e.at);
     if ('game' in x && !ctx.facts[x.game.fact]) out.error('L-01', `The game fact "${x.game.fact}" is not in the facts table.`, e.at, { engine: true });
   }
   for (const [i, w] of (c.world ?? []).entries()) {

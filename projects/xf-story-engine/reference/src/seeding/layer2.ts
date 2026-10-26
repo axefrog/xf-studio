@@ -17,13 +17,15 @@ import type { Budget } from '../work.ts';
 import type { GameTime, Id, Layer } from '../types.ts';
 import { PredSyntaxError, parsePred } from './pred.ts';
 import { PackIndex } from './packs.ts';
+import { SEED_KINDS } from './kinds.ts';
+import * as patternReads from './pattern-reads.ts';
 import { lintPack, type LintCtx } from './lint.ts';
 import { compileSeed } from './compile.ts';
 import { atoms, fragmentSites, predSites } from './doc.ts';
 import { L2Registry } from './registries.ts';
 import * as ids from './ids.ts';
 import type { DisplayReport, Layer2Port } from './port.ts';
-import { Arbiter, arbiterStep, preparePlaySecond, displayReport, findDelivery, replyTo, respondTo, startDirect, type Response } from './arbiter.ts';
+import { Arbiter, arbiterStep, preparePlaySecond, displayReport, findDelivery, replyTo, respondTo, startDirect, authorisedStep, type Response } from './arbiter.ts';
 import { completeBeat } from './beats.ts';
 import { marksAt } from './effects.ts';
 import { evalPred, explainPred, ledger, type Explain, type LedgerEntry } from './eval.ts';
@@ -47,6 +49,7 @@ export interface Instance {
 }
 
 export interface Tunables {
+  nudgeGap: number;
   maxLive: number;
   watchMax: number;
   maxTransitions: number;
@@ -76,6 +79,7 @@ export interface Tunables {
 }
 
 export const DEFAULT_TUNABLES: Tunables = {
+  nudgeGap: 3600,
   maxLive: 4,
   watchMax: 64,
   maxTransitions: 8,
@@ -139,7 +143,9 @@ export interface Layer2Options {
   lab?: boolean;
   tunables?: Partial<Tunables>;
   /** Main-story (spine) characters: the director never casts them (S2 section 5.2). */
-  worldRegistry?: { isSpine?(node: Id): boolean };
+  worldRegistry?: { isSpine?(node: Id): boolean; agentRoles?(kind: string): string[];
+    eventWitnesses?(place: Id | undefined, participants: Id[], at: GameTime): Id[];
+    intends?(actor: Id, kind: string, at: GameTime): boolean; areTied?(a: Id, b: Id, at: GameTime): boolean };
   /** Names of facts that record a relationship's status elsewhere (L-16). */
   relationshipFacts?: ReadonlySet<string>;
 }
@@ -199,6 +205,16 @@ export class Layer2 implements Layer2Hook {
   private parsed = new Map<string, Pred>();
 
   constructor(readonly k: Kernel, readonly opts: Layer2Options) {
+    for (const entry of SEED_KINDS) if (!k.eventKinds.eventKind(entry.name)) k.eventKinds.register(entry);
+    for (const [name, values] of [
+      ['core:event-kind', ['promise']],
+      ['core:participant-role', ['asker', 'protagonist', 'promiser', 'promisee', 'subject']],
+    ] as Array<[string, string[]]>) {
+      const dim = k.schema.dims.get(name);
+      if (dim?.value.t === 'enum') k.schema.dims.set(name, {
+        ...dim, value: { ...dim.value, values: [...new Set([...dim.value.values, ...values])].sort() },
+      });
+    }
     this.worldRegistry = opts.worldRegistry ?? {};
     this.reg = opts.reg ?? new L2Registry();
     this.tun = { ...DEFAULT_TUNABLES, ...(opts.tunables ?? {}) };
@@ -413,6 +429,7 @@ export class Layer2 implements Layer2Hook {
       pack: index, facts: this.facts, reg: this.reg, schema: this.k.schema,
       capabilities: this.opts.capabilities ?? this.port.capabilities(), maxLive: this.tun.maxLive, watchMax: this.tun.watchMax,
       worldSeed: this.worldSeed,
+      eventKinds: this.k.eventKinds,
     };
     c.portReport = { channels: { has: (ch: string) => this.port.channelAvailable(ch) } as unknown as ReadonlySet<string>, capabilities: this.port.capabilities() };
     if (this.opts.relationshipFacts) c.relationshipFacts = this.opts.relationshipFacts;
@@ -581,7 +598,7 @@ export class Layer2 implements Layer2Hook {
     const e: RecordEntry = { n: st.nextEntry++, at: this.k.now, playTotal: this.playTotal(), kind, data };
     if (cause !== undefined) e.cause = cause;
     st.record.push(e);
-    const SEMANTIC = new Set(['response', 'closure', 'transition']);
+    const SEMANTIC = new Set(['response', 'closure', 'transition', 'minted']);
     const diag = st.record.filter((x) => !SEMANTIC.has(x.kind));
     if (diag.length > this.tun.recordMax) {
       const drop = diag.length - this.tun.recordMax;
@@ -645,9 +662,11 @@ export class Layer2 implements Layer2Hook {
     if (!hit) return;
     const { inst, d } = hit;
     if (d.state !== 'displayed' && d.state !== 'released') return;
-    d.state = 'answered';
-    if (d.beat && d.what === 'beat' && inst.st.beats[d.beat]?.state === 'running' && !inst.st.document.beats[d.beat]!.objective) this.completeNow(inst, d.beat);
-    this.queueReeval(inst, 'content completed');
+    authorisedStep(this, inst, undefined, () => {
+      d.state = 'answered';
+      if (d.beat && d.what === 'beat' && inst.st.beats[d.beat]?.state === 'running' && !inst.st.document.beats[d.beat]!.objective) this.completeNow(inst, d.beat);
+      this.queueReeval(inst, 'content completed');
+    });
   }
 
   /** V asked for a delivery (a pull): it skips the timers, and an exhausted attempt bound is lifted (S2 section 8.5). */
@@ -688,6 +707,14 @@ export class Layer2 implements Layer2Hook {
   ledger(): LedgerEntry[] {
     return ledger(this);
   }
+
+  exposure(event: Id): ReturnType<typeof patternReads.exposure> { return patternReads.exposure(this, event); }
+  responseOf(event: Id): ReturnType<typeof patternReads.responseOf> { return patternReads.responseOf(this, event); }
+  realisedBy(event: Id): ReturnType<typeof patternReads.realisedBy> { return patternReads.realisedBy(this, event); }
+  realising(pattern: string, juncture: string): ReturnType<typeof patternReads.realising> { return patternReads.realising(this, pattern, juncture); }
+  beatFunction(seed: Id, beat: string): ReturnType<typeof patternReads.beatFunction> { return patternReads.beatFunction(this, seed, beat); }
+  mintedBy(event: Id): ReturnType<typeof patternReads.mintedBy> { return patternReads.mintedBy(this, event); }
+  exposedNodeAt(node: Id, atLeast: import('./types.ts').ExposureGrade = 'presented'): number | undefined { return patternReads.exposedNodeAt(this, node, atLeast); }
 
   exposedNode(node: Id, atLeast: 'ambient' | 'presented' | 'confirmed' = 'confirmed'): boolean {
     const rank = { ambient: 0, presented: 1, confirmed: 2 } as const;

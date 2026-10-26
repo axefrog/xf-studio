@@ -28,6 +28,7 @@ describe('SF1-Q-2 (v0.6): the audits catch', () => {
   test('a seed write to punish state: a layer above S1 naming the intention, its last window, its grounding pulse or its events', () => {
     expect(lintLayerWrites([{ path: 'commit.ts', text: 'state.groups[g].lastPunish = 3;' }]).map((f) => f.audit)).toEqual(['d30-grounds']);
     expect(lintLayerWrites([{ path: 'commit.ts', text: "const intent = { name: 'punish' };" }]).length).toBe(0);
+    expect(lintLayerWrites([{ path: 'encounter.ts', text: "const decision = events.find(e => e.kind === 'decide.punish');" }])).toEqual([]);
     expect(lintLayerWrites([{ path: 'commit.ts', text: 'g.intent = { punish: true };' }]).map((f) => f.audit)).toEqual(['d30-grounds']);
     expect(lintLayerWrites([{ path: 'commit.ts', text: "mint({ kind: 'decide.punish' });" }]).map((f) => f.audit)).toEqual(['d30-grounds']);
     expect(lintLayerWrites([{ path: 'commit.ts', text: "g.pulse['retribution-v'] = p;" }]).map((f) => f.audit)).toEqual(['d30-grounds']);

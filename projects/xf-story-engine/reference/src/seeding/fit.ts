@@ -8,6 +8,7 @@ import type { Id, Query } from '../types.ts';
 import { castOrder, castRole, effective, runLadder } from './cast.ts';
 import { chooseFragment } from './beats.ts';
 import { playOf } from './doc.ts';
+import { implicitPattern } from './seed-patterns.ts';
 import { evalPred, ledger } from './eval.ts';
 import type { Instance, Layer2 } from './layer2.ts';
 import { isTerminal } from './layer2.ts';
@@ -19,6 +20,7 @@ import type { CompiledResult } from './compile.ts';
 import type { ChannelId, ContentRef, EffectDecl, Finding, SeedInput, TimingRequest } from './types.ts';
 
 export interface FitReport {
+  implicitPattern?: ReturnType<typeof implicitPattern>;
   fit?: import('./fit-types.ts').FitReportFit;
   verdict: 'fits' | 'waits' | 'no-fit';
   why: string[];
@@ -78,6 +80,8 @@ function evaluate(l2: Layer2, out: FitReport, res: CompiledResult, fitId: Id, pa
   st.sowSeq = l2.global.nextSowSeq;
   const inst: Instance = { id: fitId, st, fitSample: sample };
   const doc = st.document;
+  out.implicitPattern = implicitPattern(doc, (ref) => res.closure.fragments.find((f) => f.id === ref.replace(/^pack:/, '')),
+    l2.reg.patterns, l2.reg.vocabulary, (kind) => k.eventKinds.eventKind(kind));
   let withdraw: string | undefined;
   let waiting = false;
   for (const key of castOrder(inst)) {

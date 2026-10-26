@@ -33,6 +33,7 @@ export interface SowOpts {
   authoringSource?: boolean;
   overlay?: {
     roles?: Record<string, { identity: Id }>;
+    growsFrom?: { instance: Id; juncture: string };
     stakeScale?: Seed['stakeScale'];
   };
 }
@@ -64,6 +65,12 @@ function applyOverlay(l2: Layer2, input: SeedInput, overlay: NonNullable<SowOpts
     seed.roles[key] = { ...role, identity: o.identity };
   }
   if (overlay.stakeScale !== undefined) seed.stakeScale = overlay.stakeScale;
+  if (overlay.growsFrom !== undefined) {
+    const g = overlay.growsFrom;
+    if (!/^[0-9a-f]{32}$/.test(g.instance) || typeof g.juncture !== 'string' || !g.juncture)
+      findings.push({ code: 'overlay', level: 'error', engine: true, message: 'Growth needs an instance Id and a juncture key.' });
+    else seed.growsFrom = structuredClone(g);
+  }
   return { seed, findings };
 }
 
@@ -159,7 +166,7 @@ export function sowTemplate(l2: Layer2, packId: string, templateId: string, opts
   st.frames.watch = watch;
   for (const rk of Object.keys(roles)) {
     const f = ids.roleFrameId(iid, rk);
-    k.frames.open({ id: f, actor: iid, level: 'goal', origin: iid, weight: 1, cause: iid, parents: [{ frame: watch, weight: 1 }], focus: { nodes: [], tier: 3 } });
+    k.frames.open({ id: f, actor: iid, level: 'goal', origin: iid, weight: 1, cause: iid, parents: [{ frame: watch, weight: 1 }], focus: { nodes: [], tier: inst.st.document.nudge ? 1 : 3 } });
     st.frames.roles[rk] = f;
   }
   // The world requirements that start at sowing.

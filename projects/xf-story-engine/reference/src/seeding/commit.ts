@@ -81,7 +81,7 @@ export function commitRoles(l2: Layer2, inst: Instance, roles: string[], cause: 
       goalFrame = ids.goalFrameId(inst.id, r);
       k.frames.open({
         id: goalFrame, actor: node, level: 'goal', origin: roleFrame ?? inst.id, weight: 1, cause: inst.id,
-        parents: roleFrame ? [{ frame: roleFrame, weight: 1 }] : [], payload: { goal: { effects } }, focus: { nodes: [node], tier: 3 },
+        parents: roleFrame ? [{ frame: roleFrame, weight: 1 }] : [], payload: { goal: { effects } }, focus: { nodes: [node], tier: doc.nudge ? 1 : 3 },
       });
     }
     for (const a of role.authored ?? []) {

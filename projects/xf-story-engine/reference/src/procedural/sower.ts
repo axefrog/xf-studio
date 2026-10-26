@@ -20,8 +20,9 @@ import type {
 import { Keys, cmp } from './keys.ts';
 import { compatible, levels, sowableFindings } from './lint.ts';
 import type { Sifter } from './sifter.ts';
+import type { GraphSower } from './graph-sower.ts';
 
-export const FEATURES: Feature[] = ['F3', 'F5', 'F6', 'F11'];
+export const FEATURES: Feature[] = ['F3', 'F5', 'F6', 'F11', 'F13', 'F14', 'F15', 'F16'];
 export interface RankedCandidate extends Candidate {
   bands: Partial<Record<Feature, number>>;
   composite: number;
@@ -40,7 +41,7 @@ export function rankCandidates(
   for (const f of FEATURES) {
     if (out.every((c) => c.features[f] === out[0]?.features[f])) continue;
     used.push(f);
-    const ranked = out.slice().sort((a, b) => b.features[f] - a.features[f] || cmp(a.key, b.key));
+    const ranked = out.slice().sort((a, b) => (b.features[f] ?? 0) - (a.features[f] ?? 0) || cmp(a.key, b.key));
     ranked.forEach((c, r) => {
       c.bands[f] = 2 - Math.floor((3 * r) / out.length);
     });
@@ -49,8 +50,8 @@ export function rankCandidates(
     let sum = 0,
       weights = 0;
     for (const f of used) {
-      sum += data.sower.featureWeights[f] * c.bands[f]!;
-      weights += data.sower.featureWeights[f];
+      sum += (data.sower.featureWeights[f] ?? 0) * c.bands[f]!;
+      weights += data.sower.featureWeights[f] ?? 0;
     }
     c.composite = weights === 0 ? 0.5 : sum / (2 * weights);
     let dup = 0;
@@ -58,17 +59,19 @@ export function rankCandidates(
       if (r.pattern === c.pattern) dup++;
       if (c.place !== undefined && r.place === c.place) dup++;
     }
-    c.score = data.sower.lambda * c.composite - data.sower.diversity * dup;
+    c.score = data.sower.lambda * c.composite - data.sower.diversity * dup - data.sower.skeleton * Math.min(c.skeletonMatches ?? 0, data.sower.skeletonCap);
   }
   return out;
 }
 export interface Kit {
+  overlay?: SowRequest['overlay'];
   pack: string;
   template: Seed;
   sowable: Sowable;
 }
 export type TypedExclusion = { kind: 'verb' | 'class' | 'tag' | 'npc'; value: string };
 export class Sower {
+  graph?: GraphSower;
   readonly rivals: Array<{ k: number; candidates: RankedCandidate[] }> = [];
   constructor(
     readonly l2: Layer2,
@@ -122,7 +125,7 @@ export class Sower {
       }
     return out;
   }
-  private excluded(t: Seed | CompiledSeed, pack: string, nodes: string[]): boolean {
+  excluded(t: Seed | CompiledSeed, pack: string, nodes: string[]): boolean {
     const settings = this.l2.k.settings.current(),
       tags = [...(t.purpose.tags ?? []), ...((t.sowable as Sowable | undefined)?.tags ?? [])],
       envelope = t.content?.envelope ?? {},
@@ -148,7 +151,7 @@ export class Sower {
     for (const e of this.state()
       .pool.slice()
       .sort((a, b) => a.seq - b.seq)) {
-      if (!e.complete || e.seed) continue;
+      if (e.graph || !e.complete || e.seed) continue;
       const p = this.sifter.patterns.get(e.pattern);
       if (!p) continue;
       const events = e.stages.map((s) => this.kv.event(s.event));
@@ -231,7 +234,7 @@ export class Sower {
         kits,
       });
     }
-    return out.sort((a, b) => cmp(a.candidate.key, b.candidate.key));
+    return out.concat(this.graph?.collect(counts) ?? []).sort((a, b) => cmp(a.candidate.key, b.candidate.key));
   }
   resolve(counts: Counts): void {
     const st = this.state(),
@@ -250,10 +253,10 @@ export class Sower {
     else if (slot.time < this.data.schedule.gentleFirst) reason = 'slot-gentle';
     else if (now < st.openLockUntil) reason = 'slot-locked';
     else if (
-      counts.A >= this.data.threads.maxAttended ||
+      ![...this.sifter.patterns.values()].some((p) => p.graph) && (counts.A >= this.data.threads.maxAttended ||
       counts.L >= this.data.threads.maxLive ||
       counts.S >= this.data.threads.maxSimmering ||
-      st.pending.length >= this.data.threads.maxLive
+      st.pending.length >= this.data.threads.maxLive)
     )
       reason = 'slot-budget';
     if (reason) this.log('slot', reason, { k, ...slot, tempo, counts });
@@ -296,14 +299,14 @@ export class Sower {
           req: SowRequest = {
             template: kit.template.id,
             pack: kit.pack,
-            overlay: { roles: this.overlay(p, e) },
+            overlay: kit.overlay ?? { roles: this.overlay(p, e) },
             localName: candidate.key.slice(0, 16),
             decision: this.keys.decision(candidate.key),
           };
         const result = this.atomic(req, (instance) => {
           const st = this.state();
-          e.seed = instance;
-          st.pending.push({ instance, sownAt: this.lv.playTotal() });
+          if (e.graph) this.graph!.accepted(e, candidate, instance);
+          else { e.seed = instance; st.pending.push({ instance, sownAt: this.lv.playTotal() }); }
           st.recent.push({ pattern: p.id, kit: kit.template.id, place: candidate.place, at: this.lv.playTotal() });
           st.recent = st.recent.slice(-this.data.sower.recentSown);
           st.slots.open.next = k + 1;
@@ -341,6 +344,7 @@ export class Sower {
         );
         if (result.ok) return;
       }
+      if (e.graph) { this.graph!.refused(e, candidate); continue; }
       e.refusals++;
       e.cooldownUntil = this.lv.playTotal() + this.data.sower.cooldown;
       if (e.refusals >= this.data.sower.maxRefusals) this.sifter.drop(e, 'refusals', this.l2.k.now);

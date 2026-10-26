@@ -1,10 +1,12 @@
 import type { Finding, Seed } from '../seeding/types.ts';
 import type { Layer2 } from '../seeding/layer2.ts';
 import { bound, playOf } from '../seeding/doc.ts';
+import { lintPattern } from '../seeding/pattern-lint.ts';
+import { implicitPattern } from '../seeding/seed-patterns.ts';
 import type { KernelView, Layer3Data, SiftPattern, Sowable } from './types.ts';
 
 export const levels = ['glance', 'encounter', 'vignette', 'gig', 'arc', 'season'];
-export const forms = ['rumour', 'recap', 'sighting', 'foreshadow', 'offer', 'aftermath'];
+export const forms = ['rumour', 'recap', 'sighting', 'foreshadow', 'offer', 'aftermath', 'nudge'];
 const finding = (code: string, message: string): Finding => ({ code, level: 'error', message });
 export function clauses(p: SiftPattern) {
   return [...p.stages, ...(p.unless ?? []).map((u) => u.clause)];
@@ -22,7 +24,7 @@ export function sowableFindings(t: Seed, l2: Layer2, view: KernelView, data: Lay
   const out: Finding[] = [],
     sow = t.sowable as Sowable | undefined;
   if (!sow) return [finding('S3-K-0', 'No sowable declaration.')];
-  if (Object.keys(sow).some((key) => !['serves', 'firstClass', 'weight', 'climactic', 'tags'].includes(key)))
+  if (Object.keys(sow).some((key) => !['serves', 'firstClass', 'weight', 'climactic', 'tags', 'fills', 'tells', 'explains'].includes(key)))
     out.push(finding('S3-K-0', 'This sowable capability is not supported yet.'));
   if (!Array.isArray(sow.serves) || !sow.serves.length || sow.serves.some((f) => !forms.includes(f)))
     return [finding('S3-K-0', 'This form is not supported yet.')];
@@ -35,7 +37,7 @@ export function sowableFindings(t: Seed, l2: Layer2, view: KernelView, data: Lay
     !['person', 'crew', 'block'].includes(t.stakeScale ?? 'block')
   )
     out.push(finding('S3-K-2', 'This level or stake scale is not supported yet.'));
-  if (sow.serves?.some((f) => !['rumour', 'recap', 'sighting'].includes(f)) && !t.closing)
+  if (!t.nudge && sow.serves?.some((f) => !['rumour', 'recap', 'sighting'].includes(f)) && !t.closing)
     out.push(finding('S3-K-3', 'An offer kit needs closing content.'));
   const compiled = l2.compile(pack, t);
   if (compiled.ok) {
@@ -45,9 +47,41 @@ export function sowableFindings(t: Seed, l2: Layer2, view: KernelView, data: Lay
         const frag = l2.packs.get(pack)?.fragment(ref);
         return frag ? frag.channels.map((ch) => l2.reg.channels.get(ch)?.class).filter((c) => c !== undefined) : [];
       });
-    if (!classes.length || classes.some((c) => c !== sow.firstClass))
+    if (!t.nudge && (!classes.length || classes.some((c) => c !== sow.firstClass)))
       out.push(finding('S3-K-4', 'firstClass must match every possible first delivery and its fallback.'));
   } else out.push(finding('S3-K-4', 'The template must compile before its first delivery can be checked.'));
+  if (!!t.nudge !== sow.serves.includes('nudge') || (t.nudge && sow.serves.length !== 1))
+    out.push(finding('S3-K-7', 'Only a silent nudge serves nudge, exclusively.'));
+  if (compiled.ok) {
+    const implicit = implicitPattern(compiled.seed, (ref) => l2.packs.get(pack)?.fragment(ref), l2.reg.patterns, l2.reg.vocabulary, (kind) => l2.k.eventKinds.eventKind(kind));
+    const count = (key: string, visited: Set<string>): number => {
+      if (visited.has(key)) return 0;
+      const b = compiled.seed.beats[key]; if (!b) return 0;
+      const seen = new Set([...visited, key]);
+      const offer = playOf(b).refs.some((ref) => !!l2.packs.get(pack)?.fragment(ref)?.offer);
+      const own = offer || ['texture', 'exit'].includes(b.kind ?? '') || ['ask', 'comply', 'refuse', 'choose'].includes(implicit.junctures[key]?.fn ?? '') ? 0 : 1;
+      const next = Object.entries(compiled.seed.beats).filter(([, beat]) => beat.links?.some((l) => 'because' in l ? l.because === key : 'then' in l && l.then.includes(key))).map(([k]) => k);
+      return own + Math.max(0, ...next.map((n) => count(n, seen)));
+    };
+    if (compiled.seed.start.some((k) => count(k, new Set()) > data.sower.kitJunctures)) out.push(finding('S3-K-6', 'A sowable kit contains a whole plot.'));
+  }
+  for (const f of sow.fills ?? []) {
+    const spec = l2.reg.vocabulary?.functions[f.fn];
+    const accepts = (arg: string, role: string) => {
+      const expected = spec?.args[arg]; if (!expected) return false;
+      const kinds = (Array.isArray(expected) ? expected : [expected]).flatMap((k) => k === 'actor' ? ['person', 'group'] : [k]);
+      if (role === 'v') return kinds.some((k) => k === 'person' || k === 'any');
+      const actual = t.roles[role]?.kind;
+      return !!actual && bound(t.roles[role].identity).status !== 'fixed' && kinds.some((k) => k === 'any' || k === 'fact'
+        || view.isKind(actual, k === 'item' ? 'xf:item' : `core:${k}`) || view.isKind(k === 'item' ? 'xf:item' : `core:${k}`, actual));
+    };
+    const acting = Object.entries(spec?.args ?? {}).find(([, k]) => (Array.isArray(k) ? k : [k]).some((v) => ['actor', 'person', 'group'].includes(v)))?.[0];
+    const askers = t.start.flatMap((k) => playOf(t.beats[k]).refs).flatMap((ref) => l2.packs.get(pack)?.fragment(ref)?.offer?.asker ?? []);
+    if (!spec || Object.entries(f.args).some(([arg, role]) => !accepts(arg, role))
+      || (t.nudge && acting && f.args[acting] === 'v')
+      || (sow.serves.includes('offer') && acting && f.args[acting] !== 'v' && !askers.includes(f.args[acting]))
+      || [f.cause, sow.tells, sow.explains].some((r) => r && t.roles[r]?.kind !== 'core:event')) out.push(finding('S3-K-8', 'Kit fills need compatible open roles and event cause/telling roles.'));
+  }
   if (
     Object.values(t.roles).some((r) => {
       const b = bound(r.identity);
@@ -84,6 +118,22 @@ export function compatible(p: SiftPattern, t: Seed, view: KernelView): boolean {
   });
 }
 export function patternFindings(p: SiftPattern, l2: Layer2, view: KernelView, data: Layer3Data): Finding[] {
+  if (p.graph) {
+    if (!l2.reg.vocabulary) return [finding('S3-L-7', 'A graph pattern needs its vocabulary.')];
+    const report = lintPattern(p.graph, l2.reg.vocabulary, [...l2.reg.patterns.values()], data.sifter);
+    const junctures = [...Object.values(p.graph.junctures), ...(p.graph.unless ?? []).map((u) => u.juncture)];
+    for (const j of junctures) {
+      for (const fill of bound(j.fill).status === 'fixed' ? bound(j.fill).value ?? [] : []) {
+        if ('kinds' in fill && fill.kinds.some((kind) => !view.eventKind(kind)?.producers.length)) report.findings.push(finding('S3-L-9', 'A fixed filler needs a registered kind with producers.'));
+        if ('seed' in fill && ![...l2.packs.values()].some((pack) => pack.pack.seeds.some((t) => t.id === fill.seed))) report.findings.push(finding('S3-L-10', 'A seed filler needs a loaded template.'));
+        if ('pattern' in fill && !l2.reg.patterns.has(fill.pattern)) report.findings.push(finding('S3-L-10', 'A story filler needs a loaded pattern.'));
+      }
+      if (j.realise?.some((r) => 'construct' in r || 'refine' in r)) report.findings.push({ ...finding('S3-L-11', 'Construct and refine are later capabilities; these entries are skipped.'), level: 'warning' });
+    }
+    for (const fn of new Set(Object.values(p.graph.junctures).map((j) => j.fn)))
+      if ((l2.reg.patternWorld?.stateRules(fn) ?? []).some((r) => r.durable !== true)) report.findings.push(finding('S3-L-7', 'State rules must be durable.'));
+    return report.findings;
+  }
   const out: Finding[] = [],
     fail = (n: number, m: string) => out.push(finding(`S3-L-${n}`, m));
   if (
