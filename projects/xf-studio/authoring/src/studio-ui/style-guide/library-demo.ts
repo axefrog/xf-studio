@@ -367,7 +367,7 @@ const MOUNTS: Record<string, Mount> = {
   },
   "lib-framework-status": () => {
     // Sample states in the words the app uses (Settings › Game › Mod frameworks derives the real ones from the framework check).
-    const ok = (name: string, version: string, from: string): FrameworkStatusRow => ({ id: name, name, status: "ok", neededFor: "Needed for XF Eye Artistry", badge: { text: "Up to date", tone: "success" }, facts: [version, from], message: null, notes: [], links: [] });
+    const ok = (name: string, version: string, from: string): FrameworkStatusRow => ({ id: name, name, status: "ok", neededFor: `Needed for ${EYE_MAKEUP_MOD.modName}`, badge: { text: "Up to date", tone: "success" }, facts: [version, from], message: null, notes: [], links: [] });
     const unused = (name: string, version: string, from: string): FrameworkStatusRow => ({ ...ok(name, version, from), status: "not-needed", neededFor: null, badge: { text: "Not needed for what you build", tone: "neutral" } });
     const links = (name: string, id: string) => [{ id: `framework-${id}-nexus`, label: "Nexus Mods", name: `${name} on Nexus Mods` }, { id: `framework-${id}-github`, label: "GitHub", name: `${name} on GitHub` }];
     const archive = ok("ArchiveXL", "1.27.5", "from the Mod Organizer 2 mod “ArchiveXL”"), red4ext = ok("RED4ext", "1.30.0", "from the game folder");
@@ -376,21 +376,21 @@ const MOUNTS: Record<string, Mount> = {
       unused("Cyber Engine Tweaks", "1.37.1", "from the game folder")];
     const allFine: FrameworkStatusState = { line: "All frameworks up to date", tone: "ready", rows: [archive, red4ext, redscript, ...others], foldable: true, checking: false };
     const tooOld: FrameworkStatusRow = { ...archive, status: "too-old", badge: { text: "Too old (minimum 1.27.3)", tone: "warning" }, facts: ["1.26.3", "from the Mod Organizer 2 mod “ArchiveXL”"],
-      message: "XF Eye Artistry needs ArchiveXL 1.27.3 or newer; you have 1.26.3. Update it in Mod Organizer 2 with the latest release from Nexus Mods or GitHub.",
+      message: `${EYE_MAKEUP_MOD.modName} needs ArchiveXL 1.27.3 or newer; you have 1.26.3. Update it in Mod Organizer 2 with the latest release from Nexus Mods or GitHub.`,
       notes: ["ArchiveXL is installed more than once in this profile. Mod Organizer uses the copy in \"ArchiveXL\"; \"Old ArchiveXL\" is not used."], links: links("ArchiveXL", "archivexl") };
     const missing: FrameworkStatusRow = { ...redscript, status: "missing", badge: { text: "Missing", tone: "warning" }, facts: ["Not installed"],
-      message: "XF Eye Artistry needs redscript 0.5.31 or newer, and it isn't installed in this profile. Install it in Mod Organizer 2 from Nexus Mods or GitHub.", links: links("redscript", "redscript") };
+      message: `${EYE_MAKEUP_MOD.modName} needs redscript 0.5.31 or newer, and it isn't installed in this profile. Install it in Mod Organizer 2 from Nexus Mods or GitHub.`, links: links("redscript", "redscript") };
     const attention: FrameworkStatusState = { line: "2 frameworks need attention", tone: "attention", rows: [tooOld, red4ext, missing, ...others], foldable: false, checking: false };
     const expressionTweak: FrameworkStatusRow = { ...others[0]!, status: "too-old", neededFor: "Needed for expression sets",
       badge: { text: "Too old (minimum 1.11.4)", tone: "warning" }, facts: ["1.11.3", "from the Mod Organizer 2 mod “TweakXL”"],
       message: "Expression sets need TweakXL 1.11.4 or newer; you have 1.11.3. Update it in Mod Organizer 2 with the latest release from Nexus Mods or GitHub.",
       links: links("TweakXL", "tweakxl") };
     const expressions: FrameworkStatusState = { ...attention, line: "1 framework needs attention", rows: [
-      { ...archive, neededFor: "Needed for XF Eye Artistry and expression sets" }, expressionTweak, red4ext, redscript, ...others.slice(1)] };
+      { ...archive, neededFor: `Needed for ${EYE_MAKEUP_MOD.modName} and expression sets` }, expressionTweak, red4ext, redscript, ...others.slice(1)] };
     let count = 0;
     const make = (state: FrameworkStatusState, width = 420, open = false) => {
       const status = new FrameworkStatus({ label: "Mod frameworks", key: `style-guide.frameworks.${++count}`, onCheckAgain: () => {}, onRetryRequirements: () => {}, onOpenLink: () => {},
-        help: ["The tools your mods rely on in the game. XF Eye Artistry always counts, and expression sets count when your library holds any. XF Studio reads which version of each the game will load (through your Mod Organizer 2 profile, or the game folder) and tells you when one needs updating.",
+        help: [`The tools your mods rely on in the game. ${EYE_MAKEUP_MOD.modName} always counts, and expression sets count when your library holds any. XF Studio reads which version of each the game will load (through your Mod Organizer 2 profile, or the game folder) and tells you when one needs updating.`,
           "It never installs, updates or changes them: you do that yourself, from each one's own page."] });
       status.update(state);
       if (open) status.element.querySelector<HTMLElement>(".expander")?.click();

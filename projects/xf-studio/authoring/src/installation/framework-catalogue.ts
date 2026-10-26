@@ -1,4 +1,4 @@
-/** The frameworks the check covers, what XF Eye Artistry needs of them, and the plain-language verdicts (pure: no files, no Node).
+/** The frameworks the check covers, what the eye-makeup mod needs of them, and the plain-language verdicts (pure: no files, no Node).
  *
  * The page uses this module directly (Settings › Game › Mod frameworks, the Mod package card), and `framework-versions.ts` reads the
  * installed files and fills in the reports these types describe. Evidence rules and the reasoning behind each minimum:
