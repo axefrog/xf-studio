@@ -90,6 +90,8 @@ export function ownDefaultOf(value: unknown): OwnDefaultDocument | null {
 export type ContributedDefaultsSource = {
   list(): readonly ContributedLayoutDefault[];
   subscribe(listener: () => void): () => void;
+  /** Moves whenever the set of contributions changes: a check made earlier is revalidated at dispatch if it differs. Absent: fixed. */
+  generation?(): number;
 };
 
 export type LayoutDefaultsDeps = {

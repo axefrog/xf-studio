@@ -119,6 +119,39 @@ describe("experiment-contributed default layouts", () => {
     expect(w.defaults.get(HOLO)).toBeUndefined();
   });
 
+  test("the generation moves only when the registration set changes, and the list and knowledge share one snapshot", () => {
+    const experiments = experimentsDouble([holotable]), w = windowWith(experiments);
+    const g0 = w.layouts.contributed.generation!();
+    expect(w.layouts.contributed.generation!()).toBe(g0);
+    experiments.set(true);
+    const g1 = w.layouts.contributed.generation!();
+    expect(g1).toBeGreaterThan(g0);
+    expect(w.layouts.known.panel("holotable.view")).toBe(w.layouts.contributed.list().some(item => item.id === HOLO));
+    experiments.set(false);
+    expect(w.layouts.contributed.generation!()).toBeGreaterThan(g1);
+    expect(w.layouts.known.panel("holotable.view")).toBe(false);
+  });
+
+  test("§6.6, this side: a tab and an own default made from the experiment survive it going off and on; the own default is unavailable meanwhile", () => {
+    const experiments = experimentsDouble([holotable]), w = windowWith(experiments);
+    experiments.set(true);
+    w.tabs.dispatch({ kind: "tabs.new", default: HOLO });
+    const tabId = w.s.tabId(), tab = JSON.stringify(w.s.tab(tabId));
+    const saved = w.defaults.dispatch({ kind: "create", name: "My replay", fragment: w.defaults.get(HOLO)!.fragment });
+    if (!saved.ok) throw Error(saved.reason);
+    expect(w.defaults.get(saved.id)?.unavailable).toBeUndefined();
+    experiments.set(false);
+    expect(w.defaults.get(saved.id)?.unavailable).toBeDefined();
+    expect(w.defaults.list().some(item => item.id === saved.id)).toBe(true);
+    expect(w.defaults.capability({ kind: "rename", id: saved.id, name: "Still mine" }).available).toBe(true);
+    expect(w.defaults.capability({ kind: "delete", id: saved.id }).available).toBe(true);
+    expect(JSON.stringify(w.s.tab(tabId))).toBe(tab);
+    experiments.set(true);
+    expect(w.defaults.get(saved.id)?.unavailable).toBeUndefined();
+    expect(w.tabs.capability({ kind: "tabs.new", default: saved.id }).available).toBe(true);
+    expect(JSON.stringify(w.s.tab(tabId))).toBe(tab);
+  });
+
   test("a tab made from an experiment default survives the experiment going off and on", () => {
     const experiments = experimentsDouble([holotable]), w = windowWith(experiments);
     experiments.set(true);

@@ -35,24 +35,23 @@ export type LayoutExperiments = { registrations(): readonly LayoutExperiment[]; 
  * the build. Switching the experiment off withdraws its defaults and its panel types; tabs made from them are the person's and stay.
  */
 export function studioLayoutDefaults(experiments: LayoutExperiments, log: (message: string) => void = () => {}) {
-  const known: FragmentKnowledge = Object.freeze({ rules: STUDIO_VIEW_GRAPH_RULES, tool: STUDIO_FRAGMENT_KNOWLEDGE.tool,
-    panel: (type: string) => panels.has(type) || experiments.registrations().some(item => item.contribution.panels.some(panel => panel.id === type)) });
   const refused = new WeakSet<StudioModule>();
-  // Cached on the registrations themselves (their identities), so a module registered again with other defaults is checked afresh.
-  let cached: { on: readonly LayoutExperiment[]; list: readonly ContributedLayoutDefault[] } | null = null;
   const refuse = (item: LayoutExperiment, reason: string) => {
     if (refused.has(item.module)) return;
     refused.add(item.module);
     log(`The ${item.module.label} experiment's default layouts can't be offered: ${reason}.`);
   };
-  const list = (): readonly ContributedLayoutDefault[] => {
-    const on = experiments.registrations().filter(item => {
-      try { return !!item.module.defaults?.length; } catch (error) { refuse(item, String((error as Error)?.message ?? error)); return false; }
-    });
-    if (cached && cached.on.length === on.length && cached.on.every((item, index) => item === on[index])) return cached.list;
+  // One snapshot per registration set: the defaults and the panel types come from the same `registrations()` read, so the list and the
+  // knowledge can never disagree. Cached on the registrations' identities, so a module registered again is checked afresh; the
+  // generation moves whenever the set changes (dispatch-time checks compare it).
+  let snap: { on: readonly LayoutExperiment[]; generation: number; list: readonly ContributedLayoutDefault[]; panels: ReadonlySet<string> } | null = null;
+  const snapshot = () => {
+    const on = experiments.registrations();
+    if (snap && snap.on.length === on.length && snap.on.every((item, index) => item === on[index])) return snap;
     const added = on.flatMap(item => {
       // One experiment's broken defaults never take the others, or the built-in ones, with them.
       try {
+        if (!item.module.defaults?.length) return [];
         const own = new Set(item.contribution.panels.map(panel => panel.id));
         const issues = contributedDefaultIssues([item.module], { ...STUDIO_FRAGMENT_KNOWLEDGE, panel: type => panels.has(type) || own.has(type) });
         if (!issues.length) return contributedDefaults([item.module]);
@@ -60,10 +59,14 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
       } catch (error) { refuse(item, String((error as Error)?.message ?? error)); }
       return [];
     });
-    cached = { on, list: Object.freeze([...STUDIO_LAYOUT_DEFAULTS, ...added]) };
-    return cached.list;
+    snap = { on, generation: (snap?.generation ?? 0) + 1, list: Object.freeze([...STUDIO_LAYOUT_DEFAULTS, ...added]),
+      panels: new Set(on.flatMap(item => item.contribution.panels.map(panel => panel.id))) };
+    return snap;
   };
-  const contributed: ContributedDefaultsSource = { list, subscribe: listener => experiments.subscribe(listener) };
+  const known: FragmentKnowledge = Object.freeze({ rules: STUDIO_VIEW_GRAPH_RULES, tool: STUDIO_FRAGMENT_KNOWLEDGE.tool,
+    panel: (type: string) => panels.has(type) || snapshot().panels.has(type) });
+  const contributed: ContributedDefaultsSource = { list: () => snapshot().list, generation: () => snapshot().generation,
+    subscribe: listener => experiments.subscribe(listener) };
   return { contributed, known };
 }
 // A first workspace keeps its legacy view graph, and starts with Eye makeup's contributed panel arrangement in both size classes.

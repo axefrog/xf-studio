@@ -49,7 +49,8 @@ export function holotablePanel(ctx: Ctx): PanelController {
     transaction: { edit: v => { const s = facade.snapshot().open?.session; if (s) void ctx.dispatch({ kind: "holo.seek", t: s.meta.from + v }, { quiet: true }); } } });
   const readout = h("span", { class: "note muted mono", role: "status" });
 
-  const controls = h("div", { class: "control-line" }, play, view.element, readout);
+  const controls = h("div", { class: "control-line", style: "flex:0 0 auto" }, play, view.element, readout);
+  time.element.style.flex = "0 0 auto"; // the drawing takes the room; the controls keep their own height
   const element = h("div", { class: "panel-content holotable-panel", style: "display:flex;flex-direction:column;height:100%;min-height:0;box-sizing:border-box;overflow:auto" },
     empty, svg, time.element, controls);
 
