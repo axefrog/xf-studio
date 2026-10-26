@@ -83,3 +83,38 @@ describe("H3: B318-1 needs readiness evidence for every run, and says when it ha
     expect(row.verdict).toBe("PASS");
   });
 });
+
+describe("H4: a change claimed inside a burst is timed against its frames", () => {
+  const runSt5 = async (burstStartOffsetMs: number) => {
+    const { writeFileSync, mkdirSync } = await import("node:fs");
+    const { encodePng } = await import("../capture/image.ts");
+    const { stScript } = await import("../sessions/make-batches.ts");
+    const { clock, fakeApi, fakeHost, go, script } = await fakes();
+    const row = { ...(stScript(false, { panel: true, cpu: true }) as { rows: { id: string; steps: { do?: string; plate?: number[] }[] }[] }).rows.find((r) => r.id === "ST5-dark")!, requires: [] };
+    const plate = row.steps.find((s) => s.do === "capture.surface")!.plate!;
+    const dir = tempDir("xfb-r34-");
+    mkdirSync(join(dir, "pics"), { recursive: true });
+    const pic = join(dir, "pics", "plate.png");
+    writeFileSync(pic, encodePng({ width: 8, height: 8, rgb: new Uint8Array(8 * 8 * 3).map((_, i) => plate[i % 3]) }));
+    let paused = false, id = 0;
+    const requests: { id: number; press: string; press_status: string }[] = [];
+    const api = fakeApi(clock, {
+      "overlay.state": () => ({ ok: true, result: { theme: "dark", motion: { setting: "full", effective: "full" }, cet_open: false, drawing_now: true } }),
+      "bridge.info": () => ({ ok: true, result: { sid: "sid-1", status_surface: "xf_box", status: { chip: paused ? "Paused" : "Changes allowed" }, bridge: { writes_paused: paused }, cet_panel: { requests } } }),
+      "cet.panel": (input) => { paused = input.press === "pause_changes"; requests.push({ id: ++id, press: input.press, press_status: "done" }); return { ok: true, result: { queued: true, id } }; },
+      "capture.screenshot": () => ({ ok: true, result: { crop: { region: "pixels" }, full: { path: pic }, view: { path: pic } } }),
+      "capture.burst": () => ({ ok: true, result: { started_at: new Date(Date.now() + burstStartOffsetMs).toISOString(), crop: { region: "pixels" }, timing: { first_to_last_ms: 2300 },
+        frames: Array.from({ length: 24 }, (_, i) => ({ index: i + 1, at_ms: i * 100, record: { full: { path: pic } } })), contact_sheet: { path: pic }, manifest: pic } }),
+    });
+    return (await go(script([row] as never), api, fakeHost(), clock, dir)).rows[0];
+  };
+  test("both changes stamped between the first and last frame: CAPTURED", async () => {
+    const row = await runSt5(-20);
+    expect(row.verdict).toBe("CAPTURED");
+  });
+  test("a burst whose frames don't span the changes: PARTIAL, naming the check", async () => {
+    const row = await runSt5(-60_000);
+    expect(row.verdict).toBe("PARTIAL");
+    expect(row.reason).toContain("both changes inside the burst");
+  });
+});

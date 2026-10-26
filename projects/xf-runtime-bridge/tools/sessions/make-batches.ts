@@ -235,6 +235,33 @@ const resumeChanges = (row: string): Json[] => [
     when: { match: { ref: ref(row, "player_paused"), exists: false } } },
 ];
 
+/**
+ * A real change of tone inside a burst: Pause changes after lead_ms, the request done and the chip Paused, then after
+ * gap_ms Resume changes, done and Changes allowed again. Each change is bracketed by wall-clock stamps (before the press,
+ * after its state was seen), and burst.covers checks every stamp falls between the burst's first and last frame: only
+ * then did both changes happen inside it. A change outside the frames leaves that check failing (the row PARTIAL).
+ */
+const changeInBurst = (row: string, burst: Json, burstBind: string, leadMs: number, gapMs: number): { steps: Json[]; pass: Json[] } => {
+  const seen = (name: string, req: string, label: string): Json => ({ do: "run", command: "bridge.info", input: {}, until: { all: [request(row, req, [{ path: "press_status", equals: "done" }]), chip(label)] },
+    interval_ms: 100, deadline_ms: 800, bind: key(row, name), on_fail: "continue" });
+  const stamp = (name: string): Json => ({ do: "stamp", bind: key(row, name) });
+  return {
+    steps: [
+      { label: `${row}-change`, together: [
+        { ...burst, bind: key(row, burstBind) },
+        { sequence: [{ do: "wait", ms: leadMs }, stamp("t1"), panelPress(row, "pause", "pause_changes"), seen("first", "pause", "Paused"), stamp("t2"),
+          { do: "wait", ms: gapMs }, stamp("t3"), panelPress(row, "resume", "resume_changes"), seen("second", "resume", "Changes allowed"), stamp("t4")] },
+      ] },
+      { label: `${row}-inside`, do: "burst.covers", burst: ref(row, burstBind), times: [ref(row, "t1", "ms"), ref(row, "t2", "ms"), ref(row, "t3", "ms"), ref(row, "t4", "ms")], bind: key(row, "inside"), on_fail: "continue" },
+    ],
+    pass: [
+      check("Paused: its press done and the chip seen", row, "first", "status.chip", { equals: "Paused" }),
+      check("Resumed: its press done and Changes allowed seen", row, "second", "status.chip", { equals: "Changes allowed" }),
+      check("both changes inside the burst (their stamps between its first and last frame)", row, "inside", "covers", { equals: true }),
+    ],
+  };
+};
+
 // ---- The ST rows -------------------------------------------------------------------------------------------
 
 /** Motion auto against frame generation, the CET line under it, the Windows half of ST9, and ST13's cet_open. */
@@ -358,19 +385,13 @@ function writesRows(theme: Theme): Json[] {
   // The settle needs a real change of tone inside the burst: the CET window's own Pause changes, then Resume within 2 s.
   row = `ST5-${theme}`;
   if (PANEL_HOOK) {
+    const change = changeInBurst(row, { do: "burst", name: `ST5-xfbox-settle-${theme}`, frames: 24, interval_ms: 100, clear_overlay: false, rect: "$win.regions.xf_box" }, "burst", 300, 500);
     rows.push({ id: row, title: `The settle on a change of state (Pause changes), and none for a second change within 2 s (Resume) (${theme})`, requires, judged_by: STUDIO,
       steps: [inPlay(row), ...look(row, theme, "full"), ...xfBox(row),
         verify(row, "box", { all: [onSurface("xf_box"), chip("Changes allowed")] }), visible(row, "xf_box", theme, "box"),
-        { label: `${row}-change`, together: [
-          { do: "burst", name: `ST5-xfbox-settle-${theme}`, frames: 20, interval_ms: 100, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "burst") },
-          { sequence: [{ do: "wait", ms: 300 }, panelPress(row, "pause", "pause_changes"), { do: "wait", ms: 150 }, { do: "run", command: "bridge.info", input: {}, bind: key(row, "first") },
-            { do: "wait", ms: 500 }, panelPress(row, "resume", "resume_changes"), { do: "wait", ms: 150 }, { do: "run", command: "bridge.info", input: {}, bind: key(row, "second") }] },
-        ] },
-        inFrame(row, "burst", "xf_box", theme)],
-      pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the settle burst (paused at 0.3 s, resumed at 1.0 s)", row, "burst"), framed(row, "burst"),
-        check("the first change happened inside the burst (Paused)", row, "first", "status.chip", { equals: "Paused" }),
-        check("the second change happened inside the burst (Changes allowed)", row, "second", "status.chip", { equals: "Changes allowed" }),
-        check("all 20 frames", row, "burst", "frames.19", { exists: true }), check("over about 2 s", row, "burst", "timing.first_to_last_ms", { min: 1700 })],
+        ...change.steps, inFrame(row, "burst", "xf_box", theme)],
+      pass: [check("motion full", row, "overlay", "motion.effective", { equals: "full" }), captured("the settle burst (paused at about 0.3 s, resumed within 2 s)", row, "burst"), framed(row, "burst"),
+        ...change.pass, check("all 24 frames", row, "burst", "frames.23", { exists: true }), check("over about 2.3 s", row, "burst", "timing.first_to_last_ms", { min: 2100 })],
       cleanup: [...resumeChanges(row), hudBack(row)] });
   } else waiting.push({ row, hook: "cet.panel press" });
 
@@ -496,19 +517,13 @@ function writesRows(theme: Theme): Json[] {
   // No settle under reduced motion, on a real change of tone inside the burst (Pause changes, then Resume).
   row = `ST3-${theme}-settle`;
   if (PANEL_HOOK) {
+    const settle = changeInBurst(row, { do: "burst", name: `ST3-xfbox-reduced-settle-${theme}`, frames: 20, interval_ms: 100, clear_overlay: false, rect: "$win.regions.xf_box" }, "settle", 300, 300);
     rows.push({ id: row, title: `The XF box with motion reduced: no settle on a change of tone (Pause changes and back) (${theme})`, requires, judged_by: STUDIO,
       steps: [inPlay(row), ...look(row, theme, "reduced"), ...xfBox(row),
         verify(row, "box", { all: [onSurface("xf_box"), chip("Changes allowed")] }), visible(row, "xf_box", theme, "box"),
-        { label: `${row}-change`, together: [
-          { do: "burst", name: `ST3-xfbox-reduced-settle-${theme}`, frames: 10, interval_ms: 100, clear_overlay: false, rect: "$win.regions.xf_box", bind: key(row, "settle") },
-          { sequence: [{ do: "wait", ms: 300 }, panelPress(row, "pause", "pause_changes"), { do: "wait", ms: 150 }, { do: "run", command: "bridge.info", input: {}, bind: key(row, "first") },
-            { do: "wait", ms: 250 }, panelPress(row, "resume", "resume_changes"), { do: "wait", ms: 150 }, { do: "run", command: "bridge.info", input: {}, bind: key(row, "second") }] },
-        ] },
-        inFrame(row, "settle", "xf_box", theme)],
+        ...settle.steps, inFrame(row, "settle", "xf_box", theme)],
       pass: [check("motion reduced", row, "overlay", "motion.effective", { equals: "reduced" }), captured("no wash on a change", row, "settle"), framed(row, "settle"),
-        check("the tone changed inside the burst (Paused)", row, "first", "status.chip", { equals: "Paused" }),
-        check("and back (Changes allowed)", row, "second", "status.chip", { equals: "Changes allowed" }),
-        check("all 10 settle frames", row, "settle", "frames.9", { exists: true }), check("over about 1 s", row, "settle", "timing.first_to_last_ms", { min: 800 })],
+        ...settle.pass, check("all 20 settle frames", row, "settle", "frames.19", { exists: true }), check("over about 1.9 s", row, "settle", "timing.first_to_last_ms", { min: 1700 })],
       cleanup: [...resumeChanges(row), hudBack(row)] });
   } else waiting.push({ row, hook: "cet.panel press" });
   return rows;

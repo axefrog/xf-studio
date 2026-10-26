@@ -3166,7 +3166,7 @@
             {
               "do": "burst",
               "name": "ST5-xfbox-settle-dark",
-              "frames": 20,
+              "frames": 24,
               "interval_ms": 100,
               "clear_overlay": false,
               "rect": "$win.regions.xf_box",
@@ -3177,6 +3177,10 @@
                 {
                   "do": "wait",
                   "ms": 300
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST5_dark_t1"
                 },
                 {
                   "label": "ST5-dark-pause",
@@ -3218,18 +3222,48 @@
                   "bind": "ST5_dark_pause_req"
                 },
                 {
-                  "do": "wait",
-                  "ms": 150
-                },
-                {
                   "do": "run",
                   "command": "bridge.info",
                   "input": {},
-                  "bind": "ST5_dark_first"
+                  "until": {
+                    "all": [
+                      {
+                        "path": "cet_panel.requests",
+                        "some": {
+                          "all": [
+                            {
+                              "path": "id",
+                              "equals": "$ST5_dark_pause_req.id"
+                            },
+                            {
+                              "path": "press_status",
+                              "equals": "done"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "path": "status.chip",
+                        "equals": "Paused"
+                      }
+                    ]
+                  },
+                  "interval_ms": 100,
+                  "deadline_ms": 800,
+                  "bind": "ST5_dark_first",
+                  "on_fail": "continue"
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST5_dark_t2"
                 },
                 {
                   "do": "wait",
                   "ms": 500
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST5_dark_t3"
                 },
                 {
                   "label": "ST5-dark-resume",
@@ -3283,18 +3317,57 @@
                   "bind": "ST5_dark_resume_req"
                 },
                 {
-                  "do": "wait",
-                  "ms": 150
-                },
-                {
                   "do": "run",
                   "command": "bridge.info",
                   "input": {},
-                  "bind": "ST5_dark_second"
+                  "until": {
+                    "all": [
+                      {
+                        "path": "cet_panel.requests",
+                        "some": {
+                          "all": [
+                            {
+                              "path": "id",
+                              "equals": "$ST5_dark_resume_req.id"
+                            },
+                            {
+                              "path": "press_status",
+                              "equals": "done"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "path": "status.chip",
+                        "equals": "Changes allowed"
+                      }
+                    ]
+                  },
+                  "interval_ms": 100,
+                  "deadline_ms": 800,
+                  "bind": "ST5_dark_second",
+                  "on_fail": "continue"
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST5_dark_t4"
                 }
               ]
             }
           ]
+        },
+        {
+          "label": "ST5-dark-inside",
+          "do": "burst.covers",
+          "burst": "$ST5_dark_burst",
+          "times": [
+            "$ST5_dark_t1.ms",
+            "$ST5_dark_t2.ms",
+            "$ST5_dark_t3.ms",
+            "$ST5_dark_t4.ms"
+          ],
+          "bind": "ST5_dark_inside",
+          "on_fail": "continue"
         },
         {
           "label": "ST5-dark-in-frame-burst",
@@ -3325,7 +3398,7 @@
           }
         },
         {
-          "label": "the settle burst (paused at 0.3 s, resumed at 1.0 s)",
+          "label": "the settle burst (paused at about 0.3 s, resumed within 2 s)",
           "ref": "$ST5_dark_burst",
           "captured": true
         },
@@ -3338,31 +3411,38 @@
           }
         },
         {
-          "label": "the first change happened inside the burst (Paused)",
+          "label": "Paused: its press done and the chip seen",
           "ref": "$ST5_dark_first.status.chip",
           "match": {
             "equals": "Paused"
           }
         },
         {
-          "label": "the second change happened inside the burst (Changes allowed)",
+          "label": "Resumed: its press done and Changes allowed seen",
           "ref": "$ST5_dark_second.status.chip",
           "match": {
             "equals": "Changes allowed"
           }
         },
         {
-          "label": "all 20 frames",
-          "ref": "$ST5_dark_burst.frames.19",
+          "label": "both changes inside the burst (their stamps between its first and last frame)",
+          "ref": "$ST5_dark_inside.covers",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "all 24 frames",
+          "ref": "$ST5_dark_burst.frames.23",
           "match": {
             "exists": true
           }
         },
         {
-          "label": "over about 2 s",
+          "label": "over about 2.3 s",
           "ref": "$ST5_dark_burst.timing.first_to_last_ms",
           "match": {
-            "min": 1700
+            "min": 2100
           }
         }
       ],
@@ -5780,7 +5860,7 @@
             {
               "do": "burst",
               "name": "ST3-xfbox-reduced-settle-dark",
-              "frames": 10,
+              "frames": 20,
               "interval_ms": 100,
               "clear_overlay": false,
               "rect": "$win.regions.xf_box",
@@ -5791,6 +5871,10 @@
                 {
                   "do": "wait",
                   "ms": 300
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST3_dark_settle_t1"
                 },
                 {
                   "label": "ST3-dark-settle-pause",
@@ -5832,18 +5916,48 @@
                   "bind": "ST3_dark_settle_pause_req"
                 },
                 {
-                  "do": "wait",
-                  "ms": 150
-                },
-                {
                   "do": "run",
                   "command": "bridge.info",
                   "input": {},
-                  "bind": "ST3_dark_settle_first"
+                  "until": {
+                    "all": [
+                      {
+                        "path": "cet_panel.requests",
+                        "some": {
+                          "all": [
+                            {
+                              "path": "id",
+                              "equals": "$ST3_dark_settle_pause_req.id"
+                            },
+                            {
+                              "path": "press_status",
+                              "equals": "done"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "path": "status.chip",
+                        "equals": "Paused"
+                      }
+                    ]
+                  },
+                  "interval_ms": 100,
+                  "deadline_ms": 800,
+                  "bind": "ST3_dark_settle_first",
+                  "on_fail": "continue"
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST3_dark_settle_t2"
                 },
                 {
                   "do": "wait",
-                  "ms": 250
+                  "ms": 300
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST3_dark_settle_t3"
                 },
                 {
                   "label": "ST3-dark-settle-resume",
@@ -5897,18 +6011,57 @@
                   "bind": "ST3_dark_settle_resume_req"
                 },
                 {
-                  "do": "wait",
-                  "ms": 150
-                },
-                {
                   "do": "run",
                   "command": "bridge.info",
                   "input": {},
-                  "bind": "ST3_dark_settle_second"
+                  "until": {
+                    "all": [
+                      {
+                        "path": "cet_panel.requests",
+                        "some": {
+                          "all": [
+                            {
+                              "path": "id",
+                              "equals": "$ST3_dark_settle_resume_req.id"
+                            },
+                            {
+                              "path": "press_status",
+                              "equals": "done"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "path": "status.chip",
+                        "equals": "Changes allowed"
+                      }
+                    ]
+                  },
+                  "interval_ms": 100,
+                  "deadline_ms": 800,
+                  "bind": "ST3_dark_settle_second",
+                  "on_fail": "continue"
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST3_dark_settle_t4"
                 }
               ]
             }
           ]
+        },
+        {
+          "label": "ST3-dark-settle-inside",
+          "do": "burst.covers",
+          "burst": "$ST3_dark_settle_settle",
+          "times": [
+            "$ST3_dark_settle_t1.ms",
+            "$ST3_dark_settle_t2.ms",
+            "$ST3_dark_settle_t3.ms",
+            "$ST3_dark_settle_t4.ms"
+          ],
+          "bind": "ST3_dark_settle_inside",
+          "on_fail": "continue"
         },
         {
           "label": "ST3-dark-settle-in-frame-settle",
@@ -5952,31 +6105,38 @@
           }
         },
         {
-          "label": "the tone changed inside the burst (Paused)",
+          "label": "Paused: its press done and the chip seen",
           "ref": "$ST3_dark_settle_first.status.chip",
           "match": {
             "equals": "Paused"
           }
         },
         {
-          "label": "and back (Changes allowed)",
+          "label": "Resumed: its press done and Changes allowed seen",
           "ref": "$ST3_dark_settle_second.status.chip",
           "match": {
             "equals": "Changes allowed"
           }
         },
         {
-          "label": "all 10 settle frames",
-          "ref": "$ST3_dark_settle_settle.frames.9",
+          "label": "both changes inside the burst (their stamps between its first and last frame)",
+          "ref": "$ST3_dark_settle_inside.covers",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "all 20 settle frames",
+          "ref": "$ST3_dark_settle_settle.frames.19",
           "match": {
             "exists": true
           }
         },
         {
-          "label": "over about 1 s",
+          "label": "over about 1.9 s",
           "ref": "$ST3_dark_settle_settle.timing.first_to_last_ms",
           "match": {
-            "min": 800
+            "min": 1700
           }
         }
       ],
@@ -9381,7 +9541,7 @@
             {
               "do": "burst",
               "name": "ST5-xfbox-settle-light",
-              "frames": 20,
+              "frames": 24,
               "interval_ms": 100,
               "clear_overlay": false,
               "rect": "$win.regions.xf_box",
@@ -9392,6 +9552,10 @@
                 {
                   "do": "wait",
                   "ms": 300
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST5_light_t1"
                 },
                 {
                   "label": "ST5-light-pause",
@@ -9433,18 +9597,48 @@
                   "bind": "ST5_light_pause_req"
                 },
                 {
-                  "do": "wait",
-                  "ms": 150
-                },
-                {
                   "do": "run",
                   "command": "bridge.info",
                   "input": {},
-                  "bind": "ST5_light_first"
+                  "until": {
+                    "all": [
+                      {
+                        "path": "cet_panel.requests",
+                        "some": {
+                          "all": [
+                            {
+                              "path": "id",
+                              "equals": "$ST5_light_pause_req.id"
+                            },
+                            {
+                              "path": "press_status",
+                              "equals": "done"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "path": "status.chip",
+                        "equals": "Paused"
+                      }
+                    ]
+                  },
+                  "interval_ms": 100,
+                  "deadline_ms": 800,
+                  "bind": "ST5_light_first",
+                  "on_fail": "continue"
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST5_light_t2"
                 },
                 {
                   "do": "wait",
                   "ms": 500
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST5_light_t3"
                 },
                 {
                   "label": "ST5-light-resume",
@@ -9498,18 +9692,57 @@
                   "bind": "ST5_light_resume_req"
                 },
                 {
-                  "do": "wait",
-                  "ms": 150
-                },
-                {
                   "do": "run",
                   "command": "bridge.info",
                   "input": {},
-                  "bind": "ST5_light_second"
+                  "until": {
+                    "all": [
+                      {
+                        "path": "cet_panel.requests",
+                        "some": {
+                          "all": [
+                            {
+                              "path": "id",
+                              "equals": "$ST5_light_resume_req.id"
+                            },
+                            {
+                              "path": "press_status",
+                              "equals": "done"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "path": "status.chip",
+                        "equals": "Changes allowed"
+                      }
+                    ]
+                  },
+                  "interval_ms": 100,
+                  "deadline_ms": 800,
+                  "bind": "ST5_light_second",
+                  "on_fail": "continue"
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST5_light_t4"
                 }
               ]
             }
           ]
+        },
+        {
+          "label": "ST5-light-inside",
+          "do": "burst.covers",
+          "burst": "$ST5_light_burst",
+          "times": [
+            "$ST5_light_t1.ms",
+            "$ST5_light_t2.ms",
+            "$ST5_light_t3.ms",
+            "$ST5_light_t4.ms"
+          ],
+          "bind": "ST5_light_inside",
+          "on_fail": "continue"
         },
         {
           "label": "ST5-light-in-frame-burst",
@@ -9540,7 +9773,7 @@
           }
         },
         {
-          "label": "the settle burst (paused at 0.3 s, resumed at 1.0 s)",
+          "label": "the settle burst (paused at about 0.3 s, resumed within 2 s)",
           "ref": "$ST5_light_burst",
           "captured": true
         },
@@ -9553,31 +9786,38 @@
           }
         },
         {
-          "label": "the first change happened inside the burst (Paused)",
+          "label": "Paused: its press done and the chip seen",
           "ref": "$ST5_light_first.status.chip",
           "match": {
             "equals": "Paused"
           }
         },
         {
-          "label": "the second change happened inside the burst (Changes allowed)",
+          "label": "Resumed: its press done and Changes allowed seen",
           "ref": "$ST5_light_second.status.chip",
           "match": {
             "equals": "Changes allowed"
           }
         },
         {
-          "label": "all 20 frames",
-          "ref": "$ST5_light_burst.frames.19",
+          "label": "both changes inside the burst (their stamps between its first and last frame)",
+          "ref": "$ST5_light_inside.covers",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "all 24 frames",
+          "ref": "$ST5_light_burst.frames.23",
           "match": {
             "exists": true
           }
         },
         {
-          "label": "over about 2 s",
+          "label": "over about 2.3 s",
           "ref": "$ST5_light_burst.timing.first_to_last_ms",
           "match": {
-            "min": 1700
+            "min": 2100
           }
         }
       ],
@@ -11995,7 +12235,7 @@
             {
               "do": "burst",
               "name": "ST3-xfbox-reduced-settle-light",
-              "frames": 10,
+              "frames": 20,
               "interval_ms": 100,
               "clear_overlay": false,
               "rect": "$win.regions.xf_box",
@@ -12006,6 +12246,10 @@
                 {
                   "do": "wait",
                   "ms": 300
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST3_light_settle_t1"
                 },
                 {
                   "label": "ST3-light-settle-pause",
@@ -12047,18 +12291,48 @@
                   "bind": "ST3_light_settle_pause_req"
                 },
                 {
-                  "do": "wait",
-                  "ms": 150
-                },
-                {
                   "do": "run",
                   "command": "bridge.info",
                   "input": {},
-                  "bind": "ST3_light_settle_first"
+                  "until": {
+                    "all": [
+                      {
+                        "path": "cet_panel.requests",
+                        "some": {
+                          "all": [
+                            {
+                              "path": "id",
+                              "equals": "$ST3_light_settle_pause_req.id"
+                            },
+                            {
+                              "path": "press_status",
+                              "equals": "done"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "path": "status.chip",
+                        "equals": "Paused"
+                      }
+                    ]
+                  },
+                  "interval_ms": 100,
+                  "deadline_ms": 800,
+                  "bind": "ST3_light_settle_first",
+                  "on_fail": "continue"
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST3_light_settle_t2"
                 },
                 {
                   "do": "wait",
-                  "ms": 250
+                  "ms": 300
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST3_light_settle_t3"
                 },
                 {
                   "label": "ST3-light-settle-resume",
@@ -12112,18 +12386,57 @@
                   "bind": "ST3_light_settle_resume_req"
                 },
                 {
-                  "do": "wait",
-                  "ms": 150
-                },
-                {
                   "do": "run",
                   "command": "bridge.info",
                   "input": {},
-                  "bind": "ST3_light_settle_second"
+                  "until": {
+                    "all": [
+                      {
+                        "path": "cet_panel.requests",
+                        "some": {
+                          "all": [
+                            {
+                              "path": "id",
+                              "equals": "$ST3_light_settle_resume_req.id"
+                            },
+                            {
+                              "path": "press_status",
+                              "equals": "done"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "path": "status.chip",
+                        "equals": "Changes allowed"
+                      }
+                    ]
+                  },
+                  "interval_ms": 100,
+                  "deadline_ms": 800,
+                  "bind": "ST3_light_settle_second",
+                  "on_fail": "continue"
+                },
+                {
+                  "do": "stamp",
+                  "bind": "ST3_light_settle_t4"
                 }
               ]
             }
           ]
+        },
+        {
+          "label": "ST3-light-settle-inside",
+          "do": "burst.covers",
+          "burst": "$ST3_light_settle_settle",
+          "times": [
+            "$ST3_light_settle_t1.ms",
+            "$ST3_light_settle_t2.ms",
+            "$ST3_light_settle_t3.ms",
+            "$ST3_light_settle_t4.ms"
+          ],
+          "bind": "ST3_light_settle_inside",
+          "on_fail": "continue"
         },
         {
           "label": "ST3-light-settle-in-frame-settle",
@@ -12167,31 +12480,38 @@
           }
         },
         {
-          "label": "the tone changed inside the burst (Paused)",
+          "label": "Paused: its press done and the chip seen",
           "ref": "$ST3_light_settle_first.status.chip",
           "match": {
             "equals": "Paused"
           }
         },
         {
-          "label": "and back (Changes allowed)",
+          "label": "Resumed: its press done and Changes allowed seen",
           "ref": "$ST3_light_settle_second.status.chip",
           "match": {
             "equals": "Changes allowed"
           }
         },
         {
-          "label": "all 10 settle frames",
-          "ref": "$ST3_light_settle_settle.frames.9",
+          "label": "both changes inside the burst (their stamps between its first and last frame)",
+          "ref": "$ST3_light_settle_inside.covers",
+          "match": {
+            "equals": true
+          }
+        },
+        {
+          "label": "all 20 settle frames",
+          "ref": "$ST3_light_settle_settle.frames.19",
           "match": {
             "exists": true
           }
         },
         {
-          "label": "over about 1 s",
+          "label": "over about 1.9 s",
           "ref": "$ST3_light_settle_settle.timing.first_to_last_ms",
           "match": {
-            "min": 800
+            "min": 1700
           }
         }
       ],

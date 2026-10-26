@@ -118,6 +118,8 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   "config.restore": { required: [], optional: [], help: "put config.ini back as it was before the run" },
   "actors.release_all": { required: [], optional: [], help: "release every actor the bridge directs (npc.status, then npc.release despawn)" },
   pick: { required: ["from"], optional: ["where", "index"], help: "an element of a list (a bound result's array) that matches where, the index-th such (default 0); value the element" },
+  stamp: { required: [], optional: [], help: "the wall-clock time now; value {ms} (milliseconds since the epoch, as a burst's frames are timed)" },
+  "burst.covers": { required: ["burst", "times"], optional: [], help: "whether every wall-clock time (stamp ms) falls between a burst's first and last frame; value {covers, first_ms, last_ms, outside}" },
   "host.windows_animations": { required: [], optional: [], help: "Windows' own Animation effects setting (SPI_GETCLIENTAREAANIMATION), read, never changed; value {on}" },
   "recorder.span": { required: ["run"], optional: [], help: "a recorder run's span from the v channel: V's distance travelled over every catch-up page" },
   "overlay.restore": { required: [], optional: [], help: "put the overlay's live look back as this game session started it (the first overlay.set's undo)" },
@@ -708,6 +710,19 @@ export class SessionExecutor implements Executor {
           const index = Number(action.index ?? 0);
           if (index >= eligible.length) return { ok: false, code: "none_eligible", message: `Only ${eligible.length} of ${action.from.length} match${index ? ` (wanted the ${index + 1}th)` : ""}.`, value: { eligible: eligible.length, of: action.from.length } };
           return { ok: true, value: eligible[index] };
+        }
+        case "stamp":
+          return { ok: true, value: { ms: Date.now() } };
+        case "burst.covers": {
+          const burst = action.burst as { started_at?: string; frames?: { at_ms?: number }[] } | undefined;
+          const start = Date.parse(burst?.started_at ?? "");
+          const ats = (burst?.frames ?? []).map((f) => f.at_ms).filter((a): a is number => typeof a === "number");
+          const times = Array.isArray(action.times) ? action.times as unknown[] : [];
+          if (!Number.isFinite(start) || !ats.length) return { ok: false, code: "no_burst", message: "The burst's start and frame times are needed." };
+          if (times.some((t) => typeof t !== "number")) return { ok: false, code: "no_times", message: "Every time must be a stamp's ms (a step before didn't run)." };
+          const first = start + Math.min(...ats), last = start + Math.max(...ats);
+          const outside = (times as number[]).flatMap((t, i) => (t >= first && t <= last ? [] : [i]));
+          return { ok: true, value: { covers: !outside.length, first_ms: first, last_ms: last, times, outside } };
         }
         case "host.windows_animations": {
           const on = await this.c.host.windowsAnimations();
