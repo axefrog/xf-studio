@@ -1,126 +1,611 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Holotable mock-up</title>
 <style>
-  :root {
-    --bg: #0d1014; --panel: rgba(16, 22, 28, 0.62); --edge: #2c3a46; --grid: #18222b;
-    --text: #d6dee6; --muted: #7d8b97; --v: #ffd84a; --actor: #4cc3ff; --xf: #ff5d73;
-    --heard: #b48cff; --gap: #e0a040; --area: #1d3a2f; --area-edge: #3c8a68; --hot: #ff7a3c;
-  }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
-  main { max-width: 1280px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 20px; margin: 4px 0 2px; }
-  h2 { font-size: 15px; margin: 24px 0 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
-  p { margin: 4px 0 12px; color: var(--muted); max-width: 80ch; }
-  svg { width: 100%; height: auto; display: block; border: 1px solid var(--edge); border-radius: 6px; }
-  .label { fill: var(--text); font: 12px system-ui, sans-serif; }
-  .small { fill: var(--muted); font: 11px system-ui, sans-serif; }
+/* Tokens copied from XF Studio's studio.css ("Night-shift instrument") so the mock-up uses the
+   design system's own values. This page is a sketch for the phase 1 proposal, not a style-guide entry. */
+:root {
+  color-scheme: light dark;
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Bahnschrift SemiCondensed", "Bahnschrift", "DIN Alternate", "Roboto Condensed", "Arial Narrow", sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px; --fs-xl: 19px;
+  --sp-1: 2px; --sp-2: 4px; --sp-3: 6px; --sp-4: 8px; --sp-5: 12px; --sp-6: 16px; --sp-7: 20px; --sp-8: 28px;
+  --control-h: 28px; --control-h-sm: 24px; --row-h: 32px; --header-h: 44px;
+  --radius: 2px; --bevel: 7px; --bevel-sm: 4px; --dur: 140ms; --ease: cubic-bezier(.2, .7, .2, 1);
+  --bg-app: light-dark(oklch(.955 .004 255), oklch(.17 .008 255));
+  --bg-panel: light-dark(oklch(.995 .002 255), oklch(.21 .009 255));
+  --bg-raised: light-dark(oklch(.965 .004 255), oklch(.25 .011 255));
+  --bg-sunken: light-dark(oklch(.935 .005 255), oklch(.185 .008 255));
+  --bg-hover: light-dark(oklch(.935 .006 255), oklch(.285 .012 255));
+  --bg-active: light-dark(oklch(.9 .008 255), oklch(.32 .014 255));
+  --bg-overlay: light-dark(oklch(.995 .002 255 / .97), oklch(.235 .01 255 / .97));
+  --line: light-dark(oklch(.87 .006 255), oklch(.33 .012 255));
+  --line-soft: light-dark(oklch(.91 .005 255), oklch(.285 .011 255));
+  --line-strong: light-dark(oklch(.6 .012 255), oklch(.55 .012 255));
+  --text: light-dark(oklch(.22 .012 255), oklch(.95 .005 255));
+  --text-muted: light-dark(oklch(.46 .012 255), oklch(.77 .01 255));
+  --text-faint: light-dark(oklch(.52 .012 255), oklch(.66 .01 255));
+  --accent: oklch(.89 .16 100); --accent-ink: oklch(.2 .02 100);
+  --accent-text: light-dark(oklch(.47 .1 98), oklch(.89 .16 100));
+  --signal: light-dark(oklch(.5 .1 212), oklch(.82 .12 205));
+  --signal-bg: light-dark(oklch(.5 .1 212 / .1), oklch(.82 .12 205 / .13));
+  --signal-line: light-dark(oklch(.5 .1 212 / .55), oklch(.82 .12 205 / .6));
+  --danger: light-dark(oklch(.53 .19 27), oklch(.7 .18 25));
+  --danger-bg: light-dark(oklch(.53 .19 27 / .09), oklch(.7 .18 25 / .14));
+  --warning: light-dark(oklch(.54 .13 60), oklch(.78 .14 62));
+  --warning-bg: light-dark(oklch(.54 .13 60 / .1), oklch(.78 .14 62 / .13));
+  --success: light-dark(oklch(.5 .12 155), oklch(.79 .15 155));
+  --focus: light-dark(oklch(.3 .05 255), oklch(.89 .16 100));
+  --stage: radial-gradient(120% 90% at 50% 38%, light-dark(oklch(.93 .004 255), oklch(.27 .006 255)), light-dark(oklch(.81 .005 255), oklch(.17 .006 255)) 72%);
+  --stage-strong: light-dark(oklch(.12 .01 255), oklch(1 0 0));
+  --stage-chip: light-dark(oklch(.985 .003 255 / .82), oklch(.17 .008 255 / .78));
+  /* Proposed for Holotable, to be agreed with the UI component track: the translucent canvas plate
+     (the XF box's plate is 97 %) and the wireframe's three depths. */
+  --holo-plate: light-dark(oklch(.995 .002 255 / .74), oklch(.2 .01 255 / .72));
+  --holo-wire: light-dark(oklch(.42 .012 255), oklch(.72 .012 255));
+  --holo-roof: light-dark(oklch(.97 .003 255 / .9), oklch(.26 .01 255 / .92));
+  --holo-wall: light-dark(oklch(.9 .005 255 / .9), oklch(.205 .009 255 / .94));
+  --holo-ground: light-dark(oklch(.6 .01 255), oklch(.6 .01 255));
+  --holo-road: light-dark(oklch(.88 .005 255 / .8), oklch(.235 .008 255 / .85));
+  --game-sky: linear-gradient(180deg, oklch(.24 .03 280), oklch(.3 .05 40) 62%, oklch(.2 .02 30));
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg-app); color: var(--text); font: var(--fs-md)/1.45 var(--font-ui); }
+.page { max-width: 1440px; margin: 0 auto; padding: var(--sp-6); display: grid; gap: var(--sp-8); }
+.page-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--sp-5); }
+.page-head p { margin: var(--sp-2) 0 0; color: var(--text-muted); max-width: 78ch; }
+.eyebrow { font: 600 var(--fs-xs)/1.2 var(--font-display); letter-spacing: .12em; text-transform: uppercase; color: var(--text-muted); }
+h1 { margin: var(--sp-2) 0 0; font: 600 var(--fs-xl)/1.2 var(--font-display); letter-spacing: .02em; }
+h2 { margin: 0 0 var(--sp-4); font: 600 var(--fs-lg)/1.2 var(--font-display); letter-spacing: .02em; }
+.section-note { margin: 0 0 var(--sp-5); color: var(--text-muted); max-width: 90ch; }
+.mono { font-family: var(--font-mono); font-size: var(--fs-sm); }
+.muted { color: var(--text-muted); }
+button { font: inherit; color: inherit; }
+.btn { height: var(--control-h); padding: 0 var(--sp-5); display: inline-flex; align-items: center; gap: var(--sp-3); border: 1px solid var(--line-strong); background: var(--bg-raised); border-radius: 0 var(--bevel-sm) 0 var(--bevel-sm); cursor: pointer; transition: background var(--dur) var(--ease); }
+.btn:hover { background: var(--bg-hover); }
+.btn.small { height: var(--control-h-sm); padding: 0 var(--sp-4); font-size: var(--fs-sm); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.icon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: square; stroke-linejoin: miter; flex: none; }
+.segmented { display: inline-flex; border: 1px solid var(--line-strong); background: var(--bg-sunken); padding: 1px; gap: 1px; border-radius: 0 var(--bevel-sm) 0 var(--bevel-sm); }
+.segmented button { height: 22px; padding: 0 var(--sp-4); border: 0; background: transparent; color: var(--text-muted); font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; cursor: pointer; }
+.segmented button[aria-pressed="true"] { background: var(--signal-bg); color: var(--signal); box-shadow: inset 0 -2px 0 var(--signal); }
+.chip { display: inline-flex; align-items: center; gap: var(--sp-2); height: 20px; padding: 0 var(--sp-4); border: 1px solid var(--line); border-radius: 0 var(--bevel-sm) 0 var(--bevel-sm); font: 600 var(--fs-xs)/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; }
+.chip[data-tone="signal"] { color: var(--signal); border-color: var(--signal-line); background: var(--signal-bg); }
+.chip[data-tone="warning"] { color: var(--warning); border-color: color-mix(in oklch, var(--warning) 55%, transparent); background: var(--warning-bg); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex: none; animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .6; } }
+@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+@supports (corner-shape: bevel) { .btn, .segmented, .chip, .card, .brand, .plate, .cet { corner-shape: bevel; } }
+
+/* ---------- External window ---------- */
+.app { border: 1px solid var(--line); background: var(--bg-app); display: grid; grid-template-rows: var(--header-h) minmax(0, 1fr) auto; height: min(820px, 92vh); min-height: 620px; }
+.app-head { display: flex; align-items: center; gap: var(--sp-5); padding: 0 var(--sp-5); background: var(--bg-panel); border-bottom: 1px solid var(--line); min-width: 0; }
+.brand { display: grid; place-items: center; width: 30px; height: 24px; background: var(--accent); color: var(--accent-ink); font: 700 13px/1 var(--font-display); letter-spacing: .04em; border-radius: 0 var(--bevel) 0 var(--bevel); flex: none; }
+.app-title { font: 600 var(--fs-lg)/1 var(--font-display); letter-spacing: .04em; }
+.status { display: inline-flex; align-items: center; gap: var(--sp-3); color: var(--text-muted); font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.spacer { flex: 1; }
+.app-body { display: grid; grid-template-columns: 248px minmax(0, 1fr) 288px; min-height: 0; }
+.panel { background: var(--bg-panel); min-height: 0; overflow: auto; padding: var(--sp-5) var(--sp-5) var(--sp-7); display: grid; align-content: start; gap: var(--sp-6); }
+.panel.left { border-right: 1px solid var(--line); }
+.panel.right { border-left: 1px solid var(--line); }
+.group { display: grid; gap: var(--sp-2); }
+.group-head { display: flex; align-items: center; justify-content: space-between; height: 20px; }
+.layer { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-4); height: var(--row-h); padding: 0 var(--sp-2); border-radius: var(--radius); cursor: pointer; }
+.layer:hover { background: var(--bg-hover); }
+.layer .key { width: 12px; height: 12px; border: 1.5px solid var(--k, var(--line-strong)); background: var(--kf, transparent); border-radius: 1px; }
+.layer .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.layer .count { color: var(--text-faint); font: var(--fs-sm) var(--font-mono); }
+.switch { appearance: none; width: 28px; height: 16px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg-sunken); position: relative; cursor: pointer; margin: 0; flex: none; transition: background var(--dur) var(--ease); }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); transition: transform var(--dur) var(--ease); }
+.switch:checked { background: var(--signal-bg); border-color: var(--signal); }
+.switch:checked::after { transform: translateX(12px); background: var(--signal); }
+.hold { position: relative; overflow: hidden; width: 100%; justify-content: center; }
+.hold .fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--warning-bg); pointer-events: none; }
+.hold span { position: relative; }
+.content-line { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+.stage { position: relative; background: var(--stage); min-width: 0; min-height: 0; overflow: hidden; cursor: grab; touch-action: none; }
+.stage:active { cursor: grabbing; }
+.stage svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.stage-top { position: absolute; top: var(--sp-5); left: var(--sp-5); right: var(--sp-5); display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-4); pointer-events: none; }
+.stage-top > * { pointer-events: auto; }
+.stage-chip { background: var(--stage-chip); backdrop-filter: blur(6px); padding: var(--sp-2) var(--sp-4); border: 1px solid var(--line); font: var(--fs-sm) var(--font-mono); color: var(--text-muted); }
+.stage-foot { position: absolute; left: var(--sp-5); bottom: var(--sp-5); right: var(--sp-5); display: flex; justify-content: space-between; align-items: end; gap: var(--sp-4); pointer-events: none; }
+.card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: 0 var(--bevel) 0 0; padding: var(--sp-5); display: grid; gap: var(--sp-4); }
+.card-title { display: flex; align-items: center; gap: var(--sp-4); font: 600 var(--fs-lg)/1.2 var(--font-display); letter-spacing: .02em; }
+.facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-2) var(--sp-5); margin: 0; font-size: var(--fs-sm); }
+.facts dt { color: var(--text-muted); }
+.facts dd { margin: 0; text-align: right; font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cites { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.cites li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--sp-4); align-items: center; height: 28px; padding: 0 var(--sp-4); background: var(--bg-sunken); font-size: var(--fs-sm); }
+.cites li span:last-child { font-family: var(--font-mono); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.report { margin: 0; padding: var(--sp-4) var(--sp-5); background: var(--bg-sunken); border: 1px solid var(--line); font: var(--fs-sm)/1.55 var(--font-mono); color: var(--text-muted); white-space: pre; overflow: auto; }
+.timeline { background: var(--bg-panel); border-top: 1px solid var(--line); padding: var(--sp-4) var(--sp-5) var(--sp-5); display: grid; gap: var(--sp-3); }
+.tl-head { display: flex; align-items: center; gap: var(--sp-5); flex-wrap: wrap; }
+.tl-head .clock { font: var(--fs-sm) var(--font-mono); color: var(--text-muted); }
+.tl-head .clock b { color: var(--text); font-weight: 400; }
+.tl { position: relative; height: 72px; cursor: ew-resize; touch-action: none; }
+.tl svg { width: 100%; height: 100%; display: block; }
+
+/* ---------- In game ---------- */
+.game { position: relative; aspect-ratio: 2.4 / 1; min-height: 340px; border: 1px solid var(--line); overflow: hidden; background: var(--game-sky); color-scheme: dark; }
+.game > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.plate { position: absolute; background: var(--holo-plate); border: 1px solid color-mix(in oklch, var(--line-strong) 70%, transparent); border-radius: 0 var(--bevel) 0 var(--bevel); }
+.radar { top: 3.5%; right: 2%; width: min(25%, 300px); aspect-ratio: 1 / 1.12; padding: 8px 10px 10px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 6px; }
+.radar svg { width: 100%; height: 100%; display: block; }
+.plate-head { display: flex; align-items: center; gap: var(--sp-3); }
+.plate-head .eyebrow { color: var(--text); }
+.plate-foot { display: flex; justify-content: space-between; font: var(--fs-xs) var(--font-mono); color: var(--text-muted); }
+.keyhint { position: absolute; left: 2%; bottom: 4%; padding: 6px 10px; display: flex; gap: var(--sp-5); font-size: var(--fs-sm); color: var(--text-muted); }
+.keycap { font: var(--fs-xs) var(--font-mono); color: var(--accent-text); border: 1px solid var(--line-strong); padding: 0 4px; border-radius: 2px; margin-right: 4px; }
+.game[data-mode="off"] .plate:not(.keyhint), .game[data-mode="off"] .marks { display: none; }
+.game[data-mode="radar"] .marks { display: none; }
+.cet { width: 360px; max-width: 100%; background: var(--bg-overlay); border: 1px solid var(--line-strong); border-radius: 0 var(--bevel) 0 0; padding: 12px; display: grid; gap: 10px; color-scheme: dark; color: var(--text); }
+.cet-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); min-height: 24px; font-size: var(--fs-sm); }
+.cet-row label { color: var(--text-muted); }
+.range { width: 140px; accent-color: var(--signal); }
+.duo { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--sp-7); align-items: start; }
+.legend { display: flex; flex-wrap: wrap; gap: var(--sp-4) var(--sp-6); color: var(--text-muted); font-size: var(--fs-sm); }
+.legend span { display: inline-flex; align-items: center; gap: var(--sp-3); }
+.legend i { width: 14px; height: 2px; background: var(--c); }
+
+/* SVG classes (fills and strokes by token, never by literal) */
+.g-ground { fill: none; stroke: var(--holo-ground); stroke-width: .6; }
+.g-road { fill: var(--holo-road); stroke: none; }
+.g-roof { fill: var(--holo-roof); stroke: var(--holo-wire); stroke-width: .8; stroke-linejoin: miter; }
+.g-wall { fill: var(--holo-wall); stroke: var(--holo-wire); stroke-width: .6; stroke-linejoin: miter; }
+.g-district { fill: none; stroke: var(--text-muted); stroke-width: 1.2; stroke-dasharray: 10 4 2 4; }
+.g-band-hot { fill: var(--warning-bg); stroke: color-mix(in oklch, var(--warning) 60%, transparent); stroke-width: 1; }
+.g-band-flash { fill: var(--danger-bg); stroke: color-mix(in oklch, var(--danger) 60%, transparent); stroke-width: 1; }
+.g-trail { fill: none; stroke: var(--stage-strong); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .55; }
+.g-gap { fill: none; stroke: var(--warning); stroke-width: 3; stroke-dasharray: 2 5; }
+.g-v { fill: var(--stage-strong); stroke: var(--bg-app); stroke-width: 1.5; }
+.g-cone { fill: color-mix(in oklch, var(--stage-strong) 8%, transparent); stroke: color-mix(in oklch, var(--stage-strong) 35%, transparent); stroke-width: 1; }
+.g-actor { fill: var(--signal); stroke: var(--bg-app); stroke-width: 1.5; }
+.g-crowd { fill: var(--text-faint); stroke: none; }
+.g-hold { fill: var(--signal-bg); stroke: var(--signal); stroke-width: 1.2; stroke-dasharray: 5 3; }
+.g-saw { fill: none; stroke: var(--signal); stroke-width: 1.6; }
+.g-heard { fill: none; stroke: var(--signal); stroke-width: 1.4; stroke-dasharray: 3 4; }
+.g-ray { stroke: var(--signal-line); stroke-width: 1; stroke-dasharray: 2 3; }
+.g-drift { stroke: var(--danger); stroke-width: 1.4; fill: none; }
+.g-ghost { fill: none; stroke: var(--danger); stroke-width: 1.4; stroke-dasharray: 2 2; }
+.g-safe { fill: none; stroke: var(--success); stroke-width: 1.4; }
+.g-sel { fill: none; stroke: var(--signal); stroke-width: 2; }
+.g-leader { stroke: var(--line-strong); stroke-width: 1; }
+.g-label { fill: var(--text); font: 11px var(--font-mono); paint-order: stroke; stroke: var(--bg-app); stroke-width: 3px; stroke-linejoin: round; }
+.g-label.muted { fill: var(--text-muted); }
+.g-tick { stroke: var(--line-strong); stroke-width: 1; }
+.g-ticklabel { fill: var(--text-faint); font: 10px var(--font-mono); }
+.g-north { fill: var(--text-muted); font: 600 11px var(--font-display); letter-spacing: .1em; }
+.g-scale { stroke: var(--text-muted); stroke-width: 1.5; fill: none; }
+.g-bracket { fill: none; stroke: var(--signal); stroke-width: 1.5; }
+.g-chipbg { fill: var(--holo-plate); stroke: color-mix(in oklch, var(--line-strong) 70%, transparent); }
+.g-chiptext { fill: var(--text); font: 11px var(--font-mono); }
+.g-chipeyebrow { fill: var(--signal); font: 600 10px var(--font-display); letter-spacing: .1em; }
+.g-game-far { fill: oklch(.2 .02 290); }
+.g-game-mid { fill: oklch(.17 .015 280); stroke: oklch(.32 .03 300 / .5); stroke-width: .6; }
+.g-game-near { fill: oklch(.13 .01 270); stroke: oklch(.3 .04 40 / .5); stroke-width: .6; }
+.g-game-ground { fill: oklch(.16 .01 40); }
+.g-game-win { fill: oklch(.75 .12 70 / .45); }
+.tl-lane { fill: var(--bg-sunken); }
+.tl-text { fill: var(--text-faint); font: 10px var(--font-mono); }
+.tl-ev { stroke: var(--signal); stroke-width: 1.5; }
+.tl-ev2 { stroke: var(--text-muted); stroke-width: 1.5; }
+.tl-gap { fill: var(--warning-bg); stroke: var(--warning); stroke-dasharray: 2 2; }
+.tl-load { stroke: var(--text-faint); stroke-dasharray: 3 3; }
+.tl-spark { fill: none; stroke: var(--stage-strong); stroke-width: 1.2; opacity: .7; }
+.tl-head-line { stroke: var(--signal); stroke-width: 2; }
+.tl-handle { fill: var(--signal); }
+
+@media (max-width: 1180px) {
+  .app-body { grid-template-columns: 220px minmax(0, 1fr); }
+  .panel.right { display: none; }
+  .duo { grid-template-columns: 1fr; }
+  .game { aspect-ratio: 16 / 9; min-height: 0; }
+}
+@media (max-width: 760px) {
+  .app { height: auto; grid-template-rows: auto auto auto; }
+  .app-head { flex-wrap: wrap; height: auto; padding: var(--sp-4) var(--sp-5); }
+  .app-body { grid-template-columns: 1fr; }
+  .panel.left { border-right: 0; border-bottom: 1px solid var(--line); }
+  .stage { height: 420px; }
+  .game { aspect-ratio: 4 / 5; min-height: 0; }
+  .radar { width: 52%; }
+}
 </style>
 </head>
 <body>
-<main>
-  <h1>Holotable: layout mock-up</h1>
-  <p>Static sketch for the phase 1 proposal. Both surfaces are projections of the same model: the same item kinds, style tokens and labels. Positions and names are made up.</p>
+<div class="page">
+  <header class="page-head">
+    <div>
+      <div class="eyebrow">XF Holotable · phase 1 · layout mock-up</div>
+      <h1>One model, every view</h1>
+      <p>Everything below is drawn from one small data model: seeded terrain and buildings, items on a timeline, layers and their projection rules. Toggle a layer, scrub the timeline, select an actor or hold to show story content, and every view changes together. Places and people are made up.</p>
+    </div>
+    <div class="segmented" role="group" aria-label="Theme">
+      <button type="button" data-theme-set="dark" aria-pressed="true">Dark</button>
+      <button type="button" data-theme-set="light" aria-pressed="false">Light</button>
+    </div>
+  </header>
 
-  <h2>1. In game: translucent overlay (no input, one key to show or hide)</h2>
-  <svg viewBox="0 0 1200 500" role="img" aria-label="Game frame with a translucent radar inset and world markers">
-    <defs>
-      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#1b2433"/><stop offset="1" stop-color="#2a2320"/>
-      </linearGradient>
-      <clipPath id="radarClip"><circle cx="1060" cy="140" r="110"/></clipPath>
-    </defs>
-    <rect width="1200" height="500" fill="url(#sky)"/>
-    <!-- stand-in game scene -->
-    <polygon points="0,500 380,250 820,250 1200,500" fill="#232a30"/>
-    <rect x="80" y="120" width="160" height="210" fill="#1a2027"/><rect x="900" y="150" width="140" height="190" fill="#1a2027"/>
-    <text x="24" y="480" class="small">game frame (stand-in)</text>
-    <!-- world markers -->
-    <ellipse cx="560" cy="360" rx="70" ry="16" fill="none" stroke="var(--xf)" stroke-width="2" stroke-dasharray="6 4" opacity=".85"/>
-    <text x="500" y="392" class="small">hold radius · a2</text>
-    <rect x="535" y="270" width="18" height="60" rx="9" fill="none" stroke="var(--xf)" stroke-width="2" opacity=".9"/>
-    <g opacity=".9">
-      <rect x="495" y="232" width="110" height="30" rx="4" fill="var(--panel)" stroke="var(--edge)"/>
-      <text x="503" y="245" class="label">a2 · vendor</text>
-      <text x="503" y="257" class="small">plan: wait (step 3/5)</text>
-    </g>
-    <ellipse cx="760" cy="300" rx="44" ry="10" fill="none" stroke="var(--heard)" stroke-width="2" opacity=".8"/>
-    <text x="728" y="322" class="small">inc-7 · heard</text>
-    <line x1="600" y1="470" x2="545" y2="300" stroke="var(--v)" stroke-width="1" stroke-dasharray="3 4" opacity=".6"/>
-    <!-- radar -->
-    <circle cx="1060" cy="140" r="112" fill="var(--panel)" stroke="var(--edge)"/>
-    <g clip-path="url(#radarClip)">
-      <polygon points="990,60 1120,80 1140,190 1010,210" fill="var(--area)" stroke="var(--area-edge)" opacity=".7"/>
-      <polygon points="1100,180 1180,170 1190,260 1090,260" fill="#3a2418" stroke="var(--hot)" opacity=".6"/>
-      <circle cx="1060" cy="140" r="40" fill="none" stroke="var(--grid)"/><circle cx="1060" cy="140" r="80" fill="none" stroke="var(--grid)"/>
-      <circle cx="1040" cy="110" r="5" fill="var(--xf)"/><circle cx="1090" cy="120" r="4" fill="var(--actor)"/>
-      <circle cx="1020" cy="160" r="4" fill="var(--actor)"/><circle cx="1075" cy="95" r="12" fill="none" stroke="var(--heard)"/>
-      <path d="M1060,180 Q1062,160 1060,140" fill="none" stroke="var(--v)" stroke-width="2" opacity=".5"/>
-    </g>
-    <polygon points="1060,128 1068,148 1060,143 1052,148" fill="var(--v)"/>
-    <text x="1000" y="272" class="small">radar · 40 m · structure</text>
-    <g><rect x="16" y="16" width="250" height="26" rx="4" fill="var(--panel)" stroke="var(--edge)"/>
-      <text x="26" y="33" class="small">Holotable · radar + markers · [key] hide · [key] mode</text></g>
-  </svg>
+  <section aria-labelledby="ig-title">
+    <h2 id="ig-title">In game: the overlay</h2>
+    <p class="section-note">A translucent plate the bridge draws itself. It takes no input, so the game plays on underneath. <span class="keycap">H</span> shows or hides it and <span class="keycap">M</span> switches between radar and radar with markers (try them here). The radar turns with V; the markers sit on the people and places they describe.</p>
+    <div class="duo">
+      <div class="game" id="game" data-mode="marks" tabindex="0" aria-label="Game view stand-in with the Holotable overlay">
+        <svg id="gameSvg" aria-hidden="true"></svg>
+        <div class="plate radar" aria-label="Radar">
+          <div class="plate-head"><span class="dot" aria-hidden="true"></span><span class="eyebrow">Holotable</span><span class="spacer"></span><span class="chip" data-tone="signal" id="radarLevel">Structure</span></div>
+          <svg id="radarSvg" viewBox="-100 -100 200 200" aria-hidden="true"></svg>
+          <div class="plate-foot"><span id="radarRange">60 m</span><span id="radarHeading">HDG 000°</span></div>
+        </div>
+        <div class="plate keyhint"><span><span class="keycap">H</span>Hide</span><span><span class="keycap">M</span><span id="modeLabel">Radar only</span></span></div>
+      </div>
+      <div class="cet" aria-label="CET settings window">
+        <div class="plate-head"><span class="brand" aria-hidden="true">XF</span><span style="font:600 15px/1.2 var(--font-display);color:var(--accent-text)">Holotable</span><span class="spacer"></span><span class="chip">Settings</span></div>
+        <div class="eyebrow">Overlay</div>
+        <div class="cet-row"><label for="cetShow">Show overlay</label><input class="switch" type="checkbox" id="cetShow" checked></div>
+        <div class="cet-row"><label>Mode</label><div class="segmented" role="group" aria-label="Mode"><button type="button" data-mode-set="radar" aria-pressed="false">Radar</button><button type="button" data-mode-set="marks" aria-pressed="true">Markers</button></div></div>
+        <div class="cet-row"><label for="cetRange">Radar range</label><span class="mono" id="cetRangeOut">60 m</span></div>
+        <input class="range" style="width:100%" type="range" id="cetRange" min="30" max="120" step="10" value="60" aria-label="Radar range">
+        <div class="cet-row"><label for="cetOpacity">Plate opacity</label><span class="mono" id="cetOpOut">72%</span></div>
+        <input class="range" style="width:100%" type="range" id="cetOpacity" min="40" max="97" step="1" value="72" aria-label="Plate opacity">
+        <div class="eyebrow">Keys</div>
+        <div class="cet-row"><label>Show or hide</label><span class="keycap">H</span></div>
+        <div class="cet-row"><label>Mode</label><span class="keycap">M</span></div>
+        <p class="muted" style="margin:0;font-size:var(--fs-sm)">CET takes the keyboard while it is open: it is for settings. Close it and the overlay keeps drawing.</p>
+      </div>
+    </div>
+  </section>
 
-  <h2>2. Optional external window: bird's-eye view, timeline and "why"</h2>
-  <svg viewBox="0 0 1200 560" role="img" aria-label="External window with layers, a top-down scene, an inspector and a timeline">
-    <rect width="1200" height="560" fill="var(--bg)"/>
-    <!-- layers panel -->
-    <rect x="12" y="12" width="210" height="436" rx="6" fill="#121820" stroke="var(--edge)"/>
-    <text x="26" y="36" class="label">Layers</text>
-    <g class="small">
-      <text x="26" y="62" class="small">■ V and trail</text><text x="26" y="84" class="small">■ XF actors (roles, plans)</text>
-      <text x="26" y="106" class="small">■ Nearby population</text><text x="26" y="128" class="small">■ Camera frustum</text>
-      <text x="26" y="150" class="small">■ Incidents (saw / heard)</text><text x="26" y="172" class="small">■ Supervisor</text>
-      <text x="26" y="194" class="small">■ Recorder gaps</text><text x="26" y="216" class="small">■ Districts and areas</text>
-      <text x="26" y="238" class="small">□ Collision (W0)</text><text x="26" y="260" class="small">■ Story: heat bands</text>
-      <text x="26" y="282" class="small">■ Story: drift</text>
-    </g>
-    <rect x="26" y="410" width="182" height="26" rx="13" fill="#1a2430" stroke="var(--edge)"/>
-    <text x="40" y="427" class="small">Story content: structure (hold to show)</text>
-    <!-- scene -->
-    <rect x="234" y="12" width="700" height="436" rx="6" fill="#0f141a" stroke="var(--edge)"/>
-    <g stroke="var(--grid)">
-      <line x1="234" y1="112" x2="934" y2="112"/><line x1="234" y1="212" x2="934" y2="212"/><line x1="234" y1="312" x2="934" y2="312"/><line x1="234" y1="412" x2="934" y2="412"/>
-      <line x1="334" y1="12" x2="334" y2="448"/><line x1="484" y1="12" x2="484" y2="448"/><line x1="634" y1="12" x2="634" y2="448"/><line x1="784" y1="12" x2="784" y2="448"/>
-    </g>
-    <polygon points="300,80 620,60 680,260 340,300" fill="var(--area)" stroke="var(--area-edge)" opacity=".75"/>
-    <polygon points="640,280 900,250 910,430 620,440" fill="#3a2418" stroke="var(--hot)" opacity=".6"/>
-    <text x="320" y="100" class="small">area: market (structure)</text><text x="660" y="300" class="small">cell band: hot</text>
-    <polygon points="420,330 360,200 520,200" fill="var(--v)" opacity=".08" stroke="var(--v)" stroke-opacity=".3"/>
-    <path d="M300,420 C340,400 380,380 410,350 S430,330 440,330" fill="none" stroke="var(--v)" stroke-width="2" opacity=".6"/>
-    <path d="M300,420 L330,405" stroke="var(--gap)" stroke-width="4" stroke-dasharray="2 6"/>
-    <polygon points="440,318 452,342 440,336 428,342" fill="var(--v)"/>
-    <circle cx="470" cy="190" r="7" fill="var(--xf)"/><text x="482" y="186" class="small">a2 · vendor</text>
-    <circle cx="470" cy="190" r="28" fill="none" stroke="var(--xf)" stroke-dasharray="5 4" opacity=".7"/>
-    <circle cx="520" cy="250" r="6" fill="var(--actor)"/><circle cx="560" cy="160" r="5" fill="var(--actor)"/><circle cx="600" cy="230" r="5" fill="var(--actor)"/>
-    <circle cx="700" cy="140" r="22" fill="none" stroke="var(--heard)" stroke-width="2"/><text x="728" y="144" class="small">inc-7 · heard</text>
-    <circle cx="476" cy="196" r="3" fill="none" stroke="var(--text)"/><line x1="476" y1="196" x2="470" y2="190" stroke="var(--text)"/>
-    <text x="250" y="436" class="small">orbit · follow V · 1 grid = 10 m</text>
-    <!-- inspector -->
-    <rect x="946" y="12" width="242" height="436" rx="6" fill="#121820" stroke="var(--edge)"/>
-    <text x="960" y="36" class="label">a2 · XF actor</text>
-    <text x="960" y="58" class="small">role vendor (structure level)</text>
-    <text x="960" y="78" class="small">plan step: wait, 3 of 5</text>
-    <text x="960" y="98" class="small">supervisor: hold 1.0 m, in radius</text>
-    <text x="960" y="118" class="small">drift: engine mirror 0.4 m away</text>
-    <text x="960" y="148" class="label">Why</text>
-    <text x="960" y="170" class="small">recorder:1:1388 actors</text>
-    <text x="960" y="190" class="small">event:34001b…:19 supervisor.set</text>
-    <text x="960" y="210" class="small">se:… plan report (step 3)</text>
-    <!-- timeline -->
-    <rect x="12" y="460" width="1176" height="88" rx="6" fill="#121820" stroke="var(--edge)"/>
-    <line x1="40" y1="500" x2="1160" y2="500" stroke="var(--edge)" stroke-width="2"/>
-    <rect x="160" y="492" width="60" height="16" fill="var(--gap)" opacity=".35"/><text x="160" y="528" class="small">recorder gap</text>
-    <line x1="420" y1="488" x2="420" y2="512" stroke="var(--heard)"/><line x1="610" y1="488" x2="610" y2="512" stroke="var(--xf)"/>
-    <line x1="860" y1="484" x2="860" y2="516" stroke="var(--muted)" stroke-dasharray="3 3"/><text x="830" y="532" class="small">save load: branch</text>
-    <polygon points="700,486 708,500 700,514 692,500" fill="var(--v)"/>
-    <text x="40" y="482" class="small">QPC 139,690 s</text><text x="1060" y="482" class="small">game time 21:14</text>
-  </svg>
-</main>
+  <section aria-labelledby="ext-title">
+    <h2 id="ext-title">Optional external window</h2>
+    <p class="section-note">A desktop app beside the game: drag to orbit, scroll to zoom, click an actor to inspect it. Its layers and selection are the same model the overlay draws.</p>
+    <div class="app">
+      <header class="app-head">
+        <span class="brand" aria-hidden="true">XF</span><span class="app-title">Holotable</span>
+        <span class="status"><span class="dot" aria-hidden="true"></span>Connected to Cyberpunk 2077</span>
+        <span class="spacer"></span>
+        <div class="segmented" role="group" aria-label="Source"><button type="button" aria-pressed="true">Live</button><button type="button" aria-pressed="false">Replay</button></div>
+        <div class="segmented" role="group" aria-label="View"><button type="button" data-view="top" aria-pressed="false">Top</button><button type="button" data-view="tilt" aria-pressed="true">Tilt</button><button type="button" data-view="low" aria-pressed="false">Low</button></div>
+      </header>
+      <div class="app-body">
+        <aside class="panel left" aria-label="Layers" id="layersPanel"></aside>
+        <div class="stage" id="stage">
+          <svg id="stageSvg" aria-label="Bird's-eye view"></svg>
+          <div class="stage-top"><span class="stage-chip" id="camChip">Watson › Kabuki</span><span class="stage-chip" id="cursorChip">X −1572.8  Y 1267.9  Z 19.1</span></div>
+          <div class="stage-foot"><span class="stage-chip" id="followChip">Following V</span><span class="stage-chip">Sectors L0 · 29 loaded</span></div>
+        </div>
+        <aside class="panel right" aria-label="Inspector">
+          <div class="card" id="inspector"></div>
+          <div class="group"><div class="group-head"><span class="eyebrow">Agent view</span><span class="chip">Text</span></div><pre class="report" id="report"></pre></div>
+        </aside>
+      </div>
+      <div class="timeline">
+        <div class="tl-head">
+          <button class="btn small" type="button" id="playBtn" aria-label="Play"><svg viewBox="0 0 16 16" class="icon" aria-hidden="true"><path d="M4.5 2.8L13 8l-8.5 5.2z" fill="currentColor" stroke="none"/></svg></button>
+          <span class="clock">Session <b id="tClock">00:00.0</b></span>
+          <span class="clock">Game <b id="gClock">21:14</b></span>
+          <span class="clock">Record <b id="seqClock">1:0</b></span>
+          <span class="spacer"></span>
+          <div class="legend"><span style="--c:var(--signal)"><i></i>Events</span><span style="--c:var(--warning)"><i></i>Recorder gap</span><span style="--c:var(--text-faint)"><i></i>Save load</span></div>
+        </div>
+        <div class="tl" id="tl"><svg id="tlSvg" aria-label="Timeline"></svg></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  // ---------- The model: plain data ----------
+  let seed = 20771;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const H = (x, y) => 4 * Math.sin(x / 90) + 3 * Math.cos(y / 70) + 2 * Math.sin((x + y) / 55);
+  const W = { x0: -260, x1: 260, y0: -200, y1: 200 };
+  const roadsX = [], roadsY = [];
+  for (let x = W.x0 + 30; x < W.x1; x += 62 + rnd() * 26) roadsX.push(x);
+  for (let y = W.y0 + 25; y < W.y1; y += 58 + rnd() * 24) roadsY.push(y);
+  const ROAD = 12;
+  const buildings = [];
+  const split = (x0, y0, x1, y1, depth) => {
+    const w = x1 - x0, h = y1 - y0;
+    if ((w < 34 && h < 34) || depth > 4) {
+      if (rnd() < 0.1) return;
+      const m = 2 + rnd() * 3, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+      const centre = Math.max(0, 1 - Math.hypot(cx - 140, cy + 90) / 360);
+      const h = 7 + Math.pow(rnd(), 2.2) * (40 + 140 * centre);
+      buildings.push({ x0: x0 + m, y0: y0 + m, x1: x1 - m, y1: y1 - m, z: H(cx, cy), h });
+      return;
+    }
+    if (w > h) { const s = x0 + w * (0.35 + rnd() * 0.3); split(x0, y0, s, y1, depth + 1); split(s, y0, x1, y1, depth + 1); }
+    else { const s = y0 + h * (0.35 + rnd() * 0.3); split(x0, y0, x1, s, depth + 1); split(x0, s, x1, y1, depth + 1); }
+  };
+  const xs = [W.x0, ...roadsX, W.x1], ys = [W.y0, ...roadsY, W.y1];
+  for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < ys.length - 1; j++) {
+    const a = xs[i] + (i ? ROAD / 2 + 3 : 0), b = xs[i + 1] - (i + 1 < xs.length - 1 ? ROAD / 2 + 3 : 0);
+    const c = ys[j] + (j ? ROAD / 2 + 3 : 0), d = ys[j + 1] - (j + 1 < ys.length - 1 ? ROAD / 2 + 3 : 0);
+    if (b - a > 8 && d - c > 8) split(a, c, b, d, 0);
+  }
+  // V walks along a street; a short stretch of the trail has no samples (a recorder gap).
+  const rx = roadsX[3], ry = roadsY[2];
+  const trail = [];
+  for (let k = 0; k <= 60; k++) trail.push([rx - 3, -170 + k * ((ry + 3) - (-170)) / 60]);
+  for (let k = 1; k <= 40; k++) trail.push([rx - 3 + k * 1.9, ry + 3]);
+  const T = trail.length - 1;
+  const gap = [34, 41];
+  const at = i => trail[Math.max(0, Math.min(T, Math.round(i)))];
+  const items = [
+    { id: 'a1', kind: 'actor', layer: 'actors', p: [rx + 26, ry + 30], role: 'lookout', plan: 'watch', step: '2 of 4', from: 0 },
+    { id: 'a2', kind: 'actor', layer: 'actors', p: [rx + 58, ry - 14], role: 'vendor', plan: 'wait', step: '3 of 5', hold: 8, from: 0 },
+    { id: 'a3', kind: 'actor', layer: 'actors', p: [rx + 12, ry - 36], role: 'courier', plan: 'approach', step: '1 of 3', ghost: [rx + 5, ry - 52], from: 20 },
+    { id: 'inc-7', kind: 'incident', layer: 'incidents', p: [rx + 92, ry + 22], how: 'heard', r: 14, from: 62, cites: 'event:34001b:44' },
+    { id: 'inc-8', kind: 'incident', layer: 'incidents', p: [rx + 40, ry - 22], how: 'saw', r: 9, from: 50, cites: 'event:34001b:51' },
+    { id: 'safe', kind: 'safe', layer: 'supervisor', p: [rx - 3, ry - 20], from: 30 },
+  ];
+  const crowd = Array.from({ length: 22 }, () => [rx - 60 + rnd() * 200, ry - 90 + rnd() * 170]);
+  const bands = [{ x0: rx + 6, y0: ry - 60, x1: rx + 120, y1: ry + 6, band: 'hot' }, { x0: rx + 6, y0: ry + 6, x1: rx + 120, y1: ry + 70, band: 'flash' }];
+  const district = [[W.x0 + 40, W.y0 + 30], [rx + 40, W.y0 + 10], [rx + 150, ry - 40], [rx + 130, W.y1 - 30], [W.x0 + 20, W.y1 - 50]];
+  const events = [12, 20, 31, 44, 52, 62, 70, 80, 88, 95];
+  const layers = [
+    { group: 'Game', id: 'v', name: 'V and trail', k: 'var(--stage-strong)', on: true, count: () => '1' },
+    { group: 'Game', id: 'actors', name: 'XF actors', k: 'var(--signal)', kf: 'var(--signal)', on: true, count: () => '3' },
+    { group: 'Game', id: 'crowd', name: 'People nearby', k: 'var(--text-faint)', kf: 'var(--text-faint)', on: true, count: () => String(crowd.length) },
+    { group: 'Game', id: 'incidents', name: 'What V saw or heard', k: 'var(--signal)', on: true, count: () => String(items.filter(i => i.kind === 'incident' && i.from <= t).length) },
+    { group: 'Game', id: 'supervisor', name: 'Safe points', k: 'var(--success)', on: true, count: () => '1' },
+    { group: 'Game', id: 'gaps', name: 'Recorder gaps', k: 'var(--warning)', on: true, count: () => '1' },
+    { group: 'World', id: 'terrain', name: 'Terrain', k: 'var(--holo-ground)', on: true, count: () => '' },
+    { group: 'World', id: 'buildings', name: 'Buildings', k: 'var(--holo-wire)', on: true, count: () => String(buildings.length) },
+    { group: 'World', id: 'roads', name: 'Roads', k: 'var(--line-strong)', kf: 'var(--holo-road)', on: true, count: () => '' },
+    { group: 'World', id: 'district', name: 'Districts', k: 'var(--text-muted)', on: true, count: () => '1' },
+    { group: 'Story', id: 'bands', name: 'Heat by block', k: 'var(--warning)', kf: 'var(--warning-bg)', on: true, count: () => '2' },
+    { group: 'Story', id: 'drift', name: 'Drift', k: 'var(--danger)', on: true, count: () => '1' },
+  ];
+  const on = id => layers.find(l => l.id === id).on;
+
+  // ---------- View state (the only state the views keep) ----------
+  let t = 68, selected = 'a2', full = false, mode = 'marks', range = 60;
+  const cam = { yaw: -0.6, pitch: 0.95, dist: 330, fov: 0.9, tx: 0, ty: 0 };
+  const vAt = () => { const i = Math.min(t, T); const p = at(i), q = at(Math.min(T, i + 1)), r = at(Math.max(0, i - 1)); return { p, yaw: Math.atan2(q[1] - r[1], q[0] - r[0]) }; };
+  const level = () => full ? 'Full' : 'Structure';
+  const label = it => it.kind !== 'actor' ? it.id : full ? `${it.id} · ${it.role} · ${it.plan}` : `${it.id} · step ${it.step}`;
+
+  // ---------- Projection helpers ----------
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+  const pts = a => a.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const makeCam = (c, w, h) => {
+    const cx = c.tx + c.dist * Math.cos(c.pitch) * Math.cos(c.yaw), cy = c.ty + c.dist * Math.cos(c.pitch) * Math.sin(c.yaw), cz = (c.tz || 0) + c.dist * Math.sin(c.pitch);
+    const f = [c.tx - cx, c.ty - cy, (c.tz || 0) - cz], fl = Math.hypot(...f); f[0] /= fl; f[1] /= fl; f[2] /= fl;
+    let r = [f[1], -f[0], 0]; const rl = Math.hypot(...r) || 1; r = r.map(v => v / rl);
+    const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+    const F = (h / 2) / Math.tan(c.fov / 2);
+    const P = (x, y, z) => { const d = [x - cx, y - cy, z - cz]; const zc = d[0] * f[0] + d[1] * f[1] + d[2] * f[2]; if (zc < 2) return null; return [w / 2 + F * (d[0] * r[0] + d[1] * r[1] + d[2] * r[2]) / zc, h / 2 - F * (d[0] * u[0] + d[1] * u[1] + d[2] * u[2]) / zc, zc]; };
+    return { P, pos: [cx, cy, cz] };
+  };
+  const polyOk = a => a.every(Boolean);
+
+  // ---------- External view ----------
+  const stage = document.getElementById('stage'), svg = document.getElementById('stageSvg');
+  function drawStage() {
+    const w = stage.clientWidth, h = stage.clientHeight; if (!w || !h) return;
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.textContent = '';
+    const V = vAt(); cam.tx = V.p[0]; cam.ty = V.p[1]; cam.tz = H(...V.p);
+    const C = makeCam(cam, w, h), P = C.P;
+    const g = el('g', {}, svg);
+    const fadeBy = z => Math.max(0.18, Math.min(1, 1.25 - z / (cam.dist * 2.4)));
+    if (on('terrain')) {
+      for (let x = W.x0; x <= W.x1; x += 20) { const line = []; for (let y = W.y0; y <= W.y1; y += 10) { const q = P(x, y, H(x, y)); if (q) line.push(q); } if (line.length > 1) el('polyline', { points: pts(line), class: 'g-ground', opacity: fadeBy(line[line.length >> 1][2]) * 0.55 }, g); }
+      for (let y = W.y0; y <= W.y1; y += 20) { const line = []; for (let x = W.x0; x <= W.x1; x += 10) { const q = P(x, y, H(x, y)); if (q) line.push(q); } if (line.length > 1) el('polyline', { points: pts(line), class: 'g-ground', opacity: fadeBy(line[line.length >> 1][2]) * 0.55 }, g); }
+    }
+    if (on('roads')) {
+      const strip = (ax, ay, bx, by, wx, wy) => { for (let k = 0; k < 16; k++) { const s0 = k / 16, s1 = (k + 1) / 16; const x0 = ax + (bx - ax) * s0, y0 = ay + (by - ay) * s0, x1 = ax + (bx - ax) * s1, y1 = ay + (by - ay) * s1; const quad = [P(x0 - wx, y0 - wy, H(x0, y0) + .1), P(x1 - wx, y1 - wy, H(x1, y1) + .1), P(x1 + wx, y1 + wy, H(x1, y1) + .1), P(x0 + wx, y0 + wy, H(x0, y0) + .1)]; if (polyOk(quad)) el('polygon', { points: pts(quad), class: 'g-road' }, g); } };
+      roadsX.forEach(x => strip(x, W.y0, x, W.y1, ROAD / 2, 0)); roadsY.forEach(y => strip(W.x0, y, W.x1, y, 0, ROAD / 2));
+    }
+    const ground = (poly, cls, lift = .3) => { const q = poly.map(p => P(p[0], p[1], H(p[0], p[1]) + lift)); if (polyOk(q)) return el('polygon', { points: pts(q), class: cls }, g); };
+    const rect = b => [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]];
+    if (on('bands')) bands.forEach(b => ground(rect(b), b.band === 'hot' ? 'g-band-hot' : 'g-band-flash', .5));
+    if (on('district')) { const q = [...district, district[0]].flatMap((p, i, a) => { if (!i) return []; const o = a[i - 1], r = []; for (let k = 0; k < 8; k++) { const x = o[0] + (p[0] - o[0]) * k / 8, y = o[1] + (p[1] - o[1]) * k / 8; r.push(P(x, y, H(x, y) + .6)); } return r; }).filter(Boolean); el('polyline', { points: pts(q), class: 'g-district' }, g); }
+    if (on('v')) {
+      const seg = (a, b, cls) => { const q = trail.slice(a, b + 1).map(p => P(p[0], p[1], H(...p) + .8)).filter(Boolean); if (q.length > 1) el('polyline', { points: pts(q), class: cls }, g); };
+      const end = Math.min(t, T);
+      if (end > gap[1] && on('gaps')) { seg(0, gap[0], 'g-trail'); seg(gap[0], gap[1], 'g-gap'); seg(gap[1], end, 'g-trail'); }
+      else seg(0, end, 'g-trail');
+    }
+    if (on('buildings')) {
+      const list = buildings.map(b => ({ b, d: Math.hypot((b.x0 + b.x1) / 2 - C.pos[0], (b.y0 + b.y1) / 2 - C.pos[1]) })).sort((a, b) => b.d - a.d);
+      const bg = el('g', {}, g);
+      for (const { b } of list) {
+        const z0 = b.z, z1 = b.z + b.h; const base = rect(b);
+        const lo = base.map(p => P(p[0], p[1], z0)), hi = base.map(p => P(p[0], p[1], z1));
+        if (!polyOk(lo) || !polyOk(hi)) continue;
+        const op = fadeBy((hi[0][2] + lo[2][2]) / 2);
+        const bgp = el('g', { opacity: op.toFixed(2) }, bg);
+        for (let k = 0; k < 4; k++) { const a = lo[k], b2 = lo[(k + 1) % 4], c = hi[(k + 1) % 4], d = hi[k]; const cross = (b2[0] - a[0]) * (d[1] - a[1]) - (b2[1] - a[1]) * (d[0] - a[0]); if (cross < 0) el('polygon', { points: pts([a, b2, c, d]), class: 'g-wall' }, bgp); }
+        el('polygon', { points: pts(hi), class: 'g-roof' }, bgp);
+      }
+    }
+    // Data draws above geometry, always visible (an instrument, not a scene).
+    const top = el('g', {}, svg);
+    const at3 = (p, lift = 1) => P(p[0], p[1], H(p[0], p[1]) + lift);
+    const ring = (p, r, cls) => { const q = []; for (let k = 0; k <= 32; k++) { const a = k / 32 * Math.PI * 2; const s = P(p[0] + r * Math.cos(a), p[1] + r * Math.sin(a), H(p[0], p[1]) + .8); if (s) q.push(s); } if (q.length > 2) el('polygon', { points: pts(q), class: cls }, top); };
+    const tag = (s, text, muted) => { if (!s) return; el('line', { x1: s[0], y1: s[1], x2: s[0] + 14, y2: s[1] - 22, class: 'g-leader' }, top); const tx = el('text', { x: s[0] + 17, y: s[1] - 25, class: 'g-label' + (muted ? ' muted' : '') }, top); tx.textContent = text; };
+    if (on('crowd')) crowd.forEach(c => { const s = at3(c); if (s) el('circle', { cx: s[0], cy: s[1], r: 2.4, class: 'g-crowd' }, top); });
+    if (on('incidents')) items.filter(i => i.kind === 'incident' && i.from <= t).forEach(i => { ring(i.p, i.r, i.how === 'saw' ? 'g-saw' : 'g-heard'); if (i.how === 'saw') { const a = at3(V.p, 1.7), b = at3(i.p, 1); if (a && b) el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], class: 'g-ray' }, top); } tag(at3(i.p), `${i.id} · ${i.how}`, true); });
+    if (on('supervisor')) items.filter(i => i.kind === 'safe' && i.from <= t).forEach(i => { const s = at3(i.p); if (s) { el('rect', { x: s[0] - 5, y: s[1] - 5, width: 10, height: 10, class: 'g-safe', transform: `rotate(45 ${s[0]} ${s[1]})` }, top); } });
+    if (on('actors')) items.filter(i => i.kind === 'actor' && i.from <= t).forEach(i => {
+      if (i.hold) ring(i.p, i.hold, 'g-hold');
+      if (on('drift') && i.ghost) { const a = at3(i.p), b = at3(i.ghost); if (a && b) { el('line', { x1: a[0], y1: a[1], x2: b[0], y2: b[1], class: 'g-drift' }, top); el('circle', { cx: b[0], cy: b[1], r: 5, class: 'g-ghost' }, top); } }
+      const s = at3(i.p, 1); if (!s) return;
+      if (i.id === selected) el('circle', { cx: s[0], cy: s[1], r: 11, class: 'g-sel' }, top);
+      const c = el('circle', { cx: s[0], cy: s[1], r: 6, class: 'g-actor', 'data-id': i.id, style: 'cursor:pointer' }, top);
+      c.addEventListener('pointerdown', e => { e.stopPropagation(); selected = i.id; render(); });
+      tag(s, label(i));
+    });
+    if (on('v')) {
+      const s = at3(V.p, 1.7);
+      if (s) {
+        const cone = [V.p, [V.p[0] + 70 * Math.cos(V.yaw - .45), V.p[1] + 70 * Math.sin(V.yaw - .45)], [V.p[0] + 70 * Math.cos(V.yaw + .45), V.p[1] + 70 * Math.sin(V.yaw + .45)]].map(p => at3(p, 1.7));
+        if (polyOk(cone)) el('polygon', { points: pts(cone), class: 'g-cone' }, top);
+        const nose = at3([V.p[0] + 7 * Math.cos(V.yaw), V.p[1] + 7 * Math.sin(V.yaw)], 1.7), l = at3([V.p[0] + 4 * Math.cos(V.yaw + 2.4), V.p[1] + 4 * Math.sin(V.yaw + 2.4)], 1.7), r = at3([V.p[0] + 4 * Math.cos(V.yaw - 2.4), V.p[1] + 4 * Math.sin(V.yaw - 2.4)], 1.7);
+        if (nose && l && r) el('polygon', { points: pts([nose, l, s, r]), class: 'g-v' }, top);
+        tag(s, 'V');
+      }
+    }
+    // Instrument frame: edge ticks, scale bar, north.
+    const frame = el('g', {}, svg);
+    for (let x = 0; x < w; x += 40) { el('line', { x1: x, y1: 0, x2: x, y2: x % 200 ? 4 : 9, class: 'g-tick' }, frame); el('line', { x1: x, y1: h, x2: x, y2: h - (x % 200 ? 4 : 9), class: 'g-tick' }, frame); }
+    for (let y = 0; y < h; y += 40) { el('line', { x1: 0, y1: y, x2: y % 200 ? 4 : 9, y2: y, class: 'g-tick' }, frame); el('line', { x1: w, y1: y, x2: w - (y % 200 ? 4 : 9), y2: y, class: 'g-tick' }, frame); }
+    const o = at3(V.p, 0), e10 = at3([V.p[0] + 50, V.p[1]], 0), nN = at3([V.p[0], V.p[1] + 1], 0);
+    if (o && e10) { const len = Math.min(140, Math.hypot(e10[0] - o[0], e10[1] - o[1])); const bx = w - 24 - len, by = h - 58; el('path', { d: `M${bx},${by - 4}v4h${len}v-4`, class: 'g-scale' }, frame); const st = el('text', { x: bx + len, y: by - 8, class: 'g-ticklabel', 'text-anchor': 'end' }, frame); st.textContent = '50 m'; }
+    if (o && nN) { const a = Math.atan2(nN[1] - o[1], nN[0] - o[0]); const cx = w - 34, cy = 70; el('circle', { cx, cy, r: 14, class: 'g-scale' }, frame); el('line', { x1: cx, y1: cy, x2: cx + 12 * Math.cos(a), y2: cy + 12 * Math.sin(a), class: 'g-scale' }, frame); const nt = el('text', { x: cx + 22 * Math.cos(a) - 4, y: cy + 22 * Math.sin(a) + 4, class: 'g-north' }, frame); nt.textContent = 'N'; }
+  }
+
+  // ---------- In game: a stand-in game frame, then the overlay drawn with the same camera ----------
+  const game = document.getElementById('game'), gsvg = document.getElementById('gameSvg'), rsvg = document.getElementById('radarSvg');
+  function drawGame() {
+    const w = game.clientWidth, h = game.clientHeight; if (!w || !h) return;
+    gsvg.setAttribute('viewBox', `0 0 ${w} ${h}`); gsvg.textContent = '';
+    const V = vAt(); const back = 5;
+    // A third-person camera just behind V, looking ahead along her heading.
+    const eye = [V.p[0] - back * Math.cos(V.yaw), V.p[1] - back * Math.sin(V.yaw), H(...V.p) + 2.6];
+    const look = { yaw: V.yaw + Math.PI, pitch: 0.05, dist: 60, fov: 1.15, tx: eye[0] + 60 * Math.cos(V.yaw), ty: eye[1] + 60 * Math.sin(V.yaw), tz: eye[2] - 3 };
+    const GC = makeCam(look, w, h), P = GC.P;
+    el('rect', { x: 0, y: h * 0.56, width: w, height: h * 0.44, class: 'g-game-ground' }, gsvg);
+    const list = buildings.map(b => ({ b, d: Math.hypot((b.x0 + b.x1) / 2 - GC.pos[0], (b.y0 + b.y1) / 2 - GC.pos[1]) })).filter(o => o.d < 520).sort((a, b) => b.d - a.d);
+    for (const { b, d } of list) {
+      const base = [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]];
+      const lo = base.map(p => P(p[0], p[1], b.z)), hi = base.map(p => P(p[0], p[1], b.z + b.h));
+      if (!polyOk(lo) || !polyOk(hi)) continue;
+      const cls = d > 260 ? 'g-game-far' : d > 110 ? 'g-game-mid' : 'g-game-near';
+      for (let k = 0; k < 4; k++) { const a = lo[k], b2 = lo[(k + 1) % 4], c = hi[(k + 1) % 4], dd = hi[k]; const cross = (b2[0] - a[0]) * (dd[1] - a[1]) - (b2[1] - a[1]) * (dd[0] - a[0]); if (cross < 0) { el('polygon', { points: pts([a, b2, c, dd]), class: cls }, gsvg); if (d < 260 && (b.h > 20)) for (let s = 0; s < 6; s++) { const u = .15 + .7 * ((s * 37 + b.h) % 10) / 10, v = .2 + .6 * ((s * 53 + b.x0) % 10) / 10; const px = a[0] + (b2[0] - a[0]) * u + (dd[0] - a[0]) * v, py = a[1] + (b2[1] - a[1]) * u + (dd[1] - a[1]) * v; el('rect', { x: px, y: py, width: Math.max(1.5, 600 / d), height: Math.max(1, 300 / d), class: 'g-game-win' }, gsvg); } } }
+    }
+    // Overlay markers: the same items, projected with the game camera.
+    const marks = el('g', { class: 'marks' }, gsvg);
+    const at3 = (p, lift = 0) => P(p[0], p[1], H(p[0], p[1]) + lift);
+    const bracket = (s, size) => { const k = size * .35; el('path', { d: `M${s[0] - size},${s[1] - size + k}v${-k}h${k}M${s[0] + size - k},${s[1] - size}h${k}v${k}M${s[0] + size},${s[1] + size - k}v${k}h${-k}M${s[0] - size + k},${s[1] + size}h${-k}v${-k}`, class: 'g-bracket' }, marks); };
+    const chip = (x, y, eyebrow, text) => { const wch = Math.max(eyebrow.length * 6.4, text.length * 6.7) + 16; const g = el('g', {}, marks); el('path', { d: `M${x},${y}h${wch - 5}l5,5v${29}h${-wch + 5}l-5,-5z`, class: 'g-chipbg' }, g); const e = el('text', { x: x + 8, y: y + 13, class: 'g-chipeyebrow' }, g); e.textContent = eyebrow.toUpperCase(); const tt = el('text', { x: x + 8, y: y + 27, class: 'g-chiptext' }, g); tt.textContent = text; };
+    if (on('actors')) items.filter(i => i.kind === 'actor' && i.from <= t).forEach(i => {
+      const foot = at3(i.p, 0), head = at3(i.p, 1.8); if (!foot || !head) return;
+      const size = Math.max(8, (foot[1] - head[1]) * .55);
+      if (i.hold) { const q = []; for (let k = 0; k <= 32; k++) { const a = k / 32 * Math.PI * 2; const s = P(i.p[0] + i.hold * Math.cos(a), i.p[1] + i.hold * Math.sin(a), H(...i.p) + .05); if (s) q.push(s); } if (q.length > 2) el('polygon', { points: pts(q), class: 'g-hold' }, marks); }
+      bracket([(foot[0] + head[0]) / 2, (foot[1] + head[1]) / 2], size);
+      const dist = Math.hypot(i.p[0] - V.p[0], i.p[1] - V.p[1]);
+      chip(head[0] + size + 6, head[1] - 18, `${i.id} · ${dist.toFixed(0)} m`, full ? `${i.role} · ${i.plan}` : `step ${i.step}`);
+    });
+    if (on('incidents')) items.filter(i => i.kind === 'incident' && i.from <= t).forEach(i => { const q = []; for (let k = 0; k <= 32; k++) { const a = k / 32 * Math.PI * 2; const s = P(i.p[0] + i.r * Math.cos(a), i.p[1] + i.r * Math.sin(a), H(...i.p) + .05); if (s) q.push(s); } if (q.length > 2) { el('polygon', { points: pts(q), class: i.how === 'saw' ? 'g-saw' : 'g-heard' }, marks); const c = at3(i.p, 3); if (c) chip(c[0] - 30, c[1] - 30, i.id, i.how); } });
+    drawRadar(V);
+  }
+  function drawRadar(V) {
+    rsvg.textContent = '';
+    const s = 100 / range, rot = -V.yaw + Math.PI / 2;
+    const tr = p => { const dx = (p[0] - V.p[0]) * s, dy = (p[1] - V.p[1]) * s; return [dx * Math.cos(rot) - dy * Math.sin(rot), -(dx * Math.sin(rot) + dy * Math.cos(rot))]; };
+    const clipId = 'rclip'; const defs = el('defs', {}, rsvg); const cp = el('clipPath', { id: clipId }, defs); el('rect', { x: -100, y: -100, width: 200, height: 200 }, cp);
+    const g = el('g', { 'clip-path': `url(#${clipId})` }, rsvg);
+    for (let k = 1; k <= 3; k++) el('circle', { cx: 0, cy: 0, r: k * 33, class: 'g-ground', opacity: .5 }, g);
+    if (on('roads')) { roadsX.forEach(x => el('polygon', { points: pts([[x - 6, W.y0], [x + 6, W.y0], [x + 6, W.y1], [x - 6, W.y1]].map(tr)), class: 'g-road' }, g)); roadsY.forEach(y => el('polygon', { points: pts([[W.x0, y - 6], [W.x1, y - 6], [W.x1, y + 6], [W.x0, y + 6]].map(tr)), class: 'g-road' }, g)); }
+    if (on('bands')) bands.forEach(b => el('polygon', { points: pts([[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]].map(tr)), class: b.band === 'hot' ? 'g-band-hot' : 'g-band-flash' }, g));
+    if (on('buildings')) buildings.forEach(b => { if (Math.hypot((b.x0 + b.x1) / 2 - V.p[0], (b.y0 + b.y1) / 2 - V.p[1]) > range * 1.6) return; el('polygon', { points: pts([[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]].map(tr)), class: 'g-roof', 'stroke-width': .6 }, g); });
+    if (on('v')) { const q = trail.slice(0, Math.min(t, T) + 1).map(tr); el('polyline', { points: pts(q), class: 'g-trail', 'stroke-width': 1.4 }, g); }
+    if (on('crowd')) crowd.forEach(c => { const p = tr(c); el('circle', { cx: p[0], cy: p[1], r: 1.8, class: 'g-crowd' }, g); });
+    if (on('incidents')) items.filter(i => i.kind === 'incident' && i.from <= t).forEach(i => { const p = tr(i.p); el('circle', { cx: p[0], cy: p[1], r: i.r * s, class: i.how === 'saw' ? 'g-saw' : 'g-heard' }, g); });
+    if (on('actors')) items.filter(i => i.kind === 'actor' && i.from <= t).forEach(i => { const p = tr(i.p); if (i.hold) el('circle', { cx: p[0], cy: p[1], r: i.hold * s, class: 'g-hold' }, g); if (i.id === selected) el('circle', { cx: p[0], cy: p[1], r: 7, class: 'g-sel' }, g); el('circle', { cx: p[0], cy: p[1], r: 3.6, class: 'g-actor' }, g); const tx = el('text', { x: p[0] + 6, y: p[1] - 5, class: 'g-label', style: 'font-size:9px' }, g); tx.textContent = i.id; });
+    el('polygon', { points: '0,-8 5,5 0,2 -5,5', class: 'g-v' }, rsvg);
+    for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2; el('line', { x1: 96 * Math.cos(a), y1: 96 * Math.sin(a), x2: 100 * Math.cos(a), y2: 100 * Math.sin(a), class: 'g-tick' }, rsvg); }
+    document.getElementById('radarRange').textContent = range + ' m';
+    document.getElementById('radarHeading').textContent = 'HDG ' + String(Math.round(((90 - V.yaw * 180 / Math.PI) % 360 + 360) % 360)).padStart(3, '0') + '°';
+    document.getElementById('radarLevel').textContent = level();
+  }
+
+  // ---------- Layers, inspector, agent text: the same model as rows and text ----------
+  function drawLayers() {
+    const host = document.getElementById('layersPanel'); host.textContent = '';
+    const content = document.createElement('div'); content.className = 'group';
+    content.innerHTML = `<div class="group-head"><span class="eyebrow">Story content</span><span class="chip" ${full ? 'data-tone="warning"' : ''}>${level()}</span></div><button class="btn small hold" type="button" id="holdBtn"><i class="fill"></i><span>${full ? 'Hide story content' : 'Hold to show story content'}</span></button>`;
+    host.appendChild(content);
+    for (const grp of ['Game', 'World', 'Story']) {
+      const g = document.createElement('div'); g.className = 'group';
+      g.innerHTML = `<div class="group-head"><span class="eyebrow">${grp}</span></div>`;
+      layers.filter(l => l.group === grp).forEach(l => {
+        const row = document.createElement('label'); row.className = 'layer';
+        row.innerHTML = `<i class="key" style="--k:${l.k};--kf:${l.kf || 'transparent'}"></i><span class="name">${l.name}</span><span style="display:flex;gap:8px;align-items:center"><span class="count">${l.count()}</span><input class="switch" type="checkbox" ${l.on ? 'checked' : ''} aria-label="${l.name}"></span>`;
+        row.querySelector('input').addEventListener('change', e => { l.on = e.target.checked; render(); });
+        g.appendChild(row);
+      });
+      host.appendChild(g);
+    }
+    const hb = document.getElementById('holdBtn'), fill = hb.querySelector('.fill'); let timer = null, startT = 0;
+    const stop = () => { cancelAnimationFrame(timer); timer = null; fill.style.width = '0'; };
+    hb.addEventListener('pointerdown', () => { if (full) { full = false; render(); return; } startT = performance.now(); const step = () => { const k = (performance.now() - startT) / 800; fill.style.width = Math.min(100, k * 100) + '%'; if (k >= 1) { full = true; stop(); render(); } else timer = requestAnimationFrame(step); }; timer = requestAnimationFrame(step); });
+    ['pointerup', 'pointerleave'].forEach(ev => hb.addEventListener(ev, () => { if (timer) stop(); }));
+  }
+  function drawInspector() {
+    const i = items.find(x => x.id === selected), V = vAt(); const host = document.getElementById('inspector');
+    const d = Math.hypot(i.p[0] - V.p[0], i.p[1] - V.p[1]), brg = Math.round(((90 - Math.atan2(i.p[1] - V.p[1], i.p[0] - V.p[0]) * 180 / Math.PI) % 360 + 360) % 360);
+    host.innerHTML = `<div class="eyebrow">XF actor</div><div class="card-title">${i.id}<span class="chip" data-tone="signal">Selected</span></div>
+      <dl class="facts"><dt>Role</dt><dd${full ? '' : ' style="color:var(--text-faint)"'}>${full ? i.role : 'Hidden'}</dd><dt>Plan step</dt><dd>${full ? i.plan + ', ' : ''}${i.step}</dd><dt>From V</dt><dd>${d.toFixed(1)} m · ${String(brg).padStart(3, '0')}°</dd><dt>Position</dt><dd>${(i.p[0] - 1572.8 - rx).toFixed(1)}, ${(i.p[1] + 1267.9 - ry).toFixed(1)}</dd>${i.hold ? `<dt>Holding</dt><dd>0.6 of ${i.hold.toFixed(1)} m</dd>` : ''}${i.ghost ? `<dt>Drift</dt><dd style="color:var(--danger)">${Math.hypot(i.p[0] - i.ghost[0], i.p[1] - i.ghost[1]).toFixed(1)} m</dd>` : ''}</dl>
+      <div class="eyebrow">Why</div><ul class="cites"><li><span>Position</span><span>recorder 1:1388 actors</span></li><li><span>Hold</span><span>event 34001b:19 supervisor.set</span></li><li><span>Plan</span><span>engine plan report, step ${i.step.split(' ')[0]}</span></li></ul>`;
+  }
+  function drawReport() {
+    const V = vAt(), z = H(...V.p);
+    const lines = [`t ${(t / 10).toFixed(1)} s · world 1 · ${level().toLowerCase()}`, `V     ${V.p[0].toFixed(1)}, ${V.p[1].toFixed(1)}, ${z.toFixed(1)}`];
+    items.filter(i => i.from <= t && on(i.layer)).forEach(i => { const d = Math.hypot(i.p[0] - V.p[0], i.p[1] - V.p[1]); if (i.kind === 'actor') lines.push(`${i.id.padEnd(6)}${d.toFixed(1).padStart(5)} m  ${full ? i.role : 'step ' + i.step.split(' ')[0] + '/' + i.step.split(' ')[2]}${i.hold ? ' hold' : ''}`); else if (i.kind === 'incident') lines.push(`${i.id.padEnd(6)}${d.toFixed(1).padStart(5)} m  ${i.how}`); });
+    if (on('drift') && t >= 20) lines.push('drift a3  2.4 m');
+    if (on('gaps') && t > gap[1]) lines.push('gap   1:1201–1214  1.3 s');
+    document.getElementById('report').textContent = lines.join('\n');
+  }
+
+  // ---------- Timeline ----------
+  const tl = document.getElementById('tl'), tlSvg = document.getElementById('tlSvg');
+  function drawTimeline() {
+    const w = tl.clientWidth, h = tl.clientHeight; tlSvg.setAttribute('viewBox', `0 0 ${w} ${h}`); tlSvg.textContent = '';
+    const X = i => 8 + (w - 16) * i / T;
+    const lanes = [['V', 4], ['Events', 28], ['Story', 50]];
+    lanes.forEach(([name, y]) => { el('rect', { x: 0, y, width: w, height: 18, class: 'tl-lane' }, tlSvg); const tx = el('text', { x: 6, y: y + 12, class: 'tl-text' }, tlSvg); tx.textContent = name.toUpperCase(); });
+    const spark = trail.map((p, i) => [X(i), 16 - 8 * Math.abs(Math.sin(i / 7)) - (i > 60 ? 2 : 0)]); el('polyline', { points: pts(spark), class: 'tl-spark' }, tlSvg);
+    el('rect', { x: X(gap[0]), y: 4, width: X(gap[1]) - X(gap[0]), height: 18, class: 'tl-gap' }, tlSvg);
+    events.forEach((e, k) => el('line', { x1: X(e), y1: 31, x2: X(e), y2: 43, class: k % 3 ? 'tl-ev2' : 'tl-ev' }, tlSvg));
+    items.filter(i => i.kind === 'incident').forEach(i => el('rect', { x: X(i.from) - 3, y: 53, width: 6, height: 12, class: 'tl-ev', fill: 'var(--signal)' }, tlSvg));
+    el('line', { x1: X(72), y1: 0, x2: X(72), y2: h, class: 'tl-load' }, tlSvg);
+    el('line', { x1: X(t), y1: 0, x2: X(t), y2: h, class: 'tl-head-line' }, tlSvg);
+    el('path', { d: `M${X(t) - 5},0h10l-5,6z`, class: 'tl-handle' }, tlSvg);
+    document.getElementById('tClock').textContent = `00:${String(Math.floor(t / 10 * 1.3)).padStart(2, '0')}.${Math.round(t * 1.3) % 10}`;
+    document.getElementById('gClock').textContent = `21:${String(14 + Math.floor(t / 40)).padStart(2, '0')}`;
+    document.getElementById('seqClock').textContent = `1:${1290 + t}`;
+  }
+  const scrub = e => { const r = tl.getBoundingClientRect(); t = Math.max(0, Math.min(T, Math.round((e.clientX - r.left - 8) / (r.width - 16) * T))); render(); };
+  tl.addEventListener('pointerdown', e => { tl.setPointerCapture(e.pointerId); scrub(e); tl.onpointermove = scrub; });
+  tl.addEventListener('pointerup', () => { tl.onpointermove = null; });
+
+  // ---------- Interaction ----------
+  let drag = null;
+  stage.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, yaw: cam.yaw, pitch: cam.pitch }; stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener('pointermove', e => { if (!drag) return; cam.yaw = drag.yaw - (e.clientX - drag.x) * 0.006; cam.pitch = Math.max(0.15, Math.min(1.52, drag.pitch + (e.clientY - drag.y) * 0.005)); setView(null); drawStage(); });
+  stage.addEventListener('pointerup', () => { drag = null; });
+  stage.addEventListener('wheel', e => { e.preventDefault(); cam.dist = Math.max(90, Math.min(700, cam.dist * (1 + Math.sign(e.deltaY) * 0.1))); drawStage(); }, { passive: false });
+  const views = { top: { pitch: 1.52, dist: 380 }, tilt: { pitch: 0.95, dist: 330 }, low: { pitch: 0.38, dist: 220 } };
+  const setView = v => document.querySelectorAll('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === v)));
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { Object.assign(cam, views[b.dataset.view]); setView(b.dataset.view); drawStage(); }));
+  document.querySelectorAll('[data-theme-set]').forEach(b => b.addEventListener('click', () => { document.documentElement.dataset.theme = b.dataset.themeSet; document.querySelectorAll('[data-theme-set]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); }));
+  const setMode = m => { mode = m; game.dataset.mode = m; document.getElementById('cetShow').checked = m !== 'off'; document.querySelectorAll('[data-mode-set]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.modeSet === m))); document.getElementById('modeLabel').textContent = m === 'marks' ? 'Radar only' : 'Markers'; };
+  let lastMode = 'marks';
+  document.addEventListener('keydown', e => { if (e.target.closest('input, button')) return; if (e.key === 'h' || e.key === 'H') { if (mode === 'off') setMode(lastMode); else { lastMode = mode; setMode('off'); } } if ((e.key === 'm' || e.key === 'M') && mode !== 'off') setMode(mode === 'marks' ? 'radar' : 'marks'); });
+  document.querySelectorAll('[data-mode-set]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.modeSet)));
+  document.getElementById('cetShow').addEventListener('change', e => { if (e.target.checked) setMode(lastMode); else { lastMode = mode; setMode('off'); } });
+  document.getElementById('cetRange').addEventListener('input', e => { range = +e.target.value; document.getElementById('cetRangeOut').textContent = range + ' m'; drawRadar(vAt()); });
+  document.getElementById('cetOpacity').addEventListener('input', e => { document.getElementById('cetOpOut').textContent = e.target.value + '%'; document.documentElement.style.setProperty('--holo-plate', `light-dark(oklch(.995 .002 255 / ${e.target.value / 100}), oklch(.2 .01 255 / ${e.target.value / 100}))`); });
+  let playing = null;
+  document.getElementById('playBtn').addEventListener('click', () => { if (playing) { clearInterval(playing); playing = null; return; } if (t >= T) t = 0; playing = setInterval(() => { t++; if (t >= T) { clearInterval(playing); playing = null; } render(); }, 90); });
+
+  function render() { drawStage(); drawGame(); drawLayers(); drawInspector(); drawReport(); drawTimeline(); }
+  new ResizeObserver(() => { drawStage(); drawGame(); drawTimeline(); }).observe(document.body);
+  render();
+})();
+</script>
 </body>
 </html>
