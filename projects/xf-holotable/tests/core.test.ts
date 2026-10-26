@@ -6,6 +6,7 @@ import { snapshotAt, sessionAtLevel, trailUntil } from "../src/query.ts";
 import { headingDeg, report } from "../src/report.ts";
 import { createService } from "../src/service.ts";
 import { districtAt } from "../src/world.ts";
+import { emptySolids } from "../src/solid-source.ts";
 import { writeFixture, type Fixture } from "./fixture.ts";
 
 let fx: Fixture | undefined;
@@ -85,7 +86,7 @@ describe("world", () => {
 describe("service", () => {
   test("opens only runs inside its recordings folder", async () => {
     const f = fx = writeFixture();
-    const { handlers } = createService({ recordingsRoot: f.root, worldPackPath: join(f.root, "missing.json") });
+    const { handlers } = createService({ recordingsRoot: f.root, worldPackPath: join(f.root, "missing.json"), solidSource: { around: async () => emptySolids() } });
     const signal = new AbortController().signal;
     expect((await handlers["session.open"]({ dir: f.dir }, signal) as any).meta.session).toBe("abc123");
     await expect(handlers["session.open"]({ dir: join(f.root, "elsewhere") }, signal)).rejects.toThrow(/recordings folder/);
@@ -94,7 +95,7 @@ describe("service", () => {
 
   test("a cancelled open rejects without publishing, and a later open still loads", async () => {
     const f = fx = writeFixture();
-    const { handlers, sessions } = createService({ recordingsRoot: f.root, worldPackPath: join(f.root, "missing.json") });
+    const { handlers, sessions } = createService({ recordingsRoot: f.root, worldPackPath: join(f.root, "missing.json"), solidSource: { around: async () => emptySolids() } });
     const ctl = new AbortController(); ctl.abort();
     await expect(handlers["session.open"]({ dir: f.dir }, ctl.signal)).rejects.toThrow(/Cancelled/);
     expect((await handlers["session.open"]({ dir: f.dir }, new AbortController().signal) as any).v.length).toBe(50);

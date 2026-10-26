@@ -3,11 +3,13 @@
  * state. The panel writes them as SVG; the same rules feed the agent's text report in the headless service. World axes are the game's:
  * x east, y north, z up, metres.
  */
-import type { HoloArea, HoloCameraSample, HoloCell, HoloEvent, HoloSession, HoloVSample, HoloWorld, Vec3 } from "../types";
+import type { HoloArea, HoloCameraSample, HoloCell, HoloEvent, HoloSession, HoloSolid, HoloVSample, HoloWorld, Vec3 } from "../types";
 import type { HoloLayer } from "../service";
+import { solidDrawing, type SolidDrawing, SOLID_DRAW_CAP } from "./solid-projection";
 
 export type Style = "grid" | "area" | "venue" | "cell" | "trail" | "v" | "cone" | "camera" | "event" | "event-selected" | "gap" | "label" | "label-muted";
 export type Primitive =
+  | SolidDrawing
   | { kind: "line"; points: [number, number][]; style: Style; opacity: number; closed?: boolean; /** How far into its dash pattern the line starts, in pixels: a line cut at the edge keeps its dashes where they were. */ dashOffset?: number }
   | { kind: "marker"; at: [number, number]; size: number; style: Style; id?: string; shape: "chevron" | "diamond" | "dot"; angle?: number }
   | { kind: "text"; at: [number, number]; text: string; style: Style };
@@ -29,7 +31,9 @@ export function trail(s: HoloSession, t: number): Vec3[][] {
   for (const x of s.v) {
     if (x.t > t) break;
     if (breaks.has(x.t) && run.length) { runs.push(run); run = []; }
-    run.push(x.position);
+    // A stationary recorder can repeat the same point thousands of times; it contributes one geometric vertex.
+    const last = run[run.length - 1];
+    if (!last || last[0] !== x.position[0] || last[1] !== x.position[1] || last[2] !== x.position[2]) run.push(x.position);
   }
   if (run.length) runs.push(run);
   return runs;
@@ -43,7 +47,7 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
   let r = [f[1], -f[0], 0]; const rl = Math.hypot(r[0], r[1]) || 1; r = [r[0] / rl, r[1] / rl, 0];
   const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
   const focal = (height / 2) / Math.tan(o.fov / 2);
-  const view = (p: Vec3) => { const d = [p[0] - c[0], p[1] - c[1], p[2] - c[2]]; return [d[0] * r[0] + d[1] * r[1] + d[2] * r[2], d[0] * u[0] + d[1] * u[1] + d[2] * u[2], d[0] * f[0] + d[1] * f[1] + d[2] * f[2]]; };
+  const view = (p: Vec3) => { const x = p[0] - c[0], y = p[1] - c[1], z = p[2] - c[2]; return [x * r[0] + y * r[1] + z * r[2], x * u[0] + y * u[1] + z * u[2], x * f[0] + y * f[1] + z * f[2]]; };
   const screen = (q: number[]): [number, number] => [width / 2 + focal * q[0] / q[2], height / 2 - focal * q[1] / q[2]];
   const point = (p: Vec3) => { const q = view(p); return q[2] < NEAR ? null : screen(q); };
   /**
@@ -52,6 +56,8 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
    */
   const line = (ps: readonly Vec3[], closed = false): ClippedRun[] => {
     const qs = ps.map(view); if (closed && qs.length) qs.push(qs[0]);
+    if (qs.length === 2 && qs[0][2] >= NEAR && qs[1][2] >= NEAR)
+      return clipToRect([screen(qs[0]), screen(qs[1])], -MARGIN, -MARGIN, width + MARGIN, height + MARGIN);
     const runs: [number, number][][] = []; let run: [number, number][] = [];
     for (let i = 0; i < qs.length; i++) {
       const a = qs[i], inA = a[2] >= NEAR;
@@ -66,10 +72,18 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
   };
   /** Screen pixels per metre at a world point (for scale bars and sizes). */
   const scale = (p: Vec3) => { const q = view(p); return q[2] < NEAR ? 0 : focal / q[2]; };
-  return { point, line, scale, position: c };
+  const polygon = (ps: readonly Vec3[]): [number, number][] => {
+    let qs = ps.map(view);
+    qs = cutPolygon(qs, q => q[2] - NEAR);
+    let projected = qs.map(screen);
+    for (const plane of [(p: number[]) => p[0] + MARGIN, (p: number[]) => width + MARGIN - p[0],
+      (p: number[]) => p[1] + MARGIN, (p: number[]) => height + MARGIN - p[1]]) projected = cutPolygon(projected, plane) as [number, number][];
+    return projected;
+  };
+  return { point, line, polygon, scale, position: c };
 }
 
-export interface Scene { primitives: Primitive[]; v?: HoloVSample; cam?: HoloCameraSample; camStale: boolean; vStale: boolean; recent: HoloEvent[]; inGap: boolean; metresPerBar: number; barPx: number }
+export interface Scene { primitives: Primitive[]; v?: HoloVSample; cam?: HoloCameraSample; camStale: boolean; vStale: boolean; recent: HoloEvent[]; inGap: boolean; metresPerBar: number; barPx: number; solidsDrawn: number; solidsCut: number }
 
 /** The model at moment t, projected for an orbit around V (or the first sample, before V's first sample). */
 export function project(s: HoloSession, world: HoloWorld, t: number, layers: Readonly<Record<HoloLayer, boolean>>, orbit: Orbit,
@@ -92,6 +106,14 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
     if (Math.hypot(cx - target[0], cy - target[1]) <= CELL_RADIUS) box(c, (ps, o) => lines(ps, "cell", o * fade(ps[0])));
   }
   if (layers.areas) for (const a of world.areas) plate(a, target, (ps, style, o) => lines(ps, style, o * fade(ps[0]), true));
+  // Cull by distance from V before counting; keep the nearest, then paint far to near beneath every recorded data layer.
+  const nearby = nearestVisible(layers.solids ? world.solids ?? [] : [], target);
+  const visible = nearby.kept.sort((a, b) => distance2(b.solid.center, C.position) - distance2(a.solid.center, C.position));
+  let solidsDrawn = 0;
+  for (const { solid } of visible) {
+    const drawing = solidDrawing(solid, C, fade(solid.center));
+    if (drawing.lines.length || drawing.faces.length) { out.push(drawing); solidsDrawn++; }
+  }
   if (layers.v) for (const run of trail(s, t)) lines(run.map(p => [p[0], p[1], p[2] + 0.3] as Vec3), "trail", 0.85);
   if (layers.gaps) for (const g of s.gaps) if (g.from <= t) {
     const a = at(s.v, g.from), b = at(s.v, g.to);
@@ -119,7 +141,55 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
   // A scale bar that tells the truth: the largest round distance that fits in 140 px at V.
   const ppm = C.scale(target), choice = [5, 10, 20, 50, 100, 200, 500].filter(m => m * ppm <= 140).pop() ?? 5;
   return { primitives: out, v, cam, camStale, vStale: !!v && t - v.t > STALE_S, recent: s.events.filter(e => e.t <= t && t - e.t <= 5),
-    inGap: s.gaps.some(g => g.from < t && t < g.to), metresPerBar: choice, barPx: choice * ppm };
+    inGap: s.gaps.some(g => g.from < t && t < g.to), metresPerBar: choice, barPx: choice * ppm,
+    solidsDrawn, solidsCut: Math.max(0, nearby.total - SOLID_DRAW_CAP) };
+}
+
+const distance2 = (a: Vec3, b: Vec3) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+// World snapshots are immutable. This geometry-only memo is weakly held and independent of the camera and playback state.
+const solidRadii = new WeakMap<HoloSolid, number>();
+function solidRadius(solid: HoloSolid): number {
+  const cached = solidRadii.get(solid); if (cached !== undefined) return cached;
+  let radius = 0;
+  for (let i = 0; i < 3; i++) radius += Math.hypot(...solid.axes[i]) * (solid.kind === "box" ? solid.size[i] : solid.size[0]);
+  if (solid.kind === "capsule") radius += Math.hypot(...solid.axes[2]) * solid.size[1] / 2;
+  solidRadii.set(solid, radius); return radius;
+}
+/** A bounded max heap selects the nearest in O(n log cap), without allocating/sorting all 12,000 solids each frame. */
+function nearestVisible(solids: readonly HoloSolid[], target: Vec3) {
+  type Near = { solid: HoloSolid; d: number };
+  const kept: Near[] = []; let total = 0;
+  const farther = (a: Near, b: Near) => a.d > b.d || a.d === b.d && a.solid.id > b.solid.id;
+  for (const solid of solids) {
+    const d = distance2(solid.center, target); if (d > 350 * 350) continue;
+    // A conservative affine bound keeps every drawn point within 350 m, including large shapes crossing the boundary.
+    if (Math.sqrt(d) + solidRadius(solid) > 350) continue;
+    total++;
+    if (kept.length < SOLID_DRAW_CAP) {
+      let i = kept.length; kept.push({ solid, d });
+      while (i > 0) { const p = (i - 1) >> 1; if (!farther(kept[i], kept[p])) break; const swap = kept[i]; kept[i] = kept[p]; kept[p] = swap; i = p; }
+    } else if (d < kept[0].d || d === kept[0].d && solid.id < kept[0].solid.id) {
+      kept[0] = { solid, d }; let i = 0;
+      for (;;) {
+        const l = i * 2 + 1, r = l + 1;
+        if (l >= kept.length) break;
+        const child = r < kept.length && farther(kept[r], kept[l]) ? r : l;
+        if (!farther(kept[child], kept[i])) break;
+        const swap = kept[i]; kept[i] = kept[child]; kept[child] = swap; i = child;
+      }
+    }
+  }
+  return { kept, total };
+}
+function cutPolygon(ps: number[][], plane: (p: number[]) => number): number[][] {
+  if (ps.every(p => plane(p) >= 0)) return ps;
+  const out: number[][] = [];
+  for (let i = 0; i < ps.length; i++) {
+    const a = ps[(i + ps.length - 1) % ps.length], b = ps[i], da = plane(a), db = plane(b);
+    if ((da >= 0) !== (db >= 0)) { const k = da / (da - db); out.push(a.map((x, j) => x + (b[j] - x) * k)); }
+    if (db >= 0) out.push(b);
+  }
+  return out;
 }
 
 /** A sample older than this at the moment shown is stale: drawn faded or not at all, and said so. */
@@ -139,6 +209,12 @@ const MARGIN = 32;
  */
 export type ClippedRun = { points: [number, number][]; offset: number };
 export function clipToRect(ps: readonly [number, number][], x0: number, y0: number, x1: number, y1: number): ClippedRun[] {
+  if (ps.length === 2) {
+    const [a, b] = ps;
+    if (a[0] >= x0 && a[0] <= x1 && a[1] >= y0 && a[1] <= y1 && b[0] >= x0 && b[0] <= x1 && b[1] >= y0 && b[1] <= y1)
+      return [{ points: [a, b], offset: 0 }];
+    if (a[0] < x0 && b[0] < x0 || a[0] > x1 && b[0] > x1 || a[1] < y0 && b[1] < y0 || a[1] > y1 && b[1] > y1) return [];
+  }
   const runs: ClippedRun[] = []; let run: [number, number][] = [], offset = 0, along = 0;
   const flush = () => { if (run.length > 1) runs.push({ points: run, offset }); run = []; };
   for (let i = 1; i < ps.length; i++, along += Math.hypot(ps[i - 1][0] - ps[i - 2][0], ps[i - 1][1] - ps[i - 2][1])) {

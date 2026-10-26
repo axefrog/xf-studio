@@ -222,7 +222,7 @@ The [mock-up](mockup.html) is interactive and data-driven itself: one small mode
 | Streaming block descriptors (26,318) | Sector boxes by category and level: the "what is loaded near here" skeleton | Readable today with the native reader | [resource] ([world and streaming §1.2](../../knowledge/world-and-streaming.md#12-streaming-blocks)) |
 | District records and area polygons with vertical bands | District, sub-district and venue outlines; restrictions; police presets; the place dimensions | Resolved offline for the place work | [resource] ([places §12](../../knowledge/places.md#12-place-dimensions-for-the-world-index-w1)) |
 | Points of interest, map pins, services, AI spots | Markers and spot supply | Read offline | [resource] |
-| Collision actors (boxes, spheres, capsules) | The cheapest true solid geometry: flat-shaded primitives exactly in the requested style | Needs the W0 sector reader | [source] layout; reader not built |
+| Collision actors (boxes, spheres, capsules) | True solids near the recorded path; architect-model outlines and faint fills | Additive W0 reader and cached vanilla Exterior L0–L6 + Interior overlay implemented; cooked shapes counted but omitted, with [measurements and limits](w0-sector-reader.md) | [resource] four-sector oracle and region census; no game-runtime proof |
 | Building, road and terrain proxy meshes | A low-polygon city silhouette by construction | Needs mesh decoding (reader phase 4) | [resource] node counts; fit for the look [hypothesis] |
 | Navigation tiles | Walkable surface | Format unread | [hypothesis] |
 

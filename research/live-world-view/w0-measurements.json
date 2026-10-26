@@ -1,0 +1,652 @@
+{
+  "date": "2026-10-26",
+  "environment": {
+    "bun": "1.4.4",
+    "sourceReader": 5,
+    "sectorReader": 3,
+    "worldCap": 12000,
+    "drawCap": 64,
+    "rangeM": 350,
+    "marginM": 250
+  },
+  "records": [
+    {
+      "session": "82068e424289a7d6",
+      "run": 4,
+      "coldMs": 7133.616,
+      "memoryMs": 27.512500000000728,
+      "diskMs": 57.01440000000002,
+      "samples": 1929,
+      "solids": 12000,
+      "solidInfo": {
+        "source": "vanilla",
+        "readerVersion": 5,
+        "available": true,
+        "sectors": 1054,
+        "counts": {
+          "box": 146044,
+          "sphere": 878,
+          "capsule": 12100,
+          "convexMesh": 18128,
+          "triangleMesh": 174952
+        },
+        "rawCounts": {
+          "box": 148722,
+          "sphere": 888,
+          "capsule": 12374,
+          "convexMesh": 18957,
+          "triangleMesh": 178139
+        },
+        "levels": {
+          "Exterior:0": {
+            "sectors": 341,
+            "counts": {
+              "box": 20985,
+              "sphere": 127,
+              "capsule": 3579,
+              "convexMesh": 3520,
+              "triangleMesh": 27501
+            }
+          },
+          "Interior:0": {
+            "sectors": 115,
+            "counts": {
+              "box": 1922,
+              "sphere": 1,
+              "capsule": 716,
+              "convexMesh": 351,
+              "triangleMesh": 1795
+            }
+          },
+          "Exterior:1": {
+            "sectors": 190,
+            "counts": {
+              "box": 56535,
+              "sphere": 439,
+              "capsule": 2756,
+              "convexMesh": 7405,
+              "triangleMesh": 69065
+            }
+          },
+          "Interior:1": {
+            "sectors": 54,
+            "counts": {
+              "box": 12093,
+              "sphere": 37,
+              "capsule": 2872,
+              "convexMesh": 1943,
+              "triangleMesh": 11918
+            }
+          },
+          "Exterior:2": {
+            "sectors": 120,
+            "counts": {
+              "box": 41489,
+              "sphere": 206,
+              "capsule": 1232,
+              "convexMesh": 4023,
+              "triangleMesh": 52340
+            }
+          },
+          "Interior:2": {
+            "sectors": 33,
+            "counts": {
+              "box": 8373,
+              "sphere": 41,
+              "capsule": 977,
+              "convexMesh": 1035,
+              "triangleMesh": 5851
+            }
+          },
+          "Exterior:3": {
+            "sectors": 59,
+            "counts": {
+              "box": 6005,
+              "sphere": 37,
+              "capsule": 207,
+              "convexMesh": 633,
+              "triangleMesh": 9018
+            }
+          },
+          "Interior:3": {
+            "sectors": 11,
+            "counts": {
+              "box": 924,
+              "sphere": 0,
+              "capsule": 35,
+              "convexMesh": 22,
+              "triangleMesh": 456
+            }
+          },
+          "Exterior:4": {
+            "sectors": 42,
+            "counts": {
+              "box": 1,
+              "sphere": 0,
+              "capsule": 0,
+              "convexMesh": 0,
+              "triangleMesh": 24
+            }
+          },
+          "Interior:4": {
+            "sectors": 22,
+            "counts": {
+              "box": 395,
+              "sphere": 0,
+              "capsule": 0,
+              "convexMesh": 25,
+              "triangleMesh": 171
+            }
+          },
+          "Exterior:5": {
+            "sectors": 30,
+            "counts": {
+              "box": 0,
+              "sphere": 0,
+              "capsule": 0,
+              "convexMesh": 0,
+              "triangleMesh": 0
+            }
+          },
+          "Exterior:6": {
+            "sectors": 37,
+            "counts": {
+              "box": 0,
+              "sphere": 0,
+              "capsule": 0,
+              "convexMesh": 0,
+              "triangleMesh": 0
+            }
+          }
+        },
+        "overlap": {
+          "shapes": 6978,
+          "crossLevelShapes": 2063,
+          "actors": 1639,
+          "completeActors": 1632,
+          "pairs": {
+            "Exterior:0→Exterior:1": 1053,
+            "Interior:0→Interior:1": 123,
+            "Exterior:0→Interior:1": 1,
+            "Exterior:0→Exterior:2": 185,
+            "Exterior:1→Exterior:2": 286,
+            "Interior:1→Exterior:2": 2,
+            "Exterior:1→Interior:2": 266,
+            "Interior:0→Interior:2": 20,
+            "Interior:1→Interior:2": 19,
+            "Exterior:0→Interior:2": 11,
+            "Exterior:2→Exterior:3": 53,
+            "Exterior:1→Exterior:3": 38,
+            "Interior:1→Interior:3": 2,
+            "Interior:0→Interior:3": 3,
+            "Interior:0→Interior:4": 1
+          },
+          "examples": [
+            {
+              "kept": "15929306216832200624:1395:0:0",
+              "removed": "12014708328291059842:2819:2:0",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            },
+            {
+              "kept": "15929306216832200624:1395:1:0",
+              "removed": "12014708328291059842:2819:7:0",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            },
+            {
+              "kept": "15929306216832200624:1395:1:1",
+              "removed": "12014708328291059842:2819:7:1",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            },
+            {
+              "kept": "15929306216832200624:1395:1:2",
+              "removed": "12014708328291059842:2819:7:2",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            },
+            {
+              "kept": "15929306216832200624:1395:2:0",
+              "removed": "12014708328291059842:2819:8:0",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            },
+            {
+              "kept": "15929306216832200624:1395:2:1",
+              "removed": "12014708328291059842:2819:8:1",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            },
+            {
+              "kept": "15929306216832200624:1395:2:2",
+              "removed": "12014708328291059842:2819:8:2",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            },
+            {
+              "kept": "15929306216832200624:1395:3:0",
+              "removed": "12014708328291059842:2819:12:0",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            }
+          ]
+        },
+        "omittedMeshShapes": 193080,
+        "cut": 147022,
+        "cap": 12000,
+        "variants": "defaults"
+      },
+      "projection": {
+        "300/top": {
+          "median": 0.8447999999999638,
+          "p95": 2.542500000000018,
+          "max": 4.0896999999999935,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        },
+        "300/tilt": {
+          "median": 1.0588000000000193,
+          "p95": 2.6485000000000127,
+          "max": 3.5633000000000266,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        },
+        "300/low": {
+          "median": 1.0356999999999061,
+          "p95": 2.338999999999942,
+          "max": 3.201999999999998,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        },
+        "800/top": {
+          "median": 1.0858999999999241,
+          "p95": 2.6664999999998145,
+          "max": 3.735500000000002,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        },
+        "800/tilt": {
+          "median": 0.7958000000000993,
+          "p95": 2.47400000000016,
+          "max": 3.478399999999965,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        },
+        "800/low": {
+          "median": 1.350500000000011,
+          "p95": 3.2148999999999432,
+          "max": 6.883499999999913,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        }
+      }
+    },
+    {
+      "session": "34001b6cf0a36839",
+      "run": 1,
+      "coldMs": 4763.586899999999,
+      "memoryMs": 32.0671999999995,
+      "diskMs": 315.09450000000106,
+      "samples": 8857,
+      "solids": 12000,
+      "solidInfo": {
+        "source": "vanilla",
+        "readerVersion": 5,
+        "available": true,
+        "sectors": 758,
+        "counts": {
+          "box": 78793,
+          "sphere": 445,
+          "capsule": 6852,
+          "convexMesh": 8280,
+          "triangleMesh": 95238
+        },
+        "rawCounts": {
+          "box": 79651,
+          "sphere": 451,
+          "capsule": 6995,
+          "convexMesh": 8664,
+          "triangleMesh": 96228
+        },
+        "levels": {
+          "Exterior:0": {
+            "sectors": 235,
+            "counts": {
+              "box": 10012,
+              "sphere": 17,
+              "capsule": 1885,
+              "convexMesh": 1503,
+              "triangleMesh": 11887
+            }
+          },
+          "Interior:0": {
+            "sectors": 87,
+            "counts": {
+              "box": 713,
+              "sphere": 4,
+              "capsule": 359,
+              "convexMesh": 413,
+              "triangleMesh": 793
+            }
+          },
+          "Exterior:1": {
+            "sectors": 114,
+            "counts": {
+              "box": 27444,
+              "sphere": 193,
+              "capsule": 1529,
+              "convexMesh": 3055,
+              "triangleMesh": 36123
+            }
+          },
+          "Interior:1": {
+            "sectors": 45,
+            "counts": {
+              "box": 5062,
+              "sphere": 95,
+              "capsule": 1460,
+              "convexMesh": 712,
+              "triangleMesh": 4733
+            }
+          },
+          "Exterior:2": {
+            "sectors": 85,
+            "counts": {
+              "box": 24218,
+              "sphere": 90,
+              "capsule": 753,
+              "convexMesh": 1889,
+              "triangleMesh": 31748
+            }
+          },
+          "Interior:2": {
+            "sectors": 27,
+            "counts": {
+              "box": 6713,
+              "sphere": 52,
+              "capsule": 958,
+              "convexMesh": 806,
+              "triangleMesh": 4744
+            }
+          },
+          "Exterior:3": {
+            "sectors": 39,
+            "counts": {
+              "box": 4560,
+              "sphere": 0,
+              "capsule": 28,
+              "convexMesh": 253,
+              "triangleMesh": 5713
+            }
+          },
+          "Interior:3": {
+            "sectors": 6,
+            "counts": {
+              "box": 759,
+              "sphere": 0,
+              "capsule": 23,
+              "convexMesh": 18,
+              "triangleMesh": 430
+            }
+          },
+          "Exterior:4": {
+            "sectors": 37,
+            "counts": {
+              "box": 0,
+              "sphere": 0,
+              "capsule": 0,
+              "convexMesh": 0,
+              "triangleMesh": 0
+            }
+          },
+          "Interior:4": {
+            "sectors": 17,
+            "counts": {
+              "box": 170,
+              "sphere": 0,
+              "capsule": 0,
+              "convexMesh": 15,
+              "triangleMesh": 57
+            }
+          },
+          "Exterior:5": {
+            "sectors": 29,
+            "counts": {
+              "box": 0,
+              "sphere": 0,
+              "capsule": 0,
+              "convexMesh": 0,
+              "triangleMesh": 0
+            }
+          },
+          "Exterior:6": {
+            "sectors": 37,
+            "counts": {
+              "box": 0,
+              "sphere": 0,
+              "capsule": 0,
+              "convexMesh": 0,
+              "triangleMesh": 0
+            }
+          }
+        },
+        "overlap": {
+          "shapes": 2381,
+          "crossLevelShapes": 834,
+          "actors": 680,
+          "completeActors": 676,
+          "pairs": {
+            "Exterior:0→Exterior:1": 425,
+            "Interior:0→Interior:1": 86,
+            "Exterior:0→Interior:1": 1,
+            "Exterior:1→Exterior:2": 112,
+            "Exterior:0→Exterior:2": 98,
+            "Interior:1→Exterior:2": 2,
+            "Interior:0→Interior:2": 21,
+            "Interior:1→Interior:2": 44,
+            "Exterior:1→Exterior:3": 17,
+            "Exterior:2→Exterior:3": 22,
+            "Interior:1→Interior:3": 2,
+            "Interior:0→Interior:3": 3,
+            "Interior:0→Interior:4": 1
+          },
+          "examples": [
+            {
+              "kept": "3919742118226925414:479:0:0",
+              "removed": "17725884780421631227:2744:18:0",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            },
+            {
+              "kept": "3919742118226925414:479:0:1",
+              "removed": "17725884780421631227:2744:18:1",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "triangleMesh"
+            },
+            {
+              "kept": "3919742118226925414:479:1:0",
+              "removed": "17725884780421631227:2744:19:0",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            },
+            {
+              "kept": "3919742118226925414:479:1:1",
+              "removed": "17725884780421631227:2744:19:1",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "triangleMesh"
+            },
+            {
+              "kept": "3919742118226925414:479:2:0",
+              "removed": "17725884780421631227:2744:20:0",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            },
+            {
+              "kept": "3919742118226925414:479:2:1",
+              "removed": "17725884780421631227:2744:20:1",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "triangleMesh"
+            },
+            {
+              "kept": "3919742118226925414:479:3:0",
+              "removed": "17725884780421631227:2744:21:0",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "box"
+            },
+            {
+              "kept": "3919742118226925414:479:3:1",
+              "removed": "17725884780421631227:2744:21:1",
+              "keptLevel": 0,
+              "removedLevel": 1,
+              "kind": "triangleMesh"
+            }
+          ]
+        },
+        "omittedMeshShapes": 103518,
+        "cut": 74090,
+        "cap": 12000,
+        "variants": "defaults"
+      },
+      "projection": {
+        "300/top": {
+          "median": 0.5934999999999491,
+          "p95": 2.0667000000000826,
+          "max": 2.6174000000000888,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        },
+        "300/tilt": {
+          "median": 0.7986999999998261,
+          "p95": 2.2917999999999665,
+          "max": 2.76279999999997,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        },
+        "300/low": {
+          "median": 0.7417000000000371,
+          "p95": 1.984899999999925,
+          "max": 3.50630000000001,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        },
+        "800/top": {
+          "median": 1.0318999999999505,
+          "p95": 2.3514000000000124,
+          "max": 2.818500000000313,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        },
+        "800/tilt": {
+          "median": 0.5545999999999367,
+          "p95": 1.9023999999999432,
+          "max": 2.5378999999998086,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        },
+        "800/low": {
+          "median": 0.9587000000001353,
+          "p95": 1.8976999999999862,
+          "max": 2.6847999999999956,
+          "drawn": [
+            64,
+            64
+          ],
+          "cut": 11936
+        }
+      }
+    }
+  ],
+  "oracle": {
+    "wolvenKit": {
+      "version": "9.0.1",
+      "sha256": "4e22bc953473f75e0126e40731965b56746f11b5950d8da39cf9103c3f74d7d0"
+    },
+    "samples": [
+      {
+        "path": "base\\worlds\\03_night_city\\_compiled\\default\\exterior_-21_23_-9_0.streamingsector",
+        "sha256": "61b1c126c2cbf3c1efe12513fb608dac2f1955a820a2d33102b61437ed84880d",
+        "placements": 1389,
+        "nodes": 1388,
+        "actors": 198,
+        "shapes": 198,
+        "differences": []
+      },
+      {
+        "path": "base\\worlds\\03_night_city\\_compiled\\default\\interior_-51_31_0_0.streamingsector",
+        "sha256": "98c9cf7bed3a456ffc82e649e2ac3740e7d95d1407b81451631d316e827f9e15",
+        "placements": 402,
+        "nodes": 382,
+        "actors": 7,
+        "shapes": 12,
+        "differences": []
+      },
+      {
+        "path": "base\\worlds\\03_night_city\\_compiled\\default\\navigation_-5_5_-2_3.streamingsector",
+        "sha256": "bfb757ebda968df7812a3e73921a875a4ac986f378539f870b3771c0d28483ce",
+        "placements": 4,
+        "nodes": 4,
+        "actors": 0,
+        "shapes": 0,
+        "differences": []
+      },
+      {
+        "path": "base\\worlds\\03_night_city\\_compiled\\default\\exterior_-8_13_0_1.streamingsector",
+        "sha256": "e2b3ef5930845c0a15a71841f5f4fda4b447c99aeecef8f5965891432a9e5507",
+        "placements": 2141,
+        "nodes": 2044,
+        "actors": 7326,
+        "shapes": 10817,
+        "differences": []
+      }
+    ]
+  }
+}

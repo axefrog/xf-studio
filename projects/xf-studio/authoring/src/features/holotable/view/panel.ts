@@ -90,8 +90,8 @@ export function holotablePanel(ctx: Ctx): PanelController {
 
   // The drawing reuses its nodes: each frame sets the attributes that changed on pooled lines and labels, instead of building
   // hundreds of elements per playback tick. The edge ticks change only with the drawing's size.
-  const chrome = document.createElementNS(NS, "g"), linesLayer = document.createElementNS(NS, "g"), marksLayer = document.createElementNS(NS, "g"), textLayer = document.createElementNS(NS, "g");
-  svg.append(chrome, linesLayer, marksLayer, textLayer);
+  const chrome = document.createElementNS(NS, "g"), solidsLayer = document.createElementNS(NS, "g"), linesLayer = document.createElementNS(NS, "g"), marksLayer = document.createElementNS(NS, "g"), textLayer = document.createElementNS(NS, "g");
+  svg.append(solidsLayer, chrome, linesLayer, marksLayer, textLayer);
   let chromeSize = "";
   const pooled = (layer: SVGGElement, tag: "polyline" | "text", index: number): SVGElement => {
     let e = layer.children[index] as SVGElement | undefined;
@@ -103,10 +103,23 @@ export function holotablePanel(ctx: Ctx): PanelController {
 
   function draw(state: HoloState) {
     const open = state.open;
-    if (!open) { trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); chromeSize = ""; return; }
+    if (!open) { trim(solidsLayer, 0); trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); chromeSize = ""; return; }
     const width = svg.clientWidth || 800, height = svg.clientHeight || 480;
     const scene = project(open.session, open.world, state.t, state.layers, orbit, width, height, state.selected);
     set(svg, "viewBox", `0 0 ${width} ${height}`);
+    const solids = scene.primitives.filter((p): p is Extract<Primitive, { kind: "solid" }> => p.kind === "solid");
+    const path = (points: readonly (readonly [number, number])[], closed = false) => points.length ? `M${points.map(p => `${f1(p[0])},${f1(p[1])}`).join("L")}${closed ? "Z" : ""}` : "";
+    solids.forEach((p, i) => {
+      let group = solidsLayer.children[i] as SVGGElement | undefined;
+      if (!group) { group = document.createElementNS(NS, "g"); for (let k = 0; k < 3; k++) group.append(document.createElementNS(NS, "path")); solidsLayer.append(group); }
+      for (const [index, top] of [false, true].entries()) {
+        set(group.children[index], "d", p.faces.filter(f => f.top === top).map(f => path(f.points, true)).join(""));
+        set(group.children[index], "style", `fill:var(--text);stroke:none;opacity:${(p.opacity * (top ? 0.06 : 0.04)).toFixed(3)}`);
+      }
+      set(group.children[2], "d", p.lines.map(r => path(r.points)).join(""));
+      set(group.children[2], "style", `fill:none;stroke:var(--line-strong);stroke-width:1;opacity:${p.opacity.toFixed(2)}`);
+    });
+    trim(solidsLayer, solids.length);
     if (chromeSize !== `${width}x${height}`) {
       chromeSize = `${width}x${height}`;
       const ticks: Element[] = [];
@@ -184,4 +197,3 @@ export function holotablePanel(ctx: Ctx): PanelController {
     dispose() { resized.disconnect(); },
   };
 }
-

@@ -103,6 +103,8 @@ A few classes append data after the terminator. [resource] [source] WolvenKit's 
 - `CMaterialTemplate`: groups until the end, each a u8 count of (u8 type, u16 offset, u16 name index). This is `parameterInfo`.
 - Any other trailing data is refused (the resource falls back to WolvenKit).
 
+**Additive sector entry point (26 October 2026).** The separate `native/streaming-sector.ts` reads `worldStreamingSector` appendix version 62, its 144-byte placement records and `worldCollisionNode` compiled actor/shape tables. `readStreamingSector` retains every placement field; `readStreamingSectorCollisions` skips unused placement metadata and filter/debug properties for bulk collision preparation. Both use the established CR2W buffer reader, bounded sessions and typed refusals, and produce equal collision records on four real sectors. Every stored appendix/placement/collision field matches WolvenKit CLI 9.0.1 JSON (`11720772` source studied as layout documentation) [resource]. See [world and streaming §1.3](world-and-streaming.md#13-sector-files) for layouts, source/extracted hashes, sample paths, the verified positive-infinity streaming-distance sentinel, and the cooked-geometry bounds limitation. **The general resource-document read path and its unknown-trailing-data refusal are unchanged.** No cooked mesh bounds are invented, and no game payload fixtures are shipped.
+
 ## 4. Value encodings
 
 A property's type string names its encoding; the CR2W file carries it, so values can be read without the RTTI. [resource] [source] WolvenKit `CR2WReader.cs`

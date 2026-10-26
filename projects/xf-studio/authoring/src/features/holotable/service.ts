@@ -11,7 +11,7 @@
 import { refusal, type Capability, type ReasonCode } from "../../platform/api";
 import type { ContentLevel, HoloRun, HoloSession, HoloTransport, HoloWorld } from "./types";
 
-export const HOLO_LAYERS = ["v", "camera", "events", "gaps", "areas", "cells"] as const;
+export const HOLO_LAYERS = ["v", "camera", "events", "gaps", "areas", "cells", "solids"] as const;
 export type HoloLayer = typeof HOLO_LAYERS[number];
 
 export type HoloAction =
@@ -52,7 +52,7 @@ const SPEED = 4; // a quarter-hour session plays in under four minutes
 
 export function createHolotable(device: HoloDevice, signal: AbortSignal) {
   let state: HoloState = { phase: "idle", message: "", runs: [], open: null, t: 0, playing: false, level: "structure",
-    layers: { v: true, camera: true, events: true, gaps: true, areas: true, cells: false }, selected: null, revision: 0 };
+    layers: { v: true, camera: true, events: true, gaps: true, areas: true, cells: false, solids: true }, selected: null, revision: 0 };
   const listeners = new Set<() => void>();
   const set = (patch: Partial<HoloState>) => { state = { ...state, ...patch, revision: state.revision + 1 }; for (const l of listeners) l(); };
   let loading: AbortController | null = null;

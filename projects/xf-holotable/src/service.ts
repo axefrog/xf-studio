@@ -9,12 +9,13 @@ import { sessionAtLevel } from "./query.ts";
 import { report } from "./report.ts";
 import { boxOf, loadWorldPack, region } from "./world.ts";
 import type { ContentLevel, Session, WorldPack } from "./model.ts";
+import { createGameSolidSource, type SolidPort } from "./solid-source.ts";
 
 export const PROTOCOL = "xfh/service-1";
 /** The longest request line accepted; a longer one is refused and dropped without growing the buffer. */
 export const FRAME_LIMIT = 1024 * 1024;
 
-export interface ServiceOptions { recordingsRoot: string; worldPackPath: string }
+export interface ServiceOptions { recordingsRoot: string; worldPackPath: string; solidSource?: SolidPort; solidCacheDir?: string }
 
 export function defaultOptions(env = process.env): ServiceOptions {
   const local = env.LOCALAPPDATA ?? "";
@@ -37,6 +38,7 @@ const until = <T>(p: Promise<T>, signal: AbortSignal) => new Promise<T>((resolve
 
 /** Holds sessions by folder (loaded once, shared by every requester) and the world pack. */
 export function createService(options: ServiceOptions) {
+  const solids = options.solidSource ?? createGameSolidSource(options.solidCacheDir ?? join(import.meta.dir, "..", "..", "..", "local", "holotable", "cache"));
   const sessions = new Map<string, Session>();
   // One load per folder in flight, shared; it stops only when every requester waiting on it has cancelled.
   const loads = new Map<string, { promise: Promise<Session>; ctl: AbortController; waiters: number }>();
@@ -70,8 +72,11 @@ export function createService(options: ServiceOptions) {
     "session.open": async (p, signal) => sessionAtLevel(await open(known(p.dir), signal), level(p.level)),
     "world.around": async (p, signal) => {
       const s = await open(known(p.dir), signal), w = pack();
-      if (!w) return { schema: "xfh/world-pack-1", provenance: null, areas: [], cells: [] };
-      return region(w, boxOf(s.v.map(x => x.position)), typeof p.margin === "number" ? p.margin : 250);
+      const margin = typeof p.margin === "number" ? p.margin : 250;
+      if (!Number.isFinite(margin) || margin < 0 || margin > 1000) throw coded("bad_request", "Margin must be between 0 and 1000 metres.");
+      const path = s.v.map(x => x.position), geometry = await solids.around(path, margin, signal);
+      signal.throwIfAborted();
+      return { ...(w ? region(w, boxOf(path), margin) : { schema: "xfh/world-pack-1", provenance: null, areas: [], cells: [] }), ...geometry };
     },
     "session.report": async (p, signal) => {
       if (typeof p.t !== "number") throw coded("bad_request", "No moment given");

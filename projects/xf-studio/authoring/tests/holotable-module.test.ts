@@ -103,7 +103,7 @@ describe("Holotable projection", () => {
     expect(trail(session("structure"), 110).length).toBe(2);
   });
   test("projects V, the placed event and a true scale bar", () => {
-    const layers = { v: true, camera: true, events: true, gaps: true, areas: true, cells: true };
+    const layers = { v: true, camera: true, events: true, gaps: true, areas: true, cells: true, solids: true };
     const scene = project(session("structure"), { provenance: null, areas: [], cells: [] }, 105, layers, ORBITS.tilt, 800, 500, "e2");
     expect(scene.v?.position[0]).toBe(50);
     expect(scene.primitives.some(p => p.kind === "marker" && p.id === "v")).toBe(true);
@@ -121,7 +121,7 @@ describe("Holotable projection", () => {
   test("no line runs far past the drawing: a district outline around the camera stays within the margin", () => {
     // A district much larger than the view, centred on V: unclipped, its near edges project millions of pixels away.
     const big = { kind: "district" as const, name: "Big", poly: [[-5000, -5000], [5000, -5000], [5000, 5000], [-5000, 5000]] as [number, number][], zlo: 0, zhi: 400 };
-    const layers = { v: true, camera: true, events: true, gaps: true, areas: true, cells: false };
+    const layers = { v: true, camera: true, events: true, gaps: true, areas: true, cells: false, solids: true };
     for (const orbit of Object.values(ORBITS)) {
       const scene = project(session("structure"), { provenance: null, areas: [big as never], cells: [] }, 105, layers, orbit, 800, 500, null);
       for (const p of scene.primitives) if (p.kind === "line") for (const [x, y] of p.points) {

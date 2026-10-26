@@ -47,7 +47,7 @@ Nothing here is scheduled; it ranks below V's appearance and body work, and each
 
 | Phase | Scope | Effort | Depends on |
 |---|---|---|---|
-| W0. Sector reader | Native decoding of the sector trailing block, placement records, instance transforms and collision actors, with WolvenKit JSON as the oracle; the block and world root | 2–4 days | Native reader (done) |
+| W0. Sector reader | Appendix, placement records and collision actors implemented for Holotable, with four real-sector WolvenKit comparisons and all-level primitive overlay ([checkpoint](../live-world-view/w0-sector-reader.md)). Instance buffers and verified cooked-geometry bounds remain open; broader W0 is not complete. | 2–4 days | Native reader (done) |
 | W1. World index | Effective blocks (vanilla plus mods' `.xl` blocks through the existing mount plan), a spatial index of descriptors, mods' deletions and mutations applied the way ArchiveXL applies them, and a per-sector report of which mods touch it. The place dimensions the index should expose (district polygons with a vertical band, venue areas, points of interest, quest pins, spots, restrictions) are listed in [places, §12](../../knowledge/places.md#12-place-dimensions-for-the-world-index-w1). | 3–5 days | W0 |
 | W2. Offline location viewer | Pick a point or a named place; load levels 0–1 plus proxies; draw static and instanced meshes with resolved materials; show collision, AI spots and deleted nodes as overlays | 2–4 weeks | W1, native mesh decoding (reader phase 4) and textures (phase 3) |
 | W3. Mod conflict view | For a sector or area: which mods add, delete or move what, stale `expectedNodes`, same-path `.xl` files | 3–5 days | W1 |

@@ -65,12 +65,35 @@ export interface Area { id: string; name: string; kind: "district" | "venue"; pa
 /** A streaming sector's box, a coarse "what the game streams here" cell. */
 export interface Cell { level: number; category: string; min: Vec3; max: Vec3 }
 
+/** A primitive in world metres. Axes retain the full actor-scale × local-pose transform, including nonuniform scales. */
+export interface Solid {
+  id: string; kind: "box" | "sphere" | "capsule";
+  center: Vec3; axes: [Vec3, Vec3, Vec3];
+  /** Box half extents; sphere radius in x; capsule radius in x, cylinder length in y (local Z axis). */
+  size: Vec3;
+}
+export interface SolidRegion {
+  solids: Solid[];
+  solidInfo: {
+    source: "vanilla"; readerVersion: number; available: boolean;
+    sectors: number; counts: ShapeCounts; rawCounts: ShapeCounts; levels: Record<string, { sectors: number; counts: ShapeCounts }>;
+    overlap: { shapes: number; crossLevelShapes: number; actors: number; completeActors: number; pairs: Record<string, number>;
+      examples: { kept: string; removed: string; keptLevel: number; removedLevel: number; kind: string }[] };
+    omittedMeshShapes: number; cut: number; cap: number;
+    /** An offline default-variant estimate, never a claim about recorded live state. */
+    variants: "defaults";
+  };
+}
+export interface ShapeCounts { box: number; sphere: number; capsule: number; convexMesh: number; triangleMesh: number }
+
 export interface WorldPack {
   schema: "xfh/world-pack-1";
   /** Which game data it was built from: offline geometry is an estimate of the live world. */
   provenance: { game: string; source: string; built: string };
   areas: Area[];
   cells: Cell[];
+  solids?: Solid[];
+  solidInfo?: SolidRegion["solidInfo"];
 }
 
 /** The model evaluated at one moment: what every projection draws from. */
