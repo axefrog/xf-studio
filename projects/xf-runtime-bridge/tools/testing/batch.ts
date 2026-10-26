@@ -18,7 +18,7 @@
 // plan module knows nothing of them.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { findCommand } from "../api/catalogue.ts";
 import type { CommandApi } from "../api/command-api.ts";
 import { decodePng, diffStats, crop } from "../capture/image.ts";
@@ -57,6 +57,12 @@ export type Row = {
   halt_on?: string[];
   /** Values the row's record and the report list (a recorder run id, a distance): {label, ref}. */
   facts?: { label: string; ref: string }[];
+  /**
+   * whole-batch: the row owns no session time. It is judged at the end, over the batch's always-on telemetry
+   * ($telemetry: every channel's records and invalid samples, the gaps, the coverage loss, the rows they fell in),
+   * after the last row and before the teardown; its steps only read and compute.
+   */
+  passive?: "whole-batch";
 };
 export type BatchScript = {
   schema: string;
@@ -193,7 +199,7 @@ export function planBatch(script: BatchScript): PlannedBatch {
   for (const key of Object.keys(script ?? {})) if (!allowed.has(key)) problems.push(`script: unknown field ${key}`);
   if (!/^[A-Za-z0-9._-]{1,60}$/.test(script?.name ?? "")) problems.push("name must be 1-60 letters, digits, '.', '_' or '-'");
   if (!Array.isArray(script?.rows) || !script.rows.length) return { setup: { id: "setup", steps: [] }, rows: [], teardown: { id: "teardown", steps: [] }, problems: [...problems, "rows must be a non-empty list"] };
-  const known = new Set(["fixture", "board", "cast", ...bindNames(script)]);
+  const known = new Set(["fixture", "board", "cast", "recorder", "telemetry", ...bindNames(script)]);
   const checker = makeActionChecker(known);
   const plan = (id: string, steps: SessionStep[] | undefined, extra: Partial<Plan> = {}, failRow = new Set<string>()) => {
     const p: Plan = { id, steps: toPlanSteps(steps, failRow, id, problems), ...extra };
@@ -206,7 +212,7 @@ export function planBatch(script: BatchScript): PlannedBatch {
   const rows = script.rows.map((row, i) => {
     const where = `row ${i + 1}${row?.id ? ` (${row.id})` : ""}`;
     if (!row || typeof row !== "object") { problems.push(`${where}: a row must be an object`); return { row, plan: { id: "x", steps: [] }, failRow: new Set<string>() }; }
-    for (const key of Object.keys(row)) if (!["id", "title", "requires", "steps", "pass", "cleanup", "deadline_ms", "judged_by", "after", "halt_on", "facts"].includes(key)) problems.push(`${where}: unknown field ${key}`);
+    for (const key of Object.keys(row)) if (!["id", "title", "requires", "steps", "pass", "cleanup", "deadline_ms", "judged_by", "after", "halt_on", "facts", "passive"].includes(key)) problems.push(`${where}: unknown field ${key}`);
     for (const fact of row.facts ?? []) {
       if (typeof fact?.label !== "string" || typeof fact.ref !== "string" || !fact.ref.startsWith("$")) problems.push(`${where}: a fact is {label, ref: "$binding.path"}`);
       else if (!known.has(fact.ref.slice(1).split(".")[0])) problems.push(`${where}: fact ${fact.label} reads ${fact.ref}, which no step binds`);
@@ -228,6 +234,8 @@ export function planBatch(script: BatchScript): PlannedBatch {
       if (!known.has(name)) problems.push(`${where}: pass check ${check.label} reads ${check.ref}, which no step binds`);
     }
     if (row.after !== undefined && row.after !== "restart") problems.push(`${where}: after is restart`);
+    if (row.passive !== undefined && row.passive !== "whole-batch") problems.push(`${where}: passive is whole-batch`);
+    if (row.passive && JSON.stringify(row.steps ?? []).match(/"do":"(?!set|wait|note)[^"]+"/)) problems.push(`${where}: a whole-batch passive row only reads and computes (set, wait, note)`);
     if (row.halt_on !== undefined) { try { parseHaltOn(row.halt_on.length ? row.halt_on : ["none"]); } catch (error) { problems.push(`${where}: ${String((error as Error).message).replace("--halt-on", "halt_on")}`); } }
     const failRow = new Set<string>();
     const p = plan(row.id, row.steps, { ...(row.deadline_ms ? { deadline_ms: row.deadline_ms } : {}), ...(row.cleanup ? { finally: toPlanSteps(row.cleanup, failRow, where, problems) } : {}) }, failRow);
@@ -905,7 +913,9 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
     commitFloorGb: typeof fixtures.commit_floor_gb === "number" ? fixtures.commit_floor_gb : 4, commitEveryMs: options.commitEveryMs }, script);
   const logs = fixtures.logs as { plugin_dir?: string } | undefined;
   const telemetry = new Telemetry({ api: options.api, host: options.host, outDir: options.outDir, attempt, clock,
-    pluginLogDir: logs?.plugin_dir ?? (typeof fixtures.game_dir === "string" ? join(fixtures.game_dir, "red4ext", "logs") : undefined),
+    // Under MO2 the game's new files (its logs among them) land in MO2's overwrite folder, so that is looked at first.
+    pluginLogDirs: [logs?.plugin_dir, typeof (fixtures.mo2 as { exe?: string } | undefined)?.exe === "string" ? join(dirname((fixtures.mo2 as { exe: string }).exe), "overwrite", "red4ext", "logs") : undefined,
+      typeof fixtures.game_dir === "string" ? join(fixtures.game_dir, "red4ext", "logs") : undefined].filter((d): d is string => typeof d === "string"),
     haltPatterns: [...DEFAULT_HALT_PATTERNS, ...((script.halt_patterns ?? fixtures.halt_patterns ?? []) as string[])] });
   const bindings = executor.bindings;
   const signal = options.signal ?? new AbortController().signal;
@@ -967,6 +977,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
     const record: RowRecord = { id: row.id, title: row.title, verdict: "SKIP", evidence: [], checks: [], reports: [], attempt, started_at: new Date().toISOString(), ...(row.judged_by ? { judged_by: row.judged_by } : {}) };
     records.push(record);
     if (options.rows && !options.rows.includes(row.id)) { record.reason = "not selected"; continue; }
+    if (row.passive) { record.reason = "judged at the end over the whole batch's telemetry"; continue; }
     if (signal.aborted) { record.reason = "interrupted"; continue; }
     if (halt) { record.reason = `not reached: ${halt.reason}`; continue; }
     if (setupFailed) { record.reason = setupFailed; continue; }
@@ -995,6 +1006,8 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       const prelude = await plan({ id: `${row.id}.prelude`, steps: preludeSteps(needs, restartDue, needsLoad({ ...current, ...needs })) });
       record.prelude = { status: prelude.status, reason: prelude.reason };
       record.reports.push(...prelude.reports);
+      // A load stops the recorder (load_requested): the run the batch holds is stale, and the next ensureRecorder starts afresh.
+      if (prelude.reports.some((e) => e.kind === "step" && e.label === "load" && e.status === "ok")) telemetry.invalidate();
       restartDue = false;
       if (monitor.reason) stopWith("tripwire", monitor.reason, row.id);
       if (prelude.status !== "done") {
@@ -1069,6 +1082,23 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   await attemptCleanup("commit monitor", () => monitor.stop());
   if (monitor.reason) stopWith("tripwire", monitor.reason);
   await attemptCleanup("telemetry", () => telemetry.finish());
+  // Whole-batch passive rows: judged now over everything the recorder saw, with no session time of their own.
+  bindings.telemetry = telemetry.summary();
+  for (const { row, plan: rowPlan, failRow } of planned.rows.filter((r) => r.row.passive)) {
+    const record = records.find((r) => r.id === row.id)!;
+    if (options.rows && !options.rows.includes(row.id)) continue;
+    await attemptCleanup(`passive row ${row.id}`, async () => {
+      const before = new Map(Object.entries(bindings));
+      const result = await runPlan(rowPlan, { executor, clock, bindings });
+      record.close = reportOf(result);
+      record.reports.push(...result.reports);
+      record.checks = (row.pass ?? []).map((check) => evaluateCheck(check, bindings, (name) => name === "telemetry" || !before.has(name) || before.get(name) !== bindings[name]));
+      record.reason = undefined;
+      Object.assign(record, verdictOf(result, record.checks, failRow));
+      if (row.facts) record.facts = row.facts.map((fact) => { const missing: string[] = []; const value = resolveRefs(fact.ref, bindings, missing); return { label: fact.label, value: missing.length ? null : value }; });
+      log(`${record.verdict.padEnd(7)} ${row.id} (over the whole batch)${record.reason ? `: ${record.reason}` : ""}`);
+    });
+  }
   const teardownPlan: Plan = { id: "teardown", steps: [...planned.teardown.steps.map((s) => ({ ...s, on_fail: "continue" as const })), ...builtinTeardown()] };
   executor.clearStops();
   const teardownExecutor: Executor = { run: async (action, context) => ({ ...(await executor.run(action, context)), halt: undefined }) };

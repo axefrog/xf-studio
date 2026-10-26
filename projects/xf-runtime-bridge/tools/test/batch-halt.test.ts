@@ -340,3 +340,59 @@ describe("the prelude starts a game patiently and adopts a healthy one", () => {
     expect(clock.now()).toBeLessThan(60_000);
   });
 });
+
+describe("whole-batch passive rows, and the telemetry they judge", () => {
+  const pageWith = (invalid: number, gaps: string[] = []) => ({ ok: true as const, result: { cursor: { after: 1 }, counts: {}, gaps, more: false,
+    count_detail: { subtitles: { records: 10, invalid, valid: 10 - invalid }, v: { records: 50, invalid: 0, valid: 50 } }, coverage_delta: { dropped: 0, invalid, missed_deadlines: 0, file_error: false } } });
+  const passive: Row = { id: "B318-1", title: "passive", passive: "whole-batch", steps: [{ do: "set", value: "$telemetry", bind: "all" }],
+    pass: [{ label: "no invalid", ref: "$all.coverage.invalid", match: { equals: 0 } }, { label: "subtitles", ref: "$all.channels.subtitles.invalid", match: { equals: 0 } }],
+    facts: [{ label: "invalid by row", ref: "$all.invalid_in" }] };
+  const two: Row[] = [passive, { id: "a", title: "a", steps: [{ do: "run", command: "ui.state", input: {} }] }, { id: "b", title: "b", steps: [{ do: "run", command: "ui.state", input: {} }] }];
+
+  test("judged at the end over every row's catch-up, with no session time of its own", async () => {
+    const clock = new FakeClock();
+    let n = 0;
+    const api = fakeApi(clock, { "game.catchup": () => pageWith(++n === 2 ? 2 : 0, n === 2 ? ["invalid_source"] : []) });
+    const result = await go(script(two), api, fakeHost(), clock, tempDir("xfb-batch-"));
+    const row = result.rows.find((r) => r.id === "B318-1")!;
+    expect(row.verdict).toBe("FAIL");
+    expect(row.facts![0].value).toEqual([{ row: "b", channel: "subtitles", invalid: 2 }]);
+    // It ran no prelude, held no session time and collected no telemetry of its own.
+    expect(row.prelude).toBeUndefined();
+    expect(row.telemetry).toBeUndefined();
+    expect(clock.now()).toBeLessThan(20_000);
+  });
+
+  test("a clean batch passes it", async () => {
+    const clock = new FakeClock();
+    const result = await go(script(two), fakeApi(clock, { "game.catchup": () => pageWith(0) }), fakeHost(), clock, tempDir("xfb-batch-"));
+    expect(result.rows.find((r) => r.id === "B318-1")!.verdict).toBe("PASS");
+  });
+
+  test("a passive row that would act is refused at planning", () => {
+    const problems = planBatch(script([{ ...passive, steps: [{ do: "wait", ms: 1 }, { do: "run", command: "ui.state", input: {} }] }])).problems;
+    expect(problems.join("\n")).toContain("only reads and computes");
+  });
+
+  test("a load in the prelude marks the batch's recorder stale, so the row gets a fresh run (the load stopped it)", async () => {
+    const clock = new FakeClock();
+    const dir = tempDir("xfb-batch-");
+    let phase = "main_menu";
+    const api = fakeApi(clock, { "game.status": () => ({ ok: true, result: { phase } }), "game.load": () => { phase = "gameplay"; return { ok: true, result: { reached: "gameplay" } }; } });
+    const rows: Row[] = [{ id: "r", title: "r", requires: [{ config: "bridge.allow_writes", equals: "true" }], steps: [{ do: "set", value: 1 }] }];
+    await go(script(rows), api, fakeHost({ running: true }), clock, dir, { fixtures: { staged_mod: stagedMod(dir) } });
+    expect(api.calls.filter((c) => c.name === "test.record.start").length).toBe(2);
+  });
+
+  test("the plugin log is found in MO2's overwrite folder, where the game's new files land under MO2", async () => {
+    const clock = new FakeClock();
+    const dir = tempDir("xfb-batch-");
+    const logs = join(dir, "MO2", "overwrite", "red4ext", "logs");
+    mkdirSync(logs, { recursive: true });
+    const file = join(logs, "xfruntimebridge-2026-10-26-12-12-29.log");
+    writeFileSync(file, "boot\n");
+    const api = fakeApi(clock, { "ui.state": () => { writeFileSync(file, "boot\nevt=row.work\n"); return { ok: true, result: {} }; } });
+    const result = await go(script([{ id: "a", title: "a", steps: [{ do: "run", command: "ui.state", input: {} }] }]), api, fakeHost(), clock, dir, { fixtures: { mo2: { exe: join(dir, "MO2", "ModOrganizer.exe"), profile: "p", executable: "g" } } });
+    expect(result.rows[0].telemetry!.log_lines).toBe(1);
+  });
+});

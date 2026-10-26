@@ -10,6 +10,12 @@
 // Collecting never fails a row: what couldn't be read is listed in the row's telemetry summary (missing). The summary
 // also carries the plugin log lines that match the halt patterns (a draw call that failed, the overlay stopping), so
 // the batch can stop early on a significant bug.
+//
+// Each row's catch-up is drained to the end (every page, so nothing backs up behind a slow row), and every page is
+// added to the batch's summary (summary(): per-channel records and invalid samples, the gaps, the coverage loss and the
+// rows they came in), which whole-batch passive rows judge at the end. A game load stops the recorder (its reason:
+// load_requested), so the batch marks the run stale after a prelude that loaded, and a catch-up the bridge refuses
+// marks it stale too: the next row starts a fresh run instead of reading a dead one.
 
 import { existsSync, mkdirSync, openSync, readSync, closeSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -41,17 +47,41 @@ export type TelemetryOptions = {
   outDir: string;
   attempt: number;
   clock: PlanClock;
-  /** The folder holding the plugin's logs (xfruntimebridge-<time>.log): fixtures logs.plugin_dir, else <game_dir>/red4ext/logs. */
-  pluginLogDir?: string;
+  /**
+   * The folders that may hold the plugin's logs (xfruntimebridge-<time>.log): fixtures logs.plugin_dir, MO2's
+   * overwrite/red4ext/logs (under MO2 the game's new files land there) and <game_dir>/red4ext/logs. The newest wins.
+   */
+  pluginLogDirs?: string[];
   haltPatterns?: string[];
 };
 
-/** The newest plugin log in a folder (the live one, not a rotated .1.log). */
-export function newestPluginLog(dir: string | undefined): string | undefined {
-  if (!dir || !existsSync(dir)) return undefined;
-  const logs = readdirSync(dir).filter((n) => /^xfruntimebridge-.*\.log$/i.test(n) && !/\.\d+\.log$/i.test(n)).sort();
-  return logs.length ? join(dir, logs.at(-1)!) : undefined;
+/** The newest plugin log across the folders (the live one, not a rotated .1.log), by modification time. */
+export function newestPluginLog(dirs: (string | undefined)[] | undefined): string | undefined {
+  let best: { path: string; mtime: number } | undefined;
+  for (const dir of dirs ?? []) {
+    if (!dir || !existsSync(dir)) continue;
+    for (const name of readdirSync(dir)) {
+      if (!/^xfruntimebridge-.*\.log$/i.test(name) || /\.\d+\.log$/i.test(name)) continue;
+      const path = join(dir, name);
+      const mtime = statSync(path).mtimeMs;
+      if (!best || mtime > best.mtime) best = { path, mtime };
+    }
+  }
+  return best?.path;
 }
+
+/** What the batch's whole recorder history came to: per channel, the gaps, the coverage loss, and where invalid samples fell. */
+export type TelemetrySummary = {
+  runs: number[];
+  pages: number;
+  rows: string[];
+  gaps: string[];
+  channels: Record<string, { records: number; invalid: number; valid: number }>;
+  coverage: { dropped: number; invalid: number; missed_deadlines: number; file_error: boolean };
+  invalid_in: { row: string; channel: string; invalid: number }[];
+  gaps_in: { row: string; gaps: string[] }[];
+  unread: string[];
+};
 
 function readFrom(path: string, from: number): string {
   const size = statSync(path).size;
@@ -76,6 +106,7 @@ export class Telemetry {
   private unavailable?: string;
   private mark?: { file: string; size: number };
   private readonly patterns: RegExp[];
+  private readonly total: TelemetrySummary = { runs: [], pages: 0, rows: [], gaps: [], channels: {}, coverage: { dropped: 0, invalid: 0, missed_deadlines: 0, file_error: false }, invalid_in: [], gaps_in: [], unread: [] };
 
   constructor(private readonly o: TelemetryOptions) {
     this.dir = join(o.outDir, "telemetry", `a${o.attempt}`);
@@ -116,13 +147,13 @@ export class Telemetry {
 
   /** Where the plugin log stands now, so the row's slice starts here. */
   markRow() {
-    const file = newestPluginLog(this.o.pluginLogDir);
+    const file = newestPluginLog(this.o.pluginLogDirs);
     this.mark = file ? { file, size: statSync(file).size } : undefined;
   }
 
   /** The plugin log since markRow (a restart's new log from its start, after the old one's tail). */
   private logSlice(): string {
-    const now = newestPluginLog(this.o.pluginLogDir);
+    const now = newestPluginLog(this.o.pluginLogDirs);
     if (!now) return "";
     if (!this.mark) return readFrom(now, 0);
     if (this.mark.file === now) return readFrom(now, this.mark.size);
@@ -143,17 +174,9 @@ export class Telemetry {
     const out: RowTelemetry = { dir: relative(this.o.outDir, dir), files, recorder: {}, log_lines: 0, log_matches: [], missing };
     try {
       if (this.run !== undefined) {
-        const page = await this.read("game.catchup", this.cursor ? { cursor: this.cursor } : { run: this.run });
-        if (page.ok) {
-          const value = page.value as { cursor?: unknown; counts?: unknown; gaps?: unknown };
-          this.cursor = value.cursor ?? this.cursor;
-          save("catchup.json", value);
-          out.recorder = { run: this.run, records: value.counts, gaps: value.gaps };
-        } else {
-          missing.push(`game.catchup: ${page.code}`);
-          out.recorder = { run: this.run, unavailable: page.code };
-          if (/invalid_cursor|recording_changed/.test(page.code)) this.cursor = undefined;
-        }
+        const drained = await this.drain(rowKey, (name, value) => save(name, value));
+        out.recorder = drained.ok ? { run: drained.run, records: drained.counts, gaps: drained.gaps } : { run: drained.run, unavailable: drained.code };
+        if (!drained.ok) missing.push(`game.catchup: ${drained.code}`);
       } else out.recorder = { unavailable: this.unavailable ?? "no recorder" };
       const overlay = await this.read("overlay.state");
       if (overlay.ok) {
@@ -172,7 +195,8 @@ export class Telemetry {
       const lines = text.split(/\r?\n/).filter(Boolean);
       out.log_lines = lines.length;
       out.log_matches = lines.filter((line) => this.patterns.some((p) => p.test(line))).slice(0, 20);
-      if (!this.o.pluginLogDir) missing.push("plugin log: no folder (fixtures game_dir or logs.plugin_dir)");
+      if (!this.o.pluginLogDirs?.length) missing.push("plugin log: no folder (fixtures game_dir, mo2.exe or logs.plugin_dir)");
+      else if (!newestPluginLog(this.o.pluginLogDirs)) missing.push("plugin log: none found in its folders");
     } catch (error) {
       missing.push(`plugin log: ${String(error)}`);
     }
@@ -194,11 +218,70 @@ export class Telemetry {
     return out;
   }
 
-  /** The end of the run: the last page, then the recorder stopped. */
+  /**
+   * The run's catch-up from the cursor to the end (at most 20 pages), each page saved and added to the summary. A
+   * refusal marks the run stale (a load stopped it, or another recorder replaced it), so the next row starts afresh.
+   */
+  private async drain(rowKey: string, save: (name: string, value: unknown) => void): Promise<{ ok: boolean; run?: number; code?: string; counts?: unknown; gaps?: unknown }> {
+    const run = this.run!;
+    let counts: unknown, gaps: string[] = [];
+    for (let page = 1; page <= 20; page++) {
+      const read = await this.read("game.catchup", this.cursor ? { cursor: this.cursor } : { run });
+      if (!read.ok) {
+        this.total.unread.push(`${rowKey}: run ${run}: ${read.code}`);
+        this.invalidate();
+        return { ok: false, run, code: read.code };
+      }
+      const value = read.value as { cursor?: unknown; counts?: unknown; gaps?: string[]; more?: boolean; count_detail?: Record<string, { records?: number; invalid?: number; valid?: number }>;
+        coverage_delta?: { dropped?: number; invalid?: number; missed_deadlines?: number; file_error?: boolean } };
+      this.cursor = value.cursor ?? this.cursor;
+      save(page === 1 ? "catchup.json" : `catchup-${page}.json`, value);
+      counts = value.counts;
+      gaps = [...new Set([...gaps, ...(value.gaps ?? [])])];
+      this.add(rowKey, run, value);
+      if (!value.more) break;
+    }
+    return { ok: true, run, counts, gaps };
+  }
+
+  private add(rowKey: string, run: number, page: { gaps?: string[]; count_detail?: Record<string, { records?: number; invalid?: number; valid?: number }>; coverage_delta?: { dropped?: number; invalid?: number; missed_deadlines?: number; file_error?: boolean } }) {
+    const t = this.total;
+    if (!t.runs.includes(run)) t.runs.push(run);
+    if (!t.rows.includes(rowKey)) t.rows.push(rowKey);
+    t.pages++;
+    if (page.gaps?.length) {
+      t.gaps = [...new Set([...t.gaps, ...page.gaps])];
+      t.gaps_in.push({ row: rowKey, gaps: page.gaps });
+    }
+    for (const [channel, d] of Object.entries(page.count_detail ?? {})) {
+      const c = (t.channels[channel] ??= { records: 0, invalid: 0, valid: 0 });
+      c.records += d.records ?? 0;
+      c.invalid += d.invalid ?? 0;
+      c.valid += d.valid ?? 0;
+      if (d.invalid) t.invalid_in.push({ row: rowKey, channel, invalid: d.invalid });
+    }
+    const delta = page.coverage_delta ?? {};
+    t.coverage.dropped += delta.dropped ?? 0;
+    t.coverage.invalid += delta.invalid ?? 0;
+    t.coverage.missed_deadlines += delta.missed_deadlines ?? 0;
+    t.coverage.file_error ||= delta.file_error === true;
+  }
+
+  /** The run is no longer the bridge's (a load stopped it, or a refusal said so): the next ensureRecorder starts a fresh one. */
+  invalidate() {
+    this.run = undefined;
+    this.cursor = undefined;
+  }
+
+  /** The batch's recorder history so far (whole-batch passive rows read it as $telemetry). */
+  summary(): TelemetrySummary {
+    return structuredClone(this.total);
+  }
+
+  /** The end of the run: the rest of the history, then the recorder stopped. */
   async finish() {
     if (this.run !== undefined) {
-      const page = await this.read("game.catchup", this.cursor ? { cursor: this.cursor } : { run: this.run }).catch(() => null);
-      if (page?.ok) writeFileSync(join(this.dir, "final-catchup.json"), JSON.stringify(page.value, null, 2) + "\n");
+      await this.drain("end", (name, value) => writeFileSync(join(this.dir, `final-${name}`), JSON.stringify(value, null, 2) + "\n")).catch(() => null);
     }
     await this.read("test.record.stop").catch(() => null);
     this.run = undefined;

@@ -17,115 +17,49 @@
   "rows": [
     {
       "id": "B318-1",
-      "title": "No invalid heartbeats: the recorder on all channels for 2 minutes",
-      "requires": [
-        {
-          "config": "bridge.allow_writes",
-          "equals": "true"
-        }
-      ],
+      "title": "No invalid heartbeats over the whole batch: every channel's samples valid, no coverage gaps (passive, judged at the end)",
+      "passive": "whole-batch",
       "steps": [
         {
-          "label": "B318-1-play",
-          "do": "run",
-          "command": "game.wait",
-          "input": {
-            "phase": "gameplay",
-            "timeout_ms": 20000
-          },
-          "deadline_ms": 25000,
-          "alternatives": [
-            [
-              {
-                "do": "run",
-                "command": "photo.exit",
-                "input": {}
-              },
-              {
-                "do": "run",
-                "command": "game.wait",
-                "input": {
-                  "phase": "gameplay",
-                  "timeout_ms": 20000
-                },
-                "deadline_ms": 25000
-              }
-            ]
-          ]
-        },
-        {
-          "label": "B318-1-start",
-          "do": "run",
-          "command": "test.record.start",
-          "input": {
-            "channels": [
-              "v",
-              "actors",
-              "subtitles",
-              "voice",
-              "face",
-              "ui",
-              "contacts",
-              "supervisor"
-            ],
-            "duration_s": 300
-          },
-          "bind": "B318_1_rec",
-          "outcomes": [
-            {
-              "name": "batch_recorder",
-              "match": {
-                "code": "recording_busy"
-              },
-              "run": [
-                {
-                  "do": "set",
-                  "value": "$recorder",
-                  "bind": "B318_1_rec"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "label": "B318-1-two-minutes",
-          "do": "wait",
-          "ms": 120000,
-          "deadline_ms": 125000
-        },
-        {
-          "label": "B318-1-catchup",
-          "do": "run",
-          "command": "game.catchup",
-          "input": {
-            "run": "$B318_1_rec.run"
-          },
-          "bind": "B318_1_catch",
-          "retry": {
-            "times": 2,
-            "backoff_ms": 2000
-          }
+          "label": "B318-1-telemetry",
+          "do": "set",
+          "value": "$telemetry",
+          "bind": "B318_1_all"
         }
       ],
       "pass": [
         {
-          "label": "no gaps",
-          "ref": "$B318_1_catch.gaps",
+          "label": "the recorder ran and was read",
+          "ref": "$B318_1_all.runs.0",
+          "match": {
+            "exists": true
+          }
+        },
+        {
+          "label": "every page read (no catch-up refused)",
+          "ref": "$B318_1_all.unread",
           "match": {
             "equals": []
           }
         },
         {
+          "label": "no invalid samples",
+          "ref": "$B318_1_all.coverage.invalid",
+          "match": {
+            "equals": 0
+          }
+        },
+        {
           "label": "subtitles: no invalid samples",
-          "ref": "$B318_1_catch",
+          "ref": "$B318_1_all",
           "match": {
             "any": [
               {
-                "path": "count_detail.subtitles.invalid",
+                "path": "channels.subtitles.invalid",
                 "equals": 0
               },
               {
-                "path": "count_detail.subtitles",
+                "path": "channels.subtitles",
                 "exists": false
               }
             ]
@@ -133,15 +67,15 @@
         },
         {
           "label": "voice: no invalid samples",
-          "ref": "$B318_1_catch",
+          "ref": "$B318_1_all",
           "match": {
             "any": [
               {
-                "path": "count_detail.voice.invalid",
+                "path": "channels.voice.invalid",
                 "equals": 0
               },
               {
-                "path": "count_detail.voice",
+                "path": "channels.voice",
                 "exists": false
               }
             ]
@@ -149,15 +83,15 @@
         },
         {
           "label": "face: no invalid samples",
-          "ref": "$B318_1_catch",
+          "ref": "$B318_1_all",
           "match": {
             "any": [
               {
-                "path": "count_detail.face.invalid",
+                "path": "channels.face.invalid",
                 "equals": 0
               },
               {
-                "path": "count_detail.face",
+                "path": "channels.face",
                 "exists": false
               }
             ]
@@ -165,27 +99,52 @@
         },
         {
           "label": "ui: no invalid samples",
-          "ref": "$B318_1_catch",
+          "ref": "$B318_1_all",
           "match": {
             "any": [
               {
-                "path": "count_detail.ui.invalid",
+                "path": "channels.ui.invalid",
                 "equals": 0
               },
               {
-                "path": "count_detail.ui",
+                "path": "channels.ui",
                 "exists": false
               }
             ]
           }
+        },
+        {
+          "label": "no gaps",
+          "ref": "$B318_1_all.gaps",
+          "match": {
+            "equals": []
+          }
         }
       ],
-      "cleanup": [
+      "facts": [
         {
-          "label": "B318-1-stop",
-          "do": "run",
-          "command": "test.record.stop",
-          "input": {}
+          "label": "runs",
+          "ref": "$B318_1_all.runs"
+        },
+        {
+          "label": "pages",
+          "ref": "$B318_1_all.pages"
+        },
+        {
+          "label": "gaps",
+          "ref": "$B318_1_all.gaps"
+        },
+        {
+          "label": "coverage loss",
+          "ref": "$B318_1_all.coverage"
+        },
+        {
+          "label": "invalid samples by row",
+          "ref": "$B318_1_all.invalid_in"
+        },
+        {
+          "label": "gaps by row",
+          "ref": "$B318_1_all.gaps_in"
         }
       ]
     },

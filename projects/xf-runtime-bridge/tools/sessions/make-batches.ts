@@ -377,17 +377,22 @@ function smokeScript(): Json {
   const writes = cfg({ "bridge.allow_writes": "true" });
   const quiet = { phase: "gameplay", combat: false, vehicle: false };
   const rows: Json[] = [];
+  // B318-1 owns no session time: it is judged at the end over the batch's always-on recorder (every channel, every
+  // row), so a soak never makes the player watch V stand still.
   let row = "B318-1";
-  rows.push({ id: row, title: "No invalid heartbeats: the recorder on all channels for 2 minutes", requires: writes,
-    steps: [inPlay(row),
-      { label: `${row}-start`, do: "run", command: "test.record.start", input: { channels: ["v", "actors", "subtitles", "voice", "face", "ui", "contacts", "supervisor"], duration_s: 300 }, bind: key(row, "rec"),
-        // The batch's telemetry recorder (every channel) is usually running already: the bridge refuses a second with recording_busy.
-        outcomes: [{ name: "batch_recorder", match: { code: "recording_busy" }, run: [{ do: "set", value: "$recorder", bind: key(row, "rec") }] }] },
-      { label: `${row}-two-minutes`, do: "wait", ms: 120_000, deadline_ms: 125_000 },
-      { label: `${row}-catchup`, do: "run", command: "game.catchup", input: { run: ref(row, "rec", "run") }, bind: key(row, "catch"), retry: { times: 2, backoff_ms: 2000 } }],
-    pass: [check("no gaps", row, "catch", "gaps", { equals: [] }),
-      ...["subtitles", "voice", "face", "ui"].map((ch) => ({ label: `${ch}: no invalid samples`, ref: ref(row, "catch"), match: { any: [{ path: `count_detail.${ch}.invalid`, equals: 0 }, { path: `count_detail.${ch}`, exists: false }] } }))],
-    cleanup: [{ label: `${row}-stop`, do: "run", command: "test.record.stop", input: {} }] });
+  rows.push({ id: row, title: "No invalid heartbeats over the whole batch: every channel's samples valid, no coverage gaps (passive, judged at the end)", passive: "whole-batch",
+    steps: [{ label: `${row}-telemetry`, do: "set", value: "$telemetry", bind: key(row, "all") }],
+    pass: [
+      check("the recorder ran and was read", row, "all", "runs.0", { exists: true }),
+      check("every page read (no catch-up refused)", row, "all", "unread", { equals: [] }),
+      check("no invalid samples", row, "all", "coverage.invalid", { equals: 0 }),
+      ...["subtitles", "voice", "face", "ui"].map((ch) => ({ label: `${ch}: no invalid samples`, ref: ref(row, "all"), match: { any: [{ path: `channels.${ch}.invalid`, equals: 0 }, { path: `channels.${ch}`, exists: false }] } })),
+      check("no gaps", row, "all", "gaps", { equals: [] }),
+    ],
+    facts: [
+      { label: "runs", ref: ref(row, "all", "runs") }, { label: "pages", ref: ref(row, "all", "pages") }, { label: "gaps", ref: ref(row, "all", "gaps") },
+      { label: "coverage loss", ref: ref(row, "all", "coverage") }, { label: "invalid samples by row", ref: ref(row, "all", "invalid_in") }, { label: "gaps by row", ref: ref(row, "all", "gaps_in") },
+    ] });
 
   row = "B318-3";
   rows.push({ id: row, title: "phone.call auto_answer: answered with no key press, the call ends by itself", requires: writes,
