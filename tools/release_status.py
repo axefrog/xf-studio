@@ -73,6 +73,8 @@ def lane_items(lane: str, today: date) -> list[dict]:
         it["title"] = (m.group(1) if m else it["text"][:80]).rstrip(":. ")
         d = item_date(it["text"], today)
         it["age_days"] = (today - d).days if d else None
+        if WAITS_ON_MAINTAINER.search(it["text"]):
+            it["waits_on"] = "maintainer"
     return out
 
 
@@ -115,9 +117,22 @@ def ci_status() -> list[dict]:
     except Exception:
         return []
     latest = {}
-    for r in runs:
-        latest.setdefault(r["workflowName"], r)
-    return [{"workflow": k, "result": v.get("conclusion") or v.get("status"), "at": v["createdAt"][:16]} for k, v in sorted(latest.items())]
+    for r in runs:  # newest first; only finished, non-skipped runs count
+        if r.get("status") == "completed" and r.get("conclusion") not in (None, "", "skipped"):
+            latest.setdefault(r["workflowName"], r)
+    return [{"workflow": k, "result": v["conclusion"], "at": v["createdAt"][:16]} for k, v in sorted(latest.items())]
+
+
+# A blocker waits on the maintainer when its text says so: his decision or an in-game session he runs.
+WAITS_ON_MAINTAINER = re.compile(r"waiting (for|on) (in-game|a game session|game sessions|the maintainer|his )|waits (for|on) (in-game|a game session|game sessions|the maintainer|his )|needs the maintainer'?s? (decision|go|answer)", re.I)
+
+
+def decisions() -> list[str]:
+    """Release decisions the maintainer must make: one per line in local/release-decisions.txt (kept by the meta-coordinator)."""
+    f = ROOT / "local/release-decisions.txt"
+    if not f.exists():
+        return []
+    return [line.strip() for line in f.read_text(encoding="utf-8").splitlines() if line.strip() and not line.startswith("#")]
 
 
 def board_rows(today: date) -> list[dict]:
@@ -217,7 +232,8 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(md) + "\n", encoding="utf-8")
     out.with_suffix(".json").write_text(json.dumps({"blockers": blockers, "polish": polish, "ledger": ledger, "projects": activity,
-                                                    "tags": tags, "ci": ci, "chats": rows, "signals": signals}, indent=1, default=str), encoding="utf-8")
+                                                    "tags": tags, "ci": ci, "chats": rows, "signals": signals,
+                                                    "decisions": decisions()}, indent=1, default=str), encoding="utf-8")
     print(f"wrote {out} ({len(signals)} signals)")
     return 0
 
