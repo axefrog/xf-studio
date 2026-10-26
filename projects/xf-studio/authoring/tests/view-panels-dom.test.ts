@@ -5,7 +5,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { installLightDom, lightDocument, lightEvent, type LightElement, uninstallLightDom } from "./light-dom";
 import type { DrawnViews } from "../src/app/viewport-attachment";
-import { allGroups, applyDrop, setSizes, group, split, locate, MIN_GROUP, type DockState, type SplitNode, type DockNode, type DockTree, type GroupNode } from "../src/studio-ui/dock/layout";
+import { allGroups, applyDrop, setSizes, setWindowRect, parkPanels, unparkPanels, parseTree, group, split, locate, MIN_GROUP, type DockState, type SplitNode, type DockNode, type DockTree, type GroupNode } from "../src/studio-ui/dock/layout";
 import { restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
 import { DockView, type PanelSpec } from "../src/studio-ui/dock/dock-view";
 import { canvasView, tabViews, viewPaneState, ViewPanels, viewPanelEntries, viewPanelIds, type ShownView, type ViewPaneController } from "../src/studio-ui/panels/view-panels";
@@ -674,7 +674,54 @@ test.each([false, true])("review M3: withdrawal cancels a pending/active drag be
   } finally { h.stop(); }
 }));
 
-test("registration model: withdrawal/return interleaved with tab switches, drags and resizes preserves authored geometry and identities", () => withWindow(() => {
+/** Independent full-frame oracle: shuffled nested returns must recover the authored rectangle, scaled only by explicit resize commands. */
+function floatingReturnOrders(random: () => number, deadline: number) {
+  for (let trial = 0; trial < 8; trial++) {
+    let nodeId = 0;
+    const panels: string[] = [];
+    const nested = (depth: number, axis: SplitNode["axis"]): DockNode => {
+      const id = `nested-${nodeId++}`;
+      if (!depth) { panels.push(id); return group([id], id, `g-${id}`); }
+      const share = .15 + random() * .7;
+      return split(axis, [nested(depth - 1, axis === "row" ? "column" : "row"), nested(depth - 1, axis === "row" ? "column" : "row")], [share, 1 - share], id);
+    };
+    const root = nested(2 + trial % 2, random() < .5 ? "row" : "column");
+    const expected = { x: 40, y: 50, w: 600 + Math.floor(random() * 800), h: 500 + Math.floor(random() * 400) };
+    const original: DockTree = { root: null, closed: [], floating: [{ id: "nested-window", ...expected, node: root }] };
+    const order = [...panels];
+    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [order[i], order[j]] = [order[j]!, order[i]!]; }
+    let held = parkPanels(original, panels);
+    const returned: string[] = [];
+    for (const panel of order) {
+      if (performance.now() > deadline) throw Error("Floating return generator exceeded its deadline");
+      // A resize/move is authored independently of the restoration result; later returns must preserve its scale and position.
+      if (returned.length && trial % 2 && random() < .6) {
+        const frame = held.floating[0]!, sx = .8 + random() * .5, sy = .8 + random() * .5;
+        expected.w *= sx; expected.h *= sy; expected.x += 13; expected.y += 7;
+        held = setWindowRect(held, frame.id, { w: frame.w * sx, h: frame.h * sy, x: expected.x, y: expected.y });
+      }
+      const before = structuredClone(held);
+      const restored = unparkPanels(held, [panel], original, { x: 0, y: 0, w: 2000, h: 1600 });
+      expect(held).toEqual(before);
+      returned.push(panel);
+      held = parseTree(JSON.parse(JSON.stringify(restored)), returned, original, order.filter(id => !returned.includes(id)))!;
+    }
+    const frame = held.floating[0]!;
+    expect(held.floating).toHaveLength(1); expect(held.parked).toBeUndefined();
+    expect(frame.id).toBe("nested-window"); expect(frame.x).toBe(expected.x); expect(frame.y).toBe(expected.y);
+    expect(frame.w).toBeCloseTo(expected.w, 7); expect(frame.h).toBeCloseTo(expected.h, 7);
+    const sameTopology = (actual: DockNode, authored: DockNode) => {
+      expect(actual.id).toBe(authored.id); expect(actual.kind).toBe(authored.kind);
+      if (actual.kind === "split" && authored.kind === "split") {
+        expect(actual.axis).toBe(authored.axis); expect(actual.children).toHaveLength(authored.children.length);
+        actual.children.forEach((child, index) => { expect(actual.sizes[index]!).toBeCloseTo(authored.sizes[index]!, 9); sameTopology(child, authored.children[index]!); });
+      } else if (actual.kind === "group" && authored.kind === "group") expect(actual.panels).toEqual(authored.panels);
+    };
+    sameTopology(frame.node, root);
+  }
+}
+
+test("registration model: withdrawal/return interleaved with tab switches, drags, resizes and shuffled floating composites preserves authored geometry and identities", () => withWindow(() => {
   const deadline = performance.now() + 15_000;
   for (let seed = 1; seed <= 24; seed++) {
     const random = seededRandom(seed), h = registrationHarness();
@@ -730,6 +777,7 @@ test("registration model: withdrawal/return interleaved with tab switches, drags
           if (a && !expected.floating) expect(shares.find(item => item.id === "experiment.panel")!.share).toBeCloseTo(expected.share, 9);
         }
       }
+      floatingReturnOrders(random, deadline);
     } catch (error) { throw Error(`Registration model seed ${seed}`, { cause: error }); }
     finally { h.stop(); }
   }

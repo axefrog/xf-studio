@@ -22,6 +22,8 @@ export type PlacePath = { id: string; axis: SplitNode["axis"]; child: string;
 export type ParkedPlace = { group: PanelId[]; index: number; active: boolean; collapsed?: boolean; window?: Rect;
   groupId?: string; windowId?: string; windowIndex?: number; docked?: true;
   path?: PlacePath;
+  /** The floating size produced by withdrawal/return, before any intervening user resize. `window` retains the whole frame. */
+  windowProjection?: Pick<Rect, "w" | "h">;
   anchor?: { panel: PanelId; side: Side; share: number; splitId?: string; shares?: Record<string, number> } } | { closed: true };
 export type DockTree = {
   root: DockNode | null;
@@ -639,6 +641,19 @@ export function parkPanels(tree: DockTree, panels: readonly PanelId[]): DockTree
   for (const panel of panels) { const place = placeOf(tree, panel, leaving, true); if (place && !parked[panel]) parked[panel] = place; }
   let next = clone(tree);
   for (const panel of panels) next = detachPanel(next, panel);
+  for (const frame of tree.floating) {
+    const earlier = Object.values(tree.parked ?? {}).find(place => !("closed" in place) && place.path && place.windowId === frame.id && place.window);
+    const remembered = earlier && !("closed" in earlier) ? earlier : undefined;
+    // A later withdrawal shares the first frame. Fold user resizing into that frame before remembering the next projection.
+    const full = { x: frame.x, y: frame.y,
+      w: (remembered?.window?.w ?? frame.w) * (remembered?.windowProjection ? frame.w / remembered.windowProjection.w : 1),
+      h: (remembered?.window?.h ?? frame.h) * (remembered?.windowProjection ? frame.h / remembered.windowProjection.h : 1) };
+    const remaining = next.floating.find(item => item.id === frame.id);
+    for (const [id, place] of Object.entries(parked)) if (!("closed" in place) && place.path && place.windowId === frame.id) {
+      const { windowProjection: _old, ...rest } = place;
+      parked[id] = { ...rest, window: full, ...(remaining ? { windowProjection: { w: remaining.w, h: remaining.h } } : {}) };
+    }
+  }
   // A closed panel parked with its module keeps where it was before it was closed.
   for (const panel of panels) { const place = tree.lastPlace?.[panel]; if (place) next.lastPlace = { ...next.lastPlace, [panel]: place }; }
   next.parked = parked;
@@ -652,14 +667,15 @@ export function parkPanels(tree: DockTree, panels: readonly PanelId[]): DockTree
  */
 export function unparkPanels(tree: DockTree, panels: readonly PanelId[], fallback: DockTree, area: Rect): DockTree {
   let next = clone(tree);
-  const parked = { ...next.parked };
+  let parked = { ...next.parked };
   for (const panel of panels) {
     const place = parked[panel];
     delete parked[panel];
+    next.parked = parked;
     if (locate(next, panel) || next.closed.includes(panel)) continue;
     if (place && "closed" in place) { next = { ...next, closed: [...next.closed, panel] }; continue; }
     const restored = place && restorePlace(next, panel, place);
-    if (restored) { next = restored; continue; }
+    if (restored) { next = restored; parked = { ...restored.parked }; continue; }
     if (fallback.closed.includes(panel)) { next = { ...next, closed: [...next.closed, panel] }; continue; }
     const actives = new Map(allGroups(next).map(entry => [entry.group.id, entry.group.active]));
     const home = locate(fallback, panel);
@@ -805,17 +821,27 @@ function restorePath(tree: DockTree, panel: PanelId, place: Exclude<ParkedPlace,
   // With no surviving path, the returning group establishes the root; later returns rebuild its ancestors from their own paths.
   restored ??= root ? split("row", [root, created]) : created;
   const next = clone(tree);
+  let projection: Pick<Rect, "w" | "h"> | undefined;
   if (place.windowId) {
     if (container) next.floating = next.floating.map(floatingWindow => {
       if (floatingWindow.id !== container.id) return floatingWindow;
-      const rect = { ...floatingWindow, node: restored! };
+      const basis = place.windowProjection ?? floatingWindow;
+      const expected = { w: basis.w, h: basis.h };
       if (growth) {
         const dimension = growth.axis === "row" ? "w" : "h", minimum = growth.axis === "row" ? MIN_WINDOW.w : MIN_WINDOW.h;
         const original = place.window?.[dimension];
-        rect[dimension] = original && Math.abs(floatingWindow[dimension] - Math.max(minimum, Math.round(original * growth.before))) < 1
-          ? Math.max(minimum, Math.round(original * growth.after)) : floatingWindow[dimension] / (1 - growth.take);
+        expected[dimension] = original && Math.abs(basis[dimension] - Math.max(minimum, Math.round(original * growth.before))) < 1
+          ? Math.max(minimum, Math.round(original * growth.after)) : basis[dimension] / (1 - growth.take);
       }
-      return rect;
+      if (place.windowProjection) {
+        const present = new Set([...groups(restored!)].map(group => group.id));
+        const complete = (place.path![0]?.siblings.flatMap(sibling => sibling.groups) ?? [place.groupId!]).every(id => present.has(id))
+          && Object.values(next.parked ?? {}).every(held => "closed" in held || held.windowId !== place.windowId || present.has(held.groupId!));
+        // The last branch restores both dimensions, even when its nested split never touched the root. User resizing stays proportional.
+        if (complete && place.window) { expected.w = Math.max(MIN_WINDOW.w, place.window.w); expected.h = Math.max(MIN_WINDOW.h, place.window.h); }
+        projection = expected;
+      }
+      return { ...floatingWindow, node: restored!, w: floatingWindow.w / basis.w * expected.w, h: floatingWindow.h / basis.h * expected.h };
     });
     else {
       const rect = { ...(place.window ?? { x: 40, y: 40, w: 400, h: 560 }) };
@@ -825,7 +851,10 @@ function restorePath(tree: DockTree, panel: PanelId, place: Exclude<ParkedPlace,
         rect[dimension] = Math.max(axis === "row" ? MIN_WINDOW.w : MIN_WINDOW.h, Math.round(rect[dimension] * fraction));
       }
       next.floating.splice(Math.min(place.windowIndex ?? next.floating.length, next.floating.length), 0, { id: place.windowId, ...rect, node: restored });
+      projection = { w: rect.w, h: rect.h };
     }
+    if (projection) for (const [id, held] of Object.entries(next.parked ?? {}))
+      if (!("closed" in held) && held.path && held.windowId === place.windowId) next.parked![id] = { ...held, windowProjection: projection };
   } else next.root = restored;
   return next;
 }
@@ -993,8 +1022,11 @@ function parsePlace(value: unknown, validId: (id: unknown) => id is string, fini
         ? { shares: { ...anchor.shares } as Record<string, number> } : {}) } : undefined;
   const parsedPath = parsePlacePath(place.path, validId, finite);
   const path = parsedPath && (!parsedPath.length || parsedPath.at(-1)!.child === place.groupId) ? parsedPath : undefined;
+  const projection = place.windowProjection as Record<string, unknown> | undefined;
   return { group: [...place.group] as string[], index: place.index as number, active: place.active,
     ...(path ? { path } : {}),
+    ...(path && rect && projection && finite(projection.w) && projection.w > 0 && finite(projection.h) && projection.h > 0
+      ? { windowProjection: { w: projection.w, h: projection.h } } : {}),
     ...(validId(place.groupId) ? { groupId: place.groupId } : {}), ...(place.docked === true ? { docked: true as const } : {}),
     ...(place.collapsed === true ? { collapsed: true } : {}), ...(rect ? { window: rect,
       ...(validId(place.windowId) ? { windowId: place.windowId } : {}), ...(Number.isSafeInteger(place.windowIndex) && (place.windowIndex as number) >= 0 ? { windowIndex: place.windowIndex as number } : {}) } : {}),

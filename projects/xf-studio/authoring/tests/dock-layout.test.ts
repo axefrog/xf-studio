@@ -420,10 +420,52 @@ test("review M5: a returning panel takes its share without rewinding the resized
   expect(restored.sizes[1]! / restored.sizes[2]!).toBeCloseTo(4, 12);
 });
 
-test("withdrawal paths preserve resizing of a surviving floating composite instead of restoring its old rectangle", () => {
+const floatingColumns = (): DockTree => ({ root: null, closed: [], floating: [{ id: "window", x: 40, y: 50, w: 1000, h: 600,
+    node: split("row", [split("column", [group(["a"], "a", "ga"), group(["b"], "b", "gb")], [.6, .4], "left"),
+      split("column", [group(["c"], "c", "gc"), group(["d"], "d", "gd")], [.6, .4], "right")], [.5, .5], "outer") }] });
+
+test.each([false, true])("CORE-241: interleaved returns restore the whole floating frame; batch=%s", batch => {
+  const original = floatingColumns();
+  let tree = parkPanels(original, ["a", "b", "c", "d"]);
+  if (batch) tree = unparkPanels(tree, ["a", "c", "b", "d"], original, area);
+  else for (const panel of ["a", "c", "b", "d"]) tree = unparkPanels(tree, [panel], original, area);
+  expect(tree).toEqual(original);
+});
+
+test("CORE-241: the last nested return retains resizing and movement made while withdrawn", () => {
+  const original = floatingColumns();
+  const early = unparkPanels(parkPanels(original, ["a", "b", "c", "d"]), ["a", "c"], original, area);
+  early.floating[0] = { ...early.floating[0]!, x: 123, y: 234, w: 1300, h: 420 };
+  const saved = parseTree(JSON.parse(JSON.stringify(early)), ["a", "c"], original, ["b", "d"])!;
+  const complete = unparkPanels(saved, ["b", "d"], original, area);
+  expect(complete.floating[0]).toEqual({ ...original.floating[0]!, x: 123, y: 234, w: 1300, h: 700 });
+});
+
+test("CORE-241: staggered withdrawals share the remembered frame and capture intervening resizing", () => {
+  const original = floatingColumns(), early = parkPanels(original, ["a", "b"]);
+  early.floating[0] = { ...early.floating[0]!, x: 123, y: 234, w: 650, h: 660 };
+  const before = structuredClone(early), held = parkPanels(early, ["c", "d"]);
+  expect(early).toEqual(before);
+  const complete = unparkPanels(held, ["a", "c", "b", "d"], original, area);
+  expect(complete.floating[0]).toMatchObject({ id: "window", x: 123, y: 234, w: 1300, h: 660 });
+});
+
+test("CORE-241: a malformed saved projection cannot replace a valid floating size", () => {
+  const original = floatingColumns(), held = parkPanels(original, ["a"]);
+  for (const w of [0, -1, Infinity, NaN]) {
+    const place = held.parked!.a!;
+    if ("closed" in place) throw Error("Expected a floating place");
+    place.windowProjection = { w, h: 600 };
+    const saved = parseTree(held, ["b", "c", "d"], original, ["a"])!;
+    expect(saved.parked!.a).not.toHaveProperty("windowProjection");
+  }
+});
+
+test.each([false, true])("withdrawal paths preserve resizing of a surviving floating composite; legacy=%s", legacy => {
   const original: DockTree = { root: null, closed: [], floating: [{ id: "window", x: 40, y: 50, w: 1000, h: 600,
     node: split("row", [group(["a"], "a", "ga"), group(["b"], "b", "gb")], [.42, .58], "row") }] };
   const held = parkPanels(original, ["a"]); held.floating[0]!.w = 700; held.floating[0]!.x = 123;
+  if (legacy) for (const place of Object.values(held.parked!)) if (!("closed" in place)) delete place.windowProjection;
   const restored = unparkPanels(held, ["a"], original, area).floating[0]!;
   expect(restored.x).toBe(123); expect(restored.w).toBeCloseTo(700 / .58, 9);
   expect((restored.node as SplitNode).sizes).toEqual([.42, .58]);
