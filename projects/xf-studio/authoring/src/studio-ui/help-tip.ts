@@ -9,8 +9,8 @@ import { icon } from "./icons";
  * - **A real button.** The icon is a small button in the tab order, named "About <what>"; its text is the button's accessible
  *   description, so a screen reader reads it on focus without opening anything.
  * - **One tip for the page** (`installHelpTips`), like the reason tip: it shows while the pointer rests on the icon or while it has
- *   keyboard focus (`:focus-visible`; focus a script or a click puts there never opens it), and a click or tap pins it open (Escape,
- *   a second click or leaving closes it). It floats above everything, so it never moves the layout, and it never takes focus.
+ *   keyboard focus (`:focus-visible`: a click's own focus does not count), and a click or tap pins it open (Escape, a second click or
+ *   leaving closes it). Panels never put focus on a help icon themselves (`firstControl` skips them). It floats above everything, so it never moves the layout, and it never takes focus.
  * - **Rich, but plain.** An optional bold title and one or more short paragraphs; no links or controls inside (a tip can't be reached).
  */
 export type HelpText = string | readonly string[];
@@ -71,8 +71,9 @@ export function installHelpTips(doc: Document = document) {
       if (pinned && shownFor === control) hide(); else { show(control); pinned = true; }
     } else if (pinned) hide();
   }, true);
-  // Keyboard focus only. Focus that arrives any other way (a click's own focus, a panel putting focus on its first control, focus
-  // handed back after a repaint) is not the person asking what the icon is, so it never opens a tip.
+  // Keyboard focus (:focus-visible) only: a click's own focus, or focus a script puts there after a pointer interaction, is not the
+  // person asking what the icon is. Scripted focus that follows keyboard input can match :focus-visible, so panels must never focus a
+  // help icon themselves (firstControl skips them).
   doc.addEventListener("focusin", event => {
     const control = target(event);
     if (!control) { if (shownFor && !pinned) hide(); return; }

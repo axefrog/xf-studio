@@ -93,10 +93,20 @@ export class LightElement extends LightNode {
     for (let at: LightElement | null = this; at && !event.stopped; at = at.parentNode) for (const listener of at.listeners.get(event.type) ?? []) listener(event);
     return !event.defaultPrevented;
   }
-  /** What `:focus-visible` answers (a test sets false for focus that did not come from the keyboard). */
-  focusVisible = true;
+  /** What `:focus-visible` answers: false unless a test says this element was reached by the keyboard. */
+  focusVisible = false;
   click() { if (!this.disabled) this.dispatchEvent(lightEvent("click")); }
-  focus() { lightDocument.activeElement = this; this.dispatchEvent(lightEvent("focus")); }
+  /** Like the browser: a disabled element takes no focus; otherwise focus moves, and `focus` and `focusin` (which reaches the document too) fire. */
+  focus() {
+    if (this.disabled) return;
+    const previous = lightDocument.activeElement;
+    if (previous === this) return;
+    if (previous) { const out = lightEvent("focusout", { target: previous }); previous.dispatchEvent(out); lightDocument.dispatchEvent(out); }
+    lightDocument.activeElement = this;
+    this.dispatchEvent(lightEvent("focus"));
+    const event = lightEvent("focusin", { target: this });
+    this.dispatchEvent(event); lightDocument.dispatchEvent(event);
+  }
   /** Every descendant, depth first. */
   descendants(): LightElement[] { return this.children.flatMap(child => [child, ...child.descendants()]); }
   querySelectorAll(selector: string): LightElement[] { return this.descendants().filter(element => element.matches(selector)); }
@@ -106,7 +116,6 @@ export class LightElement extends LightNode {
   closest(selector: string): LightElement | null { for (let at: LightElement | null = this; at; at = at.parentNode) if (at.matches(selector)) return at; return null; }
 }
 function matchesWithNot(element: LightElement, selector: string): boolean {
-  if (selector.includes(":focus-visible")) return element.focusVisible && matchesWithNot(element, selector.replace(":focus-visible", ""));
   const nots = [...selector.matchAll(/:not\(([^)]*)\)/g)].map(match => match[1]!);
   const base = selector.replace(/:not\(([^)]*)\)/g, "");
   return (!base || matches(element, base)) && nots.every(not => !matches(element, not));
@@ -116,10 +125,12 @@ export class LightInput extends LightElement {
   select() {}
 }
 
-/** Simple selectors only: a tag, `.class`, `[attr]` or `[attr="value"]`, combined without spaces. */
+/** Simple selectors only: a tag, `.class`, `[attr]`, `[attr="value"]`, `:disabled` or `:focus-visible`, combined without spaces. */
 function matches(element: LightElement, selector: string): boolean {
-  const parts = selector.match(/^[a-z0-9]+|\.[\w-]+|\[[^\]]+\]/gi) ?? [];
+  const parts = selector.match(/^[a-z0-9]+|\.[\w-]+|\[[^\]]+\]|:[a-z-]+/gi) ?? [];
   return parts.every(part => {
+    if (part === ":focus-visible") return element.focusVisible;
+    if (part === ":disabled") return element.disabled;
     if (part.startsWith(".")) return element.classList.contains(part.slice(1));
     if (part.startsWith("[")) {
       const [name, value] = part.slice(1, -1).split("=");

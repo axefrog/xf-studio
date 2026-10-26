@@ -26,11 +26,12 @@ describe("help tips", () => {
   test("the tip opens for keyboard focus, hover and a click, never for focus that did not come from the keyboard", async () => {
     const { helpTip, installHelpTips } = await import("../src/studio-ui/help-tip");
     Object.assign(globalThis, { innerWidth: 800, innerHeight: 600 });
+    // A fresh view of the document each time: the tip installs once per document object, and another file may have installed on the shared one.
     const host = new (lightDocument.body.constructor as new (tag: string) => LightElement)("div");
     const tip = helpTip("Cyberpunk 2077 folder", "The folder the game is installed in.") as unknown as LightElement;
     host.append(tip);
     lightDocument.body.append(host);
-    installHelpTips(lightDocument as never);
+    installHelpTips(Object.create(lightDocument) as never);
     const bubble = lightDocument.body.querySelector(".help-bubble")!;
     const fire = (type: string, extra: object = {}) => lightDocument.dispatchEvent(lightEvent(type, { target: tip, ...extra }));
     expect(bubble.hidden).toBe(true);
@@ -71,7 +72,7 @@ describe("help tips", () => {
     const control = new Control("button");
     control.setAttribute("aria-disabled", "true"); control.setAttribute("data-reason", "Restore your previous settings first.");
     lightDocument.body.append(control);
-    installReasonTips(lightDocument as never);
+    installReasonTips(Object.create(lightDocument) as never);
     const bubble = lightDocument.body.querySelector(".reason-tip")!;
     const fire = (type: string) => lightDocument.dispatchEvent(lightEvent(type, { target: control }));
     control.focusVisible = false;
@@ -83,6 +84,20 @@ describe("help tips", () => {
     fire("focusout");
     expect(bubble.hidden).toBe(true);
     control.remove();
+  });
+
+  test("firstControl: the first shown, enabled button or text box; never a help icon or a natively disabled control, but an unavailable (aria-disabled) action counts", async () => {
+    const { firstControl } = await import("../src/studio-ui/dom");
+    const { helpTip } = await import("../src/studio-ui/help-tip");
+    const Element = lightDocument.body.constructor as new (tag: string) => LightElement;
+    const root = new Element("div"), disabledInput = new Element("input"), hidden = new Element("button"), unavailable = new Element("button"), later = new Element("button");
+    disabledInput.disabled = true; hidden.hidden = true; unavailable.setAttribute("aria-disabled", "true");
+    root.append(helpTip("Folder", "text") as unknown as LightElement, disabledInput, hidden, unavailable, later);
+    expect(firstControl(root as unknown as ParentNode)).toBe(unavailable as unknown as HTMLElement);
+    unavailable.disabled = true;
+    expect(firstControl(root as unknown as ParentNode)).toBe(later as unknown as HTMLElement);
+    later.disabled = true;
+    expect(firstControl(root as unknown as ParentNode)).toBeNull();
   });
 });
 

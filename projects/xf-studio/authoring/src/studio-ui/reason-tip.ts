@@ -42,7 +42,8 @@ export function installReasonTips(doc: Document = document) {
     event.preventDefault(); event.stopImmediatePropagation();
     show(control, true);
   }, true);
-  // Keyboard focus only: focus a script or a click puts on the control (a panel focusing its first control) never opens the tip.
+  // Keyboard focus (:focus-visible) only: a click's own focus, or focus a script puts there after a pointer interaction (a panel
+  // focusing its first control), does not open the tip.
   doc.addEventListener("focusin", event => {
     const control = target(event);
     if (!control) { if (shownFor) hide(); return; }

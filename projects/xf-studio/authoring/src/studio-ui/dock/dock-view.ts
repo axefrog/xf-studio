@@ -1,6 +1,6 @@
 import { keyBinding, panelModifiersHeld } from "../../app/input-bindings";
 import { button } from "../controls";
-import { clamp, h, setAttr } from "../dom";
+import { clamp, firstControl, h, setAttr } from "../dom";
 import { icon, type IconName } from "../icons";
 import { openMenu, type MenuItem } from "../menu";
 import { HeaderFitter, PanelHeader } from "../components/panel-header";
@@ -464,7 +464,8 @@ export class DockView {
   }
   focusContent(id: PanelId) {
     const element = this.panels.get(id)?.element;
-    const target = element?.querySelector<HTMLElement>("[data-autofocus], button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex='0']");
+    // Never a help icon: it follows keyboard input, so its tip would open unasked.
+    const target = element && firstControl(element, "[data-autofocus], select:not(:disabled), [tabindex='0']:not(.help-tip):not(:disabled)");
     (target ?? element)?.focus();
   }
   private title(id: PanelId) { return this.panels.get(id)?.title ?? id; }

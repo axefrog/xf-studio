@@ -588,6 +588,7 @@ test("swatch card: shows the true colour after the pointer rests, follows to the
   key(list, "Escape");
   expect([card.element.hidden, items[1]!.getAttribute("aria-describedby")]).toEqual([true, null]);
   // Keyboard focus shows it at once.
+  (items[0] as unknown as LightElement).focusVisible = true;
   (items[0] as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
   expect(card.element.hidden).toBe(false);
   detach();
@@ -818,6 +819,7 @@ test("choice list with swatches: the swatch card shows a choice's colour and nam
   document.body.append(list.element);
   const [auburn, plain] = list.list.querySelectorAll(".choice") as unknown as HTMLElement[];
   expect(auburn!.getAttribute("title")).toBeNull();
+  (auburn as unknown as LightElement).focusVisible = true;
   (auburn as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
   const card = swatchCard().element;
   expect([card.hidden, (card.querySelector(".swatch-card-name") as unknown as HTMLElement).textContent]).toEqual([false, "Auburn"]);
@@ -834,6 +836,7 @@ test("choice list with swatches: the swatch card shows a choice's colour and nam
   host.append(item); document.body.append(host);
   expect(item.getAttribute("title")).toBeNull();
   const detach = attachSwatchCard(host, () => ({ colours: ["#8d513e"], label: "Cold white", source: "From a pack", enhanced: true }));
+  (item as unknown as LightElement).focusVisible = true;
   (item as unknown as LightElement).dispatchEvent(lightEvent("focusin"));
   expect([card.hidden, (card.querySelector(".swatch-card-note") as unknown as HTMLElement).hidden]).toEqual([false, false]);
   detach();
