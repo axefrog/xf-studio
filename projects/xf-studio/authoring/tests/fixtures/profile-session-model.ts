@@ -33,7 +33,7 @@ export class SessionModel {
   content(panels: ModelPanel[]) { const id = ++this.next; this.contents.set(id, copy(panels)); return id; }
   panels(tab: Tab) { return this.contents.get(tab.content)!; }
   tab(id: string) { return this.state.tabs.find(tab => tab.id === id)!; }
-  begin() { return { state: copy(this.state), contents: copy(this.contents), shown: this.shown }; }
+  begin(panelEdit = true) { return { state: copy(this.state), contents: panelEdit ? copy(this.contents) : new Map<number, ModelPanel[]>(), shown: this.shown }; }
   record(before: ReturnType<SessionModel["begin"]>, panelEdit = false) {
     const fields: Field[] = [];
     if (panelEdit) for (const [content, panels] of this.contents) {

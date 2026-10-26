@@ -61,7 +61,7 @@ export type SceneTarget = { readonly subject?: SubjectRef; readonly look?: LookR
 /** A first view's intended slot; its structural history step keeps it across Undo and Redo. */
 type ViewPlacement = { readonly view: ViewId; readonly tab: TabId; readonly arrangement: DockLayout | null };
 /** One application request to present a just-opened view, on initial execution or replay. */
-export type ViewOpening = ViewPlacement & { readonly revision: number };
+export type ViewOpening = ViewPlacement & { readonly revision: number; readonly focus: boolean };
 /**
  * A new tab's content, its IDs fresh (`ProfileSessions.freshId`): its name, origin, arrangement and instances, its views (the session sets
  * their tab) and the nodes made with them (a scene may name what it shows). A view may name an existing node instead: a shared scene.
@@ -309,12 +309,12 @@ export class ProfileSessions {
     return clone(this.tabs.find(item => item.id === tab)?.dock ?? null);
   }
   /** Temporary phase-2 output adapter for the one-controller-per-type UI. Remove in P3-viii. */
-  legacyDock(tab: TabId = this.tabId()): DockLayout | null {
+  legacyDock(tab: TabId = this.tabId(), layout: DockLayout | null = this.dock(tab)): DockLayout | null {
     const found = this.tabs.find(item => item.id === tab);
-    if (!found?.dock) return null;
+    if (!found || !layout) return null;
     const byInstance = new Map(found.panels.map(panel => [panel.id, panel]));
     const aliases = new Map<string, string>();
-    return rewriteDock(found.dock, id => {
+    return rewriteDock(layout, id => {
       const panel = byInstance.get(id);
       if (!panel) return id;
       const target = panel.binding?.policy === "pinned" ? panel.binding.target : undefined;
@@ -572,7 +572,7 @@ export class ProfileSessions {
     });
   }
   private presentView(placement: ViewPlacement) {
-    this.opening = { ...clone(placement), revision: ++this.openingRevision };
+    this.opening = { ...clone(placement), revision: ++this.openingRevision, focus: true };
     this.focus.showTab(placement.tab);
     this.focus.focusView(placement.view);
     const instance = this.instanceOf(viewPanel(placement.view), placement.tab).id, at = this.index(placement.tab);
@@ -847,7 +847,7 @@ export class ProfileSessions {
         this.closed = clone(closed);
         this.updatePanelVersions(previous);
         this.settleShown({ ...(tabs?.shown ? { shown: tabs.shown } : {}), back, removed });
-        for (const { placement } of placements) this.opening = { ...clone(placement), revision: ++this.openingRevision };
+        for (const { placement } of placements) this.opening = { ...clone(placement), revision: ++this.openingRevision, focus: false };
         // Navigation belongs to the live session, never to a history position. settleShown above
         // handles D15's tab lifetime exception; updatePanelVersions clears only an unavailable focus.
         this.changed();

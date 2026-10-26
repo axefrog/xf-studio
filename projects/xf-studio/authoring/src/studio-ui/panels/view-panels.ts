@@ -61,7 +61,7 @@ export type ViewPanelsDeps = {
   arrangement(): { readonly tab?: string; readonly layout: unknown };
   /** The session's initial/replayed opening intent, consumed once after its pane exists. */
   opening?(): ViewOpening | undefined;
-  openView?(panel: PanelId, arrangement: unknown): void;
+  openView?(panel: PanelId, arrangement: unknown, focus: boolean): void;
   /** Load the captured destination arrangement with the reconciled controllers and catalogue. Saves once, after the whole load. */
   restore(layout: unknown): void;
   /** Persist to the tab the dock actually renders, which can lag behind the shown tab until the next paint. */
@@ -166,7 +166,7 @@ export class ViewPanels {
       if (opening && opening.revision !== this.openingRevision) {
         this.openingRevision = opening.revision;
         const pane = opening.tab === this.tab && this.deps.views().find(view => view.view === opening.view);
-        if (pane) this.deps.openView?.(pane.panel, opening.arrangement);
+        if (pane) this.deps.openView?.(pane.panel, opening.arrangement, opening.focus);
       }
       if (this.pendingSave) this.deps.save(this.tab, this.pendingSave);
       const settled = this.deps.arrangement();

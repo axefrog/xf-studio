@@ -34,12 +34,13 @@ async function measureTabSwitches(): Promise<TabSwitchProbe> {
     for (let n = 0; n < 32; n++) { const line = document.createElement("p"); line.textContent = `${id}: synthetic field ${n}`; element.append(line); }
     return { id, element, title: id, description: "Synthetic panel", icon: "head" };
   };
+  // 044 D2 / P3-i D1: this probe keeps the explicit legacy output/input adapters.
   // Controllers are kept per type; each paint reads its instance in the shown tab, as the shell's contexts do.
   const others = base.panels.filter(panel => panel.id !== "head").map(panel => body(panel.id));
   const identities = others.map(panel => panel.element);
   const canvas = document.createElement("div"); canvas.textContent = "Synthetic view";
   const panes = new ViewPanels({
-    arrangement: () => ({ tab: session.tabId(), layout: session.dock() }),
+    arrangement: () => ({ tab: session.tabId(), layout: session.legacyDock() }),
     views: () => tabViews(session.graph.snapshot().views, session.tabId()), drawn: () => ({ drawn: drawnView(session) }),
     catalogue: ids => { catalogue.panels = base.panels.flatMap(panel => panel.id === "head" ? viewPanelEntries(head, ids) : [panel]); catalogue.ids = catalogue.panels.map(panel => panel.id); },
     make: id => { const spec = body(id), slot = document.createElement("div"); spec.element.append(slot);
@@ -51,18 +52,18 @@ async function measureTabSwitches(): Promise<TabSwitchProbe> {
     dock: { addPanels: specs => dock.addPanels(specs), removePanels: (ids, options) => dock.removePanels(ids, options), get dockState() { return dock.dockState; } },
   });
   panes.start();
-  const initial = restoreDockPreference(session.dock(), area(), catalogue, [], viewPanelIds(session.graph.snapshot()), true).state;
+  const initial = restoreDockPreference(session.legacyDock(), area(), catalogue, [], viewPanelIds(session.graph.snapshot()), true).state;
   dock = new DockView({ panels: [...others, ...panes.controllers().map(pane => pane.spec)], state: initial, sizeClass: () => size,
     defaults: next => initial[next], save: state => panes.save(state), announce() {} });
   const tabs = layoutTabs({ tabs: { snapshot: () => ({ tabs: session.tabList(), shown: session.tabId(), closed: session.closedTabs() }),
-    dock: () => session.dock(), defaults: () => [], substitution: () => ({ available: false, reason: "No defaults in this probe" }),
+    dock: () => session.legacyDock(), defaults: () => [], substitution: () => ({ available: false, reason: "No defaults in this probe" }),
     subject: ref => ref.id, look: ref => ref.look, collection: id => id, subscribe: listener => session.subscribe(listener) },
     capability: action => action.kind === "tabs.show" ? session.capability(action) : { available: false },
     dispatch: action => { if (action.kind !== "tabs.show") return { ok: false, message: "Switch only" }; session.dispatch(action); return { ok: true }; },
     feedback: { announce() {}, toast: () => () => {} }, dock: dock.element, changed() {}, moduleIcon: () => "head" });
   root.append(tabs.element, dock.element); dock.render();
   const bind = () => { for (const panel of others) {
-    const instance = session.instance(panel.id); panel.element.dataset.instance = instance;
+    const instance = session.inputInstance(panel.id); panel.element.dataset.instance = instance;
     panel.element.firstElementChild!.textContent = `${session.tabId()} · ${instance}`;
   } };
   bind();

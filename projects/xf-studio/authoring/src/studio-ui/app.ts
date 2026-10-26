@@ -139,7 +139,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     instances: { controllers: () => panels, instance: panel => port.panels.instance(panel) },
     arrangement: () => ({ tab: port.focus.targets().tab || undefined, layout: port.tabs?.dock() ?? null }),
     opening: () => port.tabs?.snapshot().opening,
-    openView: (panel, arrangement) => dock.openView(panel, arrangement),
+    openView: (panel, arrangement, focus) => dock.openView(panel, arrangement, focus),
     save: (tab, state) => {
       // View-panel reconciliation also saves on load/resize. A read-only window may arrange its
       // local view, but must neither persist that automatic arrangement nor toast its refusal.

@@ -54,14 +54,15 @@ function check(s: ProfileSessions, m: SessionModel) {
   equal(sessionAccount(data), m.account(), "reference recorded state");
   const scenes = [...data.views.scenes, ...data.closed.flatMap(fragment => fragment.nodes.flatMap(item => item.slot === "scene" ? [item.node as ProfileSessionData["views"]["scenes"][number]] : []))];
   for (const scene of scenes) equal({ ...(scene.subject ? { subject: scene.subject } : {}), ...(scene.look ? { look: scene.look } : {}), gen: scene.gen }, m.targets.get(scene.id), "scene outside Undo");
+  return data;
 }
-function passage(s: ProfileSessions, scope: HistoryScope, m: SessionModel, to: number, kind?: "undo" | "redo", verify = true) {
+function passage(s: ProfileSessions, scope: HistoryScope, m: SessionModel, to: number, kind?: "undo" | "redo", verify = true, timeline = scope.timeline()) {
   const before = s.focus.snapshot(), old = m.state, at = m.at;
-  const result = kind ? scope[kind]() : scope.jumpTo(to ? scope.timeline().steps[to - 1]!.id : scope.timeline().startId);
-  equal(result, to !== at, "history result"); m.move(to); if (verify) check(s, m);
+  const result = kind ? scope[kind]() : scope.jumpTo(to ? timeline.steps[to - 1]!.id : timeline.startId);
+  equal(result, to !== at, "history result"); m.move(to); const data = verify ? check(s, m) : s.session();
   const after = s.focus.snapshot();
   equal(after.seq, before.seq, "navigation clock"); equal(after.views, before.views, "view focus outside Undo");
-  const stillValid = before.panel && s.panel(before.panel) && sessionAccount(s.session()).tabs.some(tab => tab.panels.some(panel => panel.id === before.panel && (panel.open.wide || panel.open.compact)));
+  const stillValid = before.panel && s.panel(before.panel) && sessionAccount(data).tabs.some(tab => tab.panels.some(panel => panel.id === before.panel && (panel.open.wide || panel.open.compact)));
   equal(after.panel, stillValid ? before.panel : undefined, "panel focus outside Undo");
   if (before.tab !== after.tab && old.tabs.some(tab => tab.id === after.tab) && m.state.tabs.some(tab => tab.id === before.tab))
     throw new LawFailure("shown tab outside Undo", `${before.tab} -> ${after.tab}`);
@@ -79,7 +80,8 @@ export function run(seed: number, commands: readonly Command[]) {
         : cmd.op === "start" ? 0 : cmd.op === "end" ? m.steps.length : cmd.value % (m.steps.length + 1);
       passage(s, scope, m, to, cmd.op === "undo" || cmd.op === "redo" ? cmd.op : undefined); probe(s, scope, m); continue;
     }
-    const before = serial(s), timeline = scope.timeline(), modelBefore = m.begin();
+    // Only panel operations compare content fields. Other steps still snapshot structure for the independent history/refusal oracle.
+    const before = serial(s), timeline = scope.timeline(), modelBefore = m.begin(["add", "show", "park", "bind", "hide", "addView"].includes(cmd.op));
     const tab = m.state.tabs[cmd.tab % Math.max(1, m.state.tabs.length)], id = tab?.id ?? "missing-tab";
     const panels = tab ? m.panels(tab).filter(panel => panel.type !== "view") : [], p = panels[cmd.panel % Math.max(1, panels.length)], panel = p?.id ?? "missing-panel";
     const views = m.state.views, view = views[cmd.panel % Math.max(1, views.length)], size = cmd.value % 2 ? "wide" : "compact";
@@ -177,15 +179,17 @@ export function run(seed: number, commands: readonly Command[]) {
       if (!expectedRefusal) throw new LawFailure("unexpected refusal", `${cmd.op}: ${error.message}`);
       equal(serial(s), before, "refused mutation"); equal(scope.timeline(), timeline, "refused history"); equal(m.state, modelBefore.state, "refused model");
     }
-    check(s, m);
+    const checked = check(s, m);
     equal(scope.timeline().current + 1, m.at, "reference history position"); equal(scope.timeline().steps.length, m.steps.length, "reference history length");
     if (!recorded) equal(scope.timeline(), timeline, "unrecorded history");
-    probe(s, scope, m);
+    probe(s, scope, m, checked);
   }
 }
-function probe(s: ProfileSessions, scope: HistoryScope, m: SessionModel) {
-  const at = m.at, before = arrangementSerial(s), timeline = scope.timeline();
-  const move = (to: number, kind?: "undo" | "redo") => { if (to !== m.at) passage(s, scope, m, to, kind, false); };
+function probe(s: ProfileSessions, scope: HistoryScope, m: SessionModel, checked?: ProfileSessionData) {
+  // A stable timeline can be shared by all passages; none of these probes records a step.
+  if (!m.steps.length) { check(s, m); equal(m.account(), m.initial, "reference history start"); return; }
+  const at = m.at, before = arrangementSerial(s, checked), timeline = scope.timeline();
+  const move = (to: number, kind?: "undo" | "redo") => { if (to !== m.at) passage(s, scope, m, to, kind, false, timeline); };
   move(m.steps.length); const end = arrangementSerial(s);
   move(0); check(s, m); equal(m.account(), m.initial, "reference history start");
   move(m.steps.length); equal(arrangementSerial(s), end, "end arrangement round trip");
@@ -195,8 +199,8 @@ function probe(s: ProfileSessions, scope: HistoryScope, m: SessionModel) {
 }
 /** Focus and dock active tabs are navigation, so they cannot be endpoint equality requirements.
  * Everything else (including placements, proportions, remembered places, order and scene targets) still round-trips. */
-function arrangementSerial(s: ProfileSessions) {
-  const { focus: _focus, seq: _seq, ...data } = s.session();
+function arrangementSerial(s: ProfileSessions, snapshot = s.session()) {
+  const { focus: _focus, seq: _seq, ...data } = snapshot;
   return JSON.stringify(data, (key, value) => key === "active" ? undefined : value);
 }
 function shrink(seed: number, commands: Command[], law: string): Command[] {

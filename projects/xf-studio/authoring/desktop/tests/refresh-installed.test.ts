@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { oracleTest } from "../../tests/optional-oracles";
 import { tempDir } from "../../tests/temp-dir";
 import { instanceName } from "../single-instance";
 import { installedInstanceName, installedUserData } from "../tools/installed-instance-name";
@@ -57,6 +58,20 @@ time.sleep(30)
 type Result = { outcome: string; reason: string; current: boolean; setupExit: number | null; problems: string[] };
 const reg = (...args: string[]) => spawnSync("reg.exe", args, { windowsHide: true, encoding: "utf8" });
 
+// A restricted Windows host can run Python and the setup fixture while refusing HKCU writes.
+// Only the two positive-install oracles need an actual uninstall entry. Do not turn a refused
+// fixture into a product failure (or silently claim those native integration checks passed).
+const registry = (() => {
+  if (!runnable) return { available: false, reason: "the Windows Python fixture is unavailable" };
+  const key = `HKCU\\Software\\XFStudioTest\\probe-${crypto.randomUUID()}`;
+  const added = reg("add", key, "/f");
+  if (added.status !== 0) return { available: false, reason: added.stderr.trim() || added.error?.message || `reg.exe exited ${added.status}` };
+  const removed = reg("delete", key, "/f");
+  if (removed.status !== 0) throw Error(`The temporary registry probe could not be removed: ${removed.stderr}`);
+  return { available: true, reason: "" };
+})();
+const registryTest = oracleTest(registry.available, `the temporary HKCU uninstall-entry fixture is unavailable: ${registry.reason}`);
+
 function scenario(mode: string, options: { timeoutSec?: number; skipIfCurrent?: boolean; uninstallEntry?: boolean; preinstalled?: boolean; extra?: "symlink" | "stray" } = {}) {
   const dir = tempDir("xfs-refresh-helper-");
   const app = join(dir, "app"), marker = join(dir, "marker"), resultFile = join(dir, "result.json");
@@ -87,7 +102,7 @@ function scenario(mode: string, options: { timeoutSec?: number; skipIfCurrent?: 
 }
 
 describe.skipIf(!runnable)("the install-refresh helper", () => {
-  test("a complete install is installed, and the setup got the switch that stops the app's own launch", () => {
+  registryTest("a complete install is installed, and the setup got the switch that stops the app's own launch", () => {
     const s = scenario("ok");
     try {
       const { result, ran } = s.run();
@@ -163,7 +178,7 @@ describe.skipIf(!runnable)("the install-refresh helper", () => {
     } finally { holder.kill(); s.cleanup(); }
   }, 30_000);
 
-  test("an install that is already complete is current only when asked, and then runs no setup", () => {
+  registryTest("an install that is already complete is current only when asked, and then runs no setup", () => {
     const current = scenario("ok", { preinstalled: true, skipIfCurrent: true });
     try {
       const { result, ran } = current.run();

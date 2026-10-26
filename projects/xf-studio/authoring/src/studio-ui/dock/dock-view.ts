@@ -205,6 +205,9 @@ export class DockView {
     this.scrollMemories = [];
     this.options.beforeLayout?.();
     const focused = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    // Content elements survive parking, but tab buttons are recreated. Keep focus on the same
+    // surviving tab across layout/replay without treating the restored pane as a focus request.
+    const focusedTab = focused?.classList.contains("dock-tab") && focused.closest(".dock") === this.element ? focused.getAttribute("id") : null;
     const tree = this.tree;
     for (const panel of this.panels.values()) if (panel.element.parentElement !== this.parking) this.parking.append(panel.element);
     const shown = new Set<PanelId>();
@@ -230,6 +233,7 @@ export class DockView {
       if (now !== previous.has(panel.id)) panel.visibility?.(now);
     }
     if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
+    else if (focusedTab) this.element.querySelector<HTMLElement>(`[id="${focusedTab}"]`)?.focus({ preventScroll: true });
   }
 
   /**
@@ -499,11 +503,11 @@ export class DockView {
     if (focus) this.focusTab(id);
   }
   /** A newly created first 3D view uses its tab's view slot, shown and focused, in both size classes. */
-  openView(id: PanelId, arrangement: unknown) {
+  openView(id: PanelId, arrangement: unknown, focus = true) {
     if (!this.panels.has(id)) return;
     this.state = openViewDockState(this.state, arrangement,
       { wide: this.options.defaults("wide"), compact: this.options.defaults("compact") }, id, this.area().w);
-    this.render(); this.options.save(this.dockState); this.focusTab(id);
+    this.render(); this.options.save(this.dockState); if (focus) this.focusTab(id);
   }
   /** Move focus to a panel's tab once the layout it just got has rendered. */
   private focusTab(id: PanelId) {

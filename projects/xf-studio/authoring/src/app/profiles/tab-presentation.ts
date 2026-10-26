@@ -22,7 +22,12 @@ export type LayoutTabsPort = {
 export function layoutTabsPort(session: ProfileSessions, defaults: TabDefaults,
   services: Pick<ProfileServices, "defaults" | "characters" | "collections" | "profiles">): LayoutTabsPort {
   return Object.freeze({
-    snapshot: () => ({ tabs: session.tabList(), shown: session.tabId(), closed: session.closedTabs(), lastDefault: session.lastDefault(), opening: session.viewOpening() }),
+    snapshot: () => {
+      const opening = session.viewOpening();
+      return { tabs: session.tabList(), shown: session.tabId(), closed: session.closedTabs(), lastDefault: session.lastDefault(),
+        // P3-i D1: the phase-2 dock consumes aliases on every path, including a captured opening slot.
+        opening: opening && { ...opening, arrangement: session.legacyDock(opening.tab, opening.arrangement) } };
+    },
     dock: (tab?: string) => session.legacyDock(tab), defaults: () => services.defaults.list(),
     substitution: (id: string, choice?: SubstitutionChoice) => defaults.substitution(id, choice),
     subject: (ref: SubjectRef) => ref.kind === "character" ? services.characters.character(ref.id)?.label ?? "Unnamed V" : ref.kind,

@@ -11,6 +11,7 @@ import { canvasView, tabViews, viewPaneState, ViewPanels, viewPanelEntries, view
 import { viewCatalogue } from "../src/studio-ui/views/contribution";
 import { SHELL_VIEW } from "../src/studio-ui/views/shell";
 import { UIPreferenceActions } from "../src/app/ui-preferences";
+import { layoutTabsPort } from "../src/app/profiles/tab-presentation";
 import type { ProfileSessions } from "../src/app/profiles/profile-sessions";
 import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
 import { openSession, seededRandom } from "./fixtures/profile-sessions";
@@ -67,15 +68,19 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
     catalogue.panels.splice(0, catalogue.panels.length, ...base.panels.flatMap(panel => panel.id === "head" ? viewPanelEntries(head, panels) : [panel]));
     catalogue.ids.splice(0, catalogue.ids.length, ...catalogue.panels.map(panel => panel.id));
   };
+  // P3-i D1 / 044 D2: this still mounts the phase-2 dock. Exercise its real presentation
+  // projection rather than feeding raw instance IDs to controllers keyed by type/view aliases.
+  // Only snapshot/dock are used; the defaults/library methods are outside this harness.
+  const tabs = session && layoutTabsPort(session, undefined as never, {} as never);
   const state = { views: [...initial], drawn: { ...drawn } };
   const readViews = () => session ? tabViews(session.graph.snapshot().views, session.tabId()) : shownOf(state.views);
-  const preferences = new UIPreferenceActions({ ...freshWorkspace().uiPreferences, ...(session?.dock() ? { layout: session.dock()! } : {}) });
+  const preferences = new UIPreferenceActions({ ...freshWorkspace().uiPreferences, ...(tabs?.dock() ? { layout: tabs.dock()! } : {}) });
   const attached: string[] = [], made = new Map<string, ReturnType<typeof fakePane>>(), saves: unknown[] = [];
   let dock!: InstanceType<typeof DockView>;
   const panes = new ViewPanels({
     views: readViews, drawn: () => state.drawn,
-    arrangement: () => ({ tab: session?.tabId(), layout: session ? session.dock() : preferences.snapshot().layout ?? null }),
-    opening: () => session?.viewOpening(), openView: (panel, arrangement) => dock.openView(panel, arrangement),
+    arrangement: () => ({ tab: session?.tabId(), layout: tabs ? tabs.dock() : preferences.snapshot().layout ?? null }),
+    opening: () => tabs?.snapshot().opening, openView: (panel, arrangement, focus) => dock.openView(panel, arrangement, focus),
     save: (tab, next) => { saves.push(next);
       if (session && tab !== undefined) session.dispatch({ kind: "tabs.arrange", tab, layout: serializeDockState(next) }); },
     make: panel => { const pane = fakePane(panel); made.set(panel, pane); return pane; },
@@ -105,7 +110,7 @@ async function harness(initial: string[], drawn: DrawnViews, saved?: DockTree, s
 }
 
 describe("a pane per view", () => {
-  for (const slot of ["missing", "no-head", "tight-left", "narrow", "collapsed", "wide"] as const) test(`a first view's history restores its ${slot} head slot, drawing and focus through the real session and dock`, async () => {
+  for (const slot of ["missing", "no-head", "tight-left", "narrow", "collapsed", "wide"] as const) test(`a first view's history restores its ${slot} head slot and drawing while preserving live focus through the real session and dock`, async () => {
     const workspace = freshWorkspace(), session = openSession(sessionOfWorkspace(workspace, { tab: "A", character: "c-1" }, seededRandom(57)));
     const tab = session.tabId(); session.closeView("main");
     const tree: DockTree = { root: split("row", [{ ...group(["presets"], "presets", "g-collection"), collapsed: true },
@@ -119,12 +124,13 @@ describe("a pane per view", () => {
     ], slot === "tight-left" ? [.08, .92] : [.21, .79], "s-root");
     session.arrange(tab, serializeDockState({ wide: tree, compact: tree }));
     const h = await harness([], {}, tree, session, STUDIO_CATALOGUE), depth = session.graph.history().depth;
+    lightDocument.body.append(h.dock.element as unknown as LightElement);
     const view = session.openView(tab, defaultViewGraph(workspace.preview), { kind: "character", id: "c-1" }), panel = panelOf(view);
     const paint = () => { h.state.drawn = { drawn: drawnView(session) }; h.panes.sync(); };
-    const check = async () => {
+    const check = async (focused = panel) => {
       expect(session.tabId()).toBe(tab); expect(drawnView(session)).toBe(view);
       expect(session.graph.history().depth).toBe(depth + 1);
-      expect(session.focus.focusedPanel()).toBe(session.instance(panel, tab));
+      expect(session.focus.focusedPanel()).toBe(session.instance(focused, tab));
       for (const size of ["wide", "compact"] as const) {
         const at = locate(h.dock.dockState[size], panel)!;
         expect(at?.group.id).toBe(slot === "missing" || slot === "no-head" || slot === "tight-left" ? "g-head" : "custom-head"); expect(at.windowId).toBeUndefined();
@@ -154,14 +160,18 @@ describe("a pane per view", () => {
         expect(at.group.active).toBe(panel); expect(at.group.collapsed).not.toBe(true);
       }
       expect(h.panes.canvasPanel()).toBe(panel); expect(h.attached.at(-1)).toBe(panel);
-      await Bun.sleep(5); expect(lightDocument.activeElement?.getAttribute("id")).toBe(`dock-tab-${panel}`);
+      await Bun.sleep(5);
+      expect(lightDocument.activeElement).toBe((h.dock.element as unknown as LightElement).querySelector(`[id="dock-tab-${focused}"]`));
+      expect(lightDocument.activeElement?.isConnected).toBe(true);
     };
     paint(); await check();
     for (let replay = 0; replay < 2; replay++) {
       expect(session.graph.undo()).toBe(true); paint();
       expect(session.graph.has(view)).toBe(false); expect(locate(h.dock.tree, panel)).toBeUndefined();
+      // P3-i D11 / 044 D15: restoring the pane restores its slot, never the old focus.
       session.focus.focusPanel(session.instance("presets", tab));
-      expect(session.graph.redo()).toBe(true); paint(); await check();
+      h.dock.element.querySelector<HTMLElement>('[id="dock-tab-presets"]')!.focus();
+      expect(session.graph.redo()).toBe(true); paint(); await check("presets");
     }
   });
   for (const slot of ["arranged", "factory", "empty"] as const) test(`a first 3D view opens active, expanded and focused in its ${slot} slot`, async () => {
@@ -262,13 +272,13 @@ describe("a pane per view", () => {
     expect(session.dock(b)).toEqual(customB);
     expect(group(bPanel)?.id).toBe(groupB);
     expect(dock.tree.floating).toHaveLength(1);
-    expect(session.dock(a)!.state).toMatchObject({ wide: { closed: expect.arrayContaining(["history"]) } });
+    expect(session.dock(a)!.state).toMatchObject({ wide: { closed: expect.arrayContaining([session.instance("history", a)]) } });
     expect(saves).toHaveLength(2); // A's close, then B's whole arrangement; no intermediate destination save.
     panes.sync(); expect(saves).toHaveLength(2);
     // A real edit after the switch still saves once, and is never mistaken for an external restore.
     dock.close("history");
     const editedB = structuredClone(session.dock(b));
-    expect(editedB!.state).toMatchObject({ wide: { closed: expect.arrayContaining(["history"]) } });
+    expect(editedB!.state).toMatchObject({ wide: { closed: expect.arrayContaining([session.instance("history", b)]) } });
     expect(saves).toHaveLength(3);
     panes.sync(); expect(saves).toHaveLength(3);
     session.show(a); panes.sync();

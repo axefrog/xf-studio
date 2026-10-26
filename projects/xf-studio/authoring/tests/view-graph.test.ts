@@ -231,7 +231,7 @@ test("preview actions edit the graph node of the view they name, and the device 
   expect(calls).toEqual([]);
 });
 
-test("every structure edit records a step, an unrecorded one clears the history it would break, and a replay is checked first (CORE-94)", () => {
+test("every structure edit records a step, an unrecorded one clears the history it would break, and a refused replay preserves its history (CORE-94, P3-i H2)", () => {
   const history = createHistoryService(), views = createStudioViewGraph(freshWorkspace().preview, undefined, history);
   const v2 = views.addView(MAIN_VIEW, { scene: true });
   expect(views.history()).toMatchObject({ undo: "New view", depth: 1 });
@@ -243,16 +243,19 @@ test("every structure edit records a step, an unrecorded one clears the history 
   expect(views.history()).toMatchObject({ depth: 0, redoDepth: 0 });
   expect(views.undo()).toBe(false);
   expect(views.viewIds()).toEqual([MAIN_VIEW]);
-  // The check itself: a step whose views would name a missing node is dropped with the steps behind it, and nothing changes.
+  // P3-i D11 / review H2: a refused replay is atomic, including history. Keep the bad step
+  // and the earlier valid steps available for repair instead of silently deleting the timeline.
   views.edit(MAIN_VIEW, "lights", calibrated(2), { label: "Exposure" });
   const broken = { views: [{ id: MAIN_VIEW, kind: "3d", scene: "s1", camera: "gone", lights: "l1", display: "d1", tools: "t1" }], focused: MAIN_VIEW };
   history.scope(LOCAL_VIEW_SCOPE)!.checkpoint([VIEW_HISTORY_STRUCTURE], { label: "Broken", actionKind: "view.edit" }, { read: () => broken });
   const changes: ViewGraphChange[] = [];
   views.subscribe(change => changes.push(change));
+  const scope = history.scope(LOCAL_VIEW_SCOPE)!, timeline = scope.timeline(), before = views.data();
   expect(views.undo()).toBe(false);
-  expect(views.history()).toMatchObject({ depth: 0 });
+  expect(views.history()).toMatchObject({ depth: 2, redoDepth: 0 });
+  expect(scope.timeline()).toEqual(timeline); expect(views.data()).toEqual(before);
   expect(views.state(MAIN_VIEW, "lights")).toMatchObject({ creatorLighting: { exposure: 2 } });
-  expect(changes).toHaveLength(1);
+  expect(changes).toHaveLength(0);
   expect(views.node(MAIN_VIEW, "camera").id).toBe("c1");
 });
 

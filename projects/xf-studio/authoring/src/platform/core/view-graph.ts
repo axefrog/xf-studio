@@ -513,15 +513,15 @@ export class ViewGraph {
   }
   /**
    * Show what an Undo or Redo reached. Before anything changes, the result is checked as a whole (CORE-94): view IDs are unique,
-   * every view names existing nodes of the right slot and its camera and rig suit its scene. A step that fails can never apply again,
-   * nor can the steps behind it, so the scope drops them and nothing changes. Nodes a step brings back return to their stored places.
+   * every view names existing nodes of the right slot and its camera and rig suit its scene. A refused replay leaves the graph,
+   * notifications and the entire history unchanged (P3-i H2), so the owner can repair it. Nodes brought back return to their stored places.
    */
   private applyHistory(values: Readonly<Record<string, unknown>>): boolean {
     const structure = values[STRUCTURE] as Structure | undefined;
     const ids = Object.keys(values).filter(key => key !== STRUCTURE);
     const views = structure ? structure.views : this.views, nodes = new Map(this.nodes);
     for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) nodes.set(id, value); else nodes.delete(id); }
-    if (!this.consistent(views, nodes)) { this.emit([], false, "history", false); return false; }
+    if (!this.consistent(views, nodes)) return false;
     if (structure) this.views = clone(structure.views);
     for (const id of ids) { const value = values[id] as NodeEntry | undefined; if (value) this.nodes.set(id, this.keepUnrecorded(value)); else this.nodes.delete(id); }
     if (structure?.order) {

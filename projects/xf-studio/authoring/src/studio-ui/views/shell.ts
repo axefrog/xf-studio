@@ -43,6 +43,6 @@ export const SHELL_VIEW = {
     { pattern: /^collection\./, label: "Library" }, { pattern: /^package\./, label: "Mod package" }, { pattern: /^savedV\./, label: "Saved V" }, { pattern: /^character\./, label: "Character" },
     { pattern: /^previewSetup\./, label: "3D view" }, { pattern: /^setup\./, label: "Settings" },
     { pattern: /^view\.(undo|redo)$/, label: "View and lighting" }, { pattern: /^view\./, label: "View" },
-    { pattern: /^tabs\./, label: "Layout tabs" }, { pattern: /^defaults\./, label: "Layout defaults" },
+    { pattern: /^panels\./, label: "Panels" }, { pattern: /^tabs\./, label: "Layout tabs" }, { pattern: /^defaults\./, label: "Layout defaults" },
   ],
 } as const satisfies ViewContribution;

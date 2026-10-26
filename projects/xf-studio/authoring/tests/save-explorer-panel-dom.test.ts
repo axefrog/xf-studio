@@ -35,7 +35,9 @@ function harness(overrides: Partial<SaveExplorerDevice> = {}, options: Construct
   const toasts: string[] = [], dispatched: { kind: string; instance?: string }[] = [];
   let panel!: ReturnType<typeof explorerPanel>;
   const ctx: ModuleViewContext<SaveExplorerFacade> = {
-    facade: module, instance: panelId => session ? session.instance(panelId) : `${panelId}--test`, targets: () => ({}),
+    // 044 D2 / P3-i D1: mounting the remaining type controller uses the named input adapter;
+    // instance() is now a detached read and must never allocate a missing optional panel.
+    facade: module, instance: panelId => session ? session.inputInstance(panelId) : `${panelId}--test`, targets: () => ({}),
     dispatch: async (action, _options) => { dispatched.push(action); const outcome = await module.dispatch(action); if (!outcome.ok) toasts.push(outcome.message); panel.update(undefined as never); return outcome.ok; },
     feedback: { toast: (_tone, _source, message) => { toasts.push(message); return undefined as never; }, announce: () => {}, record: () => undefined as never },
     anchors: { register: () => () => {} }, reveal: () => {}, openSettings: section => { settingsOpened.push(section); }, links: { open: async () => ({ ok: true }) }, changed: () => panel.update(undefined as never),
@@ -44,7 +46,7 @@ function harness(overrides: Partial<SaveExplorerDevice> = {}, options: Construct
   // Production reconciliation owns binding, including the empty-session case. Tests never bind the controller themselves.
   const empty = { root: null, floating: [], closed: [] };
   const panes = new ViewPanels({ instances: { controllers: () => [panel], instance: ctx.instance },
-    arrangement: () => ({ tab: session ? session.tabId() || undefined : "t-test", layout: session?.dock() ?? null }),
+    arrangement: () => ({ tab: session ? session.tabId() || undefined : "t-test", layout: session?.legacyDock() ?? null }),
     views: () => [], drawn: () => ({}), save() {}, catalogue() {}, attach() {},
     dock: { addPanels() {}, removePanels() {}, dockState: { wide: empty, compact: empty } },
     make: () => { throw Error("No view panes in this controller test"); }, spec: pane => pane.spec,

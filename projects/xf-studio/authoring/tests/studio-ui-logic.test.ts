@@ -60,6 +60,7 @@ test("every context-menu candidate has a label, and destructive entries name the
 test("every action ID has an activity source label", () => {
   expect(Object.keys(ACTION_DESCRIPTORS).filter(kind => sourceLabel(kind) === "Studio")).toEqual([]);
   expect(sourceLabel("history.redo")).toBe("Undo");
+  expect(sourceLabel("panels.add")).toBe("Panels");
   expect(sourceLabel("shape.transform")).toBe("Shape");
   expect(sourceLabel("layer.setOpacity")).toBe("Colour & finish");
 });

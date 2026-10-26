@@ -409,21 +409,28 @@ test("an answer marker removed by Clear is written again; markers of another rea
   const installation = openInstallation({ ...setup.options, native: route("marker-1") });
   const archive = installation.plan.archives[0]!, hash = refFromPath("base\\fixture\\a.hp").hash;
   const folder = join(setup.options.cacheDir, "native");
+  // NATIVE-27 writes/prunes markers in the background. Assert the actual disk checkpoint,
+  // with a deadline, rather than assuming the shared host finishes I/O within 20/50 ms.
+  const files = async (count: number) => {
+    const deadline = performance.now() + 2_000;
+    const names = () => existsSync(folder) ? readdirSync(folder) : undefined;
+    while (names()?.length !== count && performance.now() < deadline) await Bun.sleep(5);
+    expect(names()).toHaveLength(count);
+  };
   const ledger = new NativeAnswerFiles(setup.options.cacheDir, nativeReaderIdentity("marker-1"));
   ledger.add(archive, hash);
-  await Bun.sleep(20);
-  expect(readdirSync(folder).length).toBe(1);
+  await files(1);
   rmSync(folder, { recursive: true, force: true });
   expect(ledger.has(archive, hash)).toBe(false);
   ledger.add(archive, hash);
-  await Bun.sleep(20);
+  await files(1);
   expect(ledger.has(archive, hash)).toBe(true);
   // Another reader identity on the same folder: the first reader's markers can never answer again, so they go.
   const next = new NativeAnswerFiles(setup.options.cacheDir, nativeReaderIdentity("marker-2"));
-  await Bun.sleep(50);
+  await files(0);
   expect(readdirSync(folder)).toEqual([]);
   next.add(archive, hash);
-  await Bun.sleep(20);
+  await files(1);
   expect(next.has(archive, hash)).toBe(true);
 });
 
