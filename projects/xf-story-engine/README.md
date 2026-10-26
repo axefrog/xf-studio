@@ -113,6 +113,12 @@ replays missing saved records through the same header-first path as load, includ
 partially recreated item headers, and produces identical later records with or without two loads. The writer records
 all changes to earlier saved contributions, edges and pins independently of retention; sweeping protects pending
 contribution ends until recorded. The ordinary live-state view stays independent of save frequency.
+Retained-frame history follows the same boundary: `currentView().frames` contains retention roots,
+while the save writer preserves previously saved retained frames and their terminal updates even
+after their last consumer releases them. SF1-E2 compares the retained view unchanged and also checks
+the actual records of saved retained frames against uninterrupted execution. The v4.17 regressions
+cover release, terminal updates, absent-record saves and silent recovery in both snapshot modes,
+including a game reading used as a terminal cause (details in SPEC-NOTES).
 Reopened intervals keep their own unclamped ends even when their starts match a previous interval, with/without loading
 A or sweeping before B. S3G-01 covers all 16 release/end variants, both operation orders and retained-consumer controls.
 S3G-02 covers swept descriptor/item recovery in both root orders, incremental/snapshot records and fresh B loads.

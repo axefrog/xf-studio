@@ -497,9 +497,6 @@ export class Persistence {
     for (const m of k.events.materialisationRecords()) if (marked.has(m.event)) v.materialisations.set(m.event, clone(m));
     for (const s of k.summaries.records()) v.summaries.set(s.summary, clone(s));
     for (const fid of k.retention.rootFrameIds()) v.frames.set(fid, clone(k.frames.frame(fid)!));
-    // The chain is append-only truth (S0 14.1): a retained frame an earlier save holds is never dropped. Its terminal status is written
-    // with the change, whether or not a record still refers to it, and a frame a sweep took out of memory stays as saved.
-    for (const [id, was] of base.frames) if (was.retain && !v.frames.has(id)) v.frames.set(id, clone(k.frames.frame(id) ?? was));
     for (const s of k.retention.seeds.values()) v.seeds.set(s.id, clone(s));
     for (const p of k.evolution.snapshotStates()) v.processes.set(p.id, clone(p));
     v.settings = k.settings.all();
@@ -508,6 +505,9 @@ export class Persistence {
     for (const e of v.edges.values()) keep.add(e.cause);
     for (const c of v.contributions.values()) if (typeof c.source.origin === 'string') keep.add(c.source.origin);
     for (const f of v.frames.values()) keep.add(f.cause);
+    // The writer also preserves saved retained-frame updates outside this live view. Their
+    // current causes must still keep any game readings they depend on (S0 14.1).
+    for (const [id, was] of base.frames) if (was.retain) keep.add((k.frames.frame(id) ?? was).cause);
     for (const { belief: b } of v.beliefs.values()) for (const ev of b.evidence) keep.add(ev);
     const all = k.store.allPins().filter((p) => marked.has(p.node) || base.pins.has(p.id));
     for (const p of all) if (p.reason !== 'game') { keep.add(p.cause); if (p.evidence) keep.add(p.evidence); }
@@ -603,6 +603,11 @@ export class Persistence {
   /** Retention admits new material; every change to an already saved record is unconditional. */
   private includeSavedUpdates(cur: PersistedView): void {
     const store = this.k.store;
+    // Retained-frame history belongs to the append-only writer, not the retained live view.
+    // Preserve saved records even when no root names them; write their latest status when live,
+    // and keep the saved state when absent so recovery can replay it exactly (S0 14.1).
+    for (const [id, was] of this.base.frames) if (was.retain && !cur.frames.has(id))
+      cur.frames.set(id, clone(this.k.frames.frame(id) ?? was));
     const merge = <T>(saved: Map<Id, T>, into: Map<Id, T>, live: (id: Id) => T | undefined): void => {
       for (const [id, was] of saved) {
         const now = live(id);

@@ -101,6 +101,10 @@ function countRuns(sim: Sim): Map<string, number[]> {
     }
     expect(cur.windowNow()).toBe(N);
     expect(differing(recordOf(cur, { endedEdges: true }), reference)).toEqual([]);
+    // Saved retained-frame history is outside the retained live view. It must still hold the
+    // exact terminal records of U, rather than hiding a stale status behind that view.
+    const savedFrames = [...cur.k.persistence.rebuild('R2').view.frames.values()].filter((f) => f.retain);
+    for (const f of savedFrames) expect(cur.k.frames.frame(f.id)).toEqual(u.sim.k.frames.frame(f.id));
     // the past is answered alike: every seat and holder interval U's store holds, ended ones included, gives the same reads in R (S1 9.1)
     // (both ways: an edge R holds that U does not would show too)
     expect(sameHistoricalEdges(u.sim, cur)).toEqual([]);

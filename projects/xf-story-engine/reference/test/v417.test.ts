@@ -353,6 +353,56 @@ describe('F-30: retained frames (V4-54)', () => {
     expect(a.ops.some((o) => o.op === 'FrameState' && o.id === f.id)).toBe(false);
   });
 
+  for (const snapshotEvery of [1, 1_000_000]) test(`retained live frames do not depend on saves; terminal history survives recovery (${snapshotEvery})`, () => {
+    const make = () => kernel('F-30-history', { snapshotEvery });
+    const u = make(), r = make();
+    const open = (k: Kernel) => {
+      const actor = k.root('actor', 'core:person');
+      return k.frames.open({ id: H(s('frame'), s('history')), actor, level: 'goal', origin: actor, weight: 1, cause, retain: true });
+    };
+    const f = open(u); open(r);
+    r.persistence.save('A');
+    // The frame ends after A, then its final consumer releases it before B.
+    for (const k of [u, r]) {
+      k.retention.setSeed({ id: H(s('consumer')), state: {}, nodes: [f.id] });
+      k.frames.setStatus(f.id, 'satisfied', cause);
+      expect(k.persistence.currentView().frames.get(f.id)?.status).toBe('satisfied');
+      k.retention.endSeed(H(s('consumer')));
+      expect(k.persistence.currentView().frames.has(f.id)).toBe(false);
+    }
+    expect(r.persistence.currentView().toData().frames).toEqual(u.persistence.currentView().toData().frames);
+    expect(r.frames.frame(f.id)).toEqual(u.frames.frame(f.id));
+    const b = r.persistence.save('B');
+    expect(b.ops).toContainEqual({ op: 'FrameState', id: f.id, frame: structuredClone(u.frames.frame(f.id)!) });
+    const fresh = replacement(r, 'F-30-history', 'B');
+    expect(fresh.frames.frame(f.id)).toEqual(u.frames.frame(f.id));
+    expect(fresh.persistence.currentView().frames.has(f.id)).toBe(false);
+    fresh.frames.remove(f.id);
+    fresh.persistence.save('C');
+    expect(fresh.persistence.rebuild('C').view.frames.get(f.id)).toEqual(u.frames.frame(f.id));
+    fresh.persistence.recoverIfSaved(f.id);
+    expect(fresh.frames.frame(f.id)).toEqual(u.frames.frame(f.id));
+    expect(fresh.pending).toHaveLength(0);
+    // Re-reference makes the ended frame part of the retained view again in both executions.
+    for (const k of [u, fresh]) k.retention.setSeed({ id: H(s('consumer')), state: {}, nodes: [f.id] });
+    expect(fresh.persistence.currentView().toData().frames).toEqual(u.persistence.currentView().toData().frames);
+  });
+
+  test('a saved retained frame keeps a new game reading that causes its terminal status', () => {
+    const k = kernel('F-30-history-cause');
+    const actor = k.root('actor', 'core:person');
+    const f = k.frames.open({ actor, level: 'goal', origin: actor, weight: 1, cause, retain: true });
+    k.persistence.save('A');
+    const subject = k.mirrored('subject', 'core:person');
+    const reading = k.reading(subject, 'age-class', 'adult');
+    k.frames.setStatus(f.id, 'satisfied', reading.id);
+    expect(k.persistence.currentView().frames.has(f.id)).toBe(false);
+    k.persistence.save('B');
+    const fresh = replacement(k, 'F-30-history-cause', 'B');
+    expect(fresh.frames.frame(f.id)?.cause).toBe(reading.id);
+    expect(fresh.store.pin(reading.id)).toEqual(reading);
+  });
+
   test('an ended retained frame a non-canon retained event names is kept, with its links, and a process state that names it keeps it too', () => {
     const k = kernel('F-30e');
     const actor = k.mint(k.root('city', 'core:place'), cause, 'actor', 'core:person');

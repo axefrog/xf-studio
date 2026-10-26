@@ -80,6 +80,18 @@ with the summary descriptor. Both direct seed references and pending output batc
 after fresh replacement loads. A retained event's own location edge persists for spatial discovery without rooting
 unreferenced events. These [offline] checks implement S0 v4.16 §14.1; the old bare-header expectation is superseded.
 
+**Saved retained-frame history is separate from the retained live view [offline].** S0 §14.1's append-only
+writer preserves each previously saved retained frame and records its latest terminal status even after its last
+consumer releases it. That saved history does not admit the frame into `Persistence.currentView`: only retention
+roots do. The full-scale SF1-E2 diagnostic (1,008 windows, saves at 200, 461 and 827) found 27 extra ended frames
+in the reloaded run's view, although all 27 live records exactly matched the uninterrupted run and neither run
+retained them. Moving the history merge into the save writer fixes the view without dropping history or changing
+frame reads. Saved frame updates still preserve game readings used as their terminal causes. The
+[F-30 regressions](../projects/xf-story-engine/reference/test/v417.test.ts) exercise terminal updates,
+release, absent-record saves, silent recovery, re-reference in incremental and snapshot modes, and a new game-reading cause; the
+[end-to-end regression](../projects/xf-story-engine/reference/test/sim/e2e.test.ts) also compares the actual records
+of previously saved retained frames. This is reference-model evidence, not a claim about the game's save format.
+
 **Retention release is separate from edge validity [offline].** The reference model's
 [event-persistence regressions](../projects/xf-story-engine/reference/test/process-evidence.test.ts) release an event at 10,
 reference it again at 20, and compare uninterrupted execution with fresh incremental and snapshot loads: the spatial

@@ -2141,7 +2141,29 @@ Entries for what this build did and what the specifications left open. The numbe
 - **Belief changes.** A replacement of a memorable belief drops the old belief (`dropped`, carrying its own `Id` and evidence) and, if the newcomer is memorable, sets the new one (`set`): S0 10.5 says `dropped` "when a memorable belief is dropped or replaced", and a consumer such as `blame.belief.endsBy` ends on the old belief's `Id`. `revised` is for a change to the same belief record (corroboration: new evidence, a merged confidence). A memorable newcomer over a non-memorable belief is `set`. The changes follow the memorable set of each question, so a reload agrees. S0 gave no operation that makes an existing belief memorable; `Beliefs.promote` is this build's, and emits `set`.
 - **Frame openings.** Opening an ended frame again under its `Id` replaces the record (`old` is its earlier status) only while `openingChanges` is on; with it off `open` returns the ended record as in v4.16. S1 8.2's own route (remove, then open) is unaffected.
 - **Retained frames** are roots while active or blocked. An ended one is kept while a persisted record refers to it (S0 10.4, 14.1), and a save never drops a retained frame an earlier save holds. The reference is any Id the marking reached (a pin's value, an edge, a belief, the facts of a retained event such as a goal act's `served`, an outstanding batch) or an Id in a process's persisted state or digest; the kept frame's own links are then marked in turn, to a fixpoint (`Retention.rootFrameIds`). A frame an earlier save holds is written at each status change, its terminal status included, even when nothing refers to it any longer: the chain is append-only truth (S0 14.1), and `Persistence.recoverIfSaved` restores a saved frame that is not in memory, silently (no change, no relevance), as it restores any saved record. A retained frame that ended before any save held it and that no record refers to is not added to a save.
+- **Retained live view versus saved frame history (SF1-E2 full-scale CI fix).** At 1,008 windows, with saves at 200, 461 and 827, R's `currentView().frames` included 27 unreferenced ended retained goal frames absent from U's view: 25 abandoned and two satisfied (`71fad9445b85cbabfa5997979a07827f`, `cb847dbe7ca9a835b6c2dea286d42324`). The diagnostic printed every complete differing entry: all 27 live frame records were byte-identical in U and R and none was a retention root in either run. The base-frame merge in `currentView` alone admitted them in R. R's append-only history is correct under S0 §14.1; U's omission from the retained live view is also correct, since no save held those frames and nothing retains them now. The merge now runs in `includeSavedUpdates`, alongside the writer's other unconditional saved-record updates. The retained view follows roots independently of save frequency; the writer still records terminal status, never deletes saved retained frames and preserves absent saved records for exact silent replay. No SF1-E2 comparison or record filter was weakened. Its additional assertion compares every previously saved retained frame's actual live record against U; F-30's incremental/snapshot regression checks release before save, terminal updates, a further save with the frame absent, silent recovery and re-reference. There is no new frame-history representation or change to frame reads, and both frozen kernel digests stay unchanged.
 - **`ProcessOp` `edge`** takes an optional `cause` and `id`, so a layer that fixes either (`xf:leads`, S1 7.8) can.
+
+The saved-frame merge also supplied causes to the game-reading filter. That dependency remains in
+`currentView` even though the historical frames move to the writer: a game reading newly used as a
+saved frame's terminal cause must still be saved. The added F-30 cause regression failed without
+this dependency and passes with it.
+
+Verification of the SF1-E2 fix, 26 October 2026 (all commands under the 4 GB memory guard):
+
+| Check | Result | Time | Peak |
+|---|---|---|---|
+| SF1-E2, `S1_FULL=1` | 1 pass, 0 fail | 82.83 s | 2.2 GB |
+| Whole `test/sim/e2e.test.ts`, `S1_FULL=1` | 6 pass, 0 fail | 345.62 s | 3.2 GB |
+| `test/sim/properties.test.ts`, default scale | 10 pass, 2 skip, 0 fail | 4.81 s | 0.5 GB |
+| Kernel persistence, retention, v4.17, recovery API, process evidence, sweep operations/replay and both digest files | 218 pass, 3 skip, 0 fail | 12.46 s | 0.6 GB |
+| `bun run check` | Exit 0 | 5.71 s | 0.5 GB |
+| Default `bun test` | 1,558 pass, 45 skip, 0 fail; 106 files | 365.31 s | 1.5 GB |
+
+Both frozen kernel digests remain unchanged: v3 `746601727380a3fdff647f873c91c971`,
+v4 `8fce55b19462a1e02f03ca5336bd8c16`. The diagnostic script and complete differing entries
+were printed in temporary scratch and removed after verification; the requested external scratch
+path was sandbox-blocked, so the coordinator approved `.scratch-story-engine-fix/` in this worktree.
 
 ### Spec notes (S1 v0.6)
 
