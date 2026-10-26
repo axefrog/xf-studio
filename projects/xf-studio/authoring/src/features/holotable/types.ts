@@ -21,6 +21,8 @@ export interface HoloGap { readonly from: number; readonly to: number; readonly 
 export interface HoloSession {
   readonly meta: {
     readonly session: string; readonly run: number; readonly start: number; readonly end: number; readonly channels: readonly string[];
+    /** The sampled span (V's first and last samples): what replay covers. */
+    readonly from: number; readonly to: number;
     readonly complete: boolean; readonly dropped: number; readonly missedDeadlines: number; readonly largestGapS: number; readonly coverage: string;
   };
   readonly v: readonly HoloVSample[];

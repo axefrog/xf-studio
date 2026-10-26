@@ -42,6 +42,8 @@ export interface SessionMeta {
   schema: "xfh/session-1";
   session: string; run: number; worldGeneration: number; pluginVersion: string;
   start: number; end: number; channels: string[];
+  /** The sampled span: V's first and last samples. The recorder arms before its first sample, so replay covers this, not start–end. */
+  from: number; to: number;
   complete: boolean; dropped: number; missedDeadlines: number; largestGapS: number;
   /** What the recording cannot prove, from its own manifest. */
   coverage: string;

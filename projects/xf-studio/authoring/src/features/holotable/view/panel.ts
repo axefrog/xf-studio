@@ -10,7 +10,7 @@ import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
 import type { HolotableFacade } from "../facade";
-import { HOLO_LAYERS, type HoloLayer, type HoloState } from "../service";
+import type { HoloLayer, HoloState } from "../service";
 import { ORBITS, project, type Orbit, type Primitive, type Style } from "./projection";
 import { HOLOTABLE_PANEL_META } from "./contribution";
 
@@ -32,7 +32,7 @@ const heading = (yaw: number) => `${String(Math.round(((-yaw % 360) + 360) % 360
 export function holotablePanel(ctx: Ctx): PanelController {
   const facade = ctx.facade;
   let orbit: Orbit = { ...ORBITS.tilt };
-  let drawnKey = "", runsKey = "", inspectKey = "";
+  let drawnKey = "", runsKey = "", inspectKey = "", openedDir: string | undefined;
 
   // Recordings
   const runs = new RecordList({ label: "Recordings" });
@@ -50,11 +50,11 @@ export function holotablePanel(ctx: Ctx): PanelController {
     onSelect: value => { orbit = { ...ORBITS[value] }; drawnKey = ""; ctx.changed(); } });
   const play = button({ label: "Play", icon: "play", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.play", on: !facade.snapshot().playing }, { quiet: true }); } });
   const time = new SliderWithValue({ label: "Moment", min: 0, max: 1, step: 0.1, format: v => `${f1(v)} s`,
-    transaction: { edit: v => { const s = facade.snapshot().open?.session; if (s) void ctx.dispatch({ kind: "holo.seek", t: s.meta.start + v }, { quiet: true }); } } });
+    transaction: { edit: v => { const s = facade.snapshot().open?.session; if (s) void ctx.dispatch({ kind: "holo.seek", t: s.meta.from + v }, { quiet: true }); } } });
   const readout = h("p", { class: "note muted mono", role: "status" });
 
   // What to show
-  const toggles = HOLO_LAYERS.map(id => ({ id, toggle: new Toggle({ label: LAYER_LABELS[id], onChange: on => { void ctx.dispatch({ kind: "holo.layer", id, on }, { quiet: true }); } }) }));
+  const toggles = (Object.keys(LAYER_LABELS) as HoloLayer[]).map(id => ({ id, toggle: new Toggle({ label: LAYER_LABELS[id], onChange: on => { void ctx.dispatch({ kind: "holo.layer", id, on }, { quiet: true }); } }) }));
   const layers = new GroupSection({ title: "Show", key: "holotable:layers", expanded: true });
   layers.body.append(...toggles.map(t => t.toggle.element));
   const story = button({ label: "Show story content…", icon: "eye", small: true, variant: "quiet", onClick: event => {
@@ -158,7 +158,7 @@ export function holotablePanel(ctx: Ctx): PanelController {
       const e = s.events.find(x => x.id === state.selected);
       if (!e) return note("That mark isn't in this recording.");
       return propertyList([["What", e.summary], ...(e.detail ? [["Said", e.detail] as [string, string]] : []),
-        { term: "When", value: `${f1(e.t - m.start)} s`, mono: true },
+        { term: "When", value: `${f1(e.t - m.from)} s`, mono: true },
         ...(e.at ? [{ term: "Where", value: e.at.map(f1).join(", "), mono: true }] : []),
         { term: "Why", value: e.cite, mono: true }], { label: "Selected mark" });
     }
@@ -181,6 +181,9 @@ export function holotablePanel(ctx: Ctx): PanelController {
       const state = facade.snapshot();
       const rk = JSON.stringify([state.runs.map(r => r.dir), state.open?.dir]);
       if (rk !== runsKey) {
+        // A newly opened recording puts the view in front: the list folds away (one click opens it again).
+        if (state.open && state.open.dir !== openedDir) recordings.setOpen(false);
+        openedDir = state.open?.dir;
         runsKey = rk;
         runs.update(state.runs.map((r): RecordRow => ({
           id: r.dir, name: `Session ${r.session.slice(0, 8)} · run ${r.run}`, current: state.open?.dir === r.dir,
@@ -197,14 +200,14 @@ export function holotablePanel(ctx: Ctx): PanelController {
       const s = state.open?.session;
       applyCapability(play, facade.capability({ kind: "holo.play", on: true }));
       setButtonLabel(play, state.playing ? "Pause" : "Play");
-      time.update(s ? state.t - s.meta.start : 0, { min: 0, max: s ? Math.max(0.1, s.meta.end - s.meta.start) : 1, disabled: !s, reason: s ? undefined : "Open a recording first." });
+      time.update(s ? state.t - s.meta.from : 0, { min: 0, max: s ? Math.max(0.1, s.meta.to - s.meta.from) : 1, disabled: !s, reason: s ? undefined : "Open a recording first." });
       for (const { id, toggle } of toggles) toggle.update(state.layers[id], {});
       setButtonLabel(story, state.level === "full" ? "Hide story content" : "Show story content…");
       applyCapability(story, facade.capability({ kind: "holo.level", level: "full" }));
       setText(storyNote, state.level === "full" ? "Story shown" : "Story hidden");
       if (s) {
         const v = projectV(state);
-        setText(readout, `${f1(state.t - s.meta.start)} s of ${f1(s.meta.end - s.meta.start)} s${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}`);
+        setText(readout, `${f1(state.t - s.meta.from)} s of ${f1(s.meta.to - s.meta.from)} s${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}`);
         setText(limits, `This recording: ${s.meta.dropped} dropped, ${s.meta.missedDeadlines} missed, largest gap ${f1(s.meta.largestGapS)} s. Districts and cells come from offline game data, an estimate of the live world.`);
       } else { setText(readout, ""); setText(limits, ""); }
       const dk = JSON.stringify([state.revision, orbit, svg.clientWidth, svg.clientHeight]);

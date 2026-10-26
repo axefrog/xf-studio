@@ -11,7 +11,7 @@ if (cmd === "runs") {
 } else if (cmd === "report" && dir) {
   const at = rest.includes("--at") ? Number(rest[rest.indexOf("--at") + 1]) : undefined;
   const s = handlers["session.open"]({ dir, level: "structure" }, signal) as any;
-  const t = at === undefined ? s.meta.end : s.meta.start + at;
+  const t = at === undefined ? s.meta.to : s.meta.from + at;
   console.log(handlers["session.report"]({ dir, t, level: rest.includes("--full") ? "full" : "structure" }, signal));
 } else {
   console.error("Usage: bun tools/holo.ts runs | report <run folder> [--at <seconds>] [--full]");

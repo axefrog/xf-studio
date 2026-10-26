@@ -52,7 +52,7 @@ const SPEED = 4; // a quarter-hour session plays in under four minutes
 
 export function createHolotable(device: HoloDevice, signal: AbortSignal) {
   let state: HoloState = { phase: "idle", message: "", runs: [], open: null, t: 0, playing: false, level: "structure",
-    layers: { v: true, camera: true, events: true, gaps: true, areas: true, cells: true }, selected: null, revision: 0 };
+    layers: { v: true, camera: true, events: true, gaps: true, areas: true, cells: false }, selected: null, revision: 0 };
   const listeners = new Set<() => void>();
   const set = (patch: Partial<HoloState>) => { state = { ...state, ...patch, revision: state.revision + 1 }; for (const l of listeners) l(); };
   let loading: AbortController | null = null;
@@ -90,17 +90,17 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     try {
       const [session, world] = await Promise.all([call<HoloSession>("session.open", { dir, level }, cancel), call<HoloWorld>("world.around", { dir }, cancel)]);
       if (cancel.aborted) return;
-      const t = keepTime && state.open?.dir === dir ? state.t : session.meta.start;
+      const t = keepTime && state.open?.dir === dir ? state.t : session.meta.from;
       set({ open: { dir, session, world }, phase: "ready", message: "", t, level, selected: keepTime ? state.selected : null });
     } catch (e) { failed(e, cancel); }
   }
   function pause() { stopTimer?.(); stopTimer = null; if (state.playing) set({ playing: false }); }
   function play() {
     const s = state.open?.session; if (!s) return;
-    if (state.t >= s.meta.end) set({ t: s.meta.start });
+    if (state.t >= s.meta.to) set({ t: s.meta.from });
     set({ playing: true });
     stopTimer = every(STEP_MS, () => {
-      const end = state.open?.session.meta.end ?? 0, next = Math.min(end, state.t + SPEED * STEP_MS / 1000);
+      const end = state.open?.session.meta.to ?? 0, next = Math.min(end, state.t + SPEED * STEP_MS / 1000);
       set({ t: next });
       if (next >= end) pause();
     });
@@ -116,8 +116,8 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       case "holo.level": return state.open ? { available: true } : refusal("not_ready", "Open a recording first.");
     }
   }
-  async function dispatch(raw: { readonly kind: string }): Promise<HoloOutcome> {
-    const action = raw as HoloAction, cap = capability(action);
+  async function dispatch(action: HoloAction): Promise<HoloOutcome> {
+    const cap = capability(action);
     if (!cap.available) return { ok: false, code: cap.code ?? "unavailable", message: cap.reason ?? "" };
     switch (action.kind) {
       case "holo.refresh": await refresh(); break;
@@ -125,7 +125,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       case "holo.seek": {
         pause();
         const m = state.open!.session.meta;
-        set({ t: Math.max(m.start, Math.min(m.end, action.t)) });
+        set({ t: Math.max(m.from, Math.min(m.to, action.t)) });
         break;
       }
       case "holo.play": if (action.on) play(); else pause(); break;

@@ -5,7 +5,7 @@ import { ORBITS, project, trail } from "../src/features/holotable/view/projectio
 import type { HoloSession } from "../src/features/holotable/types";
 
 const session = (level: "structure" | "full"): HoloSession => ({
-  meta: { session: "s1", run: 1, start: 100, end: 110, channels: ["v"], complete: true, dropped: 0, missedDeadlines: 0, largestGapS: 0.1, coverage: "test" },
+  meta: { session: "s1", run: 1, start: 100, end: 110, from: 100, to: 110, channels: ["v"], complete: true, dropped: 0, missedDeadlines: 0, largestGapS: 0.1, coverage: "test" },
   v: Array.from({ length: 101 }, (_, i) => ({ t: 100 + i * 0.1, seq: i + 1, position: [i, 0, 10] as const, yaw: 0, speed: 1, health: 100, healthMax: 100, inCombat: false, vehicle: false, busy: "" })),
   camera: [{ t: 100, seq: 1, position: [0, -5, 12], forward: [0, 1, 0], up: [0, 0, 1], fov: 40, aspect: 1.8 }],
   events: [{ id: "e1", kind: "line", t: 101, seq: 9, summary: "Line spoken", ...(level === "full" ? { detail: "Someone: hello" } : {}), level: "full", cite: "recorder:s1:1:9" },

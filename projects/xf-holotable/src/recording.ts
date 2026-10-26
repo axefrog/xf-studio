@@ -42,7 +42,7 @@ export function readRun(dir: string, signal?: AbortSignal): Session {
     schema: "xfh/session-1", session: manifest.session, run: manifest.run, worldGeneration: manifest.world_generation,
     pluginVersion: manifest.plugin_version ?? "", start: manifest.start_s, end: manifest.end_s, channels: manifest.channels ?? [],
     complete: manifest.complete === true, dropped: manifest.dropped ?? 0, missedDeadlines: manifest.missed_deadlines ?? 0,
-    largestGapS: manifest.largest_gap_s ?? 0, coverage: manifest.coverage ?? "",
+    largestGapS: manifest.largest_gap_s ?? 0, coverage: manifest.coverage ?? "", from: manifest.start_s, to: manifest.end_s,
   };
   const session: Session = { meta, v: [], camera: [], events: [], gaps: [] };
   const cite = (seq: number): Cite => `recorder:${meta.session}:${meta.run}:${seq}`;
@@ -73,6 +73,7 @@ export function readRun(dir: string, signal?: AbortSignal): Session {
   }
   timeGaps(session);
   session.events.sort((a, b) => a.t - b.t || a.seq - b.seq);
+  if (session.v.length) { meta.from = session.v[0].t; meta.to = session.v[session.v.length - 1].t; }
   return session;
 }
 
