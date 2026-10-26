@@ -71,7 +71,7 @@ export class LookEditContexts {
   }
   private retire(key: string, entry: Entry) {
     const { app, writer, document } = entry.context;
-    app.settleEdits();
+    document.replacing();
     if (!writer.commit()) return;
     this.entries.delete(key);
     writer.dispose(); app.dispose(); document.dispose();
@@ -81,7 +81,7 @@ export class LookEditContexts {
     for (const entry of this.entries.values()) if (!entry.context.writer.commit()) ok = false;
     return ok;
   }
-  settleEdits() { for (const entry of this.entries.values()) entry.context.app.settleEdits(); }
+  settleEdits() { for (const entry of this.entries.values()) entry.context.document.replacing(); }
   held(): readonly { ref: LookRef; wants: number; dirty: boolean }[] {
     return [...this.entries.values()].map(({ context, wants }) => ({ ref: { ...context.ref }, wants, dirty: context.writer.dirty() }));
   }

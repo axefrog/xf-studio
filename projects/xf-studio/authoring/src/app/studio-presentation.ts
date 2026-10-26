@@ -388,6 +388,7 @@ type StatusSource = { snapshot(): PresentationStatus; subscribe(listener: () => 
 /** Method wrappers prevent a presentation consumer from receiving trusted service objects. */
 export function createStudioPresentation<Slot>(sources: {
   authoring: StudioApplication;
+  signal?: AbortSignal;
   library: CollectionViewPort;
   files: StudioFileOperations;
   viewport: ViewportAttachment<Slot>;
@@ -461,10 +462,10 @@ export function createStudioPresentation<Slot>(sources: {
   // The input layer (profiles design §3.6): what the shown tab's focused view resolves to, and the editing context, named in each action.
   const resolver = sources.targets;
   const named = (): NamedTargets => sources.naming?.() ?? resolver?.named() ?? {};
-  const name = <A extends { kind: string }>(action: A | Unnamed<A>): A => {
+  const name = <A extends { kind: string }>(action: A | Unnamed<A>, targets = named()): A => {
     const look = (action as { look?: import("../library/collection-documents").LookRef }).look;
     if (action.kind === "scene.setLook" && look && (action as { scene?: string }).scene === undefined && sources.lookSelection) return sources.lookSelection(look) as unknown as A;
-    return nameTargets(action as A, a.descriptor(action.kind), named());
+    return nameTargets(action as A, a.descriptor(action.kind), targets);
   };
   const editingScope = () => sources.naming ? named().scope : resolver?.editing();
   // A control run (a slider drag) captures what it acts on when it begins (§3.3): its edits name that, never what focus resolves to later,
@@ -484,21 +485,21 @@ export function createStudioPresentation<Slot>(sources: {
     fileKinds: () => a.fileKinds(), fileDescriptors: () => a.fileDescriptors(), registry: () => a.registry(),
     descriptorsFor: target => a.descriptorsFor(target),
     targetCapability: target => a.targetCapability(target),
-    contextCapability: (target, action) => a.contextCapability(target, name<StudioAction>(action)),
+    contextCapability: (target, action) => a.contextCapability(target, name<StudioAction>(action), action as StudioAction),
     choicesFor: (target, kind, field, base) => a.choicesFor(target, kind, field, base, named()),
     limitsFor: (target, kind, variant) => a.limitsFor(target, kind, variant),
     contextFor: hit => a.contextFor(hit, named()),
-    contextOptionsFor: context => a.contextOptionsFor(context),
-    contextQuery: hit => a.contextQuery(hit, named()),
-    boundActionCapability: (context, action) => a.boundActionCapability(context, action),
-    dispatchContext: (context, action) => a.dispatchContext(context, action),
+    contextOptionsFor: context => a.contextOptionsFor(context, name),
+    contextQuery: hit => a.contextQuery(hit, named(), name),
+    boundActionCapability: (context, action) => a.boundActionCapability(context, action, name),
+    dispatchContext: (context, action) => a.dispatchContext(context, action, name),
     capability: unnamed => { const action = name<StudioAction>(unnamed), result = a.capability(action), note = hint(action); return note ? { ...result, note } : result; },
-    actionsFor: target => a.actionsFor(target, named()),
+    actionsFor: target => a.actionsFor(target, named(), name),
     dispatch: action => a.dispatch(name<StudioAction>(action)),
     controlBegin: (id, layerId) => a.controlBegin(id, layerId, beginRun(id).look),
     controlEdit: (id, action) => runApp(id).controlEdit(id, nameRun<RecipeAction>(id, action) as Parameters<StudioApplication["controlEdit"]>[1]),
     controlCommit: id => { runApp(id).controlCommit(id); endRun(id); }, controlCancel: id => { runApp(id).controlCancel(id); endRun(id); },
-    requestCapability: request => a.requestCapability(request), execute: request => a.execute(request),
+    requestCapability: request => a.requestCapability(request), execute: request => l.execute(request),
     // A gesture captures the look the shown tab's focused view shows when it begins (profiles design §3.3).
     canBeginGesture: (source, layerId) => a.canBeginGesture(source, layerId, named().look),
     gestureCapability: (source, target) => a.gestureCapability(source, target),
@@ -673,11 +674,13 @@ export function createStudioPresentation<Slot>(sources: {
     notice: () => null, fullText: async () => null, expected: code => isExpectedFailure(code),
   };
   // The view settings a problem report names: what the 3D head and the preview were doing (DIAG-17).
-  d?.setViewState(() => {
+  const releaseViewState = d?.setViewState(() => {
     const preview = a.previewState(), head = v.snapshot().head;
     return { "3D head": head?.phase ?? "unknown", "preview quality": String(preview?.quality?.size ?? "unknown"),
       "lighting preset": preview?.preview?.lightingPreset ?? "unknown" };
   });
+  if (sources.signal?.aborted) releaseViewState?.();
+  else if (releaseViewState) sources.signal?.addEventListener("abort", releaseViewState, { once: true });
   const moduleServices = new Map((sources.modules ?? []).map(service => [service.module, service] as const));
   if (moduleServices.size !== (sources.modules ?? []).length) throw Error("A module's service is registered twice.");
   const openAbout = sources.about;

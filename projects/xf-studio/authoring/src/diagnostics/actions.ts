@@ -119,16 +119,19 @@ export class DiagnosticsActions {
   private noticeId = 0;
   private lastUncaught = 0;
   private recent = new Map<string, { at: number; ref: string | null }>();
-  private viewState: () => Record<string, string> = () => ({});
+  private readonly viewStates: { read(): Record<string, string> }[] = [];
   constructor(private readonly device: DiagnosticsDevice, private readonly now: () => number = Date.now,
     private readonly context: Readonly<Record<string, string>> = {}) {}
 
   /** Which view settings a report names (the presentation's choice, installed by the composition; DIAG-17). */
-  setViewState(read: () => Record<string, string>) { this.viewState = read; }
+  setViewState(read: () => Record<string, string>) {
+    const entry = { read }; this.viewStates.push(entry);
+    return () => { const at = this.viewStates.indexOf(entry); if (at >= 0) this.viewStates.splice(at, 1); };
+  }
   /** The window's facts for a report: the browser and graphics card, the host context and a few view settings. */
   pageFacts(): PageFacts {
     let state: Record<string, string> = {};
-    try { state = this.viewState(); } catch { /* Facts without view settings. */ }
+    try { state = this.viewStates.at(-1)?.read() ?? {}; } catch { /* Facts without view settings. */ }
     return { ...this.device.pageFacts(), state: { ...this.context, ...state } };
   }
 

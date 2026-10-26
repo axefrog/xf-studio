@@ -31,18 +31,20 @@ export type StarterActionsDeps = {
   readonly label: string;
   readonly thumbnail: StarterThumbnail;
   /** Resolve only within the named look; a changed or missing editor target is refused. */
-  layer(look: LookRef, id: string): Layer | undefined;
+  layer?(look: LookRef, id: string): Layer | undefined;
 };
 
 export class StarterActions {
   constructor(private readonly deps: StarterActionsDeps) {}
+  /** A requester supplies its own document resolver; the shared starter catalogue remains its single owner. */
+  bind(layer: NonNullable<StarterActionsDeps["layer"]>): StarterActions { return new StarterActions({ ...this.deps, layer }); }
 
   capability(action: StarterAction): Capability {
     const { starters } = this.deps;
     switch (action.kind) {
       case "starters.setDefault": return starters.defaultCapability(action.starter);
       case "starters.save": {
-        const layer = this.deps.layer(action.look, action.layerId);
+        const layer = this.deps.layer?.(action.look, action.layerId);
         return layer ? starters.capability({ kind: "create", name: action.name, shape: shapeOfLayer(layer) }) : refusal("missing_target", "That look or layer is no longer available. Open the layer and save it again.");
       }
       case "starters.rename": return starters.capability({ kind: "rename", id: action.starter, name: action.name });
@@ -54,7 +56,7 @@ export class StarterActions {
     const { starters } = this.deps, allowed = this.capability(action);
     if (!allowed.available) throw Error(allowed.reason ?? "That can't be done.");
     const done = action.kind === "starters.setDefault" ? starters.setDefault(action.starter)
-      : action.kind === "starters.save" ? starters.dispatch({ kind: "create", name: action.name, shape: shapeOfLayer(this.deps.layer(action.look, action.layerId)!) })
+      : action.kind === "starters.save" ? starters.dispatch({ kind: "create", name: action.name, shape: shapeOfLayer(this.deps.layer!(action.look, action.layerId)!) })
       : action.kind === "starters.rename" ? starters.dispatch({ kind: "rename", id: action.starter, name: action.name })
       : starters.dispatch({ kind: action.kind === "starters.delete" ? "delete" : "restore", id: action.starter });
     if (!done.ok) throw Error(done.reason);

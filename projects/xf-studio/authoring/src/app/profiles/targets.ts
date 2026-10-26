@@ -124,6 +124,12 @@ export class TargetResolver {
   }
   /** File requests at the root retain the explicitly drawn semantic chain, independently of focus. */
   captureView(view: ViewId | undefined, signal: AbortSignal): Capture { return this.captureTarget(this.viewTarget(view), signal); }
+  /** Retain the already resolved writer's chain; a second resolution could follow focus to another writer. */
+  captureNamed(named: NamedTargets, signal: AbortSignal, instance?: string): Capture {
+    const { view, scene, sceneGen, look, character } = named;
+    return this.captureTarget({ ...(view !== undefined ? { view } : {}), ...(scene !== undefined ? { scene, sceneGen } : {}),
+      ...(look ? { look } : {}), ...(character ? { subject: { kind: CHARACTER_KIND, id: character } } : {}) }, signal, instance);
+  }
   private captureTarget(target: Target, signal: AbortSignal, instance?: string): Capture {
     const id = ++this.next;
     let released = signal.aborted;

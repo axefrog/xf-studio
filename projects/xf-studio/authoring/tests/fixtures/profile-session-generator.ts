@@ -8,7 +8,9 @@ import { applyDrop, group, locate, allGroups, setCollapsed, setSizes, setWindowR
 import { VIEW_GRAPH_1, VIEW_SLOTS, SLOT_COLLECTIONS, type ViewGraphData, type ViewGraphRules, type ViewRecord, type ViewSlot } from "../../src/platform/api/view-graph";
 import { ViewGraph } from "../../src/platform/core/view-graph";
 import { PanelActions } from "../../src/app/profiles/panel-actions";
-import { EditContextModel, SessionModel, sessionAccount } from "./profile-session-model";
+import type { Recipe } from "../../src/engines/layered-makeup/recipe";
+import { livePart } from "../../src/app/workspace/collection-workspace";
+import { AsyncContextModel, EditContextModel, SessionModel, sessionAccount } from "./profile-session-model";
 import { seededRandom } from "./profile-sessions";
 
 const KINDS = ["add", "show", "park", "bind", "drag", "new", "reset", "close", "reopen", "duplicate", "undo", "redo", "start", "end", "point", "switch", "focus", "scene", "addView", "closeView", "link", "hide", "collapse", "resize", "split", "activate", "readonly", "withdraw"] as const;
@@ -281,6 +283,98 @@ export async function generateContextSeeds(first: number, last: number) {
     finally { await w.dispose(); }
   }
   return { seeds: last - first + 1, count, restarts };
+}
+
+/** Async operations retain the acceptance-time writer through picker/read/library waits, focus changes and drawn A/B/A changes. */
+export async function generateAsyncContextSeeds(first: number, last: number) {
+  const { profileContextStudio } = await import("./profile-context-studio");
+  const { recipeFile } = await import("../../src/legacy/eye-makeup/recipe-schema");
+  const defer = <T>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; };
+  const waitFor = async (ready: () => boolean) => {
+    const deadline = Date.now() + 4000;
+    while (!ready() && Date.now() < deadline) await Bun.sleep(1);
+    equal(ready(), true, "async boundary reached");
+  };
+  let operations = 0, switches = 0, restarts = 0;
+  for (let seed = first; seed <= last; seed++) {
+    let w = await profileContextStudio(), pending: Promise<unknown> | undefined, release = () => {};
+    const random = seededRandom(seed + 47000), views = w.session.session().views.views as readonly ViewRecord[];
+    const model = new AsyncContextModel(w.session.session().views.scenes);
+    const trace: unknown[] = [];
+    let panel = w.bind("presets--follow").context;
+    const account = () => w.session.session().views.scenes.map(scene => [scene.id, scene.look]).sort(([a], [b]) => String(a).localeCompare(String(b)));
+    const content = (look: { id: string; name: string; parts: Readonly<Record<string, unknown>> }) => {
+      const parsed = w.core.documents.parts.readPreset({ ...look, revision: 1 }, "xfs/collection-2", "keep");
+      return { name: look.name, parts: Object.fromEntries(w.core.documents.parts.features().map(feature => [feature, w.core.documents.parts.part(parsed, feature)])) };
+    };
+    try {
+      for (let round = 0; round < 6; round++) {
+        await w.settle();
+        const index = Math.floor(random() * 3), view = views[index]!, target = model.target(view.scene);
+        w.history.focus.focusView(view.id); w.draw(view.id);
+        const old = round % 2 ? panel.current() : w.port, kind = round % 3;
+        const oldLooks = w.services.collections.list().flatMap(collection => w.services.collections.looksOf(collection.id)).map(look =>
+          ({ ref: { collection: look.collection, look: look.id }, name: look.name, parts: structuredClone(look.parts), memory: structuredClone(look.memory) }));
+        const switchAway = () => { const other = views[(index + 1 + Math.floor(random() * 2)) % 3]!;
+          w.history.focus.focusView(other.id); w.draw(other.id); switches++; };
+        trace.push({ round, kind: ["collection.import", "saveCopy", "recipe.import"][kind], scene: view.scene, target });
+        if (kind === 1) {
+          const source = w.services.collections.looksOf(target.collection).map(look => structuredClone(content(look)));
+          const at = w.services.collections.collection(target.collection)!.looks.indexOf(target.look), list = w.collectionTransport.list;
+          const gate = defer<void>(); let waiting = false;
+          w.collectionTransport.list = async () => { waiting = true; await gate.promise; return list(); };
+          release = () => { w.collectionTransport.list = list; gate.resolve(); };
+          const saving = old.library.execute({ kind: "saveCopy" }); pending = saving;
+          await waitFor(() => waiting); switchAway(); equal(w.targets.held() > 0, true, "saveCopy retains its capture"); release();
+          const result = await saving;
+          if (!result.ok || result.result.kind !== "saved") throw Error(`saveCopy refused: ${JSON.stringify(result)}`);
+          const copy = result.result.collection.collection;
+          equal(copy.id === target.collection, false, "copy has its own identity");
+          equal(copy.presets.map(content), source, "copy uses captured source content");
+          model.complete(view.scene, { collection: copy.id, look: copy.presets[at]!.id });
+        } else {
+          const pick = defer<import("../../src/app/studio-file-operations").StudioPickedFile | undefined>(), text = defer<string>();
+          let reading = false;
+          const collection = crypto.randomUUID(), look = crypto.randomUUID(), name = `Async ${seed}-${round}`;
+          const recipe = structuredClone(old.feature("eye-makeup").view().recipe()) as Recipe; recipe.layers[0]!.opacity = (seed % 10 + 1) / 20;
+          const payload = kind === 0 ? { schema: "xfs/collection-2", id: collection, name, presets: [
+            { id: look, name, revision: 1, parts: w.services.collections.look(target)!.parts }] } : recipeFile(recipe);
+          const serialized = JSON.stringify(payload), file = { name: `${name}.json`, size: serialized.length,
+            text: async () => { reading = true; return text.promise; }, bytes: async () => new TextEncoder().encode(serialized) };
+          w.fileDevice.pick = () => pick.promise;
+          release = () => { pick.resolve(file); text.resolve(serialized); };
+          const importing = old.files.execute({ kind: kind === 0 ? "collection.import" : "recipe.import" }); pending = importing;
+          switchAway(); equal(w.targets.held() > 0, true, "picker retains its capture"); pick.resolve(file);
+          await waitFor(() => reading); switchAway(); text.resolve(serialized);
+          const result = await importing;
+          equal(result.ok, true, "async import accepted destination");
+          if (kind === 0) {
+            model.complete(view.scene, { collection, look });
+            equal(w.services.collections.collection(collection)!.name, name, "imported collection content");
+          } else {
+            // Fresh ID is the allocation witness; target collection and authored opacity come from the command account.
+            const added = w.services.collections.looksOf(target.collection).find(item => item.name === name);
+            if (!added) throw Error("Recipe never reached its captured collection.");
+            model.complete(view.scene, { collection: target.collection, look: added.id });
+            const content = w.core.documents.parts.readPreset({ id: added.id, name, revision: 1, parts: added.parts }, "xfs/collection-2", "keep");
+            equal(livePart(content, w.core.documents)!.layers[0]!.opacity, recipe.layers[0]!.opacity, "imported recipe content");
+          }
+        }
+        pending = undefined; release = () => {};
+        equal(account(), model.account(), "async completion changes only captured scene");
+        equal(w.targets.held(), 0, "completed operation releases capture");
+        for (const before of oldLooks) { const now = w.services.collections.look(before.ref)!;
+          equal({ name: now.name, parts: now.parts, memory: now.memory }, { name: before.name, parts: before.parts, memory: before.memory }, "existing looks unchanged by async create"); }
+        operations++;
+      }
+      await w.settle(); const saved = w.stored(), session = JSON.stringify(saved.session); await w.dispose();
+      w = await profileContextStudio({ restart: saved }); panel = w.bind("presets--follow").context;
+      equal(JSON.stringify(w.stored().session), session, "async persisted session round trip");
+      equal(account(), model.account(), "async destinations survive restart"); restarts++;
+    } catch (error) { throw Error(`P3-ii async seed ${seed}; ${JSON.stringify(trace)}\n${error instanceof Error ? error.message : String(error)}`); }
+    finally { release(); await pending?.catch(() => {}); await w.dispose(); w.library.close(); }
+  }
+  return { seeds: last - first + 1, operations, switches, restarts };
 }
 
 if (parentPort) {

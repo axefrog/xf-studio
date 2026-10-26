@@ -162,3 +162,14 @@ export class EditContextModel {
   restart() { this.undone.length = 0; this.displaced = undefined; }
   account() { return { opacity: this.opacity, selected: this.selected, depth: this.done.length, redoDepth: this.undone.length, trimmed: this.trimmed }; }
 }
+
+/** Async input oracle: a command's destination is its acceptance-time scene, independent of later focus/drawing. */
+export class AsyncContextModel {
+  private readonly looks = new Map<string, { collection: string; look: string }>();
+  constructor(scenes: readonly { id: string; look?: { collection: string; look: string } }[]) {
+    for (const scene of scenes) if (scene.look) this.looks.set(scene.id, { ...scene.look });
+  }
+  target(scene: string) { return { ...this.looks.get(scene)! }; }
+  complete(scene: string, ref: { collection: string; look: string }) { this.looks.set(scene, { ...ref }); }
+  account() { return [...this.looks].sort(([a], [b]) => a.localeCompare(b)); }
+}

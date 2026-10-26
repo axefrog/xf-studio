@@ -6,7 +6,7 @@ import type { CollectionServiceDeps } from "../library/collection-service";
 import type { SavedAppearanceState } from "../character/saved-appearance-actions";
 import type { SavedV } from "../saves/save-reader";
 import { readSavedV } from "../saves/save-reader";
-import { StudioFileOperations, type StudioFilePort } from "./studio-file-operations";
+import { StudioFileOperations, type StudioFilePort, type FileWriter, type InputCapture } from "./studio-file-operations";
 import { createStudioPresentation, type ProjectLinkPort, type StudioPresentationPort } from "./studio-presentation";
 import type { PresentationStatusSource } from "./presentation-status";
 import type { createTrustedAuthoringCore } from "./trusted-authoring-core";
@@ -29,7 +29,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   core: Core;
   naming?: () => NamedTargets;
   lookSelection?: (ref: import("../library/collection-documents").LookRef) => import("./studio-application").StudioAction;
-  fileCapture?: () => { check(): Capability; release(): void };
+  fileCapture?: () => InputCapture;
+  signal?: AbortSignal;
   bound?: Pick<ConstructorParameters<typeof PanelEditingContexts<Slot>>[0], "session" | "targets" | "looks" | "empty" | "character" | "context">;
   preferences: UIPreferenceActions;
   viewport: ViewportAttachment<Slot>;
@@ -90,9 +91,14 @@ export function createTrustedStudioBootstrap<Slot>(options: {
 }) {
   const { core } = options;
   if (options.emptyChoices) core.app.attach({ emptyChoices: options.emptyChoices });
-  let collection: CollectionApplication;
-  const files = new StudioFileOperations(options.fileDevice, {
-    capture: options.fileCapture,
+  const life = new AbortController();
+  const abort = () => life.abort();
+  options.signal?.addEventListener("abort", abort, { once: true });
+  if (options.signal?.aborted) life.abort();
+  let collection: CollectionApplication, editing: PanelEditingContexts<Slot> | undefined;
+  const writer: FileWriter = {
+    message: () => collection.service.view().progress?.message,
+    collection: () => collection.service.draftIdentity()?.collectionId,
     recipe: () => core.presentation.recipe(), selectedLayer: () => core.presentation.layer(),
     importRecipe: (recipe, name, into) => {
       collection.importRecipe(recipe, name, into);
@@ -123,11 +129,16 @@ export function createTrustedStudioBootstrap<Slot>(options: {
       if (setup.view.source === "backup") return "damaged";
       return setup.view.readiness.build.ready ? "ready" : buildToolsChecking(setup.view) ? "checking" : "needs-setup";
     }),
-  });
+  };
+  const files = new StudioFileOperations(options.fileDevice, { ...writer, capture: () => {
+    if (editing) return editing.captureView(options.naming?.().view, life.signal);
+    const held = options.fileCapture?.();
+    return held && { ...held, writer };
+  } });
   collection = new CollectionApplication({ ...options.collections, model: core.documents }, core.document, core.app, files);
-  const editing = options.bound ? new PanelEditingContexts<Slot>({ ...options.bound, create: input => {
+  editing = options.bound ? new PanelEditingContexts<Slot>({ ...options.bound, create: input => {
     const scoped = createTrustedStudioBootstrap<Slot>({ ...options, core: input.core, bound: undefined, naming: () => input.named,
-      lookSelection: input.choose,
+      lookSelection: input.choose, signal: input.signal,
       fileCapture: input.capture, panelInstance: () => input.instance, onRecipeImported: () => {},
       collections: { ...options.collections, current: input.check, preserveEmpty: true, scene: input.scene, flushLook: () => options.bound!.looks.commit() },
       savedAppearance: { has: () => !!input.core.app.characterSavedV(), read: () => input.core.app.characterSavedV(), ready: character => character === input.named.character && !!input.core.app.characterPanel(),
@@ -136,10 +147,10 @@ export function createTrustedStudioBootstrap<Slot>(options: {
           if (!done.ok) throw Error(done.message);
           return { savedV: value };
         } } });
-    return { port: scoped.mount(port => port), dispose: () => { scoped.files.dispose(); scoped.collection.dispose(); } };
+    return { port: scoped.mount(port => port), writer: scoped.writer, dispose: scoped.dispose };
   } }) : undefined;
   const port = createStudioPresentation({ authoring: core.app, library: collection,
-    naming: options.naming, lookSelection: options.lookSelection, editing,
+    naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal,
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
     localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts, modInstall: options.modInstall, previewSetup: options.previewSetup,
@@ -152,7 +163,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     ...(options.emptyChoices ? { emptyChoices: options.emptyChoices } : {}) });
   return {
     /** Trusted handles are retained by the composition root; never pass this object to a UI. */
-    files, collection,
+    files, collection, writer,
+    dispose() { options.signal?.removeEventListener("abort", abort); life.abort(); files.dispose(); collection.dispose(); },
     mount<T>(mountPresentation: (presentation: StudioPresentationPort<Slot>) => T): T {
       return mountPresentation(port);
     },

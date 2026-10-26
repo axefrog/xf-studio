@@ -326,9 +326,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The layout tabs' actions: the session's operations, and those naming a default (the modules' and the person's own).
   const layoutTabs = tabDefaults(sessionState, services, { keepsState: keepsStateInDefaults, known: layouts.known });
   core.app.attach({ scenes: sceneCommands(sessionState, services), tabs: layoutTabs });
-  const starterActions = new StarterActions({ starters: starterShapes, feature: region.id, label: region.label, thumbnail: region.thumbnail,
-    layer: (ref, id) => { const edited = lookEditor.ref();
-      return edited && sameLook(ref, edited) ? core.document.recipe.layers.find(layer => layer.id === id) : undefined; } });
+  const starterActions = new StarterActions({ starters: starterShapes, feature: region.id, label: region.label, thumbnail: region.thumbnail });
   core.app.attach({ starters: starterActions, starterShapes });
   const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, contexts: type => layouts.catalogue().context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
@@ -336,7 +334,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   core.app.attach({ targetCheck: targets, panels: panelCommands(sessionState, targets, layouts.catalogue) });
   const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
-  const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.named()), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
+  const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.namedView(drawnView())), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
   // The workspace's own editor fields, V and arrangement as the migration found them: stored back unchanged (an older build opens them).
   const frozenEditor = { recipe: workspace.recipe, active: workspace.active, selected: workspace.selected, fieldSelection: workspace.fieldSelection,
@@ -489,10 +487,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   bootstrap = createTrustedStudioBootstrap({
     core, preferences, localSetup, installDetection,
     naming: () => targets.namedView(drawnView()),
-    fileCapture: () => {
-      const life = new AbortController(), captured = targets.captureView(drawnView(), life.signal);
-      return { check: () => targets.current(captured), release: () => life.abort() };
-    },
+
     bound: { session: sessionState, targets, looks: profileAuthoring.contexts, empty: profileAuthoring.empty, context: type => STUDIO_CATALOGUE.context(type),
       character: id => services.characters.character(id) ? heads.context(id) : undefined },
     frameworkProducts: [{ feature: "expressions", name: "expression sets", requirements: EXPRESSION_FRAMEWORK_REQUIREMENTS }],

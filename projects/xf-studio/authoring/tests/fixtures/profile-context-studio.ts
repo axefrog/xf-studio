@@ -1,4 +1,9 @@
 /** Asset-free real composition for P3-ii: the production context owner, application registry, collection/file facades and resolver. */
+import { ShapeStarters } from "../../src/app/starters/shape-starters";
+import { StarterActions } from "../../src/app/starters/starter-actions";
+import { readStarterShape } from "../../src/engines/layered-makeup/starter-shape";
+import type { DiagnosticsActions } from "../../src/diagnostics/actions";
+import type { Recipe } from "../../src/engines/layered-makeup/recipe";
 import { createProfileAuthoring } from "../../src/app/profiles/profile-authoring";
 import { createProfileServices, createTargetResolver, sceneCommands } from "../../src/app/profiles/profile-window";
 import { sessionOfWorkspace } from "../../src/app/profiles/profiles-migration-data";
@@ -27,7 +32,7 @@ import { openTestLibrary, type TestLibrary } from "./library-file";
 import { libraryPort, libraryVersions, storedLook } from "./profile-studio";
 
 export type ContextRestart = { library: TestLibrary; session: ProfileSessionData; profile: string; looks: LookRef[]; vs: string[] };
-export async function profileContextStudio(options: { restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"] } = {}) {
+export async function profileContextStudio(options: { restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"]; diagnostics?: DiagnosticsActions; starters?: boolean; recipe?: () => Recipe } = {}) {
   const library = options.restart?.library ?? openTestLibrary(), transport = libraryPort(library), storage = memoryOutboxStorage();
   const outbox = new DocumentOutbox(transport, storage, { retryMs: 5 }); outbox.open();
   const history = createHistoryService(), workspace = freshWorkspace(), host = await fixtureHost();
@@ -41,7 +46,7 @@ export async function profileContextStudio(options: { restart?: ContextRestart; 
     if (!made.ok) throw Error(made.reason); profile = made.profile;
     looks = [];
     for (const n of [0, 1]) {
-      const collection = crypto.randomUUID(), inputs = Array.from({ length: n ? 1 : 2 }, (_, i) => storedLook({ name: `Look ${n}-${i}`, recipe: initialRecipe() }));
+      const collection = crypto.randomUUID(), inputs = Array.from({ length: n ? 1 : 2 }, (_, i) => storedLook({ name: `Look ${n}-${i}`, recipe: options.recipe?.() ?? initialRecipe() }));
       const answer = services.collections.dispatch({ kind: "collection.create", id: collection, name: `Collection ${n}`, looks: inputs });
       if (!answer.ok) throw Error(answer.reason);
       looks.push(...inputs.map(look => ({ collection, look: look.id })));
@@ -72,30 +77,43 @@ export async function profileContextStudio(options: { restart?: ContextRestart; 
     STUDIO_COMPOSITION, { owner: services.collections, sessions: services.looks, outbox, note: text => notes.push(text), report: error => failures.push(error), shown: () => { shows++; } });
   const core = authoring.core, targets = createTargetResolver({ state: session, history, services, contexts: type => STUDIO_CATALOGUE.context(type) });
   core.app.attach({ scenes: sceneCommands(session, services), panels: panelCommands(session, targets), targetCheck: targets });
-  const drawn = session.session().views.views[0]!.id, scene = session.graph.node(drawn, "scene").id;
+  let drawn = session.session().views.views[0]!.id;
+  const scene = session.graph.node(drawn, "scene").id, sceneOf = () => session.graph.node(drawn, "scene").id;
+  let starters: ShapeStarters | undefined;
+  if (options.starters) {
+    const region = STUDIO_COMPOSITION.region;
+    starters = new ShapeStarters({ documents: transport, outbox, feature: region.id, label: region.label, contributed: region.starters,
+      fallback: region.defaultStarter, read: value => readStarterShape(value, region.newLayer(), region.models), choice: { get: () => undefined, set: () => {} } });
+    await starters.load();
+    core.app.attach({ starters: new StarterActions({ starters, feature: region.id, label: region.label, thumbnail: region.thumbnail }), starterShapes: starters });
+  }
+  const collectionTransport: CollectionTransport = { list: async () => library.collections.list(), get: async id => library.collections.get(id),
+    package: options.package ?? (async () => { throw Error("Not used"); }) };
+  const fileDevice = { pick: options.pick ?? (async () => undefined), download: () => {}, bakeMask: async () => new Blob() };
   const viewport = new ViewportAttachment<string>({ moveHost: () => {}, measure: () => ({ width: 300, height: 600 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => false,
     hitAt: () => undefined, queryContext: hit => core.app.contextQuery(hit) });
-  const boot = createTrustedStudioBootstrap({ core, preferences: new UIPreferenceActions(workspace.uiPreferences), viewport,
+  const boot = createTrustedStudioBootstrap({ core, diagnostics: options.diagnostics, preferences: new UIPreferenceActions(workspace.uiPreferences), viewport,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 512, pending: 0, waiting: false, estimatedBytes: 0, layers: [] }), subscribe: () => () => {} },
-    fileDevice: { pick: options.pick ?? (async () => undefined), download: () => {}, bakeMask: async () => new Blob() },
-    collections: { owner: services.collections, scene: { look: () => session.scene(scene).look, setLook: ref => session.setLook(scene, ref), subscribe: listener => session.subscribe(listener) },
-      transport: { list: async () => library.collections.list(), get: async id => library.collections.get(id), package: options.package ?? (async () => { throw Error("Not used"); }) }, flushLook: () => authoring.contexts.commit() },
-    naming: () => ({ look: session.scene(scene).look, collection: session.scene(scene).look?.collection, scene, sceneGen: session.scene(scene).gen, view: drawn, scope: history.focus.editing() ?? undefined }),
+    fileDevice,
+    collections: { owner: services.collections, scene: { look: () => session.scene(sceneOf()).look, setLook: ref => session.setLook(sceneOf(), ref), subscribe: listener => session.subscribe(listener) },
+      transport: collectionTransport, flushLook: () => authoring.contexts.commit() },
+    naming: () => targets.namedView(drawn),
     targets, bound: { session, targets, looks: authoring.contexts, empty: authoring.empty, context: type => STUDIO_CATALOGUE.context(type), character: id => {
       if (!services.characters.character(id)) return undefined;
       const context = services.characters.context(id, { showSave: () => {} }); context.start(); return context;
     } },
     savedAppearance: { has: () => false, read: () => undefined, load: () => ({}), ready: () => false }, onRecipeImported: () => {} });
   authoring.drawn.show(session.scene(scene).look);
-  const off = session.subscribe(() => authoring.drawn.show(session.scene(scene).look));
+  const draw = (view: string) => { drawn = view; authoring.drawn.show(session.scene(sceneOf()).look); };
+  const off = session.subscribe(() => authoring.drawn.show(session.scene(sceneOf()).look));
   const port = boot.mount(port => port), lives: AbortController[] = [];
   const bind = (id: string) => { const life = new AbortController(); lives.push(life); return { life, context: port.editing!.acquire(id, life.signal)! }; };
   const settle = async () => { authoring.contexts.commit(); return outbox.settle(); };
   const stored = (): ContextRestart => ({ library, session: profileSessionOf(JSON.parse(JSON.stringify(session.session())))!, profile, looks, vs });
   let disposed = false;
-  const dispose = async () => { if (disposed) return; disposed = true; for (const life of lives) life.abort(); off(); await settle(); boot.files.dispose(); boot.collection.dispose(); authoring.drawn.dispose();
+  const dispose = async () => { if (disposed) return; disposed = true; for (const life of lives) life.abort(); off(); await settle(); boot.dispose(); authoring.drawn.dispose();
     for (const id of vs) await services.characters.release(id); outbox.stop(); };
-  return { library, transport, outbox, storage, services, history, session, authoring, core, port, targets, looks, vs, drawn, scene, bind, settle, stored, dispose,
+  return { library, transport, outbox, storage, services, history, session, authoring, core, port, targets, looks, vs, get drawn() { return drawn; }, draw, scene, bind, collectionTransport, fileDevice, starters, settle, stored, dispose,
     failures, notes, counters: () => ({ resets, shows }) };
 }

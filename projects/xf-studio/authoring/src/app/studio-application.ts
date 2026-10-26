@@ -23,7 +23,7 @@ import type { ViewAction, ViewActions } from "./view-actions";
 import type { SceneAction, SceneCommands } from "./profiles/scene-commands";
 import type { LayoutTabAction } from "./profiles/tab-defaults";
 import type { PanelAction } from "./profiles/panel-actions";
-import type { StarterAction } from "./starters/starter-actions";
+import type { StarterAction, StarterActions } from "./starters/starter-actions";
 import type { ShapeStarters } from "./starters/shape-starters";
 import type { EmptyChoiceRequest, EmptyChoicesPort } from "./profiles/empty-choices";
 import type { LookRef } from "../library/collection-documents";
@@ -146,7 +146,7 @@ export type StudioApplicationServices = { document: AuthoringDocument;
    * The live feature's starter shapes (`StarterActions` over `ShapeStarters`, profiles design §6): choosing the default, saving a layer's
    * shape, renaming and deleting the person's own.
    */
-  starters?: { capability(action: StarterAction): StudioCapability; dispatch(action: StarterAction): undefined };
+  starters?: Pick<StarterActions, "capability" | "dispatch"> & Partial<Pick<StarterActions, "bind">>;
   /** Resolves a starter ID (absent: the default) into its shape and name, so `layer.edit` add and reset start from it. Without it they use the region's default. */
   starterShapes?: Pick<ShapeStarters, "get" | "defaultId">;
   /**
@@ -188,6 +188,7 @@ export type StudioApplicationServices = { document: AuthoringDocument;
   access?: { refusal(): (StudioCapability & { available: false }) | undefined } };
 
 type Services = StudioApplicationServices;
+type CompleteInput = (action: StudioAction, named: NamedTargets) => StudioAction;
 /** All facades over one document share its in-progress edits, as well as its history and selection. */
 type EditingState = {
   gesture?: { source: GestureSource; scope: string; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
@@ -239,7 +240,7 @@ export class StudioApplication {
   /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
   constructor(services: Services, registry: Registry<AnyOwner>, edits?: EditingState) {
     this.edits = edits ?? { ended: new Set() };
-    this.services = services; this.routes = registry; this.handlers = this.bindHandlers();
+    this.services = services; this.services = this.bindServices(services); this.routes = registry; this.handlers = this.bindHandlers();
     // A gesture or control run belongs to the content it began on: it settles (commits) before the document shows other content, another
     // look's or the same look's replaced from elsewhere, and is over. A gesture ends with its session; a control run's later edits are
     // refused until the control begins again (`ended`).
@@ -266,10 +267,14 @@ export class StudioApplication {
   }
   attach(next: Partial<Omit<Services, "document" | "eyeMakeup" | "gestures" | "controls">>) {
     if (next.collection && next.collection !== this.services.collection) this.collectionRevision++;
-    this.services = { ...this.services, ...next }; this.subscribeSources(); this.notify();
+    this.services = this.bindServices({ ...this.services, ...next }); this.subscribeSources(); this.notify();
     for (const [fork, own] of this.forks) fork.attach(Object.fromEntries(Object.entries(next).filter(([key]) => !own.has(key as keyof Services))));
   }
   /** A bound application facade. Editing machinery stays owned once; only named destination/device services differ. */
+  private bindServices(services: Services): Services {
+    return { ...services, starters: services.starters?.bind?.((look, id) => lookScope(look) === services.document.scopeId
+      ? services.document.recipe.layers.find(layer => layer.id === id) : undefined) ?? services.starters };
+  }
   fork(overrides: Partial<Services>, editing?: StudioApplication): StudioApplication {
     const services = { ...this.services, ...overrides };
     const shared = editing?.edits ?? (services.document === this.services.document ? this.edits : undefined);
@@ -400,14 +405,14 @@ export class StudioApplication {
     return { available: true };
   }
   /** Validate a concrete target/payload pair before a menu, shortcut or form dispatches it. */
-  contextCapability(target: StudioTarget, action: StudioAction): StudioCapability {
-    const descriptor = this.routes.descriptor(action.kind);
+  contextCapability(target: StudioTarget, action: StudioAction, semantic: StudioAction = action): StudioCapability {
+    const descriptor = this.routes.descriptor(semantic.kind);
     if (!descriptor) return unknownCommand();
     if (!(descriptor.scope as readonly string[]).includes(target.kind))
       return { available: false, code: "invalid_value", reason: "This command does not apply to that target." };
     const exists = this.targetCapability(target);
     if (!exists.available) return exists;
-    const payload = action as unknown as Record<string, unknown>;
+    const payload = semantic as unknown as Record<string, unknown>;
     const command = payload.command && typeof payload.command === "object"
       ? payload.command as Record<string, unknown> : undefined;
     const flattened = { ...payload, ...command };
@@ -494,13 +499,14 @@ export class StudioApplication {
     return this.targetCapability(target);
   }
   /** Input candidates carry an applicable/disabled reason but no forged placeholder action. */
-  contextOptionsFor(context: StudioBoundContext) {
+  contextOptionsFor(context: StudioBoundContext, complete?: CompleteInput) {
     const bound = this.boundContextCapability(context), target = contextScope(context.hit), hit = context.hit;
     return contextCandidates(context.hit, this.services.document.recipe, context.named.collection).map(candidate => {
       if ("action" in candidate) {
         const action = this.withTargets(candidate.action as StudioAction, context.named);
         return { ...candidate, action, requiresInput: false as const,
-          capability: bound.available && target ? this.contextCapability(target, action) : bound, undo: this.routes.undoPolicy(action) };
+          capability: bound.available && target ? this.contextCapability(target, complete?.(action, context.named) ?? action, action) : bound,
+          undo: this.routes.undoPolicy(complete?.(action, context.named) ?? action) };
       }
       let capability = bound;
       if (capability.available && (hit.kind === "point" || hit.kind === "tangent")) {
@@ -514,13 +520,13 @@ export class StudioApplication {
       return { ...candidate, capability, undo: undoPolicyOf(this.routes.descriptor(candidate.actionKind)!, variant) };
     });
   }
-  contextQuery(hit: StudioContextHit, named: NamedTargets = {}) {
+  contextQuery(hit: StudioContextHit, named: NamedTargets = {}, complete?: CompleteInput) {
     const context = this.contextFor(hit, named);
     return { context, targetCapability: this.boundContextCapability(context),
-      options: this.contextOptionsFor(context) };
+      options: this.contextOptionsFor(context, complete) };
   }
   /** Query a completed input action, then recheck the same binding at invocation (it names what the menu named when it opened). */
-  boundActionCapability(context: StudioBoundContext, unnamed: Unnamed<StudioAction>): StudioCapability {
+  boundActionCapability(context: StudioBoundContext, unnamed: Unnamed<StudioAction>, complete?: CompleteInput): StudioCapability {
     const action = this.withTargets(unnamed as StudioAction, context.named);
     const bound = this.boundContextCapability(context);
     if (!bound.available) return bound;
@@ -536,12 +542,12 @@ export class StudioApplication {
         item.actionKind === action.kind && item.variant === variant);
     if (!candidate) return { available: false, code: "invalid_value",
       reason: "This command is not offered for that hit target." };
-    return this.contextCapability(target, action);
+    return this.contextCapability(target, complete?.(action, context.named) ?? action, action);
   }
-  dispatchContext(context: StudioBoundContext, unnamed: Unnamed<StudioAction>): StudioDispatchResult {
+  dispatchContext(context: StudioBoundContext, unnamed: Unnamed<StudioAction>, complete?: CompleteInput): StudioDispatchResult {
     const action = this.withTargets(unnamed as StudioAction, context.named);
-    const allowed = this.boundActionCapability(context, action);
-    return allowed.available ? this.dispatch(action) : { ok: false as const,
+    const allowed = this.boundActionCapability(context, action, complete);
+    return allowed.available ? this.dispatch(complete?.(action, context.named) ?? action) : { ok: false as const,
       code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
   }
   snapshot() {
@@ -764,6 +770,9 @@ export class StudioApplication {
     if (!route.ok) return unknownCommand();
     const denied = this.denied(action.kind === "tabs.show");
     if (denied) return denied;
+    const adjusting = this.edits.controlOwner ?? this.edits.featureOwner ?? this.edits.gestureOwner;
+    if (route.owner.owner === "feature" && route.spec.descriptor.effect === "content" && adjusting && adjusting !== this)
+      return { available: false, code: "busy", reason: "Another requester owns this adjustment." };
     // With a loaded collection but no selected preset the editor shows an empty recipe no
     // preset owns; content written there would be discarded at the next preset switch.
     if (route.spec.descriptor.effect === "content" && this.unowned())
@@ -1052,7 +1061,7 @@ export class StudioApplication {
     return route.ok && route.owner.id === family;
   }
   /** Candidate actions use the hit target, never the currently selected row; `named`: the targets the input layer resolved. */
-  actionsFor(target: StudioTarget, named?: NamedTargets): StudioActionInfo[] {
+  actionsFor(target: StudioTarget, named?: NamedTargets, complete?: CompleteInput): StudioActionInfo[] {
     const s = this.services, recipe = s.document.snapshot().recipe;
     let actions: Unnamed<StudioAction>[] = [];
     if (target.kind === "workspace") actions = [{ kind: "history.undo" }];
@@ -1081,7 +1090,8 @@ export class StudioApplication {
       actions = [{ kind: "camera.front", ...view }, { kind: "camera.body", ...view }, { kind: "quality.rebuild" }];
     }
     return actions.map(unnamed => {
-      const action = this.withTargets(unnamed as StudioAction, named);
+      const semantic = this.withTargets(unnamed as StudioAction, named);
+      const action = complete?.(semantic, named ?? {}) ?? semantic;
       return { action, capability: this.capability(action), undo: this.routes.undoPolicy(action), async: false as const };
     });
   }
@@ -1100,6 +1110,7 @@ export class StudioApplication {
    */
   controlBegin(id: string, layerId: string, look?: LookRef) {
     if (!look || !this.editsLook(look)) return false;
+    if (this.services.controls.snapshot() && this.edits.controlOwner !== this) return false;
     if (this.denied() || this.gesture || this.look || this.featureControl || this.unowned() || this.services.document.locked) return false;
     const begun = this.services.controls.begin(id, layerId);
     if (begun) { this.edits.controlOwner = this; this.ended.delete(`control:${id}`); this.notify(); }
@@ -1113,6 +1124,8 @@ export class StudioApplication {
    * cancels that transaction as usual.
    */
   controlEdit(id: string, action: Naming<RecipeAction, { look: LookRef }>): StudioDispatchResult {
+    if (this.services.controls.snapshot() && this.edits.controlOwner !== this)
+      return { ok: false, code: "busy", message: "Another requester owns this adjustment." };
     if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
     if (this.ended.has(`control:${id}`)) return { ok: false, code: "missing_target", message: RUN_ENDED };
     // Form controls adjust recipe content through AuthoringControlEdits, which takes recipe actions only.
@@ -1129,18 +1142,18 @@ export class StudioApplication {
       return { ok: true, result: outcome === "changed" };
     } catch (error) { return { ok: false, ...failure(undefined, error) }; }
   }
-  controlCommit(id: string) { if (this.services.controls.snapshot()?.id === id) this.edits.controlOwner = undefined; this.services.controls.commit(id); this.notify(); }
+  controlCommit(id: string) { if (this.edits.controlOwner !== this) return; if (this.services.controls.snapshot()?.id === id) this.edits.controlOwner = undefined; this.services.controls.commit(id); this.notify(); }
   /**
-   * Ends any open pointer gesture or form-control run, committing it as releasing the pointer or finishing the drag would: one Undo
-   * step each, as usual. The workspace lease's release runs it first, so the page's last write holds the edit whole (profiles §2.3).
+   * Ends this requester's pointer gesture or form-control run. Peers sharing the document retain their own adjustments.
+   * Document replacement/final release asks each requester to settle through the document's replacing notification.
    */
   settleEdits() {
-    if (this.gesture) this.endGesture(this.gesture.source);
+    if (this.gesture && this.edits.gestureOwner === this) this.endGesture(this.gesture.source);
     const control = this.services.controls.snapshot();
-    if (control) this.controlCommit(control.id);
-    if (this.featureControl) this.featureControlCommit(this.featureControl.id);
+    if (control && this.edits.controlOwner === this) this.controlCommit(control.id);
+    if (this.featureControl && this.edits.featureOwner === this) this.featureControlCommit(this.featureControl.id);
   }
-  controlCancel(id: string) { if (this.services.controls.snapshot()?.id === id) this.edits.controlOwner = undefined; this.services.controls.cancel(id); this.notify(); }
+  controlCancel(id: string) { if (this.edits.controlOwner !== this) return; if (this.services.controls.snapshot()?.id === id) this.edits.controlOwner = undefined; this.services.controls.cancel(id); this.notify(); }
   /**
    * A form control's run of edits on a feature bound by the generic handler (a slider drag), as one Undo step (feature-module platform
    * section 3): the platform's `HistoryTransaction` with the form-control policy over that feature's part. Refused inside a gesture,
@@ -1150,6 +1163,7 @@ export class StudioApplication {
   featureControlBegin(feature: string, id: string, look?: LookRef): boolean {
     if (!look || !this.editsLook(look)) return false;
     const open = this.featureControl;
+    if (open && this.edits.featureOwner !== this) return false;
     if (open?.feature === feature && open.id === id) return true;
     if (open) this.featureControlCommit(open.id);
     if (this.denied() || this.gesture || this.look || this.services.controls.snapshot() || this.unowned() || this.services.document.locked
@@ -1161,6 +1175,8 @@ export class StudioApplication {
     return true;
   }
   featureControlEdit(feature: string, id: string, action: { kind: string }): StudioDispatchResult {
+    if (this.featureControl && this.edits.featureOwner !== this)
+      return { ok: false, code: "busy", message: "Another requester owns this adjustment." };
     if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
     if (this.ended.has(`feature:${id}`)) return { ok: false, code: "missing_target", message: RUN_ENDED };
     if (this.ownerOf(action.kind) !== feature) return { ok: false, code: "invalid_value", message: "That command belongs to another part of the look." };
@@ -1187,13 +1203,13 @@ export class StudioApplication {
     }
   }
   featureControlCommit(id: string) {
-    if (this.featureControl?.id !== id) return;
+    if (this.edits.featureOwner !== this || this.featureControl?.id !== id) return;
     const control = this.featureControl; this.featureControl = undefined;
     this.edits.featureOwner = undefined;
     control.transaction.commit(); this.notify();
   }
   featureControlCancel(id: string) {
-    if (this.featureControl?.id !== id) return;
+    if (this.edits.featureOwner !== this || this.featureControl?.id !== id) return;
     const control = this.featureControl; this.featureControl = undefined;
     this.edits.featureOwner = undefined;
     control.transaction.cancel(); this.notify();
@@ -1280,10 +1296,13 @@ export class StudioApplication {
     if (fromView3d(source) && this.previewUnavailable)
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
     if (this.gesture || this.look) return { available: false, code: "busy", reason: "Another gesture is active." };
+    if (this.services.controls.snapshot() && this.edits.controlOwner !== this || this.featureControl && this.edits.featureOwner !== this)
+      return { available: false, code: "busy", reason: "Another requester owns this adjustment." };
     return this.targetCapability({ kind: "layer", id: layerId });
   }
   gestureCapability(source: GestureOrigin, target: { kind: "shape" | "path" } |
     { kind: "point"; index: number } | { kind: "field"; fieldId: string }): StudioCapability {
+    if (this.edits.gestureOwner && this.edits.gestureOwner !== this) return missingTarget("Another requester owns this gesture.");
     const session = this.gesture;
     if (!session || session.source.view !== gestureSource(source).view) return { available: false, code: "not_ready",
       reason: "Begin a gesture on the target layer first." };
@@ -1305,7 +1324,8 @@ export class StudioApplication {
     if (!layer) return false;
     // Finish an open form transaction first, so its later Escape cannot revert this gesture.
     const control = this.services.controls.snapshot();
-    if (control) this.services.controls.commit(control.id);
+    if (control) this.controlCommit(control.id);
+    if (this.featureControl) this.featureControlCommit(this.featureControl.id);
     if (!this.services.gestures.begin(source, layer)) return false;
     this.gesture = { source: gestureSource(source), scope: this.services.document.scopeId, layer, points: [...layer.points],
       fields: new Map(layer.fields.map(field => [field.id, field])) }; this.edits.gestureOwner = this; this.notify(); return true;
@@ -1328,6 +1348,7 @@ export class StudioApplication {
     return this.services.gestures.apply(source, action);
   }
   endGesture(source: GestureOrigin, cancel = false) {
+    if (this.edits.gestureOwner !== this) return;
     if (this.gesture?.source.view !== gestureSource(source).view) return;
     if (cancel) this.services.gestures.cancel(source); else this.services.gestures.commit(source);
     this.gesture = undefined; this.edits.gestureOwner = undefined; this.notify();

@@ -59,9 +59,14 @@ export type StudioFileState = { workspaceFile?: boolean; busy?: StudioFileAction
   progress?: CollectionProgress;
   activity: StudioActivity[];
   recovery: { available: boolean; reason?: string } };
+export type InputCapture = { check(): Capability; release(): void };
+export type FileWriterCapture = InputCapture & { writer: FileWriter };
+export type FileWriter = Omit<FileSources, "capture">;
 type FileSources = {
   /** Freeze the destination/revisions when a workflow starts; validate again after every asynchronous return. */
-  capture?(): { check(): Capability; release(): void };
+  capture?(): FileWriterCapture | undefined;
+  message?(): string | undefined;
+  collection?(): string | undefined;
   recipe(): ReadonlyDeep<Recipe>;
   selectedLayer(): ReadonlyDeep<Layer> | undefined;
   /** Import a recipe as a new preset of `collection` (the one the request named when it was asked). */
@@ -204,10 +209,11 @@ export class StudioFileOperations {
         : { ok: false, code: "unavailable", message: answer.reason! };
     }
     const captured = this.sources.capture?.();
+    const sources = captured?.writer ?? this.sources;
     const check = () => {
       const allowed = this.disposed ? refusal("missing_target", "This file destination was released.") : captured?.check();
       if (allowed && !allowed.available) throw new FileOperationError(allowed.code ?? "missing_target", allowed.reason ?? "This file destination changed.");
-      if (captured && action.kind === "recipe.import" && this.collection?.draftIdentity()?.collectionId !== action.collection)
+      if (captured && action.kind === "recipe.import" && (sources.collection ? sources.collection() : this.collection?.draftIdentity()?.collectionId) !== action.collection)
         throw new FileOperationError("missing_target", "The collection this file was going to is no longer available.");
     };
     if (action.kind === "package.check" || action.kind === "package.build") this.clearPackageOutcome();
@@ -229,16 +235,16 @@ export class StudioFileOperations {
           const recipe = readPortableRecipe(JSON.parse(await file.text()));
           check();
           if (!recipe) throw Error(RECIPE_FILE_MESSAGE);
-          this.sources.importRecipe(recipe, file.name.replace(/\.json$/i, ""), action.collection);
+          sources.importRecipe(recipe, file.name.replace(/\.json$/i, ""), action.collection);
           outcome = { ok: true, code: "imported", message: `Opened ${file.name}` }; break;
         }
         case "recipe.export":
           // The oldest recipe schema that holds it, so older builds open it too.
-          this.port.download(new Blob([JSON.stringify(portableRecipe(this.sources.recipe() as Recipe), null, 2)],
+          this.port.download(new Blob([JSON.stringify(portableRecipe(sources.recipe() as Recipe), null, 2)],
             { type: "application/json" }), "xfs.recipe.json");
           outcome = { ok: true, code: "exported", message: "Recipe exported — editable shapes, colours and fields." }; break;
         case "mask.export": {
-          const layer = structuredClone(this.sources.selectedLayer()!) as Layer;
+          const layer = structuredClone(sources.selectedLayer()!) as Layer;
           const blob = await this.port.bakeMask(layer);
           check();
           this.port.download(blob, `xfs-${layer.id}-alpha.png`);
@@ -250,12 +256,12 @@ export class StudioFileOperations {
           if (!file) return this.finish(owner, action.kind, { ok: false, code: "cancelled", message: "Saved V selection cancelled." });
           if (file.size > 128 * 1024 * 1024) throw new FileOperationError("too_large", "Save is larger than the supported limit.");
           const bytes = await file.bytes(); check();
-          const savedAppearance = this.sources.loadSavedV(bytes, action.character);
+          const savedAppearance = sources.loadSavedV(bytes, action.character);
           outcome = { ok: true, code: "loaded", message: "Your V is loaded. Skin, face details, eyes, brows, lashes, hair, piercings and body follow in a moment.",
             savedAppearance }; break;
         }
         case "savedV.export":
-          this.port.download(new Blob([JSON.stringify(this.sources.savedV(), null, 2)],
+          this.port.download(new Blob([JSON.stringify(sources.savedV(), null, 2)],
             { type: "application/json" }), "v-appearance.json");
           outcome = { ok: true, code: "exported", message: "Saved appearance exported." }; break;
         case "characterPreset.import": {
@@ -265,11 +271,11 @@ export class StudioFileOperations {
           if (file.size > CC_PRESET_LIMITS.bytes) throw new FileOperationError("too_large", "This character preset can't be read: the file is larger than 1 MB.");
           // The JSON is read once here and the preset once by the context (CORE-55).
           const bytes = await file.bytes(); check();
-          this.sources.characterPreset!.load(readPresetJson(bytes), action.character);
+          sources.characterPreset!.load(readPresetJson(bytes), action.character);
           outcome = { ok: true, code: "loaded", message: `Loaded ${file.name}. Your V's skin, face details, eyes, brows, lashes, hair, piercings and body follow in a moment.` }; break;
         }
         case "characterPreset.export": {
-          const saved = await this.sources.characterPreset!.save();
+          const saved = await sources.characterPreset!.save();
           check();
           this.port.download(new Blob([saved.text], { type: "application/json" }), saved.name);
           const notes = [saved.leftOut ? `${saved.leftOut} choice${saved.leftOut === 1 ? "" : "s"} couldn't be written and ${saved.leftOut === 1 ? "was" : "were"} left out.` : "",
@@ -282,7 +288,7 @@ export class StudioFileOperations {
           outcome = { ok: true, code: "exported", message: copy.message }; break;
         }
         case "collection.recover":
-          this.sources.recoverCollection(action.draft);
+          sources.recoverCollection(action.draft);
           outcome = { ok: true, code: "recovered", message: action.draft !== undefined
             ? "Reopened that draft. The one you had open is first under Recent drafts." : "Reopened the previous collection." }; break;
         default: {
@@ -295,7 +301,7 @@ export class StudioFileOperations {
             request = { kind: "import", text: file.size > 16_000_000 ? "" : await file.text(), bytes: file.size };
             check();
           } else request = collectionRequest(action.kind);
-          const result = await this.sources.executeCollection(request);
+          const result = await sources.executeCollection(request);
           // Import publishes its new binding in the same accepted command. That intentional transition is its successful result.
           if (action.kind !== "collection.import") check();
           if (!result.ok) { outcome = result; break; }
@@ -304,7 +310,7 @@ export class StudioFileOperations {
           if (result.result.kind === "packageCheck" || result.result.kind === "packageBuild")
             this.package = structuredClone(result.result);
           outcome = { ok: true, code: result.result.kind,
-            message: this.collection?.view().progress?.message ?? "Collection operation completed.", result: result.result };
+            message: sources.message?.() ?? this.collection?.view().progress?.message ?? "Collection operation completed.", result: result.result };
         }
       }
       return this.finish(owner, action.kind, outcome);
@@ -319,19 +325,25 @@ export class StudioFileOperations {
   }
   /** Existing save/open/refresh requests share the same result/download state port. */
   async executeCollection(request: CollectionRequest): Promise<CollectionOutcome> {
-    if (request.kind === "package") { this.clearPackageOutcome(); this.notify(); }
-    const result = await this.sources.executeCollection(request);
-    if (result.ok && result.result.kind === "export")
-      this.port.download(new Blob([result.result.json], { type: "application/json" }), result.result.name);
-    if (result.ok && (result.result.kind === "packageCheck" || result.result.kind === "packageBuild"))
-      this.package = structuredClone(result.result);
-    this.last = { kind: request.kind === "package" ? request.action === "check" ? "package.check" : "package.build" :
-      request.kind === "exportCollection" ? "collection.export" : request.kind === "exportPlan" ? "collection.plan" :
-      request.kind === "import" ? "collection.import" : request.kind,
-      ok: result.ok, code: result.ok ? result.result.kind : result.code,
-      message: result.ok ? this.collection?.view().progress?.message ?? "Collection operation completed." : result.message, at: Date.now() };
-    this.notify();
-    return result;
+    const captured = this.sources.capture?.(), sources = captured?.writer ?? this.sources;
+    const current = () => this.disposed ? refusal("missing_target", "This file destination was released.") : captured?.check();
+    try {
+      const allowed = current();
+      if (allowed && !allowed.available) return { ok: false, code: allowed.code ?? "missing_target", message: allowed.reason ?? "This collection destination changed." };
+      if (request.kind === "package") { this.clearPackageOutcome(); this.notify(); }
+      const result = await sources.executeCollection(request);
+      if (result.ok && result.result.kind === "export")
+        this.port.download(new Blob([result.result.json], { type: "application/json" }), result.result.name);
+      if (result.ok && (result.result.kind === "packageCheck" || result.result.kind === "packageBuild"))
+        this.package = structuredClone(result.result);
+      this.last = { kind: request.kind === "package" ? request.action === "check" ? "package.check" : "package.build" :
+        request.kind === "exportCollection" ? "collection.export" : request.kind === "exportPlan" ? "collection.plan" :
+        request.kind === "import" ? "collection.import" : request.kind,
+        ok: result.ok, code: result.ok ? result.result.kind : result.code,
+        message: result.ok ? sources.message?.() ?? this.collection?.view().progress?.message ?? "Collection operation completed." : result.message, at: Date.now() };
+      this.notify();
+      return result;
+    } finally { captured?.release(); }
   }
   private clearPackageOutcome(): void {
     this.package = undefined;
