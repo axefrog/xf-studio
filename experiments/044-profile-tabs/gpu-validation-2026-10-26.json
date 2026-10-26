@@ -1,0 +1,1586 @@
+{
+  "date": "2026-10-26",
+  "evidence": "offline; synthetic WebGL probes plus real-data G4 browser measurements, never the game",
+  "method": {
+    "order": [
+      "suite",
+      "branch-1",
+      "main-1",
+      "main-2",
+      "branch-2",
+      "branch-3",
+      "main-3",
+      "main-4",
+      "branch-4",
+      "branch-5",
+      "main-5"
+    ],
+    "freshChromeProfiles": "One per parallel/fallback probe; two fresh Chrome processes per test-file run",
+    "testCommand": "bun test --timeout 20000 tests/webgl-scene-runtimes.test.ts",
+    "guardGB": 4,
+    "chromeNoSandbox": true,
+    "concurrentActivity": "Maintainer reported a full test suite on another branch; our heavy jobs ran serially. Game closed.",
+    "runtimeTestAndProbeIdentical": true,
+    "chromeVersion": "156.0.8078.48",
+    "bunVersion": "1.4.4 (38afee6c8)",
+    "earlierSection16TimingsChromeVersion": "155"
+  },
+  "versions": {
+    "branch": {
+      "commit": "15427a40ec41ec6d3755f6c48d8ac17f939cf101",
+      "testSha256": "17c2e371e7e4a5ce48bd6b23b0e807c312e5a9f39694bfea78b24e975c96a5cd",
+      "probeSha256": "f9a725fd9de8858c164b863c7ceea1e737dfdf0e0a4f541238e6d1f49b03a8ab",
+      "launcherSha256": "1db7d88e692820cf390129253a2abd90474f81c6e557d1b771ff70af18a5d71b",
+      "three": "0.186.0"
+    },
+    "main": {
+      "commit": "7d5a8b72a75af5975c592508ae7d513edbd433c4",
+      "testSha256": "17c2e371e7e4a5ce48bd6b23b0e807c312e5a9f39694bfea78b24e975c96a5cd",
+      "probeSha256": "f9a725fd9de8858c164b863c7ceea1e737dfdf0e0a4f541238e6d1f49b03a8ab",
+      "launcherSha256": "441709de2cdf222e4532a0863501ef78582e043b168f2793e98a32531cc9d43f",
+      "three": "0.186.0"
+    }
+  },
+  "runs": [
+    {
+      "label": "suite",
+      "startedUtc": "2026-10-25T23:45:20.227594+00:00",
+      "exit": 1,
+      "attempts": 1,
+      "peakGB": 1.8,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "failedGateRows": [
+        "no first-draw stall"
+      ],
+      "modes": {
+        "parallel": {
+          "coldGapMs": 1566.7,
+          "coldWarmupGapMs": 1566.7,
+          "setupGapMs": 66.7,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 30.4,
+          "longestColdPageTaskMs": 0,
+          "coldPageTasks50": 0,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        },
+        "fallback": {
+          "coldGapMs": 38602.5,
+          "coldWarmupGapMs": 33.3,
+          "setupGapMs": 3683.5,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 30.8,
+          "longestColdPageTaskMs": 38627,
+          "coldPageTasks50": 2,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        }
+      },
+      "failedAssertions": [
+        "scene runtimes: the S2 gate table, and preparing before showing > the S2 gate table: every row passes (the rows' detail is in the tests below)",
+        "scene runtimes: the S2 gate table, and preparing before showing > no presentation gap over 100 ms while a cold V or a setup never drawn is prepared: no program builds a shader at its first draw (4a-v-c)"
+      ]
+    },
+    {
+      "label": "branch-1",
+      "startedUtc": "2026-10-25T23:51:54.396570+00:00",
+      "exit": 1,
+      "attempts": 1,
+      "peakGB": 1.6,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "failedGateRows": [
+        "no first-draw stall"
+      ],
+      "modes": {
+        "parallel": {
+          "coldGapMs": 1200.1,
+          "coldWarmupGapMs": 1200.1,
+          "setupGapMs": 17.1,
+          "setupWarmupGapMs": 16.7,
+          "showToPresentedMs": 30.5,
+          "longestColdPageTaskMs": 0,
+          "coldPageTasks50": 0,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        },
+        "fallback": {
+          "coldGapMs": 27585,
+          "coldWarmupGapMs": 883.3,
+          "setupGapMs": 3550.2,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 31,
+          "longestColdPageTaskMs": 27601,
+          "coldPageTasks50": 4,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        }
+      },
+      "failedAssertions": [
+        "scene runtimes: the S2 gate table, and preparing before showing > the S2 gate table: every row passes (the rows' detail is in the tests below)",
+        "scene runtimes: the S2 gate table, and preparing before showing > no presentation gap over 100 ms while a cold V or a setup never drawn is prepared: no program builds a shader at its first draw (4a-v-c)"
+      ]
+    },
+    {
+      "label": "main-1",
+      "startedUtc": "2026-10-25T23:57:13.528393+00:00",
+      "exit": 1,
+      "attempts": 1,
+      "peakGB": 1.5,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "failedGateRows": [
+        "no first-draw stall"
+      ],
+      "modes": {
+        "parallel": {
+          "coldGapMs": 666.7,
+          "coldWarmupGapMs": 666.7,
+          "setupGapMs": 17,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 31.1,
+          "longestColdPageTaskMs": 0,
+          "coldPageTasks50": 0,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        },
+        "fallback": {
+          "coldGapMs": 27968.4,
+          "coldWarmupGapMs": 1600.1,
+          "setupGapMs": 4783.8,
+          "setupWarmupGapMs": 16.7,
+          "showToPresentedMs": 30.9,
+          "longestColdPageTaskMs": 27982,
+          "coldPageTasks50": 4,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        }
+      },
+      "failedAssertions": [
+        "scene runtimes: the S2 gate table, and preparing before showing > the S2 gate table: every row passes (the rows' detail is in the tests below)",
+        "scene runtimes: the S2 gate table, and preparing before showing > no presentation gap over 100 ms while a cold V or a setup never drawn is prepared: no program builds a shader at its first draw (4a-v-c)"
+      ]
+    },
+    {
+      "label": "main-2",
+      "startedUtc": "2026-10-26T00:03:46.891362+00:00",
+      "exit": 0,
+      "attempts": 1,
+      "peakGB": 1.5,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "failedGateRows": [],
+      "modes": {
+        "parallel": {
+          "coldGapMs": 50,
+          "coldWarmupGapMs": 16.7,
+          "setupGapMs": 33.2,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 30.2,
+          "longestColdPageTaskMs": 0,
+          "coldPageTasks50": 0,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        },
+        "fallback": {
+          "coldGapMs": 20834.6,
+          "coldWarmupGapMs": 16.7,
+          "setupGapMs": 1966.9,
+          "setupWarmupGapMs": 16.7,
+          "showToPresentedMs": 30.3,
+          "longestColdPageTaskMs": 20860,
+          "coldPageTasks50": 2,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        }
+      },
+      "failedAssertions": []
+    },
+    {
+      "label": "branch-2",
+      "startedUtc": "2026-10-26T00:09:30.609090+00:00",
+      "exit": 0,
+      "attempts": 1,
+      "peakGB": 1.6,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "failedGateRows": [],
+      "modes": {
+        "parallel": {
+          "coldGapMs": 17.2,
+          "coldWarmupGapMs": 16.7,
+          "setupGapMs": 16.9,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 30.6,
+          "longestColdPageTaskMs": 0,
+          "coldPageTasks50": 0,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        },
+        "fallback": {
+          "coldGapMs": 34085.5,
+          "coldWarmupGapMs": 33.3,
+          "setupGapMs": 3200.2,
+          "setupWarmupGapMs": 16.7,
+          "showToPresentedMs": 30.6,
+          "longestColdPageTaskMs": 34104,
+          "coldPageTasks50": 3,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        }
+      },
+      "failedAssertions": []
+    },
+    {
+      "label": "branch-3",
+      "startedUtc": "2026-10-26T00:14:56.282513+00:00",
+      "exit": 1,
+      "attempts": 1,
+      "peakGB": 1.6,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "failedGateRows": [
+        "no first-draw stall"
+      ],
+      "modes": {
+        "parallel": {
+          "coldGapMs": 1533.5,
+          "coldWarmupGapMs": 1533.5,
+          "setupGapMs": 17,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 30.9,
+          "longestColdPageTaskMs": 0,
+          "coldPageTasks50": 0,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        },
+        "fallback": {
+          "coldGapMs": 32368.6,
+          "coldWarmupGapMs": 16.7,
+          "setupGapMs": 4050.4,
+          "setupWarmupGapMs": 16.7,
+          "showToPresentedMs": 30.9,
+          "longestColdPageTaskMs": 32385,
+          "coldPageTasks50": 2,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        }
+      },
+      "failedAssertions": [
+        "scene runtimes: the S2 gate table, and preparing before showing > the S2 gate table: every row passes (the rows' detail is in the tests below)",
+        "scene runtimes: the S2 gate table, and preparing before showing > no presentation gap over 100 ms while a cold V or a setup never drawn is prepared: no program builds a shader at its first draw (4a-v-c)"
+      ]
+    },
+    {
+      "label": "main-3",
+      "startedUtc": "2026-10-26T00:20:40.983559+00:00",
+      "exit": 1,
+      "attempts": 1,
+      "peakGB": 1.6,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "failedGateRows": [],
+      "modes": {
+        "parallel": {
+          "coldGapMs": 33.2,
+          "coldWarmupGapMs": 16.8,
+          "setupGapMs": 17,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 30.8,
+          "longestColdPageTaskMs": 0,
+          "coldPageTasks50": 0,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        },
+        "fallback": {
+          "coldGapMs": 29151.9,
+          "coldWarmupGapMs": 2016.8,
+          "setupGapMs": 3650.2,
+          "setupWarmupGapMs": 16.7,
+          "showToPresentedMs": 31.3,
+          "longestColdPageTaskMs": 29182,
+          "coldPageTasks50": 4,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        }
+      },
+      "failedAssertions": [
+        "scene runtimes: the S2 gate table, and preparing before showing > no presentation gap over 100 ms while a cold V or a setup never drawn is prepared: no program builds a shader at its first draw (4a-v-c)"
+      ]
+    },
+    {
+      "label": "main-4",
+      "startedUtc": "2026-10-26T00:27:14.477453+00:00",
+      "exit": 1,
+      "attempts": 1,
+      "peakGB": 1.6,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "failedGateRows": [
+        "no first-draw stall"
+      ],
+      "modes": {
+        "parallel": {
+          "coldGapMs": 900.1,
+          "coldWarmupGapMs": 900.1,
+          "setupGapMs": 33.3,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 30.9,
+          "longestColdPageTaskMs": 0,
+          "coldPageTasks50": 0,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        },
+        "fallback": {
+          "coldGapMs": 41052.6,
+          "coldWarmupGapMs": 16.7,
+          "setupGapMs": 6767.2,
+          "setupWarmupGapMs": 16.7,
+          "showToPresentedMs": 31.1,
+          "longestColdPageTaskMs": 41074,
+          "coldPageTasks50": 3,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        }
+      },
+      "failedAssertions": [
+        "scene runtimes: the S2 gate table, and preparing before showing > the S2 gate table: every row passes (the rows' detail is in the tests below)",
+        "scene runtimes: the S2 gate table, and preparing before showing > no presentation gap over 100 ms while a cold V or a setup never drawn is prepared: no program builds a shader at its first draw (4a-v-c)"
+      ]
+    },
+    {
+      "label": "branch-4",
+      "startedUtc": "2026-10-26T00:34:26.496388+00:00",
+      "exit": 1,
+      "attempts": 1,
+      "peakGB": 1.5,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "failedGateRows": [
+        "no first-draw stall"
+      ],
+      "modes": {
+        "parallel": {
+          "coldGapMs": 33.4,
+          "coldWarmupGapMs": 16.8,
+          "setupGapMs": 149.9,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 31.3,
+          "longestColdPageTaskMs": 0,
+          "coldPageTasks50": 0,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        },
+        "fallback": {
+          "coldGapMs": 41735.9,
+          "coldWarmupGapMs": 16.7,
+          "setupGapMs": 9800.5,
+          "setupWarmupGapMs": 16.9,
+          "showToPresentedMs": 31.1,
+          "longestColdPageTaskMs": 41752,
+          "coldPageTasks50": 3,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        }
+      },
+      "failedAssertions": [
+        "scene runtimes: the S2 gate table, and preparing before showing > the S2 gate table: every row passes (the rows' detail is in the tests below)",
+        "scene runtimes: the S2 gate table, and preparing before showing > no presentation gap over 100 ms while a cold V or a setup never drawn is prepared: no program builds a shader at its first draw (4a-v-c)"
+      ]
+    },
+    {
+      "label": "branch-5",
+      "startedUtc": "2026-10-26T00:41:03.989082+00:00",
+      "exit": 1,
+      "attempts": 1,
+      "peakGB": 1.7,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "failedGateRows": [
+        "no first-draw stall"
+      ],
+      "modes": {
+        "parallel": {
+          "coldGapMs": 2983.5,
+          "coldWarmupGapMs": 2466.8,
+          "setupGapMs": 19,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 31.1,
+          "longestColdPageTaskMs": 0,
+          "coldPageTasks50": 0,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        },
+        "fallback": {
+          "coldGapMs": 40735.8,
+          "coldWarmupGapMs": 16.7,
+          "setupGapMs": 9350.6,
+          "setupWarmupGapMs": 16.8,
+          "showToPresentedMs": 30.6,
+          "longestColdPageTaskMs": 40752,
+          "coldPageTasks50": 4,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        }
+      },
+      "failedAssertions": [
+        "scene runtimes: the S2 gate table, and preparing before showing > the S2 gate table: every row passes (the rows' detail is in the tests below)",
+        "scene runtimes: the S2 gate table, and preparing before showing > no presentation gap over 100 ms while a cold V or a setup never drawn is prepared: no program builds a shader at its first draw (4a-v-c)"
+      ]
+    },
+    {
+      "label": "main-5",
+      "startedUtc": "2026-10-26T00:47:36.413295+00:00",
+      "exit": 1,
+      "attempts": 1,
+      "peakGB": 1.6,
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "failedGateRows": [
+        "no first-draw stall"
+      ],
+      "modes": {
+        "parallel": {
+          "coldGapMs": 350,
+          "coldWarmupGapMs": 16.8,
+          "setupGapMs": 16.9,
+          "setupWarmupGapMs": 16.7,
+          "showToPresentedMs": 30.2,
+          "longestColdPageTaskMs": 0,
+          "coldPageTasks50": 0,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        },
+        "fallback": {
+          "coldGapMs": 36452.3,
+          "coldWarmupGapMs": 16.8,
+          "setupGapMs": 5017.0,
+          "setupWarmupGapMs": 16.7,
+          "showToPresentedMs": 30.5,
+          "longestColdPageTaskMs": 36437,
+          "coldPageTasks50": 3,
+          "coldFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "uploads": 17
+          },
+          "steadyUploads": 17,
+          "setupFirstFrame": {
+            "links": 0,
+            "programs": 0,
+            "frames": 1
+          }
+        }
+      },
+      "failedAssertions": [
+        "scene runtimes: the S2 gate table, and preparing before showing > the S2 gate table: every row passes (the rows' detail is in the tests below)",
+        "scene runtimes: the S2 gate table, and preparing before showing > no presentation gap over 100 ms while a cold V or a setup never drawn is prepared: no program builds a shader at its first draw (4a-v-c)"
+      ]
+    }
+  ],
+  "summary": {
+    "branch": {
+      "n": 5,
+      "parallelColdGapsMs": [
+        1200.1,
+        17.2,
+        1533.5,
+        33.4,
+        2983.5
+      ],
+      "parallelColdMedianMs": 1200.1,
+      "parallelColdMisses100": 3,
+      "fallbackColdWarmupGapsMs": [
+        883.3,
+        33.3,
+        16.7,
+        16.7,
+        16.7
+      ],
+      "fallbackColdWarmupMisses100": 1,
+      "coldMissesAcrossModes": 4,
+      "testFileFailures": 4
+    },
+    "main": {
+      "n": 5,
+      "parallelColdGapsMs": [
+        666.7,
+        50,
+        33.2,
+        900.1,
+        350
+      ],
+      "parallelColdMedianMs": 350,
+      "parallelColdMisses100": 3,
+      "fallbackColdWarmupGapsMs": [
+        1600.1,
+        16.7,
+        2016.8,
+        16.7,
+        16.8
+      ],
+      "fallbackColdWarmupMisses100": 2,
+      "coldMissesAcrossModes": 5,
+      "testFileFailures": 4
+    }
+  },
+  "g4": {
+    "status": "complete",
+    "rows": [
+      "T-a",
+      "T-d",
+      "T-e",
+      "T-h"
+    ],
+    "cache": "warm",
+    "port": 4572,
+    "serverGuardGB": 5,
+    "browserGuardGB": 5,
+    "headroomGBAtLaunch": 20.53,
+    "runs": [
+      {
+        "label": "requested-rows",
+        "startedUtc": "2026-10-26T00:56:18.864Z",
+        "cache": "warm",
+        "rows": [
+          {
+            "row": "T-a",
+            "pass": true,
+            "realDataPass": true,
+            "trials": [
+              {
+                "row": "T-a",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 55.6,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": null,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [],
+                "longTasks": []
+              },
+              {
+                "row": "T-a",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 56.3,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": null,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [],
+                "longTasks": []
+              },
+              {
+                "row": "T-a",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 60.5,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": null,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [],
+                "longTasks": []
+              },
+              {
+                "row": "T-a",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 52.5,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": null,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [],
+                "longTasks": []
+              },
+              {
+                "row": "T-a",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 49.6,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": null,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [],
+                "longTasks": []
+              }
+            ],
+            "primePass": true
+          },
+          {
+            "row": "T-d",
+            "pass": true,
+            "realDataPass": true,
+            "trials": [
+              {
+                "row": "T-d",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 54.4,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": null,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [],
+                "longTasks": []
+              },
+              {
+                "row": "T-d",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 45.2,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": null,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [],
+                "longTasks": []
+              },
+              {
+                "row": "T-d",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 43.1,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": null,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [],
+                "longTasks": []
+              },
+              {
+                "row": "T-d",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 44.6,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": null,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [],
+                "longTasks": []
+              },
+              {
+                "row": "T-d",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 45.2,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": null,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [],
+                "longTasks": []
+              }
+            ],
+            "primePass": true
+          },
+          {
+            "row": "T-e",
+            "pass": false,
+            "realDataPass": false,
+            "trials": [
+              {
+                "row": "T-e",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 951.7,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": 35.6,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [
+                  [
+                    "phase:core:record",
+                    74.8
+                  ],
+                  [
+                    "phase:core:bytes",
+                    74.8
+                  ],
+                  [
+                    "phase:core:parsed",
+                    101.5
+                  ],
+                  [
+                    "phase:core:textures",
+                    142
+                  ],
+                  [
+                    "character:ask",
+                    236.1
+                  ],
+                  [
+                    "character:answer",
+                    312.2
+                  ],
+                  [
+                    "character:record",
+                    314.2
+                  ],
+                  [
+                    "character:loaded",
+                    485.3
+                  ],
+                  [
+                    "phase:details:uploads",
+                    550.3
+                  ],
+                  [
+                    "phase:details:drained",
+                    555.6
+                  ],
+                  [
+                    "character:prepared",
+                    555.7
+                  ],
+                  [
+                    "character:placed",
+                    556.7
+                  ],
+                  [
+                    "phase:run:programs",
+                    580.5
+                  ],
+                  [
+                    "character:frame",
+                    591.4
+                  ],
+                  [
+                    "phase:run:textures-done",
+                    731.9
+                  ],
+                  [
+                    "phase:run:work",
+                    790.4
+                  ],
+                  [
+                    "phase:run:warm-up",
+                    906.1
+                  ]
+                ],
+                "longTasks": []
+              },
+              {
+                "row": "T-e",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 1108.6,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": 35.3,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [
+                  [
+                    "phase:core:record",
+                    81.8
+                  ],
+                  [
+                    "phase:core:bytes",
+                    81.9
+                  ],
+                  [
+                    "phase:core:parsed",
+                    108.9
+                  ],
+                  [
+                    "phase:core:textures",
+                    137
+                  ],
+                  [
+                    "character:ask",
+                    232.5
+                  ],
+                  [
+                    "character:answer",
+                    309.9
+                  ],
+                  [
+                    "character:record",
+                    312.4
+                  ],
+                  [
+                    "character:loaded",
+                    470.8
+                  ],
+                  [
+                    "phase:details:uploads",
+                    541.6
+                  ],
+                  [
+                    "phase:details:drained",
+                    546.9
+                  ],
+                  [
+                    "character:prepared",
+                    547
+                  ],
+                  [
+                    "character:placed",
+                    548.6
+                  ],
+                  [
+                    "character:frame",
+                    582.7
+                  ],
+                  [
+                    "phase:run:programs",
+                    596
+                  ],
+                  [
+                    "phase:run:textures-done",
+                    816.5
+                  ],
+                  [
+                    "phase:run:work",
+                    879.2
+                  ],
+                  [
+                    "phase:run:warm-up",
+                    1053.3
+                  ]
+                ],
+                "longTasks": []
+              },
+              {
+                "row": "T-e",
+                "pass": false,
+                "evidence": "offline real-data browser",
+                "realDataPass": false,
+                "clickToFirstPresentedMs": 1119,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 1,
+                "longestTaskMs": 57,
+                "progressWithinMs": 34.4,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [
+                  "Main-thread task of 50 ms or more"
+                ],
+                "marks": [
+                  [
+                    "phase:core:record",
+                    72.5
+                  ],
+                  [
+                    "phase:core:bytes",
+                    72.5
+                  ],
+                  [
+                    "phase:core:parsed",
+                    100
+                  ],
+                  [
+                    "phase:core:textures",
+                    127.6
+                  ],
+                  [
+                    "character:ask",
+                    255.5
+                  ],
+                  [
+                    "character:answer",
+                    328.8
+                  ],
+                  [
+                    "character:record",
+                    331.5
+                  ],
+                  [
+                    "character:loaded",
+                    509
+                  ],
+                  [
+                    "phase:details:uploads",
+                    571.8
+                  ],
+                  [
+                    "phase:details:drained",
+                    589.4
+                  ],
+                  [
+                    "character:prepared",
+                    589.5
+                  ],
+                  [
+                    "character:placed",
+                    590.5
+                  ],
+                  [
+                    "character:frame",
+                    631
+                  ],
+                  [
+                    "phase:run:programs",
+                    640
+                  ],
+                  [
+                    "phase:run:textures-done",
+                    895.8
+                  ],
+                  [
+                    "phase:run:work",
+                    954.5
+                  ],
+                  [
+                    "phase:run:warm-up",
+                    1068.6
+                  ]
+                ],
+                "longTasks": [
+                  [
+                    715.8,
+                    57
+                  ]
+                ]
+              }
+            ],
+            "primePass": true
+          },
+          {
+            "row": "T-h",
+            "pass": true,
+            "realDataPass": true,
+            "trials": [
+              {
+                "row": "T-h",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 15.5,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": null,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [],
+                "longTasks": [],
+                "closure": {
+                  "glBefore": {
+                    "texture": 81,
+                    "buffer": 153,
+                    "framebuffer": 28,
+                    "renderbuffer": 4,
+                    "program": 58,
+                    "vertexArray": 59,
+                    "sampler": 0,
+                    "shader": 0
+                  },
+                  "glAfter": {
+                    "texture": 81,
+                    "buffer": 153,
+                    "framebuffer": 28,
+                    "renderbuffer": 4,
+                    "program": 58,
+                    "vertexArray": 59,
+                    "sampler": 0,
+                    "shader": 0
+                  },
+                  "heapBeforeMiB": 239.527,
+                  "heapAfterMiB": 240.828,
+                  "heapDeltaMiB": 1.302,
+                  "privateDeltaMiB": -168.953,
+                  "dedicatedDeltaMiB": -56.328,
+                  "sharedDeltaMiB": -5.785,
+                  "closedSceneAbsent": true
+                }
+              }
+            ],
+            "primePass": false
+          }
+        ],
+        "pass": false
+      },
+      {
+        "label": "T-e-isolated-rerun",
+        "startedUtc": "2026-10-26T01:05:17.348Z",
+        "cache": "warm",
+        "rows": [
+          {
+            "row": "T-e",
+            "pass": true,
+            "realDataPass": true,
+            "trials": [
+              {
+                "row": "T-e",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 902.1,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": 27.2,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [
+                  [
+                    "phase:core:record",
+                    60.8
+                  ],
+                  [
+                    "phase:core:bytes",
+                    60.8
+                  ],
+                  [
+                    "phase:core:parsed",
+                    79.5
+                  ],
+                  [
+                    "phase:core:textures",
+                    107.1
+                  ],
+                  [
+                    "character:ask",
+                    192.2
+                  ],
+                  [
+                    "character:answer",
+                    281.3
+                  ],
+                  [
+                    "character:record",
+                    283.3
+                  ],
+                  [
+                    "character:loaded",
+                    458.6
+                  ],
+                  [
+                    "phase:details:uploads",
+                    524.2
+                  ],
+                  [
+                    "phase:details:drained",
+                    528.9
+                  ],
+                  [
+                    "character:prepared",
+                    529
+                  ],
+                  [
+                    "character:placed",
+                    530.1
+                  ],
+                  [
+                    "phase:run:programs",
+                    556
+                  ],
+                  [
+                    "character:frame",
+                    566.7
+                  ],
+                  [
+                    "phase:run:textures-done",
+                    697.6
+                  ],
+                  [
+                    "phase:run:work",
+                    756.3
+                  ],
+                  [
+                    "phase:run:warm-up",
+                    860
+                  ]
+                ],
+                "longTasks": []
+              },
+              {
+                "row": "T-e",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 924.6,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": 32.3,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [
+                  [
+                    "phase:core:record",
+                    74.9
+                  ],
+                  [
+                    "phase:core:bytes",
+                    75
+                  ],
+                  [
+                    "phase:core:parsed",
+                    96.7
+                  ],
+                  [
+                    "phase:core:textures",
+                    127.2
+                  ],
+                  [
+                    "character:ask",
+                    217.8
+                  ],
+                  [
+                    "character:answer",
+                    282.8
+                  ],
+                  [
+                    "character:record",
+                    287.9
+                  ],
+                  [
+                    "character:loaded",
+                    454.4
+                  ],
+                  [
+                    "phase:details:uploads",
+                    519.4
+                  ],
+                  [
+                    "phase:details:drained",
+                    524.6
+                  ],
+                  [
+                    "character:prepared",
+                    524.7
+                  ],
+                  [
+                    "character:placed",
+                    526.1
+                  ],
+                  [
+                    "character:frame",
+                    560
+                  ],
+                  [
+                    "phase:run:programs",
+                    571.1
+                  ],
+                  [
+                    "phase:run:textures-done",
+                    726.9
+                  ],
+                  [
+                    "phase:run:work",
+                    784.2
+                  ],
+                  [
+                    "phase:run:warm-up",
+                    883.1
+                  ]
+                ],
+                "longTasks": []
+              },
+              {
+                "row": "T-e",
+                "pass": true,
+                "evidence": "offline real-data browser",
+                "realDataPass": true,
+                "clickToFirstPresentedMs": 979.6,
+                "firstFrameLinks": 0,
+                "firstFramePrograms": 0,
+                "rasterRequests": 0,
+                "longTasks50": 0,
+                "longestTaskMs": 0,
+                "progressWithinMs": 28,
+                "blankSamples": 0,
+                "supersededDraws": 0,
+                "canvasChangeSamples": 0,
+                "failures": [],
+                "marks": [
+                  [
+                    "phase:core:record",
+                    63.7
+                  ],
+                  [
+                    "phase:core:bytes",
+                    63.7
+                  ],
+                  [
+                    "phase:core:parsed",
+                    96.5
+                  ],
+                  [
+                    "phase:core:textures",
+                    140
+                  ],
+                  [
+                    "character:ask",
+                    219.7
+                  ],
+                  [
+                    "character:answer",
+                    301.5
+                  ],
+                  [
+                    "character:record",
+                    304
+                  ],
+                  [
+                    "character:loaded",
+                    460.7
+                  ],
+                  [
+                    "phase:details:uploads",
+                    516.5
+                  ],
+                  [
+                    "phase:details:drained",
+                    522.3
+                  ],
+                  [
+                    "character:prepared",
+                    522.4
+                  ],
+                  [
+                    "character:placed",
+                    523.6
+                  ],
+                  [
+                    "character:frame",
+                    556.1
+                  ],
+                  [
+                    "phase:run:programs",
+                    568.6
+                  ],
+                  [
+                    "phase:run:textures-done",
+                    774.2
+                  ],
+                  [
+                    "phase:run:work",
+                    829.1
+                  ],
+                  [
+                    "phase:run:warm-up",
+                    936
+                  ]
+                ],
+                "longTasks": []
+              }
+            ],
+            "primePass": true
+          }
+        ],
+        "pass": true
+      }
+    ],
+    "repeatHeadroomGB": 20.97,
+    "command": "bun experiments/044-profile-tabs/measure-tabs.ts --cache warm --rows T-a,T-d,T-e,T-h --port 4572",
+    "unexpectedTask": {
+      "run": "initial T-e trial 3",
+      "startMsAfterClick": 715.8,
+      "durationMs": 57,
+      "detailsLoadedMs": 509,
+      "programsFinishedMs": 640,
+      "morphTexturesFinishedMs": 895.8,
+      "scope": "Between programs and morph-texture completion; no call stack was captured, so the exact cause is unresolved."
+    },
+    "browserWorkerPeaksGB": {
+      "requested-rows": [
+        2.8,
+        2.8,
+        2.9,
+        2.9,
+        3.5,
+        3.9,
+        2.9,
+        2.9
+      ],
+      "T-e-isolated-rerun": [
+        3.5,
+        3.8
+      ]
+    }
+  },
+  "conclusion": {
+    "parallelColdMisses": "3/5 on each version",
+    "allModesColdWarmupMisses": "4/10 branch, 5/10 main",
+    "firstShownWork": "All 20 comparison pages: 0 links, 0 programs, 17 uploads equal to 17 steady bone-matrix uploads",
+    "severityCaveat": "The branch had larger parallel spikes and a larger parallel median in these five samples; equal failure frequency does not prove equal severity. Both versions reproduce the intermittent hidden-warmup gap, and first-shown work does not regress.",
+    "implementationChanges": "none during validation; commit 15427a40 measured unchanged",
+    "unresolved": "Cause of intermittent hidden-warmup presentation gaps is not established by these timings."
+  }
+}
