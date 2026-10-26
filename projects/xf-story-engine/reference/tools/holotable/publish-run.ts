@@ -5,10 +5,11 @@ import { BOUNDS, validateManifest, validateRecord, type Manifest, type RecordLin
 import { boundText } from '../../src/holotable/facets.ts';
 import { KIND_GLYPHS, unknownGlyphs } from '../../src/holotable/glyphs.ts';
 
-export interface RunOptions {
+export type RunOptions = {
   set: string; title: string; from: number; to: number;
   schematic?: boolean;
-}
+  mode?: 'standalone';
+} | { mode: 'recording'; session: string; run: number; from: number; to: number; schematic?: boolean };
 interface LayerState {
   manifest: Manifest; bytes: number;
   values: Map<string, { signature: string; item: Item }>;
@@ -42,9 +43,11 @@ export class RunPublisher {
     for (const m of manifests) this.create(m);
   }
   private manifest(layer: string, kinds: Manifest['kinds']): Manifest {
+    const binding = this.run.mode === 'recording' ? { clock: 'recording' as const, session: this.run.session, run: this.run.run }
+      : { clock: 'game' as const, standalone: { set: this.run.set, title: this.run.title, from: this.run.from, to: this.run.to, clock: 'game' as const } };
     return { schema: 'xfh/layer-1', producer: 'story-engine', layer, title: layer.replaceAll('-', ' ') + (layer === 'places' && this.run.schematic ? ' (schematic layout)' : ''),
-      ...(this.run.schematic ? { description: 'Districts use real place ids; synthetic cells and their contents use a schematic layout, not measured street geometry.' } : {}), content: 'full', clock: 'game', kinds,
-      standalone: { set: this.run.set, title: this.run.title, from: this.run.from, to: this.run.to, clock: 'game' } };
+      ...(this.run.schematic ? { description: 'Districts use real place ids; synthetic cells and their contents use a schematic layout, not measured street geometry.' } : {}), content: 'full', clock: binding.clock, kinds,
+      ...binding };
   }
   private create(m: Manifest): LayerState {
     const line = spoolLine(m);

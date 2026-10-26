@@ -6,8 +6,9 @@ export type Box = { box: { min: Vec3; max: Vec3 } };
 export type Anchor = { region: string } | { entity: string } | { at: Vec3 } | { item: string } | Box;
 export interface Manifest {
   schema: 'xfh/layer-1'; producer: 'story-engine'; layer: string; title: string; description?: string;
-  content: 'full'; clock: 'game'; kinds: Kind[]; branch?: string;
-  standalone: { set: string; title?: string; from: number; to: number; clock: 'game' };
+  content: 'full'; clock: 'game' | 'recording'; kinds: Kind[]; branch?: string;
+  session?: string; run?: number;
+  standalone?: { set: string; title?: string; from: number; to: number; clock: 'game' };
 }
 export interface Item {
   schema: 'xfh/item-1'; id: string; kind: Kind; t: number; until?: number;
@@ -27,11 +28,16 @@ const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinit
 const slug = (v: unknown) => typeof v === 'string' && v.length <= 64 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v);
 const unit = (v: unknown) => num(v) && v >= 0 && v <= 1;
 export function validateManifest(v: unknown): asserts v is Manifest {
-  if (!obj(v) || !keys(v, ['schema', 'producer', 'layer', 'title', 'description', 'content', 'clock', 'kinds', 'branch', 'standalone']) ||
+  if (!obj(v) || !keys(v, ['schema', 'producer', 'layer', 'title', 'description', 'content', 'clock', 'kinds', 'branch', 'standalone', 'session', 'run']) ||
     v.schema !== 'xfh/layer-1' || v.producer !== 'story-engine' || !slug(v.layer) || !text(v.title) ||
-    v.content !== 'full' || v.clock !== 'game' || !Array.isArray(v.kinds) || !v.kinds.length ||
+    v.content !== 'full' || !['game', 'recording'].includes(v.clock) || !Array.isArray(v.kinds) || !v.kinds.length ||
     v.kinds.some((k: Kind) => !kinds.includes(k)) || new Set(v.kinds).size !== v.kinds.length ||
-    v.description !== undefined && !text(v.description, 2000) || v.branch !== undefined && !text(v.branch) || !obj(v.standalone)) throw Error('Invalid Holotable manifest');
+    v.description !== undefined && !text(v.description, 2000) || v.branch !== undefined && !text(v.branch)) throw Error('Invalid Holotable manifest');
+  if (v.clock === 'recording') {
+    if (!text(v.session) || !Number.isSafeInteger(v.run) || v.run < 1 || v.standalone !== undefined) throw Error('Invalid recording binding');
+    return;
+  }
+  if (!obj(v.standalone) || v.session !== undefined || v.run !== undefined) throw Error('Invalid standalone binding');
   const s = v.standalone;
   if (!keys(s, ['set', 'title', 'from', 'to', 'clock']) || !slug(s.set) || s.title !== undefined && !text(s.title) ||
     s.clock !== 'game' || !num(s.from) || !num(s.to) || s.to <= s.from) throw Error('Invalid standalone timeline');
