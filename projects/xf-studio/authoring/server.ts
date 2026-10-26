@@ -21,6 +21,7 @@ import { EYE_PLATE_RECIPE } from "./src/legacy/eye-makeup/plate/eye-plate-recipe
 import { createLocalSettingsHandler } from "./src/setup/host/local-settings-server";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "./src/installation/host/install-detection-server";
 import { createSavesHandler } from "./src/features/save-explorer/host/saves-server";
+import { createHolotableHandler, HOLOTABLE_ENDPOINT } from "./src/features/holotable/host/holotable-server";
 import { savesFolderProbe, savesHostSources } from "./src/saves/host/saves-host-sources";
 import { UPDATE_CHECK_FILE, updateCheckEndpoints } from "./src/setup/host/update-check-host";
 import { textFileAt } from "./src/host/derived-cache";
@@ -246,6 +247,9 @@ const savesRequest = createSavesHandler(savesHostSources({ allowOverride: true, 
   diagnostics.log.logger("saves"));
 const verificationSavesRequest = createSavesHandler(savesHostSources({ allowOverride: true, exists: existsSync, settings: savesSettings(verificationSettings) }),
   diagnostics.log.logger("saves"), "/api/verification/saves");
+// Holotable (early access): its headless service starts on the first request, never at startup; the verification workspace has its own.
+const holotable = createHolotableHandler(), verificationHolotable = createHolotableHandler();
+process.on("exit", () => { holotable.dispose(); verificationHolotable.dispose(); });
 const build = await buildBrowser(resolve(root, "build"));
 if (!build.success) {
   console.error(build.logs);
@@ -270,6 +274,8 @@ const server = Bun.serve({
     if (url.pathname === "/api/install-detection") return detectionRequest(request);
     if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) return savesRequest(request);
     if (url.pathname === "/api/verification/saves" || url.pathname.startsWith("/api/verification/saves/")) return verificationSavesRequest(request);
+    if (url.pathname === HOLOTABLE_ENDPOINT) return holotable.handle(request);
+    if (url.pathname === `/api/verification${HOLOTABLE_ENDPOINT.slice(4)}`) return verificationHolotable.handle(request);
     if (url.pathname === "/api/update-check" || url.pathname === "/api/verification/update-check") return updateCheckRequests[url.pathname](request);
     if (url.pathname === "/api/desktop-app") return desktopAppRequest(request);
     if (url.pathname === "/api/verification/desktop-app") return verificationDesktopAppRequest(request);

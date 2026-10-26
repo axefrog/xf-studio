@@ -10,6 +10,7 @@ import { createLocalSettingsHandler } from "../src/setup/host/local-settings-ser
 import { FOLDER_FIELDS, type FolderField } from "../src/setup/local-setup-actions";
 import { createInstallDetectionHandler, hostFrameworkCheck, profileFrameworkMods } from "../src/installation/host/install-detection-server";
 import { createSavesHandler } from "../src/features/save-explorer/host/saves-server";
+import { createHolotableHandler, HOLOTABLE_ENDPOINT } from "../src/features/holotable/host/holotable-server";
 import { savesFolderProbe, savesHostSources } from "../src/saves/host/saves-host-sources";
 import { createModInstallHandler, installReceiptsRoot, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, systemAnsiCodePage,
   windowsRunningApps } from "../src/installation/host/mod-install-host";
@@ -221,6 +222,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     diagnostics.log.logger("saves"));
   const verificationSavesRequest = createSavesHandler(savesHostSources({ allowOverride: false, exists: existsSync, settings: () => verificationSettings.load().settings }),
     diagnostics.log.logger("saves"), "/api/verification/saves");
+  // Holotable (early access): the packaged app doesn't ship its service, so these answer "not available" and never spawn.
+  const holotable = createHolotableHandler(), verificationHolotable = createHolotableHandler();
   const token = randomBytes(32).toString("hex");
   // The core preview has one source: the derivation from the player's own game files.
   const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
@@ -467,6 +470,8 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (url.pathname === "/api/install-detection") return installDetection(routedRequest);
       if (url.pathname === "/api/saves" || url.pathname.startsWith("/api/saves/")) return savesRequest(routedRequest);
       if (url.pathname === "/api/verification/saves" || url.pathname.startsWith("/api/verification/saves/")) return verificationSavesRequest(routedRequest);
+      if (url.pathname === HOLOTABLE_ENDPOINT) return holotable.handle(routedRequest);
+      if (url.pathname === `/api/verification${HOLOTABLE_ENDPOINT.slice(4)}`) return verificationHolotable.handle(routedRequest);
       const libraryAnswer = libraries.handle(routedRequest, url);
       if (libraryAnswer) return libraryAnswer;
       if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
@@ -530,6 +535,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       wolvenKit.cancel();
       server.stop(true);
       facial.dispose();
+      holotable.dispose(); verificationHolotable.dispose();
       libraries.close();
     },
   };
