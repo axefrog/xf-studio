@@ -299,6 +299,7 @@ Existing brow, lash, hair and piercing *preview context* is not permission to bu
 
 Polish on existing features, not new work. Each is one line; the code-health ledger keeps only Medium and above.
 
+- **An experiment module's actions bypass the action registry.** Holotable's `holo.*` actions (watch, follow and so on) go through the module action route and never reach the central action catalogue or its generated docs. An experiment's actions should register with the registry while it's on, through the same live registration snapshot the panels and layouts now use, and be withdrawn when it's off. Pair this with profiles P3-v (panel picker and command parity). *27 Oct*
 - **WebView2 runs with `--disable-web-security`** (DESK-09): Electrobun's native wrapper hard-codes the flag and no setting removes it; the CSP, session cookie and navigation rules still hold. Raise it upstream, or bundle CEF at the cost of a much larger installer.
 
 ## Working rules for this queue
