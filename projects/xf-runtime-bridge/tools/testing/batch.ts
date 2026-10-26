@@ -63,6 +63,8 @@ export type Row = {
    * after the last row and before the teardown; its steps only read and compute.
    */
   passive?: "whole-batch";
+  /** The row's expected span in seconds (a player's free roam, a soak), for the recorder-lifetime warning. */
+  expected_s?: number;
 };
 export type BatchScript = {
   schema: string;
@@ -213,7 +215,7 @@ export function planBatch(script: BatchScript): PlannedBatch {
   const rows = script.rows.map((row, i) => {
     const where = `row ${i + 1}${row?.id ? ` (${row.id})` : ""}`;
     if (!row || typeof row !== "object") { problems.push(`${where}: a row must be an object`); return { row, plan: { id: "x", steps: [] }, failRow: new Set<string>() }; }
-    for (const key of Object.keys(row)) if (!["id", "title", "requires", "steps", "pass", "cleanup", "deadline_ms", "judged_by", "after", "halt_on", "facts", "passive"].includes(key)) problems.push(`${where}: unknown field ${key}`);
+    for (const key of Object.keys(row)) if (!["id", "title", "requires", "steps", "pass", "cleanup", "deadline_ms", "judged_by", "after", "halt_on", "facts", "passive", "expected_s"].includes(key)) problems.push(`${where}: unknown field ${key}`);
     for (const fact of row.facts ?? []) {
       if (typeof fact?.label !== "string" || typeof fact.ref !== "string" || !fact.ref.startsWith("$")) problems.push(`${where}: a fact is {label, ref: "$binding.path"}`);
       else if (!known.has(fact.ref.slice(1).split(".")[0])) problems.push(`${where}: fact ${fact.label} reads ${fact.ref}, which no step binds`);
@@ -236,6 +238,11 @@ export function planBatch(script: BatchScript): PlannedBatch {
     }
     if (row.after !== undefined && row.after !== "restart") problems.push(`${where}: after is restart`);
     if (row.passive !== undefined && row.passive !== "whole-batch") problems.push(`${where}: passive is whole-batch`);
+    // A recorder's lifetime is always the script's choice: the bridge's default (60 s) cut scripted session 1's free roam short.
+    for (const start of JSON.stringify(row.steps ?? []).match(/\{"do":"run","command":"test\.record\.start","input":\{[^}]*\}/g) ?? []) {
+      if (!/"duration_s":/.test(start)) problems.push(`${where}: test.record.start sets duration_s (the bridge's default is 60 s): size it to the row's expected span, at most 1800`);
+    }
+    if (row.expected_s !== undefined && !(typeof row.expected_s === "number" && row.expected_s > 0 && row.expected_s <= 24 * 3600)) problems.push(`${where}: expected_s is the row's expected span in seconds`);
     if (row.passive && JSON.stringify(row.steps ?? []).match(/"do":"(?!set|wait|note)[^"]+"/)) problems.push(`${where}: a whole-batch passive row only reads and computes (set, wait, note)`);
     if (row.halt_on !== undefined) { try { parseHaltOn(row.halt_on.length ? row.halt_on : ["none"]); } catch (error) { problems.push(`${where}: ${String((error as Error).message).replace("--halt-on", "halt_on")}`); } }
     const failRow = new Set<string>();

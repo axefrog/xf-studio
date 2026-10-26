@@ -246,6 +246,19 @@ export async function preflight(options: PreflightOptions): Promise<PreflightRes
     add(writer.busy ? "blocker" : "ok", "writer", writer.busy ? `Another tool holds the bridge's writer seat (bridge_busy): ${writer.detail}. Close it (the MCP server: /reload-plugins after its session) first.` : `the writer seat is free (${writer.detail})`);
   } else add("info", "writer", "The game isn't running: the writer seat is checked when the bridge first answers.");
 
+  // Recording lifetimes: a row's own recorder must outlast the row (its expected span, or its waits added up).
+  for (const entry of planned.rows) {
+    const row = entry.row;
+    const flat = allSteps(entry.plan.steps);
+    const starts = flat.filter((st) => commandOf(st as Record<string, unknown>) === "test.record.start");
+    if (!starts.length) continue;
+    const lifetime = Math.min(...starts.map((st) => Number((st.input as { duration_s?: number } | undefined)?.duration_s ?? 60)));
+    const waited = flat.reduce((sum, st) => sum + (st.do === "wait" ? Number(st.ms ?? 0) / 1000 : st.do === "await" ? Number(st.timeout_s ?? 0) : st.do === "events" ? Number(st.duration_s ?? 0) : 0), 0);
+    const span = row.expected_s ?? waited;
+    if (span > lifetime) add("warn", `recording ${row.id}`, `the row may run ${Math.round(span)} s but its recorder lives ${lifetime} s: raise duration_s (at most 1800), or reuse the batch's recorder ($recorder), which rolls to a new run`);
+    else add("ok", `recording ${row.id}`, `recorder lifetime ${lifetime} s covers the row's ${Math.round(span)} s`);
+  }
+
   // Frame generation: motion auto reads reduced while a module is loaded.
   const modules = gameDir ? (options.listDir ?? list)(join(gameDir, "bin", "x64")).filter((n) => FRAME_GENERATION_MODULES.includes(n.toLowerCase())) : [];
   if (modules.length) {

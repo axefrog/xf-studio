@@ -102,3 +102,28 @@ describe("5: an intended stop is not a halt", () => {
     expect(host.log).toEqual(["close", "launch"]);
   });
 });
+
+describe("3: every recorder's lifetime is set, and sized to its row", () => {
+  test("a test.record.start without duration_s is refused at planning", async () => {
+    const { planBatch } = await import("../testing/batch.ts");
+    const { script } = await import("./batch-fakes.ts");
+    const problems = planBatch(script([{ id: "r", title: "r", steps: [{ do: "run", command: "test.record.start", input: { channels: ["v"] } }] }])).problems;
+    expect(problems.join("\n")).toContain("sets duration_s");
+  });
+
+  test("the preflight warns when a row may outlive its recorder (its waits, or expected_s)", async () => {
+    const { preflight } = await import("../testing/preflight.ts");
+    const { script } = await import("./batch-fakes.ts");
+    const { projectDir } = await import("./helpers.ts");
+    const rows = [
+      { id: "short", title: "short", steps: [{ do: "run", command: "test.record.start", input: { channels: ["v"], duration_s: 60 } }, { do: "wait", ms: 120_000 }] },
+      { id: "free", title: "free", expected_s: 900, steps: [{ do: "run", command: "test.record.start", input: { channels: ["v"], duration_s: 600 } }] },
+      { id: "fine", title: "fine", steps: [{ do: "run", command: "test.record.start", input: { channels: ["v"], duration_s: 300 } }, { do: "wait", ms: 60_000 }] },
+    ];
+    const result = await preflight({ script: script(rows), fixtures: {}, projectDir, runtimeDir: tempDir("xfb-rt-"), freeCommitBytes: async () => 40 * 1024 ** 3, gameRunning: async () => false, git: () => null });
+    const of = (id: string) => result.items.find((i) => i.check === `recording ${id}`)!;
+    expect(of("short").status).toBe("warn");
+    expect(of("free").status).toBe("warn");
+    expect(of("fine").status).toBe("ok");
+  });
+});
