@@ -25,7 +25,7 @@ import { findCommand } from "../api/catalogue.ts";
 import type { CommandApi } from "../api/command-api.ts";
 import { decodePng, diffStats, crop } from "../capture/image.ts";
 import { validateBound } from "./assertions.ts";
-import { ConfigEditor, readIni, stagedConfigPath, type IniValues } from "./config-ini.ts";
+import { ConfigEditor, readIni, stagedConfigPath, stagedManifestPath, type IniValues } from "./config-ini.ts";
 import { burstBytes, cetLineRect, cetWindowRect, decodeCetBinding, inkPanelRect, keysLabel, parseCetBindings, parseKeys, xfBoxRect, type Host } from "./host.ts";
 import { BURST_MEMORY_LIMIT } from "../capture/capture.ts";
 import { checkMatch, checkPlan, describePlan, matches, realClock, resolveRefs, runPlan, type Action, type ExecContext, type Executor, type Match, type Outcome, type Plan, type PlanClock, type PlanResult, type ReportEntry, type Step } from "./plan.ts";
@@ -118,6 +118,7 @@ export const LOCAL_KINDS: Record<string, { required: string[]; optional: string[
   "config.restore": { required: [], optional: [], help: "put config.ini back as it was before the run" },
   "actors.release_all": { required: [], optional: [], help: "release every actor the bridge directs (npc.status, then npc.release despawn)" },
   pick: { required: ["from"], optional: ["where", "index"], help: "an element of a list (a bound result's array) that matches where, the index-th such (default 0); value the element" },
+  "bridge.candidate": { required: [], optional: [], help: "does the running bridge match the staged candidate (its build commit, dirty flag and version against the staged manifest, its allow_writes and write classes against the staged config.ini); value {matches, mismatches}" },
   stamp: { required: [], optional: [], help: "the wall-clock time now; value {ms} (milliseconds since the epoch, as a burst's frames are timed)" },
   "burst.covers": { required: ["burst", "times"], optional: [], help: "whether every wall-clock time (stamp ms) falls between a burst's first and last frame; value {covers, first_ms, last_ms, outside}" },
   "host.windows_animations": { required: [], optional: [], help: "Windows' own Animation effects setting (SPI_GETCLIENTAREAANIMATION), read, never changed; value {on}" },
@@ -392,6 +393,18 @@ export function closeSteps(): Step[] {
 export function preludeSteps(needs: Record<string, string>, restart: boolean, load: boolean): Step[] {
   const changes = Object.keys(needs).length > 0;
   return [
+    // A running game is adopted only if its bridge is the staged candidate (a --loop restage may have replaced the
+    // build, or config.ini, since it started): otherwise it closes, and the start below launches the staged one.
+    { label: "candidate", when: { check: { do: "host.running" }, match: { path: "running", equals: true } }, sequence: [
+      { label: "candidate-bridge", do: "run", command: "bridge.ping", input: {}, until: { ok: true }, interval_ms: 2000, deadline_ms: 120_000, on_fail: "continue" },
+      { label: "candidate-check", do: "bridge.candidate", on_fail: "continue", outcomes: [
+        { name: "nothing_staged", match: { code: "no_candidate" }, result: "ok" },
+        { name: "stale", match: { path: "matches", equals: false }, run: [
+          { do: "note", text: "The running game's bridge isn't the staged candidate (an earlier build or settings): the runner restarts it." },
+          ...closeSteps(),
+        ] },
+      ] },
+    ] },
     ...(changes ? [{ label: "config", do: "config.set", values: needs }] : []),
     ...(changes || restart ? [{ label: "restart", sequence: [...closeSteps(), ...startSteps()], when: { check: { do: "host.running" }, match: { path: "running", equals: true } } }] : []),
     { label: "start", sequence: startSteps(), when: { check: { do: "host.running" }, match: { path: "running", equals: false } } },
@@ -713,6 +726,8 @@ export class SessionExecutor implements Executor {
         }
         case "stamp":
           return { ok: true, value: { ms: Date.now() } };
+        case "bridge.candidate":
+          return await this.candidate(context);
         case "burst.covers": {
           const burst = action.burst as { started_at?: string; frames?: { at_ms?: number }[] } | undefined;
           const start = Date.parse(burst?.started_at ?? "");
@@ -867,6 +882,35 @@ export class SessionExecutor implements Executor {
     if (!absent.length) return { ok: true, value };
     const worst = per[absent[0] - 1];
     return { ok: false, code: "surface_missing", message: `The surface isn't in frame${per.length > 1 ? ` in frame${absent.length > 1 ? "s" : ""} ${absent.join(", ")} of ${per.length}` : ""} (plate ${(worst.plate_fraction * 100).toFixed(1)} % of the area, text ${(worst.text_fraction * 100).toFixed(2)} %).`, value };
+  }
+
+  /**
+   * Whether the running game's bridge is the staged candidate: a game left running by an earlier attempt (a --loop
+   * restage between them) may carry the previous binary or the settings it loaded. Compared: build_commit, build_dirty
+   * and plugin_version against the staged manifest, bridge.allow_writes and write_classes against the staged config.ini.
+   */
+  private async candidate(context: ExecContext): Promise<Outcome> {
+    const staged = this.c.fixtures.staged_mod;
+    if (typeof staged !== "string" || !existsSync(stagedManifestPath(staged))) return { ok: false, code: "no_candidate", message: "No staged manifest to compare with (fixtures staged_mod)." };
+    let manifest: { version?: string; commit?: string; source_tree_clean?: boolean };
+    try { manifest = JSON.parse(readFileSync(stagedManifestPath(staged), "utf8")); } catch { return { ok: false, code: "no_candidate", message: "The staged manifest couldn't be read." }; }
+    const config = existsSync(stagedConfigPath(staged)) ? readIni(readFileSync(stagedConfigPath(staged), "utf8")) : {};
+    const info = await this.api.run("bridge.info", {}, { source: "session", signal: context.signal });
+    if (!info.ok) return { ok: false, code: info.error.code, message: info.error.message };
+    const live = info.result as { build_commit?: string; build_dirty?: boolean; plugin_version?: string; bridge?: { allow_writes?: boolean; write_classes?: string[] } };
+    const mismatches: string[] = [];
+    const commit = (live.build_commit ?? "").toLowerCase(), want = (manifest.commit ?? "").toLowerCase();
+    const n = Math.min(commit.length, want.length);
+    if (want && (n < 7 || commit.slice(0, n) !== want.slice(0, n))) mismatches.push(`build ${commit.slice(0, 8) || "?"} is running, the staged build is ${want.slice(0, 8)}`);
+    if (typeof manifest.source_tree_clean === "boolean" && typeof live.build_dirty === "boolean" && live.build_dirty === manifest.source_tree_clean) mismatches.push(`the running build is ${live.build_dirty ? "dirty" : "clean"}, the staged one ${manifest.source_tree_clean ? "clean" : "dirty"}`);
+    if (manifest.version && live.plugin_version && manifest.version !== live.plugin_version) mismatches.push(`version ${live.plugin_version} is running, ${manifest.version} is staged`);
+    if (config["bridge.allow_writes"] !== undefined && live.bridge?.allow_writes !== undefined && String(live.bridge.allow_writes) !== config["bridge.allow_writes"]) mismatches.push(`allow_writes ${live.bridge.allow_writes} was loaded, config.ini says ${config["bridge.allow_writes"]}`);
+    if (config["bridge.allow_write_classes"] !== undefined && Array.isArray(live.bridge?.write_classes)) {
+      const want = new Set(config["bridge.allow_write_classes"].split(",").map((c) => c.trim()).filter(Boolean));
+      const have = new Set(live.bridge.write_classes);
+      if (want.size !== have.size || [...want].some((c) => !have.has(c))) mismatches.push(`write classes ${[...have].join(", ")} were loaded, config.ini says ${[...want].join(", ")}`);
+    }
+    return { ok: true, value: { matches: !mismatches.length, mismatches } };
   }
 
   /** How much two captures differ (mean and changed share) inside an area of their full-resolution files. */

@@ -118,3 +118,32 @@ describe("H4: a change claimed inside a burst is timed against its frames", () =
     expect(row.reason).toContain("both changes inside the burst");
   });
 });
+
+describe("H5: a running game is adopted only when its bridge is the staged candidate", () => {
+  const adopt = async (live: Record<string, unknown>) => {
+    const { writeFileSync } = await import("node:fs");
+    const { clock, fakeApi, fakeHost, go, script, stagedMod } = await fakes();
+    const dir = tempDir("xfb-r34-");
+    const mod = stagedMod(dir);
+    writeFileSync(join(mod, "red4ext", "plugins", "XFRuntimeBridge", "manifest.json"), JSON.stringify({ version: "0.8.22", variant: "writes", commit: "65b8da29".padEnd(40, "0"), source_tree_clean: true }));
+    const api = fakeApi(clock, { "bridge.info": () => ({ ok: true, result: { sid: "sid-1", plugin_version: "0.8.22", build_dirty: false, bridge: { allow_writes: true, write_classes: ["photo", "world", "save"] }, ...live } }) });
+    const host = fakeHost({ running: true });
+    const rows = [{ id: "r", title: "r", steps: [{ label: "w", do: "wait", ms: 10 }] }];
+    await go(script(rows as never), api, host, clock, dir, { fixtures: { staged_mod: mod, mo2: { exe: join(dir, "mo2", "ModOrganizer.exe"), profile: "p", executable: "e" } } });
+    return host.log;
+  };
+  test("the previous build still running (a restage since): closed and the staged one launched", async () => {
+    const log = await adopt({ build_commit: "6085d8e4".padEnd(40, "0") });
+    expect(log.indexOf("close")).toBeGreaterThanOrEqual(0);
+    expect(log.indexOf("launch")).toBeGreaterThan(log.indexOf("close"));
+  });
+  test("settings the game loaded that config.ini no longer says (allow_writes): restarted", async () => {
+    const log = await adopt({ build_commit: "65b8da29".padEnd(40, "0"), bridge: { allow_writes: false, write_classes: ["photo", "world", "save"] } });
+    expect(log).toContain("close");
+  });
+  test("the staged candidate running: adopted, no restart", async () => {
+    const log = await adopt({ build_commit: "65b8da29".padEnd(40, "0") });
+    expect(log).not.toContain("close");
+    expect(log).not.toContain("launch");
+  });
+});
