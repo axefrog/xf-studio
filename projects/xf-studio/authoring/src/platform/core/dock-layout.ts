@@ -569,17 +569,21 @@ export function lastExpandedDocked(tree: DockTree, groupId: string): boolean {
 }
 
 /** Where a panel is now, as a parked place (undefined when the tree doesn't hold it). `leaving` are the panels parked with it. */
-function placeOf(tree: DockTree, panel: PanelId, leaving: ReadonlySet<PanelId>): ParkedPlace | undefined {
+function placeOf(tree: DockTree, panel: PanelId, leaving: ReadonlySet<PanelId>, withdrawal = false): ParkedPlace | undefined {
   if (tree.closed.includes(panel)) return { closed: true };
   const at = locate(tree, panel);
   if (!at) return undefined;
   const floatingWindow = at.windowId ? tree.floating.find(item => item.id === at.windowId) : undefined;
   // A departing group remembers a neighbour in its dock or floating composite, on the same side and at the same share.
-  const anchor = anchorFor(floatingWindow?.node ?? tree.root, at.group.id, new Set([...leaving, ...at.group.panels]));
+  const root = floatingWindow?.node ?? tree.root;
+  // Withdrawal can take an entire layout away. Remember a departing sibling when none survives, so the groups can reconstruct
+  // their split as they return; semantic Close/Remove keeps its existing surviving-neighbour policy.
+  const anchor = anchorFor(root, at.group.id, new Set([...leaving, ...at.group.panels]))
+    ?? (withdrawal ? anchorFor(root, at.group.id, new Set(at.group.panels)) : undefined);
   return { group: [...at.group.panels], index: at.index, active: at.group.active === panel, groupId: at.group.id, ...(at.group.collapsed ? { collapsed: true } : {}),
     ...(!floatingWindow ? { docked: true as const } : {}),
     ...(floatingWindow ? { window: { x: floatingWindow.x, y: floatingWindow.y, w: floatingWindow.w, h: floatingWindow.h }, windowId: floatingWindow.id, windowIndex: tree.floating.indexOf(floatingWindow) } : {}),
-    ...(anchor ? { anchor: floatingWindow ? anchor : { panel: anchor.panel, side: anchor.side, share: anchor.share, splitId: anchor.splitId } } : {}) };
+    ...(anchor ? { anchor: floatingWindow || withdrawal ? anchor : { panel: anchor.panel, side: anchor.side, share: anchor.share, splitId: anchor.splitId } } : {}) };
 }
 /** Read a panel's current or remembered closed place without closing it or cloning its whole tree. */
 export function panelPlace(tree: DockTree, panel: PanelId): Exclude<ParkedPlace, { closed: true }> | undefined {
@@ -623,7 +627,7 @@ function anchorFor(root: DockNode | null, id: string, leaving: ReadonlySet<Panel
 export function parkPanels(tree: DockTree, panels: readonly PanelId[]): DockTree {
   const leaving = new Set(panels), parked = { ...tree.parked };
   // Every place is read from the tree as it is, before any panel leaves, so a group that leaves whole keeps its members' order.
-  for (const panel of panels) { const place = placeOf(tree, panel, leaving); if (place && !parked[panel]) parked[panel] = place; }
+  for (const panel of panels) { const place = placeOf(tree, panel, leaving, true); if (place && !parked[panel]) parked[panel] = place; }
   let next = clone(tree);
   for (const panel of panels) next = detachPanel(next, panel);
   // A closed panel parked with its module keeps where it was before it was closed.
@@ -640,7 +644,18 @@ export function parkPanels(tree: DockTree, panels: readonly PanelId[]): DockTree
 export function unparkPanels(tree: DockTree, panels: readonly PanelId[], fallback: DockTree, area: Rect): DockTree {
   let next = clone(tree);
   const parked = { ...next.parked };
-  for (const panel of panels) {
+  // Restore an anchor before the group that needs it. A wholly withdrawn layout can contain cycles (two neighbouring groups);
+  // visiting each panel once breaks those cycles while keeping inner splits together before their outer neighbours return.
+  const wanted = new Set(panels), visited = new Set<PanelId>(), ordered: PanelId[] = [];
+  const visit = (panel: PanelId) => {
+    if (visited.has(panel)) return;
+    visited.add(panel);
+    const place = parked[panel], anchor = place && !("closed" in place) ? place.anchor?.panel : undefined;
+    if (anchor && wanted.has(anchor)) visit(anchor);
+    ordered.push(panel);
+  };
+  for (const panel of panels) visit(panel);
+  for (const panel of ordered) {
     const place = parked[panel];
     delete parked[panel];
     if (locate(next, panel) || next.closed.includes(panel)) continue;
@@ -702,8 +717,34 @@ function restorePlace(tree: DockTree, panel: PanelId, place: Exclude<ParkedPlace
       };
       return { ...tree, root: visit(tree.root), floating: tree.floating.map(floatingWindow => ({ ...floatingWindow, node: visit(floatingWindow.node)! })) };
     };
-    if (!anchor.windowId) return restoreShares(insertNode(tree, place.collapsed ? { ...created, collapsed: true } : created,
-      { kind: "split", groupId: anchor.group.id, side: beside.side }, undefined, beside.share, true, beside.splitId));
+    if (!anchor.windowId) {
+      // A remembered direct sibling can itself be a split (an entire column). Rejoin the original split when it survives, or
+      // rebuild around one of its remembered child subtrees; never split one of that child's leaves instead.
+      const shares = beside.shares, order = Object.keys(shares ?? {}), incoming = order.indexOf(created.id);
+      const node = place.collapsed ? { ...created, collapsed: true } : created;
+      let inserted = false;
+      const rejoin = (root: DockNode | null): DockNode | null => {
+        if (!root || root.kind === "group") return root;
+        if (incoming >= 0 && root.id === beside.splitId && root.children.every(child => order.includes(child.id))) {
+          inserted = true;
+          const children = [...root.children, node].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+          return { ...root, children, sizes: normalizeSizes(children.map(child => shares![child.id]!), children.length) };
+        }
+        return { ...root, children: root.children.map(child => rejoin(child)!) };
+      };
+      const joined = rejoin(tree.root);
+      if (inserted) return { ...clone(tree), root: joined };
+      const sibling = (node: DockNode | null): DockNode | undefined => !node ? undefined : beside.shares?.[node.id] !== undefined ? node
+        : node.kind === "split" ? node.children.map(sibling).find(Boolean) : undefined;
+      const branch = sibling(tree.root);
+      if (branch && incoming >= 0 && beside.splitId !== branch.id) {
+        const before = incoming < order.indexOf(branch.id), children = before ? [node, branch] : [branch, node];
+        return restoreShares({ ...clone(tree), root: replaceNode(tree.root!, branch.id,
+          split(beside.side === "left" || beside.side === "right" ? "row" : "column", children, children.map(child => shares![child.id]!), beside.splitId)) });
+      }
+      return restoreShares(insertNode(tree, place.collapsed ? { ...created, collapsed: true } : created,
+        { kind: "split", groupId: anchor.group.id, side: beside.side }, undefined, beside.share, true, beside.splitId));
+    }
     const floatingWindow = tree.floating.find(item => item.id === anchor!.windowId)!;
     const row = beside.side === "left" || beside.side === "right";
     const children = floatingWindow.node.kind === "split" && floatingWindow.node.id === beside.splitId ? floatingWindow.node.children : [floatingWindow.node];

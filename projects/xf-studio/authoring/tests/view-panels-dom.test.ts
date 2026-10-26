@@ -24,12 +24,39 @@ import { defaultViewGraph } from "../src/preview/preview-view-graph";
 import { drawnView } from "../src/app/profiles/profile-window";
 import { Feedback } from "../src/studio-ui/feedback";
 import type { PreviewSetupSnapshot } from "../src/preview/preview-setup";
+import { HOLOTABLE_MODULE } from "../src/features/holotable";
+import { HOLOTABLE_VIEW } from "../src/features/holotable/view/contribution";
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
 
 const panelOf = (view: string) => view === "main" ? "head" : `view.${view}`;
 const shownOf = (views: string[]): ShownView[] => views.map(view => ({ view, panel: panelOf(view) }));
+
+test.each(["wide", "compact"] as const)("registered experiment panels resume in the real %s dock and Panels picker after an early restore", async size => {
+  const { DockView } = await import("../src/studio-ui/dock/dock-view");
+  const { restoreDockPreference } = await import("../src/studio-ui/dock/persist");
+  const life = new AbortController(), area = { x: 0, y: 0, w: 800, h: 600 };
+  const saved = HOLOTABLE_MODULE.defaults![0]!.fragment.tab.dock;
+  const off = viewCatalogue([SHELL_VIEW]), on = viewCatalogue([SHELL_VIEW, HOLOTABLE_VIEW]);
+  const specs = (catalogue: typeof on) => catalogue.panels.map(({ id, title, icon, description }) => ({ id, title, icon, description, element: document.createElement("div") }));
+  const early = restoreDockPreference(saved, area, off, [], [], true).state;
+  const dock = new DockView({ signal: life.signal, panels: specs(off), state: early, sizeClass: () => size,
+    defaults: () => early[size], save() {}, announce() {} });
+  lightDocument.body.append(dock.element as unknown as LightElement);
+  try {
+    dock.render();
+    expect(dock.tree.root).toBeNull();
+    dock.load(restoreDockPreference(serializeDockState(early), area, on, [], [], true).state, specs(on));
+    for (const panel of HOLOTABLE_VIEW.panels) {
+      expect(dock.panelState(panel.id)).toBe("open");
+      expect((dock.element as unknown as LightElement).querySelector(`[data-panel="${panel.id}"]`)).not.toBeNull();
+    }
+    const rt = { dock, views: on, port: { views: { titles: () => [], modules: () => [HOLOTABLE_MODULE], plannedModules: () => [] } } };
+    const rows = panelMenuItems(rt as never, false).filter(item => item.kind === "action");
+    for (const panel of HOLOTABLE_VIEW.panels) expect(rows.some(row => row.label === panel.title && row.checked)).toBe(true);
+  } finally { life.abort(); }
+});
 
 describe("pane state", () => {
   test("the canvas is in the pane whose picture it holds, the drawn view's while none is on it; the drawn view elsewhere is preparing", () => {

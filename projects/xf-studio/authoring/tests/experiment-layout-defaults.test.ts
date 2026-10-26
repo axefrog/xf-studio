@@ -2,7 +2,7 @@
  * Experiment-contributed default layouts (compose/layout-defaults.ts `studioLayoutDefaults`): an experiment's module defaults are offered
  * in New tab ▸ while it's on and withdrawn when it's off; an invalid one is refused and logged without touching the built-in set; a tab
  * made from one is the person's and survives the experiment going off and on. The experiments own the fact that their registration set
- * changed (`registrationGeneration`, `onRegistrationsChanged`); the layouts rebuild eagerly on that signal and never on a read.
+ * changed (`registrationGeneration`, `onRegistrationsChanged`); all consumers read a generation-checked registration snapshot.
  * Holotable's own default (no 3D view, an empty graph) is the worked case.
  */
 import { describe, expect, test } from "bun:test";
@@ -18,6 +18,11 @@ import type { StudioModule } from "../src/platform/api";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { memoryOutboxStorage, storeDocuments } from "./fixtures/platform-doubles";
 import { openSession, seededRandom } from "./fixtures/profile-sessions";
+import { panelCommands } from "../src/compose/panel-commands";
+import type { TargetResolver } from "../src/app/profiles/targets";
+import { restoreDockPreference, serializeDockState } from "../src/studio-ui/dock/persist";
+import { allGroups, locate, type DockState } from "../src/studio-ui/dock/layout";
+import { createHistoryService } from "../src/platform/core/history-service";
 
 const HOLO = "holotable/default", EYE = "eye-makeup/default";
 const holotable: LayoutExperiment = { module: HOLOTABLE_MODULE, contribution: HOLOTABLE_VIEW };
@@ -52,12 +57,86 @@ function windowWith(experiments: Double, log: string[] = []) {
   outbox.open();
   const layouts = studioLayoutDefaults(experiments, message => log.push(message));
   const defaults = new LayoutDefaults({ documents, outbox, contributed: layouts.contributed, known: layouts.known, random: seededRandom(3) });
-  const s = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "Layout 1" }, seededRandom(1)), { random: seededRandom(7) });
+  const history = createHistoryService();
+  const s = openSession(sessionOfWorkspace(freshWorkspace(), { tab: "Layout 1" }, seededRandom(1)), { random: seededRandom(7), history });
   const services = { profiles: { profile: () => ({ subjects: [], collections: [] }) }, collections: { collection: () => ({ looks: [] }), look: () => ({ state: "live" }) },
     characters: { document: () => null } };
   const tabs = new TabDefaults({ sessions: s, defaults, candidates: () => substitutionContext(s, services as never), keepsState: keepsStateInDefaults, known: layouts.known });
-  return { defaults, tabs, s, layouts, log };
+  const commands = panelCommands(s, { world: () => ({ views: {}, scenes: {}, subjects: {}, looks: {} }) } as unknown as TargetResolver, layouts.catalogue);
+  return { defaults, tabs, s, layouts, log, history, commands };
 }
+
+const area = { x: 0, y: 0, w: 800, h: 600 };
+const restore = (w: ReturnType<typeof windowWith>) => {
+  const catalogue = w.layouts.catalogue();
+  // The phase-2 shell replaces head with the shown tab's view panes. Holotable's default has no 3D view.
+  return restoreDockPreference(w.s.legacyDock(), area, { ...catalogue, ids: catalogue.ids.filter(id => id !== "head"),
+    panels: catalogue.panels.filter(panel => panel.id !== "head") }, [], [], true).state;
+};
+const shown = (state: DockState, size: keyof DockState) => allGroups(state[size]).flatMap(({ group }) => group.panels).sort();
+const holoPanels = HOLOTABLE_VIEW.panels.map(panel => panel.id).sort();
+
+describe("experiment panels through the live contribution and dock boundary", () => {
+  test("a fresh experiment default has all its contributed panels in both docks and the typed catalogue", () => {
+    const experiments = experimentsDouble(), w = windowWith(experiments);
+    experiments.set(true);
+    w.tabs.dispatch({ kind: "tabs.new", default: HOLO });
+    const projection = w.commands.projection(w.s.tabId());
+    for (const type of holoPanels) {
+      expect(projection.find(panel => panel.type === type)?.contribution).toMatchObject({ id: type, owner: "holotable" });
+      expect(w.layouts.catalogue().ids).toContain(type);
+    }
+    const state = restore(w);
+    for (const size of ["wide", "compact"] as const) expect(shown(state, size)).toEqual(holoPanels);
+    expect(locate(state.compact, "holotable.recordings")?.group.panels).toEqual(["holotable.recordings", "holotable.details"]);
+    expect(w.commands.capability({ kind: "panels.add", destination: w.s.panelTabTarget(w.s.tabId()), type: "holotable.details" }).available).toBe(true);
+  });
+
+  test.each([true, false])("restore before registration resumes all remembered places; writable=%s", writable => {
+    const experiments = experimentsDouble(), first = windowWith(experiments);
+    experiments.set(true); first.tabs.dispatch({ kind: "tabs.new", default: HOLO });
+    const expected = restore(first), saved = first.s.session(), id = first.s.tabId();
+    experiments.set(false);
+    const history = createHistoryService(), s = openSession(saved, { history }), w = { ...first, s };
+    const before = JSON.stringify(s.tab(id)), timeline = JSON.stringify(history.scope(`view:${s.profile}`)!.timeline());
+    const parked = restore(w);
+    for (const size of ["wide", "compact"] as const) {
+      expect(shown(parked, size)).toEqual([]);
+      expect(Object.keys(parked[size].parked ?? {}).sort()).toEqual(holoPanels);
+    }
+    // A writable window can save its early recovery. A read-only window must resume from the original saved tab locally.
+    if (writable) s.arrange(id, serializeDockState(parked));
+    experiments.set(true);
+    expect(restore(w)).toEqual(expected);
+    expect(s.tab(id)?.panels.filter(panel => panel.type.startsWith("holotable."))).toEqual(saved.tabs.find(tab => tab.id === id)!.panels.filter(panel => panel.type.startsWith("holotable.")));
+    expect(JSON.stringify(history.scope(`view:${s.profile}`)!.timeline())).toBe(timeline);
+    if (!writable) expect(JSON.stringify(s.tab(id))).toBe(before);
+  });
+
+  test("flag off/on keeps instance IDs, state, bindings, closed panels and independently arranged size classes without history", () => {
+    const experiments = experimentsDouble(), w = windowWith(experiments);
+    experiments.set(true); w.tabs.dispatch({ kind: "tabs.new", default: HOLO });
+    const id = w.s.tabId(), before = w.s.tab(id)!, state = restore(w);
+    state.wide.floating.push({ id: "w-custom", x: 80, y: 90, w: 400, h: 350,
+      node: { kind: "group", id: "g-custom", panels: ["holotable.details"], active: "holotable.details" } });
+    // Keep the custom floating placement in wide, and the contributed grouped placement in compact.
+    const wide = state.wide.root!;
+    if (wide.kind !== "split") throw Error("Expected the contributed split");
+    wide.children = wide.children.filter(child => child.id !== "g-details"); wide.sizes = [0.3, 0.7];
+    w.s.arrange(id, serializeDockState(state));
+    const expected = restore(w), instances = w.s.tab(id)!.panels, history = JSON.stringify(w.history.scope(`view:${w.s.profile}`)!.timeline());
+    experiments.set(false);
+    expect(w.commands.projection(id).filter(panel => panel.type.startsWith("holotable.")).every(panel => panel.contribution === undefined)).toBe(true);
+    expect(w.commands.capability({ kind: "panels.show", destination: w.s.panelTarget(instances.find(panel => panel.type === "holotable.view")!.id) }).available).toBe(false);
+    w.s.arrange(id, serializeDockState(restore(w)));
+    experiments.set(true);
+    expect(restore(w)).toEqual(expected);
+    expect(w.s.tab(id)!.panels).toEqual(instances);
+    expect(instances.filter(panel => panel.type.startsWith("holotable.")).map(panel => panel.id))
+      .toEqual(before.panels.filter(panel => panel.type.startsWith("holotable.")).map(panel => panel.id));
+    expect(JSON.stringify(w.history.scope(`view:${w.s.profile}`)!.timeline())).toBe(history);
+  });
+});
 
 describe("experiment-contributed default layouts", () => {
   test("Holotable's default reads: an empty graph (no views, nodes or subjects) passes the fragment validator", () => {
@@ -84,7 +163,7 @@ describe("experiment-contributed default layouts", () => {
   test("an invalid experiment default is refused and logged once, never offered, and the built-in set is unharmed", () => {
     const broken: StudioModule = { ...HOLOTABLE_MODULE, id: "broken", label: "Broken", defaults: [{ ...HOLOTABLE_MODULE.defaults![0]!,
       fragment: { ...HOLOTABLE_MODULE.defaults![0]!.fragment, panels: [{ key: "x", type: "no.such.panel" }] } }] };
-    const log: string[] = [], experiments = experimentsDouble([{ module: broken, contribution: { panels: [] } }]), w = windowWith(experiments, log);
+    const log: string[] = [], experiments = experimentsDouble([{ module: broken, contribution: { ...HOLOTABLE_VIEW, panels: [] } }]), w = windowWith(experiments, log);
     experiments.set(true);
     const ids = w.defaults.list().map(item => item.id);
     expect(ids).not.toContain("broken/default"); expect(ids).toContain(EYE);
@@ -185,11 +264,12 @@ describe("experiment-contributed default layouts", () => {
   test("(c) general experiment changes (playback, services, history) neither move the generation nor rebuild", () => {
     const experiments = experimentsDouble(), w = windowWith(experiments);
     experiments.set(true);
-    const generation = w.layouts.contributed.generation!(), list = w.layouts.contributed.list();
+    const generation = w.layouts.contributed.generation!(), list = w.layouts.contributed.list(), catalogue = w.layouts.catalogue();
     let notified = 0; w.layouts.contributed.subscribe(() => notified++);
     for (let i = 0; i < 5; i++) experiments.noise();
     expect(w.layouts.contributed.generation!()).toBe(generation);
     expect(w.layouts.contributed.list()).toBe(list);
+    expect(w.layouts.catalogue()).toBe(catalogue);
     expect(notified).toBe(0);
   });
 
@@ -241,7 +321,13 @@ describe("order-proof reads", () => {
   test("a registration listener registered before the layouts never reads a withdrawn set", () => {
     const experiments = experimentsDouble(), seen: boolean[] = [];
     let w: ReturnType<typeof windowWith> | undefined;
-    experiments.onRegistrationsChanged(() => { if (w) seen.push(w.layouts.contributed.list().some(item => item.id === HOLO) || w.layouts.known.panel("holotable.view")); });
+    experiments.onRegistrationsChanged(() => { if (w) {
+      const on = w.layouts.contributed.list().some(item => item.id === HOLO);
+      expect(w.layouts.registrations().includes(holotable)).toBe(on);
+      expect(w.layouts.catalogue().ids.includes("holotable.view")).toBe(on);
+      expect(w.layouts.known.panel("holotable.view")).toBe(on);
+      seen.push(on);
+    } });
     w = windowWith(experiments);
     experiments.set(true); experiments.set(false);
     expect(seen).toEqual([true, false]);

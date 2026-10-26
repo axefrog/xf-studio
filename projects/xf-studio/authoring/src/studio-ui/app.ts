@@ -293,16 +293,23 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   };
   let lastNotice = port.diagnostics.snapshot().notice?.id ?? 0;
   let setupRequests = port.previewSetup.snapshot().setupRequests;
-  let optionalKey = "";
+  let optionalViews: ReturnType<NonNullable<ViewComposition["optional"]>> = [];
+  let optionalGeneration: number | undefined;
+  const optionalAnchors = new Map<PanelController, () => void>();
   let experimentFocus = "";
   function syncOptional() {
-    const optional = views.optional?.() ?? [], key = optional.map(item => item.contribution.owner).join(",");
-    if (key === optionalKey) return;
-    const owners = new Set(optional.map(item => item.contribution.owner));
+    const generation = views.optionalGeneration?.();
+    if (generation !== undefined && generation === optionalGeneration) return;
+    const optional = views.optional?.() ?? [];
+    if (generation === undefined && optional.length === optionalViews.length && optional.every((item, i) => item === optionalViews[i])) return;
+    const owners = new Map(optional.map(item => [item.contribution.owner, item]));
     const gone = panels.filter(panel => { const entry = catalogue.panels.find(item => item.id === panel.spec.id);
-      return entry && !isViewPane(entry.id) && !views.catalogue.ids.includes(entry.id) && !owners.has(entry.owner); });
-    for (const panel of gone) { panel.spec.visibility?.(false); panel.dispose?.(); byId.delete(panel.spec.id); panels.splice(panels.indexOf(panel), 1); }
-    if (gone.length) dock.removePanels(gone.map(panel => panel.spec.id));
+      return entry && !isViewPane(entry.id) && !views.catalogue.ids.includes(entry.id)
+        && owners.get(entry.owner) !== optionalViews.find(item => item.contribution.owner === entry.owner); });
+    for (const panel of gone) {
+      panel.spec.visibility?.(false); panel.dispose?.(); optionalAnchors.get(panel)?.(); optionalAnchors.delete(panel);
+      byId.delete(panel.spec.id); panels.splice(panels.indexOf(panel), 1);
+    }
     const extra = viewCatalogue(optional.map(item => item.contribution));
     extraEntries = extra.panels;
     rebuildCatalogue();
@@ -312,11 +319,13 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       const ctx = moduleViewContext(rt, contribution.owner);
       for (const entry of contribution.panels) if (!byId.has(entry.id)) {
         const panel = (binding.panels[entry.id] as (ctx: ModuleViewContext) => PanelController)(ctx);
-        panels.push(panel); byId.set(entry.id, panel); rt.anchors.register(panelAnchor(entry.id), panel.spec.element);
+        panel.bind?.(port.panels.instance(entry.id));
+        panels.push(panel); byId.set(entry.id, panel); optionalAnchors.set(panel, anchorPanel(panel));
       }
     }
-    optionalKey = key; withdrawnKey = ""; experimentFocus = "";
-    // Reload against the refreshed catalogue; absent experiment panels stay closed.
+    optionalViews = optional; optionalGeneration = generation; withdrawnKey = ""; experimentFocus = "";
+    // One restore from the destination tab, without an intermediate withdrawal save into a possibly newly shown tab. Unknown types
+    // park on withdrawal and known types resume their remembered places, even in a read-only window (only persistence needs a lease).
     dock.load(restoreDockPreference(port.tabs?.dock(), dock.area(), catalogue, [], viewPanelIds(port.views.snapshot()), !!port.tabs).state, panels.map(specOf));
   }
   const paint = () => {

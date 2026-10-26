@@ -67,7 +67,6 @@ import { ShapeStarters } from "../app/starters/shape-starters";
 import { StarterActions } from "../app/starters/starter-actions";
 import { readStarterShape } from "../engines/layered-makeup/starter-shape";
 import { STUDIO_VIEW_COMPOSITION } from "./view-panels";
-import { STUDIO_CATALOGUE } from "./views";
 import { STUDIO_FACE_POSES, STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./renderers";
 import { combineFacePoses, FacialPreview } from "../animation/facial-preview";
 import { headQuiet, prefetchWhenQuiet } from "../animation/facial-prefetch";
@@ -341,10 +340,10 @@ async function start(host: StudioHost, root: HTMLElement) {
     layer: (ref, id) => { const edited = lookEditor.ref();
       return edited && sameLook(ref, edited) ? core.document.recipe.layers.find(layer => layer.id === id) : undefined; } });
   core.app.attach({ starters: starterActions, starterShapes });
-  const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, contexts: type => STUDIO_CATALOGUE.context(type),
+  const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, contexts: type => layouts.catalogue().context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
-  core.app.attach({ targetCheck: targets, panels: panelCommands(sessionState, targets) });
+  core.app.attach({ targetCheck: targets, panels: panelCommands(sessionState, targets, layouts.catalogue) });
   const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.named()), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
@@ -563,7 +562,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     } else lookEditor.show(shownScene.look());
   });
   // The only object handed to the presentation.
-  const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: () => experiments.registrations().map(item => ({ contribution: item.contribution, binding: item.binding })) };
+  const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: layouts.registrations, optionalGeneration: layouts.registrationGeneration };
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); });
   defaultNote = text => adapterMessage("layout-default", text);
   if (defaultNotes.length) { defaultNote(defaultNotes.join("\n\n")); defaultNotes.length = 0; }

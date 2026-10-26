@@ -384,3 +384,14 @@ test("floating composite remembered shares survive persistence and module withdr
   expect(restored.parked).toEqual(parked.parked);
   expect(unparkPanels(restored, ["a"], tree, area)).toEqual(tree);
 });
+
+test("a wholly withdrawn dock reconstructs every split and tab from persisted places, in any return order", () => {
+  const tree: DockTree = { root: split("row", [split("column", [group(["a"], "a", "ga"), group(["b", "d"], "d", "gb")], [.6, .4], "inner"),
+    group(["c"], "c", "gc")], [.7, .3], "outer"), floating: [], closed: ["closed"] };
+  const orders = [["a", "b", "c", "d", "closed"], ["c", "d", "b", "a", "closed"], ["d", "c", "a", "b", "closed"]];
+  for (const order of orders) {
+    const parked = parkPanels(tree, order);
+    const saved = parseTree(JSON.parse(JSON.stringify(parked)), [], { root: null, floating: [], closed: [] }, order)!;
+    expect(unparkPanels(saved, order, { root: null, floating: [], closed: order }, area)).toEqual(tree);
+  }
+});

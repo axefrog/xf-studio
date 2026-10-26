@@ -10,7 +10,8 @@ import { dispatchIsolated } from "../platform/core/listeners";
 import type { FragmentKnowledge } from "../app/profiles/layout-fragment";
 import { STUDIO_VIEW_GRAPH_RULES } from "../preview/preview-view-graph";
 import { STUDIO_MODULE_REGISTRATION, STUDIO_MODULES } from "./modules";
-import { STUDIO_CATALOGUE } from "./views";
+import { STUDIO_CATALOGUE, STUDIO_VIEWS } from "./views";
+import { viewCatalogue, type ViewCatalogue, type ViewContribution } from "../studio-ui/views/contribution";
 import { legacyEnabledModules, type DockLayout, type UIPreferences } from "../app/ui-preferences";
 import { dockPanels, rewriteDock, type InitialProfileLayout } from "../app/profiles/profiles-migration-data";
 import { defaultDockState } from "../studio-ui/layout-defaults";
@@ -26,10 +27,10 @@ if (issues.length) throw Error(`The modules' default layouts are incomplete: ${i
 export const STUDIO_LAYOUT_DEFAULTS = contributedDefaults(STUDIO_MODULES);
 
 /** An experiment as the layouts see it: its module (with any defaults) and the panels its view contributes while it's on. */
-export type LayoutExperiment = { readonly module: StudioModule; readonly contribution: { readonly panels: readonly { readonly id: string }[] } };
+export type LayoutExperiment = { readonly module: StudioModule; readonly contribution: ViewContribution };
 /** What the layouts need of the experiments: their registrations, and the owner's signal that the set of them changed. */
-export type LayoutExperiments = {
-  registrations(): readonly LayoutExperiment[];
+export type LayoutExperiments<T extends LayoutExperiment = LayoutExperiment> = {
+  registrations(): readonly T[];
   registrationGeneration(): number;
   onRegistrationsChanged(listener: () => void): () => void;
 };
@@ -40,7 +41,7 @@ export type LayoutExperiments = {
  * the build's knowledge plus that experiment's own panels; an invalid one is refused, logged once and never offered, and it never stops
  * the build. Switching the experiment off withdraws its defaults and its panel types; tabs made from them are the person's and stay.
  */
-export function studioLayoutDefaults(experiments: LayoutExperiments, log: (message: string) => void = () => {}) {
+export function studioLayoutDefaults<T extends LayoutExperiment>(experiments: LayoutExperiments<T>, log: (message: string) => void = () => {}) {
   const refused = new WeakSet<StudioModule>();
   const refuse = (item: LayoutExperiment, reason: string) => {
     if (refused.has(item.module)) return;
@@ -51,9 +52,9 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
   // knowledge can never disagree. The experiments own the fact that the set changed: every read compares the snapshot's generation with
   // their `registrationGeneration()` (cheap and authoritative) and rebuilds when it is behind, so no listener, in whatever order it
   // subscribed, can read a withdrawn set. The signal only tells this source's subscribers.
-  type Snapshot = { generation: number; list: readonly ContributedLayoutDefault[]; panels: ReadonlySet<string> };
+  type Snapshot = { generation: number; list: readonly ContributedLayoutDefault[]; panels: ReadonlySet<string>; registrations: readonly T[]; catalogue?: ViewCatalogue };
   const build = (): Snapshot => {
-    const at = experiments.registrationGeneration(), on = experiments.registrations();
+    const at = experiments.registrationGeneration(), on = [...experiments.registrations()];
     const added = on.flatMap(item => {
       // One experiment's broken defaults never take the others, or the built-in ones, with them.
       try {
@@ -65,7 +66,7 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
       } catch (error) { refuse(item, String((error as Error)?.message ?? error)); }
       return [];
     });
-    return { generation: at, list: Object.freeze([...STUDIO_LAYOUT_DEFAULTS, ...added]),
+    return { generation: at, list: Object.freeze([...STUDIO_LAYOUT_DEFAULTS, ...added]), registrations: Object.freeze(on),
       panels: new Set(on.flatMap(item => item.contribution.panels.map(panel => panel.id))) };
   };
   /**
@@ -74,7 +75,7 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
    * and knowledge stand in, cached for that generation; a withdrawn set is never returned. A read made from inside a build (a listener
    * reached during it) gets the built-ins too.
    */
-  const builtIns = (generation: number): Snapshot => ({ generation, list: STUDIO_LAYOUT_DEFAULTS, panels: new Set() });
+  const builtIns = (generation: number): Snapshot => ({ generation, list: STUDIO_LAYOUT_DEFAULTS, panels: new Set(), registrations: [] });
   let snap: Snapshot = builtIns(-1), building = false;
   const snapshot = (): Snapshot => {
     const current = experiments.registrationGeneration();
@@ -96,7 +97,9 @@ export function studioLayoutDefaults(experiments: LayoutExperiments, log: (messa
     panel: (type: string) => panels.has(type) || snapshot().panels.has(type) });
   const contributed: ContributedDefaultsSource = { list: () => snapshot().list, generation: () => snapshot().generation,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; } };
-  return { contributed, known };
+  // Defaults, command metadata, target contexts and the shell's factories all read this same generation-checked registration set.
+  return { contributed, known, registrations: () => snapshot().registrations, registrationGeneration: () => snapshot().generation,
+    catalogue: () => { const current = snapshot(); return current.catalogue ??= viewCatalogue([...STUDIO_VIEWS, ...current.registrations.map(item => item.contribution)]); } };
 }
 // A first workspace keeps its legacy view graph, and starts with Eye makeup's contributed panel arrangement in both size classes.
 const first = STUDIO_LAYOUT_DEFAULTS.find(item => item.id === "eye-makeup/default")!;
