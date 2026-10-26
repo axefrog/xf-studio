@@ -150,4 +150,6 @@ test('S3H recovery paths: reconciliation cannot recover facts from the discarded
 test('S3I property: unswept, swept and random fresh replay agree after every operation', () => {
   const coverage = runSweepReplayProperty();
   if (process.env.SWEEP_SEEDS || process.env.S1_FULL === "1") console.log('sweep/replay coverage:', coverage);
-}, Math.max(60000, Number(process.env.SWEEP_SEEDS ?? (process.env.S1_FULL === "1" ? 2048 : 8)) * 1500));
+// 1.5 s a seed, and under `S1_FULL` the whole hunt (2,048 seeds in each snapshot mode, about 25 minutes alone and over 50 on a loaded or slow runner, whose CI run took 3,103 s
+// against the old 3,072 s) gets 90 minutes: the hunt keeps all of its seeds, because it is there to find the rare bug
+}, process.env.SWEEP_SEEDS === undefined && process.env.S1_FULL === '1' ? 5_400_000 : Math.max(60000, Number(process.env.SWEEP_SEEDS ?? 8) * 1500));
