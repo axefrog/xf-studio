@@ -68,4 +68,5 @@ export type SetExportResult =
   | { kind: "failed"; action: "check" | "build"; code: string; message: string; revision: number; key: string;
       /** When nothing could be packaged: each expression and why (the result then shows them with their next step). */
       omissions?: readonly ExportOmission[] };
-export type SetExportState = { busy: { id: string; action: "check" | "build" | "reveal" } | null; results: Readonly<Record<string, SetExportResult>> };
+export type SetBuildProgress = import("../platform/api").PackageBuildProgress & { readonly message: string; readonly fraction: number };
+export type SetExportState = { busy: { id: string; action: "check" | "build" | "reveal"; progress?: SetBuildProgress } | null; results: Readonly<Record<string, SetExportResult>> };

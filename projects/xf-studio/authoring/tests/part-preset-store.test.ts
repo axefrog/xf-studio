@@ -229,12 +229,24 @@ test("a set's Check and Build go through the package route with its package-only
   const preset = { id: presetId, feature: "expressions", name: "Smile", revision: 1, part: expression({ jaw_mid_open: 0.2 }), updatedAt: "now" };
   const sets = [{ id: setId, feature: "expressions", name: "Moody", revision: 1, members: [] as string[], updatedAt: "now" }];
   const sent: unknown[] = [], revealed: string[] = [];
+  let lateProgress: ((progress: import("../src/platform/api").PackageBuildProgress) => void) | undefined;
+  let progressSignal: AbortSignal | undefined;
   const service = new PartPresetService({
     list: async () => [preset], save: async () => { throw Error("unused"); }, rename: async () => { throw Error("unused"); }, delete: async id => ({ id }),
     listSets: async () => structuredClone(sets), createSet: async () => { throw Error("unused"); }, deleteSet: async id => ({ id }),
     updateSet: async (id, input) => { Object.assign(sets[0]!, input, { revision: sets[0]!.revision + 1 }); return structuredClone(sets[0]!); },
   }, {
-    package: async (action, collection) => { sent.push({ action, collection }); return { schema: action === "build" ? "xfs/package-build-2" : "xfs/package-check-2",
+    package: async (action, collection, signal, onProgress) => {
+      if (action === "build") {
+        lateProgress = onProgress; progressSignal = signal;
+        for (const [index, stage] of ["prepare", "compose", "convert", "pack", "verify"].entries()) {
+          onProgress!({ stage: stage as import("../src/platform/api").PackageBuildStage, step: index + 1, steps: 5 });
+          expect(service.exportState().busy).toMatchObject({ id: setId, action: "build", progress: { stage, step: index + 1 } });
+        }
+        onProgress!({ stage: "compose", step: 2, steps: 5 });
+        expect(service.exportState().busy!.progress!.stage).toBe("verify");
+      }
+      sent.push({ action, collection }); return { schema: action === "build" ? "xfs/package-build-2" : "xfs/package-check-2",
       products: [{ productId: setId, modName: "XF Expressions - Moody", package: "C:/dist/xfs_c00-1", features: [] }], omissions: [], originalPresetCount: 1 } as never; },
     reveal: async id => { revealed.push(id); return { ok: true }; },
   });
@@ -252,6 +264,9 @@ test("a set's Check and Build go through the package route with its package-only
   expect((sent[0] as { collection: { presetSet: unknown; presets: { id: string }[] } }).collection).toMatchObject({ presetSet: { table: "installed" },
     presets: [{ id: presetId }] });
   expect(service.exportState().results[setId]).toMatchObject({ kind: "build", revision: 2, missing: 0 });
+  expect(progressSignal!.aborted).toBe(true);
+  lateProgress!({ stage: "pack", step: 4, steps: 5 });
+  expect(service.exportState().busy).toBeNull();
   expect(await service.execute({ kind: "partPresetSet.reveal", feature: "expressions", id: setId })).toEqual({ ok: true });
   expect(revealed).toEqual(["xfs_c00-1"]);
   // The verified Build is offered to "Add to my mod manager" by its product and candidate (mod-install-actions.ts).

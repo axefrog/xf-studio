@@ -216,10 +216,12 @@ export const EXPRESSIONS_EXPORTER: FeatureExporter<ExpressionPlan> = Object.free
     mkdirSync(context.work, { recursive: true });
     const json = join(context.work, "json");
     const convert = async (document: unknown, depotPath: string, into: string): Promise<string> => {
+      context.signal?.throwIfAborted();
       const source = join(json, `${depotPath.split("/").at(-1)}.json`), target = join(into, ...depotPath.split("/"));
       mkdirSync(dirname(source), { recursive: true }); mkdirSync(dirname(target), { recursive: true });
       writeFileSync(source, JSON.stringify(document, null, 2), "utf8");
       const step = await context.tools.deserialize(source, dirname(target));
+      context.signal?.throwIfAborted();
       if (step.exitCode !== 0) refuse("package_tool_failed", `WolvenKit couldn't write ${depotPath.split("/").at(-1)}.`);
       context.log(`expressions: wrote ${depotPath}`);
       return target;
@@ -227,17 +229,22 @@ export const EXPRESSIONS_EXPORTER: FeatureExporter<ExpressionPlan> = Object.free
     const files: GeneratedFile[] = [];
     const clips = planned.expressions.map(item => ({ clip: item.clip, controls: item.controls }));
     const record: Record<string, unknown> = { plan: planned, sets: {} };
+    const resources: { document: unknown; path: string }[] = [];
     for (const gender of Object.keys(GENDERS) as Gender[]) {
       const built = animationSet(documents.sets[gender], game.rigs[gender], clips);
       (record.sets as Record<string, unknown>)[gender] = built.buffers.map(buffer => sha256(buffer));
-      files.push({ ...hashFile(await convert(built.document, planned.paths.sets[gender], context.staging)), path: planned.paths.sets[gender] });
+      resources.push({ document: built.document, path: planned.paths.sets[gender] });
     }
-    files.push({ ...hashFile(await convert(faceRigPatch(documents.faceRig, planned.component, planned.paths.sets), planned.paths.patch, context.staging)),
-      path: planned.paths.patch });
+    resources.push({ document: faceRigPatch(documents.faceRig, planned.component, planned.paths.sets), path: planned.paths.patch });
     // The extras: the table in its overlay, and the TweakXL records.
     const rows = plannedRows(planned, game);
+    const tableDocument = expressionTable(documents.table, rows);
+    context.signal?.throwIfAborted();
+    context.stage?.("convert");
+    for (const resource of resources)
+      files.push({ ...hashFile(await convert(resource.document, resource.path, context.staging)), path: resource.path });
     const overlayRoot = join(context.extras, "overlays", planned.overlay);
-    const table = await convert(expressionTable(documents.table, rows), EXPRESSION_TABLE_PATH, overlayRoot);
+    const table = await convert(tableDocument, EXPRESSION_TABLE_PATH, overlayRoot);
     const tweakPath = `r6/tweaks/${planned.archive}/${planned.tweak}`, tweak = join(context.extras, ...tweakPath.split("/"));
     mkdirSync(dirname(tweak), { recursive: true });
     writeFileSync(tweak, tweakRecords(planned.expressions.map(item => ({ clip: item.clip, label: item.label, index: item.index! })), planned.modName), "utf8");

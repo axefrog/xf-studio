@@ -223,6 +223,42 @@ function buildConnection(adapter: PackageHostAdapter) {
 const buildPost = (action: string, buildId: string, collection?: unknown): RequestInit => ({ method: "POST",
   headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, buildId, ...(collection ? { collection } : {}) }) });
 
+test("identified Build forwards its host stages and stops forwarding on abort (UI-142)", async () => {
+  const abort = new AbortController(), stages = ["prepare", "compose", "convert", "pack", "verify"] as const;
+  const seen: string[] = [];
+  let reads = 0;
+  const client = requestIdentifiedBuild({}, abort.signal, {
+    id: () => "expression-build", pause: () => Bun.sleep(1),
+    onProgress: progress => { seen.push(progress.stage); if (progress.stage === "convert") abort.abort(); },
+    send: async (path, init) => {
+      if (path === "/api/package") {
+        if (JSON.parse(init.body as string).action === "build") return new Promise<Response>(() => {});
+        return Response.json({ phase: "finished", outcome: { ok: false, code: "package_build_cancelled", message: "Stopped", status: 499 } });
+      }
+      expect(path).toContain("buildId=expression-build");
+      const index = Math.min(reads++, 4);
+      return Response.json({ status: { phase: "running" }, build: { stage: stages[index], step: index + 1, steps: 5 } });
+    },
+  });
+  await expect(client).rejects.toMatchObject({ code: "package_build_cancelled" });
+  expect(seen).toEqual(["prepare", "compose", "convert"]);
+  expect(reads).toBe(3);
+});
+
+test("a set's identified Build keeps omission reasons on refusal, including a reconciled refusal (UI-142)", async () => {
+  const omissions = [{ kind: "preset", presetId: "p", presetName: "Blank", reason: "No face movements." }];
+  for (const lost of [false, true]) {
+    const result = requestIdentifiedBuild({}, undefined, { pause: () => Bun.sleep(1), send: async path => {
+      if (path === "/api/package") {
+        if (lost) throw Error("Lost response");
+        return Response.json({ code: "no_exportable_content", error: "Nothing to build.", omissions }, { status: 422 });
+      }
+      return Response.json({ status: { phase: "finished", outcome: { ok: false, code: "no_exportable_content", message: "Nothing to build.", status: 422, omissions } } });
+    } });
+    await expect(result).rejects.toMatchObject({ code: "no_exportable_content", omissions });
+  }
+});
+
 for (const loseReplies of [false, true]) test(`Stop waits for real host cleanup, double Stop is idempotent, and rebuild waits${loseReplies ? "; lost replies reconcile" : ""}`, async () => {
   const h = host(), staged = latch(), cleanup = latch();
   const run = h.adapter.runBuilder;

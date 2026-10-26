@@ -339,8 +339,13 @@ async function attempt(adapter: PackageHostAdapter, value: unknown, signal: Abor
   retried: boolean, onProgress: (progress: PackageBuildProgress) => void): Promise<PackageHostOutcome | typeof RETRY> {
   const started = Date.now();
   let looks: number | undefined;
-  const report = (stage: PackageBuildStage) => onProgress({ stage, step: PACKAGE_BUILD_STAGES.indexOf(stage) + 1, steps: PACKAGE_BUILD_STAGES.length,
-    ...looks !== undefined ? { looks } : {} });
+  let lastStep = 0;
+  const report = (stage: PackageBuildStage) => {
+    const step = PACKAGE_BUILD_STAGES.indexOf(stage) + 1;
+    if (deadline.signal.aborted || step <= lastStep) return;
+    lastStep = step;
+    onProgress({ stage, step, steps: PACKAGE_BUILD_STAGES.length, ...looks !== undefined ? { looks } : {} });
+  };
   // Cancellation is connected before anything is awaited, and checked before each step starts: closing the page while the setup is
   // still being probed stops the Build there (PIPE-140).
   const deadline = new AbortController();

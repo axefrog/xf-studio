@@ -58,6 +58,55 @@ const PRODUCT = { archive: "xfs_c5e7a1111222243338444555566667777", modName: "XF
 const plan = (value: unknown, inputs: GameInputs | null = game()) =>
   EXPRESSIONS_EXPORTER.plan({ collection: value, prerequisites: inputs ? { [EXPRESSIONS_GAME_PREREQUISITE]: inputs } : {}, diagnostics: false, product: PRODUCT });
 
+test("expression Build reports each host stage in order and stops reporting after cancellation (UI-142)", async () => {
+  const { PackageHostService } = await import("../src/platform/export/product-host");
+  const { PACKAGE_PROGRESS_PREFIX } = await import("../src/platform/api");
+  for (const cancel of [false, true]) {
+    const dir = tempDir("expression-progress-"), service = new PackageHostService(), abort = new AbortController();
+    const seen: string[] = [];
+    const adapter: import("../src/platform/export/product-host").PackageHostAdapter = {
+      exporters: [{ exporter: EXPRESSIONS_EXPORTER, verifier: EXPRESSIONS_VERIFIER }], checkWorker: "", buildIssue: () => null, log() {},
+      prerequisites: { [EXPRESSIONS_GAME_PREREQUISITE]: { cached: () => null, discard() {}, prepare: async () => {
+        seen.push(service.buildProgress()!.stage); return { plan: game(), builder: { file: "fixture" } };
+      } } },
+      buildSetup: () => ({ snapshot: join(dir, "snapshot"), work: join(dir, "work"), stage: join(dir, "stage"), candidates: join(dir, "candidates"), wolvenkit: "", gamepath: "" }),
+      runBuilder: async (_args, options) => {
+        for (const stage of ["compose", "convert", "pack", "verify"]) {
+          if (cancel && stage === "pack") abort.abort();
+          options.onLine?.(PACKAGE_PROGRESS_PREFIX + JSON.stringify({ stage }));
+          const reported = service.buildProgress()!.stage;
+          if (seen.at(-1) !== reported) seen.push(reported);
+        }
+        return { exitCode: 1, stdout: "", stderr: "", stopped: null };
+      },
+    };
+    const answer = await service.run(adapter, "build", collection([look(1, "Open", expression({ jaw_mid_open: .2 }))]), abort.signal);
+    expect(seen).toEqual(cancel ? ["prepare", "compose", "convert"] : ["prepare", "compose", "convert", "pack", "verify"]);
+    expect(answer).toMatchObject({ ok: false, ...(cancel ? { code: "package_build_cancelled" } : {}) });
+    expect(service.buildProgress()).toBeNull();
+  }
+});
+
+test("expression conversion announces its stage once and a cancelled tool starts no further conversion (UI-142)", async () => {
+  for (const cancel of [false, true]) {
+    const dir = tempDir("expression-convert-"), file = join(dir, "game.json"), abort = new AbortController();
+    writeFileSync(file, JSON.stringify({ plan: game(), sets: { female: templateSet(), male: templateSet() }, faceRig: FACE_RIG, table: TABLE_DOC }));
+    const stages: string[] = [], calls: string[] = [];
+    const build = EXPRESSIONS_EXPORTER.build(plan(collection([look(1, "Open", expression({ jaw_mid_open: .2 }))])), {
+      work: join(dir, "work"), staging: join(dir, "staging"), extras: join(dir, "extras"), signal: abort.signal, log() {},
+      stage: stage => stages.push(stage), prerequisites: { [EXPRESSIONS_GAME_PREREQUISITE]: game(), [`${EXPRESSIONS_GAME_PREREQUISITE}#file`]: file },
+      tools: { deserialize: async (source: string, into: string) => {
+        calls.push(source); copyFileSync(source, join(into, basename(source).replace(/\.json$/, "")));
+        if (cancel) abort.abort();
+        return { exitCode: 0, log: "" };
+      } } as never,
+    });
+    if (cancel) await expect(build).rejects.toThrow(); else await build;
+    expect(stages).toEqual(["convert"]);
+    expect(calls).toHaveLength(cancel ? 1 : 4);
+  }
+});
+
 test("a static face clip round-trips through the Studio's own decoder exactly, and refuses what the rig lacks", () => {
   let seed = 7;
   const random = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;

@@ -110,12 +110,12 @@ export function expressionSets(ctx: Ctx): PanelController {
   const build = button({ label: "Build mod files…", icon: "package", small: true, variant: "primary", onClick: event => confirmBuild(event.currentTarget as Element) });
   // While the set's latest Build is current, its result's Add is the one primary action: Build again is a secondary one.
   const rebuild = button({ label: "Build mod files…", icon: "package", small: true, onClick: event => confirmBuild(event.currentTarget as Element) });
-  const progressText = h("span", { class: "muted small" });
-  const progress = h("div", { class: "package-progress idle" }, progressBar({ label: "Set export in progress" }).element, progressText);
-  // A Build takes a minute or two and the host reports no steps of its own yet, so the line says what it is doing and how long it
-  // usually takes, never a bare "Building…" (UI-142; step-by-step progress needs a progress stream from the export host).
-  const paintProgress = (running: string | undefined) => {
-    setText(progressText, running === "build" ? "Making and checking the mod files. This usually takes a minute or two…" : running === "check" ? "Checking…" : "");
+  const progressText = h("span", { class: "progress-text muted small" });
+  const bar = progressBar({ label: "Set export in progress" });
+  const progress = h("div", { class: "package-progress idle" }, bar.element, progressText);
+  const paintProgress = (running: string | undefined, stage?: import("../../../library/part-preset-sets").SetBuildProgress) => {
+    bar.set(running === "build" && stage ? stage.fraction : null);
+    setText(progressText, running === "build" ? stage?.message ?? "Making and checking the mod files. This usually takes a minute or two…" : running === "check" ? "Checking…" : "");
     progressText.title = progressText.textContent ?? "";
   };
   const result = h("div", { class: "package-result", "aria-live": "polite" });
@@ -400,7 +400,7 @@ export function expressionSets(ctx: Ctx): PanelController {
       const last = exports.results[set.id], builtCurrent = last?.kind === "build" && last.key === setExportKey(set, presets.items);
       build.hidden = builtCurrent; rebuild.hidden = !builtCurrent;
       progress.classList.toggle("idle", !running || running === "reveal");
-      paintProgress(running);
+      paintProgress(running, exports.busy?.id === set.id ? exports.busy.progress : undefined);
       const next = JSON.stringify([set.id, set.revision, exports.results[set.id], presets.items.map(item => [item.id, item.name, item.revision])]);
       if (next !== signature) {
         signature = next; result.replaceChildren(...renderResult(set, exports.results[set.id], presets.items));

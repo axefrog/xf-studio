@@ -369,7 +369,7 @@ export type PackageBuildProgress = { readonly stage: PackageBuildStage; readonly
 /** A host-owned Build receipt. Terminal answers are retained so a lost HTTP response can be reconciled. */
 export type PackageBuildStatus = { readonly phase: "unknown" | "running" | "stopping" } |
   { readonly phase: "finished"; readonly outcome: { readonly ok: true; readonly result: PackageBuildResult } |
-    { readonly ok: false; readonly code: string; readonly message: string; readonly status: number } };
+    { readonly ok: false; readonly code: string; readonly message: string; readonly status: number; readonly omissions?: readonly ExportOmission[] } };
 /** The builder's stdout line announcing a stage: this prefix, then `{"stage": …}`. */
 export const PACKAGE_PROGRESS_PREFIX = "XFS_PACKAGE_PROGRESS=";
 

@@ -8,6 +8,8 @@ import { modNameIssue, refusal, refusalOmissions, type Capability, type PackageB
 import { setCollection, setExportKey, setMembers, type PartPresetSet, type PartPresetSetList, type PartPresetSetTable, type SetExportResult,
   type SetExportState } from "./part-preset-sets";
 import { builtModsOf, type BuiltMod } from "../installation/mod-install-actions";
+import { packageBuildStageLine, requestIdentifiedBuild } from "../legacy/eye-makeup/export/package-action";
+import type { PackageBuildProgress } from "../platform/api";
 
 export type { PartPresetSet, PartPresetSetList, PartPresetSetTable, SetExportResult, SetExportState } from "./part-preset-sets";
 
@@ -47,7 +49,7 @@ export interface PartPresetTransport {
  * Absent where the host can't build (then export says so).
  */
 export interface SetExportTransport {
-  package(action: "check" | "build", collection: unknown): Promise<PackageCheckResult | PackageBuildResult>;
+  package(action: "check" | "build", collection: unknown, signal?: AbortSignal, onProgress?: (progress: PackageBuildProgress) => void): Promise<PackageCheckResult | PackageBuildResult>;
   reveal(candidateId: string): Promise<{ ok: true } | { ok: false; code: string; message: string }>;
 }
 /** Most members a set holds. */
@@ -265,9 +267,16 @@ export class PartPresetService {
     const set = this.set(feature, id)!, presets = this.lists.get(feature)?.items ?? [];
     const missing = setMembers(set, presets).filter(member => !member.preset).length, key = setExportKey(set, presets);
     this.exports = { ...this.exports, busy: { id, action } }; this.notify();
+    const progress = new AbortController();
     let entry: SetExportResult;
     try {
-      const result = await this.exporter!.package(action, setCollection(set, presets));
+      const result = await this.exporter!.package(action, setCollection(set, presets), progress.signal, stage => {
+        const busy = this.exports.busy;
+        if (progress.signal.aborted || action !== "build" || busy?.id !== id || busy.action !== action ||
+            (busy.progress && stage.step <= busy.progress.step)) return;
+        this.exports = { ...this.exports, busy: { ...busy, progress: { ...stage,
+          message: packageBuildStageLine(stage, feature === "expressions" ? "expressions" : "looks"), fraction: (stage.step - .5) / stage.steps } } }; this.notify();
+      });
       entry = action === "build" ? { kind: "build", result: result as PackageBuildResult, revision: set.revision, key, missing }
         : { kind: "check", result: result as PackageCheckResult, revision: set.revision, key, missing };
     } catch (error) {
@@ -275,7 +284,7 @@ export class PartPresetService {
       const omissions = refusalOmissions((error as { omissions?: unknown })?.omissions);
       entry = { kind: "failed", action, code: typeof code === "string" ? code : "package_failed",
         message: error instanceof Error ? error.message : "The request failed.", revision: set.revision, key, ...(omissions ? { omissions } : {}) };
-    }
+    } finally { progress.abort(); }
     this.exports = { busy: null, results: { ...this.exports.results, [id]: entry } };
     this.notify();
     // A Check made before the game files were read (they are read in the background) runs again by itself until they are.
@@ -306,8 +315,9 @@ export class PartPresetService {
 /** The browser's route for a set's export: the host's package route (Check and Build) and Show in folder of the mod-install route. */
 export function setExportTransport(installEndpoint: string, fetcher: (url: string, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init)): SetExportTransport {
   return {
-    package: async (action, collection) => {
-      const response = await fetcher("/api/package", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, collection }) });
+    package: async (action, collection, signal, onProgress) => {
+      if (action === "build") return requestIdentifiedBuild(collection, signal, { send: fetcher, onProgress });
+      const response = await fetcher("/api/package", { method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, collection }) });
       const body = await response.json().catch(() => null) as { code?: string; error?: string; omissions?: unknown } | null;
       if (!response.ok || !body) throw Object.assign(Error(body?.error ?? "XF Studio couldn't reach its mod builder. Restart XF Studio and try again."),
         { code: body?.code ?? "package_failed", ...(refusalOmissions(body?.omissions) ? { omissions: refusalOmissions(body?.omissions) } : {}) });

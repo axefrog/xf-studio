@@ -14,9 +14,10 @@ test("each paint updates the shown result's install row only: a deleted set's ro
   const { expressionSets } = await import("../src/features/expressions/view/sets");
   let sets = [{ id: "a", name: "Smiles", members: [], revision: 1 }, { id: "b", name: "Frowns", members: [], revision: 1 }];
   const asked: string[] = [];
+  let stage: import("../src/library/part-preset-sets").SetBuildProgress | undefined;
   const ctx = {
     presets: { sets: () => ({ phase: "ready", items: sets }), list: () => ({ phase: "ready", items: [] }),
-      exports: () => ({ results: { a: built("product-a"), b: built("product-b") } }), capability: () => ({ available: true }), execute: async () => ({ ok: true }) },
+      exports: () => ({ results: { a: built("product-a"), b: built("product-b") }, busy: stage ? { id: "a", action: "build", progress: stage } : null }), capability: () => ({ available: true }), execute: async () => ({ ok: true }) },
     modInstall: { label: () => "Add to my mod manager…", capability: (product: string) => { asked.push(product); return { available: true }; },
       outcome: () => undefined, review: () => {} },
     facade: { view: () => undefined, editable: () => ({ available: true }) },
@@ -26,11 +27,23 @@ test("each paint updates the shown result's install row only: a deleted set's ro
   document.body.append(panel.spec.element);
   panel.update(undefined as never);
   expect(asked).toEqual(["product-a"]);
+  // The same component and bar-to-step pattern as eye makeup, with expression vocabulary (UI-142).
+  const { PACKAGE_BUILD_STAGES } = await import("../src/platform/api");
+  const lines = ["Reading your game files…", "Making 2 expressions…", "Converting 2 expressions…", "Packing the mod files…", "Checking the mod files…"];
+  for (const [index, name] of PACKAGE_BUILD_STAGES.entries()) {
+    stage = { stage: name, step: index + 1, steps: 5, looks: 2, message: `Step ${index + 1} of 5: ${lines[index]}`, fraction: (index + .5) / 5 };
+    panel.update(undefined as never);
+    const root = panel.spec.element;
+    expect(root.querySelector(".package-progress")!.querySelector(".small")!.textContent).toBe(`Step ${index + 1} of 5: ${lines[index]}`);
+    expect(root.querySelector('[role="progressbar"]')!.getAttribute("aria-valuenow")).toBe(String(index * 20 + 10));
+  }
   // Set a is deleted: the panel shows b, and paints only b's row from now on.
   sets = sets.filter(set => set.id !== "a");
   asked.length = 0;
   panel.update(undefined as never);
   expect(asked).toEqual(["product-b"]);
+  expect(panel.spec.element.querySelector(".package-progress")!.classList.contains("idle")).toBe(true);
+  expect(panel.spec.element.querySelector('[role="progressbar"]')!.getAttribute("aria-valuenow")).toBeNull();
   asked.length = 0;
   panel.update(undefined as never);
   expect(asked).toEqual(["product-b"]);
