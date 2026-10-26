@@ -10,13 +10,14 @@ import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
 import type { HolotableFacade } from "../facade";
 import type { HoloState } from "../service";
-import { ORBITS, project, type Orbit, type Primitive, type Style } from "./projection";
+import { ORBITS, fitOrbit, project, type Orbit, type Primitive, type Style } from "./projection";
 import { HOLOTABLE_PANEL_META } from "./contribution";
 import { f1, heading, vAt } from "./shared";
 import { solidCanvas } from "./solid-canvas";
 import { agentCanvas } from "./agent-canvas";
 import { pickPlace } from "./place-picking";
 import { createSolidSelection } from "./solid-selection";
+import type { AgentLabel } from "./agent-labels";
 import type { Vec3 } from "../types";
 
 type Ctx = ModuleViewContext<HolotableFacade>;
@@ -36,6 +37,7 @@ export interface HolotableFrame { ms: number; projectMs: number; drawMs: number;
 export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => void): PanelController {
   const facade = ctx.facade;
   let orbit: Orbit = { ...ORBITS.tilt };
+  let fittedDir = "", hovered: string | null = null, zoomLimit = 1500;
   let drawnKey = "", emptyKey = "";
 
   // The drawing takes all the height the panel has: no scrollbar, the controls in one line under it.
@@ -86,12 +88,19 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     svg.setPointerCapture(event.pointerId);
   });
   svg.addEventListener("pointermove", event => {
-    if (!drag || event.pointerId !== drag.id) return;
+    if (!drag) {
+      const bounds = svg.getBoundingClientRect(), key = layersCanvas.pick(event.clientX - bounds.left, event.clientY - bounds.top);
+      if (key !== hovered) { hovered = key; drawnKey = ""; ctx.changed(); }
+      svg.style.cursor = key ? "pointer" : "grab";
+      return;
+    }
+    if (event.pointerId !== drag.id) return;
     const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
     if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
     orbit = { ...orbit, yaw: drag.yaw - dx * 0.006, pitch: Math.max(0.12, Math.min(1.52, drag.pitch + dy * 0.005)) };
     drawnKey = ""; ctx.changed();
   });
+  svg.addEventListener("pointerleave", () => { if (hovered) { hovered = null; drawnKey = ""; ctx.changed(); } });
   const endDrag = (event: PointerEvent) => {
     if (!drag || event.pointerId !== drag.id) return;
     const clicked = !drag.moved, picked = clicked ? drag.mark : null;
@@ -105,7 +114,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   };
   svg.addEventListener("pointerup", endDrag);
   svg.addEventListener("pointercancel", () => { drag = null; });
-  svg.addEventListener("wheel", event => { event.preventDefault(); orbit = { ...orbit, distance: Math.max(40, Math.min(1500, orbit.distance * (event.deltaY > 0 ? 1.12 : 1 / 1.12))) }; drawnKey = ""; ctx.changed(); }, { passive: false });
+  svg.addEventListener("wheel", event => { event.preventDefault(); orbit = { ...orbit, distance: Math.max(40, Math.min(zoomLimit, orbit.distance * (event.deltaY > 0 ? 1.12 : 1 / 1.12))) }; drawnKey = ""; ctx.changed(); }, { passive: false });
   svg.addEventListener("keydown", event => {
     const turn = { ArrowLeft: [-0.12, 0], ArrowRight: [0.12, 0], ArrowUp: [0, 0.08], ArrowDown: [0, -0.08] }[event.key];
     if (!turn) return;
@@ -135,11 +144,22 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     if (!open || state.phase === "opening") { solidsCanvas.clear(svg.clientWidth, svg.clientHeight); layersCanvas.clear(svg.clientWidth, svg.clientHeight); trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); message.textContent = ""; messageKey = ""; chromeSize = ""; return; }
     const width = svg.clientWidth || 800, height = svg.clientHeight || 480;
     const started = performance.now();
+    if (fittedDir !== open.dir) {
+      const extent = open.session.meta.standalone?.extent;
+      orbit = extent ? fitOrbit(extent, ORBITS.tilt, width, height) : { ...ORBITS.tilt };
+      zoomLimit = Math.max(1500, orbit.distance * 4); fittedDir = open.dir;
+    }
     const scene = project(open.session, open.world, state.t, state.layers, orbit, width, height, state.selected, open.session.meta.standalone ? focusAt(state) : undefined, { instances: [], cut: 0 });
     currentScene = scene;
     const projectedAt = performance.now();
     set(svg, "viewBox", `0 0 ${width} ${height}`);
-    const agentProgress = layersCanvas.draw(state.agents, state.agentEnabled, scene.solidCamera, state.selected, Math.max(0, Math.min(4, started + 6 - performance.now())));
+    const bx = width - 24 - scene.barPx, by = height - 22;
+    const worldText = scene.primitives.filter((p): p is Extract<Primitive, { kind: "text" }> => p.kind === "text");
+    const extraLabels: AgentLabel[] = worldText.map((p, i) => ({ key: `world:${i}`, text: p.text, x: p.at[0], y: p.at[1], priority: p.id === state.selected ? -1 : 4, colour: "", alpha: 1, overlay: true }));
+    extraLabels.push({ key: "scale", text: `${scene.metresPerBar} m`, x: bx + scene.barPx, y: by - 8, priority: 4, colour: "", alpha: 1, overlay: true, align: "end" });
+    const extent = open.session.meta.standalone?.extent;
+    const radius = extent ? Math.max(350, Math.hypot(...extent.max.map((n, axis) => n - extent.min[axis]))) : 350;
+    const agentProgress = layersCanvas.draw(state.agents, state.agentEnabled, scene.solidCamera, state.selected, Math.max(0, Math.min(4, started + 6 - performance.now())), hovered, extraLabels, radius);
     const target = open.session.meta.standalone ? focusAt(state) : scene.v?.position ?? [0,0,0] as Vec3;
     const solidStarted = performance.now();
     const prepared = solidSelection.step(state.layers.solids ? open.world.solids ?? emptySolids : emptySolids, target, scene.solidCamera, Math.min(started + 3.5, solidStarted + 1.5));
@@ -155,18 +175,15 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       for (let y = 0; y < height; y += 40) ticks.push(line([[0, y], [y % 200 ? 4 : 9, y]], "grid", 0.8), line([[width, y], [width - (y % 200 ? 4 : 9), y]], "grid", 0.8));
       chrome.replaceChildren(...ticks);
     }
-    const bx = width - 24 - scene.barPx, by = height - 22;
     const lineList = scene.primitives.filter((p): p is Extract<Primitive, { kind: "line" }> => p.kind === "line");
     lineList.push({ kind: "line", points: [[bx, by - 4], [bx, by], [bx + scene.barPx, by], [bx + scene.barPx, by - 4]], style: "label-muted", opacity: 1 });
     lineList.forEach((p, i) => paintLine(pooled(linesLayer, "polyline", i), p.points, p.style, p.opacity, p.dashOffset));
     trim(linesLayer, lineList.length);
-    const textList: { at: readonly [number, number]; text: string; style: Style; anchor?: "end" }[] =
-      scene.primitives.filter((p): p is Extract<Primitive, { kind: "text" }> => p.kind === "text").map(p => ({ at: p.at, text: p.text, style: p.style }));
-    textList.push({ at: [bx + scene.barPx, by - 8], text: `${scene.metresPerBar} m`, style: "label-muted", anchor: "end" });
     const notice = state.live.watching && state.message ? state.message : scene.inGap ? "No samples at this moment: nothing here proves what happened" :
       scene.camStale && state.layers.camera ? "No fresh camera sample at this moment" : "";
     paintMessage(notice, width);
-    textList.forEach((p, i) => paintText(pooled(textLayer, "text", i), p.at, p.text, p.style, p.anchor));
+    const textList = layersCanvas.overlayLabels();
+    textList.forEach((p, i) => paintText(pooled(textLayer, "text", i), [p.x, p.y], p.text, p.key === "scale" ? "label-muted" : worldText[Number(p.key.slice(6))].style));
     trim(textLayer, textList.length);
     // Markers are few (V and the placed events): rebuilt each frame.
     marksLayer.replaceChildren(...scene.primitives.filter(p => p.kind === "marker").map(p => marker(p as Extract<Primitive, { kind: "marker" }>)));
@@ -181,6 +198,8 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   function focusAt(state: HoloState): Vec3 {
     const items = state.agents.layers.filter(l => state.agentEnabled[l.id] !== false).flatMap(l=>l.items).filter(i=>i.place);
     const selected = items.find(i=>i.key===state.selected); if (selected?.place) return selected.place;
+    const extent = state.open?.session.meta.standalone?.extent;
+    if (extent) return extent.min.map((n, axis) => (n + extent.max[axis]) / 2) as unknown as Vec3;
     if (!items.length) return [0,0,0];
     return [0,1,2].map(axis => (Math.min(...items.map(i=>i.place![axis]))+Math.max(...items.map(i=>i.place![axis])))/2) as unknown as Vec3;
   }

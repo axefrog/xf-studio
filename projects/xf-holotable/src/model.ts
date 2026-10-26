@@ -46,7 +46,7 @@ export interface SessionMeta {
   /** ISO wall-clock reference at start, when the source supplies a mapping. */
   wallStart?: string;
   gameTimeSamples?: { source: number; game: number }[];
-  standalone?: { set: string; title: string; clock: "wall" | "game" | "recording"; branches: string[] };
+  standalone?: { set: string; title: string; clock: "wall" | "game" | "recording"; branches: string[]; extent?: { min: Vec3; max: Vec3 } };
   /** The sampled span: V's first and last samples. The recorder arms before its first sample, so replay covers this, not start–end. */
   from: number; to: number;
   complete: boolean; dropped: number; missedDeadlines: number; largestGapS: number;

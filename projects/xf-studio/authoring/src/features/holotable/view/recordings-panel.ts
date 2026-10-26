@@ -9,6 +9,8 @@ import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
 import type { HolotableFacade } from "../facade";
 import { HOLOTABLE_PANEL_META } from "./contribution";
 
+import { gameSpan } from "./agent-labels";
+
 type Ctx = ModuleViewContext<HolotableFacade>;
 
 export function holotableRecordingsPanel(ctx: Ctx): PanelController {
@@ -37,7 +39,7 @@ export function holotableRecordingsPanel(ctx: Ctx): PanelController {
       if (!body.contains(runs.element)) body.replaceChildren(runs.element);
       const rows: RecordRow[] = state.runs.map((r): RecordRow => ({
         id: r.dir, name: r.title ?? `Session ${r.session.slice(0, 8)} · run ${r.run}`, current: state.open?.dir === r.dir,
-        meta: r.standalone ? [`layers only · ${Math.round(r.end - r.start)} s`] : [`${Math.round(r.end - r.start)} s`, `${(r.bytes / 1e6).toFixed(1)} MB`],
+        meta: r.standalone ? [`layers only · ${r.clock === "game" ? gameSpan(r.end - r.start) : `${Math.round(r.end - r.start)} s`}`] : [`${Math.round(r.end - r.start)} s`, `${(r.bytes / 1e6).toFixed(1)} MB`],
         badge: state.open?.dir === r.dir ? { text: "Open now", tone: "info" } : undefined,
         action: state.open?.dir === r.dir ? undefined : button({ label: "Open", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.open", dir: r.dir }); } }),
       }));

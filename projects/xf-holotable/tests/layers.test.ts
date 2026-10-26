@@ -82,6 +82,15 @@ test("standalone game sets and branches remain separate, with unbranched context
  expect(evaluateLayers([d],s,1,"full",[],undefined,"save-a")[0].items.map(i=>i.id)).toEqual(["one","a"]);
 });
 
+test("standalone framing bounds include both branches, area height, field size and influence ends",()=>{
+ const m=manifest({clock:"game",standalone:{set:"extent",from:0,to:100,clock:"game"}});
+ const d=data([item({branch:"a",anchor:{at:[-100,0,0]}}),item({branch:"b",id:"sphere",kind:"actor",anchor:{sphere:{at:[200,100,50],r:20}},value:{name:"Synthetic group"}}),item({id:"field",kind:"field",anchor:{grid:{origin:[0,0,0],cell:10,cols:2,rows:3}},value:{scalars:[0,0,0,0,0,0]}}),item({id:"edge",kind:"influence",value:{to:{at:[500,400,200]}}})],m);
+ expect(standaloneSession([d],"layers:test/extent").meta.standalone?.extent).toEqual({min:[-100,0,0],max:[500,400,200]});
+ expect(standaloneSession([data([d.records[1]],m)],"layers:test/extent").meta.standalone?.extent).toEqual({min:[180,80,30],max:[220,120,70]});
+ expect(standaloneSession([data([d.records[2]],m)],"layers:test/extent").meta.standalone?.extent).toEqual({min:[0,0,0],max:[20,30,0]});
+ expect(standaloneSession([data([item({kind:"zone",anchor:zone})],m)],"layers:test/extent").meta.standalone?.extent).toEqual({min:[0,0,0],max:[20,20,20]});
+});
+
 test("game-clock mappings interpolate and bound extrapolation without inventing a rate",()=>{
  const s=session(),m=manifest({clock:"game"});s.meta.gameTimeSamples=[{source:1000,game:3600},{source:1010,game:3620}];
  expect(recordingTime(3610,m,s)).toBe(1005);

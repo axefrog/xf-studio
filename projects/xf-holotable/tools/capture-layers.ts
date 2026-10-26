@@ -11,8 +11,9 @@ import { FakeBridge } from "../tests/live-fake.ts";
 import { KINDS, type LayerItem, type LayerManifest } from "../src/layers.ts";
 import type { SolidRegion, Vec3 } from "../src/model.ts";
 
-const [runDir,worldFile,regionFolder]=process.argv.slice(2);
-if(!runDir||!worldFile||!regionFolder)throw Error("Usage: capture-layers.ts <run-4 folder> <world-pack.json> <cached regions folder>");
+const [runDir,worldFile,regionFolder,onlyCase]=process.argv.slice(2);
+if(!runDir||!worldFile||!regionFolder)throw Error("Usage: capture-layers.ts <run-4 folder> <world-pack.json> <cached regions folder> [actor|here|cluster|standalone]");
+if(onlyCase && !["actor","here","cluster","standalone"].includes(onlyCase))throw Error("Unknown capture case.");
 const output=resolve(import.meta.dir,"../../../local/holotable/evidence/agent-layers"),scratch=resolve(import.meta.dir,"../../../local/holotable/scratch/capture-layers");mkdirSync(output,{recursive:true});mkdirSync(scratch,{recursive:true});
 const recording=readRun(resolve(runDir)),moment=recording.meta.from+30,v=recording.v.find(v=>v.t>=moment)!,p=v.position;
 const world=loadWorldPack(resolve(worldFile))!;
@@ -54,7 +55,7 @@ const server=Bun.serve({hostname:"127.0.0.1",port:0,async fetch(request){const u
 let page:BrowserSession|undefined;const measurements:unknown[]=[];const deadline=setTimeout(()=>{console.error("Capture exceeded 180 seconds");process.exit(1);},180000);
 try{
  page=await launch(`http://127.0.0.1:${server.port}/?verify=1`,{width:1500,height:1170,motion:"reduce",args:["--disable-gpu","--no-sandbox"]});
- const cases=[...["full","structure"].map(level=>({name:"actor",level,branch:""})),{name:"here",level:"full",branch:""},{name:"cluster",level:"full",branch:""},...(["save-a","save-b"] as const).map(branch=>({name:"standalone",level:"full",branch}))];
+ const cases=[...["full","structure"].map(level=>({name:"actor",level,branch:""})),{name:"here",level:"full",branch:""},{name:"cluster",level:"full",branch:""},...(["save-a","save-b"] as const).map(branch=>({name:"standalone",level:"full",branch}))].filter(c=>!onlyCase||c.name===onlyCase);
  for(const c of cases)for(const theme of ["light","dark"])for(const width of ["narrow","wide"]){
   await page.viewport(width==="narrow"?1452:1812,1170);await page.send("Page.navigate",{url:`http://127.0.0.1:${server.port}/?verify=1&case=${c.name}&theme=${theme}&width=${width}&level=${c.level}&branch=${c.branch}`});await page.waitFor('document.body.dataset.ready === "true" && !globalThis.holoVerification.frames.at(-1)?.pending');
   const result=await page.evaluate(`(()=>{const s=globalThis.holoVerification.service.snapshot(),details=document.querySelector('.holotable-details');return{case:${JSON.stringify(c)},theme:${JSON.stringify(theme)},width:${JSON.stringify(width)},layers:s.agents.layers.length,refused:s.agents.layers.reduce((n,l)=>n+l.refused,0),full:s.level==='full',facets:details.textContent.includes('The route is watched'),here:details.textContent.includes("What's here"),branch:s.branch,overflow:details.scrollWidth>details.clientWidth,frames:globalThis.holoVerification.frames}})()`);
@@ -62,6 +63,6 @@ try{
   measurements.push(result);await page.screenshot(join(output,`${c.name}-${c.branch||c.level}-${theme}-${width}.png`));console.log(`${c.name} ${c.branch||c.level} ${theme} ${width}: ${result.layers} layers`);
  }
  if(page.console.some(e=>e.type==="exception"||e.type==="error"))throw Error(JSON.stringify(page.console));
- writeFileSync(join(output,"measurements.json"),JSON.stringify(measurements,null,2));
+ writeFileSync(join(output,onlyCase?`measurements-${onlyCase}.json`:"measurements.json"),JSON.stringify(measurements,null,2));
  writeFileSync(join(output,"README.txt"),"Recorded run 4, synthetic diagnostic content; cached offline collision primitives and world-pack areas. No game or bridge tool was run. Four theme/width variants for actor full/structure, What's here, region cluster/refusal, and each of two standalone branches. Measurements and exact source identity are private.\n");
 }finally{clearTimeout(deadline);await page?.close();service.close();server.stop(true);rmSync(scratch,{recursive:true,force:true});}

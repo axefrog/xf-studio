@@ -12,10 +12,26 @@ export type Primitive =
   | SolidInstance
   | { kind: "line"; points: [number, number][]; style: Style; opacity: number; closed?: boolean; /** How far into its dash pattern the line starts, in pixels: a line cut at the edge keeps its dashes where they were. */ dashOffset?: number }
   | { kind: "marker"; at: [number, number]; size: number; style: Style; id?: string; shape: "chevron" | "diamond" | "dot"; angle?: number }
-  | { kind: "text"; at: [number, number]; text: string; style: Style };
+  | { kind: "text"; at: [number, number]; text: string; style: Style; id?: string };
 
 export interface Orbit { yaw: number; pitch: number; distance: number; fov: number }
 export const ORBITS = { top: { yaw: -Math.PI / 2, pitch: 1.5, distance: 420, fov: 0.8 }, tilt: { yaw: -2.3, pitch: 0.85, distance: 300, fov: 0.8 }, low: { yaw: -2.3, pitch: 0.32, distance: 170, fov: 0.9 } } satisfies Record<string, Orbit>;
+
+/** Fit all eight extent corners with room for marker labels, using this camera's perspective. */
+export function fitOrbit(bounds: { min: Vec3; max: Vec3 }, orbit: Orbit, width: number, height: number): Orbit {
+  const center = bounds.min.map((n, axis) => (n + bounds.max[axis]) / 2);
+  const forward = [-Math.cos(orbit.pitch) * Math.cos(orbit.yaw), -Math.cos(orbit.pitch) * Math.sin(orbit.yaw), -Math.sin(orbit.pitch)];
+  const right = [-Math.sin(orbit.yaw), Math.cos(orbit.yaw), 0];
+  const up = [right[1] * forward[2], -right[0] * forward[2], right[0] * forward[1] - right[1] * forward[0]];
+  const focal = height / 2 / Math.tan(orbit.fov / 2), halfWidth = Math.max(1, width / 2 - 80), halfHeight = Math.max(1, height / 2 - 60);
+  let distance = 40;
+  for (let corner = 0; corner < 8; corner++) {
+    const delta = center.map((n, axis) => (corner & (1 << axis) ? bounds.max[axis] : bounds.min[axis]) - n);
+    const dot = (axis: number[]) => delta.reduce((sum, n, i) => sum + n * axis[i], 0), depth = dot(forward);
+    distance = Math.max(distance, Math.abs(dot(right)) * focal / halfWidth - depth, Math.abs(dot(up)) * focal / halfHeight - depth, 2 - depth);
+  }
+  return { ...orbit, distance };
+}
 
 /** The last sample at or before t (binary search over a time-sorted array). */
 export function at<T extends { t: number }>(xs: readonly T[], t: number): T | undefined {
@@ -175,7 +191,7 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
     const p = C.point(e.at); if (!p) continue;
     const isSel = e.id === selected;
     out.push({ kind: "marker", at: p, size: isSel ? 8 : 6, style: isSel ? "event-selected" : "event", id: e.id, shape: "diamond" });
-    if (isSel || t - e.t < 6) out.push({ kind: "text", at: [p[0] + 10, p[1] - 10], text: e.summary, style: "label-muted" });
+    if (isSel || t - e.t < 6) out.push({ kind: "text", at: [p[0] + 10, p[1] - 10], text: e.summary, style: "label-muted", id: e.id });
   }
   if (layers.v && v) {
     const p = C.point([v.position[0], v.position[1], v.position[2] + 0.3]);
@@ -184,7 +200,7 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
       const ahead = C.point([v.position[0] - Math.sin(v.yaw * Math.PI / 180) * 4, v.position[1] + Math.cos(v.yaw * Math.PI / 180) * 4, v.position[2] + 0.3]);
       const angle = ahead ? Math.atan2(ahead[1] - p[1], ahead[0] - p[0]) : 0;
       out.push({ kind: "marker", at: p, size: 9, style: "v", id: "v", shape: "chevron", angle });
-      out.push({ kind: "text", at: [p[0] + 12, p[1] - 12], text: "V", style: "label" });
+      out.push({ kind: "text", at: [p[0] + 12, p[1] - 12], text: "V", style: "label", id: "v" });
     }
   }
   // A scale bar that tells the truth: the largest round distance that fits in 140 px at V.

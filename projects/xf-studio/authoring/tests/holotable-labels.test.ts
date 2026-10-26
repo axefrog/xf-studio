@@ -1,0 +1,69 @@
+import { expect, test } from "bun:test";
+import { actorCaption, gameSpan, itemTitle, labelContext, labelPriority, layerCounts, placeLabels, type AgentLabel } from "../src/features/holotable/view/agent-labels";
+import { camera, fitOrbit, ORBITS } from "../src/features/holotable/view/projection";
+import type { AgentItem } from "../src/features/holotable/agent-types";
+import type { Vec3 } from "../src/features/holotable/types";
+
+const item = (key: string, kind = "point"): AgentItem => ({ id: key, key, kind, anchor: { at: [0,0,0] } });
+const label = (key: string, priority: number, x = 20, y = 30): AgentLabel => ({ key, text: key, priority, x, y, colour: "signal", alpha: 1 });
+const measure = (s: string) => s.length * 7;
+
+test("overlapping labels yield to selection, relation ends, actors, points, then relation text; markers remain outside text layout", () => {
+  const actor = item("actor", "actor"), target = item("target", "target"), edge = { ...item("edge", "relation"), links: { from: "actor", to: "target" } };
+  const context = labelContext([actor, target, edge], "edge", null);
+  expect([...context].sort()).toEqual(["actor", "edge", "target"]);
+  expect(labelPriority(target, context)).toBe(0);
+  const ordinary = new Set<string>();
+  const candidates = [item("other", "zone"), edge, target, actor].map(i => label(i.key, labelPriority(i, ordinary)));
+  expect(placeLabels(candidates, measure, 800, 500).map(l => l.key)).toEqual(["actor"]);
+  expect(placeLabels([...candidates, label("hovered", -2)], measure, 800, 500).map(l => l.key)).toEqual(["hovered"]);
+});
+
+test("captions yield to names, are one muted value line, and the text budget is forty", () => {
+  const candidates = [label("actor", 1), { ...label("actor", 1, 20, 47), text: "waiting", caption: true }, label("point", 2, 20, 47)];
+  expect(placeLabels(candidates, measure, 800, 500).map(l => l.text)).toEqual(["actor", "waiting"]);
+  expect(actorCaption("waiting\nfor a courier")).toBe("waiting for a courier");
+  expect(actorCaption("A full line of dialogue that is longer than the caption")).toHaveLength(28);
+  expect(actorCaption("A full line of dialogue that is longer than the caption")).toEndWith("…");
+  expect(placeLabels(Array.from({ length: 70 }, (_, i) => label(String(i), 1, i % 10 * 60, 20 + Math.floor(i / 10) * 25)), measure, 800, 500)).toHaveLength(40);
+  const long = placeLabels([{ ...label("selected", -1), text: "x".repeat(160) }], measure, 300, 500);
+  expect(long).toHaveLength(1); expect(long[0].width).toBeLessThanOrEqual(292); expect(long[0].text).toEndWith("…");
+});
+
+test("relation titles, count plurals and game-clock spans use readable meaning", () => {
+  const kai = { ...item("kai", "actor"), value: { name: "Synthetic Kai" } }, edge = { ...item("edge", "relation"), value: { type: "owes", mutual: false }, links: { from: "mira", to: "kai" } };
+  expect(itemTitle(edge, [kai, edge])).toBe("owes → Synthetic Kai");
+  expect(itemTitle({ ...edge, value: { ...edge.value, mutual: true } }, [kai])).toBe("owes ↔ Synthetic Kai");
+  expect(layerCounts({ id: "l", title: "L", producer: "p", layer: "l", items: [kai], refused: 1, reason: "", notPlaced: ["a"], otherBranches: ["b"] })).toBe("1 item · 1 refused · 1 not placed · 1 on other branches");
+  expect(gameSpan(604800)).toBe("7 days"); expect(gameSpan(273600)).toBe("3 days 4 h");
+  expect(gameSpan(86400)).toBe("1 day"); expect(gameSpan(3600)).toBe("1 h"); expect(gameSpan(60)).toBe("<1 h");
+});
+
+test("standalone first-fit keeps the whole extent inside both narrow and wide viewports", () => {
+  const bounds = { min: [-900,-300,0] as Vec3, max: [800,600,100] as Vec3 }, center = bounds.min.map((n, i) => (n + bounds.max[i]) / 2) as unknown as Vec3;
+  for (const width of [300, 780]) for (const preset of Object.values(ORBITS)) {
+    const fitted = fitOrbit(bounds, preset, width, 500), C = camera(center, fitted, width, 500);
+    expect(fitted.distance).toBeGreaterThan(preset.distance);
+    for (let n = 0; n < 8; n++) {
+      const p = C.point(bounds.min.map((v, axis) => n & (1 << axis) ? bounds.max[axis] : v) as unknown as Vec3)!;
+      expect(p[0]).toBeGreaterThanOrEqual(79.99); expect(p[0]).toBeLessThanOrEqual(width - 79.99);
+      expect(p[1]).toBeGreaterThanOrEqual(59.99); expect(p[1]).toBeLessThanOrEqual(440.01);
+    }
+  }
+});
+
+const mira = { ...item("mira", "actor"), value: { name: "Synthetic Mira" } };
+const kai = { ...item("kai", "actor"), value: { name: "Synthetic Kai" } };
+test("an actor's outgoing relation names the destination", () => {
+  const edge = { ...item("edge", "relation"), value: { type: "owes" }, links: { from: "mira", to: "kai" } };
+  expect(itemTitle(edge, [mira, kai], "mira")).toBe("owes → Synthetic Kai");
+});
+test("an actor's incoming relation names the source before its type", () => {
+  const edge = { ...item("edge", "relation"), value: { type: "hunting" }, links: { from: "kai", to: "mira" } };
+  expect(itemTitle(edge, [mira, kai], "mira")).toBe("Synthetic Kai → hunting");
+});
+test("a mutual relation names the far end from either actor", () => {
+  const edge = { ...item("edge", "relation"), value: { type: "loyal to", mutual: true }, links: { from: "kai", to: "mira" } };
+  expect(itemTitle(edge, [mira, kai], "mira")).toBe("loyal to ↔ Synthetic Kai");
+  expect(itemTitle(edge, [mira, kai], "kai")).toBe("loyal to ↔ Synthetic Mira");
+});

@@ -32,7 +32,11 @@ export function createSolidSelection(now:()=>number=()=>performance.now()) {
       while(now()<deadline){latest=job.next();if(latest.done){job=undefined;break;}}
       if(latest){
         const distance=Math.hypot(...C.position.map((n,i)=>n-target[i]));
-        result={instances:[...latest.value.kept].sort((a,b)=>Math.hypot(...b.solid.center.map((n,i)=>n-C.position[i]))-Math.hypot(...a.solid.center.map((n,i)=>n-C.position[i]))).map(({solid,extent})=>({kind:"solid",id:solid.id,source:solid,extentPx:extent,opacity:Math.max(0.15,Math.min(1,1.3-Math.hypot(...solid.center.map((n,i)=>n-C.position[i]))/(distance*2.6)))})),cut:Math.max(0,latest.value.total-latest.value.kept.length),pending:!!job};
+        const ordered = latest.value.kept.map(candidate => {
+          const p = candidate.solid.center;
+          return { ...candidate, distance: Math.hypot(p[0]-C.position[0], p[1]-C.position[1], p[2]-C.position[2]) };
+        }).sort((a,b)=>b.distance-a.distance);
+        result={instances:ordered.map(({solid,extent,distance:fromCamera})=>({kind:"solid",id:solid.id,source:solid,extentPx:extent,opacity:Math.max(0.15,Math.min(1,1.3-fromCamera/(distance*2.6)))})),cut:Math.max(0,latest.value.total-latest.value.kept.length),pending:!!job};
       }
       return result;
     },

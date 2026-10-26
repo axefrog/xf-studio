@@ -17,7 +17,7 @@ try {
     const spool = createLayerSpool(defaultOptions().layersRoot!);
     try {
       const result = spool.publish(target, text.split("\n").filter(l => l.trim()));
-      console.log(`${result.accepted} lines published; ${result.refused} items refused.`);
+      console.log(`${result.accepted} ${result.accepted === 1 ? "line" : "lines"} published; ${result.refused} refused.`);
       for (const reason of result.reasons) console.error(reason);
       status = result.refused ? 1 : 0;
     } finally { spool.close(); }

@@ -2,39 +2,52 @@
 import type { AgentAnswer, AgentAnchor, AgentItem } from "../agent-types";
 import type { Vec3 } from "../types";
 import type { camera } from "./projection";
+import { actorCaption, labelContext, labelPriority, placeLabels, type AgentLabel, type LabelBounds, type PlacedLabel } from "./agent-labels";
+
 type Camera = ReturnType<typeof camera>;
 type XY = readonly [number, number];
 export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
   const context = canvas.getContext("2d"); if (!context) throw Error("Canvas 2D is unavailable for Agent layers.");
   const ctx = context;
+  const labels = document.createElement("canvas"); labels.style.cssText = canvas.style.cssText; labels.setAttribute("aria-hidden", "true"); canvas.after(labels);
+  const text = labels.getContext("2d")!;
+  let candidates: AgentLabel[] = [], labelsPainted = false, previousHover: string | null = null;
+  let overlayLabels: PlacedLabel[] = [], previousOverlay = "";
+  let badges: LabelBounds[] = [];
   const swatches = new Map<string, HTMLElement>();
   let palette: Record<string, string> = {}, hits: { key: string; points: XY[]; fill: boolean; priority: number }[] = [];
-  const invalidate = () => { palette = {}; changed(); }, theme = new MutationObserver(invalidate);
+  const invalidate = () => { palette = {}; previous = undefined; changed(); }, theme = new MutationObserver(invalidate);
   for (const root of [document.documentElement, document.body]) theme.observe(root, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
   const media = matchMedia("(prefers-color-scheme: dark)"); media.addEventListener("change", invalidate);
   let previous: AgentAnswer | undefined, previousEnabled: Readonly<Record<string, boolean>> | undefined, previousCamera = "", previousSelection: string | null = null, cursor = 0, fieldCell = 0;
   const path = (ps: readonly XY[], closed = false) => { if (!ps.length) return; ctx.moveTo(...ps[0]); for (let i = 1; i < ps.length; i++) ctx.lineTo(...ps[i]); if (closed) ctx.closePath(); };
   function clear(width: number, height: number) {
-    previous = undefined; cursor = 0; fieldCell = 0;
+    previous = undefined; cursor = 0; fieldCell = 0; candidates = []; labelsPainted = false; badges = []; overlayLabels = [];
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) { canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); }
+    labels.width = Math.round(width * dpr); labels.height = Math.round(height * dpr);
+    text.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, width, height); hits = [];
     if (!palette.signal) palette = Object.fromEntries([...swatches].map(([t, e]) => [t, getComputedStyle(e).color]));
   }
   return {
     clear,
-    draw(answer: AgentAnswer, enabled: Readonly<Record<string, boolean>>, C: Camera, selected: string | null, budgetMs = 8) {
+    overlayLabels: () => overlayLabels,
+    draw(answer: AgentAnswer, enabled: Readonly<Record<string, boolean>>, C: Camera, selected: string | null, budgetMs = 8, hovered: string | null = null, overlays: readonly AgentLabel[] = [], radius = 350) {
       for (const [tone, token] of Object.entries(answer.specs.tones ?? {})) if (!swatches.has(tone) && /^[a-z-]+$/.test(token)) {
         const span = document.createElement("span"); span.style.cssText = `position:absolute;visibility:hidden;color:var(--${token})`;
         canvas.parentElement!.append(span); swatches.set(tone, span); palette = {};
       }
-      const cameraKey = JSON.stringify([C.position, C.ray(C.width / 2, C.height / 2).direction, C.width, C.height]);
-      const fresh = previous !== answer || previousEnabled !== enabled || previousCamera !== cameraKey || previousSelection !== selected;
-      if (fresh) { clear(C.width, C.height); previous = answer; previousEnabled = enabled; previousCamera = cameraKey; previousSelection = selected; }
+      const cameraKey = JSON.stringify([C.position, C.ray(C.width / 2, C.height / 2).direction, C.width, C.height, radius]);
+      const overlayKey = JSON.stringify(overlays);
+      const fresh = previous !== answer || previousEnabled !== enabled || previousCamera !== cameraKey || previousSelection !== selected || previousHover !== hovered || previousOverlay !== overlayKey;
+      if (fresh) { clear(C.width, C.height); previous = answer; previousEnabled = enabled; previousCamera = cameraKey; previousSelection = selected; previousHover = hovered; previousOverlay = overlayKey; }
       if (answer.specs.schema !== "xfh/projections-1") return;
       const deadline = performance.now() + budgetMs;
+      const far = Math.max(1500, Math.hypot(...C.position.map((n, axis) => n - C.target[axis])) + radius), fade = Math.max(1800, far * 1.2);
       ctx.font = "11px " + getComputedStyle(canvas).getPropertyValue("--font-mono"); ctx.lineJoin = "round";
       const items = answer.layers.filter(l => enabled[l.id] !== false).flatMap(l => l.items.filter(i => i.place && !l.notPlaced.includes(i.id)));
+      const important = labelContext(items, selected, hovered);
       const positions = new Map<string, XY>(), clusters = new Map<string, AgentItem[]>();
       const positionItems = [...items, ...items.filter(i => i.toRegion && i.to).map(i => ({ ...i, key: i.key + ":to", region: i.toRegion, place: i.to }))];
       for (const i of positionItems) {
@@ -48,6 +61,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
           for (const i of group) collapsed.add(i.key);
           const key = `cluster:${group[0].region!.id}`;
           ctx.fillStyle = palette.signal; ctx.globalAlpha = 1; if (fresh) ctx.fillText(`+${group.length}`, center[0] + 3, center[1] - 3);
+          if (fresh) badges.push({ x: center[0] + 3, y: center[1] - 3, width: ctx.measureText(`+${group.length}`).width });
           if (fresh) hits.push({ key, points: [[center[0] - 4, center[1] - 18], [center[0] + 38, center[1] - 18], [center[0] + 38, center[1] + 4], [center[0] - 4, center[1] + 4]], fill: true, priority: 3 });
         } else if (group.length > 1) group.forEach((i, n) => { const a = n / group.length * 2 * Math.PI; positions.set(i.key, [center[0] + Math.cos(a) * 12, center[1] + Math.sin(a) * 12]); });
       }
@@ -56,12 +70,12 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
         const item = items[cursor];
         if (performance.now() > deadline) break;
         if (collapsed.has(item.key)) continue;
-        const p = item.place!; if (Math.hypot(...p.map((n, j) => n - C.target[j])) > 350) continue;
+        const p = item.place!; if (Math.hypot(...p.map((n, j) => n - C.target[j])) > radius) continue;
         const xy = positions.get(item.links?.from ?? item.key), rule = answer.specs.kinds[item.kind]; if (!xy || !rule) continue;
-        if (Math.hypot(...p.map((n, j) => n - C.position[j])) > 1500 || xy[0] < -64 || xy[0] > C.width + 64 || xy[1] < -64 || xy[1] > C.height + 64) {
+        if (Math.hypot(...p.map((n, j) => n - C.position[j])) > far || xy[0] < -64 || xy[0] > C.width + 64 || xy[1] < -64 || xy[1] > C.height + 64) {
           if (!["polyline", "volume", "grid", "curve", "arrow"].includes(rule.draw)) continue;
         }
-        const weight = item.weight ?? 0.7, size = 4 + weight * 4, alpha = (0.35 + weight * 0.65) * Math.max(0.12, 1 - Math.hypot(...p.map((n, j) => n - C.position[j])) / 1800);
+        const weight = item.weight ?? 0.7, size = 4 + weight * 4, alpha = (0.35 + weight * 0.65) * Math.max(0.12, 1 - Math.hypot(...p.map((n, j) => n - C.position[j])) / fade);
         const colour = palette[rule.style === "tone" ? item.tone ?? "signal" : rule.style] ?? palette.signal;
         ctx.strokeStyle = colour; ctx.fillStyle = colour; ctx.lineWidth = 1 + weight * 2; ctx.globalAlpha = alpha; ctx.setLineDash([]);
         const hit = (ps: XY[], fill = false, priority = fill ? 1 : 2) => hits.push({ key: item.key, points: ps, fill, priority });
@@ -78,6 +92,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
           stroke(bottom, fill ? 0.7 : 0.2, true); stroke(top, 0.12, true);
         };
         const arrow = (a: XY, b: XY) => { const angle = Math.atan2(b[1] - a[1], b[0] - a[0]); ctx.beginPath(); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle - 0.45), b[1] - 7 * Math.sin(angle - 0.45)); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle + 0.45), b[1] - 7 * Math.sin(angle + 0.45)); ctx.stroke(); };
+        const addLabel = (value: string, at: XY, caption = false) => { if (value) candidates.push({ key: item.key, text: value, x: at[0], y: at[1], priority: caption ? 1.5 : item.key === hovered ? -2 : item.key === selected ? -1 : labelPriority(item, important), colour: caption ? palette.muted ?? colour : colour, alpha: caption ? 0.85 : alpha, caption }); };
         let label = rule.label.replace("{label}", item.label ?? "").replace("{name}", item.value?.name ?? "actor").replace("{type}", item.value?.type ?? "");
         const a = item.resolvedAnchor ?? item.anchor;
         if (item.region && selected === item.key && !["actor", "zone"].includes(item.kind)) volume(a, false);
@@ -105,7 +120,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
             const points = Array.from({ length: 17 }, (_, n): XY => { const k = n / 16; return [(1-k)**2*xy[0]+2*(1-k)*k*mid[0]+k*k*to[0], (1-k)**2*xy[1]+2*(1-k)*k*mid[1]+k*k*to[1]]; });
             ctx.beginPath(); path(points); ctx.stroke(); hit(points);
             if (!item.value?.mutual) arrow(points[15], to);
-            if (label) ctx.fillText(label, points[8][0] + 4, points[8][1] - 4); label = "";
+            if (label) addLabel(label, [points[8][0] + 4, points[8][1] - 4]); label = "";
           } else { ctx.beginPath(); path([xy, to]); ctx.stroke(); hit([xy, to]); arrow(xy, to); }
         } else {
           if (rule.draw === "diamond") { volume(a, false); ctx.beginPath(); path([[xy[0], xy[1]-size], [xy[0]+size,xy[1]], [xy[0],xy[1]+size], [xy[0]-size,xy[1]]], true); ctx.stroke(); }
@@ -116,11 +131,23 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
           }
           hit([[xy[0]-size-3,xy[1]-size-3], [xy[0]+Math.max(size+3, rule.draw === "text" ? label.length*7 : size+3),xy[1]-size-3], [xy[0]+size+3,xy[1]+size+3], [xy[0]-size-3,xy[1]+size+3]], true, 3);
         }
-        if (label && xy[0] >= -32 && xy[0] <= C.width+32 && xy[1] >= -32 && xy[1] <= C.height+32) ctx.fillText(label, xy[0]+size+4, xy[1]-4);
+        if (label && xy[0] >= -32 && xy[0] <= C.width+32 && xy[1] >= -32 && xy[1] <= C.height+32) addLabel(label, [xy[0]+size+4, xy[1]-4]);
         const facet = Object.entries(item.facets ?? item.value?.facets ?? {})[0];
-        if (facet && rule.draw === "diamond") ctx.fillText(`${facet[0]}: ${facet[1]}`, xy[0]+size+4, xy[1]+11);
+        if (facet && rule.draw === "diamond") addLabel(actorCaption(facet[1]), [xy[0]+size+4, xy[1]+13], true);
         if (selected === item.key) { ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(...xy, size+5, 0, Math.PI*2); ctx.stroke(); }
         drawn++;
+      }
+      if (cursor >= items.length && !labelsPainted) {
+        text.font = ctx.font;
+        text.strokeStyle = getComputedStyle(canvas.parentElement!).backgroundColor; text.lineWidth = 3; text.lineJoin = "round";
+        const placed = placeLabels([...candidates, ...overlays], value => text.measureText(value).width, C.width, C.height, 40, badges);
+        overlayLabels = placed.filter(label => label.overlay);
+        for (const label of placed.filter(label => !label.overlay)) {
+          text.globalAlpha = label.alpha; text.fillStyle = label.colour;
+          text.strokeText(label.text, label.x, label.y);
+          text.fillText(label.text, label.x, label.y);
+        }
+        labelsPainted = true;
       }
       ctx.globalAlpha = 1; return { pending: cursor < items.length, drawn, total: items.length };
     },
@@ -132,6 +159,6 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
       }
       return null;
     },
-    dispose() { theme.disconnect(); media.removeEventListener("change", invalidate); for (const e of swatches.values()) e.remove(); },
+    dispose() { labels.remove(); theme.disconnect(); media.removeEventListener("change", invalidate); for (const e of swatches.values()) e.remove(); },
   };
 }

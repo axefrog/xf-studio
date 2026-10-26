@@ -84,7 +84,7 @@ export function createService(options: ServiceOptions) {
   const live = createLiveSource(options.liveBridge ?? createLiveBridge(), { clock: options.liveClock, changed: wantWorld,
     idle() { worldCtl.abort(); worldCtl = new AbortController(); worldPending = false; } });
   async function open(dir: string, signal: AbortSignal): Promise<Session> {
-    if (dir.startsWith("layers:")) return standaloneSession(layers.snapshot(), dir);
+    if (dir.startsWith("layers:")) return standaloneSession(layers.snapshot(), dir, pack() ?? undefined);
     const ready = sessions.get(dir);
     if (ready) { signal.throwIfAborted(); return ready; }
     let load = loads.get(dir);

@@ -8,6 +8,7 @@ import type { HoloLayer, HoloState } from "../service";
 import type { AgentItem, AgentLayer } from "../agent-types";
 import { HOLOTABLE_PANEL_META } from "./contribution";
 import { f1, heading, LAYER_LABELS, vAt } from "./shared";
+import { itemTitle, layerCounts } from "./agent-labels";
 
 type Ctx = ModuleViewContext<HolotableFacade>;
 export function holotableDetailsPanel(ctx: Ctx): PanelController {
@@ -25,8 +26,9 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
   let inspectKey = "";
   const visible = (state: HoloState) => state.agents.layers.filter(l => state.agentEnabled[l.id] !== false);
   const find = (state: HoloState, key: string) => visible(state).flatMap(l => l.items).find(i => i.key === key);
+  const title = (item: AgentItem, state: HoloState, owner?: string) => itemTitle(item, visible(state).flatMap(l => l.items), owner);
   function itemFacts(item: AgentItem, state: HoloState): HTMLElement {
-    const facts: [string, string][] = [["Kind", item.kind]];
+    const facts: [string, string][] = [[item.kind === "relation" ? "Relation" : "Kind", item.kind === "relation" ? title(item, state) : item.kind]];
     if (item.value?.name) facts.push(["Name", item.value.name]);
     if (item.label) facts.push(["Label", item.label]);
     if (item.detail) facts.push(["Detail", item.detail]);
@@ -35,13 +37,12 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
     if (item.region) facts.push([`Placed by ${item.region.kind}`, item.region.name]);
     if (item.toRegion) facts.push([`Other end by ${item.toRegion.kind}`, item.toRegion.name]);
     if (item.cite) facts.push(["Why", item.cite]);
-    if (item.value?.type) facts.push(["Relation", item.value.type]);
     const body = h("div", {}, propertyList(facts, { label: "Selected item" }));
-    for (const key of item.relations ?? []) { const relation = find(state, key); if (relation) body.append(button({ label: relation.value?.type ?? "Relation", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.select", id: key }); } })); }
+    for (const key of item.relations ?? []) { const relation = find(state, key); if (relation) body.append(button({ label: title(relation, state, item.key), small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.select", id: key }); } })); }
     return body;
   }
   function itemList(items: readonly AgentItem[], state: HoloState): HTMLElement {
-    return h("div", {}, ...items.map(item => h("div", {}, button({ label: item.value?.name ?? item.label ?? item.kind, small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.select", id: item.key }); } }), itemFacts(item, state))));
+    return h("div", {}, ...items.map(item => h("div", {}, button({ label: title(item, state), small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.select", id: item.key }); } }), itemFacts(item, state))));
   }
   function rows(state: HoloState): HTMLElement {
     const open = state.open; if (!open) return note("Open a recording to see what it holds.");
@@ -80,7 +81,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
       for (const l of owned) {
         let toggle = agentRows.get(l.id);
         if (!toggle) { toggle = new Toggle({ label: l.title, onChange: on => { void ctx.dispatch({ kind: "holo.agentLayer", id: l.id, on }); } }); agentRows.set(l.id, toggle); producer.body.append(toggle.element); }
-        toggle.update(state.agentEnabled[l.id] !== false, { note: `${l.items.length} items${l.refused ? ` · ${l.refused} items refused` : ""}${l.notPlaced.length ? ` · ${l.notPlaced.length} not placed` : ""}${l.otherBranches.length ? ` · ${l.otherBranches.length} on other branches` : ""}` });
+        toggle.update(state.agentEnabled[l.id] !== false, { note: layerCounts(l) });
         toggle.element.title = [l.reason, l.notPlaced.length ? `Not placed: ${l.notPlaced.join(", ")}` : "", l.otherBranches.length ? `Other branches: ${[...new Set(l.otherBranches)].join(", ")}` : ""].filter(Boolean).join("\n");
       }
     }

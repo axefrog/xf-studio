@@ -68,8 +68,8 @@ Spool folders are ignored and private, like recordings. Content levels apply to 
 
 - Per layer: at most 5,000 live items, 16 MB of spool, and 2 batches a second through the CLI or service. Fields: at most 128×128 cells.
 - Labels are at most 160 characters; details 4,000. Facets have at most 16 entries, with keys up to 40 characters and values up to 500 (a complete dialogue line may be a facet). Paths and polygons have at most 4,096 vertices. A spool line is at most 1 MiB. Retractions require `t`.
-- Anything malformed is refused with a counted, plain reason, and the layer's row in the view shows "N items refused" with the first reason as its tooltip. One bad line never drops the layer.
-- Drawing is clipped and distance-faded, beneath V and the trail but above the solid shapes, at most 8 ms a frame together. Agent data draws first, with about 4 ms for its work; solid preparation and drawing yield within the remainder and resume next frame. Hidden views and superseded frames cancel continuations. Report cold completion frames and total preparation time separately.
+- Anything malformed is refused with a counted, plain reason, and the layer's row in the view shows "N refused" with the first reason as its tooltip. One bad line never drops the layer.
+- Drawing is clipped and distance-faded, beneath V and the trail but above the solid shapes, at most 8 ms a frame together in steady state. Cold preparation, including its resumed frames, may take up to 12 ms a frame. Agent data draws first, with about 4 ms for its work; solid preparation and drawing yield within the remaining allowance and resume next frame. Hidden views and superseded frames cancel continuations. Report cold completion frames and total preparation time separately.
 
 ## In the Studio
 

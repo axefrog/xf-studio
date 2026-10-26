@@ -23,7 +23,7 @@ export function report(s: Session, t: number, level: ContentLevel, world?: World
   const groups = near ? whatsHere(layers, near, hidden) : layers.filter(l => !hidden.includes(l.id)).map(l => ({ layer: l.id, title: l.title, items: l.items.filter(i => i.place && !l.notPlaced.includes(i.id)).map(item => ({ item, distance: 0, sample: undefined })) }));
   out.push(position ? `What's here  ${position.map(f1).join(", ")}` : "Agent layers (near V; at most 128 items)");
   let remaining = 128;
-  for (const l of layers) if (!hidden.includes(l.id)) out.push(`Layer  ${l.title} (${l.id}) · ${l.items.length} items · ${l.refused} items refused${l.reason ? `: ${l.reason}` : ""}${l.notPlaced.length ? ` · ${l.notPlaced.length} not placed` : ""}${l.otherBranches.length ? ` · ${l.otherBranches.length} on other branches` : ""}`);
+  for (const l of layers) if (!hidden.includes(l.id)) out.push(`Layer  ${l.title} (${l.id}) · ${l.items.length} ${l.items.length === 1 ? "item" : "items"} · ${l.refused} refused${l.reason ? `: ${l.reason}` : ""}${l.notPlaced.length ? ` · ${l.notPlaced.length} not placed` : ""}${l.otherBranches.length ? ` · ${l.otherBranches.length} on other branches` : ""}`);
   for (const g of groups) {
     if (!remaining) break;
     out.push(`  ${g.title} (${g.layer})`);

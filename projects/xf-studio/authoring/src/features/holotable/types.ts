@@ -26,7 +26,7 @@ export interface HoloSession {
     readonly complete: boolean; readonly dropped: number; readonly missedDeadlines: number; readonly largestGapS: number; readonly coverage: string;
     /** Damage found while reading (missing chunks, an unfinished last row). */
     readonly problems: readonly string[];
-    readonly standalone?: { readonly set: string; readonly title: string; readonly clock: "wall" | "game" | "recording"; readonly branches: readonly string[] };
+    readonly standalone?: { readonly set: string; readonly title: string; readonly clock: "wall" | "game" | "recording"; readonly branches: readonly string[]; readonly extent?: { readonly min: Vec3; readonly max: Vec3 } };
   };
   readonly v: readonly HoloVSample[];
   readonly camera: readonly HoloCameraSample[];
