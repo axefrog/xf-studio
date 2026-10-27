@@ -1,7 +1,7 @@
 /** Installed vanilla W1 adapter. One bounded CLI build owns its workers, cache and archive handles. */
-import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { statSync } from "node:fs";
+import { join } from "node:path";
 import { Cr2wFile } from "../../xf-studio/authoring/src/native/cr2w-file";
 import { Cr2wDecoder } from "../../xf-studio/authoring/src/native/cr2w-reader";
 import { NativeArchivePool } from "../../xf-studio/authoring/src/native/archive-reader";
@@ -13,7 +13,7 @@ import { depotHash } from "../../xf-studio/authoring/src/game/depot-path";
 import { vanillaSources } from "./solid-source.ts";
 import { createSectorCache, SectorWorkers, type SourceStamp } from "./sector-cache.ts";
 import { CONTENT_SECTOR_VERSION, decodeContentSector, list, object, reference, vector } from "./world-content-data.ts";
-import { ContentAssembler, CONTENT_FILE_CAP, CONTENT_POLICY, WORLD_CONTENT_READER, boxOverlapsPlace, count, selectSlice, type WorldContent } from "./world-content.ts";
+import { ContentAssembler, CONTENT_POLICY, WORLD_CONTENT_READER, boxOverlapsPlace, count, selectSlice, type WorldContent } from "./world-content.ts";
 import { validateContent } from "./world-content-validation.ts";
 export { validateContent } from "./world-content-validation.ts";
 import { indexJournal, mapMappins, mapWorkspot, type JournalIndex } from "./world-content-resources.ts";
@@ -24,30 +24,17 @@ import { addWorldTexts, resolvePoiTitles } from "./world-content-titles.ts";
 import { resolveContentRecords } from "./world-content-people.ts";
 import { tweakDbOf } from "../../xf-studio/authoring/src/character/host/clothing-host";
 
-import { updateWorldIndex } from "./world-content-index.ts";
+import { cachedWorldContent } from "./world-content-publication.ts";
+export { cachedWorldContent } from "./world-content-publication.ts";
 
 const BASE="base\\worlds\\03_night_city\\_compiled\\default\\";
 const BLOCKS=[BASE+"blocks\\all.streamingblock",BASE+"ep1\\blocks\\all.streamingblock"];
 const digest=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export function worldContentSourceFingerprint(sources:readonly SourceStamp[],pack:WorldPack,reader=WORLD_CONTENT_READER,names:readonly SourceStamp[]=[]) {
-  return digest({sources,names,pack,reader,native:NATIVE_READER_VERSION,sector:SECTOR_READER_VERSION,contentSector:CONTENT_SECTOR_VERSION,policy:CONTENT_POLICY,localisation:gameTextPaths("en-us",sources.some(s=>/[\\/]ep1[\\/]/.test(s.path)))});
+  return digest({sources,names,pack,reader,native:NATIVE_READER_VERSION,sector:SECTOR_READER_VERSION,contentSector:CONTENT_SECTOR_VERSION,policy:CONTENT_POLICY,publication:2,localisation:gameTextPaths("en-us",sources.some(s=>/[\\/]ep1[\\/]/.test(s.path)))});
 }
 export function worldContentCacheKey(sources:readonly SourceStamp[],pack:WorldPack,slice:string,reader=WORLD_CONTENT_READER,names:readonly SourceStamp[]=[]) {
   return digest({fingerprint:worldContentSourceFingerprint(sources,pack,reader,names),slice});
-}
-/** Probe the small assembled file before opening archive indexes. Damaged entries rebuild atomically. */
-export async function cachedWorldContent(file:string,key:string,build:()=>Promise<WorldContent>,signal:AbortSignal) {
-  signal.throwIfAborted();
-  try {
-    const size=statSync(file).size;
-    if(size>0&&size<=CONTENT_FILE_CAP) {const content=JSON.parse(readFileSync(file,"utf8")) as WorldContent;validateContent(content,key);return {content,cached:true,bytes:size};}
-  } catch { /* A miss, changed key or damaged file is regenerated. */ }
-  const content=await build();signal.throwIfAborted();validateContent(content,key);
-  const json=JSON.stringify(content);
-  if(Buffer.byteLength(json)>CONTENT_FILE_CAP)throw new NativeBudgetError("Slice exceeds 32 MiB; use a smaller slice.");
-  mkdirSync(dirname(file),{recursive:true});const tmp=join(dirname(file),`.${randomUUID()}.tmp`);
-  try {writeFileSync(tmp,json,{flag:"wx"});signal.throwIfAborted();renameSync(tmp,file);}finally{rmSync(tmp,{force:true});}
-  return {content,cached:false,bytes:Buffer.byteLength(json)};
 }
 interface Descriptor { resource:string; min:Vec3; max:Vec3; ranges:number[]; source:number; level:number }
 export async function buildWorldContent(options:{root:string;pack:WorldPack;slice:string;directory:string;signal:AbortSignal;now?:()=>string}) {
@@ -119,6 +106,6 @@ export async function buildWorldContent(options:{root:string;pack:WorldPack;slic
         source:{game:pack.provenance.game,archives:digest(sources),reader:WORLD_CONTENT_READER,built:(options.now??(()=>new Date().toISOString()))(),key},
         records:recordTable,communities:out.communities,spots:out.spots,spawners:out.spawners,pois:out.pois,counts:out.counts};
     } finally {try {await workers.shutdown();cache.trim();}finally{cache.end();pool.close();oodle.close();}}
-  },signal);
-  await updateWorldIndex(directory,result.content,slice,signal,{fingerprint,bytes:result.bytes});return result;
+  },signal,{slice,fingerprint,check:unchanged});
+  return result;
 }

@@ -1,7 +1,8 @@
-import { updateWorldIndex } from "../src/world-content-index";
+import { cachedWorldContent } from "../src/world-content-publication";
+import {createHash} from "node:crypto";
 import { expect, test } from "bun:test";
 import { writeFileSync, unlinkSync, statSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { tempDir } from "../../xf-studio/authoring/tests/temp-dir";
 import { CONTENT_IDLE_MS, CONTENT_LEASE_MS, CONTENT_RENEW_MS, estimatedContentBytes, worldContentFiles } from "../src/world-content-files";
 import { ContentAssembler, WORLD_CONTENT_READER, selectSlice, type WorldContent } from "../src/world-content";
@@ -14,7 +15,7 @@ const fixture=():WorldContent=>{
  const out=new ContentAssembler(pack,selectSlice(pack,"kabuki"));out.addPoi({id:"p",at:[10,10,0],variant:"ServicePointRipperdocVariant"});
  return {schema:"xfh/world-content-1",source:{key:"test",game:"test",reader:WORLD_CONTENT_READER,built:"test",archives:"test"},slice:{id:"kabuki",title:"Kabuki",places:["Districts.Kabuki"]},records:{},communities:[],spots:[],spawners:[],pois:out.pois,counts:out.counts};
 };
-async function save(file:string,content:WorldContent){writeFileSync(file,JSON.stringify(content));await updateWorldIndex(dirname(file),content,selectSlice(pack,"kabuki"),new AbortController().signal,{fingerprint:"fixture",bytes:Buffer.byteLength(JSON.stringify(content))});}
+async function save(file:string,content:WorldContent){const key=createHash("sha256").update(JSON.stringify(content)).digest("hex");await cachedWorldContent(file,key,async()=>({...content,source:{...content.source,key}}),new AbortController().signal,{fingerprint:"fixture",slice:selectSlice(pack,"kabuki")});}
 function testClock(){
  let now=0;const timers=new Map<()=>void,number>();
  return {now:()=>now,timers,later(ms:number,fn:()=>void){timers.set(fn,now+ms);return()=>{timers.delete(fn);};},advance(ms:number){
@@ -107,8 +108,7 @@ async function severalSlices(){
  const sizes:number[]=[];
  for(const [i,area]of many.areas.entries()){
   const c=fixture();c.slice={id:area.name,title:area.name,places:[area.id]};c.pois[0]={...c.pois[0],id:area.name,place:area.id,at:[i*1000+10,10,0]};
-  const file=join(dir,`${area.name}.content.json`);writeFileSync(file,JSON.stringify(c));const bytes=statSync(file).size;sizes.push(estimatedContentBytes(bytes));
-  await updateWorldIndex(dir,c,{roots:[area]},new AbortController().signal,{fingerprint:"fixture",bytes});
+  const file=join(dir,`${area.name}.content.json`);await cachedWorldContent(file,c.source.key,async()=>c,new AbortController().signal,{fingerprint:"fixture",slice:{roots:[area]}});sizes.push(estimatedContentBytes(statSync(file).size));
  }
  return {dir,pack:many,cap:2*Math.max(...sizes)};
 }

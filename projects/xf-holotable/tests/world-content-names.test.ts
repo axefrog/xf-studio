@@ -115,3 +115,19 @@ test("a captured discovery list detects additions, removals and the appearance o
  const initial=worldNameSources(root,false);writeFileSync(join(base,"one.tweak"),"package Test\none {}");utimesSync(base,new Date(),new Date(initial.directories[0].mtimeMs+2000));expect(()=>checkWorldNameSources(initial)).toThrow();
  const present=worldNameSources(root,false);rmSync(join(base,"one.tweak"));expect(()=>checkWorldNameSources(present)).toThrow();
 });
+
+test("rebuild validation reselects a newly preferred TweakDB, including initially absent blobs",()=>{
+ for(const initial of ["base","absent"]){
+  const root=tempDir(`w1-db-selection-${initial}-`),cache=join(root,"r6/cache");mkdirSync(cache,{recursive:true});
+  if(initial==="base")writeFileSync(join(cache,"tweakdb.bin"),"base");
+  const before=worldNameSources(root,true);expect(()=>checkWorldNameSources(before)).not.toThrow();
+  writeFileSync(join(cache,"tweakdb_ep1.bin"),"preferred");
+  if(initial==="base")expect(statSync(join(cache,"tweakdb.bin")).size).toBe(4);
+  expect(()=>checkWorldNameSources(before)).toThrow("Preferred TweakDB selection");
+  const selected=worldNameSources(root,true);expect(selected.db?.source).toContain("tweakdb_ep1.bin");expect(()=>checkWorldNameSources(selected)).not.toThrow();
+  writeFileSync(join(cache,"tweakdb_ep1.bin"),"preferred changed");expect(()=>checkWorldNameSources(selected)).toThrow("Preferred TweakDB selection");
+ }
+ const root=tempDir("w1-db-base-appearance-"),cache=join(root,"r6/cache");mkdirSync(cache,{recursive:true});const absent=worldNameSources(root,false);
+ writeFileSync(join(cache,"tweakdb.bin"),"base");expect(()=>checkWorldNameSources(absent)).toThrow("Preferred TweakDB selection");
+ const base=worldNameSources(root,false);writeFileSync(join(cache,"tweakdb_ep1.bin"),"not selected without expansion");expect(()=>checkWorldNameSources(base)).not.toThrow();
+});

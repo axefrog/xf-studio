@@ -20,7 +20,7 @@ export interface Poi { id: string; place: string; at: Vec3; kind: string; varian
 export interface Coverage { read: Record<string, number>; kept: Record<string, number>; dropped: Record<string, number>; reasons: Record<string, Record<string, number>> }
 export interface WorldContent {
   schema: "xfh/world-content-1"; slice: { id: string; title: string; places: string[] };
-  source: { game: string; archives: string; reader: string; built: string; key: string };
+  source: { game: string; archives: string; reader: string; built: string; key: string; fingerprint?:string };
   records: Record<string,ContentRecord>; communities: Community[]; spots: Spot[]; spawners: Spawner[]; pois: Poi[]; counts: Coverage;
 }
 export function coverage(): Coverage { return { read: {}, kept: {}, dropped: {}, reasons: {} }; }

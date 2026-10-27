@@ -47,10 +47,11 @@ export function worldNameSources(root:string,ep1:boolean,limits:Readonly<typeof 
   try{walk(join(root,"tools","redmod","tweaks","base"));if(ep1)walk(join(root,"tools","redmod","tweaks","ep1"));}finally{reader.close();}
   files.sort((a,b)=>a.path.localeCompare(b.path));directories.sort((a,b)=>a.path.localeCompare(b.path));
   const db=tweakDbSourceOf(root,ep1),sources=[...files,...(db?[{path:db.path,size:db.size,mtimeMs:db.mtimeMs}]:[])];
-  return {files,sources,directories,missingDirectories,stats};
+  return {root,ep1,db,files,sources,directories,missingDirectories,stats};
 }
 /** Rebuild-only publication check: reuse the captured list instead of rediscovering the tree. */
 export function checkWorldNameSources(snapshot:ReturnType<typeof worldNameSources>) {
+  if(JSON.stringify(tweakDbSourceOf(snapshot.root,snapshot.ep1))!==JSON.stringify(snapshot.db))throw Error("Preferred TweakDB selection or stamps changed during the build; rerun.");
   const directoryPaths=new Set(snapshot.directories.map(s=>s.path));
   for(const s of [...snapshot.directories,...snapshot.sources]) {
     try {const now=statSync(s.path),directory=directoryPaths.has(s.path);

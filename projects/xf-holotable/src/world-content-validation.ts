@@ -7,6 +7,7 @@ export function validateContent(value: unknown, key: string): asserts value is W
   shape(value,"world content");shape(value.source,"content source");shape(value.slice,"content slice");
   if(value.schema!=="xfh/world-content-1"||value.source.key!==key||value.source.reader!==WORLD_CONTENT_READER)throw new NativeMalformedError("Invalid world-content identity.");
   for(const field of ["game","archives","reader","built","key"])string(value.source[field],`source ${field}`);
+  optionalString(value.source.fingerprint,"source fingerprint");
   string(value.slice.id,"slice id");string(value.slice.title,"slice title");
   const budget=new ContentBudget();stringList(value.slice.places,"slice places",budget);
   const affiliation=(value:unknown)=>{if(value===undefined)return;shape(value,"affiliation");string(value.record,"affiliation record");optionalString(value.recordName,"affiliation record name");optionalString(value.title,"affiliation title");budget.charge({nested:1,bytes:64+stringBytes(value.record)+stringBytes(value.recordName as string|undefined)+stringBytes(value.title as string|undefined)});};

@@ -1,8 +1,6 @@
 /** Small, atomically replaced catalogue of prepared slices. No archives or game payloads. */
-import { readFileSync, statSync, mkdirSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
-import { acquireSetPublishLock } from "./set-publish-lock.ts";
 import type { Vec3 } from "./model.ts";
 import type { WorldContent, selectSlice } from "./world-content.ts";
 import { array, shape, string, stringList, finiteTuple, integer, optionalString, CONTENT_LIMITS, ContentBudget } from "./world-content-budget.ts";
@@ -39,24 +37,21 @@ export function listWorldIndex(directory:string) {
   });
   return {...index,slices,...(missing.length?{missing}:{})};
 }
-export async function updateWorldIndex(directory:string,content:WorldContent,slice:Pick<ReturnType<typeof selectSlice>,"roots">,signal:AbortSignal,publication:{fingerprint:string;bytes:number}) {
-  signal.throwIfAborted();mkdirSync(directory,{recursive:true});
-  // This existing cross-process lease has a five-second acquisition deadline and reclaims dead owners after 30 seconds.
-  const release=await acquireSetPublishLock(join(directory,".world-index.publish.lock"),signal);
-  try {
-    signal.throwIfAborted();
-    const {game,archives,reader}=content.source,source={game,archives,reader,fingerprint:publication.fingerprint},prior=listWorldIndex(directory);
-    // Read/reconcile only inside the lock: concurrent slices cannot overwrite one another's additions.
-    const same=prior&&prior.source.game===game&&prior.source.archives===archives&&prior.source.reader===reader&&prior.source.fingerprint===source.fingerprint;
-    const slices=same?prior.slices.filter(s=>s.id!==content.slice.id):[];
-    const bounds={min:[Infinity,Infinity,Infinity] as Vec3,max:[-Infinity,-Infinity,-Infinity] as Vec3};
-    for(const root of slice.roots)for(const [x,y] of root.poly){bounds.min[0]=Math.min(bounds.min[0],x);bounds.min[1]=Math.min(bounds.min[1],y);bounds.max[0]=Math.max(bounds.max[0],x);bounds.max[1]=Math.max(bounds.max[1],y);bounds.min[2]=Math.min(bounds.min[2],root.zlo);bounds.max[2]=Math.max(bounds.max[2],root.zhi);}
-    statSync(join(directory,`${content.slice.id}.content.json`)); // Never publish an already-deleted incoming slice.
-    slices.push({...content.slice,bounds,file:`${content.slice.id}.content.json`,counts:{communities:content.communities.length,spots:content.spots.length,spawners:content.spawners.length,pois:content.pois.length,records:Object.keys(content.records).length},bytes:publication.bytes,built:content.source.built});slices.sort((a,b)=>a.id.localeCompare(b.id));
-    const index:WorldIndex={schema:"xfh/world-index-1",source,slices};validateWorldIndex(index);
-    const json=JSON.stringify(index);if(Buffer.byteLength(json)>1024*1024)throw Error("World index exceeds 1 MiB.");
-    const tmp=join(directory,`.${randomUUID()}.tmp`);
-    try{writeFileSync(tmp,json,{flag:"wx"});signal.throwIfAborted();renameSync(tmp,join(directory,"index.json"));}finally{rmSync(tmp,{force:true});}
-    return index;
-  }finally{release();}
+/** Build metadata under the publication owner's directory lease; this function never writes a file. */
+export function worldIndexFor(directory:string,content:WorldContent,slice:Pick<ReturnType<typeof selectSlice>,"roots">,publication:{fingerprint:string;bytes:number}) {
+  const {game,archives,reader}=content.source,source={game,archives,reader,fingerprint:publication.fingerprint},prior=listWorldIndex(directory);
+  const same=prior&&prior.source.game===game&&prior.source.archives===archives&&prior.source.reader===reader&&prior.source.fingerprint===source.fingerprint;
+  const slices=same?prior.slices.filter(s=>s.id!==content.slice.id):[];
+  const bounds={min:[Infinity,Infinity,Infinity] as Vec3,max:[-Infinity,-Infinity,-Infinity] as Vec3};
+  for(const root of slice.roots)for(const [x,y] of root.poly){bounds.min[0]=Math.min(bounds.min[0],x);bounds.min[1]=Math.min(bounds.min[1],y);bounds.max[0]=Math.max(bounds.max[0],x);bounds.max[1]=Math.max(bounds.max[1],y);bounds.min[2]=Math.min(bounds.min[2],root.zlo);bounds.max[2]=Math.max(bounds.max[2],root.zhi);}
+  slices.push({...content.slice,bounds,file:`${content.slice.id}.content.json`,counts:{communities:content.communities.length,spots:content.spots.length,spawners:content.spawners.length,pois:content.pois.length,records:Object.keys(content.records).length},bytes:publication.bytes,built:content.source.built});slices.sort((a,b)=>a.id.localeCompare(b.id));
+  const index:WorldIndex={schema:"xfh/world-index-1",source,slices};validateWorldIndex(index);return index;
+}
+/** A superseded caller must preserve the winner's bounds/source, rather than re-derive them from older inputs. */
+export function indexMatchesContent(index:WorldIndex|undefined,content:WorldContent,bytes:number):boolean {
+  const row=index?.slices.find(s=>s.id===content.slice.id);
+  return !!row&&index!.source.game===content.source.game&&index!.source.archives===content.source.archives&&index!.source.reader===content.source.reader
+    &&!!content.source.fingerprint&&index!.source.fingerprint===content.source.fingerprint
+    &&row.bytes===bytes&&row.built===content.source.built&&row.title===content.slice.title&&JSON.stringify(row.places)===JSON.stringify(content.slice.places)
+    &&row.counts.communities===content.communities.length&&row.counts.spots===content.spots.length&&row.counts.spawners===content.spawners.length&&row.counts.pois===content.pois.length&&row.counts.records===Object.keys(content.records).length;
 }
