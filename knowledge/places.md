@@ -495,13 +495,20 @@ and [shadow host notes](../projects/xf-story-engine/reference/SHADOW.md).
 [world importer](../projects/xf-story-engine/reference/WORLD-IMPORT.md) clips an
 origin-anchored 200 m grid to Kabuki's actual outline/Z band: **25 blocks**, plus
 **three venue cells**, retaining all seven venue volumes. Their XY footprint
-unions total **4,228.52 m²**; stacked volumes are not counted twice. Clipping
-uses binary64 arithmetic for simple input rings without holes. Disconnected
-components remain separate polygons; artificial cut-line bridges are not used
-as membership boundaries. Gap regressions cover all four clipping directions,
-and a private real-input check rejects 14 exterior samples accepted by the prior
-implementation. These finite checks do not establish robustness for arbitrary
-self-intersecting outlines, holes or numerically degenerate inputs. Venue
+unions total **4,228.52 m²**; stacked volumes are not counted twice. All input
+coordinates are rounded to integer millimetres before geometry. Grid cuts use
+exact 200,000 mm lines, reuse on-line endpoints and round new intersections to
+integer mm. Vertex identity and boundary/orientation tests use integer pairs
+and BigInt arithmetic. Disconnected components remain separate polygons;
+artificial cut-line bridges are not membership boundaries. Positive overlap
+requires at least **1 mm²** of exact rational intersection area: shared edges
+and points are contact. The serialised index converts coordinates back to
+metres only at the final output projection. Quantisation can change a clipped
+cell's area; it does not promise the exact boundary of the unquantised source.
+Regressions cover fractional boundary vertices, sloped shared edges, all four
+clipping directions and the 1 mm² threshold. Simple input rings without holes
+are supported; these finite checks do not establish robustness for arbitrary
+self-intersecting outlines or degenerate inputs. Venue
 membership takes precedence and includes height. Geometric neighbours do not
 establish traversability. The observer emits the polygons, with extra zone items
 for additional volumes, rather than replacing them with bounding boxes. Existing

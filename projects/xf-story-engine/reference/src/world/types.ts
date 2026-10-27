@@ -29,7 +29,7 @@ export interface CellGeometry {
 export interface Binding { community: string; entry: string; spot: string }
 export interface ImportedWorldIndex extends WorldIndex {
   worldImport: {
-    schema: 'xf.s1-world-import@1'; gridMetres: 200;
+    schema: 'xf.s1-world-import@1'; gridMetres: 200; coordinateQuantisationMm: 1;
     sources: { pack: string; content: string };
     districtPlaces: Record<string, string>;
     geometry: Record<string, CellGeometry>;

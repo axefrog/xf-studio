@@ -2,11 +2,13 @@ import { hrec } from '../canon.ts';
 import { H, memberId, s } from '../id.ts';
 import { makeKabukiSlice, districtIdOf } from '../sim/slices.ts';
 import type { CellIndex } from '../sim/index-types.ts';
-import { area, cellAt, centre, clip, footprint, overlapsXY, squaredDistance } from './geometry.ts';
+import { areaMm2 as area, cellAtMm as cellAt, centreMm as centre, clipMm as clip, footprintMm2 as footprint,
+  overlapsXYMm as overlapsXY, squaredDistanceMm as squaredDistance, GRID_MM, quantiseVolume, quantiseXYZ, metresXYZ, metresVolume } from './geometry.ts';
 import { COVERAGE_KINDS, OTHER_KINDS, PLACE_NAMES, SERVICE_KINDS, VENDOR_SERVICE_TYPES } from './poi-kinds.ts';
 import type { CellGeometry, ImportedWorldIndex, W1Content, W1Pack, Volume } from './types.ts';
 
 const cmp = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
+const cmpDistance = (a: bigint, b: bigint) => a < b ? -1 : a > b ? 1 : 0;
 export const stableJson = (value: unknown): string => JSON.stringify(value, (_key, v) => {
   if (v && typeof v === 'object' && !Array.isArray(v)) return Object.fromEntries(Object.keys(v).sort(cmp).map((k) => [k, v[k]]));
   return v;
@@ -38,7 +40,7 @@ export function validateInputs(pack: W1Pack, content: W1Content): void {
   if (content?.schema !== 'xfh/world-content-1' || content.slice?.id !== 'kabuki' || !Array.isArray(content.slice.places) ||
     !content.slice.places.includes('Districts.Kabuki') || !content.records || typeof content.records !== 'object' || Array.isArray(content.records)) fail('Kabuki content schema/records');
   for (const a of pack.areas) if (!a || typeof a.id !== 'string' || typeof a.kind !== 'string' || !Array.isArray(a.poly) || a.poly.length < 3 || a.poly.length > 4096 ||
-    a.poly.some((p) => !Array.isArray(p) || p.length !== 2 || !p.every(Number.isFinite)) || !Number.isFinite(a.zlo) || !Number.isFinite(a.zhi) || a.zlo > a.zhi || area(a.poly) <= 0) fail('invalid area');
+    a.poly.some((p) => !Array.isArray(p) || p.length !== 2 || !p.every(Number.isFinite)) || !Number.isFinite(a.zlo) || !Number.isFinite(a.zhi) || a.zlo > a.zhi) fail('invalid area');
   for (const collection of [content.communities, content.spots, content.pois, content.spawners]) if (!Array.isArray(collection)) fail('missing collection');
   if (content.communities.length + content.spots.length + content.pois.length + content.spawners.length > 50000 || Object.keys(content.records).length > 50000) fail('collection cap');
   for (const r of Object.values(content.records)) if (!r || !['person', 'vehicle', 'other'].includes(r.kind) || r.affiliationName !== undefined && typeof r.affiliationName !== 'string') fail('invalid record');
@@ -72,8 +74,14 @@ export function validateInputs(pack: W1Pack, content: W1Content): void {
   }
 }
 
-export function importW1(pack: W1Pack, content: W1Content): { index: ImportedWorldIndex; report: ImportReport } {
-  validateInputs(pack, content);
+export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index: ImportedWorldIndex; report: ImportReport } {
+  validateInputs(sourcePack, sourceContent);
+  // Quantise once before any geometric operation. Work geometry, poses, grid
+  // lines, intersections and centres remain integer mm until the output projection.
+  const pack: W1Pack = {...sourcePack, areas: sourcePack.areas.map((a)=>({...a,...quantiseVolume(a)}))};
+  const content: W1Content = {...sourceContent, spots: sourceContent.spots.map((p)=>({...p,at:quantiseXYZ(p.at)})),
+    pois: sourceContent.pois.map((p)=>({...p,at:quantiseXYZ(p.at)}))};
+  for(const a of pack.areas) if(a.poly.length<3||area(a.poly)<=0) throw Error('W1 import refused: invalid area after mm quantisation');
   const base = makeKabukiSlice(), district = base.districts[districtIdOf('wat_kab')];
   const outlines = pack.areas.filter((a) => a.id === 'Districts.Kabuki');
   if (outlines.length !== 1) throw Error('W1 import requires one Kabuki district outline');
@@ -91,11 +99,11 @@ export function importW1(pack: W1Pack, content: W1Content): { index: ImportedWor
     shapes.push({ key: `venue:${place}`, place, name, volumes, area: footprint(volumes), centre: centre(volumes) });
   }
   const xs = outline.poly.map((p) => p[0]), ys = outline.poly.map((p) => p[1]);
-  const gxlo = Math.floor(Math.min(...xs) / 200), gxhi = Math.ceil(Math.max(...xs) / 200);
-  const gylo = Math.floor(Math.min(...ys) / 200), gyhi = Math.ceil(Math.max(...ys) / 200);
+  const gxlo = Math.floor(Math.min(...xs) / GRID_MM), gxhi = Math.ceil(Math.max(...xs) / GRID_MM);
+  const gylo = Math.floor(Math.min(...ys) / GRID_MM), gyhi = Math.ceil(Math.max(...ys) / GRID_MM);
   if ((gxhi - gxlo) * (gyhi - gylo) > 10000) throw Error('Grid candidate cap exceeded');
   for (let gx = gxlo; gx < gxhi; gx++) for (let gy = gylo; gy < gyhi; gy++) {
-    const polygons = clip(outline.poly, gx * 200, gy * 200, (gx + 1) * 200, (gy + 1) * 200), a = polygons.reduce((n,p)=>n+area(p),0);
+    const polygons = clip(outline.poly, gx * GRID_MM, gy * GRID_MM, (gx + 1) * GRID_MM, (gy + 1) * GRID_MM), a = polygons.reduce((n,p)=>n+area(p),0);
     if (a <= 0) continue;
     const volumes = polygons.map((poly)=>({ poly, zlo: outline.zlo, zhi: outline.zhi }));
     shapes.push({ key: `grid:${gx},${gy}`, grid: [gx, gy], name: `Kabuki, block ${shapes.length + 1}`, volumes, area: a, centre: centre(volumes) });
@@ -164,7 +172,7 @@ export function importW1(pack: W1Pack, content: W1Content): { index: ImportedWor
   }
   const totalWeight = sum(raw);
   const coverage = Object.fromEntries(cellIds.map((id) => [id, {} as Record<string, number>]));
-  const candidates = Object.fromEntries(cellIds.map((id) => [id, [] as Array<{ id: string; type: string; distance: number }> ]));
+  const candidates = Object.fromEntries(cellIds.map((id) => [id, [] as Array<{ id: string; type: string; distance: bigint }> ]));
   const unknownPoiKinds: Record<string, number> = {};
   for (const poi of [...content.pois].sort((a, b) => cmp(a.id, b.id))) {
     if (poi.id.includes(':')) counts.fallbackPoiIds++;
@@ -201,39 +209,43 @@ export function importW1(pack: W1Pack, content: W1Content): { index: ImportedWor
         else if (dx === 1 && dy === 1) c.adj2.push(other);
       } else if (!!g.grid !== !!h.grid) {
         const block = g.grid ? g : h, venue = g.place ? g : h;
-        if (venue.volumes.some((v) => block.volumes.some((b)=>overlapsXY(v,b)))) c.adj1.push(other);
+        if (overlapsXY(venue.volumes, block.volumes)) c.adj1.push(other);
       }
     }
     c.adj1.sort(cmp); c.adj2.sort(cmp);
     if (g.place) {
       c.host = c.adj1.filter((other) => geometry[other].grid).sort((a, b) => {
         const distance = (key: string) => squaredDistance(geometry[key].centre,g.centre);
-        return distance(a) - distance(b) || cmp(a, b);
+        return cmpDistance(distance(a), distance(b)) || cmp(a, b);
       })[0];
       if (!c.host) throw Error(`Venue ${g.place} overlaps no retained block`);
     }
-    const services = candidates[id].sort((a, b) => a.distance - b.distance || cmp(a.id, b.id));
+    const services = candidates[id].sort((a, b) => cmpDistance(a.distance, b.distance) || cmp(a.id, b.id));
     c.services = services.slice(0, 15).map((p, i) => ({ id: memberId(id, 'services', i), type: p.type, poi: p.id }));
     c.marketCell = c.services.some((service)=>VENDOR_SERVICE_TYPES.has(service.type));
     c.gameCoverage = Object.fromEntries(Object.keys(c.gameCoverage).map((kind)=>[kind,0]));
     const droppedServices = Math.max(0, services.length - 15);
     counts.servicesKept += c.services.length; counts.servicesDroppedCap += droppedServices;
     cells[id] = c;
-    rows.push({ id, key: g.key, name: g.name, area: g.area, residents: Math.round(district.rho * district.entry.total * c.headShare),
+    rows.push({ id, key: g.key, name: g.name, area: g.area / 1_000_000, residents: Math.round(district.rho * district.entry.total * c.headShare),
       spots: spotCounts[id] ?? 0, personLinks: n, presenceFloor: !n && !!g.grid,
       presenceTop3: Object.entries(c.presence).sort(([a, x], [b, y]) => y - x || cmp(a, b)).slice(0, 3),
       services: c.services.length, market: c.marketCell, ...(c.host ? {host:geometry[c.host].key}:{}), components:g.volumes.length,
       droppedServices, coverage: coverage[id], standInTemplate: template.id });
   }
-  district.cellIds = cellIds; district.polygon = structuredClone(outline.poly); district.zBand = [outline.zlo, outline.zhi];
+  // Serialisation projection: world-index consumers keep their metre contract.
+  const outputGeometry = Object.fromEntries(Object.entries(geometry).map(([id,g])=>[id,{
+    ...g,volumes:g.volumes.map(metresVolume),centre:metresXYZ(g.centre),area:g.area/1_000_000,
+  }]));
+  district.cellIds = cellIds; district.polygon = outline.poly.map(([x,y])=>[x/1000,y/1000]); district.zBand = [outline.zlo/1000, outline.zhi/1000];
   district.staticTotalA = Object.fromEntries(Object.keys(district.staticTotalA).map((kind) => [kind,
     [0, 1, 2, 3].map((p) => cellIds.reduce((n, id) => n + cells[id].A[kind][p], 0)) as [number, number, number, number]]));
   const index: ImportedWorldIndex = {
     ...base, version: 'xf.kabuki.w1.index@1', cells,
     names: { wat_kab: district.id, wat_nor: districtIdOf('wat_nor'), wat_lch: districtIdOf('wat_lch'), ...Object.fromEntries(cellIds.map((id) => [geometry[id].key, id])) },
-    worldImport: { schema: 'xf.s1-world-import@1', gridMetres: 200, sources: { pack: digest(pack), content: digest(content) },
+    worldImport: { schema: 'xf.s1-world-import@1', gridMetres: 200, coordinateQuantisationMm: 1, sources: { pack: digest(sourcePack), content: digest(sourceContent) },
       districtPlaces: { [district.id]: 'Districts.Kabuki', [districtIdOf('wat_nor')]: 'Districts.Northside', [districtIdOf('wat_lch')]: 'Districts.LittleChina' },
-      geometry, bindings, gameCoverageEvidence: coverage },
+      geometry: outputGeometry, bindings, gameCoverageEvidence: coverage },
   };
   const { hash: _hash, ...hashed } = index; index.hash = digest(hashed);
   const roundedHeadcount = rows.reduce((n, r) => n + r.residents, 0);
@@ -243,7 +255,7 @@ export function importW1(pack: W1Pack, content: W1Content): { index: ImportedWor
     cells: rows, templates, population: { census: district.entry.total, roundedHeadcount, roundingDelta: roundedHeadcount - district.entry.total },
     affiliations: { census: district.entry.byAff.map(({ aff, q }) => ({ aff, q })), personEntries, personSpotLinks }, counts, unknownPoiKinds,
     assumptions: [
-      { source: 'derived', field: 'geometry', rule: 'Origin-anchored 200 m clipped blocks with disconnected components stored separately; binary64 coordinates, simple rings without holes. Venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.' },
+      { source: 'derived', field: 'geometry', rule: 'Input coordinates quantised once by Math.round(metres * 1000); integer-mm geometry, exact 200000 mm grid, rounded integer-mm clip intersections and reused on-line endpoints. Disconnected simple components stay separate. Areas/orientations use BigInt; venue overlap requires exact intersection area >=1 mm2. Centres round once to mm; squared-distance comparisons use BigInt and id ties. Only the final index/report projection converts back to metres/m2. Venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.' },
       { source: 'derived', field: 'neighbours', rule: 'Grid edge neighbours, diagonal second neighbours; venues intersect actual clipped block polygons in XY. Geometry only; traversability unknown. Venue host is the nearest genuinely overlapping block centre by fixed-order squared distance, then cell id.' },
       { source: 'derived', field: 'headShare', rule: 'Clipped block area / district area; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.' },
       { source: 'derived', field: 'presence/pop', rule: 'One vote per distinct person-entry/spot link across phases, retaining cross-community tuples. Affiliation from records, civilian/Unaffiliated merged, NCPD normalized. Exclude vehicle/other/unresolved affiliation. Flat periods (06:00, 12:00, 18:00, 00:00): schedule unknown. Pop distributes the census scale over all cells by votes; empty blocks get 1% of mean block votes (mean 1 if all empty). Empty cells use census affiliation shares. No simultaneous occupancy claim.' },

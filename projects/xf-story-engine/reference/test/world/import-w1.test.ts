@@ -5,7 +5,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import packFixture from './fixtures/world-pack.json';
 import contentFixture from './fixtures/content.json';
 import { importW1, stableJson } from '../../src/world/import-w1.ts';
-import { area, cellAt, clip, contains, footprint, overlapsXY, squaredDistance } from '../../src/world/geometry.ts';
+import { area, cellAt, clip, clipMm, contains, footprint, overlapsXY, overlapsXYMm, squaredDistance, millimetres, quantisePolygon } from '../../src/world/geometry.ts';
 import type { W1Pack, W1Content } from '../../src/world/types.ts';
 import { makeKabukiSlice } from '../../src/sim/slices.ts';
 import { memberId } from '../../src/id.ts';
@@ -27,6 +27,75 @@ test('synthetic import bytes and SHA-256 match the cross-platform golden', () =>
   expect(bytes.equals(golden)).toBe(true);
   expect(createHash('sha256').update(bytes).digest('hex')).toBe(sha);
   expect(createHash('sha256').update(golden).digest('hex')).toBe(sha);
+});
+
+test('fractional, sloped, disconnected import and service-cap ordering match the second byte golden', () => {
+  const dir=resolve(import.meta.dir,'fixtures');
+  const pack=JSON.parse(readFileSync(join(dir,'fractional-world-pack.json'),'utf8'));
+  const content=JSON.parse(readFileSync(join(dir,'fractional-content.json'),'utf8'));
+  const result=importW1(pack,content),bytes=Buffer.from(stableJson(result));
+  const golden=readFileSync(join(dir,'fractional-import.golden.json'));
+  const sha=readFileSync(join(dir,'fractional-import.golden.sha256'),'utf8').trim();
+  expect(bytes.equals(golden)).toBe(true);
+  expect(createHash('sha256').update(bytes).digest('hex')).toBe(sha);
+  expect(createHash('sha256').update(golden).digest('hex')).toBe(sha);
+  const {index,report}=result;
+  const id=Object.keys(index.worldImport.geometry).find((id)=>index.worldImport.geometry[id].key==='grid:0,0')!;
+  expect(index.worldImport.geometry[id].volumes).toHaveLength(2);
+  expect(index.cells[id].services).toHaveLength(15);
+  expect(report.counts.servicesDroppedCap).toBe(5);
+  expect(index.cells[id].services[0].poi).toBe('cap-00');
+  expect(index.cells[id].services[1].poi).toBe('cap-01');
+  // Every serialised vertex is exactly an integer-mm value in metre units.
+  for(const g of Object.values(index.worldImport.geometry)) for(const v of g.volumes)
+    for(const [x,y] of v.poly) {expect(x).toBe(millimetres(x)/1000);expect(y).toBe(millimetres(y)/1000);}
+});
+
+test('fractional boundary vertices are reused across windings and clipping directions', () => {
+  const triangle:[number,number][]=[[-100,-1],[0,0.1],[100,100]];
+  for(const reverse of [false,true]) {
+    const poly=reverse?[...triangle].reverse():triangle;
+    expect(()=>clip(poly,0,-200,200,200)).not.toThrow();
+    const pieces=clip(poly,0,-200,200,200);
+    expect(pieces).toHaveLength(1);
+    expect(pieces[0]).toContainEqual([0,0.1]);
+    expect(clipMm(quantisePolygon(poly),0,-200000,200000,200000)[0]).toContainEqual([0,100]);
+    for(const sign of [-1,1]) {
+      const p=poly.map(([x,y])=>[sign*x,y] as [number,number]);
+      expect(()=>clip(p,sign<0?-200:0,-200,sign<0?0:200,200)).not.toThrow();
+      const swapped=p.map(([x,y])=>[y,x]as[number,number]);
+      expect(()=>clip(swapped,-200,sign<0?-200:0,200,sign<0?0:200)).not.toThrow();
+    }
+  }
+  expect(millimetres(-0.0005)).toBe(0);
+  expect(millimetres(0.0005)).toBe(1);
+});
+
+test('sloped shared edges and points are contact; exact intersection must reach 1 mm2', () => {
+  const a:[number,number][]=[[0,0.1],[100,17.3],[0,100]];
+  const b:[number,number][]=[[100,-100],[100,17.3],[0,0.1]];
+  const v=(poly:[number,number][])=>({poly,zlo:0,zhi:1});
+  for(const reverseA of [false,true]) for(const reverseB of [false,true]) {
+    const p=reverseA?[...a].reverse():a,q=reverseB?[...b].reverse():b;
+    expect(overlapsXY(v(p),v(q))).toBe(false);
+    expect(overlapsXY(v(q),v(p))).toBe(false);
+    const square:[number,number][]=[[0,0],[0.001,0],[0.001,0.001],[0,0.001]];
+    const small:[number,number][]=[[0,0],[0.001,0],[0,0.001]];
+    const contact:[number,number][]=[[0.001,0.001],[0.002,0.001],[0.002,0.002],[0.001,0.002]];
+    const winding=(poly:[number,number][],reverse:boolean)=>reverse?[...poly].reverse():poly;
+    expect(overlapsXY(v(winding(square,reverseA)),v(winding(square,reverseB)))).toBe(true); // exactly 1 mm²
+    expect(overlapsXY(v(winding(small,reverseA)),v(winding(square,reverseB)))).toBe(false); // 0.5 mm²
+    expect(overlapsXY(v(winding(square,reverseA)),v(winding(contact,reverseB)))).toBe(false);
+  }
+});
+
+test('the 1 mm2 overlap gate counts the union across components without counting stacked volumes twice', () => {
+  const a={poly:[[0,0],[1,0],[0,1]] as [number,number][],zlo:0,zhi:1};
+  const b={...a,poly:[[2,0],[3,0],[2,1]] as [number,number][]};
+  const cover={...a,poly:[[0,0],[3,0],[3,1],[0,1]] as [number,number][]};
+  expect(overlapsXYMm(a,cover)).toBe(false);
+  expect(overlapsXYMm([a,b],[cover])).toBe(true);
+  expect(overlapsXYMm([a,{...a,zlo:2,zhi:3}],[cover])).toBe(false);
 });
 
 test('deterministic bytes, hashes, ordering, input immutability and JSON round trip', () => {

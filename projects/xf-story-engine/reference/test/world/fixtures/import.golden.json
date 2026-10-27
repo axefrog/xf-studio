@@ -1420,7 +1420,7 @@
         ]
       }
     },
-    "hash": "ba425e6e16856084ee8310d78c2a12b6",
+    "hash": "f2bbfd4e5b78ef9255837232217a6d9f",
     "names": {
       "grid:0,0": "afe58497541db22ba7fe7cef72d2587d",
       "grid:0,1": "c395de04232f26a7f02010379a825034",
@@ -1527,6 +1527,7 @@
           }
         ]
       },
+      "coordinateQuantisationMm": 1,
       "districtPlaces": {
         "5d2579361a73c853f48d43526d0cd8ca": "Districts.Northside",
         "8cacfd0ab7df94d8d894e69d3068bcc3": "Districts.LittleChina",
@@ -1810,7 +1811,7 @@
     "assumptions": [
       {
         "field": "geometry",
-        "rule": "Origin-anchored 200 m clipped blocks with disconnected components stored separately; binary64 coordinates, simple rings without holes. Venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.",
+        "rule": "Input coordinates quantised once by Math.round(metres * 1000); integer-mm geometry, exact 200000 mm grid, rounded integer-mm clip intersections and reused on-line endpoints. Disconnected simple components stay separate. Areas/orientations use BigInt; venue overlap requires exact intersection area >=1 mm2. Centres round once to mm; squared-distance comparisons use BigInt and id ties. Only the final index/report projection converts back to metres/m2. Venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.",
         "source": "derived"
       },
       {
@@ -2040,7 +2041,7 @@
       "vehicleEntries": 1,
       "vehicleRecords": 1
     },
-    "indexHash": "ba425e6e16856084ee8310d78c2a12b6",
+    "indexHash": "f2bbfd4e5b78ef9255837232217a6d9f",
     "lineage": "Different input content or geometry creates a new lineage. Origin-anchored grid keys are stable; ordinal member ids can shift when earlier cells are inserted.",
     "population": {
       "census": 2964,

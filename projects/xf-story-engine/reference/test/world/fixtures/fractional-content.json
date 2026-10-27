@@ -1,0 +1,231 @@
+{
+  "communities": [
+    {
+      "entries": [
+        {
+          "name": "resident",
+          "phases": [
+            {
+              "name": "unknown",
+              "spots": [
+                "fractional-spot"
+              ]
+            }
+          ],
+          "record": "person"
+        }
+      ],
+      "id": "fractional-community"
+    }
+  ],
+  "pois": [
+    {
+      "at": [
+        170.1234,
+        70.4564,
+        3.3334
+      ],
+      "id": "cap-00",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.1234,
+        70.4564,
+        3.3334
+      ],
+      "id": "cap-01",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.1304,
+        70.46940000000001,
+        3.3334
+      ],
+      "id": "cap-02",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.1374,
+        70.4824,
+        3.3334
+      ],
+      "id": "cap-03",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.1444,
+        70.4954,
+        3.3334
+      ],
+      "id": "cap-04",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.1514,
+        70.50840000000001,
+        3.3334
+      ],
+      "id": "cap-05",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.1584,
+        70.5214,
+        3.3334
+      ],
+      "id": "cap-06",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.1654,
+        70.5344,
+        3.3334
+      ],
+      "id": "cap-07",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.1724,
+        70.5474,
+        3.3334
+      ],
+      "id": "cap-08",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.17940000000002,
+        70.5604,
+        3.3334
+      ],
+      "id": "cap-09",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.1864,
+        70.5734,
+        3.3334
+      ],
+      "id": "cap-10",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.1934,
+        70.5864,
+        3.3334
+      ],
+      "id": "cap-11",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.2004,
+        70.5994,
+        3.3334
+      ],
+      "id": "cap-12",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.2074,
+        70.61240000000001,
+        3.3334
+      ],
+      "id": "cap-13",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.2144,
+        70.6254,
+        3.3334
+      ],
+      "id": "cap-14",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.22140000000002,
+        70.6384,
+        3.3334
+      ],
+      "id": "cap-15",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.2284,
+        70.6514,
+        3.3334
+      ],
+      "id": "cap-16",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.2354,
+        70.6644,
+        3.3334
+      ],
+      "id": "cap-17",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.2424,
+        70.6774,
+        3.3334
+      ],
+      "id": "cap-18",
+      "kind": "Food vendor"
+    },
+    {
+      "at": [
+        170.2494,
+        70.6904,
+        3.3334
+      ],
+      "id": "cap-19",
+      "kind": "Food vendor"
+    }
+  ],
+  "records": {
+    "person": {
+      "affiliationName": "Factions.Civilian",
+      "kind": "person"
+    }
+  },
+  "schema": "xfh/world-content-1",
+  "slice": {
+    "id": "kabuki",
+    "places": [
+      "Districts.Kabuki",
+      "Districts.TestHall"
+    ]
+  },
+  "spawners": [],
+  "spots": [
+    {
+      "at": [
+        170.1234,
+        70.4564,
+        3.3334
+      ],
+      "communities": [
+        "fractional-community"
+      ],
+      "id": "fractional-spot"
+    }
+  ]
+}

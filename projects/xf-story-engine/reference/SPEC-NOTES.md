@@ -2482,14 +2482,26 @@ census scale over these links and floors, including venue presence. Quantities,
 period names, registry IDs and binding ordinals await a versioned W1 contract;
 runtime body binding and an opt-in W1 census remain deferred.
 
-Clipping retains disconnected components as separate simple polygons using
-binary64 arithmetic, rather than connecting them along an exterior cut line.
-Venue neighbours and hosts require positive-area intersection with actual
-clipped block polygons. Distance selection uses fixed-order squared XYZ
-distances and ID ties, without sqrt/hypot. A synthetic complete import golden
-is stored as exact bytes and SHA-256, with byte-preserving Git attributes for
-Windows/Linux CI. The readability oracle lives in a helper with no test
-registration side effects.
+Geometry quantises every input coordinate with `Math.round(metres * 1000)`
+before any geometry operation. All working vertices, Z bands, positions and
+centres are integer millimetres. Grid lines are exact 200,000 mm integers;
+on-line endpoints are reused, while new intersections round once to integer
+mm. Vertex identity is an integer pair. BigInt orientation and twice-area sums
+avoid floating boundary residues. Disconnected components stay separate.
+Venue neighbours and hosts require **at least 1 mm²** of intersection with
+actual clipped blocks; rational slab integration with BigInt numerators and
+denominators compares that threshold exactly. Edges and points are contact.
+Distance comparisons use BigInt squared XYZ distances and ID ties; centres
+round once to mm. Only the final index/report serialisation projection converts
+coordinates to metres and areas to m², preserving the existing consumer contract.
+`coordinateQuantisationMm: 1` records this policy alongside the geometry.
+
+Two complete synthetic import goldens store exact bytes and SHA-256, with
+byte-preserving Git attributes for Windows/Linux CI. The second exercises
+fractional/sloped geometry, disconnected components and service-cap ordering.
+The first golden is refreshed for the quantised output; frozen kernel digests
+and the existing synthetic input fixtures stay unchanged.
+The readability oracle lives in a helper with no test registration side effects.
 
 The observer uses polygon `zone` anchors already supported by Holotable, one
 place item per retained volume (the first keeps the cell ID). Venue display names
