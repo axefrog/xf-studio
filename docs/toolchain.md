@@ -8,7 +8,7 @@ Versions actually pinned or used by current XF Studio work. Lockfiles and `packa
 
 | Tool | Version | Used for | Pinned by |
 |---|---|---|---|
-| [Bun](https://bun.sh/) | 1.4.2 | Studio server, bundling, tests; desktop main; public site | `@types/bun` in each `package.json`; `bun-version` in `.github/workflows/pages.yml` |
+| [Bun](https://bun.sh/) | 1.4.4 (runtime, locally and in every CI workflow); `@types/bun` 1.4.2 | Studio server, bundling, tests; desktop main; public site | `bun-version` in each `.github/workflows/*.yml`; `@types/bun` in each `package.json`. CI moved from 1.4.2 because 1.4.2 segfaults on Windows partway through a single-process `bun test` of the authoring suite (in `tests/cdp-launch.test.ts`, after 44 files, reproduced locally; 1.4.4 passes the same sequence) |
 | TypeScript | 7.0.2 (authoring), 5.9.3 (desktop) | `tsc --noEmit` checks (authoring: `bun run check` also covers `tools/` and the experiment scripts) | `projects/xf-studio/authoring/package.json`, `authoring/desktop/package.json` |
 | three.js | 0.186.0, patched (see [below](#the-threejs-patch)) | Browser renderer; skinning shader patches are pinned to this version | `authoring/package.json` (with `@types/three` 0.186.0; the patch in `patchedDependencies`) |
 | [Electrobun](https://github.com/blackboardsh/electrobun) | 2.0.2 (paired Hutch 0.27.1, which fetches Cottontail 0.7.1 for build-time use and the Bun 1.4.0 toolchain the app runs on; on the development PC local builds select the paired Hutch copied from the v2.0.2 release, `D:/Dev/tools/hutch/0.27.1/`, with `ELECTROBUN_HUTCH_BINARY`) | Windows desktop app; `bun run build:installer` builds its setup from a checkout | `authoring/desktop/package.json` and its `bunx electrobun@2.0.2` scripts; `hutch.config.ts` |

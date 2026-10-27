@@ -65,7 +65,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
 
       # Private preview assets and game-format files are ignored locally; prove none are tracked or
       # present, which is what makes XFS_PRIVATE_ASSETS=absent below honest.
@@ -120,7 +120,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
 
       - name: Install
         run: |

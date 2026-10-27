@@ -242,7 +242,9 @@ test.skipIf(process.platform !== "win32" || process.arch !== "x64")("native proc
   const rows = readWindowsVortexProcesses(new AbortController().signal, basename(process.execPath), process.pid);
   expect(rows).toHaveLength(1);
   expect(rows[0]!.executable.toLowerCase()).toBe(process.execPath.toLowerCase());
-  expect(rows[0]!.commandLine).toContain("vortex-data.test.ts");
+  // The command line names this file only when the run names it (`bun test tests/vortex-data.test.ts`); a plain `bun test`
+  // (the desktop release workflow) reads as "bun test". Either way it is this test runner's own.
+  expect(rows[0]!.commandLine).toMatch(/\btest\b/);
 });
 
 test("cold inspection validates custom state before a hung shortcut sweep can consume the panel deadline", async () => {

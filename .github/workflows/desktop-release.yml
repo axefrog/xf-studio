@@ -73,7 +73,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
 
       # On a tag push this fails unless the repository has a top-level LICENSE, the tag equals
       # v<package.json version> and the changelog section for that version is complete.
@@ -203,7 +203,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.4
 
       - name: Require a tag on main with no existing release
         run: |
