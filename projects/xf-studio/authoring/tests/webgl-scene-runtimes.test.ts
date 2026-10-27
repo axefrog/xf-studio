@@ -1,7 +1,7 @@
 import { beforeAll, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import { oracleDescribe } from "./optional-oracles";
-import { CHROME, chromeInstalled, runProbePage } from "./webgl-harness";
+import { CHROME, chromeInstalled, runProbePage, softwareRenderer } from "./webgl-harness";
 import type { SceneRuntimesProbe } from "./webgl-scene-runtimes-probe-page";
 
 /**
@@ -27,7 +27,8 @@ import type { SceneRuntimesProbe } from "./webgl-scene-runtimes-probe-page";
  * work): a cold V prepared while another is shown keeps the page's thread free and draws nothing until it is shown; a lighting setup never
  * drawn, asked of the shown V, is prepared while the setup before stays drawn and takes over with nothing left to link; every warm-up is
  * drawn in pieces; a context lost part-way recovers. The same page runs again without the extension (the fallback), which must stay chunked
- * and still report progress; its page tasks are recorded, not gated. Public CI has no GPU and skips; XFS_REQUIRE_ORACLES=1 turns the skip
+ * and still report progress; its page tasks are recorded, not gated. Public CI without Chrome skips; GitHub's Windows runner has Chrome but
+ * no GPU, so on its software rasteriser the presentation gaps are reported, not gated (every other row still is); XFS_REQUIRE_ORACLES=1 turns the skip
  * into a failure. XFS_PROBE_PRINT=1 prints the gate table and both probes. The table's real-data half is G3 (`measure.ts` in experiment 043).
  */
 const PAGE = resolve(import.meta.dir, "webgl-scene-runtimes-probe-page.ts");
@@ -147,7 +148,10 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     // ANGLE builds a program that writes several outputs, or reads integers into a float input, again at its first draw, on the GPU
     // process's main thread, presenting nothing meanwhile (13.9 s and 4.0 s here before 4a-v-c, experiment 043 §12). With
     // KHR_parallel_shader_compile the page's own tasks stay under 50 ms too, so a frame is presented at least every 100 ms.
-    expect({ cold: parallel.cold.frameGapMs <= 100, setup: parallel.setup.frameGapMs <= 100 }).toEqual({ cold: true, setup: true });
+    // A software rasteriser draws a frame in more than 100 ms by itself, so on one the gaps are reported, not gated.
+    if (softwareRenderer(parallel.renderer)) return console.log(`software renderer (${parallel.renderer}): gaps ${Math.round(parallel.cold.frameGapMs)} / ${Math.round(parallel.setup.frameGapMs)} ms, not gated`);
+    expect({ cold: parallel.cold.frameGapMs <= 100, setup: parallel.setup.frameGapMs <= 100, renderer: parallel.renderer })
+      .toEqual({ cold: true, setup: true, renderer: parallel.renderer });
     // The fallback's page tasks are long (recorded, not gated), but no warm-up piece holds the GPU process for long either.
     for (const probe of [parallel, fallback]) expect({ cold: probe.cold.warmUpFrameGapMs <= 100, setup: probe.setup.warmUpFrameGapMs <= 100 })
       .toEqual({ cold: true, setup: true });
@@ -384,7 +388,8 @@ function gateTable(probe: SceneRuntimesProbe) {
     "last choice": { value: supersede.shown, pass: supersede.superseded === "AbortError" && supersede.shown === "s1|v1|female|studio" },
     "no first-draw stall": { value: `links ${cold.firstFrame.links} (cold), ${Math.max(...warm.links)} (warm), ${staleMakeup.firstFrame.links} (makeup changed while warm), `
       + `${editorRemount.firstFrame.links} (editor shown again); gaps ${Math.round(cold.frameGapMs)} / ${Math.round(setup.frameGapMs)} ms, tasks ${cold.tasksOver50 + setup.tasksOver50}`,
-      pass: cold.firstFrame.links === 0 && cold.firstFrame.programs === 0 && setup.firstFrame.links === 0 && cold.frameGapMs <= 100 && setup.frameGapMs <= 100
+      pass: cold.firstFrame.links === 0 && cold.firstFrame.programs === 0 && setup.firstFrame.links === 0
+        && (softwareRenderer(probe.renderer) || (cold.frameGapMs <= 100 && setup.frameGapMs <= 100))
         && cold.tasksOver50 === 0 && setup.tasksOver50 === 0 && warm.links.every(links => links === 0) && same(staleMakeup.firstFrame, { links: 0, programs: 0 })
         && !staleMakeup.preparedAfterChange && same(editorRemount.firstFrame, { links: 0, programs: 0 }) },
     "warm residency": { value: `hidden targets ${warm.targets.map(entry => entry.hidden.reduce((sum, n) => sum + n, 0)).join("/")} px`,

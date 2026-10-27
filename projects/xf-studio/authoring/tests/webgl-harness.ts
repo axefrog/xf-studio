@@ -8,6 +8,13 @@ export const CHROME = process.env.CHROME ?? "C:/Program Files/Google/Chrome/Appl
 export const chromeInstalled = () => existsSync(CHROME);
 
 /**
+ * A software rasteriser: Chrome's SwiftShader, or Windows' WARP ("Microsoft Basic Render Driver"), as on GitHub's Windows runner,
+ * which has Chrome but no GPU. Gates that time the GPU's own drawing (presentation gaps) hold only on hardware; gates that time
+ * the page's scheduling (switches, cancels, page tasks) and every functional gate hold on both.
+ */
+export const softwareRenderer = (renderer: string) => /swiftshader|basic render|\bwarp\b|llvmpipe/i.test(renderer);
+
+/**
  * Bundle a probe page, serve it on a loopback port, open it in headless Chrome (a real WebGL 2 context), wait for `window.probe`
  * and return it. `query` is appended to the page URL (the page reads it, for example to hide extensions); `define` replaces global
  * identifiers in the bundle with the given JavaScript expressions (for example a stylesheet's text, as a JSON string).
