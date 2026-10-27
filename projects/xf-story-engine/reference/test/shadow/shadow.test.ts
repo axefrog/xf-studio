@@ -1,10 +1,13 @@
-import { afterAll, expect, test, setDefaultTimeout } from 'bun:test';
+import { afterAll, expect, test, setDefaultTimeout, spyOn } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { ShadowClock } from '../../src/shadow/clock.ts';
+import { ShadowClock, initialGameTime } from '../../src/shadow/clock.ts';
 import { defaultReader, recordingBatch, type Batch, type WorldPack } from '../../src/shadow/feed.ts';
 import { ShadowHost } from '../../src/shadow/host.ts';
-import { ReadOnlyApi, replayLog, watchLive } from '../../src/shadow/live.ts';
+import { ReadOnlyApi, readOnlyBridge, replayLog, watchLive } from '../../src/shadow/live.ts';
+import { CommandApi } from '../../../../xf-runtime-bridge/tools/api/command-api.ts';
+import { BridgeClient } from '../../../../xf-runtime-bridge/tools/bridge-lib.ts';
+import { runCli } from '../../tools/shadow/run.ts';
 import { RunPublisher } from '../../tools/holotable/publish-run.ts';
 import { validateManifest } from '../../src/holotable/schema.ts';
 import type { LiveClock } from '../../../../xf-holotable/src/live.ts';
@@ -31,6 +34,9 @@ test('clock prefers game readings; fallback is causal, declared and rejects roll
   expect(c.at(100)).toEqual({ game: 0, derived: true });
   expect(c.at(110, 1000)).toEqual({ game: 1000, derived: false });
   expect(c.at(111)).toEqual({ game: 1008, derived: true });
+  expect(c.at(111.5, undefined, true)).toEqual({ game: 1008, derived: true });
+  expect(c.at(111.6, undefined, true)).toEqual({ game: 1008, derived: true });
+  expect(c.at(112)).toEqual({ game: 1016, derived: true });
   expect(() => c.at(112, 500)).toThrow('backwards');
   const sampled = new ShadowClock({ ...meta, gameTimeSamples: [{ source: 100, game: 3600 }, { source: 200, game: 7200 }] });
   expect(sampled.at(101).game).toBe(3600);
@@ -96,8 +102,43 @@ test('explicit paused game time does not advance windows through intervening act
   const data = batch();
   data.v = [{ ...v(100), gameTime: 7200 }, { ...v(101), gameTime: 7200 }, { ...v(180), gameTime: 7800 }];
   data.actors = [{ t: 100.5, who: 'a1', position: [20, 20, 0] }];
+  const boundaries: number[] = [], evolution = host.sim.k.evolution, step = evolution.stepBoundary.bind(evolution);
+  evolution.stepBoundary = report => { boundaries.push(evolution.cursor + 1); return step(report); };
   host.consume(data); expect(host.summary().windows).toBe(1);
   expect(host.summary().gameThrough).toBe(7800);
+  expect(boundaries).toEqual([12, 13]);
+});
+
+test('latest source reading wins per node/slot/second across live batches', () => {
+  const host = new ShadowHost(defaultReader, world, meta, temp(), 0, 600);
+  const feed = (t: number, gameTime: number, position: [number, number, number]): Batch => ({ ...batch(),
+    v: [{ ...v(t, 1, position), gameTime }], actors: [{ t, who: 'a1', position }], camera: [], events: [], gaps: [] });
+  host.consume(feed(100, 600.1, [20, 20, 0]));
+  host.consume(feed(100.05, 600.5, [220, 20, 0]));
+  host.consume(feed(100.1, 600.9, [120, 20, 0]));
+  host.consume(feed(180, 1200, [20, 20, 0]));
+  const state = host.sim.w.vState, actor = mirroredId(host.key('a1'));
+  expect(host.sim.k.value(state, 'position')).toEqual([120, 20, 0]);
+  expect(host.sim.k.value(state, 'district')).toBe(host.locate([120, 20, 0]).district);
+  expect(host.sim.k.value(state, 'cell')).toBe('0'.repeat(32));
+  expect(host.sim.k.value(actor, 'position')).toEqual([120, 20, 0]);
+  for (const node of [state, actor]) expect(host.sim.k.store.pinsOfNode(node).filter(p => p.reason === 'game' && p.slot === 'position')).toHaveLength(1);
+  expect(host.summary().inputs).toBe(4);
+});
+
+test('CLI starts from the earliest observation with the consumption clock, holding manifest anchors', async () => {
+  const data: Batch = { ...batch(), meta: { ...meta, gameTimeSamples: [{ source: 100, game: 0 }, { source: 275, game: 600 }] },
+    v: [v(200), v(275)], actors: [] };
+  expect(initialGameTime(data)).toBe(0);
+  expect(initialGameTime({ ...data, v: [{ ...v(200), gameTime: 900 }], actors: [{ t: 150, who: 'first', position: [20, 20, 0] }] })).toBe(0);
+  expect(initialGameTime({ ...data, v: [v(275), v(200)] })).toBe(0);
+  const folder = temp(), log = join(folder, 'input.jsonl'), pack = join(folder, 'world.json'), out = temp();
+  writeFileSync(log, JSON.stringify({ schema: 'xfse/shadow-live-1' }) + '\n' + JSON.stringify({ batch: data }) + '\n');
+  writeFileSync(pack, JSON.stringify(world));
+  const output = spyOn(console, 'log').mockImplementation(() => {});
+  try { await runCli(['--replay-log', log, out, '--world-pack', pack]); } finally { output.mockRestore(); }
+  const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8'));
+  expect(summary.windows).toBe(1); expect(summary.gameThrough).toBe(600); expect(summary.lastObservedGameTime).toBe(600);
 });
 
 test('never acts: the command allowlist rejects writes before any transport call', async () => {
@@ -109,6 +150,71 @@ test('never acts: the command allowlist rejects writes before any transport call
   expect(() => api.run('recorder.start', {})).toThrow('Non-read');
   expect(calls).toEqual(['recorder.status', 'game.catchup']);
 });
+
+test('never acts: live adapter and real CommandApi select a reader and issue only retained-data reads', async () => {
+  const runtimeDir = temp(), calls: string[] = [], selections: boolean[] = [];
+  writeFileSync(join(runtimeDir, 'session.json'), JSON.stringify({ protocol: 1, sid: 'synthetic', pid: process.pid, pipe: 'forbidden-writer',
+    read_only_pipes: ['synthetic-reader'], token: 'synthetic', allow_writes: true }));
+  // Inject at the native transport boundary; keep readOnlyBridge, its wrapper,
+  // CommandApi.run and the local game.catchup expansion in the exercised path.
+  const connect = spyOn(BridgeClient.prototype, 'connect').mockImplementation(async options => {
+    selections.push(options?.readOnly === true);
+    if (!options?.readOnly) throw Error('Writer slot forbidden');
+  });
+  const call = spyOn(BridgeClient.prototype, 'call').mockImplementation(async (method, _params, cid) => {
+    calls.push(method);
+    let result: unknown;
+    switch (method) {
+      case 'recorder.status': result = { active: true, run: 1, session: 'synthetic', world: 1, channels: ['v'], start: { s: 100 }, latest: 1 }; break;
+      case 'bridge.info': result = { sid: 'synthetic' }; break;
+      case 'test.record.read': result = { run: 1, session: 'synthetic', world_generation: 1, active: true, latest: 1, next: 1, lost: 0,
+        start_s: 100, end_s: null, source_now_s: 100, records: [{ seq: 1, run: 1, session: 'synthetic', world_generation: 1, valid: true, source_s: 100, channel: 'v', data: { position: [20, 20, 0], yaw: 0 } }] }; break;
+      case 'session.events': result = { events: [], next: 0, latest: 0, dropped: 0 }; break;
+      default: throw Error(`Non-read transport method forbidden: ${method}`);
+    }
+    return { v: 1, id: 1, cid: cid ?? 'synthetic', ok: true, result };
+  });
+  let consumed = 0;
+  const live = watchLive(readOnlyBridge(options => new CommandApi({ ...options, runtimeDir })), join(temp(), 'live.jsonl'),
+    { consume(batch) { consumed += batch.v.length; } }, { clock: { now: () => 0, later: () => () => {} } });
+  try {
+    await new Promise(setImmediate); live.heartbeat();
+    expect(selections).toEqual([true]);
+    expect(calls).toEqual(['recorder.status', 'bridge.info', 'test.record.read', 'session.events']);
+    expect(consumed).toBe(1);
+  } finally { live.close(); connect.mockRestore(); call.mockRestore(); }
+});
+
+for (const stage of ['discovery', 'page'] as const) for (const failure of ['budget', 'disk'] as const) {
+  test(`live ${stage} transport-log ${failure} failure is fatal and stops retries`, async () => {
+    const log = join(temp(), 'live.jsonl');
+    let timer: (() => void) | undefined, closes = 0, requests = 0, consumed = 0;
+    const breakDisk = () => { rmSync(log); mkdirSync(log); };
+    const bridge: LiveBridge = {
+      async discover() {
+        requests++;
+        if (stage === 'discovery' && failure === 'disk') breakDisk();
+        return { available: true, recorder: { active: true, run: 1, session: 'synthetic', world: 1, channels: ['v'], start: 100, latest: 1, stopReason: null } };
+      },
+      async catchup() {
+        requests++;
+        if (stage === 'page' && failure === 'disk') breakDisk();
+        return { cursor: { sid: 'synthetic', run: 1, world: 1, record: 0, event: 0 }, records: [], events: [],
+          calibration: { source_s: 100, host_after_ms: 0 }, padding: 'x'.repeat(3000) };
+      },
+      close() { closes++; },
+    };
+    const live = watchLive(bridge, log, { consume(b) { consumed += b.v.length; } }, {
+      maxLogBytes: failure === 'budget' ? stage === 'discovery' ? 1 : 2000 : undefined,
+      clock: { now: () => 0, later(_ms, fn) { timer = fn; return () => { timer = undefined; }; } },
+    });
+    await new Promise(setImmediate);
+    expect(() => live.heartbeat()).toThrow(failure === 'budget' ? 'budget' : undefined);
+    expect(() => live.close()).toThrow();
+    expect(closes).toBe(1); expect(timer).toBeUndefined(); expect(consumed).toBe(0);
+    expect(requests).toBe(stage === 'discovery' ? 1 : 2);
+  });
+}
 
 test('simulated live batches use their own read slot at <=1 Hz; exact log replay matches spool', async () => {
   let now = 0, timer: { at: number; fn: () => void } | undefined;

@@ -3,6 +3,7 @@ import { resolve, join } from 'node:path';
 import { setTimeout as pause } from 'node:timers/promises';
 import { defaultReader, loadReader, recordingBatch, type Batch, type WorldPack } from '../../src/shadow/feed.ts';
 import { ShadowHost } from '../../src/shadow/host.ts';
+import { initialGameTime } from '../../src/shadow/clock.ts';
 import { readOnlyBridge, replayLog, watchLive } from '../../src/shadow/live.ts';
 
 export async function runCli(args: string[]) {
@@ -30,10 +31,7 @@ export async function runCli(args: string[]) {
   const prelude: Batch[] = [];
   const sink = { consume(batch: Batch) {
     if (!host && !batch.v.length && !batch.actors.length) { prelude.push(batch); return; }
-    const first = batch.v[0], qpc = Math.min(first?.t ?? Infinity, batch.actors[0]?.t ?? Infinity);
-    const anchor = batch.meta.gameTimeSamples?.filter(x => x.source <= qpc).at(-1);
-    const initial = first?.gameTime ?? (anchor ? anchor.game + (qpc - anchor.source) * 8 : defaultStart + (qpc - batch.meta.start) * 8);
-    host ??= new ShadowHost(reader, world, batch.meta, out!, defaultStart, initial);
+    host ??= new ShadowHost(reader, world, batch.meta, out!, defaultStart, initialGameTime(batch, defaultStart));
     for (const earlier of prelude.splice(0)) host.consume(earlier);
     host.consume(batch);
   } };

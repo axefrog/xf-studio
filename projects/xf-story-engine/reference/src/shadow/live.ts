@@ -7,11 +7,11 @@ export interface BatchSink { consume(batch: Batch): void }
 const MAX_LOG_BYTES = 64 * 1024 * 1024;
 /** An independent read-only reader connection. This allowlist is a second gate
  * above CommandApi({readOnly:true}); no fallback or write command is exposed. */
-export function readOnlyBridge(): LiveBridge {
+export function readOnlyBridge(createApi: (options: CommandApiOptions) => CommandApi = options => new CommandApi(options)): LiveBridge {
   return createLiveBridge(options => {
     if (options.readOnly !== true) throw Error('Shadow requires readOnly');
     // Constructed lazily by the live CLI, never when replaying offline.
-    return new ReadOnlyApi(options);
+    return new ReadOnlyApi(options, createApi(options));
   });
 }
 import { CommandApi, type CommandApiOptions } from '../../../../xf-runtime-bridge/tools/api/command-api.ts';
@@ -32,16 +32,24 @@ export class ReadOnlyApi {
 /** Log exact transport receipts and the exact normalized batches consumed. The
  * latter replay without a bridge, clocks, timers, cursor regeneration or the game.
  * Logs are private scratch evidence, never repository fixtures. */
-export function watchLive(bridge: LiveBridge, log: string, sink: BatchSink, options: { clock?: NonNullable<Parameters<typeof createLiveSource>[1]>['clock'] } = {}) {
+export function watchLive(bridge: LiveBridge, log: string, sink: BatchSink, options: { clock?: NonNullable<Parameters<typeof createLiveSource>[1]>['clock']; maxLogBytes?: number } = {}) {
   let logBytes = 0, cursor: unknown, fatal: Error | undefined;
   let lengths = { v: 0, actors: 0, events: 0, camera: 0, gaps: 0 };
   let identity: string | undefined, closed = false;
   let previousMeta: string | undefined;
-  writeFileSync(log, JSON.stringify({ schema: 'xfse/shadow-live-1' }) + '\n', { flag: 'wx' });
+  const maxLogBytes = options.maxLogBytes ?? MAX_LOG_BYTES;
+  if (!Number.isSafeInteger(maxLogBytes) || maxLogBytes < 1 || maxLogBytes > MAX_LOG_BYTES) throw Error('Invalid shadow live log budget');
+  const header = JSON.stringify({ schema: 'xfse/shadow-live-1' }) + '\n';
+  writeFileSync(log, header, { flag: 'wx' }); logBytes = Buffer.byteLength(header);
+  const stop = () => { if (closed) return; closed = true; source.close(); };
+  const fail = (e: unknown) => { fatal ??= e instanceof Error ? e : new Error(String(e)); stop(); return fatal; };
   const record = (value: unknown) => {
-    const line = JSON.stringify(value) + '\n'; logBytes += Buffer.byteLength(line);
-    if (logBytes > MAX_LOG_BYTES) throw Error('Shadow live log reached 64 MiB budget');
-    appendFileSync(log, line);
+    if (fatal) throw fatal;
+    try {
+      const line = JSON.stringify(value) + '\n'; logBytes += Buffer.byteLength(line);
+      if (logBytes > maxLogBytes) throw Error('Shadow live log reached byte budget (maximum 64 MiB)');
+      appendFileSync(log, line);
+    } catch (e) { throw fail(e); }
   };
   const capture = (session: FeedSession) => {
     const key = JSON.stringify([session.meta.session, session.meta.run, session.meta.worldGeneration]);
@@ -58,16 +66,17 @@ export function watchLive(bridge: LiveBridge, log: string, sink: BatchSink, opti
   const source = createLiveSource({
     async discover(signal) { const result = await bridge.discover(signal); record({ discovery: result }); return result; },
     async catchup(input, signal) {
+      if (fatal) throw fatal;
       const page = await bridge.catchup(input, signal); record({ request: input, page }); cursor = page.cursor;
       return page;
     },
     close: () => bridge.close(),
-  }, { ...options, changed(session) { try { capture(session); } catch (e) { fatal = e as Error; } } });
+  }, { clock: options.clock, changed(session) { try { capture(session); } catch (e) { fail(e); } } });
   const watch = source.watch().watch;
   return {
     source, watch,
-    heartbeat() { if (fatal) throw fatal; source.renew(watch); const session = source.session(); if (session) capture(session); },
-    close() { if (closed) return; closed = true; source.close(); const session = source.session(); if (session) capture(session); },
+    heartbeat() { if (fatal) throw fatal; source.renew(watch); const session = source.session(); if (session) { try { capture(session); } catch (e) { throw fail(e); } } },
+    close() { stop(); if (fatal) throw fatal; const session = source.session(); if (session) { try { capture(session); } catch (e) { throw fail(e); } } },
   };
 }
 export function replayLog(file: string, sink: BatchSink): void {

@@ -51,11 +51,23 @@ and typed incident/witness reports, exposed by Holotable, to validate that path.
 ## Time, determinism and limits
 
 The host uses sampled game time when available. Recorded game-time anchors are
-held between their samples; actor samples hold the current explicit game time,
-so a paused game's next V sample cannot roll the clock backwards. With no game
+held between their samples; actor samples hold the last effective clock value
+and its derived/recorded label, including after a V sample extrapolated an
+intermittent explicit clock. A new explicit sample still refuses a real rollback.
+With no game
 clock, it uses QPC elapsed seconds times eight from the session start, beginning
 at the declared default game epoch zero (`--default-game-start` overrides it).
 The summary names every rule used. Actual game-clock rollback refuses the run.
+CLI initialization uses this same clock at the earliest V or actor observation.
+The simulation starts at that observation's containing window through the existing
+`Sim.startAt` interface; boundaries before that window never execute.
+
+Readings use whole game seconds. Until a window closes, the adapter coalesces each
+node/slot/second to its latest source observation, including across live batches,
+so pin-hash arbitration cannot select an older subsecond position. Position,
+district and cell therefore come from the same latest valid V sample. The summary's
+`inputs` counts submitted coalesced readings; `pendingInputs` includes buffered
+readings in the unfinished window.
 
 Every manifest uses `clock: "recording"` and binds its session and run. Item and
 retraction times are the QPC observation that drove their completed window.
@@ -76,6 +88,9 @@ Live logs below the worktree's `.scratch-shadow/` record exact discovery results
 requests, cursors, returned pages and normalized batches consumed by the host.
 Replaying those batches does not open a bridge. The private log stops at 64 MiB;
 the ordinary 16 MiB/layer and distinct-item writer limits also remain enforced.
+Any transport-log budget or disk-write failure is fatal: the source closes,
+retries stop, and heartbeat/close surface the failure so the CLI cannot report
+successful partial consumption.
 Retain a live log only while needed for replay, then delete it.
 
 ## Offline evidence
@@ -86,7 +101,7 @@ timeline events (373 voice, one line). It produces eight completed windows:
 other layers are empty. These people/events are simulation results, not mirrored
 street observations. Its V stays in Little China, which has no simulation cells.
 Its clock rule is QPC × 8 from the declared default game epoch. Twelve layer
-spools are byte-identical across reruns. Its source marks coverage incomplete,
+spools and `summary.json` are byte-identical across reruns. Its source marks coverage incomplete,
 with five dropped rows. Three source channels (face, incidents, UI) are
 unquantified until Holotable exposes reader omission counts. Bounded captions
 report eight truncations in places; no unknown glyphs occur.
@@ -94,6 +109,10 @@ report eight truncations in places; no unknown glyphs occur.
 The alternate combat recording likewise has no actors. Synthetic fixtures test
 V/cell mapping, game-layer actor readings, explicit absence, schema refusal,
 read-only command enforcement, simulated live cadence and exact live-log replay.
+The live safety regression traverses the real shadow adapter and `CommandApi.run`
+with an injected native transport that requires reader selection and rejects
+every method outside the retained-data read allowlist. Transport-log failure tests
+cover both discovery and catch-up receipts, with budget and disk failures.
 No game session was run. See [performance evidence](PERFORMANCE.md) and
 [Holotable's writer contract](HOLOTABLE.md).
 

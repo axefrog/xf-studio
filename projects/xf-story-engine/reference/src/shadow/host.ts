@@ -37,6 +37,7 @@ export class ShadowHost {
   private publishMs = 0;
   private maxWindowMs = 0;
   private pendingReadings: Array<{ node: string; slot: string }> = [];
+  private coalesced = new Map<string, Extract<ReplayLine, { op: 'reading' }>>();
   private readonly layout;
   constructor(readonly reader: HoloReader, readonly world: WorldPack, meta: Batch['meta'], out: string, defaultStart = 0, initialGameTime = defaultStart) {
     this.session = { meta: structuredClone(meta), v: [], camera: [], events: [], gaps: [], actors: [] };
@@ -52,6 +53,7 @@ export class ShadowHost {
     const data = defaultData(); data.mirror.raw.push('game.incident', 'game.witness.report');
     this.sim = Sim.create({ worldSeed: H(s('shadow-v0'), s(meta.session), s(String(meta.run))), index, data,
       now: Math.floor(initialGameTime / data.time.W) * data.time.W });
+    this.sim.startAt(Math.floor(initialGameTime / data.time.W));
     // Reserved raw evidence kinds, host-only, with no fills/effects. S1's data
     // shape has no custom raw definitions; register through the public registries.
     // They await Holotable's typed-incident contract; no invented incident input.
@@ -77,9 +79,19 @@ export class ShadowHost {
     return { district, cell };
   }
   private submit(lines: ReplayLine[]) {
+    // The port stamps whole seconds. Keep the latest source reading for each
+    // node/slot/second until its window closes, including across live batches.
+    for (const line of lines) {
+      if (line.op === 'person') {
+        for (const [slot, value] of Object.entries(line.slots)) this.submit([{ t: line.t, op: 'reading', node: line.key, slot, value }]);
+      } else if (line.op === 'reading') this.coalesced.set(JSON.stringify([line.node, line.slot, line.t]), line);
+      else throw Error('Shadow input must be a reading');
+    }
+  }
+  private flushReadings() {
+    const lines = [...this.coalesced.values()]; this.coalesced.clear();
     this.inputs += lines.length; this.port.submit(lines);
-    for (const line of lines) if (line.op === 'reading') this.pendingReadings.push({ node: line.node === 'v' ? this.sim.w.vState : this.port.node(line.node), slot: line.slot });
-    else if (line.op === 'person') for (const slot of Object.keys(line.slots)) this.pendingReadings.push({ node: this.port.node(line.key), slot });
+    for (const line of lines) this.pendingReadings.push({ node: line.node === 'v' ? this.sim.w.vState : this.port.node(line.node), slot: line.slot });
   }
   consume(batch: Batch): void {
     // The process-global population memo can skip materialising slot caches in
@@ -111,6 +123,7 @@ export class ShadowHost {
       const time = this.clock.at(qpc, v?.type === 'v' ? v.value.gameTime : undefined, !v);
       while ((this.sim.windowNow() + 1) * this.sim.data.time.W <= time.game) {
         const windowStart = performance.now();
+        this.flushReadings();
         this.sim.advance(1); this.windows++;
         const advanced = performance.now(); this.advanceMs += advanced - windowStart;
         for (const r of this.pendingReadings) this.sim.k.value(r.node, r.slot);
@@ -176,7 +189,7 @@ export class ShadowHost {
   summary() {
     return { schema: 'xfse/shadow-summary-1', session: this.session.meta.session, run: this.session.meta.run,
       clock: [...this.clock.rules].sort(), defaultGameStart: this.clock.defaultStart, windows: this.windows, observations: this.observations, inputs: this.inputs,
-      pendingInputs: this.sim.k.evolution.queued.length, gameThrough: this.sim.k.now, lastObservedGameTime: this.lastGame,
+      pendingInputs: this.sim.k.evolution.queued.length + this.coalesced.size, gameThrough: this.sim.k.now, lastObservedGameTime: this.lastGame,
       counts: this.publisher.counts(), unmapped: Object.fromEntries(Object.entries(this.unmapped).sort()),
       absentFromRecorder: ABSENT, pendingHolotableModel: ['typed incidents', 'per-channel dropped-row counts'],
       pendingSchemaAdmission: ['game.incident', 'game.witness.report'],
