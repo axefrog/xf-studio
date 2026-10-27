@@ -32,11 +32,10 @@ uint64_t Integer(const json& p, const char* key, uint64_t fallback, uint64_t max
         throw MethodError("bad_params", std::string(key) + " is outside its integer bounds.");
     return v.get<uint64_t>();
 }
-std::string StartAt(double start)
+std::string UtcAt(std::chrono::system_clock::time_point value)
 {
-    // The recorder keeps QPC time only. Derive UTC at observation time; clock adjustments can change this offset.
     using namespace std::chrono;
-    const auto at = floor<milliseconds>(system_clock::now() - duration_cast<system_clock::duration>(duration<double>(Now() - start)));
+    const auto at = floor<milliseconds>(value);
     const auto seconds = floor<std::chrono::seconds>(at);
     const auto utc = system_clock::to_time_t(seconds);
     std::tm tm{}; gmtime_s(&tm, &utc);
@@ -45,6 +44,16 @@ std::string StartAt(double start)
                   tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec,
                   static_cast<long long>((at - seconds).count()));
     return text;
+}
+json ClockSync(std::optional<double> anchor = {})
+{
+    // Bracket the UTC read with QPC. The interval (not timestamp precision or OS accuracy) is the uncertainty.
+    const double before = Now();
+    const auto utc = std::chrono::system_clock::now();
+    const double after = Now();
+    const double s = anchor.value_or(before);
+    return {{"s", s}, {"at", UtcAt(utc + std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::duration<double>(s - before)))},
+            {"uncertainty_ms", (after - before) * 1000.0}};
 }
 }
 Service::Service() : m_ring(std::make_unique<std::array<Record, kCapacity>>()) {}
@@ -77,7 +86,7 @@ void Service::WriteFiles()
                     auto name = "chunk-" + std::to_string(++chunk) + ".jsonl";
                     file.open(m_output / name, std::ios::binary | std::ios::out | std::ios::trunc);
                     if (!file) throw std::runtime_error("chunk open failed");
-                    chunks.push_back({{"file", name}, {"bytes", 0}}); chunkBytes = 0;
+                    chunks.push_back({{"file", name}, {"bytes", 0}, {"sync", ClockSync()}}); chunkBytes = 0;
                 }
                 file << line;
                 if (!file) throw std::runtime_error("chunk write failed");
@@ -131,6 +140,8 @@ json Service::Status(double now) const
     return {{"schema", "xfb/recording-1"}, {"plugin_version", XFB_VERSION_STRING}, {"run", m_run}, {"session", m_session}, {"pid", GetCurrentProcessId()},
         {"world_generation", m_world}, {"connection", m_connection}, {"active", m_active}, {"reason", m_reason},
         {"clock", "QueryPerformanceCounter_seconds"}, {"source_now_s", now}, {"start_s", m_start}, {"end_s", m_active ? json(nullptr) : json(m_end)},
+        {"start_at", m_startSync.is_object() ? m_startSync.at("at") : json(nullptr)}, {"start_sync", m_startSync},
+        {"actor_identity_cap", kActorIdentityCap}, {"actor_identities", m_actorIdentities.size()}, {"actor_identity_omitted", m_identityOmitted},
         {"requested_hz", 10}, {"actual_hz", elapsed > 0 ? static_cast<double>(m_samples) / elapsed : 0}, {"channel_stats", counts},
         {"sample_ticks", m_samples}, {"missed_deadlines", m_missed}, {"dropped", m_dropped + m_ingressDropped.load()}, {"invalid", m_invalid}, {"not_ready", m_notReady}, {"tap_not_ready", tapNotReady}, {"complete_coverage", tapNotReady.empty()}, {"bytes", m_bytes},
         {"largest_gap_s", m_gap}, {"age_s", m_samples ? json(std::max(0.0, now - m_last)) : json(nullptr)},
@@ -147,16 +158,17 @@ json Service::ObserverStatus(const std::string& session) const
         double start, until;
         std::vector<std::string> channels;
         std::string reason;
+        json sync;
     };
     const auto state = [&] {
         std::scoped_lock lock(m_mutex);
-        return Snapshot{m_active, m_run, m_world, m_latest, m_ack, m_cap, m_start, m_until, m_channels, m_reason};
+        return Snapshot{m_active, m_run, m_world, m_latest, m_ack, m_cap, m_start, m_until, m_channels, m_reason, m_startSync};
     }();
     // Construct/encode the response only after releasing the recorder's lock.
     const bool hasRun = state.run != 0;
     return {{"active", state.active}, {"run", hasRun ? json(state.run) : json(nullptr)}, {"session", session},
         {"world", hasRun ? json(state.world) : json(nullptr)}, {"channels", state.channels},
-        {"start", hasRun ? json{{"s", state.start}, {"at", StartAt(state.start)}} : json(nullptr)},
+        {"start", hasRun ? state.sync : json(nullptr)},
         {"latest", hasRun ? json(state.latest) : json(nullptr)},
         {"stop_reason", hasRun && !state.active ? json(state.reason) : json(nullptr)},
         {"requested_hz", hasRun ? json(10) : json(nullptr)},
@@ -200,6 +212,7 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
     ++m_run; m_world = world; m_connection = connection; m_session = session;
     m_latest = m_ack = m_dropped = m_missed = m_samples = m_bytes = m_invalid = 0;
     m_start = m_next = now; m_until = now + static_cast<double>(duration); m_last = m_gap = m_end = 0;
+    m_startSync = ClockSync(now); m_actorIdentities.clear(); m_identityOmitted = 0;
     m_ingressDropped.store(0); m_nextHeartbeat = now; m_nextUiHeartbeat = 0; m_lastUi.clear();
     // Identity first: a reader that sees the channel wanted must see this run's identity.
     m_identityRun.store(m_run); m_identityWorld.store(m_world); m_identityConnection.store(m_connection);
@@ -251,6 +264,25 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
         catch (const MethodError& e) { payload = {{"error", e.code}, {"message", std::string(e.what()).substr(0, 200)}}; }
         catch (...) { payload = {{"error", "sample_failed"}}; }
         const double end = Now();
+        if (channel == "v" && payload.is_object() && !payload.contains("game_time_s")) payload["game_time_s"] = nullptr;
+        if ((channel == "v" || channel == "actors") && payload.is_object())
+        {
+            // The script has already resolved these puppets in this sample. No additional game call or timer.
+            auto identityOf = [&](json& actor) {
+                if (!actor.is_object() || !actor.contains("identity")) return;
+                auto identity = std::move(actor["identity"]); actor.erase("identity");
+                if (!identity.is_object() || !actor.contains("entity") || !actor["entity"].is_string()) return;
+                const auto entity = actor["entity"].get<std::string>();
+                if (entity.empty() || entity.size() > 20 || entity.find_first_not_of("0123456789") != std::string::npos || m_actorIdentities.count(entity)) return;
+                if (m_actorIdentities.size() >= kActorIdentityCap) { ++m_identityOmitted; return; }
+                identity["event"] = "actor.identity"; identity["entity"] = entity;
+                if (Append("actor.identity", SerializeJson(identity), at, end, tick, true)) m_actorIdentities.insert(entity);
+            };
+            if (channel == "v") identityOf(payload);
+            else if (payload.contains("actors") && payload["actors"].is_array())
+                for (auto& actor : payload["actors"]) { if (!m_active) break; identityOf(actor); }
+            if (!m_active) break;
+        }
         if ((channel == "subtitles" || channel == "voice") && payload.is_object())
         {
             if (valid) m_tapReady.insert(channel);

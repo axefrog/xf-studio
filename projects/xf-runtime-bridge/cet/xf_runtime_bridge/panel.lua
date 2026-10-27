@@ -1244,7 +1244,7 @@ function panel.body(state, queue, theme, which)
   try(state, "window height cap", function()
     ImGui.SetNextWindowSizeConstraints(0, 0, ImGui.GetFontSize() * WRAP_EM + panel.metric(theme, "WindowPaddingX", 12) * 2 + panel.metric(theme, "ScrollbarSize", 8), screenH * 0.7)
   end)
-  local title = "XF Runtime Bridge " .. tostring(state.info and state.info.plugin_version or "0.8.23") .. "###xf_runtime_bridge"
+  local title = "XF Runtime Bridge " .. tostring(state.info and state.info.plugin_version or "0.8.24") .. "###xf_runtime_bridge"
   if not ImGui.Begin(title, ImGuiWindowFlags.AlwaysAutoResize) then
     if state.testInput and state.testInput.ui then state.testInput.ui("cet_window", { drawn = false, collapsed = true, save_button_drawn = false, rect = state.testInput.windowRect() }) end
     ImGui.End()

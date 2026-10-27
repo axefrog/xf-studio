@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <limits>
 #include <map>
 #include <new>
@@ -5537,10 +5538,72 @@ int RunUnitTests()
 {
     {
         using namespace xfb;
+        // Deterministic burst/refill checks, with no waiting or writer tuning loophole.
+        ReaderRequestBudget capped(1000);
+        const auto at = std::chrono::steady_clock::now();
+        int admitted = 0;
+        for (int i = 0; i < 41; ++i) admitted += capped.Take(at);
+        Check("observer pacing: connection burst clamps at forty", admitted == 40);
+        Check("observer pacing: twenty per second refill", capped.Take(at + 50ms) && !capped.Take(at + 50ms));
+        Check("observer pacing: backwards clock adds no credit", !capped.Take(at));
+
+        Config config; config.maxRequestsPerSecond = 2;
+        Session session; session.token = "observer-pacing";
+        GameThreadQueue queue; Dispatcher dispatcher(config, session, queue);
+        auto call = [&](const char* method, ReaderRequestBudget* budget) {
+            return json::parse(dispatcher.Handle(json{{"token", session.token}, {"method", method}}.dump(), 1, false, budget).line);
+        };
+        ReaderRequestBudget first(2), second(2);
+        for (int i = 0; i < 4; ++i) call("ping", &first);
+        Check("observer pacing: exhausted connection refuses", call("ping", &first)["error"]["code"] == "rate_limited");
+        Check("observer pacing: same-PID second connection has independent credit", call("ping", &second)["ok"] == true);
+        int writerAdmitted = 0;
+        for (int i = 0; i < 5; ++i) writerAdmitted += call("ping", nullptr).value("ok", false);
+        Check("observer pacing: passive reads leave full writer burst unchanged", writerAdmitted == 4);
+
+        // Reconnecting cannot mint unlimited aggregate observer credit.
+        int freshAdmitted = 0;
+        for (int i = 0; i < 50; ++i) {
+            ReaderRequestBudget fresh(2);
+            freshAdmitted += call("ping", &fresh).value("ok", false);
+        }
+        Check("observer pacing: aggregate ceiling bounds reconnect bursts", freshAdmitted <= 27);
+    }
+    {
+        using namespace xfb;
+        Config config; config.maxRequestsPerSecond = 2;
+        Session session; session.token = "game-pacing";
+        GameThreadQueue queue; queue.SetPumping(true); Dispatcher dispatcher(config, session, queue);
+        int ran = 0;
+        dispatcher.Register({"fixture.direct", Access::Read, RunOn::GameThread, "", [&](const MethodContext&) { ++ran; return json::object(); }});
+        dispatcher.Register({"fixture.steps", Access::Read, RunOn::BridgeThread, "", [&](const MethodContext&) {
+            dispatcher.RunRead([&] { ++ran; return json::object(); }, "first");
+            return RunGameTask(queue, 1s, [&] { ++ran; return json::object(); }, "second");
+        }});
+        auto call = [&](const char* method, ReaderRequestBudget* budget) {
+            auto work = std::async(std::launch::async, [&] {
+                return dispatcher.Handle(json{{"token", session.token}, {"method", method}}.dump(), 1, false, budget);
+            });
+            const auto until = std::chrono::steady_clock::now() + 3s;
+            while (work.wait_for(1ms) != std::future_status::ready && std::chrono::steady_clock::now() < until) queue.Drain(4);
+            return work.get();
+        };
+        ReaderRequestBudget first(2), second(2), third(2);
+        Check("observer pacing: direct game read admitted", json::parse(call("fixture.direct", &first).line)["ok"] == true);
+        Check("observer pacing: multistep read charged once", json::parse(call("fixture.steps", &second).line)["ok"] == true && ran == 3);
+        const auto refused = call("fixture.steps", &third);
+        Check("observer pacing: shared game admission unchanged across connections", json::parse(refused.line)["error"]["code"] == "rate_limited" && ran == 3 && refused.rejected && refused.throttled && refused.backoffMs == 50);
+        Check("observer pacing: direct game read also refuses before enqueue", json::parse(call("fixture.direct", &third).line)["error"]["code"] == "rate_limited" && ran == 3);
+        Check("observer pacing: game reads preserve writer reserve", json::parse(call("ping", nullptr).line)["ok"] == true && json::parse(call("ping", nullptr).line)["ok"] == true);
+        Check("observer pacing: writer limit still enforced", json::parse(call("ping", nullptr).line)["error"]["code"] == "rate_limited");
+    }
+    {
+        using namespace xfb;
         Config config; config.allowWrites = true; config.maxRequestsPerSecond = 20;
         Session session; session.token = "multiclient";
         GameThreadQueue queue(2); queue.SetPumping(true);
         Dispatcher dispatcher(config, session, queue);
+        ReaderRequestBudget readerBudget(config.maxRequestsPerSecond);
         int writes = 0;
         dispatcher.Register({"test.events", Access::Read, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
         dispatcher.Register({"fixture.write", Access::Write, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
@@ -5550,21 +5613,21 @@ int RunUnitTests()
             dispatcher.Register({method, Access::Read, RunOn::BridgeThread, "", [&](const MethodContext&) { ++writes; return json::object(); }});
         dispatcher.Register({"bridge.kill", Access::Control, RunOn::BridgeThread, "", [](const MethodContext&) { return json::object(); }});
         auto request = [&](const char* method, bool reader) {
-            return json::parse(dispatcher.Handle(json{{"token", session.token}, {"method", method}}.dump(), 1, false, reader).line);
+            return json::parse(dispatcher.Handle(json{{"token", session.token}, {"method", method}}.dump(), 1, false, reader ? &readerBudget : nullptr).line);
         };
         for (const auto method : {"fixture.write", "fixture.notify", "test.record.start", "game.saves", "game.options.read", "npc.pick"})
             Check("multiclient: native reader refuses mutation/lease", request(method, true)["error"]["code"] == "read_only_connection");
-        const auto stims = json::parse(dispatcher.Handle(json{{"token", session.token}, {"method", "test.events"}, {"params", {{"stims", true}}}}.dump(), 1, false, true).line);
+        const auto stims = json::parse(dispatcher.Handle(json{{"token", session.token}, {"method", "test.events"}, {"params", {{"stims", true}}}}.dump(), 1, false, &readerBudget).line);
         Check("multiclient: read-class stim mutation refused", stims["error"]["code"] == "read_only_connection");
         Check("multiclient: reader refusals never call handlers", writes == 0);
         bool limited = false;
         for (int i = 0; i < 50; ++i) if (request("ping", true).contains("error")) { limited = true; break; }
-        Check("multiclient: reader aggregate pacing reaches limit", limited);
+        Check("multiclient: reader connection pacing reaches limit", limited);
         Check("multiclient: writer retains reserved rate tokens", request("fixture.write", false)["ok"] == true);
         for (int i = 0; i < 50; ++i) request("ping", false);
         Check("multiclient: emergency survives exhausted aggregate bucket", request("bridge.kill", true)["ok"] == true);
         Check("multiclient: connection config bounds", ParseConfig("[bridge]\nmax_read_only_connections=8").maxReadOnlyConnections == 8 &&
-            ParseConfig("[bridge]\nmax_read_only_connections=9").maxReadOnlyConnections == 3 &&
+            ParseConfig("[bridge]\nmax_read_only_connections=9").maxReadOnlyConnections == Config{}.maxReadOnlyConnections &&
             ParseConfig("[bridge]\nmax_read_only_connections=0").maxReadOnlyConnections == 0);
 
         std::vector<int> order;
@@ -5668,8 +5731,9 @@ int RunUnitTests()
         const auto began = std::chrono::steady_clock::now();
         std::vector<std::thread> readers;
         for (int i = 0; i < 8; ++i) readers.emplace_back([&] {
+            ReaderRequestBudget readerBudget(config.maxRequestsPerSecond);
             for (int j = 0; j < 100; ++j) {
-                const auto result = dispatcher.Handle(R"({"token":"reader-flood","method":"ping"})", 1, false, true);
+                const auto result = dispatcher.Handle(R"({"token":"reader-flood","method":"ping"})", 1, false, &readerBudget);
                 const auto response = json::parse(result.line);
                 if (!response.value("ok", false) && response["error"]["code"] == "rate_limited") {
                     ++limited;
@@ -5684,8 +5748,9 @@ int RunUnitTests()
         Check("reader flood: eight readers share sampled refusal logging", sink.rateWarnings > 0 && sink.rateWarnings <= 1 + elapsed / 1000);
         Check("reader flood: writer pacing reserve survives abuse", json::parse(dispatcher.Handle(R"({"token":"reader-flood","method":"ping"})", 2).line)["ok"] == true);
 
-        const auto badVersion = dispatcher.Handle(R"({"v":2,"token":"reader-flood","method":"bridge.kill"})", 1, false, true);
-        const auto missingRoute = dispatcher.Handle(R"({"token":"reader-flood","method":"bridge.kill"})", 1, false, true);
+        ReaderRequestBudget readerBudget(config.maxRequestsPerSecond);
+        const auto badVersion = dispatcher.Handle(R"({"v":2,"token":"reader-flood","method":"bridge.kill"})", 1, false, &readerBudget);
+        const auto missingRoute = dispatcher.Handle(R"({"token":"reader-flood","method":"bridge.kill"})", 1, false, &readerBudget);
         Check("reader flood: invalid emergency envelopes cannot bypass backoff", badVersion.backoffMs >= 50 && badVersion.throttled &&
               json::parse(badVersion.line)["error"]["code"] == "bad_version");
         Check("reader flood: unavailable emergency routes cannot bypass backoff", missingRoute.backoffMs >= 50 && missingRoute.throttled &&
@@ -5694,7 +5759,7 @@ int RunUnitTests()
         int stops = 0;
         dispatcher.Register({"behave.stop", Access::Control, RunOn::BridgeThread, "", [&](const MethodContext&) { ++stops; return json{{"stopping", 1}}; }});
         auto cancel = [&](bool reader, bool control = false) {
-            return dispatcher.Handle(R"({"token":"reader-flood","method":"behave.stop","params":{"all":true}})", 1, control, reader);
+            return dispatcher.Handle(R"({"token":"reader-flood","method":"behave.stop","params":{"all":true}})", 1, control, reader ? &readerBudget : nullptr);
         };
         const auto first = cancel(true), repeated = cancel(true);
         Check("reader flood: first emergency bypasses exhausted ordinary pacing", json::parse(first.line)["ok"] == true && stops == 1);
@@ -5712,8 +5777,8 @@ int RunUnitTests()
             if (++failed == 1) throw MethodError("failed", "fixture"); return json();
         }});
         const auto retry = R"({"token":"reader-flood","method":"player.stop"})";
-        dispatcher.Handle(retry, 1, false, true);
-        dispatcher.Handle(retry, 1, false, true);
+        dispatcher.Handle(retry, 1, false, &readerBudget);
+        dispatcher.Handle(retry, 1, false, &readerBudget);
         Check("reader flood: failed emergency remains retryable", failed == 2);
     }
     SanitizeTests();

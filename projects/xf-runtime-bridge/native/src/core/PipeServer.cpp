@@ -216,8 +216,19 @@ uint64_t PipeServer::ConnectionsAccepted() const
     return m_connections.load();
 }
 
+double PipeServer::ThreadCpuMs() const
+{
+    const auto thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, m_threadId.load());
+    if (!thread) return 0;
+    FILETIME created{}, exited{}, kernel{}, user{};
+    const bool ok = GetThreadTimes(thread, &created, &exited, &kernel, &user) != FALSE;
+    CloseHandle(thread);
+    const auto ticks = [](FILETIME t) { return (static_cast<uint64_t>(t.dwHighDateTime) << 32) | t.dwLowDateTime; };
+    return ok ? static_cast<double>(ticks(kernel) + ticks(user)) / 10000.0 : 0;
+}
 void PipeServer::Run()
 {
+    m_threadId.store(GetCurrentThreadId());
     const auto pipe = static_cast<HANDLE>(m_pipe);
     const auto stop = static_cast<HANDLE>(m_stopEvent);
     const auto drop = static_cast<HANDLE>(m_dropEvent);

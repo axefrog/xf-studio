@@ -10,7 +10,7 @@ class SimInput
 public:
     SimInput(Dispatcher& aDispatcher, SimNpc& aNpc, EventLog& aEvents, bool aHooks,
              std::function<std::string()> aContext, std::function<uint64_t()> aWorld, std::function<bool()> aLive,
-             std::function<uint64_t()> aConnection);
+             std::function<uint64_t()> aConnection, const Session& aSession);
     void Tick();
 private:
     input::Ops Ops();

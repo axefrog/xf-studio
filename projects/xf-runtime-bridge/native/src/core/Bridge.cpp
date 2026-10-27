@@ -16,7 +16,8 @@ Bridge::Bridge(const Config& aConfig, const Session& aSession, GameThreadQueue& 
     , m_queue(aQueue)
     , m_dispatcher(aConfig, aSession, aQueue)
 {
-    for (uint32_t i = 0; i < std::min<uint32_t>(8, m_config.maxReadOnlyConnections); ++i)
+    m_dispatcher.SetConnectionReader([this] { return ConnectionsAccepted(); });
+    for (uint32_t i = 0; i < std::min(kMaxReadOnlyConnections, m_config.maxReadOnlyConnections); ++i)
         m_readers.push_back(std::make_unique<PipeServer>());
     // Control, not read or write: it changes only the bridge (it can only take access away),
     // never the game, so it stays available when allow_writes = false.
@@ -79,8 +80,14 @@ bool Bridge::Start(std::string& aError)
         auto& reader = m_readers[i];
         const auto name = m_session.pipeName + L"-read-" + std::to_wstring(i);
         if (!reader->Start(name, m_config.idleDisconnectSeconds,
-            [this](const std::string& line, uint32_t pid) {
-                auto reply = m_dispatcher.Handle(line, pid, false, true);
+            [this, endpoint = reader.get(), generation = uint64_t{0},
+             budget = ReaderRequestBudget(m_config.maxRequestsPerSecond)](const std::string& line, uint32_t pid) mutable {
+                const auto connected = endpoint->ConnectionsAccepted();
+                if (generation != connected) {
+                    budget = ReaderRequestBudget(m_config.maxRequestsPerSecond);
+                    generation = connected;
+                }
+                auto reply = m_dispatcher.Handle(line, pid, false, &budget);
                 return PipeReply{std::move(reply.line), reply.rejected, reply.backoffMs, reply.throttled};
             }, aError)) {
             for (auto& started : m_readers) started->Stop();
@@ -266,6 +273,12 @@ bool Bridge::HasClient() const
     return m_server.HasClient();
 }
 uint64_t Bridge::ConnectionsAccepted() const { return m_server.ConnectionsAccepted(); }
+double Bridge::PipeThreadCpuMs() const
+{
+    double total = m_server.ThreadCpuMs() + m_control.ThreadCpuMs();
+    for (const auto& reader : m_readers) total += reader->ThreadCpuMs();
+    return total;
+}
 
 bool Bridge::InSession() const
 {

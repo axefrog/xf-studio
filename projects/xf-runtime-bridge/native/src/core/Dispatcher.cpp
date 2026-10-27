@@ -214,11 +214,33 @@ GameGate gGate;
 thread_local int tRestoreDepth = 0;
 thread_local bool tReadOnly = false;
 thread_local bool tEmergency = false;
+thread_local ReaderRequestBudget* tReaderBudget = nullptr;
+thread_local std::function<bool()> tReaderGameToken;
+thread_local bool tReaderGameCharged = false;
 struct ReaderScope {
     bool previous = tReadOnly, previousEmergency = tEmergency;
-    explicit ReaderScope(bool value) { tReadOnly = value; tEmergency = false; }
-    ~ReaderScope() { tReadOnly = previous; tEmergency = previousEmergency; }
+    ReaderRequestBudget* previousBudget = tReaderBudget;
+    std::function<bool()> previousGameToken = std::move(tReaderGameToken);
+    bool previousCharged = tReaderGameCharged;
+    ReaderScope(ReaderRequestBudget* budget, std::function<bool()> gameToken) {
+        tReadOnly = budget != nullptr; tEmergency = false; tReaderBudget = budget;
+        tReaderGameToken = std::move(gameToken); tReaderGameCharged = false;
+    }
+    ~ReaderScope() {
+        tReadOnly = previous; tEmergency = previousEmergency; tReaderBudget = previousBudget;
+        tReaderGameToken = std::move(previousGameToken); tReaderGameCharged = previousCharged;
+    }
 };
+
+// Charge once per observer request, before its first queued game-thread step.
+// Covers both direct GameThread methods and bridge-thread methods using RunGameTask.
+void RequireReaderGameToken()
+{
+    if (!tReadOnly || tEmergency || tReaderGameCharged) return;
+    if (!tReaderGameToken())
+        throw MethodError("rate_limited", "readers exhausted shared game-thread request pacing");
+    tReaderGameCharged = true;
+}
 thread_local json tWhen;
 thread_local Dispatcher::ExecutionGuard tExecutionGuard;
 struct ExecutionScope {
@@ -341,6 +363,7 @@ namespace
 json RunTask(GameThreadQueue& aQueue, std::chrono::milliseconds aTimeout, const std::function<json()>& aTask,
              const std::string& aLabel, bool aGated, const Dispatcher* aWriteGate, bool aDeferWhenClosed, bool aChanging)
 {
+    RequireReaderGameToken();
     const auto executionGuard = RestoreScope::Active() ? Dispatcher::ExecutionGuard{} : tExecutionGuard;
     // 0.8.2 (the re-check's sixth finding, and the review's): the kill switch closes the queue, which used to refuse a write's
     // own put-back step too (photo.pose.set killed during its settle left the category changed). A put-back step (RestoreScope)
@@ -457,6 +480,8 @@ Dispatcher::Dispatcher(const Config& aConfig, const Session& aSession, GameThrea
     , m_queue(aQueue)
     , m_tokens(aConfig.maxRequestsPerSecond * 2.0)
     , m_lastRefill(std::chrono::steady_clock::now())
+    , m_readerTokens(std::clamp<uint32_t>(aConfig.maxRequestsPerSecond, 1, ReaderRequestBudget::kMaxRate) * (2.0 * kMaxReadOnlyConnections))
+    , m_readerLastRefill(m_lastRefill)
 {
     Register({"ping", Access::Read, RunOn::BridgeThread, "Liveness check; answers without touching the game.",
               [this](const MethodContext&) {
@@ -685,6 +710,35 @@ bool Dispatcher::TakeRateToken(bool aReadOnly)
     return true;
 }
 
+ReaderRequestBudget::ReaderRequestBudget(uint32_t rate)
+    : m_rate(std::clamp<uint32_t>(rate, 1, kMaxRate)), m_tokens(m_rate * 2.0),
+      m_lastRefill(std::chrono::steady_clock::now())
+{
+}
+
+bool Dispatcher::TakeReaderRequestToken()
+{
+    if (!tReaderBudget->Take()) return false;
+    std::scoped_lock _(m_mutex);
+    const auto now = std::chrono::steady_clock::now();
+    const double rate = std::clamp<uint32_t>(m_config.maxRequestsPerSecond, 1, ReaderRequestBudget::kMaxRate) * static_cast<double>(kMaxReadOnlyConnections);
+    m_readerTokens = std::min(rate * 2.0, m_readerTokens + std::chrono::duration<double>(now - m_readerLastRefill).count() * rate);
+    m_readerLastRefill = now;
+    if (m_readerTokens < 1.0) return false;
+    m_readerTokens -= 1.0;
+    return true;
+}
+
+bool ReaderRequestBudget::Take(std::chrono::steady_clock::time_point now)
+{
+    const auto elapsed = std::max(0.0, std::chrono::duration<double>(now - m_lastRefill).count());
+    m_lastRefill = std::max(now, m_lastRefill);
+    m_tokens = std::min(m_rate * 2.0, m_tokens + elapsed * m_rate);
+    if (m_tokens < 1.0) return false;
+    m_tokens -= 1.0;
+    return true;
+}
+
 std::string Dispatcher::NextCid()
 {
     return "n" + std::to_string(m_cidCounter.fetch_add(1) + 1);
@@ -696,9 +750,9 @@ DispatchResult Dispatcher::HandleGuarded(const std::string& line, uint32_t pid, 
     return Handle(line, pid);
 }
 
-DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute, bool aReadOnly) noexcept
+DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute, ReaderRequestBudget* aReaderBudget) noexcept
 {
-    ReaderScope readerScope(aReadOnly);
+    ReaderScope readerScope(aReaderBudget, [this] { return TakeRateToken(true); });
     try
     {
         return HandleUnchecked(aLine, aClientPid, aControlRoute);
@@ -782,15 +836,17 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     const bool authenticated = tokenIt != request.end() && tokenIt->is_string() &&
                                ConstantTimeEquals(tokenIt->get<std::string>(), m_session.token);
 
-    // Ordinary requests share one aggregate bucket, including unauthenticated attempts.
+    // Each reader connection has a bounded pipe-thread budget, including unauthenticated attempts.
+    // Writers retain their existing aggregate bucket. Reader game work also uses it at enqueue.
     // Authenticated emergency cancellation never waits behind exhausted read pacing.
     const auto methodForPacing = request.value("method", json());
     const bool emergency = authenticated && methodForPacing.is_string() &&
         IsEmergencyMethod(methodForPacing.get<std::string>());
-    if (!emergency && !TakeRateToken(tReadOnly))
+    if (!emergency && !(tReadOnly ? TakeReaderRequestToken() : TakeRateToken(false)))
     {
         return refuse("bridge.rate_limited", id, cid, "rate_limited",
-                      "more than " + std::to_string(m_config.maxRequestsPerSecond) + " requests per second",
+                      tReadOnly ? "observer request budget exhausted" :
+                          "more than " + std::to_string(m_config.maxRequestsPerSecond) + " requests per second",
                       tReadOnly || !authenticated, authenticated ? "" : "authenticated=false");
     }
 
@@ -973,6 +1029,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
         }
         else
         {
+            RequireReaderGameToken();
             auto fn = spec.fn;
             json envelope;
             std::string error;
@@ -1050,6 +1107,8 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     }
     catch (const MethodError& e)
     {
+        if (tReadOnly && e.code == "rate_limited")
+            return refuse("bridge.rate_limited", id, cid, e.code, e.what(), true);
         code = e.code;
         response = ErrorResponse(id, cid, e.code, e.what());
     }
@@ -1062,6 +1121,14 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     const auto elapsedMs =
         std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
     const auto level = code == "ok" ? Level::Info : Level::Warn;
+    if (!tReadOnly && code == "ok" && m_eventSink &&
+        (methodName == "world.probe" || methodName == "scene.read" || methodName == "world.district"))
+    {
+        try {
+            m_eventSink("observe.result", "info", methodName + " observed",
+                json{{"command", methodName}, {"cid", cid}, {"connection", m_connectionReader ? m_connectionReader() : 0}, {"result", response.at("result")}});
+        } catch (...) {} // publishing must never change the caller's response
+    }
     if (logDetails) log::Write(level, "native", cid, "bridge.response",
                "method=" + methodName + " code=" + code + " ms=" + std::to_string(elapsedMs));
     // The session event stream (0.6): every write the bridge answered, with its outcome and, when it gave one, its undo.

@@ -43,8 +43,8 @@ describe("0.8.20 the command and the recorder channel", () => {
     expect(recording).toContain('json::array({"v", "actors", "camera", "contacts", "supervisor"})');
   });
   test("the build and the tools carry the 0.8.20 incident work (0.8.21 and 0.8.22 added to it)", () => {
-    expect(read("native", "CMakeLists.txt")).toMatch(/VERSION 0\.8\.23/);
-    expect(JSON.parse(read("package.json")).version).toBe("0.8.23");
+    expect(read("native", "CMakeLists.txt")).toMatch(/VERSION 0\.8\.24/);
+    expect(JSON.parse(read("package.json")).version).toBe("0.8.24");
     expect(natives).toContain("natives=37");
   });
 });

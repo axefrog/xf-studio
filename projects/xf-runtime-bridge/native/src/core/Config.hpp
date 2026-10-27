@@ -13,6 +13,7 @@
 
 namespace xfb
 {
+inline constexpr uint32_t kMaxReadOnlyConnections = 8;
 // Write classes for [bridge] allow_write_classes (photo, world, character, inventory, save, showroom). The default
 // (no allow_write_classes key) is the first three: inventory, save and showroom must be listed by name.
 inline constexpr uint32_t kWritePhoto = 1;
@@ -41,7 +42,7 @@ struct Config
     bool allowTestHooks = false;     // 0.8.4: test.save.delay refused unless true (only the -writes package sets it)
     uint32_t requestTimeoutMs = 2000; // wait for the game thread
     uint32_t maxRequestsPerSecond = 20;
-    uint32_t maxReadOnlyConnections = 3; // 0 disables readers; hard cap 8
+    uint32_t maxReadOnlyConnections = 6; // 0 disables readers; hard cap kMaxReadOnlyConnections
     uint32_t idleDisconnectSeconds = 120;
 
     // [ui] (bridge 0.5.3, temporary test features): the ink HUD panel (Demo A) shown at start, the CET layer's CET line and

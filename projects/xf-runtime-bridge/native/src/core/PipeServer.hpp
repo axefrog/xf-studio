@@ -85,6 +85,7 @@ public:
     bool IsRunning() const;
     bool HasClient() const;
     uint64_t ConnectionsAccepted() const;
+    double ThreadCpuMs() const; // worker kernel + user CPU time; no game work
 
 private:
     enum class EndReason
@@ -121,5 +122,6 @@ private:
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_hasClient{false};
     std::atomic<uint64_t> m_connections{0};
+    std::atomic<uint32_t> m_threadId{0};
 };
 } // namespace xfb

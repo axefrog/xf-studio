@@ -4,6 +4,39 @@ import { basename, join, normalize } from "node:path";
 import type { Json } from "./windows.ts";
 export type FileCursor = { file_chunk?: number; file_offset?: number };
 
+/** Calibrated QPC/UTC mapping. Interpolate between chunk syncs; outside them use the nearest measured offset.
+ * Uncertainty is the read interval in milliseconds, separate from UTC's 1 ms representation and OS clock accuracy.
+ * An adjusted wall clock can go backwards: forward mapping remains available, but inverse mapping then refuses ambiguity.
+ */
+export function recordingClock(manifest: Json): { toWallTime: (s: number) => string; fromWallTime: (at: string) => number } {
+  const start = manifest.start_sync ?? { s: manifest.start_s, at: manifest.start_at };
+  const allPoints = [start, ...(manifest.chunks ?? []).map((c: Json) => c.sync)].map(p => {
+    const ms = Date.parse(p?.at);
+    if (!Number.isFinite(p?.s) || !Number.isFinite(ms)) throw new Error("Recording has no valid QPC/UTC calibration");
+    return { s: Number(p.s), ms };
+  }).sort((a, b) => a.s - b.s).filter((p, i, all) => i === 0 || p.s !== all[i - 1]!.s);
+  const points: typeof allPoints = [];
+  for (const point of allPoints) {
+    const previous = points.at(-1);
+    // Two reads within one UTC millisecond can have the same ISO representation without a clock adjustment.
+    if (previous && point.ms === previous.ms && point.s - previous.s < 0.001) continue;
+    points.push(point);
+  }
+  const map = (value: number, inverse: boolean) => {
+    if (!Number.isFinite(value)) throw new Error("Expected a finite recording time");
+    if (inverse && points.some((p, i) => i > 0 && p.ms <= points[i - 1]!.ms)) throw new Error("Wall clock changed backwards; inverse recording time is ambiguous");
+    const x = (p: typeof points[number]) => inverse ? p.ms : p.s;
+    const y = (p: typeof points[number]) => inverse ? p.s : p.ms;
+    const scale = inverse ? 0.001 : 1000;
+    const first = points[0]!, last = points.at(-1)!;
+    if (value <= x(first)) return y(first) + (value - x(first)) * scale;
+    if (value >= x(last)) return y(last) + (value - x(last)) * scale;
+    const i = points.findIndex(p => x(p) >= value), a = points[i - 1]!, b = points[i]!;
+    return y(a) + (value - x(a)) * (y(b) - y(a)) / (x(b) - x(a));
+  };
+  return { toWallTime: s => new Date(Math.round(map(s, false))).toISOString(), fromWallTime: at => map(Date.parse(at), true) };
+}
+
 export function replayRecording(status: Json, after: number, through: number, cursor: FileCursor): { rows: Json[]; next: number; budget: boolean; gap: boolean } {
   const rows: Json[] = [];
   let next = after, budget = 8 * 1024 * 1024, gap = false;

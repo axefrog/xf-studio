@@ -21,7 +21,7 @@ const api = (readOnly = false) => {
 test("writer and two persistent digest readers coexist; disconnect leaves writer and recorder owned", async () => {
   const writer = api(), first = api(true), second = api(true);
   try {
-    expect(host.session.read_only_pipes).toHaveLength(3);
+    expect(host.session.read_only_pipes).toHaveLength(6);
     const start = await writer.run("test.record.start", { channels: ["v"], duration_s: 5 });
     expect(start.ok).toBe(true);
     for (let i = 0; i < 4; ++i) {
@@ -48,6 +48,7 @@ test("writer and two persistent digest readers coexist; disconnect leaves writer
 test("native reader enforces role, pool capacity and independent cursors; slot reusable", async () => {
   const writer = await client();
   const a = await client(true), b = await client(true), c = await client(true);
+  const remaining = await Promise.all(Array.from({ length: host.session.read_only_pipes!.length - 3 }, () => client(true)));
   try {
     expect((await a.call("session.note", { text: "forbidden" })).error?.code).toBe("read_only_connection");
     expect((await a.call("test.record.start", {})).error?.code).toBe("read_only_connection");
@@ -64,7 +65,7 @@ test("native reader enforces role, pool capacity and independent cursors; slot r
     a.close(); await sleep(50);
     const replacement = await client(true); replacement.close();
     expect((await writer.call("ping")).ok).toBe(true);
-  } finally { writer.close(); a.close(); b.close(); c.close(); }
+  } finally { writer.close(); a.close(); b.close(); c.close(); for (const reader of remaining) reader.close(); }
 }, 10000);
 
 test("reader NPC picks cannot consume shared ownership; list/status remain readable", async () => {
