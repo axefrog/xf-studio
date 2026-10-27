@@ -2,7 +2,7 @@
 
 # Bridge capabilities
 
-> **Generated page; do not edit.** The data is in [registry.json](registry.json), [items/](items) and [changelog/](changelog), and the rules in [README.md](README.md). As of 2026-10-27, the newest changelog line.
+> **Generated page; do not edit.** The data is in [registry.json](registry.json), [items/](items) and [changelog/](changelog), and the rules in [README.md](README.md). As of 2026-10-28, the newest changelog line.
 
 ## Summary
 
@@ -10,7 +10,7 @@
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 6 | 14 | 22 | 2 | 0 | 128 | 0 | 0 |
+| items | 6 | 14 | 18 | 2 | 4 | 128 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
@@ -26,29 +26,33 @@
 
 ### Evidence debt
 
-Built, merged or released capabilities with no game evidence (none or offline): 19. Age is in days to 2026-10-27.
+Built, merged or released capabilities with no game evidence (none or offline): 23. Age is in days to 2026-10-28.
 
 | Capability | Stage | Evidence | Since (version) | Age |
 |---|---|---|---|---:|
-| [`capture.event-armed`](#capture.event-armed) Event-armed captures | merged | none | 2026-10-26 (0.8.14) | 1 d |
-| [`capture.expectations`](#capture.expectations) Pre-capture checks | merged | offline | 2026-10-26 (0.6.0) | 1 d |
-| [`character.live-pose`](#character.live-pose) Live posing (L0) | merged | offline | 2026-10-26 (0.3.0) | 1 d |
-| [`incidents.spawn-link`](#incidents.spawn-link) Actors joining an incident | merged | offline | 2026-10-26 (0.8.21) | 1 d |
-| [`lifecycle.options-read`](#lifecycle.options-read) Graphics settings record | merged | offline | 2026-10-26 (0.3.0) | 1 d |
-| [`npc.gestures`](#npc.gestures) Gestures | merged | offline | 2026-10-26 (0.8.8) | 1 d |
-| [`photo.camera-place`](#photo.camera-place) Placing photo mode's camera directly | merged | offline | 2026-10-26 (0.5.2) | 1 d |
-| [`photo.camera-preset`](#photo.camera-preset) Rewriting a camera preset | merged | offline | 2026-10-26 (0.6.0) | 1 d |
-| [`photo.poses`](#photo.poses) V's photo-mode pose | merged | offline | 2026-10-26 (0.3.0) | 1 d |
-| [`safety.contact-alerts`](#safety.contact-alerts) Contact alerts | merged | offline | 2026-10-26 (0.8.15) | 1 d |
-| [`supervisor.actor-entries`](#supervisor.actor-entries) Supervising XF actors | merged | offline | 2026-10-26 (0.8.19) | 1 d |
-| [`supervisor.plan-module`](#supervisor.plan-module) Plans | merged | offline | 2026-10-26 | 1 d |
-| [`supervisor.while-away`](#supervisor.while-away) While you were away | merged | offline | 2026-10-26 (0.8.15) | 1 d |
-| [`tooling.capability-registry`](#tooling.capability-registry) The capability registry | merged | offline | 2026-10-26 | 1 d |
-| [`tooling.lint`](#tooling.lint) Lints and contracts | merged | offline | 2026-10-26 (0.3.0) | 1 d |
-| [`tooling.preflight`](#tooling.preflight) Session preflight | merged | offline | 2026-10-26 | 1 d |
-| [`tooling.selftest`](#tooling.selftest) Self-test host and unit checks | merged | offline | 2026-10-26 (0.2.0) | 1 d |
-| [`world.doors`](#world.doors) Doors | merged | offline | 2026-10-26 (0.8.12) | 1 d |
-| [`recorder.status`](#recorder.status) Read-only recorder status | merged | none | 2026-10-27 | 0 d |
+| [`capture.event-armed`](#capture.event-armed) Event-armed captures | merged | none | 2026-10-26 (0.8.14) | 2 d |
+| [`capture.expectations`](#capture.expectations) Pre-capture checks | merged | offline | 2026-10-26 (0.6.0) | 2 d |
+| [`character.live-pose`](#character.live-pose) Live posing (L0) | merged | offline | 2026-10-26 (0.3.0) | 2 d |
+| [`incidents.spawn-link`](#incidents.spawn-link) Actors joining an incident | merged | offline | 2026-10-26 (0.8.21) | 2 d |
+| [`lifecycle.options-read`](#lifecycle.options-read) Graphics settings record | merged | offline | 2026-10-26 (0.3.0) | 2 d |
+| [`npc.gestures`](#npc.gestures) Gestures | merged | offline | 2026-10-26 (0.8.8) | 2 d |
+| [`photo.camera-place`](#photo.camera-place) Placing photo mode's camera directly | merged | offline | 2026-10-26 (0.5.2) | 2 d |
+| [`photo.camera-preset`](#photo.camera-preset) Rewriting a camera preset | merged | offline | 2026-10-26 (0.6.0) | 2 d |
+| [`photo.poses`](#photo.poses) V's photo-mode pose | merged | offline | 2026-10-26 (0.3.0) | 2 d |
+| [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | built | none | 2026-10-26 | 2 d |
+| [`safety.contact-alerts`](#safety.contact-alerts) Contact alerts | merged | offline | 2026-10-26 (0.8.15) | 2 d |
+| [`supervisor.actor-entries`](#supervisor.actor-entries) Supervising XF actors | merged | offline | 2026-10-26 (0.8.19) | 2 d |
+| [`supervisor.plan-module`](#supervisor.plan-module) Plans | merged | offline | 2026-10-26 | 2 d |
+| [`supervisor.while-away`](#supervisor.while-away) While you were away | merged | offline | 2026-10-26 (0.8.15) | 2 d |
+| [`tooling.capability-registry`](#tooling.capability-registry) The capability registry | merged | offline | 2026-10-26 | 2 d |
+| [`tooling.lint`](#tooling.lint) Lints and contracts | merged | offline | 2026-10-26 (0.3.0) | 2 d |
+| [`tooling.preflight`](#tooling.preflight) Session preflight | merged | offline | 2026-10-26 | 2 d |
+| [`tooling.selftest`](#tooling.selftest) Self-test host and unit checks | merged | offline | 2026-10-26 (0.2.0) | 2 d |
+| [`world.doors`](#world.doors) Doors | merged | offline | 2026-10-26 (0.8.12) | 2 d |
+| [`recorder.actor-identity`](#recorder.actor-identity) Actor identity on recorder samples | built | none | 2026-10-27 | 1 d |
+| [`recorder.game-time`](#recorder.game-time) Game time on recorder samples | built | none | 2026-10-27 | 1 d |
+| [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | built | none | 2026-10-27 | 1 d |
+| [`recorder.status`](#recorder.status) Read-only recorder status | merged | none | 2026-10-27 | 1 d |
 
 ### Open known issues
 
@@ -151,7 +155,7 @@ Per consumer, blocking first.
 | needs | S6 | M4 | [`character.cyberware`](#character.cyberware) | merged | partial | V's cyberware. |
 | needs | S1 | M4 | [`recorder.session-events`](#recorder.session-events) | merged | partial | The bridge's own event ring and npc.* events are part of the world event feed. |
 | needs | S1 | M4 | [`recorder.world-event-feed`](#recorder.world-event-feed) | planned | none | A world event feed; the graded hooks and a minimal set of twelve event kinds are designed. Gaps: interior entry is polled, no 'any fact changed' hook, dialogue picks inferred. |
-| needs | D-34; S1, S3 | shadow-mode | [`recorder.actor-identity`](#recorder.actor-identity) | planned | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.actor-identity`](#recorder.actor-identity) | built | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
 | needs | D-34; S1, S3 | shadow-mode | [`recorder.deaths`](#recorder.deaths) | proposed | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
 | needs | D-34; S1, S3 | shadow-mode | [`recorder.combat`](#recorder.combat) | proposed | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
 | needs | D-34; S1, S3 | shadow-mode | [`recorder.crime`](#recorder.crime) | proposed | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
@@ -207,16 +211,16 @@ Per consumer, blocking first.
 | needs | want 13 | M8 | [`link.display-feed`](#link.display-feed) | proposed | none | Bridge proposal C. Story Engine layers reach the overlay through it. |
 | needs | proposal 5.1 | M6 | [`recorder.catchup`](#recorder.catchup) | merged | partial | The live feed reads catch-up with detail: true and its cursor, at most once a second, backing off when there is no more. |
 | needs | milestone 6 | M6 | [`recorder.status`](#recorder.status) | merged | none | Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run. |
-| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.actor-identity`](#recorder.actor-identity) | planned | none | Story Engine shadow mode binds simulated residents to recorded actors; Holotable shows affiliation in the People layer. |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.actor-identity`](#recorder.actor-identity) | built | none | Story Engine shadow mode binds simulated residents to recorded actors; Holotable shows affiliation in the People layer. |
 | needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.deaths`](#recorder.deaths) | proposed | none | Story Engine shadow mode reacts to deaths; Holotable draws them as events. |
 | needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.combat`](#recorder.combat) | proposed | none | Shadow mode and Holotable timelines. |
 | needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.crime`](#recorder.crime) | proposed | none | Shadow mode and Holotable timelines. |
 | needs | want 10 | M7 | [`surfaces.canvas`](#surfaces.canvas) | planned | none | Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building. |
 | needs | want 11 | M7 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) | proposed | none | Show and hide while playing, without opening CET (CET blocks input). |
 | needs | want 12 | M7 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) | proposed | none | Lets the overlay work with no other XF program running (bridge proposal B). |
-| wants | want 15 | M6 | [`recorder.observe-result`](#recorder.observe-result) | planned | none | Lets Holotable draw what sessions already asked, at no extra game cost. |
-| wants | agent-layers clock | M6b | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) | planned | none | Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today. |
-| wants | agent-layers game clock | M6c | [`recorder.game-time`](#recorder.game-time) | planned | none | Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock. |
+| wants | want 15 | M6 | [`recorder.observe-result`](#recorder.observe-result) | built | none | Lets Holotable draw what sessions already asked, at no extra game cost. |
+| wants | agent-layers clock | M6b | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) | built | none | Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today. |
+| wants | agent-layers game clock | M6c | [`recorder.game-time`](#recorder.game-time) | built | none | Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock. |
 | wants | want plate | M7 | [`surfaces.canvas`](#surfaces.canvas) | planned | none | The design comes from the UI component track; the bridge exposes the token to canvas@1. |
 
 #### Photo Mode Tools
@@ -336,8 +340,9 @@ One exclusive writer connection plus a bounded pool of independent read-only con
 - **Limit:** Half the shared rate bucket's burst is reserved for the writer; readers can't fill the last slot of the 16-slot game-thread queue.
 - **Quirk:** Recorder, supervisor and input leases follow the writer: an MCP connection holding them keeps the writer seat, so a CLI writer gets bridge_busy (Borg 4).
 - **Quirk:** Scheduling bounds are established offline, not measured game latency.
+- **Could improve (value high, effort small):** 0.8.24 (claude/bridge-0824, de216d6d): per-connection request budgets for observers (20/s, burst 40 each; observer ceiling 160/s) and six slots by default; six 1 Hz readers measured 360/360 with writer latency unchanged
 - **Docs:** [projects/xf-runtime-bridge/README.md#concurrent-observers-0815-candidate](../../../projects/xf-runtime-bridge/README.md#concurrent-observers-0815-candidate), [research/runtime/runtime-bridge-test-card.md#concurrent-readers-0815](../../../research/runtime/runtime-bridge-test-card.md#concurrent-readers-0815)
-- **Updated:** 2026-10-26
+- **Updated:** 2026-10-28
 
 <a id="link.catalogue"></a>
 
@@ -2400,10 +2405,10 @@ Continuous channels, taps, session events and catching up on what happened betwe
 | [`recorder.game-events-probe`](#recorder.game-events-probe) Game-events probe | research | merged | partial | caveats | P3 |
 | [`recorder.world-event-feed`](#recorder.world-event-feed) World event feed | sense | planned | none | unknown | P2 |
 | [`recorder.status`](#recorder.status) Read-only recorder status | sense | merged | none | unknown | P1 |
-| [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | planned | none | unknown | P3 |
-| [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | service | planned | none | unknown | P2 |
-| [`recorder.game-time`](#recorder.game-time) Game time on recorder samples | sense | planned | none | unknown | P3 |
-| [`recorder.actor-identity`](#recorder.actor-identity) Actor identity on recorder samples | sense | planned | none | unknown | P3 |
+| [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | built | none | unknown | P3 |
+| [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | service | built | none | unknown | P2 |
+| [`recorder.game-time`](#recorder.game-time) Game time on recorder samples | sense | built | none | unknown | P3 |
+| [`recorder.actor-identity`](#recorder.actor-identity) Actor identity on recorder samples | sense | built | none | unknown | P3 |
 | [`recorder.deaths`](#recorder.deaths) Deaths and knockdowns on the recorder | sense | proposed | none | unknown | P3 |
 | [`recorder.combat`](#recorder.combat) Combat start and end on the recorder | sense | proposed | none | unknown | P3 |
 | [`recorder.crime`](#recorder.crime) Crimes and police heat on the recorder | sense | proposed | none | unknown | P3 |
@@ -2571,46 +2576,50 @@ A read-only command answered on the bridge thread (no game-thread call, no lease
 
 ### Published probe and scene results (observe.result)
 
-`recorder.observe-result` · service · stage **planned** · evidence **none** · health **unknown** · P3
+`recorder.observe-result` · service · stage **built** · evidence **none** · health **unknown** · P3
 
 A bounded observe.result session event with the command, the caller's cid and the result whenever a writer calls world_probe, scene_read or world_district, adding no game-thread work.
 
+- **Version:** branch `claude/bridge-0824`
 - **Demand (holotable, wants, want 15, M6):** Lets Holotable draw what sessions already asked, at no extra game cost.
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 
 <a id="recorder.manifest-wall-clock"></a>
 
 ### Wall-clock time in the run manifest
 
-`recorder.manifest-wall-clock` · service · stage **planned** · evidence **none** · health **unknown** · P2
+`recorder.manifest-wall-clock` · service · stage **built** · evidence **none** · health **unknown** · P2
 
 The recorder run manifest carries a wall-clock mapping for its QPC clock (for example start_at, the ISO time at start_s), so replay tools can place wall-clock-timed items on the recording timeline.
 
+- **Version:** branch `claude/bridge-0824`
 - **Demand (holotable, wants, agent-layers clock, M6b):** Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today.
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 
 <a id="recorder.game-time"></a>
 
 ### Game time on recorder samples
 
-`recorder.game-time` · sense · stage **planned** · evidence **none** · health **unknown** · P3
+`recorder.game-time` · sense · stage **built** · evidence **none** · health **unknown** · P3
 
 The recorder's V samples (or a 1 Hz heartbeat) carry the game's own clock (game_time_s), so tools can align game-clock items, such as the Story Engine's shadow-mode simulation, with recorded and live observations.
 
+- **Version:** branch `claude/bridge-0824`
 - **Demand (holotable, wants, agent-layers game clock, M6c):** Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock.
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 
 <a id="recorder.actor-identity"></a>
 
 ### Actor identity on recorder samples
 
-`recorder.actor-identity` · sense · stage **planned** · evidence **none** · health **unknown** · P3
+`recorder.actor-identity` · sense · stage **built** · evidence **none** · health **unknown** · P3
 
 The actors channel carries each actor's character record id, affiliation and crowd flag, once per actor (or on first sample), so observers can tell who an actor is.
 
+- **Version:** branch `claude/bridge-0824`
 - **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Story Engine shadow mode binds simulated residents to recorded actors; Holotable shows affiliation in the People layer.
 - **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 
 <a id="recorder.deaths"></a>
 

@@ -128,6 +128,7 @@
     "evidence": "partial",
     "health": "caveats",
     "priority": "P2",
+    "branch": "",
     "since": "0.8.15",
     "changed_in": "0.8.16",
     "depends_on": ["link.pipe"],
@@ -169,8 +170,15 @@
       "Recorder, supervisor and input leases follow the writer: an MCP connection holding them keeps the writer seat, so a CLI writer gets bridge_busy (Borg 4).",
       "Scheduling bounds are established offline, not measured game latency."
     ],
+    "improvements": [
+      {
+        "summary": "0.8.24 (claude/bridge-0824, de216d6d): per-connection request budgets for observers (20/s, burst 40 each; observer ceiling 160/s) and six slots by default; six 1 Hz readers measured 360/360 with writer latency unchanged",
+        "value": "high",
+        "effort": "small"
+      }
+    ],
     "docs": ["projects/xf-runtime-bridge/README.md#concurrent-observers-0815-candidate", "research/runtime/runtime-bridge-test-card.md#concurrent-readers-0815"],
-    "updated": "2026-10-26"
+    "updated": "2026-10-28"
   },
   {
     "id": "link.catalogue",

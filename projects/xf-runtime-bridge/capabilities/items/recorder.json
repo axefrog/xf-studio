@@ -340,10 +340,11 @@
     "summary": "A bounded observe.result session event with the command, the caller's cid and the result whenever a writer calls world_probe, scene_read or world_district, adding no game-thread work.",
     "area": "recorder",
     "kind": "service",
-    "stage": "planned",
+    "stage": "built",
     "evidence": "none",
     "health": "unknown",
     "priority": "P3",
+    "branch": "claude/bridge-0824",
     "demand": [
       {
         "consumer": "holotable",
@@ -354,7 +355,7 @@
         "since": "2026-10-26"
       }
     ],
-    "updated": "2026-10-27"
+    "updated": "2026-10-28"
   },
   {
     "id": "recorder.manifest-wall-clock",
@@ -362,10 +363,11 @@
     "summary": "The recorder run manifest carries a wall-clock mapping for its QPC clock (for example start_at, the ISO time at start_s), so replay tools can place wall-clock-timed items on the recording timeline.",
     "area": "recorder",
     "kind": "service",
-    "stage": "planned",
+    "stage": "built",
     "evidence": "none",
     "health": "unknown",
     "priority": "P2",
+    "branch": "claude/bridge-0824",
     "demand": [
       {
         "consumer": "holotable",
@@ -376,7 +378,7 @@
         "since": "2026-10-27"
       }
     ],
-    "updated": "2026-10-27"
+    "updated": "2026-10-28"
   },
   {
     "id": "recorder.game-time",
@@ -384,10 +386,11 @@
     "summary": "The recorder's V samples (or a 1 Hz heartbeat) carry the game's own clock (game_time_s), so tools can align game-clock items, such as the Story Engine's shadow-mode simulation, with recorded and live observations.",
     "area": "recorder",
     "kind": "sense",
-    "stage": "planned",
+    "stage": "built",
     "evidence": "none",
     "health": "unknown",
     "priority": "P3",
+    "branch": "claude/bridge-0824",
     "demand": [
       {
         "consumer": "holotable",
@@ -398,7 +401,7 @@
         "since": "2026-10-27"
       }
     ],
-    "updated": "2026-10-27"
+    "updated": "2026-10-28"
   },
   {
     "id": "recorder.actor-identity",
@@ -406,10 +409,11 @@
     "summary": "The actors channel carries each actor's character record id, affiliation and crowd flag, once per actor (or on first sample), so observers can tell who an actor is.",
     "area": "recorder",
     "kind": "sense",
-    "stage": "planned",
+    "stage": "built",
     "evidence": "none",
     "health": "unknown",
     "priority": "P3",
+    "branch": "claude/bridge-0824",
     "demand": [
       {
         "consumer": "holotable",
@@ -428,7 +432,7 @@
         "since": "2026-10-27"
       }
     ],
-    "updated": "2026-10-27"
+    "updated": "2026-10-28"
   },
   {
     "id": "recorder.deaths",
