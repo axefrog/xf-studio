@@ -31,7 +31,7 @@ export function validateContent(value: unknown, key: string): asserts value is W
       shape(row,collection);string(row.id,"record id");string(row.place,"record place");
       if(ids.has(row.id))throw new NativeMalformedError("Duplicate content id.");
       budget.charge({records:1,bytes:256+stringBytes(row.id)+stringBytes(row.place)});ids.add(row.id);
-      for(const field of ["name","record","title","journal"]) {optionalString(row[field],field);budget.charge({bytes:stringBytes(row[field] as string|undefined)});}
+      for(const field of ["name","record","title","journal","variant"]) {optionalString(row[field],field);budget.charge({bytes:stringBytes(row[field] as string|undefined)});}
       if(collection==="communities") {
         array(row.entries,"community entries");
         for(const e of row.entries) {

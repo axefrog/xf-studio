@@ -3,7 +3,8 @@
 //   request  {"id": 1, "method": "session.open", "params": {...}}
 //   response {"id": 1, "ok": true, "result": ...} or {"id": 1, "ok": false, "error": {"code": ..., "message": ...}}
 //   cancel   {"id": 2, "method": "cancel", "params": {"id": 1}}
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { worldContentFiles } from "./world-content-files.ts";
 import { listRuns, readRunAsync } from "./recording.ts";
 import { sessionAtLevel } from "./query.ts";
 import { report } from "./report.ts";
@@ -23,7 +24,7 @@ export const FRAME_LIMIT = 1024 * 1024;
 /** Legacy live geometry stays warm only while callers poll it. */
 export const LIVE_WORLD_IDLE_MS = 2000;
 
-export interface ServiceOptions { recordingsRoot: string; worldPackPath: string; layersRoot?: string; solidSource?: SolidPort; solidCacheDir?: string; liveBridge?: LiveBridge; liveClock?: LiveClock }
+export interface ServiceOptions { recordingsRoot: string; worldPackPath: string; worldContentDir?: string; layersRoot?: string; solidSource?: SolidPort; solidCacheDir?: string; liveBridge?: LiveBridge; liveClock?: LiveClock }
 
 export function defaultOptions(env = process.env): ServiceOptions {
   const local = env.LOCALAPPDATA ?? "";
@@ -47,6 +48,7 @@ const until = <T>(p: Promise<T>, signal: AbortSignal) => new Promise<T>((resolve
 
 /** Holds sessions by folder (loaded once, shared by every requester) and the world pack. */
 export function createService(options: ServiceOptions) {
+  const content = worldContentFiles(options.worldContentDir ?? join(dirname(options.worldPackPath), "world"));
   const layers = createLayerSpool(options.layersRoot ?? defaultOptions().layersRoot!);
   const solids = options.solidSource ?? createSolidWorkerPort(options.solidCacheDir ?? join(import.meta.dir, "..", "..", "..", "local", "holotable", "cache"));
   const sessions = new Map<string, Session>();
@@ -194,7 +196,7 @@ export function createService(options: ServiceOptions) {
       if (!Number.isFinite(margin) || margin < 0 || margin > 1000) throw coded("bad_request", "Margin must be between 0 and 1000 metres.");
       const path = pathFor(s, p.center), geometry = await solids.around(path, margin, signal);
       signal.throwIfAborted();
-      return { ...(w ? region(w, boxOf(path), margin) : { schema: "xfh/world-pack-1", provenance: null, areas: [], cells: [] }), ...geometry };
+      return { ...(w ? region(w, boxOf(path), margin) : { schema: "xfh/world-pack-1", provenance: null, areas: [], cells: [] }), ...geometry, content: content.around(w ?? undefined, path, margin, p.content === true, signal) };
     },
     "session.report": async (p, signal) => {
       if (typeof p.t !== "number") throw coded("bad_request", "No moment given");
@@ -204,7 +206,7 @@ export function createService(options: ServiceOptions) {
       return report(s, p.t, level(p.level), pack() ?? undefined, answer.layers, Array.isArray(p.position) ? p.position as [number, number, number] : undefined, Array.isArray(p.hidden) ? p.hidden as string[] : []);
     },
   };
-  return { handlers, sessions, close() { layers.close(); live.close(); stopWorldWants(); solids.close?.(); }, live, layers };
+  return { handlers, sessions, close() { content.close(); layers.close(); live.close(); stopWorldWants(); solids.close?.(); }, live, layers };
 }
 
 /** Runs the service over stdin and stdout until stdin closes. */

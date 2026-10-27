@@ -91,7 +91,7 @@ test("quiet stretches follow visible changes and jumping pauses at the next one"
 
 test("overview districts fade to nothing at 300 m",()=>{
  const world={provenance:null,areas:[{id:"district",name:"Synthetic district",kind:"district" as const,poly:[[-10,-10],[10,-10],[10,10],[-10,10]] as [number,number][],zlo:0,zhi:10}],cells:[]};
- const layers={v:false,camera:false,people:false,events:false,gaps:false,areas:true,cells:false,solids:false};
+ const layers={v:false,camera:false,people:false,events:false,gaps:false,areas:true,cells:false,solids: false, pois: false, spots: false, communities: false};
  const far=project(session,world,0,layers,{...ORBITS.top,distance:450},850,500,null).primitives;
  expect(far.some(p=>p.kind==="text"&&p.text==="Synthetic district"&&p.opacity===1)).toBe(true);
  expect(project(session,world,0,layers,{...ORBITS.top,distance:300},850,500,null).primitives.some(p=>p.kind==="text"&&p.text==="Synthetic district")).toBe(false);
@@ -121,7 +121,7 @@ test("minimum-zoom nearby distinct plates retain both exact members in Details",
  expect(clusters).toHaveLength(1);expect(clusters[0].items).toHaveLength(2);
  const selection=clusterFallback(clusters[0]);expect(selection.members).toEqual(items.map(i=>i.key));
  const {service,ctl}=await fixture({...answer,layers:[{...answer.layers[0],items:[...items,item("Unrelated",10)]}]}),facade=holotableFacade(service);
- const panel=holotableDetailsPanel({facade,changed(){},dispatch:(action:HoloAction)=>service.dispatch(action)} as unknown as ModuleViewContext<HolotableFacade>),root=panel.spec.element as unknown as LightElement;
+ const panel=holotableDetailsPanel({facade,changed(){},targets:()=>({}),dispatch:(action:HoloAction)=>service.dispatch(action)} as unknown as ModuleViewContext<HolotableFacade>),root=panel.spec.element as unknown as LightElement;
  try{
  await service.dispatch({kind:"holo.select",...selection});panel.update(undefined as never);
  expect(root.textContent).toContain("2 at this spot");expect(root.querySelectorAll("button").filter(b=>b.textContent==="Near A"||b.textContent==="Near B")).toHaveLength(2);expect(root.textContent).not.toContain("Unrelated");
@@ -153,12 +153,15 @@ test("legend family tone is independent of representative item tone",()=>{
 
 test("Details routes pinned and follow-focus bindings as supplied by the platform, and never substitutes an unbound view",async()=>{
  const {service,ctl}=await fixture(),facade=holotableFacade(service),calls:string[]=[];let bound:string|undefined="pinned",menu:any;
- for(const view of ["pinned","follow"])service.navigation(view,{available:()=>true,focus:()=>{calls.push(view);return true;},back:()=>true,canBack:()=>true},ctl.signal);
+ for(const id of ["pois","spots","communities"] as const)await service.dispatch({kind:"holo.layer",id,on:true});
+ for(const view of ["pinned","follow"])service.navigation(view,{baseCounts:()=>view==="pinned"?{pois:3,spots:17,communities:2}:{pois:9,spots:99,communities:8},available:()=>true,focus:()=>{calls.push(view);return true;},back:()=>true,canBack:()=>true},ctl.signal);
  const panel=holotableDetailsPanel({facade,changed(){},targets:()=>({view:bound}),targetMenu:(m:unknown)=>{menu=m;},dispatch:(action:HoloAction)=>service.dispatch(action)} as unknown as ModuleViewContext<HolotableFacade>),root=panel.spec.element as unknown as LightElement;
  try{
  for(const view of ["pinned","follow",undefined]){
    bound=view;await service.dispatch({kind:"holo.select",id:"p/a/Courier"});panel.update(undefined as never);
    root.querySelectorAll("button").find(b=>b.textContent.includes("Fixer"))!.dispatchEvent(lightEvent("click"));
+   panel.update(undefined as never);
+   const counts=view==="pinned"?[3,17,2]:view==="follow"?[9,99,8]:[0];for(const count of counts)expect(root.textContent).toContain(`${count} on the map now`);
    expect(service.snapshot().selected).toBe("p/a/Fixer");expect(calls).toEqual(view==="pinned"?["pinned"]:["pinned","follow"]);
    root.querySelectorAll(".toggle-row").find(e=>e.dataset.holotableLayer==="p/a")!.dispatchEvent(lightEvent("contextmenu"));
    const focus=menu.items.find((i:any)=>i.label==="Focus on this layer").action;

@@ -6,6 +6,8 @@ export interface AgentLabel {
   colour: string; alpha: number; caption?: boolean; overlay?: boolean; align?: "end"; selected?: boolean;
   /** Selected name/caption blocks choose one side of this plate together. */
   plate?: { x:number; y:number; radius:number };
+  /** Community labels share ordinary collision culling, largest first, at most twelve. */
+  communitySpots?: number;
 }
 export interface PlacedLabel extends AgentLabel { width: number }
 export interface LabelBounds { x: number; y: number; width: number }
@@ -46,11 +48,11 @@ export function actorCaption(value: string): string {
 }
 /** Greedy, deterministic label culling. Important labels displace ordinary text by being placed first. */
 export function placeLabels(candidates: readonly AgentLabel[], measure: (text: string) => number, width: number, height: number, cap = 40, reserved: readonly LabelBounds[] = [],plates:readonly PlateObstacle[]|PlateObstacles=[]): PlacedLabel[] {
-  const placed: PlacedLabel[] = [], names = new Set<string>(), consumed=new Set<AgentLabel>();
+  const placed: PlacedLabel[] = [], names = new Set<string>(), consumed=new Set<AgentLabel>();let communities=0;
   if (width < 8 || height < 18) return placed;
   const obstacles="overlaps" in plates?plates:createPlateObstacles();
   if(!("overlaps" in plates))for(const plate of plates)obstacles.add(plate);
-  const ordered = [...candidates].sort((a, b) => Number(!!b.selected)-Number(!!a.selected) || a.priority - b.priority || Number(!!a.caption) - Number(!!b.caption) || a.key.localeCompare(b.key));
+  const ordered = [...candidates].sort((a, b) => Number(!!b.selected&&b.communitySpots===undefined)-Number(!!a.selected&&a.communitySpots===undefined) || a.priority - b.priority || (b.communitySpots??0)-(a.communitySpots??0) || Number(!!a.caption) - Number(!!b.caption) || a.key.localeCompare(b.key));
   const fitText=(candidate:AgentLabel)=>{
     let text=candidate.text,size=measure(text);
     if(size>width-8){
@@ -63,8 +65,9 @@ export function placeLabels(candidates: readonly AgentLabel[], measure: (text: s
   for (const candidate of ordered) {
     if (placed.length >= cap) break;
     if(consumed.has(candidate))continue;
+    if(candidate.communitySpots!==undefined&&communities>=12)continue;
     if (candidate.caption && !names.has(candidate.key)) continue;
-    if(candidate.selected&&candidate.plate&&!candidate.caption){
+    if(candidate.selected&&candidate.plate&&!candidate.caption&&candidate.communitySpots===undefined){
       const caption=ordered.find(c=>c.caption&&c.key===candidate.key),lines=[fitText(candidate),...(caption&&placed.length+1<cap?[fitText(caption)]:[])];
       const blockWidth=Math.max(...lines.map(l=>l.width)),{x:px,y:py,radius}=candidate.plate,lineGap=17,lastBaseline=(lines.length-1)*lineGap;
       const sides=[{x:px+radius+4,y:py-4},{x:px-radius-4-blockWidth,y:py-4},{x:px-blockWidth/2,y:py-radius-6-lastBaseline},{x:px-blockWidth/2,y:py+radius+19}];
@@ -76,8 +79,9 @@ export function placeLabels(candidates: readonly AgentLabel[], measure: (text: s
     const fitted=fitText(candidate),value=fitted.text,size=fitted.width;
     const x = Math.max(4, Math.min(width - size - 4, candidate.x - (candidate.align === "end" ? size : 0))), y = Math.max(14, Math.min(height - 4, candidate.y));
     const overlaps = (p: LabelBounds) => x < p.x + p.width + 4 && x + size + 4 > p.x && y - 12 < p.y + 3 && y + 3 > p.y - 12;
-    if (size > width - 8 || !candidate.selected&&(obstacles.overlaps(candidate.key,x,y,size)||reserved.some(overlaps)||placed.some(overlaps))) continue;
+    if (size > width - 8 || (!candidate.selected||candidate.communitySpots!==undefined)&&(obstacles.overlaps(candidate.key,x,y,size)||reserved.some(overlaps)||placed.some(overlaps))) continue;
     placed.push({ ...candidate, text: value, x, y, width: size });
+    if(candidate.communitySpots!==undefined)communities++;
     if (!candidate.caption) names.add(candidate.key);
   }
   return placed;

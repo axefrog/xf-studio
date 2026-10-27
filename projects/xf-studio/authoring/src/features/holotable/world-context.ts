@@ -1,7 +1,7 @@
 /** One owner for view-requested world regions. Leases debounce and supersede independently; identical reads share work. */
-import type { HoloSolid, HoloWorld, Vec3 } from "./types";
+import type { HoloSolid, HoloWorld, HoloPoi, HoloSpot, HoloCommunity, Vec3 } from "./types";
 export const CONTEXT_SOLID_CAP = 12000;
-export type WorldContextLease = { want(position: Vec3, moved?: boolean): void };
+export type WorldContextLease = { want(position: Vec3, moved?: boolean): void; contentAvailable(): boolean|undefined };
 type Source = { identity: string; params: Record<string,unknown> };
 type Row = { stop?: () => void; ctl?: AbortController; source?: Source; position?: Vec3; world?: HoloWorld; cut?: number };
 type Job = { ctl: AbortController; promise: Promise<HoloWorld>; waiters: number };
@@ -23,6 +23,7 @@ export function worldContexts(options: {
       if(!any)break;
     }
     const areas=new Map<string,HoloWorld["areas"][number]>(),cells=new Map<string,HoloWorld["cells"][number]>();
+    const pois=new Map<string,HoloPoi>(),spots=new Map<string,HoloSpot>(),communities=new Map<string,HoloCommunity>(),slices=new Set<string>();let contentAvailable=false;
     let cut=0,omitted=0,available=false;
     for(const row of ready){
       const world=row.world!,kept=(world.solids??[]).filter(s=>union.has(s.id)).map(s=>union.get(s.id)!);
@@ -31,15 +32,17 @@ export function worldContexts(options: {
       omitted=Math.max(omitted,world.solidInfo?.omittedMeshShapes??0);available||=world.solidInfo?.available??false;
       // Retain only the capped union. Shared identities refer to the same object; released-only solids are collectible.
       row.world={...world,solids:kept};
+      if(world.content){contentAvailable ||= world.content.available;for(const id of world.content.slices)slices.add(id);
+        for(const item of world.content.pois)pois.set(item.id,item);for(const item of world.content.spots)spots.set(item.id,item);for(const item of world.content.communities)communities.set(item.id,item);}
       for(const area of world.areas)areas.set(area.id,area);
       for(const cell of world.cells)cells.set(JSON.stringify(cell),cell);
     }
     options.changed({...empty(),provenance:ready[0]?.world?.provenance??null,extent:ready[0]?.world?.extent,
       areas:[...areas.values()],cells:[...cells.values()],solids:[...union.values()],
-      solidInfo:{available,omittedMeshShapes:omitted,cut,cap:CONTEXT_SOLID_CAP}});
+      solidInfo:{available,omittedMeshShapes:omitted,cut,cap:CONTEXT_SOLID_CAP},content:{available:contentAvailable,slices:[...slices],pois:[...pois.values()],spots:[...spots.values()],communities:[...communities.values()]}});
   }
   async function read(source: Source, position: Vec3, signal: AbortSignal){
-    const params={...source.params,center:position,margin:350},key=JSON.stringify([source.identity,position]);
+    const params={...source.params,center:position,margin:350},key=JSON.stringify([source.identity,source.params,position]);
     let job=jobs.get(key);
     if(!job){
       const ctl=new AbortController(),promise=options.load(params,ctl.signal);job={ctl,promise,waiters:0};jobs.set(key,job);
@@ -83,11 +86,11 @@ export function worldContexts(options: {
         // A departing view frees its quota. Remaining views can recover their full selection from the shared sector cache.
         for(const other of rows)if(other.position&&other.world&&!other.ctl)want(other,other.position,false,true);
       },{once:true});
-      return {want:(position,moved)=>want(row,position,moved)};
+      return {want:(position,moved)=>want(row,position,moved),contentAvailable:()=>row.world?.content?.available};
     },
     reset,
     /** Live observations refresh only regions still wanted; a pan already pending keeps its own debounce. */
-    refresh() { for (const row of rows) if (row.position && !row.ctl) want(row, row.position, false, true); },
+    refresh(force=false) { for (const row of rows) if (row.position && (force || !row.ctl)) want(row, row.position, false, true); },
     active:()=>rows.size>0,
   };
 }

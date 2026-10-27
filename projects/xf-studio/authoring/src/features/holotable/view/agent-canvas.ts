@@ -1,5 +1,7 @@
 /** Canvas interpreter of the service's versioned projection table. Geometry and picking share a draw list. */
 import type { AgentAnswer, AgentAnchor, AgentItem } from "../agent-types";
+import { baseLayerSteps, type BaseSwitches } from "./base-layers";
+import type { HoloContent } from "../types";
 import type { Vec3 } from "../types";
 import type { camera } from "./projection";
 import { clusterPlateSteps, clearSelectedPlate, clusterRadius, type PlateCluster } from "./clusters";
@@ -24,32 +26,37 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
   let currentAnswer:AgentAnswer|undefined;
   let currentCollapsed=new Set<string>(),screenClusters:PlateCluster[]=[];
   const legend=new Map<string,LegendEntry>();
+  const baseCounts={pois:0,spots:0,communities:0};
+  // Details reads the last complete projection, never a selection redraw's reset/partial totals.
+  let publishedBaseCounts={...baseCounts};
   let preparation:ReturnType<typeof prepare>|undefined,prepared:ReturnType<ReturnType<typeof prepare>["next"]>["value"]|undefined,clusterCursor=0,clusterMember=0;
-  function* prepare(answer:AgentAnswer,enabled:Readonly<Record<string,boolean>>,C:Camera,radius:number,selected:string|null,hovered:string|null){
-    const items:AgentItem[]=[],layerIds=new Map<string,string>(),missing=new Set(effects.keys());let work=0;
+  function* prepare(answer:AgentAnswer,enabled:Readonly<Record<string,boolean>>,C:Camera,radius:number,selected:string|null,hovered:string|null,base?:{content?:HoloContent;on:BaseSwitches}){
+    const items:AgentItem[]=[],layerIds=new Map<string,string>(),missing=new Set(effects.keys());let work=0,communityCount=0;
     for(const layer of answer.layers){
       if(enabled[layer.id]===false)continue;
       const notPlaced=new Set(layer.notPlaced);
       for(const item of layer.items){if(work++%64===0)yield;missing.delete(item.key);if(item.place&&!notPlaced.has(item.id)){items.push(item);layerIds.set(item.key,layer.id);}}
     }
+    if(base)for(const item of yield* baseLayerSteps(base.content,base.on,C)){items.push(item);layerIds.set(item.key,"__base");if(item.base==="communities")communityCount++;}
     const positions=new Map<string,XY>(),coincident=new Map<string,AgentItem[]>();
     for(const item of items){if(work++%64===0)yield;
       for(const i of [item,...(item.kind!=="relation"&&item.to?[{...item,key:item.key+":to",region:item.toRegion,place:item.to}]:[])]){
-        if(["point","target","label","actor","influence"].includes(i.kind)){const key=JSON.stringify(i.place),group=coincident.get(key)??[];group.push(i);coincident.set(key,group);}
+        if(i.base!=="spots"&&["point","target","label","actor","influence"].includes(i.kind)){const key=JSON.stringify(i.place),group=coincident.get(key)??[];group.push(i);coincident.set(key,group);}
         const p=C.point(i.place!);if(p)positions.set(i.key,p);
       }
     }
     for(const group of coincident.values()){if(work++%64===0)yield;if(group.length<=12)group.sort((a,b)=>a.key.localeCompare(b.key));const center=positions.get(group[0].key);if(!center)continue;
-      if(group.length>1&&group.length<=12)group.forEach((i,n)=>{const a=n/group.length*2*Math.PI;positions.set(i.key,[center[0]+Math.cos(a)*12,center[1]+Math.sin(a)*12]);});
+      if(group.length>1&&group.length<=12&&!group.some(i=>i.base))group.forEach((i,n)=>{const a=n/group.length*2*Math.PI;positions.set(i.key,[center[0]+Math.cos(a)*12,center[1]+Math.sin(a)*12]);});
     }
     const projected=[];
     for(const item of items){if(work++%64===0)yield;const p=positions.get(item.key);
-      if(answer.specs.kinds[item.kind]&&item.key!==selected&&p&&agentInRange(item,C.target,radius)&&p[0]>=0&&p[0]<=C.width&&p[1]>=0&&p[1]<=C.height&&(glyphIcon(item.glyph,isIconName).known||["point","actor","target"].includes(item.kind)))projected.push({item,x:p[0],y:p[1]});
+      if((item.base||answer.specs.kinds[item.kind])&&item.base!=="communities"&&item.base!=="spots"&&item.key!==selected&&p&&agentInRange(item,C.target,radius)&&p[0]>=0&&p[0]<=C.width&&p[1]>=0&&p[1]<=C.height&&(glyphIcon(item.glyph,isIconName).known||["point","actor","target"].includes(item.kind)))projected.push({item,x:p[0],y:p[1]});
     }
     const plan=yield* clusterPlateSteps(projected,Math.hypot(...C.position.map((n,i)=>n-C.target[i]))<=100);
     const selectedPoint=selected?positions.get(selected):undefined;if(selectedPoint)plan.clusters=plan.clusters.map(c=>clearSelectedPlate(c,selectedPoint));
-    return {items,layerIds,missing,positions,important:labelContext(items,selected,hovered),plan};
+    return {items,layerIds,missing,positions,important:labelContext(items,selected,hovered),plan,communityCount};
   }
+  let previousBase: HoloContent|undefined, previousBaseOn="";
   let motionKey = "", previousPlaying = false;
   let painted = new Map<string, PaintedMarker>(), paintFailed = false;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
@@ -121,7 +128,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
   let previous: AgentAnswer | undefined, previousEnabled: Readonly<Record<string, boolean>> | undefined, previousCamera = "", previousSelection: string | null = null, cursor = 0, fieldCell = 0;
   const path = (ctx: CanvasRenderingContext2D, ps: readonly XY[], closed = false) => { if (!ps.length) return; ctx.moveTo(...ps[0]); for (let i = 1; i < ps.length; i++) ctx.lineTo(...ps[i]); if (closed) ctx.closePath(); };
   function clear(width: number, height: number) {
-    painted = new Map(); paintFailed = false;legend.clear();screenClusters=[];currentCollapsed=new Set();preparation=undefined;prepared=undefined;clusterCursor=0;clusterMember=0;
+    painted = new Map(); paintFailed = false;legend.clear();baseCounts.pois=baseCounts.spots=baseCounts.communities=0;screenClusters=[];currentCollapsed=new Set();preparation=undefined;prepared=undefined;clusterCursor=0;clusterMember=0;
     previous = undefined; cursor = 0; fieldCell = 0; candidates = []; labelsPainted = false; badges = []; plates = createPlateObstacles(); overlayLabels = [];
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) { canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); }
@@ -131,11 +138,12 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     if (!palette.signal) palette = Object.fromEntries([...swatches].map(([t, e]) => [t, getComputedStyle(e).color]));
   }
   function paintItem(item:AgentItem,layer:string,C:Camera,selected:string|null,hovered:string|null,positions:ReadonlyMap<string,XY>,important:ReadonlySet<string>,radius:number,deadline:number,ctx:CanvasRenderingContext2D):"drawn"|"skip"|"pending" {
+    if(item.base&&currentCollapsed.has(item.key))return "skip";
     let cell=fieldCell;
     const far=Math.max(1500,Math.hypot(...C.position.map((n,i)=>n-C.target[i]))+radius),fade=Math.max(1800,far*1.2);
     const answer=currentAnswer!;
     const p = item.place!; if (!agentInRange(item, C.target, radius)) return "skip";
-    const rule = answer.specs.kinds[item.kind]; if (!rule) return "skip";
+    const rule = item.base ? {draw:item.base==="communities"?"text":"ring",style:"muted",label:item.base==="spots"?"":"{label}"} : answer.specs.kinds[item.kind]; if (!rule) return "skip";
     const area = item.resolvedAnchor ?? item.anchor;
     const extended = ["polyline", "volume", "grid", "curve", "arrow"].includes(rule.draw) || rule.draw === "crosshair" && !!item.to || "box" in area || "zone" in area || "sphere" in area;
     const clipped = item.to ? C.line([p,item.to]) : [];
@@ -145,10 +153,16 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     if (Math.hypot(...p.map((n, j) => n - C.position[j])) > far || xy[0] < -64 || xy[0] > C.width + 64 || xy[1] < -64 || xy[1] > C.height + 64) {
       if (!extended) return "skip";
     }
-    const weight = item.weight ?? 0.7, size = 4 + weight * 4, alpha = (0.35 + weight * 0.65) * Math.max(0.12, 1 - Math.hypot(...p.map((n, j) => n - C.position[j])) / fade);
+    const weight = item.weight ?? 0.7, size = 4 + weight * 4, alpha = item.base ? item.opacity??1 : (0.35 + weight * 0.65) * Math.max(0.12, 1 - Math.hypot(...p.map((n, j) => n - C.position[j])) / fade);
     const colour = palette[rule.style === "tone" ? item.tone ?? "signal" : rule.style] ?? palette.signal;
     ctx.strokeStyle = colour; ctx.fillStyle = colour; ctx.lineWidth = 1 + weight * 2; ctx.globalAlpha = alpha; ctx.setLineDash([]);
     const hit = (ps: XY[], fill = false, priority = fill ? 1 : 2) => { hits.push({ key: item.key, points: ps, fill, priority }); };
+    if(item.base==="spots"){
+      ctx.beginPath();ctx.arc(...xy,1.5,0,Math.PI*2);ctx.fill();
+      hit([[xy[0]-4,xy[1]-4],[xy[0]+4,xy[1]-4],[xy[0]+4,xy[1]+4],[xy[0]-4,xy[1]+4]],true,3);
+      if(selected===item.key){ctx.strokeStyle=palette.signal;ctx.beginPath();ctx.arc(...xy,6,0,Math.PI*2);ctx.stroke();}
+      return "drawn";
+    }
     const stroke = (ps: readonly Vec3[], opacity = 1, closed = false) => { for (const run of C.line(ps, closed)) { ctx.beginPath(); path(ctx,run.points); ctx.globalAlpha = alpha * opacity; ctx.stroke(); hit(run.points); } ctx.globalAlpha = alpha; };
     const polygon = (ps: Vec3[], opacity: number) => { const projected = C.polygon(ps); ctx.beginPath(); path(ctx,projected, true); ctx.globalAlpha = alpha * opacity; ctx.fill(); hit(projected, true); ctx.globalAlpha = alpha; };
     const volume = (a: AgentAnchor, fill: boolean) => {
@@ -162,8 +176,12 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       stroke(bottom, fill ? 0.7 : 0.2, true); stroke(top, 0.12, true);
     };
     const arrow = (a: XY, b: XY) => { const angle = Math.atan2(b[1] - a[1], b[0] - a[0]); ctx.beginPath(); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle - 0.45), b[1] - 7 * Math.sin(angle - 0.45)); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle + 0.45), b[1] - 7 * Math.sin(angle + 0.45)); ctx.stroke(); };
-    const addLabel = (value: string, at: XY, caption = false) => { if (value && !currentCollapsed.has(item.key)) candidates.push({ key: item.key, text: value, x: at[0], y: at[1], priority: caption ? 1.5 : item.key === hovered ? -2 : item.key === selected ? -1 : labelPriority(item, important), colour: selected===item.key?palette.signal:caption ? palette.muted ?? colour : colour, alpha: item.key===selected?1:caption ? 0.85 : alpha, caption,selected:!caption&&item.key===selected,plate:item.key===selected&&markerXY?{x:xy[0],y:xy[1],radius:glyphIcon(item.glyph,isIconName).known?11:size}:undefined }); };
+    const addLabel = (value: string, at: XY, caption = false) => { if (value && !currentCollapsed.has(item.key)) candidates.push({ key: item.key, text: value, x: at[0], y: at[1], priority: item.base==="communities"?4:caption ? 1.5 : item.key === hovered ? -2 : item.key === selected ? -1 : labelPriority(item, important), colour: selected===item.key?palette.signal:caption ? palette.muted ?? colour : colour, alpha: item.key===selected?1:caption ? 0.85 : alpha, caption,communitySpots:item.base==="communities"?item.communitySpots:undefined,selected:!caption&&item.key===selected,plate:item.key===selected&&markerXY?{x:xy[0],y:xy[1],radius:glyphIcon(item.glyph,isIconName).known?11:size}:undefined }); };
     let label = rule.label.replace("{label}", item.label ?? "").replace("{name}", item.value?.name ?? "actor").replace("{type}", item.value?.type ?? "");
+    if(item.base==="communities"){
+      if(!item.opacity)return "skip";
+      addLabel(label,[xy[0],xy[1]]);return "drawn";
+    }
     const a = item.resolvedAnchor ?? item.anchor;
     if (item.region && selected === item.key && !["actor", "zone"].includes(item.kind)) volume(a, false);
     if (item.toRegion && item.toResolvedAnchor && selected === item.key) volume(item.toResolvedAnchor, false);
@@ -212,7 +230,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     const facet = Object.entries(item.facets ?? item.value?.facets ?? {})[0];
     if (facet && rule.draw === "diamond") addLabel(actorCaption(facet[1]), [xy[0]+(plated ? 11 : size)+4, xy[1]+13], true);
     if (selected === item.key) { ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(...xy, plated ? 14 : size+5, 0, Math.PI*2); ctx.stroke(); }
-    if (markerXY && xy[0]>=0 && xy[0]<=C.width && xy[1]>=0 && xy[1]<=C.height && (plated || ["ring","diamond","crosshair"].includes(rule.draw))) {
+    if (!item.base && markerXY && xy[0]>=0 && xy[0]<=C.width && xy[1]>=0 && xy[1]<=C.height && (plated || ["ring","diamond","crosshair"].includes(rule.draw))) {
       if (painted.size < EFFECT_MARKERS) {
         const projected = C.point(p);
         if (projected) painted.set(item.key,{ key:item.key,id:item.id,layer,version:item.version??item.t??0,screen:[...xy],point:[...p],offset:[xy[0]-projected[0],xy[1]-projected[1]],tone:rule.style==="tone"?item.tone??"signal":rule.style,marker:rule.draw,glyph:item.glyph,fades:item.kind!=="path"&&item.kind!=="zone" });
@@ -222,19 +240,21 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     return "drawn";
   }
   return {
-    clear: (width: number, height: number) => { effects.clear(); motion.clearRect(0,0,motionCanvas.width,motionCanvas.height); clear(width,height); }, animate,
+    clear: (width: number, height: number) => { effects.clear(); motion.clearRect(0,0,motionCanvas.width,motionCanvas.height); clear(width,height); publishedBaseCounts={...baseCounts}; }, animate,
     overlayLabels: () => overlayLabels,
     clusters: () => screenClusters,
     legend: () => orderedLegend(legend),
+    items: () => prepared?.items??[],
+    baseCounts: () => ({...publishedBaseCounts}),
     drawLegend(target: CanvasRenderingContext2D, width:number,height:number) {
       const entries=orderedLegend(legend);if(!entries.length)return;
       target.save();target.font="11px "+getComputedStyle(canvas).getPropertyValue("--font-mono");target.lineJoin="round";target.lineWidth=3;
       entries.forEach((entry,n)=>{const xy:XY=[22,height-52-(entries.length-1-n)*24],colour=palette[entry.tone]??palette.signal;target.strokeStyle=colour;target.fillStyle=colour;target.globalAlpha=1;
-        const draw=currentAnswer?.specs.kinds[entry.kind]?.draw??"ring";if(!plate(target,entry,draw,xy,false,colour,1))defaultMark(target,draw,xy,5);
+        const draw=currentAnswer?.specs.kinds[entry.kind]?.draw??"ring";if(entry.family==="spots"){target.beginPath();target.arc(...xy,1.5,0,Math.PI*2);target.fill();}else if(!plate(target,entry,draw,xy,false,colour,1))defaultMark(target,draw,xy,5);
         const label=`${FAMILY_TITLES[entry.family]??entry.family} ${entry.count}`;target.strokeStyle=stageColour;target.lineWidth=3;target.strokeText(label,38,xy[1]+4,Math.max(20,width-62));target.fillStyle=palette.muted??colour;target.fillText(label,38,xy[1]+4,Math.max(20,width-62));
       });target.restore();
     },
-    draw(answer: AgentAnswer, enabled: Readonly<Record<string, boolean>>, C: Camera, selected: string | null, budgetMs = 8, hovered: string | null = null, overlays: readonly AgentLabel[] = [], radius = 350, playback = { playing: false, epoch: "" }) {
+    draw(answer: AgentAnswer, enabled: Readonly<Record<string, boolean>>, C: Camera, selected: string | null, budgetMs = 8, hovered: string | null = null, overlays: readonly AgentLabel[] = [], radius = 350, playback = { playing: false, epoch: "" }, base?:{content?:HoloContent;on:BaseSwitches}) {
       const deadline = performance.now() + budgetMs;
       currentCamera=C;currentRadius=radius;currentAnswer=answer;currentEnabled=enabled;
       for (const [tone, token] of Object.entries(answer.specs.tones ?? {})) if (!swatches.has(tone) && /^[a-z-]+$/.test(token)) {
@@ -246,8 +266,10 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       const overlayKey = JSON.stringify(overlays);
       const key = JSON.stringify([playback.epoch,enabled]);
       effects.configure(playback.playing,key,reduced.matches);
-      const fresh = previousPlaying !== playback.playing || motionKey !== key || previous !== answer || previousEnabled !== enabled || previousCamera !== cameraKey || previousSelection !== selected || previousHover !== hovered || previousOverlay !== overlayKey;
+      const baseOn=JSON.stringify(base?.on);
+      const fresh = previousBase!==base?.content || previousBaseOn!==baseOn || previousPlaying !== playback.playing || motionKey !== key || previous !== answer || previousEnabled !== enabled || previousCamera !== cameraKey || previousSelection !== selected || previousHover !== hovered || previousOverlay !== overlayKey;
       if (fresh) {
+        previousBase=base?.content;previousBaseOn=baseOn;
         motionKey = key; previousPlaying = playback.playing;
         clear(C.width, C.height); previous = answer; previousEnabled = enabled; previousCamera = cameraKey; previousSelection = selected; previousHover = hovered; previousOverlay = overlayKey; }
       if (answer.specs.schema !== "xfh/projections-1") { effects.clear(); return; }
@@ -257,11 +279,12 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       if(performance.now()>deadline){paintFailed=true;effects.clear();return {pending:true,drawn:0,total:0};}
       ctx.font = "11px " + getComputedStyle(canvas).getPropertyValue("--font-mono"); ctx.lineJoin = "round";
       if(!prepared){
-        preparation??=prepare(answer,enabled,C,radius,selected,hovered);
+        preparation??=prepare(answer,enabled,C,radius,selected,hovered,base);
         while(performance.now()<=deadline){const step=preparation.next();if(step.done){prepared=step.value;preparation=undefined;break;}}
         if(!prepared){paintFailed=true;effects.clear();return {pending:true,drawn:0,total:0};}
       }
-      const {items,layerIds,missing,positions,important,plan}=prepared;
+      const {items,layerIds,missing,positions,important,plan,communityCount}=prepared;
+      baseCounts.communities=communityCount;
       currentCollapsed=plan.hidden;screenClusters=plan.clusters;
       for(;clusterCursor<screenClusters.length;clusterCursor++){
         if(performance.now()>deadline){paintFailed=true;effects.clear();return {pending:true,drawn:0,total:items.length};}
@@ -274,7 +297,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
         }
         for(;clusterMember<cluster.items.length;clusterMember++){
           if(clusterMember%64===0&&performance.now()>deadline){paintFailed=true;effects.clear();return {pending:true,drawn:0,total:items.length};}
-          addLegend(legend,cluster.items[clusterMember]);
+          const member=cluster.items[clusterMember];addLegend(legend,member);if(member.base)baseCounts[member.base]++;
         }
         clusterMember=0;
       }
@@ -284,7 +307,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
         if (performance.now() > deadline) { paintFailed=true; effects.clear(); break; }
         const result=paintItem(item,layerIds.get(item.key)!,C,selected,hovered,positions,important,radius,deadline,ctx);
         if(result==="pending"){paintFailed=true;effects.clear();return {pending:true,drawn,total:items.length};}
-        if(result==="drawn"){drawn++;if(!currentCollapsed.has(item.key))addLegend(legend,item);}
+        if(result==="drawn"){drawn++;if(item.base&&item.base!=="communities")baseCounts[item.base]++;if(!currentCollapsed.has(item.key))addLegend(legend,item);}
       }
       if (cursor >= items.length && !labelsPainted) {
         text.font = ctx.font;
@@ -295,6 +318,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
           text.globalAlpha = label.alpha; text.fillStyle = label.colour;
           text.strokeText(label.text, label.x, label.y);
           text.fillText(label.text, label.x, label.y);
+          if(label.communitySpots!==undefined)hits.push({key:label.key,points:[[label.x,label.y-13],[label.x+label.width,label.y-13],[label.x+label.width,label.y+4],[label.x,label.y+4]],fill:true,priority:3});
         }
         if (paintFailed || performance.now()>deadline) effects.clear();
         else {
@@ -305,6 +329,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
           });
         }
         labelsPainted = true;
+        publishedBaseCounts={...baseCounts};
       }
       ctx.globalAlpha = 1; return { pending: cursor < items.length, drawn, total: items.length };
     },

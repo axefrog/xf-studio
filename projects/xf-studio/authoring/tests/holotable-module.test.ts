@@ -122,7 +122,7 @@ describe("Holotable projection", () => {
     expect(trail(session("structure"), 110).length).toBe(2);
   });
   test("projects V, the placed event and a true scale bar", () => {
-    const layers = { v: true, camera: true, people: false, events: true, gaps: true, areas: true, cells: true, solids: true };
+    const layers = { v: true, camera: true, people: false, events: true, gaps: true, areas: true, cells: true, solids: true, pois: false, spots: false, communities: false };
     const scene = project(session("structure"), { provenance: null, areas: [], cells: [] }, 105, layers, ORBITS.tilt, 800, 500, "e2");
     expect(scene.v?.position[0]).toBe(50);
     expect(scene.primitives.some(p => p.kind === "marker" && p.id === "v")).toBe(true);
@@ -140,7 +140,7 @@ describe("Holotable projection", () => {
   test("no line runs far past the drawing: a district outline around the camera stays within the margin", () => {
     // A district much larger than the view, centred on V: unclipped, its near edges project millions of pixels away.
     const big = { kind: "district" as const, name: "Big", poly: [[-5000, -5000], [5000, -5000], [5000, 5000], [-5000, 5000]] as [number, number][], zlo: 0, zhi: 400 };
-    const layers = { v: true, camera: true, people: false, events: true, gaps: true, areas: true, cells: false, solids: true };
+    const layers = { v: true, camera: true, people: false, events: true, gaps: true, areas: true, cells: false, solids: true, pois: false, spots: false, communities: false };
     for (const orbit of Object.values(ORBITS)) {
       const scene = project(session("structure"), { provenance: null, areas: [big as never], cells: [] }, 105, layers, orbit, 800, 500, null);
       for (const p of scene.primitives) if (p.kind === "line") for (const [x, y] of p.points) {
@@ -242,7 +242,7 @@ test("People is opt-in, uses 3 px dots and five-second fading trails, and stops 
   const s = session("full"), world = { provenance: null, areas: [], cells: [] };
   const observations = Array.from({length:61},(_,i)=>({t:100+i/10, who:"a1", valid:true, entity:"one", position:[i,10,10] as const, command_state:"Executing"}));
   const withPeople = {...s, actors:observations};
-  const layers = { v:false, camera:false, people:false, events:false, gaps:false, areas:false, cells:false, solids:false };
+  const layers = { v:false, camera:false, people:false, events:false, gaps:false, areas:false, cells:false, solids: false, pois: false, spots: false, communities: false };
   expect(project(withPeople,world,106,layers,ORBITS.tilt,800,500,null).primitives.some(p=>p.kind!=="solid"&&p.style==="people")).toBe(false);
   const visible=project(withPeople,world,106,{...layers,people:true},ORBITS.tilt,800,500,null).primitives.filter(p=>p.kind!=="solid"&&p.style==="people");
   expect(visible.find(p=>p.kind==="marker")).toMatchObject({size:3,id:"person:a1",shape:"dot"});

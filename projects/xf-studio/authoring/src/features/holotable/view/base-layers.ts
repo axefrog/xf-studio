@@ -1,0 +1,89 @@
+/** Static world content projected into the existing marker/cluster vocabulary. No timeline or effects. */
+import type { HoloContent, HoloPoi, Vec3 } from "../types";
+import type { AgentItem } from "../agent-types";
+import type { camera } from "./projection";
+
+export const SPOT_DOT_CAP = 2000;
+export const POI_GLYPHS: Readonly<Record<string, string>> = Object.freeze({
+  Ripperdoc: "clinic", Medicine: "clinic", Cyberware: "clinic", "Food vendor": "market", Bar: "market", Clothing: "market",
+  "Gun shop": "market", "Junk shop": "market", "Tech vendor": "market", "Black market": "market",
+  Apartment: "refuge", "Apartment for sale": "refuge", "Hidden stash": "hideout", "Smuggler hideout": "hideout",
+  "Gang activity": "hazard", Cyberpsycho: "hazard", Outpost: "hazard",
+  Fixer:"place", "Drop point":"place", "Melee trainer":"place", "Netrunner trainer":"place", "Sex worker":"place",
+  Tarot:"place", Quest:"place", "Quest marker":"place", "Fast travel":"place", Resources:"place", Theft:"place",
+  Retrieval:"place", Sabotage:"place", "Client in distress":"place", "Bounty hunt":"place", "Car for sale":"place",
+  "Motorcycle for sale":"place", "Courier activity":"place", "Dogtown gate":"place", Race:"place", Metro:"place",
+});
+export const poiTitle = (p: HoloPoi) => Object.hasOwn(POI_GLYPHS,p.kind) ? p.kind : "Place";
+export const poiGlyph = (p: HoloPoi) => Object.hasOwn(POI_GLYPHS,p.kind) ? POI_GLYPHS[p.kind] : "place";
+export const readable = (s: string) => { const text=s.replace(/[-_]+/g," ").trim();return text ? text[0].toUpperCase()+text.slice(1) : text; };
+export const communityOpacity = (distance: number) => Math.max(0, Math.min(1, (distance-100)/100));
+const communityLabel = (n:number) => `Community · ${n} ${n===1?"spot":"spots"}`;
+export type BaseSwitches = Readonly<{ pois: boolean; spots: boolean; communities: boolean }>;
+const marker = (type: "pois"|"spots"|"communities", id: string, at: Vec3, label: string): AgentItem => ({
+  id, key:`base:${type}:${id}`, base:type, kind:type==="communities"?"label":"point", anchor:{at}, place:at, label, tone:"muted",
+});
+/** Every source traversal yields after 64 records; sorting is bounded by the reader's 50k cap. */
+export function* baseLayerSteps(content: HoloContent | undefined, on: BaseSwitches, C?: ReturnType<typeof camera>): Generator<void, AgentItem[]> {
+  if(!content)return [];
+  let work=0;const items:AgentItem[]=[],spots:typeof content.spots[number][]=[];
+  const visible=(at:Vec3)=>{if(!C)return true;const p=C.point(at);return !!p&&Math.hypot(at[0]-C.target[0],at[1]-C.target[1],at[2]-C.target[2])<=350&&p[0]>=0&&p[0]<=C.width&&p[1]>=0&&p[1]<=C.height;};
+  if(on.pois)for(const p of content.pois){if(work++%64===0)yield;if(visible(p.at))items.push({...marker("pois",p.id,p.at,poiTitle(p)),glyph:poiGlyph(p),tone:"signal"});}
+  if(on.spots||on.communities)for(const s of content.spots){if(work++%64===0)yield;if(visible(s.at))spots.push(s);}
+  if(on.spots){
+    const center=C?.target??[0,0,0],distance=(at:Vec3)=>(at[0]-center[0])**2+(at[1]-center[1])**2+(at[2]-center[2])**2;
+    // Max heap keeps the nearest 2,000 without an unyielding sort of the whole source.
+    const heap:{spot:typeof spots[number];distance:number}[]=[],compare=(a:typeof heap[number],b:typeof heap[number])=>a.distance-b.distance||a.spot.id.localeCompare(b.spot.id);
+    for(const spot of spots){
+      if(work++%64===0)yield;const row={spot,distance:distance(spot.at)};
+      if(heap.length<SPOT_DOT_CAP){heap.push(row);let i=heap.length-1;while(i){const parent=(i-1)>>1;if(compare(heap[parent],heap[i])>=0)break;[heap[parent],heap[i]]=[heap[i],heap[parent]];i=parent;}}
+      else if(compare(row,heap[0])<0){heap[0]=row;let i=0;while(i*2+1<heap.length){let child=i*2+1;if(child+1<heap.length&&compare(heap[child+1],heap[child])>0)child++;if(compare(heap[i],heap[child])>=0)break;[heap[i],heap[child]]=[heap[child],heap[i]];i=child;}}
+    }
+    heap.sort(compare);
+    for(const {spot:s} of heap){if(work++%64===0)yield;items.push(marker("spots",s.id,s.at,""));}
+  }
+  if(on.communities){
+    const alpha=C?communityOpacity(Math.hypot(...C.position.map((n,i)=>n-C.target[i]))):1;
+      const sums=new Map<string,{at:[number,number,number];n:number}>();
+      for(const s of spots){if(work++%64===0)yield;for(const id of s.communities){if(work++%64===0)yield;const sum=sums.get(id)??{at:[0,0,0],n:0};sum.n++;for(let i=0;i<3;i++)sum.at[i]+=s.at[i];sums.set(id,sum);}}
+      // Keep presence independent of label opacity: the Show count includes close communities.
+      for(const c of content.communities){if(work++%64===0)yield;const sum=sums.get(c.id);if(sum)items.push({...marker("communities",c.id,sum.at.map(n=>n/sum.n) as [number,number,number],communityLabel(sum.n)),opacity:alpha,communitySpots:sum.n});}
+  }
+  return items;
+}
+export function baseLayerItems(content:HoloContent|undefined,on:BaseSwitches,C?:ReturnType<typeof camera>) { const steps=baseLayerSteps(content,on,C);let step=steps.next();while(!step.done)step=steps.next();return step.value; }
+
+/** Explicit selection/focus is independent of the drawing cap and the camera. */
+export function baseItem(content:HoloContent|undefined,key:string):AgentItem|undefined {
+  if(!content)return;
+  const p=content.pois.find(p=>`base:pois:${p.id}`===key);
+  if(p)return {...marker("pois",p.id,p.at,poiTitle(p)),glyph:poiGlyph(p),tone:"signal"};
+  const s=content.spots.find(s=>`base:spots:${s.id}`===key);
+  if(s)return marker("spots",s.id,s.at,"");
+  const c=content.communities.find(c=>`base:communities:${c.id}`===key);
+  if(c){const spots=content.spots.filter(s=>s.communities.includes(c.id));if(!spots.length)return;
+    return {...marker("communities",c.id,[0,1,2].map(axis=>spots.reduce((sum,s)=>sum+s.at[axis],0)/spots.length) as [number,number,number],communityLabel(spots.length)),communitySpots:spots.length};}
+}
+
+export interface BaseCard { title:string; summary:string; when?:string; involved:{key:string;label:string}[]; more:number; technical:[string,string][] }
+export function baseCard(content:HoloContent|undefined,key:string):BaseCard|undefined {
+  if(!content)return;
+  const card:BaseCard={title:"",summary:"",involved:[],more:0,technical:[]};
+  const p=content.pois.find(p=>`base:pois:${p.id}`===key);
+  if(p){card.title=poiTitle(p);card.summary=card.title==="Place"?"Map pin":"Point of interest";card.technical=[["Id",p.id],["Variant",p.variant??p.kind],...(p.record?[["Record",p.record] as [string,string]]:[]),...(p.journal?[["Journal",p.journal] as [string,string]]:[])];return card;}
+  const s=content.spots.find(s=>`base:spots:${s.id}`===key);
+  if(s){card.title="Spot";card.summary=s.workspot?.tags.map(readable).filter(Boolean).join(", ")||"No activity recorded";card.involved=s.communities.map(id=>({key:`base:communities:${id}`,label:"Community"}));card.technical=[["Id",s.id],["Yaw",`${s.yaw}°`],...(s.workspot?[["Workspot",s.workspot.path] as [string,string]]:[])];return card;}
+  const c=content.communities.find(c=>`base:communities:${c.id}`===key);
+  if(c){
+    card.title="Community";const records=new Map<string,number>(),phases=new Set<string>(),spots=new Set<string>();
+    for(const e of c.entries){const name=e.record?readable(e.record.split(".").at(-1)!):"Character record unavailable";records.set(name,(records.get(name)??0)+1);for(const p of e.phases){phases.add(p.name);for(const id of p.spots)spots.add(id);}}
+    const raw=[...new Set(c.entries.flatMap(e=>e.record?[e.record]:[]))];
+    card.summary=raw.some(r=>/^\d+$/.test(r))?`${raw.length} character ${raw.length===1?"type":"types"}`:[...records].map(([name,n])=>`${name} · ${n}`).join("\n")||"No entries";
+    // Names containing code punctuation/digits, or <=3 characters, aren't presented as times.
+    const coded=[...phases].some(name=>name.trim().length<=3||!/^\p{L}+(?:[ '\u2019-]\p{L}+)*$/u.test(name));
+    card.when=coded?`${phases.size} time ${phases.size===1?"phase":"phases"}`:[...phases].join(", ");
+    const byId=new Map(content.spots.map(s=>[s.id,s]));
+    card.involved=[...spots].slice(0,12).map((id,index)=>{const tag=byId.get(id)?.workspot?.tags[0]?.replace(/[-_]+/g," ").trim();return {key:`base:spots:${id}`,label:`Spot · ${tag||index+1}`};});
+    card.more=Math.max(0,spots.size-12);card.technical=[["Id",c.id],...(raw.length?[["Character records",raw.join(", ")] as [string,string]]:[]),...(coded?[["Time phases",[...phases].join(", ")] as [string,string]]:[])];return card;
+  }
+}

@@ -236,3 +236,41 @@ test("legend retains its family tone through selection and hover",()=>withCanvas
  const data=answer([{...point(),kind:"actor",glyph:"fixer",tone:"accent"}]),C=camera([0,0,0],ORBITS.top,300,500);
  for(const [selected,hovered] of [[null,null],["p/a/a",null],[null,"p/a/a"]] as const){renderer.draw(data,{},C,selected,1000,hovered);expect(renderer.legend()[0].tone).toBe("signal");}
 }));
+
+
+test("static world markers use Places counts and unlabelled 3px dots, without pulse or retraction effects",()=>withCanvas((renderer,arcs,_strokes,names)=>{
+ const C=camera([0,0,0],{...ORBITS.top,distance:300},850,500),playback={playing:true,epoch:"static"},enabled={},on={pois:true,spots:true,communities:true};
+ const content={available:true,slices:["test"],pois:[{id:"p",place:"test",kind:"Ripperdoc",at:[-50,0,0] as const}],spots:[{id:"s",place:"test",at:[50,0,0] as const,yaw:0,communities:[]}],communities:[]};
+ renderer.draw(answer([]),enabled,C,null,1000,null,[],350,playback,{content,on});
+ expect(arcs.map(a=>a[2])).toContain(1.5);expect(names).not.toContain("Spot");expect(renderer.legend().find(e=>e.family==="place")?.count).toBe(1);expect(renderer.baseCounts()).toEqual({pois:1,spots:1,communities:0});
+ expect(renderer.animate()).toBe(false);
+ renderer.draw(answer([]),enabled,C,null,1000,null,[],350,playback,{content:{...content,pois:[],spots:[]},on});
+ expect(renderer.animate()).toBe(false);
+}));
+
+
+test("overlapping gathering dots never cluster or fan out; plated markers still cluster and Spots follows Places",()=>withCanvas((renderer,arcs,_strokes,names)=>{
+ const C=camera([0,0,0],{...ORBITS.top,distance:300},850,500),on={pois:true,spots:true,communities:true};
+ const content={available:true,slices:["test"],pois:[{id:"p",place:"test",kind:"Ripperdoc",at:[-50,0,0] as const},{id:"q",place:"test",kind:"Medicine",at:[-50,0,0] as const}],spots:[{id:"s",place:"test",at:[0,0,0] as const,yaw:0,communities:["c"]},{id:"t",place:"test",at:[0,0,0] as const,yaw:0,communities:["c"]}],communities:[{id:"c",place:"test",entries:[]}]};
+ renderer.draw(answer([]),{},C,null,1000,null,[],350,{playing:false,epoch:"dots"},{content,on});
+ expect(renderer.clusters()).toHaveLength(1);expect(renderer.clusters()[0].items.every(i=>i.base==="pois")).toBe(true);
+ expect(arcs.filter(a=>a[2]===1.5).map(a=>a.slice(0,2))).toEqual([C.point([0,0,0])!,C.point([0,0,0])!]);
+ expect(renderer.legend().map(e=>[e.family,e.count])).toEqual([["place",2],["spots",2]]);
+ expect(names.filter(s=>s.startsWith("Community"))).toEqual(["Community · 2 spots"]);
+ arcs.length=0;names.length=0;
+ renderer.draw(answer([]),{},camera([0,0,0],{...ORBITS.top,distance:90},850,500),null,1000,null,[],350,{playing:false,epoch:"dots"},{content,on});
+ expect(renderer.baseCounts().communities).toBe(1);expect(names.filter(s=>s.startsWith("Community"))).toEqual([]);
+}));
+
+
+test("selecting an item retains complete view counts through a budgeted redraw and identical completion",()=>withCanvas(renderer=>{
+ const C=camera([0,0,0],{...ORBITS.top,distance:300},850,500),enabled={},data=answer([]),on={pois:true,spots:true,communities:true};
+ const content={available:true,slices:["test"],pois:[{id:"p",place:"test",kind:"Ripperdoc",at:[-50,0,0] as const}],spots:[{id:"s",place:"test",at:[0,0,0] as const,yaw:0,communities:["c"]}],communities:[{id:"c",place:"test",entries:[]}]};
+ const draw=(selected:string|null,budget:number)=>renderer.draw(data,enabled,C,selected,budget,null,[],350,{playing:false,epoch:"selection"},{content,on});
+ expect(draw(null,1000)?.pending).toBe(false);const before=renderer.baseCounts();expect(before).toEqual({pois:1,spots:1,communities:1});
+ for(const selected of ["base:communities:c","base:pois:p",null]){
+   expect(draw(selected,-1)?.pending).toBe(true);expect(renderer.baseCounts()).toEqual(before);
+   expect(draw(selected,1000)?.pending).toBe(false);expect(renderer.baseCounts()).toEqual(before);
+ }
+ renderer.clear(850,500);expect(renderer.baseCounts()).toEqual({pois:0,spots:0,communities:0});
+}));

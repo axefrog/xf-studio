@@ -12,6 +12,16 @@ beforeAll(()=>installLightDom());afterAll(()=>uninstallLightDom());
 const settle=()=>new Promise(r=>setTimeout(r,0));
 const full:AgentAnswer={specs:{schema:"xfh/projections-1",kinds:{}},here:[],layers:[{id:"writer/actors",title:"Actors",producer:"writer",layer:"actors",refused:2,reason:"Bad coordinates.",notPlaced:["missing"],otherBranches:[],items:[{id:"a",key:"writer/actors/a",kind:"actor",glyph:"courier",badge:"pending",anchor:{at:[0,0,0]},place:[0,0,0],value:{name:"Synthetic Mira",role:"generated fixer",facets:{thinking:"Wait for the courier"}},relations:["writer/actors/tie"],cite:"agent:writer:1"},{id:"kai",key:"writer/actors/kai",kind:"actor",anchor:{at:[1,0,0]},place:[1,0,0],value:{name:"Synthetic Kai"}},{id:"tie",key:"writer/actors/tie",kind:"relation",anchor:{item:"a"},value:{type:"loyal to",mutual:true},links:{from:"writer/actors/kai",to:"writer/actors/a"},cite:"agent:writer:2"}]},{id:"writer/places",title:"Places",producer:"writer",layer:"places",refused:0,reason:"",notPlaced:[],otherBranches:[],items:[]}]};
 const session:HoloSession={meta:{session:"s",run:1,start:0,end:10,from:0,to:10,channels:[],complete:true,dropped:0,missedDeadlines:0,largestGapS:0,coverage:"synthetic",problems:[]},v:[],camera:[],events:[],gaps:[]};
+test("base Show rows use the bound view counts and absent files say Not built yet",()=>{
+ const ctl=new AbortController(),service=createHolotable({transport:null},ctl.signal);
+ service.navigation("bound",{available:()=>true,canBack:()=>false,back:()=>false,focus:()=>false,baseCounts:()=>({pois:3,spots:17,communities:2})},ctl.signal);
+ const original=service.snapshot();let available=true;
+ const facade={...holotableFacade(service),snapshot:()=>({...original,layers:{...original.layers,pois:true,spots:true,communities:true},open:{dir:"synthetic",session,world:{provenance:null,areas:[],cells:[],content:{available,slices:["kabuki"],pois:[],spots:[],communities:[]}}}})};
+ const panel=holotableDetailsPanel({facade,targets:()=>({view:"bound"}),dispatch:async()=>true,changed(){}} as unknown as ModuleViewContext<HolotableFacade>);
+ try {panel.update(undefined as never);expect(panel.spec.element.textContent).toContain("3 on the map now");expect(panel.spec.element.textContent).toContain("17 on the map now");expect(panel.spec.element.textContent).toContain("2 on the map now");
+  available=false;panel.update(undefined as never);expect(panel.spec.element.textContent.match(/Not built yet/g)).toHaveLength(3);expect(panel.spec.element.textContent).toContain("World content for this district hasn't been prepared");
+ }finally{panel.dispose?.();ctl.abort();}
+});
 test("producer switches compose layer rows; inspector shows facets, relations, placement and What's here",async()=>{
  const ctl=new AbortController();let stops=0;
  const service=createHolotable({later:()=>()=>{},transport:async(method,p)=>{
@@ -25,7 +35,7 @@ test("producer switches compose layer rows; inspector shows facets, relations, p
    return{ok:true,status:200,data:{ok:true,result}};
  }},ctl.signal);
  service.shown();await settle();await service.dispatch({kind:"holo.open",dir:"fixture"});
- const facade=holotableFacade(service),ctx={facade,changed(){},dispatch:async(action:any)=>(await service.dispatch(action)).ok} as ModuleViewContext<HolotableFacade>;
+ const facade=holotableFacade(service),ctx={facade,changed(){},targets:()=>({}),dispatch:async(action:any)=>(await service.dispatch(action)).ok} as ModuleViewContext<HolotableFacade>;
  const panel=holotableDetailsPanel(ctx);lightDocument.body.append(panel.spec.element as unknown as LightElement);panel.update(undefined as never);
  expect(panel.spec.element.textContent).toContain("Agent layers");expect(panel.spec.element.textContent).toContain("2 refused");
  const story=lightDocument.body.querySelectorAll("input").find(i=>i.parentNode?.textContent.includes("Story content"));expect(story?.checked).toBe(true);
@@ -64,7 +74,7 @@ test("failed opens render their title and reason in place with the library retry
 test("layers-only switches hide recording controls and restore them on a recording or live session",()=>{
  const ctl=new AbortController(),service=createHolotable({transport:null},ctl.signal);
  let state:HoloState={...service.snapshot(),open:{dir:"layers:writer/week",session:{...session,meta:{...session.meta,standalone:{set:"writer/week",title:"Week",clock:"game",branches:[]}}},world:{provenance:null,areas:[],cells:[]}}};
- const facade=holotableFacade(service),ctx={facade:{...facade,snapshot:()=>state},dispatch:()=>Promise.resolve({ok:true})} as unknown as ModuleViewContext<HolotableFacade>;
+ const facade=holotableFacade(service),ctx={facade:{...facade,snapshot:()=>state},targets:()=>({}),dispatch:()=>Promise.resolve({ok:true})} as unknown as ModuleViewContext<HolotableFacade>;
  const panel=holotableDetailsPanel(ctx);lightDocument.body.append(panel.spec.element as unknown as LightElement);
  const row=(label:string)=>(panel.spec.element as unknown as LightElement).querySelectorAll("input").find(i=>i.parentNode?.textContent.includes(label))!.closest(".toggle-row")!;
  panel.update(undefined as never);
@@ -95,7 +105,7 @@ test("the People toggle clears its inspector and does not restore the person whe
   let panel: ReturnType<typeof holotableDetailsPanel> | undefined;
   try {
     await service.dispatch({ kind: "holo.refresh" }); await service.dispatch({ kind: "holo.open", dir: "people" });
-    const ctx = { facade: holotableFacade(service), dispatch: async (action: any) => (await service.dispatch(action)).ok } as ModuleViewContext<HolotableFacade>;
+    const ctx = { facade: holotableFacade(service), targets:()=>({}), dispatch: async (action: any) => (await service.dispatch(action)).ok } as ModuleViewContext<HolotableFacade>;
     panel = holotableDetailsPanel(ctx); panel.update(undefined as never);
     const toggle = (panel.spec.element as unknown as LightElement).querySelectorAll("input").find(i => i.parentNode?.textContent.includes("People"))!;
     toggle.checked = true; toggle.dispatchEvent(lightEvent("change")); await settle();

@@ -7,12 +7,14 @@ import { ContentBudget, stringBytes, type ContentUsage } from "./world-content-b
 
 // The four provisional Story Engine decisions live here; none is inferred by an adapter.
 export const CONTENT_POLICY = Object.freeze({ files: "per-slice", workspots: "activity-and-tags", characters: "record-ids", variants: "defaults" });
-export const WORLD_CONTENT_READER = "w1.2";
+export const WORLD_CONTENT_READER = "w1.3";
+/** Prepared slices, shared by the reader and the demand-driven service. */
+export const WORLD_CONTENT_SLICES = [{ id: "kabuki", place: "Districts.Kabuki" }] as const;
 export const CONTENT_CAP = 50_000, CONTENT_FILE_CAP = 32 * 1024 * 1024;
 export interface Community { id: string; place: string; name?: string; entries: { name: string; record?: string; phases: { name: string; time?: [number, number]; spots: string[] }[] }[] }
 export interface Spot { id: string; place: string; at: Vec3; yaw: number; workspot?: { path: string; activity?: string; tags: string[] }; communities: string[] }
 export interface Spawner { id: string; place: string; at: Vec3; yaw: number; record: string; onStart?: boolean }
-export interface Poi { id: string; place: string; at: Vec3; kind: string; title?: string; record?: string; journal?: string }
+export interface Poi { id: string; place: string; at: Vec3; kind: string; variant?: string; title?: string; record?: string; journal?: string }
 export interface Coverage { read: Record<string, number>; kept: Record<string, number>; dropped: Record<string, number>; reasons: Record<string, Record<string, number>> }
 export interface WorldContent {
   schema: "xfh/world-content-1"; slice: { id: string; title: string; places: string[] };
@@ -45,7 +47,8 @@ export function placeAt(areas: readonly Area[], p: Vec3): Area | undefined {
 }
 export function selectSlice(pack: WorldPack, id: string) {
   for(const a of pack.areas)if(!Array.isArray(a.poly)||a.poly.length<3||a.poly.length>100_000||!Number.isFinite(a.zlo)||!Number.isFinite(a.zhi)||a.zlo>a.zhi||a.poly.some(p=>p.length!==2||!p.every(Number.isFinite)))throw new NativeMalformedError("Invalid world-pack place outline.");
-  const roots = pack.areas.filter(a => a.kind === "district" && a.id.toLowerCase() === `districts.${id.toLowerCase()}`);
+  const place = WORLD_CONTENT_SLICES.find(slice=>slice.id===id.toLowerCase())?.place ?? `Districts.${id}`;
+  const roots = pack.areas.filter(a => a.kind === "district" && a.id.toLowerCase() === place.toLowerCase());
   if (!roots.length) throw new NativeMalformedError(`No district outline for slice ${id}.`);
   const ids = new Set(roots.map(a => a.id));
   let changed = true;
@@ -185,7 +188,7 @@ export class ContentAssembler {
   addPoi(p: Omit<Poi,"place"|"kind"> & {variant?:string}) {
     if(!p.variant) {count(this.counts,"pois","journal variant unavailable");return;}
     const place=this.admit("pois",p.id,p.at);if(!place)return;
-    this.budget.charge({bytes:stringBytes(p.variant)+stringBytes(p.title)+stringBytes(p.record)+stringBytes(p.journal)});
-    const {variant,...row}=p;this.pois.push({...row,place,kind:poiKind(variant)});
+    this.budget.charge({bytes:stringBytes(p.variant)+stringBytes(poiKind(p.variant))+stringBytes(p.title)+stringBytes(p.record)+stringBytes(p.journal)});
+    const {variant,...row}=p;this.pois.push({...row,variant,place,kind:poiKind(variant)});
   }
 }

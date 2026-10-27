@@ -1,0 +1,71 @@
+import { expect, test } from "bun:test";
+import { baseCard, baseItem, baseLayerItems, baseLayerSteps, communityOpacity, poiGlyph, poiTitle } from "../src/features/holotable/view/base-layers";
+import { camera, ORBITS } from "../src/features/holotable/view/projection";
+import { createHolotable } from "../src/features/holotable/service";
+import { worldContexts } from "../src/features/holotable/world-context";
+import type { HoloContent } from "../src/features/holotable/types";
+const on={pois:true,spots:true,communities:true};
+const content:HoloContent={available:true,slices:["kabuki"],pois:[{id:"p",place:"test",at:[0,0,0],kind:"Ripperdoc",variant:"ServicePointRipperdocVariant",record:"1",journal:"journal/p"}],spots:[
+ {id:"s1",place:"test",at:[-10,0,0],yaw:90,workspot:{path:"test.workspot",tags:["stand-around","talk_to_friend"]},communities:["c"]},
+ {id:"s2",place:"test",at:[10,0,0],yaw:0,communities:["c"]},
+ {id:"far",place:"test",at:[900,0,0],yaw:0,communities:["c"]}],communities:[{id:"c",place:"test",entries:[{name:"resident",record:"Character.street_vendor",phases:[{name:"day_shift",spots:["s1","s2","far"]}]}]}]};
+test("POIs map only to Places glyphs and unknown raw variants say Place",()=>{
+ expect(poiGlyph(content.pois[0])).toBe("clinic");expect(poiTitle(content.pois[0])).toBe("Ripperdoc");
+ expect(poiGlyph({...content.pois[0],kind:"Food vendor"})).toBe("market");expect(poiGlyph({...content.pois[0],kind:"FutureVariant"})).toBe("place");expect(poiTitle({...content.pois[0],kind:"FutureVariant"})).toBe("Place");
+});
+test("visible linked spots determine a community centroid and the overview fade",()=>{
+ const C=camera([0,0,0],{...ORBITS.top,distance:300},850,500),items=baseLayerItems(content,on,C),community=items.find(i=>i.base==="communities")!;
+ expect(community.place).toEqual([0,0,0]);expect(community.label).toBe("Community · 2 spots");
+ expect(communityOpacity(100)).toBe(0);expect(communityOpacity(150)).toBe(.5);expect(communityOpacity(200)).toBe(1);
+ expect(baseLayerItems(content,on,camera([0,0,0],{...ORBITS.top,distance:90},850,500)).find(i=>i.base==="communities")).toMatchObject({opacity:0,communitySpots:2});
+});
+test("dot work is capped nearest first, with cooperative source traversal",()=>{
+ const dense={...content,spots:Array.from({length:5000},(_,i)=>({id:String(i),place:"test",at:[5000-i,0,0] as const,yaw:0,communities:[]}))};
+ const steps=baseLayerSteps(dense,{pois:false,spots:true,communities:false});let yields=0,step=steps.next();while(!step.done){yields++;step=steps.next();}
+ expect(yields).toBeGreaterThan(70);expect(step.value.length).toBe(2000);expect(baseItem(dense,"base:spots:0")?.place).toEqual([5000,0,0]);expect(step.value[0].id).toBe("4999");expect(step.value.at(-1)?.id).toBe("3000");expect(step.value.every(i=>!i.label&&!i.glyph)).toBe(true);
+});
+test("base cards keep raw values in Technical and expose phases and bounded chips",()=>{
+ expect(baseCard(content,"base:pois:p")).toMatchObject({title:"Ripperdoc",summary:"Point of interest",technical:[["Id","p"],["Variant","ServicePointRipperdocVariant"],["Record","1"],["Journal","journal/p"]]});
+ expect(baseCard(content,"base:spots:s1")).toMatchObject({title:"Spot",summary:"Stand around, Talk to friend",involved:[{key:"base:communities:c",label:"Community"}]});
+ expect(baseCard(content,"base:communities:c")).toMatchObject({summary:"Street vendor · 1",when:"1 time phase",more:0,involved:[{key:"base:spots:s1",label:"Spot · stand around"},{key:"base:spots:s2",label:"Spot · 2"},{key:"base:spots:far",label:"Spot · 3"}]});
+ const many={...content,communities:[{...content.communities[0],entries:[{name:"resident",record:"12345",phases:[{name:"night",spots:Array.from({length:20},(_,i)=>String(i))}]}]}]};
+ expect(baseCard(many,"base:communities:c")).toMatchObject({summary:"1 character type",more:8});expect(baseCard(many,"base:communities:c")?.involved).toHaveLength(12);
+});
+test("view leases acquire content only while a base layer is enabled and static content never adds a change",async()=>{
+ const ctl=new AbortController(),view=new AbortController(),timers=new Set<()=>void>(),calls:Record<string,unknown>[]=[];
+ const session={meta:{session:"test",run:1,start:0,end:100,from:0,to:100,channels:[],complete:true,dropped:0,missedDeadlines:0,largestGapS:0,coverage:"",problems:[]},v:[],camera:[],events:[],gaps:[]};
+ const service=createHolotable({later:(ms,fn)=>{if(ms===250)timers.add(fn);return()=>timers.delete(fn);},transport:async(method,p)=>{let result:unknown={};if(method==="runs.list")result=[{dir:"r",session:"test",run:1}];if(method==="session.open")result=session;if(method==="world.around"){calls.push(p);result={provenance:null,areas:[],cells:[],content:{...content,...(p.content?{}:{pois:[],spots:[],communities:[]})}};}return {ok:true,status:200,data:{ok:true,result}};}},ctl.signal);
+ const settle=()=>new Promise(r=>setTimeout(r,0)),flush=async()=>{for(const fn of [...timers]){timers.delete(fn);fn();}await settle();};
+ try{
+  service.shown();await settle();await service.dispatch({kind:"holo.open",dir:"r"});service.context(view.signal).want([0,0,0]);await flush();expect(calls.every(c=>!c.content)).toBe(true);
+  expect(service.snapshot().layers).toMatchObject({pois:false,spots:false,communities:false});await service.dispatch({kind:"holo.layer",id:"pois",on:true});await flush();expect(calls.at(-1)?.content).toBe(true);expect(service.nextVisibleChange()).toBeUndefined();
+  await service.dispatch({kind:"holo.layer",id:"pois",on:false});await flush();expect(calls.at(-1)?.content).toBeUndefined();
+  view.abort();expect(service.snapshot().open?.world.content?.pois).toEqual([]);
+ }finally{view.abort();ctl.abort();}
+});
+
+test("separate view leases retain only their own nearby content and file availability",async()=>{
+ const ctl=new AbortController(),a=new AbortController(),b=new AbortController(),timers=new Set<()=>void>();let published:HoloContent|undefined;
+ const contexts=worldContexts({source:()=>({identity:"test",params:{content:true}}),later:(_ms,fn)=>{timers.add(fn);return()=>timers.delete(fn);},load:async p=>{
+  const x=(p.center as number[])[0];return {provenance:null,areas:[],cells:[],content:{...content,available:x===0,pois:x===0?content.pois:[],spots:x===0?content.spots:[],communities:x===0?content.communities:[]}};
+ },changed:world=>{published=world.content;}},ctl.signal);
+ try{
+  const first=contexts.lease(a.signal),second=contexts.lease(b.signal);first.want([0,0,0]);second.want([2000,0,0]);
+  for(const fn of [...timers]){timers.delete(fn);fn();}await new Promise(r=>setTimeout(r,0));
+  expect(published?.pois.length).toBe(1);expect(first.contentAvailable()).toBe(true);expect(second.contentAvailable()).toBe(false);
+  a.abort();expect(published?.pois).toEqual([]);expect(published?.spots).toEqual([]);expect(second.contentAvailable()).toBe(false);
+  b.abort();expect(published?.communities).toEqual([]);
+ }finally{a.abort();b.abort();ctl.abort();}
+});
+
+
+test("short or coded phases use a count and raw Technical names; words retain their wording",()=>{
+ const make=(names:string[])=>({...content,communities:[{...content.communities[0],entries:[{name:"resident",phases:names.map(name=>({name,spots:["s1"]}))}]}]});
+ const coded=baseCard(make(["A","B"]),"base:communities:c")!;
+ expect(coded.when).toBe("2 time phases");expect(coded.technical).toContainEqual(["Time phases","A, B"]);
+ expect(baseCard(make(["AB_01"]),"base:communities:c")?.when).toBe("1 time phase");
+ expect(baseCard(make(["Morning","late evening"]),"base:communities:c")?.when).toBe("Morning, late evening");
+ expect(baseCard(content,"base:spots:s2")?.summary).toBe("No activity recorded");
+ const one={...content,spots:[content.spots[0]],communities:content.communities};
+ expect(baseLayerItems(one,on).find(i=>i.base==="communities")?.label).toBe("Community · 1 spot");
+});

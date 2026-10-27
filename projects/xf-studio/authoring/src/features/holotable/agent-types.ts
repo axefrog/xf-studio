@@ -2,6 +2,8 @@
 import type { Vec3 } from "./types";
 export type AgentAnchor = { at: Vec3 } | { entity: string } | { item: string } | { region: string } | { path: readonly Vec3[] } | { zone: { poly: readonly (readonly [number, number])[]; zlo: number; zhi: number } } | { box: { min: Vec3; max: Vec3 } } | { sphere: { at: Vec3; r: number } } | { grid: { origin: Vec3; cell: number; cols: number; rows: number } };
 export interface AgentItem {
+  /** Renderer-owned static base content; never enters agent timelines or effects. */
+  base?: "pois" | "spots" | "communities"; opacity?: number; communitySpots?: number;
   id: string; key: string; version?: number; kind: string; t?: number; until?: number; anchor: AgentAnchor; resolvedAnchor?: AgentAnchor; place?: Vec3; to?: Vec3;
   value?: { name?: string; role?: string; facets?: Record<string, string>; type?: string; strength?: number; mutual?: boolean; scalars?: readonly number[]; vectors?: readonly (readonly [number, number])[]; from?: AgentAnchor; to?: AgentAnchor };
   glyph?: string; badge?: string; label?: string; detail?: string; facets?: Record<string, string>; tone?: string; weight?: number; cite?: string; relations?: string[]; region?: { id: string; name: string; kind: string };

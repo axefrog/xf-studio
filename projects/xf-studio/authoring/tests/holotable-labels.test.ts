@@ -116,3 +116,14 @@ test("bounds culling retains paths, areas, fields and relations crossing the 350
  expect(agentInRange({...base,place:[351,0,0]},target,350)).toBe(false);
  expect(agentInRange({...base,kind:"path",anchor:{path:[[1000,1000,0],[2000,2000,0]]},place:[1000,1000,0]},target,350)).toBe(false);
 });
+
+
+test("community labels keep the largest at a collision, respect plates even when selected, and show at most twelve",()=>{
+ const community=(key:string,n:number,x=20,y=30):AgentLabel=>({...label(key,4,x,y),text:`Community · ${n} ${n===1?"spot":"spots"}`,communitySpots:n});
+ const large=community("large",20),small=community("small",1);
+ expect(placeLabels([small,large],measure,1100,400).map(l=>l.key)).toEqual(["large"]);
+ expect(placeLabels([{...large,selected:true,plate:{x:20,y:30,radius:9}}],measure,1100,400,40,[],[{key:"poi",x:60,y:30,radius:9}])).toEqual([]);
+ const many=Array.from({length:20},(_,i)=>community(String(i),20-i,20+(i%5)*210,30+Math.floor(i/5)*50));
+ const placed=placeLabels(many.reverse(),measure,1100,400);
+ expect(placed).toHaveLength(12);expect(placed.map(l=>l.communitySpots)).toEqual(Array.from({length:12},(_,i)=>20-i));
+});

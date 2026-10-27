@@ -29,7 +29,7 @@ test("fit and every preset reset pan, while replay follows V with a persistent X
  expect(fitOrbit({min:[0,0,0],max:[100,100,20]},orbit,850,600).pan).toEqual([0,0]);
  for(const preset of Object.values(ORBITS))expect(preset.pan).toEqual([0,0]);
  const s:HoloSession={meta:{session:"s",run:1,start:0,end:1,from:0,to:1,channels:[],complete:true,dropped:0,missedDeadlines:0,largestGapS:0,coverage:"",problems:[]},v:[0,1].map(t=>({t,seq:t,position:[t*100,t*50,10] as Vec3,yaw:0,speed:1,health:1,healthMax:1,inCombat:false,vehicle:false,busy:""})),camera:[],events:[],gaps:[]};
- const layers={v:true,camera:false,people:false,events:false,gaps:false,areas:false,cells:false,solids:false};
+ const layers={v:true,camera:false,people:false,events:false,gaps:false,areas:false,cells:false,solids: false, pois: false, spots: false, communities: false};
  expect(project(s,empty,0,layers,orbit,850,600,null).solidCamera.target).toEqual([45,-23,10]);
  expect(project(s,empty,1,layers,orbit,850,600,null).solidCamera.target).toEqual([145,27,10]);
  expect(orbit.pan).toEqual([45,-23]);

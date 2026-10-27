@@ -44,7 +44,12 @@ export interface HoloSolid {
   readonly id: string; readonly kind: "box" | "sphere" | "capsule"; readonly center: Vec3;
   readonly axes: readonly [Vec3, Vec3, Vec3]; readonly size: Vec3;
 }
+export interface HoloPoi { readonly id: string; readonly place: string; readonly at: Vec3; readonly kind: string; readonly variant?: string; readonly record?: string; readonly journal?: string }
+export interface HoloSpot { readonly id: string; readonly place: string; readonly at: Vec3; readonly yaw: number; readonly workspot?: { readonly path: string; readonly activity?: string; readonly tags: readonly string[] }; readonly communities: readonly string[] }
+export interface HoloCommunity { readonly id: string; readonly place: string; readonly name?: string; readonly entries: readonly { readonly name: string; readonly record?: string; readonly phases: readonly { readonly name: string; readonly spots: readonly string[] }[] }[] }
+export interface HoloContent { readonly available: boolean; readonly slices: readonly string[]; readonly pois: readonly HoloPoi[]; readonly spots: readonly HoloSpot[]; readonly communities: readonly HoloCommunity[] }
 export interface HoloWorld {
+  readonly content?: HoloContent;
   readonly extent?: { readonly min: Vec3; readonly max: Vec3 };
   readonly provenance: { readonly game: string; readonly source: string } | null; readonly areas: readonly HoloArea[]; readonly cells: readonly HoloCell[];
   readonly solids?: readonly HoloSolid[];

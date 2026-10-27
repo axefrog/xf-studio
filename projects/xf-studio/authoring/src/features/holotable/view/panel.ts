@@ -6,6 +6,7 @@
  */
 import { applyCapability, closeMenus, openMenu, iconButton, button, emptyState, Segmented, setButtonLabel, SliderWithValue } from "../../../studio-ui/components";
 import { holotablePointerBinding, pointerInputOf, keyBinding } from "../../../app/input-bindings";
+import { baseItem } from "./base-layers";
 import { navigation, type Viewpoint } from "./navigation";
 import { clusterFallback, clusterPlates } from "./clusters";
 import { humanMoment, quietUntil } from "./friendly";
@@ -73,6 +74,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   back.style.cssText="position:absolute;left:12px;top:12px";back.hidden=true;stage.append(back);
   const solidsCanvas = solidCanvas(canvas, () => { drawnKey = ""; ctx.changed(); });
   const layersCanvas = agentCanvas(agents, () => { drawnKey = ""; ctx.changed(); }, motionClock);
+  let countKey="";
   let currentScene: ReturnType<typeof project> | undefined;
   const solidSelection = createSolidSelection();
   let resumeFrame: number | undefined, disposed = false, preparationFrames = 0, preparationMs = 0;
@@ -261,7 +263,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   function draw(state: HoloState) {
     if (resumeFrame !== undefined) { cancelAnimationFrame(resumeFrame); resumeFrame = undefined; }
     const open = state.open;
-    if (!open || state.phase === "opening") { solidsCanvas.clear(svg.clientWidth, svg.clientHeight); layersCanvas.clear(svg.clientWidth, svg.clientHeight); trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); message.textContent = ""; messageKey = ""; chromeSize = ""; return; }
+    if (!open || state.phase === "opening") { countKey=""; solidsCanvas.clear(svg.clientWidth, svg.clientHeight); layersCanvas.clear(svg.clientWidth, svg.clientHeight); trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); message.textContent = ""; messageKey = ""; chromeSize = ""; return; }
     const width = svg.clientWidth || 800, height = svg.clientHeight || 480;
     const started = performance.now();
     const fitKey=JSON.stringify([open.dir,open.session.meta.session,open.session.meta.run,state.openGeneration]);
@@ -285,7 +287,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     extraLabels.push({ key: "scale", text: `${scene.metresPerBar} m`, x: bx + scene.barPx, y: by - 8, priority: 4, colour: "", alpha: 1, overlay: true, align: "end" });
     const extent = open.session.meta.standalone?.extent;
     const radius = extent ? Math.max(350, Math.hypot(...extent.max.map((n, axis) => n - extent.min[axis]))) : 350;
-    const agentProgress = layersCanvas.draw(state.agents, state.agentEnabled, scene.solidCamera, state.selected, Math.max(0, Math.min(4, started + 6 - performance.now())), hovered, extraLabels, radius, { playing: state.playing || state.live.following, epoch: JSON.stringify([open.dir,state.motionEpoch,navigationEpoch,orbit,width,height]) });
+    const agentProgress = layersCanvas.draw(state.agents, state.agentEnabled, scene.solidCamera, state.selected, Math.max(0, Math.min(4, started + 6 - performance.now())), hovered, extraLabels, radius, { playing: state.playing || state.live.following, epoch: JSON.stringify([open.dir,state.motionEpoch,navigationEpoch,orbit,width,height]) }, {content:open.world.content,on:state.layers});
     const dpr=window.devicePixelRatio||1;if(keyCanvas.width!==Math.round(width*dpr)||keyCanvas.height!==Math.round(height*dpr)){keyCanvas.width=Math.round(width*dpr);keyCanvas.height=Math.round(height*dpr);}keyContext.setTransform(dpr,0,0,dpr,0,0);keyContext.clearRect(0,0,width,height);
     if(keyOpen)layersCanvas.drawLegend(keyContext,width,height);
     keyButton.setAttribute("aria-expanded",String(keyOpen));keyButton.title=keyOpen?"Fold map key":"Show map key";
@@ -325,7 +327,9 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       if (!disposed && element.isConnected && element.getClientRects().length) { drawnKey = ""; draw(facade.snapshot()); }
       else solidSelection.cancel();
     });
-    else { preparationFrames = 0; preparationMs = 0; }
+    else { preparationFrames = 0; preparationMs = 0;
+      const counts=JSON.stringify(layersCanvas.baseCounts());if(countKey!==counts){countKey=counts;queueMicrotask(()=>{if(!disposed)ctx.changed();});}
+    }
   }
   let animationFrame: number | undefined;
   function animate() {
@@ -349,6 +353,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   function stopNavigation(){if(!nav.moving)return;const current=viewpoint();nav.cancel();centerOverride=current.center;orbit=current.orbit;}
   function applyPoint(next:Viewpoint){navigationEpoch++;centerOverride=next.center;orbit=next.orbit;contextMoved=true;drawnKey="";ctx.changed();}
   navigationAdapter={
+    baseCounts:()=>({...layersCanvas.baseCounts(),available:contextLease?.contentAvailable()}),
     available:()=>!disposed&&element.isConnected&&!!element.getClientRects().length,
     canBack:()=>nav.depth>0,
     back:()=>{const next=nav.back(viewpoint(),reducedMotion());if(next)applyPoint(next);return !!next;},
@@ -356,6 +361,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       const state=facade.snapshot();if(!state.open)return false;
       const cluster=layersCanvas.clusters().find(c=>c.key===target.id);
       const items=state.agents.layers.filter(l=>state.agentEnabled[l.id]!==false&&(!target.layer||l.id===target.layer)).flatMap(l=>{const missing=new Set(l.notPlaced);return l.items.filter(i=>i.place&&!missing.has(i.id)&&(!target.id||i.key===target.id));});
+      const base=target.id?baseItem(state.open.world.content,target.id):undefined;if(base)items.push(base);
       const points=cluster?cluster.items.map(i=>i.place!):target.position?[target.position]:items.flatMap(i=>[i.place!,...(i.to?[i.to]:[])]);
       if(!points.length&&target.id){const event=state.open.session.events.find(e=>e.id===target.id);if(event?.at)points.push(event.at);else if(target.id==="v"){const v=vAt(state);if(v)points.push(v.position);}}
       if(!points.length)return false;

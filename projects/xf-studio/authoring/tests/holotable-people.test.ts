@@ -10,7 +10,7 @@ import type { HoloActorSample, HoloGap, HoloSession } from "../src/features/holo
 import { ORBITS, peopleAt, project, trail } from "../src/features/holotable/view/projection";
 
 const world = { provenance: null, areas: [], cells: [] };
-const layers = { v: false, camera: false, people: true, events: false, gaps: false, areas: false, cells: false, solids: false };
+const layers = { v: false, camera: false, people: true, events: false, gaps: false, areas: false, cells: false, solids: false, pois: false, spots: false, communities: false };
 const person = (t: number): HoloActorSample => ({ t, who: "a1", valid: true, entity: "42", position: [t - 1000, 0, 0] });
 const scene = (s: HoloSession, t: number) => project(s, world, t, layers, ORBITS.tilt, 800, 500, null).primitives;
 const markers = (s: HoloSession, t: number) => scene(s, t).filter(p => p.kind === "marker" && p.style === "people");

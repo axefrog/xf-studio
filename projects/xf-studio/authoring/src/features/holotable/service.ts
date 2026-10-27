@@ -15,11 +15,11 @@ import { worldContexts } from "./world-context";
 import type { AgentAnswer } from "./agent-types";
 import type { Vec3 } from "./types";
 
-export const HOLO_LAYERS = ["v", "camera", "people", "events", "gaps", "areas", "cells", "solids"] as const;
+export const HOLO_LAYERS = ["v", "camera", "people", "events", "gaps", "areas", "cells", "solids", "pois", "spots", "communities"] as const;
 export type HoloLayer = typeof HOLO_LAYERS[number];
 
 export type ViewFocus = { id?: string; layer?: string; position?: Vec3 };
-export interface HoloNavigation { focus(target: ViewFocus): boolean; back(): boolean; canBack(): boolean; available(): boolean }
+export interface HoloNavigation { focus(target: ViewFocus): boolean; back(): boolean; canBack(): boolean; available(): boolean; baseCounts?(): Readonly<{pois:number;spots:number;communities:number;available?:boolean}> }
 export interface HoloPreferences { technical?: boolean; keys?: Record<string, boolean> }
 
 export type HoloAction =
@@ -95,7 +95,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
   let memory = playbackMemory(device.playback);
   let state: HoloState = { phase: "idle", message: "", openError: null, runs: [], open: null, openGeneration: 0, t: 0, playing: false, speed: memory.recording, changeScope: null, motionEpoch: 0, level: "full",
     agents: { layers: [], here: [], specs: { schema: "xfh/projections-1", kinds: {} } }, agentEnabled: {}, position: null, branch: undefined,
-    layers: { v: true, camera: true, people: false, events: true, gaps: true, areas: true, cells: false, solids: true }, selected: null, revision: 0,
+    layers: { v: true, camera: true, people: false, events: true, gaps: true, areas: true, cells: false, solids: true, pois: false, spots: false, communities: false }, selected: null, revision: 0,
     live: { available: false, recording: false, watching: false, following: false, phase: "idle", behindS: 0, more: false, droppedBatches: 0, message: "" } };
   const views = new Map<string,HoloNavigation>();
   let preferences: HoloPreferences = { ...device.preferences, keys: { ...device.preferences?.keys } };
@@ -138,7 +138,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
   };
   const contexts=worldContexts({later,
     source:()=>visible&&state.open&&(state.open.dir!=="live"||watchId) ? {identity:`${state.open.dir}:${state.open.session.meta.session}:${state.open.session.meta.run}`,
-      params:state.open.dir==="live"?{watch:watchId}:{dir:state.open.dir}} : undefined,
+      params:{...(state.open.dir==="live"?{watch:watchId}:{dir:state.open.dir}),...((state.layers.pois||state.layers.spots||state.layers.communities)?{content:true}:{})}} : undefined,
     load:(params,cancel)=>call<HoloWorld>("world.around",params,cancel),
     changed:world=>{if(state.open&&!signal.aborted)set({open:{...state.open,world:{...world,extent:world.extent??state.open.world.extent}}});},
   },signal);
@@ -413,7 +413,9 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
         if (state.live.following) set({ live: { ...state.live, following: false }, playing: false, speed: memory[clockFamily(state)] });
         if (action.on) play(); else pause(); break;
       case "holo.layer": set({ layers: { ...state.layers, [action.id]: action.on },
-        selected: !action.on && action.id === "people" && state.selected?.startsWith("person:") ? null : state.selected }); break;
+        selected: !action.on && action.id === "people" && state.selected?.startsWith("person:") ? null : !action.on && state.selected?.startsWith(`base:${action.id}:`) ? null : state.selected });
+        if (["pois", "spots", "communities"].includes(action.id)) contexts.refresh(true);
+        break;
       case "holo.level": await setLevel(action.level); break;
       case "holo.select": set({ selected: action.id, selectedCluster: action.members ? [...action.members] : undefined, position: null }); break;
       case "holo.place": set({ position: action.position, selected: null }); break;
@@ -433,6 +435,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       const release=()=>{if(views.get(view)===adapter)views.delete(view);};
       if(lifetime.aborted)release();else lifetime.addEventListener("abort",release,{once:true});
     },
+    visibleBaseCounts(view:string|undefined) { return view ? views.get(view)?.baseCounts?.() : undefined; },
     preference(key: "technical" | "key", view?: string): boolean { return key==="technical" ? preferences.technical??false : preferences.keys?.[view??""]??true; },
     remember(key: "technical" | "key", value: boolean, view?: string) {
       preferences=key==="technical"?{...preferences,technical:value}:{...preferences,keys:{...preferences.keys,[view??""]:value}};

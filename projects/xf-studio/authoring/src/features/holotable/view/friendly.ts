@@ -23,16 +23,17 @@ export function cardDetail(detail = "") {
   return {summary:summary.join("\n").trim(),why:why.join("\n").trim()};
 }
 export const familyOf = (item: Pick<AgentItem,"glyph"|"kind">) => item.glyph && Object.hasOwn(GLYPHS,item.glyph) ? GLYPHS[item.glyph].family : item.kind;
-export const FAMILY_TITLES:Readonly<Record<string,string>>={person:"People",group:"Groups",event:"Events",story:"Story",place:"Places",area:"Areas",route:"Routes",marker:"Markers",field:"Fields",diagnostic:"Diagnostics",item:"Things",direction:"Direction"};
-const LEGEND_ORDER=["person","group","event","story","place","area","route","marker","field","diagnostic","item","direction"] as const;
+export const FAMILY_TITLES:Readonly<Record<string,string>>={person:"People",group:"Groups",event:"Events",story:"Story",place:"Places",spots:"Gathering spots",area:"Areas",route:"Routes",marker:"Markers",field:"Fields",diagnostic:"Diagnostics",item:"Things",direction:"Direction"};
+const LEGEND_ORDER=["person","group","event","story","place","spots","area","route","marker","field","diagnostic","item","direction"] as const;
 const KIND_FAMILIES:Readonly<Record<string,string>>={actor:"person",zone:"area",path:"route",field:"field",point:"marker",target:"marker",label:"marker"};
 export interface LegendEntry { family:string; count:number; glyph?:string; kind:string; tone:string }
 export const orderedLegend=(counts:ReadonlyMap<string,LegendEntry>)=>LEGEND_ORDER.flatMap(family=>{const entry=counts.get(family);return entry?[entry]:[];});
 export function addLegend(counts: Map<string,LegendEntry>,item:AgentItem) {
-  const family=item.glyph&&Object.hasOwn(GLYPHS,item.glyph)?GLYPHS[item.glyph].family:Object.hasOwn(KIND_FAMILIES,item.kind)?KIND_FAMILIES[item.kind]:undefined;
+  if(item.base==="communities")return;
+  const family=item.base==="spots"?"spots":item.glyph&&Object.hasOwn(GLYPHS,item.glyph)?GLYPHS[item.glyph].family:Object.hasOwn(KIND_FAMILIES,item.kind)?KIND_FAMILIES[item.kind]:undefined;
   if(!family)return;
   const old=counts.get(family);
-  if(old)old.count++;else counts.set(family,{family,count:1,glyph:item.glyph,kind:item.kind,tone:"signal"});
+  if(old)old.count++;else counts.set(family,{family,count:1,glyph:item.glyph,kind:item.kind,tone:family==="spots"?"muted":"signal"});
 }
 export function plainCounts(layer:AgentLayer,on=true) {
   const missing=new Set(layer.notPlaced),count=on?layer.items.filter(i=>i.place&&!missing.has(i.id)).length:0,total=layer.total??layer.items.length;

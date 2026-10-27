@@ -8,7 +8,7 @@ const box = (id: string, center: HoloSolid["center"], kind: HoloSolid["kind"] = 
 const s: HoloSession = { meta: { session: "synthetic", run: 1, start: 0, end: 1, from: 0, to: 1, channels: ["v"], complete: true, dropped: 0,
   missedDeadlines: 0, largestGapS: 0, coverage: "synthetic", problems: [] }, v: [{ t: 0, seq: 1, position: [0, 0, 0], yaw: 0, speed: 0,
   health: 100, healthMax: 100, inCombat: false, vehicle: false, busy: "" }], camera: [], events: [], gaps: [] };
-const layers = { v: true, camera: true, people: false, events: true, gaps: true, areas: false, cells: false, solids: true };
+const layers = { v: true, camera: true, people: false, events: true, gaps: true, areas: false, cells: false, solids: true, pois: false, spots: false, communities: false };
 
 test("a box has its 12 crisp edges and faint visible faces; sphere and capsule each have a silhouette and meridian", () => {
   const C = camera([0, 0, 0], ORBITS.tilt, 800, 480);
