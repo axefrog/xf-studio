@@ -19,6 +19,15 @@ optionally selects another **project directory**, not a repository root. The
 world pack defaults to private `local/holotable/world-pack.json`. Recordings stay
 in their original private folders. Neither command starts the recorder or the game.
 
+Output enables Holotable's content hooks by default: `producer_title`, per-layer
+`facet_titles`, and multiline detail with a short hover summary followed by the
+cause lines. Detail permits only LF breaks, at most 40 lines and 4,000 characters.
+For older Holotable builds, append `--no-holotable-hooks` to any mode, including
+`--live`. This omits the hooks and folds detail into one line using
+`<summary> Why: <cause> → <cause>`. `--holotable-hooks` is a no-op alias; the negative
+flag wins when both appear. Code hosts may pass `{ holotableHooks: false }` as
+`ShadowHost`'s final writer-options argument. See [Holotable layers](HOLOTABLE.md).
+
 V's sampled position sets its mirrored position, district and schematic cell.
 District selection uses Holotable's real polygons. Kabuki's schematic XY grid is
 exactly the writer's layout; its thin drawing slab is not a street elevation test.

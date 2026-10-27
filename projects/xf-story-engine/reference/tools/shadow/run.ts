@@ -7,12 +7,14 @@ import { initialGameTime } from '../../src/shadow/clock.ts';
 import { readOnlyBridge, replayLog, watchLive } from '../../src/shadow/live.ts';
 
 export async function runCli(args: string[]) {
-  const usage = 'bun tools/shadow/run.ts <recording-run-dir> <fresh-out-dir> | --live <fresh-out-dir> | --replay-log <log> <fresh-out-dir> [--world-pack <file>] [--holotable-root <project-dir>] [--default-game-start <seconds>] [--duration <seconds>]';
+  const usage = 'bun tools/shadow/run.ts <recording-run-dir> <fresh-out-dir> | --live <fresh-out-dir> | --replay-log <log> <fresh-out-dir> [--world-pack <file>] [--holotable-root <project-dir>] [--default-game-start <seconds>] [--duration <seconds>] [--no-holotable-hooks]';
   let input: string | undefined, out: string | undefined, mode: 'recording' | 'live' | 'log' = 'recording';
   if (args[0] === '--live') { mode = 'live'; out = args[1]; args = args.slice(2); }
   else if (args[0] === '--replay-log') { mode = 'log'; input = args[1]; out = args[2]; args = args.slice(3); }
   else { [input, out] = args; args = args.slice(2); }
   if (!out || out.startsWith('--') || mode !== 'live' && !input) throw Error(usage);
+  const holotableHooks = !args.includes('--no-holotable-hooks');
+  args = args.filter((a) => a !== '--holotable-hooks' && a !== '--no-holotable-hooks');
   let pack = resolve(import.meta.dir, '../../../../../local/holotable/world-pack.json');
   let root: string | undefined, defaultStart = 0, duration = 60;
   for (let i = 0; i < args.length; i += 2) {
@@ -31,7 +33,7 @@ export async function runCli(args: string[]) {
   const prelude: Batch[] = [];
   const sink = { consume(batch: Batch) {
     if (!host && !batch.v.length && !batch.actors.some(a => a.valid) && !batch.events.some(e => e.kind === 'incident')) { prelude.push(batch); return; }
-    host ??= new ShadowHost(reader, world, batch.meta, out!, defaultStart, initialGameTime(batch, defaultStart));
+    host ??= new ShadowHost(reader, world, batch.meta, out!, defaultStart, initialGameTime(batch, defaultStart), { holotableHooks });
     for (const earlier of prelude.splice(0)) host.consume(earlier);
     host.consume(batch);
   } };

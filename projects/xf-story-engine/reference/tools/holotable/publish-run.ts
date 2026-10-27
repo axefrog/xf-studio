@@ -11,6 +11,10 @@ export type RunOptions = {
   schematic?: boolean;
   mode?: 'standalone';
 } | { mode: 'recording'; session: string; run: number; from: number; to: number; schematic?: boolean };
+export interface PublishOptions {
+  /** Defaults on; false supports older consumers. */
+  holotableHooks?: boolean;
+}
 interface LayerState {
   manifest: Manifest; bytes: number;
   values: Map<string, { signature: string; item: Item }>;
@@ -37,7 +41,7 @@ export function spoolLine(record: unknown): string {
 export class RunPublisher {
   readonly directory: string;
   private layers = new Map<string, LayerState>();
-  constructor(directory: string, readonly run: RunOptions, readonly options: { holotableHooks?: boolean } = {}) {
+  constructor(directory: string, readonly run: RunOptions, readonly options: PublishOptions = {}) {
     this.directory = resolve(directory);
     if (existsSync(this.directory) && readdirSync(this.directory).some((f) => f.endsWith('.jsonl'))) throw Error('Output directory already contains spools; use a fresh directory');
     const manifests = Object.entries(LAYERS).map(([layer, kinds]) => this.manifest(layer, kinds));
@@ -50,7 +54,7 @@ export class RunPublisher {
       : { clock: 'game' as const, standalone: { set: this.run.set, title: this.run.title, from: this.run.from, to: this.run.to, clock: 'game' as const } };
     const { clock, ...identity } = binding;
     return { schema: 'xfh/layer-1', producer: 'story-engine', layer, title: layer.replaceAll('-', ' ') + (layer === 'places' && this.run.schematic ? ' (schematic layout)' : ''),
-      ...(this.options.holotableHooks ? { producer_title: 'Story Engine', facet_titles: facetTitles(layer) } : {}),
+      ...(this.options.holotableHooks !== false ? { producer_title: 'Story Engine', facet_titles: facetTitles(layer) } : {}),
       ...(this.run.schematic ? { description: 'Districts use real place ids; synthetic cells and their contents use a schematic layout, not measured street geometry.' } : {}), content: 'full', clock, kinds,
       ...identity };
   }
@@ -82,7 +86,7 @@ export class RunPublisher {
         const item = structuredClone(value);
         item.glyph ??= KIND_GLYPHS[item.kind];
         let shortened = boundText(item) + (observation.truncations?.get(layer)?.get(item.id) ?? 0);
-        if (!this.options.holotableHooks && item.detail) {
+        if (this.options.holotableHooks === false && item.detail) {
           item.detail = compatibilityDetail(item.detail);
           shortened += boundText(item); // separators can lengthen a near-limit detail
         }

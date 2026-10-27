@@ -304,8 +304,11 @@ test('Holotable observes stage-sourced stories without reading their schema or c
     const before = image(), sample = new HolotableObserver(sim, l2, l3).sample();
     expect(image().equals(before)).toBe(true);
     const item = sample.layers.get('stories')!.find((i) => i.id === stage.id)!;
-    expect(item.facets?.pattern).toBe(`${stage.pattern}@${stage.version}`);
-    expect(item.facets?.outcome).toBe('done'); // Existing observer presentation of stage completion.
+    expect(item.label).toBe('A story'); // No wording/schema dependency for an unknown fixture pattern.
+    expect(item.facets?.now).toBe('Settled');
+    expect(item.badge).toBe('done');
+    expect(item.facets?.pattern).toBeUndefined(); // Internal pattern ids are not display content.
+    expect(item.facets?.outcome).toBeUndefined();
     sawStage = true;
   } });
   expect(sawStage).toBe(true);

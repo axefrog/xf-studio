@@ -15,7 +15,7 @@ import type { LiveBridge } from '../../../../xf-holotable/src/live-bridge.ts';
 import { mirroredId } from '../../src/id.ts';
 import { People } from '../../src/sim/people.ts';
 import { createLayerSpool } from '../../../../xf-holotable/src/layer-spool.ts';
-import { evaluateLayers } from '../../../../xf-holotable/src/layers.ts';
+import { evaluateLayers, validateManifest as consumerManifest, validateRecord as consumerRecord } from '../../../../xf-holotable/src/layers.ts';
 
 setDefaultTimeout(180_000);
 const scratch = resolve(import.meta.dir, '../../../../../.scratch-holo1/shadow');
@@ -227,13 +227,15 @@ test('clock prefers game readings; fallback is causal, declared and rejects roll
   expect(paused.at(100.2, 600).game).toBe(600);
 });
 
-test('recording mode validates its binding; standalone bytes retain the original manifest', () => {
+test('recording mode defaults to hooks; compatibility standalone bytes retain the original manifest', () => {
   const standalone = temp(), rec = temp();
-  new RunPublisher(standalone, { set: 'test', title: 'Test', from: 0, to: 100 });
+  new RunPublisher(standalone, { set: 'test', title: 'Test', from: 0, to: 100 }, { holotableHooks: false });
   expect(readFileSync(join(standalone, 'people.jsonl'), 'utf8')).toBe('{"schema":"xfh/layer-1","producer":"story-engine","layer":"people","title":"people","content":"full","clock":"game","kinds":["actor","point"],"standalone":{"set":"test","title":"Test","from":0,"to":100,"clock":"game"}}\n');
   new RunPublisher(rec, { mode: 'recording', session: 'synthetic', run: 1, from: 100, to: 200 });
   const m = JSON.parse(readFileSync(join(rec, 'people.jsonl'), 'utf8')); validateManifest(m);
   expect(m.clock).toBe('recording'); expect(m.session).toBe('synthetic'); expect(m.standalone).toBeUndefined();
+  expect(m.producer_title).toBe('Story Engine'); expect(m.facet_titles?.about).toBe('About');
+  expect(consumerManifest(m)).toBeNull();
   expect(() => validateManifest({ ...m, run: 0 })).toThrow();
   expect(() => validateManifest({ ...m, standalone: {} })).toThrow();
 });
@@ -317,19 +319,30 @@ test('latest source reading wins per node/slot/second across live batches', () =
   expect(host.summary().inputs).toBe(4);
 });
 
-test('CLI starts from the earliest observation with the consumption clock, holding manifest anchors', async () => {
+test('CLI forwards hook options and starts from the earliest observation with the consumption clock', async () => {
   const data: Batch = { ...batch(), meta: { ...meta, gameTimeSamples: [{ source: 100, game: 0 }, { source: 275, game: 600 }] },
     v: [v(200), v(275)], actors: [] };
   expect(initialGameTime(data)).toBe(0);
   expect(initialGameTime({ ...data, v: [{ ...v(200), gameTime: 900 }], actors: [{ t: 150, who: 'first', valid: true, position: [20, 20, 0] }] })).toBe(0);
   expect(initialGameTime({ ...data, v: [v(275), v(200)] })).toBe(0);
-  const folder = temp(), log = join(folder, 'input.jsonl'), pack = join(folder, 'world.json'), out = temp();
+  const folder = temp(), log = join(folder, 'input.jsonl'), pack = join(folder, 'world.json');
   writeFileSync(log, JSON.stringify({ schema: 'xfse/shadow-live-1' }) + '\n' + JSON.stringify({ batch: data }) + '\n');
   writeFileSync(pack, JSON.stringify(world));
   const output = spyOn(console, 'log').mockImplementation(() => {});
-  try { await runCli(['--replay-log', log, out, '--world-pack', pack]); } finally { output.mockRestore(); }
-  const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8'));
-  expect(summary.windows).toBe(1); expect(summary.gameThrough).toBe(600); expect(summary.lastObservedGameTime).toBe(600);
+  try {
+    for (const flags of [[], ['--no-holotable-hooks'], ['--holotable-hooks'], ['--holotable-hooks', '--no-holotable-hooks']]) {
+      const out = temp();
+      await runCli(['--replay-log', log, out, '--world-pack', pack, ...flags]);
+      const summary = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8'));
+      expect(summary.windows).toBe(1); expect(summary.gameThrough).toBe(600); expect(summary.lastObservedGameTime).toBe(600);
+      for (const text of Object.values(spool(out))) {
+        const [manifest, ...records] = text.trim().split('\n').map((line) => JSON.parse(line));
+        expect(manifest.producer_title).toBe(flags.includes('--no-holotable-hooks') ? undefined : 'Story Engine');
+        expect(consumerManifest(manifest)).toBeNull();
+        for (const item of records) expect(consumerRecord(item, manifest)).toBeNull();
+      }
+    }
+  } finally { output.mockRestore(); }
 });
 
 test('never acts: the command allowlist rejects writes before any transport call', async () => {

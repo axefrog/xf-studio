@@ -96,8 +96,8 @@ test('a named opening moves one resident out of the crowd without resolving duri
 test('the complete fixture week is readable and bounded in both modes; default spools pass the current consumer', async () => {
   const consumer = await import(resolve(import.meta.dir, '../../../../xf-holotable/src/layers.ts'));
   scratch((dir) => {
-    const ordinary = new RunPublisher(join(dir, 'ordinary'), { set: 'readability-week', title: 'Fixture', from: 0, to: 604800 });
-    const hooks = new RunPublisher(join(dir, 'hooks'), { set: 'readability-week', title: 'Fixture', from: 0, to: 604800 }, { holotableHooks: true });
+    const ordinary = new RunPublisher(join(dir, 'compatibility'), { set: 'readability-week', title: 'Fixture', from: 0, to: 604800 }, { holotableHooks: false });
+    const hooks = new RunPublisher(join(dir, 'default'), { set: 'readability-week', title: 'Fixture', from: 0, to: 604800 });
     let observer: HolotableObserver | undefined;
     layeredWeek('pay', false, { steps: 1002, horizon: 601200, sample(sim, l2, l3) {
       observer ??= new HolotableObserver(sim, l2, l3, { gameEpochSeconds: 0 });
@@ -109,19 +109,21 @@ test('the complete fixture week is readable and bounded in both modes; default s
       }
       ordinary.publish(observation); hooks.publish(observation);
     } });
-    for (const [folder, enabled] of [['ordinary', false], ['hooks', true]] as const) for (const file of readdirSync(join(dir, folder))) {
+    for (const [folder, enabled] of [['compatibility', false], ['default', true]] as const) for (const file of readdirSync(join(dir, folder))) {
       const [manifest, ...records] = readFileSync(join(dir, folder, file), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
       validateManifest(manifest);
       if (enabled) { expect(manifest.producer_title).toBe('Story Engine'); expect(Object.keys(manifest.facet_titles!).length).toBeLessThanOrEqual(16); }
-      else { expect(manifest.producer_title).toBeUndefined(); expect(consumer.validateManifest(manifest)).toBeNull(); }
+      else { expect(manifest.producer_title).toBeUndefined(); expect(manifest.facet_titles).toBeUndefined(); }
+      expect(consumer.validateManifest(manifest)).toBeNull();
       for (const record of records) {
         validateRecord(record, manifest);
-        if (!enabled) expect(consumer.validateRecord(record, manifest)).toBeNull();
+        expect(consumer.validateRecord(record, manifest)).toBeNull();
         if ('id' in record) readable(record);
       }
       if (file === 'events.jsonl') {
         const items = records.filter((r) => 'id' in r);
         expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
+        expect(items.some((i) => i.detail?.includes('\n'))).toBe(enabled);
       }
     }
   });
@@ -139,7 +141,7 @@ test('compatibility detail separates the summary from causes; hook mode preserve
   const original = 'Mara paid Jun.\n\nDay 1, 00:20: Jun came to collect.\nDay 1, 00:34: Mara paid Jun.';
   for (const enabled of [false, true]) {
     const folder = join(dir, String(enabled));
-    const publisher = new RunPublisher(folder, { set: 'detail', title: 'Detail', from: 0, to: 10 }, { holotableHooks: enabled });
+    const publisher = new RunPublisher(folder, { set: 'detail', title: 'Detail', from: 0, to: 10 }, enabled ? undefined : { holotableHooks: false });
     const base: Item = { schema: 'xfh/item-1', id: 'paid', kind: 'point', t: 0, anchor: { region: 'r' }, cite: 'se:event:paid' };
     publisher.publish({ t: 0, layers: new Map([['events', [
       { ...base, detail: original },
@@ -155,7 +157,7 @@ test('compatibility detail separates the summary from causes; hook mode preserve
 test('a compatibility-mode overflow remains single-line and passes the current consumer', async () => {
   const consumer = await import(resolve(import.meta.dir, '../../../../xf-holotable/src/layers.ts'));
   scratch((dir) => {
-    const publisher = new RunPublisher(dir, { set: 'overflow', title: 'Overflow', from: 0, to: 10 });
+    const publisher = new RunPublisher(dir, { set: 'overflow', title: 'Overflow', from: 0, to: 10 }, { holotableHooks: false });
     publisher.publish({ t: 0, layers: new Map([['events', [{ schema: 'xfh/item-1', id: 'overflow', kind: 'point', t: 0, anchor: { region: 'r' }, cite: 'se:event:overflow', label: 'A story. '.repeat(25), detail: 'A summary.\n' + 'A cause.\n'.repeat(39), facets: { who: 'A neighbour. '.repeat(60) } } as Item]]]) });
     const [manifest, record] = readFileSync(join(dir, 'events.jsonl'), 'utf8').trim().split('\n').map((s) => JSON.parse(s));
     expect(record.detail).not.toContain('\n');

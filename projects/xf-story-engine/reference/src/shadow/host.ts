@@ -8,7 +8,7 @@ import { ReplayPort, type ReplayLine } from '../sim/port.ts';
 import { HolotableObserver } from '../holotable/observe.ts';
 import { phrase } from '../wording/index.ts';
 import { schematicLayout } from '../holotable/layout.ts';
-import { RunPublisher, type ItemRevision } from '../../tools/holotable/publish-run.ts';
+import { RunPublisher, type ItemRevision, type PublishOptions } from '../../tools/holotable/publish-run.ts';
 import { ShadowClock } from './clock.ts';
 import type { Actor, Batch, FeedSession, HoloReader, WorldPack } from './feed.ts';
 import { districtAt } from '../../../../xf-holotable/src/world.ts';
@@ -49,7 +49,7 @@ export class ShadowHost {
   private pendingReadings: Array<{ node: string; slot: string }> = [];
   private coalesced = new Map<string, Extract<ReplayLine, { op: 'reading' }>>();
   private readonly layout;
-  constructor(readonly reader: HoloReader, readonly world: WorldPack, meta: Batch['meta'], out: string, defaultStart = 0, initialGameTime = defaultStart) {
+  constructor(readonly reader: HoloReader, readonly world: WorldPack, meta: Batch['meta'], out: string, defaultStart = 0, initialGameTime = defaultStart, writerOptions: PublishOptions = {}) {
     this.session = { meta: structuredClone(meta), v: [], camera: [], events: [], gaps: [], actors: [] };
     this.clock = new ShadowClock(meta, defaultStart);
     const index = makeKabukiSlice();
@@ -76,7 +76,7 @@ export class ShadowHost {
     }
     this.port = new ReplayPort(this.sim);
     this.observer = new HolotableObserver(this.sim, undefined, undefined, { gameEpochSeconds: 0, runStartSeconds: initialGameTime, layout: this.layout, entities: this.entities });
-    this.publisher = new RunPublisher(out, { mode: 'recording', session: meta.session, run: meta.run, from: meta.start, to: Number.MAX_SAFE_INTEGER, schematic: true });
+    this.publisher = new RunPublisher(out, { mode: 'recording', session: meta.session, run: meta.run, from: meta.start, to: Number.MAX_SAFE_INTEGER, schematic: true }, writerOptions);
   }
   private count(key: string, n = 1) { if (n) this.unmapped[key] = (this.unmapped[key] ?? 0) + n; }
   key(who: string): string { return `shadow:${this.session.meta.session}:${this.session.meta.run}:${who}`; }

@@ -16,7 +16,7 @@ read only. M3's thread renderer is a future second consumer; `src/m3/` is unchan
 From this directory, under the repository memory guard:
 
 ```powershell
-bun tools/holotable/publish-run.ts <fresh-output-directory> --world-pack <world-pack.json> [--game-epoch-seconds <number>] [--holotable-hooks]
+bun tools/holotable/publish-run.ts <fresh-output-directory> --world-pack <world-pack.json> [--game-epoch-seconds <number>] [--no-holotable-hooks]
 ```
 
 The default world pack is the repository's private `local/holotable/world-pack.json`.
@@ -32,15 +32,10 @@ each completed boundary. The host supplies the timeline extent and any explicit
 entity bindings. [Shadow mode](SHADOW.md) uses the same observer and wording with
 recording-clock bindings; it issues no game writes.
 
-### Compatibility option
+### Default hooks and compatibility option
 
-Current Holotable on main rejects the new optional manifest hooks and multiline
-detail. The writer therefore defaults to compatibility mode: no hooks, and detail
-is one line: `<summary> Why: <cause> → <cause>`. A summary without causes
-stays on its own; current-story text stays with the summary.
-
-`--holotable-hooks`, or the third constructor argument
-`{ holotableHooks: true }`, enables:
+Holotable's playback round accepts the content hooks and multiline detail.
+The writer now enables them by default for standalone and shadow output:
 
 - `producer_title: "Story Engine"` (1–80 characters, no controls);
 - `facet_titles`, containing only that layer's keys (at most 16, keys 1–40 and
@@ -48,9 +43,16 @@ stays on its own; current-story text stays with the summary.
 - multiline detail, whose first line is a self-contained hover summary. Only LF
   line breaks are permitted: at most 40 lines and 4,000 characters.
 
-The producer validates both forms. Default-mode fixture output is checked directly
-against Holotable's current validator, imported read only. Hook-mode interoperability
-awaits Holotable's matching round; it is not claimed to work in today's consumer.
+For older Holotable builds, pass `--no-holotable-hooks` to either CLI, or use
+`{ holotableHooks: false }` as the third `RunPublisher` constructor argument.
+`ShadowHost` accepts the same writer options as its final constructor argument.
+Compatibility output omits the manifest hooks and uses one detail line:
+`<summary> Why: <cause> → <cause>`. A summary without causes stays on its own;
+current-story text stays with the summary. `--holotable-hooks` remains a no-op
+alias; the negative flag takes precedence if both are supplied.
+
+The producer's bounds apply in both modes. Both complete fixture outputs are
+checked against Holotable's current validator, imported read only.
 
 ## What the layers say
 
@@ -161,11 +163,16 @@ observation, and raw-state images include ephemeral caches. Both frozen kernel
 digests are unchanged by this work.
 
 Offline verification on 27 October 2026 (Bun 1.4.4): `bun run check` passed;
-the guarded default suite passed **1,768 tests**, with **46 skipped**, **0 failed**
-and **1.4 GB** peak memory (1,814 tests across 130 files). The real-world-pack
-fixture CLI published 1,010 observations in 10.9 seconds, using 0.5 GB peak memory;
-its 12 spools have zero truncations and unknown glyphs, and Holotable's standalone
-validator reported **Valid: no refusals**. This measures offline fixture publishing,
+the guarded Holotable/shadow tests passed **88 tests**, with **1 skipped**, **0 failed**
+and **0.7 GB** peak memory (89 tests across 9 files). The S3 mixed-pattern tests
+passed **11 tests**, **0 failed**, using **0.5 GB** peak memory. Two final default-suite
+attempts stopped at the machine-wide 4 GB free-memory floor; the maintainer will
+run that final suite. Observer-on/off and both frozen-digest checks passed in the
+earlier suite run. The real-world-pack default fixture CLI published 1,010 observations
+in 14.6 seconds, using 0.5 GB peak memory;
+both default and compatibility runs have 12 spools with zero truncations and unknown
+glyphs, and Holotable's standalone validator reported **Valid: no refusals** for
+both complete runs. This measures offline fixture publishing,
 not interactive playback or game responsiveness. The v3 digest remains
 `746601727380a3fdff647f873c91c971`, and v4 remains
 `8fce55b19462a1e02f03ca5336bd8c16`.
