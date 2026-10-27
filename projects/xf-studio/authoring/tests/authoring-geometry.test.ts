@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringDocument } from "./fixtures/makeup-document";
 import { AuthoringGeometry } from "../src/app/authoring/authoring-geometry";
 import { freshWorkspace } from "./fixtures/eye-region";
 

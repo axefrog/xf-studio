@@ -76,7 +76,7 @@ import { countGlObjects, type GlObjectCounts } from "./webgl-gl-objects";
 import { SceneResidency, type PreparationState, type ResidencyWant } from "../src/preview/scene-residency";
 import { syntheticCore, syntheticIdle, syntheticRecords } from "./webgl-synthetic-head";
 import type { RuntimePreparationResult } from "../src/platform/scene/runtime-preparation";
-import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringDocument } from "./fixtures/makeup-document";
 import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
 import { offerUploadSource, uploadStep, UPLOAD_BITMAP_OPTIONS } from "../src/character/render/character-detail-loader";
 import { gpuGate } from "../src/platform/scene/gpu-gate";

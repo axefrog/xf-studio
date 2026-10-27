@@ -12,7 +12,7 @@ import { MAIN_VIEW, type ViewId } from "../../src/platform/api/view-graph";
 import type { HistoryService } from "../../src/platform/core/history-service";
 import type { ViewGraph } from "../../src/platform/core/view-graph";
 import type { StudioApplication, StudioAction } from "../../src/app/studio-application";
-import type { AuthoringDocument } from "../../src/app/authoring/authoring-document";
+import type { AuthoringDocument } from "../../src/app/authoring/makeup-document";
 import type { LookRef } from "../../src/library/collection-documents";
 import { TargetResolver } from "../../src/app/profiles/targets";
 import { SceneCommands } from "../../src/app/profiles/scene-commands";

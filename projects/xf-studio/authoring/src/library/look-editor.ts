@@ -14,7 +14,7 @@
  * - **Elsewhere.** A change of the look taken from another window (or a resolution that took theirs) replaces what the document shows, and
  *   its Undo starts there. While the look is being restored from the last session, the document can't be edited (the recovery gate).
  */
-import type { AuthoringDocument, DocumentState } from "../app/authoring/authoring-document";
+import type { AuthoringDocument, DocumentState } from "../app/authoring/makeup-document";
 import { liveFeatureStates, liveMemory, livePart, withLiveFeatures, withLiveMemory, withLivePart, type DocumentModel } from "../app/workspace/collection-workspace";
 import { emptyRecipe } from "../engines/layered-makeup/recipe";
 import { COLLECTION_2, isNewerData, type Look, type LookMemory } from "../platform/api";

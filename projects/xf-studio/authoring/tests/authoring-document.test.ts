@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringDocument } from "./fixtures/makeup-document";
 import { WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
 import { workspaceKeys } from "../src/app/workspace/workspace-state";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";

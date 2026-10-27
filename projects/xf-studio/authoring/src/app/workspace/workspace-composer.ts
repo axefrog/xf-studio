@@ -1,4 +1,4 @@
-import type { DocumentState } from "../authoring/authoring-document";
+import type { DocumentState } from "../authoring/makeup-document";
 import type { PreviewActions } from "../../preview/preview-actions";
 import type { WorkspaceState } from "./workspace-state";
 import { parseUIPreferences } from "../ui-preferences";

@@ -5,7 +5,7 @@ import { liveFeatureStates, liveMemory, livePart, parseCollectionWorkspace, read
   writeCollectionWorkspace,
   type CollectionWorkspace, type DocumentModel, type RestoreWarnings } from "./collection-workspace";
 import { isNewerData, LOOK_HISTORY_1, LOOK_MEMORY, type LookMemory, type PartEnvelope } from "../../platform/api";
-import type { DocumentHistory } from "../authoring/authoring-document";
+import type { DocumentHistory } from "../authoring/makeup-document";
 import { emptyLookHistory } from "../../platform/core/look-history";
 import type { NewerPolicy } from "../../platform/core/document";
 import type { LiveFeatureState } from "../../platform/core/live-features";

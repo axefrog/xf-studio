@@ -2,7 +2,7 @@ import type { PartPresetService } from "../src/library/part-presets";
 import type { WorkspaceLease } from "../src/app/workspace/workspace-lease";
 import { eyeCheck } from "./fixtures/package-results";
 import { AuthoringControlEdits } from "../src/app/authoring/authoring-control-edits";
-import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringDocument } from "./fixtures/makeup-document";
 import { AuthoringGestures } from "../src/app/authoring/authoring-gestures";
 import { CollectionApplication } from "../src/library/collection-application";
 import type { CollectionTransport } from "../src/library/collection-service";

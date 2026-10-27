@@ -1,4 +1,4 @@
-import type { AuthoringDocument, DocumentChange } from "./authoring-document";
+import type { AuthoringDocument, DocumentChange } from "./makeup-document";
 import type { AuthoringGeometry } from "./authoring-geometry";
 import type { Layer, Recipe, WarpField } from "../../engines/layered-makeup/recipe";
 import type { ReadonlyDeep } from "../../platform/api/read-only";

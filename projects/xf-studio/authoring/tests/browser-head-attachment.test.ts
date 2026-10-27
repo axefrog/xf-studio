@@ -4,7 +4,7 @@ import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import type { CameraState } from "../src/app/workspace/workspace-state";
 import { contextOf, harness } from "./fixtures/fake-heads";
 import * as THREE from "three";
-import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringDocument } from "./fixtures/makeup-document";
 import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
 import type { RasterPort } from "../src/legacy/eye-makeup/browser/raster-client";
 import type { LayeredMakeupSurface } from "../src/engines/layered-makeup/render/makeup-stack";

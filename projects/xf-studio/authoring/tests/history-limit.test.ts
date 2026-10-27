@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { RECIPE_HISTORY, RECIPE_HISTORY_LIMIT } from "../src/legacy/eye-makeup/editor-actions";
-import type { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import type { AuthoringDocument } from "./fixtures/makeup-document";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
 import { lookHistoryBodies } from "../src/platform/core/look-history";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";

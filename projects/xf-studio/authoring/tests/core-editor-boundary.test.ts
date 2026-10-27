@@ -63,9 +63,7 @@ test("a registered editor observes its feature, snapshots detached data and rele
 });
 
 describe("CORE-03 later-slice construction gates (no shell-mount claim)", () => {
-  test.todo("slice 2: a zero-feature authoring document snapshots and restores a sparse look without a recipe", () => {});
-  test.todo("slice 2: synthetic and second plain-data parts share one look history, including cross-part Undo/Redo and absent-part restoration", () => {});
-  test.todo("slice 2: eye-makeup document adapter retains part/history and selection parity", () => {});
+  // Slice 2's three active construction gates now live in look-document.test.ts.
   test.todo("slice 3: an empty registry cold-loads a writable workspace with no mandatory live-recipe projection", () => {});
   test.todo("slice 3: zero-feature and synthetic collections round-trip workspace drafts and SQLite without adding makeup", () => {});
   test.todo("slice 3: released eye-makeup workspace and collection formats retain compatibility", () => {});

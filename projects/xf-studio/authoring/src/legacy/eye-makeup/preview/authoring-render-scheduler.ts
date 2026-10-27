@@ -1,4 +1,4 @@
-import type { AuthoringDocument, DocumentEffect } from "../../../app/authoring/authoring-document";
+import type { AuthoringDocument, DocumentEffect } from "../../../app/authoring/makeup-document";
 import { layerRenderQueue } from "./layer-render-queue";
 import type { Layer } from "../../../engines/layered-makeup/recipe";
 

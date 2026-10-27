@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringDocument } from "./fixtures/makeup-document";
 import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
 import type { RasterPort } from "../src/legacy/eye-makeup/browser/raster-client";
 import type { LayeredMakeupSurface } from "../src/engines/layered-makeup/render/makeup-stack";

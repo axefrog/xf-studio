@@ -1,4 +1,4 @@
-import type { AuthoringDocument } from "./authoring/authoring-document";
+import type { AuthoringDocument } from "./authoring/makeup-document";
 import type { AuthoringControlEdits } from "./authoring/authoring-control-edits";
 import { fromView3d, gestureSource, type AuthoringGestures, type GestureOrigin, type GestureSource } from "./authoring/authoring-gestures";
 import type { HistoryCommand as HistoryAction, HistoryMove, HistorySnapshot, HistoryState, HistoryScopeDetails } from "../platform/api/history";

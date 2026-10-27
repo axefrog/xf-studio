@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { AuthoringControlEdits } from "../src/app/authoring/authoring-control-edits";
-import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringDocument } from "./fixtures/makeup-document";
 import { registeredEditing } from "./gesture-test-adapter";
 import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
 import { planLayerPreview, previewCapacity } from "../src/legacy/eye-makeup/preview/authoring-preview-policy";

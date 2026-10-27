@@ -3,7 +3,7 @@ import { liveMemory, type CollectionDraft } from "../../src/app/workspace/collec
 import { LIVE_FEATURE, STUDIO_PARTS, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { LOOK_HISTORY_1, type Look, type LookHistoryData } from "../../src/platform/api";
 import { lookHistoryBodies } from "../../src/platform/core/look-history";
-import type { DocumentHistory } from "../../src/app/authoring/authoring-document";
+import type { DocumentHistory } from "../../src/app/authoring/makeup-document";
 import type { Recipe } from "../../src/engines/layered-makeup/recipe";
 import { serializeWorkspace, type WorkspaceState } from "../../src/app/workspace/workspace-state";
 

@@ -8,7 +8,7 @@
  * history lands (migration step 4), so `EditorMemory` below is that document's memory for one
  * look; every other part and feature memory of a look is carried unchanged.
  */
-import type { DocumentHistory } from "../authoring/authoring-document";
+import type { DocumentHistory } from "../authoring/makeup-document";
 import type { FieldSelection } from "../../engines/layered-makeup/field-selection";
 import { COLLECTION_1, COLLECTION_2, isNewerData, storedPackagePlan, type Look, type LookCollection, type LookMemory,
   type PartMemory } from "../../platform/api";

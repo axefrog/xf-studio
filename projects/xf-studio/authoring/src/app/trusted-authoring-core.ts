@@ -1,7 +1,7 @@
 import type { ModuleRegistration } from "../platform/api";
 import { createViewServices } from "./view-actions";
 import { AuthoringControlEdits } from "./authoring/authoring-control-edits";
-import { AuthoringDocument, type DocumentState } from "./authoring/authoring-document";
+import { AuthoringDocument, type DocumentState } from "./authoring/makeup-document";
 import { eyeMakeupPort, RecipeActions, type EyeMakeupGestures, type EyeMakeupSpec } from "../legacy/eye-makeup/authoring-eye-makeup";
 import { AuthoringGeometry } from "./authoring/authoring-geometry";
 import { AuthoringGestures } from "./authoring/authoring-gestures";
@@ -82,7 +82,8 @@ export function createAuthoringEditing(workspace: DocumentState & Pick<Workspace
     selected: workspace.selected, fieldSelection: workspace.fieldSelection, history: workspace.history,
     ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}),
     ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}),
-    ...(workspace.liveLocked ? { liveLocked: workspace.liveLocked } : {}) }, { feature: documents.live, parts: documents.parts, others },
+    ...(workspace.liveLocked ? { liveLocked: workspace.liveLocked } : {}) }, { feature: documents.live, parts: documents.parts,
+      module: documents.parts.feature(documents.live)!, others },
     { history, activate: ports.activate, ...(ports.scope ? { scope: ports.scope } : {}), resetStack: previous => ports.resetStack(previous) });
   const geometry = new AuthoringGeometry(document);
   const presentation = new AuthoringPresentation(document, geometry);

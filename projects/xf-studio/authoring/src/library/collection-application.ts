@@ -1,4 +1,4 @@
-import type { AuthoringDocument } from "../app/authoring/authoring-document";
+import type { AuthoringDocument } from "../app/authoring/makeup-document";
 import type { CollectionAction } from "./collection-actions";
 import type { Unnamed } from "../app/action-targets";
 import { CollectionService, type CollectionOutcome, type CollectionRequest, type CollectionServiceDeps,

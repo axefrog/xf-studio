@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { AuthoringDocument } from "../src/app/authoring/authoring-document";
+import { AuthoringDocument } from "./fixtures/makeup-document";
 import { AuthoringGestures } from "../src/app/authoring/authoring-gestures";
 import { AuthoringRenderScheduler } from "../src/legacy/eye-makeup/preview/authoring-render-scheduler";
 import { registeredEditing } from "./gesture-test-adapter";

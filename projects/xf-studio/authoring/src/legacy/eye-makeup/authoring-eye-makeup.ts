@@ -5,7 +5,7 @@
  * always have (one checkpoint, the new state, its render effect). Every way of editing eye makeup
  * goes through it: dispatched actions, form controls (CORE-31) and gesture frames. DOM-free.
  */
-import type { AuthoringDocument } from "../../app/authoring/authoring-document";
+import type { AuthoringDocument } from "../../app/authoring/makeup-document";
 import type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupResult, EyeMakeupState } from "./eye-makeup-model";
 import type { FeatureActionSpec, GestureProvider } from "../../platform/api";
 import type { Recipe } from "../../engines/layered-makeup/recipe";

@@ -15,7 +15,7 @@ import * as THREE from "three";
 import { createBrowserSceneHeads, type SceneHeadsPorts } from "../src/preview/browser/browser-scene-heads";
 import type { LayeredSurfaceWiring } from "../src/preview/browser/browser-head-attachment";
 import { CharacterContextActions } from "../src/character/character-context-actions";
-import { AuthoringDocument, type DocumentState } from "../src/app/authoring/authoring-document";
+import { AuthoringDocument, type DocumentState } from "./fixtures/makeup-document";
 import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
 import type { RasterPort } from "../src/legacy/eye-makeup/browser/raster-client";
 import type { LayeredMakeupSurface } from "../src/engines/layered-makeup/render/makeup-stack";

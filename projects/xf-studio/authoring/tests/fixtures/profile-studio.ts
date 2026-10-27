@@ -14,7 +14,7 @@ import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-r
 import type { Recipe } from "../../src/engines/layered-makeup/recipe";
 import { CollectionApplication } from "../../src/library/collection-application";
 import { CollectionService, type CollectionServiceDeps, type CollectionTransport } from "../../src/library/collection-service";
-import type { AuthoringDocument } from "../../src/app/authoring/authoring-document";
+import type { AuthoringDocument } from "../../src/app/authoring/makeup-document";
 import type { DocumentModel } from "../../src/app/workspace/collection-workspace";
 import { type LookRef, lookRef, collectionRef } from "../../src/library/collection-documents";
 import { CollectionOwner, type CollectionVersionsPort } from "../../src/library/collection-owner";

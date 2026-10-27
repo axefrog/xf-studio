@@ -1,4 +1,4 @@
-import type { AuthoringDocument } from "./authoring-document";
+import type { AuthoringDocument } from "./makeup-document";
 import type { GestureEdit } from "../../engines/layered-makeup/recipe-actions";
 import type { Layer } from "../../engines/layered-makeup/recipe";
 import { gestureHistoryLabel, type HistoryLabel } from "../../legacy/eye-makeup/history-labels";
