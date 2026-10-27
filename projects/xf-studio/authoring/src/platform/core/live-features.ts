@@ -6,6 +6,7 @@
  */
 import type { AnyFeatureModule } from "../api/feature";
 import type { FeatureState } from "../api/document";
+import { notifyAll } from "./listeners";
 
 /** One feature's live state for a look: its parsed part (absent: the look lacks it) and its editor memory. */
 export type LiveFeatureState = { part?: unknown; editor?: unknown };
@@ -81,7 +82,7 @@ export class LiveFeatures {
     return document;
   }
   subscribe(listener: (change: LiveFeatureChange) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  private notify(change: LiveFeatureChange) { if (!this.batching) for (const listener of this.listeners) listener(change); }
+  private notify(change: LiveFeatureChange) { if (!this.batching) notifyAll(this.listeners, change); }
   get size() { return this.documents.size; }
   features(): string[] { return [...this.documents.keys()]; }
   has(feature: string) { return this.documents.has(feature); }
@@ -90,7 +91,9 @@ export class LiveFeatures {
   read(feature: string): unknown | undefined { return this.documents.get(feature)?.part; }
   /** Restore the parts an Undo or Redo returned; features without a live document are ignored. Returns the restored ones. */
   restore(parts: Readonly<Record<string, unknown | undefined>>): string[] {
-    return this.restorePrepared(this.prepareRestore(parts));
+    const prepared = this.prepareRestore(parts);
+    this.restorePrepared(prepared)();
+    return prepared.map(item => item.feature);
   }
   prepareRestore(parts: Readonly<Record<string, unknown | undefined>>) {
     return Object.entries(parts).flatMap(([feature, part]) => {
@@ -98,7 +101,14 @@ export class LiveFeatures {
       return document ? [{ feature, document, state: document.prepareRestore(part) }] : [];
     });
   }
-  restorePrepared(prepared: ReturnType<LiveFeatures["prepareRestore"]>) { return this.commit(prepared, "restore"); }
+  /** Commit now, returning publication for the history target's `settled` hook, outside the stack's rollback boundary. */
+  restorePrepared(prepared: ReturnType<LiveFeatures["prepareRestore"]>): () => void {
+    const previous = prepared.map(item => item.document.part), features = this.commit(prepared, "restore");
+    return () => notifyAll([
+      ...prepared.map((item, i) => () => item.document.restored(previous[i])),
+      () => { if (features.length) this.notify({ kind: "restore", features }); },
+    ]);
+  }
   /** A fingerprint of the listed features' parts (all by default): equal text, equal content. */
   content(features: readonly string[] = this.features()): string {
     return JSON.stringify(features.filter(feature => this.documents.get(feature)?.part !== undefined)
@@ -124,15 +134,14 @@ export class LiveFeatures {
       throw Error("This look's live state includes a feature this editor cannot show.");
     return [...this.documents].map(([feature, document]) => ({ feature, document, state: document.prepare(states?.[feature]) }));
   }
-  loadPrepared(prepared: ReturnType<LiveFeatures["prepare"]>) { this.commit(prepared, "load"); }
+  loadPrepared(prepared: ReturnType<LiveFeatures["prepare"]>) {
+    const features = this.commit(prepared, "load");
+    if (features.length) this.notify({ kind: "load", features });
+  }
   private commit(prepared: ReturnType<LiveFeatures["prepare"]>, kind: "load" | "restore") {
-    const previous = prepared.map(item => item.document.part);
     this.batching = true;
     try { for (const item of prepared) item.document.commit(item.state, kind); }
     finally { this.batching = false; }
-    if (kind === "restore") for (let i = 0; i < prepared.length; i++) prepared[i].document.restored(previous[i]);
-    const features = prepared.map(item => item.feature);
-    if (features.length) this.notify({ kind, features });
-    return features;
+    return prepared.map(item => item.feature);
   }
 }

@@ -4,6 +4,7 @@ import { featureId, LOOK_HISTORY_1, type FeatureModule, type LookHistoryData } f
 import { createHistoryService, lookScope } from "../src/platform/core/history-service";
 import { CONTROL_TRANSACTION } from "../src/platform/core/history-transaction";
 import { emptyLookHistory } from "../src/platform/core/look-history";
+import { LiveFeatures } from "../src/platform/core/live-features";
 import { editorComposition, FIXTURE_LOOK, SYNTHETIC_ID, SYNTHETIC_LAYERED, zeroFeatureComposition, type SyntheticPart } from "./fixtures/editor-composition";
 import { AuthoringDocument as MakeupDocument } from "./fixtures/makeup-document";
 import { freshWorkspace } from "./fixtures/eye-region";
@@ -179,4 +180,80 @@ test("slice 2: an in-place part change publishes its snapshot and invalidates Re
     expect((observed[0].features[SYNTHETIC_ID].part as SyntheticPart).layers[0].value).toBe(4);
     expect(f.document.history.canRedo()).toBe(false);
   } finally { f.life.abort(); }
+});
+
+test.each(["document subscriber", "feature subscriber", "replay hook"])("slice 2: a throwing %s cannot roll back a committed history move", source => {
+  const composition = editorComposition([marker]), live = new LiveFeatures(), history = createHistoryService(), life = new AbortController();
+  const failure = Error("Observer failed"), fail = () => { throw failure; };
+  live.add(marker, source === "replay hook" ? { restored: fail } : undefined);
+  if (source === "feature subscriber") live.subscribe(change => { if (change.kind === "restore") fail(); });
+  const document = new AuthoringDocument({ features: { [MARKER]: { part: { count: 1 } } } },
+    { features: live, parts: composition.parts }, { signal: life.signal, history });
+  const scope = document.history, part = live.document(MARKER)!, observed: unknown[] = [];
+  try {
+    scope.checkpoint([MARKER]); part.set({ count: 7 }, {});
+    if (source === "document subscriber") document.subscribe(change => { if (change === "part") fail(); });
+    document.subscribe(change => { if (change === "part") observed.push({ part: part.part, history: scope.state() }); });
+    expect(() => scope.undo()).toThrow(failure);
+    expect(part.part).toEqual({ count: 1 });
+    expect(scope.state()).toMatchObject({ depth: 0, redoDepth: 1 });
+    expect(observed).toMatchObject([{ part: { count: 1 }, history: { depth: 0, redoDepth: 1 } }]);
+    expect(() => scope.redo()).toThrow(failure);
+    expect(part.part).toEqual({ count: 7 });
+    expect(scope.state()).toMatchObject({ depth: 1, redoDepth: 0 });
+    expect(observed).toMatchObject([
+      { part: { count: 1 }, history: { depth: 0, redoDepth: 1 } },
+      { part: { count: 7 }, history: { depth: 1, redoDepth: 0 } },
+    ]);
+  } finally { life.abort(); }
+});
+
+test("slice 2: abort makes retained history refuse live reads and replay, and guards the document's subscriptions and mutations", () => {
+  const f = fixture(), scope = f.document.history;
+  scope.checkpoint([SYNTHETIC_ID]); f.layers.set({ layers: [{ id: "first", value: 7 }] }, { selected: "first" });
+  scope.checkpoint([SYNTHETIC_ID]); f.layers.set({ layers: [{ id: "first", value: 9 }] }, { selected: "first" });
+  expect(scope.undo()).toBe(true); // Abort with valid Redo also exercises scope retirement.
+  const before = f.document.export(), start = scope.timeline().startId;
+  f.life.abort();
+  expect(f.history.scope(scope.id)).toBeUndefined();
+  expect(scope.undo()).toBe(false);
+  expect(scope.redo()).toBe(false);
+  expect(scope.jumpTo(start)).toBe(false);
+  expect(scope.revertTransaction(undefined)).toBe(false);
+  expect(() => scope.checkpoint([SYNTHETIC_ID])).toThrow();
+  expect(() => scope.begin([SYNTHETIC_ID], CONTROL_TRANSACTION)).toThrow();
+  expect(scope.capability({ kind: "history.undo" }).available).toBe(false);
+  expect(() => f.document.subscribe(() => {})).toThrow();
+  expect(() => f.document.onReplacing(() => {})).toThrow();
+  expect(() => f.document.setBlocked("Released")).toThrow();
+  expect(() => f.document.changed()).toThrow();
+  expect(() => f.document.replacing()).toThrow();
+  expect(() => f.document.restore(before, "look:released/other")).toThrow();
+  expect(f.live.export()).toEqual(before.features);
+  expect(f.history.scope("look:released/other")).toBeUndefined();
+});
+
+test.each(["part load", "history publication"])("slice 2: abort during construction's %s unwinds the scope and subscriptions", source => {
+  const composition = editorComposition([marker]), history = createHistoryService(), life = new AbortController(), scope = lookScope(FIXTURE_LOOK);
+  const off = source === "part load" ? composition.live.subscribe(() => life.abort()) : history.subscribe(() => life.abort());
+  try {
+    expect(() => new AuthoringDocument({ features: { [MARKER]: { part: { count: 1 } } } },
+      { features: composition.live, parts: composition.parts }, { signal: life.signal, history, scope })).toThrow();
+    expect(life.signal.aborted).toBe(true);
+    expect(history.scope(scope)).toBeUndefined();
+    off();
+    // Neither source can call back into a partially constructed, released document.
+    expect(() => composition.live.document(MARKER)!.set({ count: 7 }, {})).not.toThrow();
+    expect(history.scope(scope)).toBeUndefined();
+  } finally { off(); life.abort(); }
+});
+
+test("slice 2: abort while a restore closes its old scope cannot register the replacement scope", () => {
+  const f = fixture(), state = f.document.export(), old = f.document.scopeId;
+  const off = f.history.subscribe(() => f.life.abort());
+  try {
+    expect(() => f.document.restore(state, "look:released/replacement")).toThrow();
+    expect(f.history.scope(old)).toBeUndefined();
+    expect(f.history.scope("look:released/replacement")).toBeUndefined();
+  } finally { off(); f.life.abort(); }
 });
