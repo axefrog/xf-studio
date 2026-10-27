@@ -29,8 +29,12 @@ fixture identity changes.
 ## Real import summary
 
 **28 cells:** 25 clipped origin-anchored 200 m blocks, three venues retaining all
-seven polygon/Z volumes. Block area totals **485,616.81 m²**;
-venue XY footprint unions total **4,228.52 m²**. The
+seven polygon/Z volumes. Retained block area totals **485,616.813989 m²**,
+against the quantised district's **485,616.587650 m²**: a geometric difference
+of **+0.226339 m²** from rounded clip intersections. This area difference is
+reported separately from headcount rounding and does not alter the census;
+residential shares use the retained block total as their denominator.
+Venue XY footprint unions total **4,228.52 m²**. The
 reported union counts stacked/overlapping venue footprints once. Population
 floor applies in six blocks. All 7,534 spots and 268 pins have a cell.
 
@@ -66,7 +70,9 @@ floor applies in six blocks. All 7,534 spots and 268 pins have a cell.
 | 28 (-4,10) | 304.049 | 2 | 0 | 0 | no | — | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
 
 ¹ Residents here means S1's rounded cell headcount, not a measured live count or
-an enumeration of generated household members. Area allocation targets 2,964;
+an enumeration of generated household members. Shares are normalised by the
+sum of retained block areas; the last block absorbs floating-point residue so
+they sum to exactly 1 in cell order. Area allocation targets 2,964;
 unchanged per-cell rounding yields **2,963** (delta −1), zero in venues.
 Household counts and membership draws retain the existing recipe. Venue zero-link
 presence uses the same explicit census-share fallback as other empty-link cells.
@@ -119,7 +125,7 @@ person, 99 vehicle, ten unsupported/unresolved. Entries total 1,958: 1,843 perso
 
 - **derived — geometry:** Input coordinates quantised once by Math.round(metres * 1000); integer-mm geometry, exact 200000 mm grid, rounded integer-mm clip intersections and reused on-line endpoints. Disconnected simple components stay separate. Areas/orientations use BigInt; venue overlap requires exact intersection area >=1 mm2. Centres round once to mm; squared-distance comparisons use BigInt and id ties. Only the final index/report projection converts back to metres/m2. Venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.
 - **derived — neighbours:** Grid edge neighbours, diagonal second neighbours; venues intersect actual clipped block polygons in XY. Geometry only; traversability unknown. Venue host is the nearest genuinely overlapping block centre by fixed-order squared distance, then cell id.
-- **derived — headShare:** Clipped block area / district area; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.
+- **derived — headShare:** Clipped block area / sum of retained block areas; final block absorbs floating-point share residue so shares sum to exactly 1 in cell order. Report retained-minus-district area separately from per-cell headcount rounding; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.
 - **derived — presence/pop:** One vote per distinct person-entry/spot link across phases, retaining cross-community tuples. Affiliation from records, civilian/Unaffiliated merged, NCPD normalized. Exclude vehicle/other/unresolved affiliation. Flat periods (06:00, 12:00, 18:00, 00:00): schedule unknown. Pop distributes the census scale over all cells by votes; empty blocks get 1% of mean block votes (mean 1 if all empty). Empty cells use census affiliation shares. No simultaneous occupancy claim.
 - **derived — services:** One plain-kind table; nearest 15 by fixed-order squared 3D distance to footprint-weighted cell centre, ties by POI id. Market only when a retained POI service has a declared retail vendor type. Unknown kinds counted, never guessed. Evidence pins never become services.
 - **derived — binding:** All linked entry types retained; exact (community id, entry name, spot id), deduplicated only across phases of the same entry. Registry ids and ordinals unavailable; no runtime binding. Fallback ids counted by colon format.
@@ -180,33 +186,43 @@ Other cells changed by at most 0.01 m². Cells (28), services (17), markets (eig
 hosts, residential rounding (2,963), spot assignments, binding tuples and POI
 counts are unchanged. Repeated real imports give identical index/report bytes.
 
+The private report's `geometry` records `districtAreaM2`, `retainedBlockAreaM2`
+and signed `areaDeltaM2` (retained minus district), independently of
+`population.roundingDelta`. The conservation regression uses
+`[[-200,0],[100,0.1],[200,0]]` in both windings: district **20 m²**, retained
+blocks **20.05 m²**, geometric difference **+0.05 m²**, residential share sum
+**1**, rounded residents **2,964**, headcount rounding difference **0**.
+The latest real rerun changes no cell areas or rounded residents; its shares
+sum to **1**, and its headcount rounding difference remains **−1**.
+
 ## Verification and responsiveness evidence
 
 - Targeted importer, day, Holotable/readability, public API, frozen digest and
-  S1/S3 transcript checks: **60 pass, four expected skips, zero fail**. The
+  S1/S3 transcript checks: **61 pass, four expected skips, zero fail**. The
   full suite remains the coordinator's check. Type, link/privacy and
   whitespace checks pass. No commit or staging is performed.
 - The imported day covers 86,400 seconds / 144 windows and 145 read-only
   observer samples. Its spool passes the independent internals oracle and
   Holotable validator: 13 layers, 35 place items, 133 item records and zero
-  truncations. It took **19.06 s**; the whole guarded targeted job peaked at
-  **1.4 GB**. Real CLI imports took **261 ms** and **356 ms** inside the tool
+  truncations. It took **17.56 s**; the whole guarded targeted job peaked at
+  **1.4 GB**. Real CLI imports took **287 ms** and **185 ms** inside the tool
   (startup excluded), producing identical index/report bytes. Shared-machine
   samples do not establish a speed trend. Existing frozen digests remain v3
   `746601727380a3fdff647f873c91c971`, v4 `8fce55b19462a1e02f03ca5336bd8c16`.
 - Regressions cover the reported fractional boundary vertex, both windings,
   all clipping directions, sloped shared edges, zero-area contacts, 0.5 mm²
   rejection, exactly 1 mm² acceptance and summed component/stacked-volume cases.
-- Two complete byte goldens include their SHA-256 files. The original is
-  refreshed for quantisation; the second includes fractional/sloped input,
+- Two complete byte goldens include their SHA-256 files. Both are refreshed
+  for the separate geometric area report and revised allocation assumption;
+  only the fractional golden's index changes from share normalisation. It includes fractional/sloped input,
   disconnected components and 20 vendor services ordered/capped to 15.
   Local fixture attributes preserve bytes on Windows/Linux checkouts. Golden
   generation ran on Windows; Linux CI checks the same bytes.
 
 | Golden | UTF-8 bytes | SHA-256 |
 |---|---:|---|
-| [import.golden.json](test/world/fixtures/import.golden.json) | 53,804 | `db5e5725ed72e7e313daa58a5d7f7df83510c13f59d91246e9de6f5376fe20bc` |
-| [fractional-import.golden.json](test/world/fixtures/fractional-import.golden.json) | 89,330 | `d7f180ffb1c089cd4da431d1a8623e1be21d2f3f895e17796499828f3895ee53` |
+| [import.golden.json](test/world/fixtures/import.golden.json) | 54,107 | `7533deab054cc1c6266af61eb9bd30d899ee7fd48c5fa9d481b09287f3aadf87` |
+| [fractional-import.golden.json](test/world/fixtures/fractional-import.golden.json) | 89,656 | `632acac8a0fe51785cdd2b0b52336d0324e1180fc7031a6566728c69e84937cf` |
 
 Input fixtures, FX-3, the frozen transcripts and archived runs are unchanged.
 Private index/report remain under `local/`; `.scratch-w1/` is untracked and
@@ -217,5 +233,6 @@ Knowledge used: [Places](../../../knowledge/places.md),
 [Population and affiliations](../../../knowledge/population-and-affiliations.md),
 [World and streaming](../../../knowledge/world-and-streaming.md), and
 [W1 content](../../../research/live-world-view/w1-world-content.md).
-The places page records the integer-mm policy and its limits; the population
-and streaming pages' source-data findings remain unchanged.
+The places and population pages record the retained-area normalisation and
+separate geometric/headcount differences; their source-data findings and the
+streaming page remain unchanged.

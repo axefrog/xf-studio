@@ -98,7 +98,7 @@
           "shakedown": 0,
           "theft": 0
         },
-        "headShare": 0.13778411628406015,
+        "headShare": 0.13778398016478324,
         "id": "0daa7c17a6977193ed0eb8bd8ad47778",
         "kind": "grid",
         "marketCell": false,
@@ -268,7 +268,7 @@
           "shakedown": 0,
           "theft": 0
         },
-        "headShare": 0.016909718137784677,
+        "headShare": 0.016909701432385914,
         "id": "865cb2678320a9bcd19692412fbbc6bd",
         "kind": "grid",
         "marketCell": false,
@@ -438,7 +438,7 @@
           "shakedown": 0,
           "theft": 0
         },
-        "headShare": 0.02001290077623993,
+        "headShare": 0.02001288100515415,
         "id": "9d11116bcf636409fdb9d8033e00f158",
         "kind": "grid",
         "marketCell": false,
@@ -608,7 +608,7 @@
           "shakedown": 0,
           "theft": 0
         },
-        "headShare": 0.02136035943510188,
+        "headShare": 0.021360338332838725,
         "id": "afe58497541db22ba7fe7cef72d2587d",
         "kind": "grid",
         "marketCell": false,
@@ -780,7 +780,7 @@
           "shakedown": 0,
           "theft": 0
         },
-        "headShare": 0.0424811253233799,
+        "headShare": 0.04248108335555213,
         "id": "c395de04232f26a7f02010379a825034",
         "kind": "grid",
         "marketCell": false,
@@ -952,7 +952,7 @@
           "shakedown": 0,
           "theft": 0
         },
-        "headShare": 0.0438785583701729,
+        "headShare": 0.04387851502179721,
         "id": "c4369efe0f2ab1fc3305a7596348481e",
         "kind": "grid",
         "marketCell": false,
@@ -1128,7 +1128,7 @@
           "shakedown": 0,
           "theft": 0
         },
-        "headShare": 0.4204217187985273,
+        "headShare": 0.42042130345674555,
         "id": "c9e8b46e6aba18060e7144354ab1a6c7",
         "kind": "grid",
         "marketCell": true,
@@ -1535,7 +1535,7 @@
           "shakedown": 0,
           "theft": 0
         },
-        "headShare": 0.011360487851225539,
+        "headShare": 0.011360476628005989,
         "id": "dc517281f5df16b62e54227b76cba62c",
         "kind": "grid",
         "marketCell": false,
@@ -1707,7 +1707,7 @@
           "shakedown": 0,
           "theft": 0
         },
-        "headShare": 0.2857920029415279,
+        "headShare": 0.2857917206027371,
         "id": "e2be3dbec02d0e8f4c253ae009ef5465",
         "kind": "grid",
         "marketCell": false,
@@ -2378,7 +2378,7 @@
         ]
       }
     },
-    "hash": "2c05cf8d8f5548eff8fac98e8ee95bc3",
+    "hash": "c5b8e9dbf9e94043e92ea5977f554ab6",
     "names": {
       "grid:-1,-1": "afe58497541db22ba7fe7cef72d2587d",
       "grid:-1,0": "c395de04232f26a7f02010379a825034",
@@ -2999,7 +2999,7 @@
       },
       {
         "field": "headShare",
-        "rule": "Clipped block area / district area; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.",
+        "rule": "Clipped block area / sum of retained block areas; final block absorbs floating-point share residue so shares sum to exactly 1 in cell order. Report retained-minus-district area separately from per-cell headcount rounding; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.",
         "source": "derived"
       },
       {
@@ -3369,7 +3369,12 @@
       "vehicleEntries": 0,
       "vehicleRecords": 0
     },
-    "indexHash": "2c05cf8d8f5548eff8fac98e8ee95bc3",
+    "geometry": {
+      "areaDeltaM2": 0.047083,
+      "districtAreaM2": 47658.812816,
+      "retainedBlockAreaM2": 47658.859899
+    },
+    "indexHash": "c5b8e9dbf9e94043e92ea5977f554ab6",
     "lineage": "Different input content or geometry creates a new lineage. Origin-anchored grid keys are stable; ordinal member ids can shift when earlier cells are inserted.",
     "population": {
       "census": 2964,

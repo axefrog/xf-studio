@@ -1821,7 +1821,7 @@
       },
       {
         "field": "headShare",
-        "rule": "Clipped block area / district area; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.",
+        "rule": "Clipped block area / sum of retained block areas; final block absorbs floating-point share residue so shares sum to exactly 1 in cell order. Report retained-minus-district area separately from per-cell headcount rounding; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.",
         "source": "derived"
       },
       {
@@ -2040,6 +2040,11 @@
       "unknownRecords": 1,
       "vehicleEntries": 1,
       "vehicleRecords": 1
+    },
+    "geometry": {
+      "areaDeltaM2": 0,
+      "districtAreaM2": 160000,
+      "retainedBlockAreaM2": 160000
     },
     "indexHash": "f2bbfd4e5b78ef9255837232217a6d9f",
     "lineage": "Different input content or geometry creates a new lineage. Origin-anchored grid keys are stable; ordinal member ids can shift when earlier cells are inserted.",

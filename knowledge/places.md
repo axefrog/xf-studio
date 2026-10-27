@@ -505,6 +505,11 @@ requires at least **1 mm²** of exact rational intersection area: shared edges
 and points are contact. The serialised index converts coordinates back to
 metres only at the final output projection. Quantisation can change a clipped
 cell's area; it does not promise the exact boundary of the unquantised source.
+Rounded clip pieces can also differ in total area from the quantised district:
+real Kabuki's retained blocks total 485,616.813989 m² against 485,616.587650 m²,
+a +0.226339 m² geometric difference. Residential shares normalise by the
+retained total, with a final floating-point residue adjustment to sum to 1;
+the report separates this geometric difference from per-cell headcount rounding.
 Regressions cover fractional boundary vertices, sloped shared edges, all four
 clipping directions and the 1 mm² threshold. Simple input rings without holes
 are supported; these finite checks do not establish robustness for arbitrary

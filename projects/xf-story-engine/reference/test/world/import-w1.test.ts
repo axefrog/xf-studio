@@ -266,6 +266,26 @@ test('population census, zero venue residents, affiliation normalization, floor 
   expect(importW1(pack,content).report.affiliations.personEntries.ncpd).toBe(1);
 });
 
+test('residential shares conserve the census when rounded clipping changes retained area', () => {
+  const triangle: [number, number][] = [[-200,0],[100,0.1],[200,0]];
+  for (const reverse of [false, true]) {
+    const { pack, content } = fixture();
+    pack.areas = [{ ...pack.areas[0], poly: reverse ? [...triangle].reverse() : triangle }];
+    const { index, report } = importW1(pack, content);
+    const cells = Object.values(index.cells);
+    expect(cells).toHaveLength(2);
+    expect(report.geometry).toEqual({ districtAreaM2: 20, retainedBlockAreaM2: 20.05, areaDeltaM2: 0.05 });
+    expect(cells.reduce((n, c) => n + c.headShare, 0)).toBe(1);
+    expect(report.population).toEqual({ census: 2964, roundedHeadcount: 2964, roundingDelta: 0 });
+    expect(report.cells.reduce((n, c) => n + c.residents, 0)).toBe(2964);
+  }
+  // More cells and sloped/disconnected geometry also close exactly in cell order.
+  const dir = resolve(import.meta.dir, 'fixtures');
+  const { index } = importW1(JSON.parse(readFileSync(join(dir, 'fractional-world-pack.json'), 'utf8')),
+    JSON.parse(readFileSync(join(dir, 'fractional-content.json'), 'utf8')));
+  expect(Object.values(index.cells).reduce((n, c) => n + c.headShare, 0)).toBe(1);
+});
+
 test('services use one table; coverage is evidence; nearest 15 with deterministic ties and drop counts', () => {
   const { pack, content } = fixture();
   for (let i = 0; i < 20; i++) content.pois.push({id:`extra-${String(i).padStart(2,'0')}`,at:[50+i,50,0],kind:'Ripperdoc'});

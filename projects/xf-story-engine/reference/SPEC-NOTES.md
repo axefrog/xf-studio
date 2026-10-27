@@ -2469,7 +2469,11 @@ public flags are identical within each kind. Markets require a retained POI
 service in the declared retail vendor set; they are never inherited from a
 template. Coverage reductions are zero. District totals are re-summed from the
 shared opportunities. Stub/rest totals and S1Data defaults remain unchanged.
-Measured presence does not recalibrate these priors. The residential scale is
+Measured presence does not recalibrate these priors. Residential shares divide
+each clipped block area by the sum of retained block areas, with final-block
+floating-point residue adjustment to sum to exactly 1 in cell order. Rounded
+clipping can change total area; the report separates retained-minus-district
+area from headcount rounding. The residential scale is
 2,964; S1's unchanged per-cell rounding yields
 2,963 headcount units on real Kabuki. Household draws remain estimates, not an
 exact population enumeration.

@@ -379,7 +379,13 @@ presence), and **4,779 distinct person-entry/spot links**. W1's counts are
 potential casting links, not quantities or simultaneous population. In this
 input, Tyger Claws have 211 person entries, Scavengers 51 and The Mox 48; the
 unchanged census priors remain 205, 48 and 112 respectively. S1's residential
-scale remains 2,964, allocated by clipped block area; unchanged per-cell rounding
+scale remains 2,964, allocated by clipped block area divided by the sum of
+retained block areas. The final block absorbs floating-point share residue,
+so shares sum to exactly 1 in cell order even when rounded clip intersections
+change total geometric area. The report records that geometric difference
+separately from headcount rounding. The 20 m² narrow-triangle regression retains
+20.05 m² after clipping yet allocates 2,964 residents in both windings [offline].
+On real Kabuki, unchanged per-cell rounding
 yields 2,963 headcount units, with household membership still drawn from the
 existing recipe. Population periods are flat because the exported schedules
 remain unknown. Empty-link cells explicitly fall back to census affiliations;

@@ -27,6 +27,7 @@ export interface ImportReport {
     presenceFloor: boolean; presenceTop3: Array<[string, number]>; services: number; market: boolean; host?: string; components: number;
     droppedServices: number; coverage: Record<string, number>; standInTemplate: string }>;
   templates: { block: { name: string; id: string; rule: string }; venue: { name: string; id: string; rule: string } };
+  geometry: { districtAreaM2: number; retainedBlockAreaM2: number; areaDeltaM2: number };
   population: { census: number; roundedHeadcount: number; roundingDelta: number };
   affiliations: { census: Array<{ aff: string; q: number }>; personEntries: Record<string, number>; personSpotLinks: Record<string, number> };
   counts: Record<string, number>; unknownPoiKinds: Record<string, number>; assumptions: Array<{ source: 'stand-in' | 'derived'; field: string; rule: string }>;
@@ -112,6 +113,8 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
   const cellIds = shapes.map((_, i) => memberId(district.id, 'cells', i));
   const geometry = Object.fromEntries(cellIds.map((id, i) => [id, shapes[i]]));
   const blocks = shapes.filter((g) => g.grid), meanFloor = 0.01;
+  const retainedBlockArea = blocks.reduce((n, g) => n + g.area, 0);
+  if (retainedBlockArea <= 0) throw Error('W1 import requires positive retained block area');
   const counts: Record<string, number> = {
     records: Object.keys(content.records).length,
     personRecords: Object.values(content.records).filter((r) => r.kind === 'person').length,
@@ -190,11 +193,18 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
     venue: { name: 'v5', id: base.names!.v5, rule: 'First non-market stand-in venue in fixture order.' },
   };
   const cells: ImportedWorldIndex['cells'] = {}, rows: ImportReport['cells'] = [];
+  let allocatedHeadShare = 0;
   for (const id of cellIds) {
     const g = geometry[id], template = base.cells[g.grid ? templates.block.id : templates.venue.id];
     const c: CellIndex = structuredClone(template);
     c.id = id; c.district = district.id; c.kind = g.grid ? 'grid' : 'venue'; delete c.host;
-    c.headShare = g.grid ? g.area / districtArea : 0;
+    c.headShare = 0;
+    if (g.grid) {
+      // Rounded clip intersections can change the total area. Normalise by
+      // retained blocks; the final block absorbs only floating-point residue.
+      c.headShare = g === blocks[blocks.length - 1] ? 1 - allocatedHeadShare : g.area / retainedBlockArea;
+      allocatedHeadShare += c.headShare;
+    }
     const pop = totalWeight ? district.entry.total * raw[id] / totalWeight : 0;
     c.pop = [pop, pop, pop, pop];
     const n = sum(weights[id]);
@@ -252,12 +262,15 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
   const report: ImportReport = {
     schema: 'xf.s1-world-import-report@1', indexHash: index.hash,
     lineage: 'Different input content or geometry creates a new lineage. Origin-anchored grid keys are stable; ordinal member ids can shift when earlier cells are inserted.',
-    cells: rows, templates, population: { census: district.entry.total, roundedHeadcount, roundingDelta: roundedHeadcount - district.entry.total },
+    cells: rows, templates,
+    geometry: { districtAreaM2: districtArea / 1_000_000, retainedBlockAreaM2: retainedBlockArea / 1_000_000,
+      areaDeltaM2: (retainedBlockArea - districtArea) / 1_000_000 },
+    population: { census: district.entry.total, roundedHeadcount, roundingDelta: roundedHeadcount - district.entry.total },
     affiliations: { census: district.entry.byAff.map(({ aff, q }) => ({ aff, q })), personEntries, personSpotLinks }, counts, unknownPoiKinds,
     assumptions: [
       { source: 'derived', field: 'geometry', rule: 'Input coordinates quantised once by Math.round(metres * 1000); integer-mm geometry, exact 200000 mm grid, rounded integer-mm clip intersections and reused on-line endpoints. Disconnected simple components stay separate. Areas/orientations use BigInt; venue overlap requires exact intersection area >=1 mm2. Centres round once to mm; squared-distance comparisons use BigInt and id ties. Only the final index/report projection converts back to metres/m2. Venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.' },
       { source: 'derived', field: 'neighbours', rule: 'Grid edge neighbours, diagonal second neighbours; venues intersect actual clipped block polygons in XY. Geometry only; traversability unknown. Venue host is the nearest genuinely overlapping block centre by fixed-order squared distance, then cell id.' },
-      { source: 'derived', field: 'headShare', rule: 'Clipped block area / district area; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.' },
+      { source: 'derived', field: 'headShare', rule: 'Clipped block area / sum of retained block areas; final block absorbs floating-point share residue so shares sum to exactly 1 in cell order. Report retained-minus-district area separately from per-cell headcount rounding; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.' },
       { source: 'derived', field: 'presence/pop', rule: 'One vote per distinct person-entry/spot link across phases, retaining cross-community tuples. Affiliation from records, civilian/Unaffiliated merged, NCPD normalized. Exclude vehicle/other/unresolved affiliation. Flat periods (06:00, 12:00, 18:00, 00:00): schedule unknown. Pop distributes the census scale over all cells by votes; empty blocks get 1% of mean block votes (mean 1 if all empty). Empty cells use census affiliation shares. No simultaneous occupancy claim.' },
       { source: 'derived', field: 'services', rule: 'One plain-kind table; nearest 15 by fixed-order squared 3D distance to footprint-weighted cell centre, ties by POI id. Market only when a retained POI service has a declared retail vendor type. Unknown kinds counted, never guessed. Evidence pins never become services.' },
       { source: 'derived', field: 'binding', rule: 'All linked entry types retained; exact (community id, entry name, spot id), deduplicated only across phases of the same entry. Registry ids and ordinals unavailable; no runtime binding. Fallback ids counted by colon format.' },
