@@ -3,6 +3,7 @@ export * from "./actions";
 export * from "./capability";
 export * from "./feature";
 export * from "./document";
+export * from "./editor";
 export * from "./history";
 export * from "./export";
 export * from "./view-graph";

@@ -7,6 +7,7 @@ import type { Capability, ReasonCode } from "./capability";
 import type { EditorCodec, MemoryCodec, PartCodec } from "./document";
 import type { HistoryLabel } from "./history";
 import type { ExportInfo } from "./export";
+import type { FeatureEditorFactory } from "./editor";
 
 export type FeatureId = string & { readonly __feature: unique symbol };
 export type FamilyId = string & { readonly __family: unique symbol };
@@ -70,6 +71,8 @@ export interface FeatureModule<A extends { kind: string } = { kind: string }, Sc
   readonly stage: "stable" | "preview" | "dev";
   readonly part: PartCodec<P>;
   readonly editor: EditorCodec<unknown, P>;
+  /** Optional per-look editor projection; its state and history remain owned by the look context. */
+  readonly createEditor?: FeatureEditorFactory;
   readonly memory?: MemoryCodec<unknown>;
   readonly actions: FeatureActionTable<P, E, A, Scope, X>;
   readonly gestures?: GestureProvider<P, G, R>;
@@ -84,7 +87,7 @@ export interface FeatureModule<A extends { kind: string } = { kind: string }, Sc
 export type ActionOwner<A extends { kind: string } = { kind: string }, Scope extends string = string> =
   SystemFamily<A, Scope, FamilyId> | FeatureModule<A, Scope, FeatureId>;
 /** A feature module seen by the platform, whatever its part and editor types. */
-export type AnyFeatureModule = Pick<FeatureModule, "id" | "label" | "exports"> & {
+export type AnyFeatureModule = Pick<FeatureModule, "id" | "label" | "exports" | "createEditor"> & {
   readonly part: PartCodec<unknown>; readonly editor: EditorCodec<unknown, unknown>; readonly memory?: MemoryCodec<unknown> };
 
 /**

@@ -64,3 +64,27 @@ Thirteen slices of about 0.5–1 agent-day each, in dependency order. They reuse
 **Estimate:** 10–14 agent-days to close, including validation and expected review fixes. Removing the whole five-subsystem scene exception is extra and not required.
 
 **Sequencing.** Keep P3-iv's `panels.bindings` and `panels.setBinding`, P3-v's contribution and instance catalogue, and P3-vii's `authoring.historyScopes()` and `history.selectScope` stable throughout. Run the edits to `studio-application.ts`, `studio-presentation.ts`, the runtime, the menus and the palette one at a time, not alongside phase 3's presentation work. Slices 1–4 touch none of phase 3's presentation files and can start once phase 3 lands.
+
+## Slice 1 as built (27 October 2026)
+
+**Boundary and fixtures complete; CORE-03 remains High.** This slice changes no startup behavior and fixes none of the four failures. The production addition is the optional `FeatureModule.createEditor` factory, also visible through `AnyFeatureModule` and the existing `PartRegistry.feature()` lookup. Its public types live in `src/platform/api/editor.ts`:
+
+- `FeatureEditorHost.look` fixes the collection/look destination for the editor's lifetime; `scope` names its existing shared `HistoryService` scope. Editors neither create nor close a second history.
+- `snapshot()` supplies only that feature's detached part and editor memory (`FeatureEditorState`). The optional part preserves a sparse look; the codecs and authoritative state stay with the existing `PartRegistry` and `LiveFeatures` owners. Actions still use the registered action table.
+- `subscribe()` announces edits, restores and selection changes until the host signal aborts. The look-context owner aborts `signal` before releasing state/history; the feature clears its own projection and refuses further reads. No parallel disposal or editor registry is introduced.
+- `FeatureEditor<S>.snapshot()` returns the feature's detached, read-only plain-data projection. Core construction carries it opaquely; only feature code interprets `S`. There are no gesture, renderer, facade or export hooks ahead of their slices.
+
+The asset-free [composition fixture](../../projects/xf-studio/authoring/tests/fixtures/editor-composition.ts) supplies an empty composition, a synthetic two-layer feature with its own codec, selection memory, registered value action and editor factory, and sparse collection seeds. It imports no makeup, renderer, browser, host or game assets. The [boundary tests](../../projects/xf-studio/authoring/tests/core-editor-boundary.test.ts) exercise the factory directly through `PartRegistry`, backed by `LiveFeatures` and the real `HistoryService`: absent-part projection, action/Undo/Redo observation, detached snapshots, abort cleanup and scope ownership. This fixture wiring is not a feature-neutral production core or shell-mount proof.
+
+The [four failure probes](../../projects/xf-studio/authoring/tests/core-editor-failures.test.ts) all pass by asserting today's exact named failure. Each fixing slice changes its expected message to `null` in one line and supplies its positive gate:
+
+| Probe | Slice expected to flip it |
+|---|---|
+| Empty-registry cold workspace: absent live feature's `part` | 3 |
+| Preseeded workspace into trusted core: unregistered live feature with gestures | 4 |
+| Application without eye makeup: extra `eye-makeup` handler | 5 |
+| Runtime without makeup facade: absent `finishCatalogue` | 7 |
+
+Eleven named pending tests specify slices 2–4: no-feature document/restore, cross-part and absent-part Undo/Redo, makeup adapter parity (2); cold empty workspace, zero/synthetic workspace and SQLite round trips, released-format compatibility (3); no-feature construction, registered synthetic construction, same-look sharing versus separate-look isolation, requester release/abort and dirty retention/retry (4). Slice 13 still owns real mount/paint/dispose proof.
+
+**Validation:** guarded `bun run check` passes; the new tests plus architecture-import-boundary, trusted-studio-bootstrap and view-contributions pass (49 pass, 11 todo, 0 fail; 519 assertions). The five guarded suite batches cover 513 tracked test files: 991/911/856/954/688 pass and 16/18/13/3/134 skip respectively, totaling 4,400 pass, 0 fail, 184 skip (highest successful-batch peak 2.4 GB under the 4 GB guard). The new, uncommitted test files run separately: 6 pass, 11 todo, 0 fail. Initially, batch 2 reached two 120-second Chrome dock-geometry hook timeouts. That run was stopped and resumed from batch 2 with a process-local unavailable `CHROME` path, retaining the same file partitions and turning unavailable browser probes into skips. No memory floor/limit kill occurred. Link and private-path checks pass. These are observed offline constructor/type results, with no browser/GPU evidence: the coordinator still runs the WebGL tests, both dock-strip geometry tests, tree-view geometry, layout-tabs timing and an existing-composition startup/paint/dispose smoke check in an isolated verification workspace. No phase-3 presentation file or protected binding/history API changed.
