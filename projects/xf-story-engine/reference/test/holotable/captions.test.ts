@@ -33,7 +33,7 @@ test('first facets are plain captions, and every known cell fallback references 
   expect(layers.get('places')!.find((i) => i.id === cell)!.facets!.mood).toBe('quiet, under a crackdown');
   expect(layers.get('events')!.find((i) => i.id === event)!.facets!['what happened']).toBe('A theft took place');
   expect(layers.get('stories')![0].facets!.now).toBeUndefined();
-  expect(layers.get('director')![0].facets!.decision).toBe('Held back: the story did not pass its checks');
+  expect(layers.get('director')![0].facets!.decision).toBe("Held back: it matches something you've excluded");
   for (const layer of ['people', 'events', 'stories', 'director']) {
     const item = layers.get(layer)!.find((i) => layer !== 'people' || i.id === actor)!;
     expect(item.anchor).toEqual({ item: `story-engine/places/${cell}` });

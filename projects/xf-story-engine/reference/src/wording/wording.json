@@ -507,7 +507,19 @@
     "phase-fade": "letting the current story settle",
     "climax-rest": "giving the high point room to breathe",
     "lead-aim": "waiting for the right moment",
-    "gate-7": "the story did not pass its checks"
+    "gate-1": "the story ran out of time",
+    "gate-2": "no way to stage it here yet",
+    "gate-3": "nothing has changed that's worth telling",
+    "gate-4": "no one is at the heart of it",
+    "gate-5": "you aren't connected to it yet",
+    "gate-6": "too big a start",
+    "gate-7": "it matches something you've excluded",
+    "gate-8": "you have enough going on",
+    "gate-9": "it would touch the main story's characters",
+    "gate-10": "it's already in motion",
+    "gate-11": "you haven't been shown enough yet",
+    "gate-12": "too big a step up",
+    "gate-13": "not allowed to steer this"
   },
   "nouns": {
     "debt": {

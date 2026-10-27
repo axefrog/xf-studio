@@ -205,3 +205,14 @@ test('every title role and all function moods agree with the protagonist and use
   expect(wording.title({ pattern: 'debt', bindings: { '?d': 'v', '?c': 'jun' } }, names)).toBe('Debt: you owe Jun');
   expect(wording.title({ pattern: 'interception', bindings: { '?i': 'mara', '?car': 'v' } }, names)).toBe('Interception: Mara goes after your delivery');
 });
+
+test('every sower gate reads as a plain reason, and an unknown numbered code never shows its id', () => {
+  for (let gate = 1; gate <= 13; gate++) {
+    const text = wording.reason(`gate-${gate}`);
+    expect(text).not.toMatch(/\d|gate/i);
+    expect(text.length).toBeGreaterThan(0);
+  }
+  expect(wording.reason('gate-99')).toBe('a check did not pass');
+  expect(wording.reason('S3-gate-7')).toBe('a check did not pass');
+  expect(wording.reason('phase-settling')).toBe('waiting for things to calm down');
+});

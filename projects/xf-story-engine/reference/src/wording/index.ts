@@ -25,7 +25,8 @@ export const percent = (n: number) => `${Math.round(n * 100)} %`;
 export const groupName = (s?: string) => s ? lookup(data.groups, s) : undefined;
 export const roleWord = (s?: string) => s ? lookup(data.roles, s.replace(/-group$/, '')) : undefined;
 export const eventNoun = (kind: string) => lookup(data.eventNouns, kind) ?? 'what happened';
-export const reason = (s: string) => lookup(data.reasons, s) ?? words(s)?.trim() ?? 'a check did not pass';
+// Unknown reasons fall back to their words, unless they're a numbered code (gate-2), which reads as an id.
+export const reason = (s: string) => lookup(data.reasons, s) ?? (/\d/.test(s) ? undefined : words(s)?.trim()) ?? 'a check did not pass';
 
 /** Names already in the record win. Unopened names use a display-only pool
  * assignment, stable by identity; this never calls the engine's random draws.
