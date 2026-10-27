@@ -22,6 +22,7 @@ import { refusal, type Capability } from "../../platform/api/capability";
 import type { ViewId } from "../../platform/api/view-graph";
 import { type PanelContext, type SubjectRef, sameSubject } from "../../platform/api/subjects";
 import { CHARACTER_KIND } from "../../platform/api/characters";
+import { targetPresent, type OwnerTargetStatus } from "../../platform/api/target-status";
 import type { LookRef } from "../../library/collection-documents";
 import type { PanelBinding, TabId } from "./profile-session";
 
@@ -43,9 +44,9 @@ export type BindingWorld = {
   /** Each view's focus number (higher: more recent; platform/core/focus.ts). */
   readonly focus: Readonly<Record<ViewId, number>>;
   /** Whether a subject still exists (not deleted). */
-  subject(ref: SubjectRef): boolean;
+  subject(ref: SubjectRef): OwnerTargetStatus;
   /** Whether a look still exists and is live (not removed). */
-  look(ref: LookRef): boolean;
+  look(ref: LookRef): OwnerTargetStatus;
 };
 
 export type Resolution =
@@ -54,7 +55,7 @@ export type Resolution =
   /** No candidate: the panel shows its empty state (Choose…, phase 2). */
   | { readonly state: "empty"; readonly reason: string; readonly missing?: Requirement; readonly target?: Target }
   /** A pin whose target is gone: the pin is kept, and the panel says what is missing (Follow focus, Choose…, Restore). */
-  | { readonly state: "dangling"; readonly missing: Requirement; readonly reason: string };
+  | { readonly state: "dangling"; readonly missing: Requirement; readonly reason: string; readonly target?: Target };
 
 const sameLook = (a: LookRef, b: LookRef) => a.collection === b.collection && a.look === b.look;
 const subjectName = (ref: SubjectRef | undefined) => ref?.kind === CHARACTER_KIND ? "V" : "subject";
@@ -68,8 +69,8 @@ export function chainOfView(world: BindingWorld, view: ViewId): Target | undefin
 function chainOfScene(world: BindingWorld, id: string): Target | undefined {
   const scene = world.scenes[id];
   if (!scene) return undefined;
-  return { scene: id, sceneGen: scene.gen, ...(scene.subject && world.subject(scene.subject) ? { subject: scene.subject } : {}),
-    ...(scene.look && world.look(scene.look) ? { look: scene.look } : {}) };
+  return { scene: id, sceneGen: scene.gen, ...(scene.subject && targetPresent(world.subject(scene.subject)) ? { subject: scene.subject } : {}),
+    ...(scene.look && targetPresent(world.look(scene.look)) ? { look: scene.look } : {}) };
 }
 
 /** Whether a view can serve a panel of this context in this tab (§3.3 eligibility). */
@@ -86,6 +87,11 @@ function eligible(world: BindingWorld, view: ViewId, tab: TabId, context: PanelC
 const passes = (context: PanelContext, target: Target, rules: readonly ConstraintRule[]) =>
   rules.every(rule => !rule.applies(context) || rule.check(target).available);
 const emptyTarget = (world: BindingWorld, context: PanelContext, target: Target): Resolution | undefined => {
+  const scene = target.scene ? world.scenes[target.scene] : undefined;
+  if ((context.kind === "subject" || context.kind === "view") && scene?.subject && !target.subject)
+    return { state: "dangling", missing: "subject", target, reason: world.subject(scene.subject).reason ?? "The subject this scene references was removed." };
+  if (context.kind === "look" && scene?.look && !target.look)
+    return { state: "dangling", missing: "look", target, reason: world.look(scene.look).reason ?? "The look this scene references was removed." };
   if ((context.kind === "subject" || context.kind === "view" && target.scene && world.scenes[target.scene]?.kind === CHARACTER_KIND) && !target.subject)
     return { state: "empty", missing: "subject", target, reason: "This 3D view has no V yet." };
   if (context.kind === "look" && !target.look)
@@ -110,14 +116,23 @@ export function resolveBinding(world: BindingWorld, request: { readonly tab: Tab
     return emptyTarget(world, context, best) ?? { state: "resolved", target: best, candidates: candidates.length, named: candidates.length > 1 };
   }
   const pin = binding.target;
+  const kind = "view" in pin ? "view" : "scene" in pin ? "scene" : "subject" in pin ? "subject" : "look";
+  const compatible = context.kind === "view" ? kind === "view" : context.kind === "scene" ? kind === "view" || kind === "scene"
+    : context.kind === "subject" ? kind !== "look" : kind !== "subject";
+  if (!compatible || "subject" in pin && context.kind === "subject" && !context.subjects.includes(pin.subject.kind))
+    return { state: "empty", reason: "What this panel is pinned to can't be shown here." };
   let target: Target | undefined, missing: Requirement, reason: string;
   if ("view" in pin) { target = chainOfView(world, pin.view); missing = "view"; reason = "The 3D view this panel was pinned to was closed."; }
   else if ("scene" in pin) { target = chainOfScene(world, pin.scene); missing = "scene"; reason = "The scene this panel was pinned to is gone."; }
   else if ("subject" in pin) {
-    target = world.subject(pin.subject) ? { subject: pin.subject } : undefined;
+    target = targetPresent(world.subject(pin.subject)) ? { subject: pin.subject } : undefined;
     missing = "subject"; reason = `The ${subjectName(pin.subject)} this panel was pinned to was deleted.`;
-  } else { target = world.look(pin.look) ? { look: pin.look } : undefined; missing = "look"; reason = "The look this panel was pinned to was removed."; }
+  } else { target = targetPresent(world.look(pin.look)) ? { look: pin.look } : undefined; missing = "look"; reason = "The look this panel was pinned to was removed."; }
   if (!target) return { state: "dangling", missing, reason };
+  const scene = target.scene && world.scenes[target.scene];
+  if (scene && (context.scenes && !context.scenes.includes(scene.kind) || context.kind === "subject" &&
+    (target.subject ? !context.subjects.includes(target.subject.kind) : !context.subjects.includes(scene.kind))))
+    return { state: "empty", reason: "What this panel is pinned to can't be shown here." };
   if (!passes(context, target, rules)) return { state: "empty", reason: "What this panel is pinned to can't be shown here." };
   return emptyTarget(world, context, target) ?? { state: "resolved", target, candidates: 1, named: true };
 }
@@ -159,8 +174,8 @@ export function captureCurrent(world: BindingWorld, capture: CaptureData, revisi
       return refusal("missing_target", "What this view shows changed. Try again.");
     }
   }
-  if (target.subject && !world.subject(target.subject)) return refusal("missing_target", `That ${subjectName(target.subject)} was deleted.`);
-  if (target.look && !world.look(target.look)) return refusal("missing_target", "That look was removed.");
+  if (target.subject && !targetPresent(world.subject(target.subject))) return refusal("missing_target", `That ${subjectName(target.subject)} was deleted.`);
+  if (target.look && !targetPresent(world.look(target.look))) return refusal("missing_target", "That look was removed.");
   for (const [key, at] of Object.entries(capture.revisions))
     if (revision(key) !== at) return refusal("missing_target", "This changed in another window. Try again.");
   return { available: true };

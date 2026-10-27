@@ -11,6 +11,7 @@ import { characterScope } from "../../character/character-history";
 import type { CharacterContextActions } from "../../character/character-context-actions";
 import { refusal, type Capability } from "../../platform/api";
 import type { PanelContext } from "../../platform/api/subjects";
+import { targetPresent } from "../../platform/api/target-status";
 import type { ProfileSessions } from "./profile-sessions";
 import { TabRefusal } from "./profile-sessions";
 import type { TargetResolver } from "./targets";
@@ -33,7 +34,8 @@ export class PanelEditingContexts<Slot> {
       fileOwner?: StudioFileOperations; captured: boolean; capture(): InputCapture | FileWriterCapture; capturePort(signal: AbortSignal, fileOwner?: StudioFileOperations): StudioPresentationPort<Slot>; signal: AbortSignal }): { port: StudioPresentationPort<Slot>; writer: FileWriter; files: StudioFileOperations; dispose(): void };
   }) {}
   acquire(instance: string, signal: AbortSignal): PanelEditingPort<Slot> | undefined {
-    if (signal.aborted || !this.deps.session.panel(instance)) return undefined;
+    const initial = this.deps.session.panel(instance);
+    if (signal.aborted || !initial || this.deps.available?.(initial.type) === false) return undefined;
     const listeners = new Set<() => void>();
     let live: { key: string; port: StudioPresentationPort<Slot>; dispose(): void } | undefined;
     let fileOwner: StudioFileOperations | undefined;
@@ -44,13 +46,13 @@ export class PanelEditingContexts<Slot> {
       try {
         const { session, targets } = this.deps, panel = session.panel(instance);
         if (!panel) { live?.dispose(); return; }
-        const destination = session.panelTarget(instance), resolved = targets.named(instance);
+        const destination = session.panelTarget(instance), resolved = targets.named(instance), status = targets.describe(instance);
         const { scope: _scope, ...partial } = resolved;
         // A retained direct look pin keeps its collection/recovery surface while removed or missing; it is never a fallback look.
-        const pin = panel.binding?.policy === "pinned" && "look" in panel.binding.target ? panel.binding.target.look : undefined;
-        const target = pin && !partial.look ? { ...partial, look: pin, collection: pin.collection } : partial;
+        const pin = status.target.look;
+        const target = !status.available ? { tab: partial.tab } : pin && !partial.look ? { ...partial, look: pin, collection: pin.collection } : partial;
         // Focus/history navigation is not an edit-context identity change. Binding generations and scene changes are.
-        const key = JSON.stringify([destination, target]);
+        const key = JSON.stringify([destination, target, status.available, status.statuses.subject.state, status.statuses.look.state]);
         if (live?.key === key) return;
         const next = this.bind(target, panel.type === "view" ? { kind: "view" } : this.deps.context(panel.type), signal, instance, destination, undefined, fileOwner);
         // The instance keeps one operation/result owner when its input follows another scene or V.
@@ -68,11 +70,27 @@ export class PanelEditingContexts<Slot> {
     const off = this.deps.session.subscribe(refresh);
     const release = () => { off(); live?.dispose(); listeners.clear(); signal.removeEventListener("abort", release); };
     signal.addEventListener("abort", release, { once: true });
-    return { current: () => live!.port, subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } };
+    return { current: () => { refresh(); return live!.port; }, subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } };
   }
   capturePort(view: string | undefined, signal: AbortSignal, fileOwner?: StudioFileOperations): StudioPresentationPort<Slot> {
-    const captured = this.deps.targets.captureView(view, signal);
-    return this.bind(captured.named, { kind: "view" }, signal, undefined, undefined, () => this.deps.targets.current(captured), fileOwner).port;
+    const named = this.deps.targets.namedView(view), current = this.captureInput(named, signal);
+    return this.bind(named, { kind: "view" }, signal, undefined, undefined, current, fileOwner).port;
+  }
+  /** Management/import controls can act beside a missing document, but never after that exact recovery state changes. */
+  private captureInput(named: NamedTargets, signal: AbortSignal, instance?: string): () => Capability {
+    const { targets } = this.deps, world = targets.world(), subject = named.character ? { kind: "character", id: named.character } : undefined;
+    const look = named.look ? world.look(named.look) : undefined, person = subject ? world.subject(subject) : undefined;
+    const missingLook = look && !targetPresent(look), missingPerson = person && !targetPresent(person);
+    const captured = targets.captureNamed({ ...named, ...(missingLook ? { look: undefined } : {}), ...(missingPerson ? { character: undefined } : {}) }, signal, instance);
+    return () => {
+      const current = targets.current(captured); if (!current.available) return current;
+      const now = targets.world();
+      for (const [before, after] of [[missingLook ? look : undefined, missingLook ? now.look(named.look!) : undefined],
+        [missingPerson ? person : undefined, missingPerson ? now.subject(subject!) : undefined]])
+        if (before && (before.state !== after?.state || before.revision !== after?.revision))
+          return refusal("missing_target", "That recovery target changed. Open the command again.");
+      return { available: true };
+    };
   }
   /** The drawn compatibility input accepts work against one explicit view, with the same writer/lifetime rules as a panel. */
   captureView(view: string | undefined, signal: AbortSignal): FileWriterCapture {
@@ -121,8 +139,8 @@ export class PanelEditingContexts<Slot> {
       if (!accepted.available) return { check: () => accepted, release() {} };
       if (extraCheck) {
         // Acceptance transfers out of the shell surface's signal before that menu or palette closes.
-        const request = new AbortController(), captured = targets.captureNamed(named, request.signal, instance);
-        const current = () => accepted.available ? targets.current(captured) : accepted;
+        const request = new AbortController(), held = this.captureInput(named, request.signal, instance);
+        const current = () => accepted.available ? held() : accepted;
         const operation = this.bind(named, context, request.signal, instance, destination, current);
         return { writer: operation.writer, check: () => {
           if (destination) try { session.checkPanelTarget(destination); }
@@ -131,7 +149,7 @@ export class PanelEditingContexts<Slot> {
         }, release: () => request.abort() };
       }
       captures++;
-      const request = new AbortController(), captured = targets.captureNamed(named, request.signal, instance);
+      const request = new AbortController(), held = this.captureInput(named, request.signal, instance);
       let released = false;
       return { check: () => {
         if (!accepted.available) return accepted;
@@ -139,15 +157,15 @@ export class PanelEditingContexts<Slot> {
         if (destination) try { session.checkPanelTarget(destination); }
         catch (error) { if (error instanceof TabRefusal) return refusal("missing_target", error.message); throw error; }
         if (instance && this.deps.available && !this.deps.available(session.panel(instance)?.type ?? "")) return refusal("missing_target", "This panel was withdrawn.");
-        return targets.current(captured);
+        return held();
       }, release: () => {
         if (released) return; released = true; request.abort(); if (!--captures && retired) destroy();
       } };
     };
     try { made = this.deps.create({ core, instance: instance ?? "", named, scene, choose, check, signal: life.signal, capture, fileOwner, captured: !!extraCheck,
       capturePort: (signal, fileOwner) => {
-        const allowed = check(), captured = targets.captureNamed(named, signal, instance);
-        return this.bind(named, context, signal, instance, destination, () => allowed.available ? targets.current(captured) : allowed, fileOwner).port;
+        const allowed = check(), held = this.captureInput(named, signal, instance);
+        return this.bind(named, context, signal, instance, destination, () => allowed.available ? held() : allowed, fileOwner).port;
       } }); }
     catch (error) { app.dispose(); life.abort(); throw error; }
     signal.addEventListener("abort", retire, { once: true });

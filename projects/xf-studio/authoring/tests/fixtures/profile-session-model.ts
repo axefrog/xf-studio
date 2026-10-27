@@ -173,3 +173,29 @@ export class AsyncContextModel {
   complete(scene: string, ref: { collection: string; look: string }) { this.looks.set(scene, { ...ref }); }
   account() { return [...this.looks].sort(([a], [b]) => a.localeCompare(b)); }
 }
+
+
+/** P3-vi independent retention account. It knows commands and elapsed time, not owner/status/resolver helpers. */
+export class RecoveryModel {
+  readonly subjects: ("present" | "removed" | "purged")[] = ["present", "present", "present"];
+  readonly looks: ("present" | "removed" | "purged")[] = ["present", "present", "present"];
+  readonly members = [true, true, true];
+  private readonly deletedAt = new Map<string, number>();
+  now = 0;
+  remove(kind: "subject" | "look", index: number): boolean {
+    const states = kind === "subject" ? this.subjects : this.looks;
+    if (states[index] !== "present") return false;
+    states[index] = "removed"; this.deletedAt.set(`${kind}/${index}`, this.now); return true;
+  }
+  restore(kind: "subject" | "look", index: number): boolean {
+    const states = kind === "subject" ? this.subjects : this.looks;
+    if (states[index] !== "removed") return false;
+    states[index] = "present"; this.deletedAt.delete(`${kind}/${index}`); return true;
+  }
+  purge(days: number) {
+    this.now += days * 24 * 3600_000;
+    for (const [key, time] of this.deletedAt) if (this.now - time >= 30 * 24 * 3600_000) {
+      const [kind, index] = key.split("/"); (kind === "subject" ? this.subjects : this.looks)[Number(index)] = "purged";
+    }
+  }
+}

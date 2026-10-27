@@ -26,7 +26,7 @@ import { CHARACTER_KIND } from "../../platform/api/characters";
 import type { ViewGraph, ViewGraphOwner } from "../../platform/core/view-graph";
 import { CHARACTER_DOCUMENT } from "../../character/character-document";
 import { LOOK_WORKING, lookRef as lookDocument } from "../../library/collection-documents";
-import type { PanelContext } from "./bindings";
+import type { PanelContext, ConstraintRule } from "./bindings";
 import { TargetResolver } from "./targets";
 import { SceneCommands } from "./scene-commands";
 import type { WorkspaceState } from "../workspace/workspace-state";
@@ -51,14 +51,14 @@ export type ProfileServices = {
 };
 
 export function createProfileServices(deps: { documents: DocumentStorePort; outbox: DocumentOutbox; subjects: SubjectRegistryPort; catalogue: CreatorCatalogue;
-  history: HistoryService; versions?: CollectionVersionsPort; report?: (error: unknown) => void;
+  history: HistoryService; versions?: CollectionVersionsPort; report?: (error: unknown) => void; now?: () => number;
   /** The modules' default layouts and what the build has (`compose/layout-defaults.ts`). */
   layouts?: { contributed: readonly ContributedLayoutDefault[] | ContributedDefaultsSource; known: FragmentKnowledge; writable?: () => boolean; note?: (message: string) => void } }): ProfileServices {
   const profiles = new ProfileService({ documents: deps.documents, outbox: deps.outbox, subjects: deps.subjects });
   const characters = new CharacterService({ documents: deps.documents, outbox: deps.outbox, catalogue: deps.catalogue, history: deps.history, profiles,
-    ...(deps.report ? { report: deps.report } : {}) });
+    now: deps.now, ...(deps.report ? { report: deps.report } : {}) });
   const collections = new CollectionOwner({ documents: deps.documents, outbox: deps.outbox, ...(deps.versions ? { versions: deps.versions } : {}),
-    ...(deps.report ? { report: deps.report } : {}) });
+    now: deps.now, ...(deps.report ? { report: deps.report } : {}) });
   const looks = new LookSessions(collections, deps.outbox);
   const defaults = new LayoutDefaults({ documents: deps.documents, outbox: deps.outbox, ...deps.layouts, ...(deps.report ? { report: deps.report } : {}) });
   return { profiles, characters, collections, looks, defaults,
@@ -136,7 +136,7 @@ const subjectAvailable = (services: Pick<ProfileServices, "characters">) => (ref
  * binding and palette command acts on, and the captures gestures and menus hold. `contexts`: each panel type's context (§3.1, §5).
  */
 export function createTargetResolver(deps: { state: ProfileSessions; history: Pick<HistoryService, "acting">;
-  services: Pick<ProfileServices, "characters" | "collections" | "looks">; contexts: (type: string) => PanelContext; available?: (type: string) => boolean; generation?: (type: string) => number; collection?: () => string | undefined }): TargetResolver {
+  services: Pick<ProfileServices, "characters" | "collections" | "looks">; contexts: (type: string) => PanelContext; rules?: readonly ConstraintRule[]; available?: (type: string) => boolean; generation?: (type: string) => number; collection?: () => string | undefined }): TargetResolver {
   const { state, services } = deps, graph = state.graph;
   return new TargetResolver({
     origin: (instance, tab = state.tabId()) => {
@@ -155,10 +155,13 @@ export function createTargetResolver(deps: { state: ProfileSessions; history: Pi
     },
     focus: state.focus,
     acting: scopes => deps.history.acting(scopes)?.id,
-    exists: {
-      subject: ref => ref.kind === CHARACTER_KIND ? !!services.characters.document(ref.id) : false,
-      look: ref => services.collections.look(ref)?.state === "live",
+    status: {
+      subject: ref => ref.kind === CHARACTER_KIND ? services.characters.targetStatus(ref.id)
+        : { state: "unavailable", owner: { kind: ref.kind, id: ref.id }, reason: "This subject kind is not registered in this build." },
+      look: ref => services.collections.targetStatus(ref),
     },
+    available: deps.available,
+    rules: deps.rules,
     // A 3D view's own panel instance (type `view`, pinned to its view) shows that view; every other type declares its context.
     context: type => type === "view" ? { kind: "view" } : deps.contexts(type),
     revisions: target => ({

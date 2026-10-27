@@ -37,6 +37,7 @@ import { CHARACTER_DOCUMENT, CHARACTER_SCHEMA, type CharacterDocument, type Char
 import type { CreatorCatalogue } from "./creator-catalogue";
 import { PROFILE_DOCUMENT, profileDocumentOf, type ProfileId, type ProfileService, type ProfileView } from "../app/profiles/profile-service";
 import { sameSubject } from "../platform/api/subjects";
+import { TOMBSTONE_RETENTION_MS, type OwnerTargetStatus } from "../platform/api/target-status";
 
 /** What a scene gives the character it shows: applying a save on its head, its V's preparation, its choice previews. */
 export type CharacterScenePorts = Pick<CharacterContextPorts, "showSave" | "details" | "previews">;
@@ -144,6 +145,44 @@ export class CharacterService implements CharactersPort {
   character(id: CharacterId): CharacterSummary | null { return this.list().find(summary => summary.id === id) ?? null; }
   /** A character's document as this window holds it (a copy), or null (none, or deleted). */
   document(id: CharacterId): CharacterDocument | null { const doc = this.doc(id); return doc ? structuredClone(doc) : null; }
+  /** Retained deletion is different from an empty slot, including while its outbox is recovering. */
+  targetStatus(id: CharacterId): OwnerTargetStatus {
+    const held = this.deps.outbox.document(docRef(id)), value = held?.value;
+    const parsed = characterDocumentOf(isTombstone(value) ? value.value : value), doc = parsed?.id === id ? parsed : null;
+    const revision = this.entries.get(id)?.revision ?? held?.version ?? 0;
+    const common = { owner: docRef(id), revision, pending: held?.pending ?? false, conflict: !!held?.conflict,
+      ...(doc ? { label: characterLabel(doc) } : {}) };
+    if (this.deps.outbox.recovering(docRef(id))) return { ...common, state: "pending", ...(doc ? { content: isTombstone(value) ? "removed" as const : "present" as const } : {}), reason: RESTORING };
+    if (isTombstone(value) && doc) return (this.deps.now ?? Date.now)() - value.at < TOMBSTONE_RETENTION_MS
+      ? { ...common, state: "removed", restore: this.restoreCapability(id, revision) }
+      : { ...common, state: "purged", reason: "This V's retention period has ended. It can no longer be restored." };
+    if (doc) return { ...common, state: "present", ...(this.blocked(id) ? { reason: this.blocked(id)! } : {}) };
+    return { ...common, state: value === undefined ? "purged" : "unavailable", reason: value === undefined
+      ? "That V is no longer retained in the library." : "This V's document cannot be read by this build." };
+  }
+  restoreCapability(character: CharacterId, base: number): Capability {
+    const held = this.deps.outbox.document(docRef(character)), value = held?.value;
+    if (this.deps.outbox.status().stopped) return refusal("unavailable", "This workspace is read-only.");
+    if (this.deps.outbox.recovering(docRef(character))) return refusal("unavailable", RESTORING);
+    if (held?.conflict) return refusal("stale", CONFLICT_MESSAGE);
+    if ((this.entries.get(character)?.revision ?? held?.version ?? 0) !== base) return refusal("stale", "That V changed since it was read.");
+    if (!isTombstone(value) || characterDocumentOf(value.value)?.id !== character || !Number.isFinite(value.at)
+      || (this.deps.now ?? Date.now)() - value.at >= TOMBSTONE_RETENTION_MS)
+      return refusal("missing_target", "That V can't be restored any more.");
+    return { available: true };
+  }
+  /** Reinstates the retained document under its own identity. Never recreates a purged subject or rewrites profile membership. */
+  restore(character: CharacterId, base: number): CharacterAnswer {
+    const allowed = this.restoreCapability(character, base);
+    if (!allowed.available) return failed(allowed);
+    const value = this.deps.outbox.document(docRef(character))!.value;
+    if (!isTombstone(value)) return failed(refusal("missing_target", "That V is no longer removed."));
+    const recorded = this.record("character.restore", [{ ...docRef(character), value: structuredClone(value.value) }]);
+    if (!recorded.available) return failed(recorded);
+    const entry = this.entryOf(character); entry.revision++;
+    this.changed();
+    return { ok: true, character, revision: entry.revision };
+  }
   private doc(id: CharacterId): CharacterDocument | null {
     const value = this.deps.outbox.document(docRef(id))?.value;
     return value === undefined || isTombstone(value) ? null : characterDocumentOf(value);

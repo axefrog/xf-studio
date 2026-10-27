@@ -26,6 +26,7 @@ export type PanelActionsDeps = {
 
 export class PanelActions {
   constructor(private readonly session: ProfileSessions, private readonly deps: PanelActionsDeps) {}
+  types(): readonly PanelType[] { return structuredClone(this.deps.types()); }
   /** Projection keeps every retained instance; catalogue metadata and factory slots stay keyed by type. */
   projection(tab: string) {
     const types = this.deps.types(), instances = this.session.tab(tab)?.panels ?? [], dock = this.session.dock(tab);

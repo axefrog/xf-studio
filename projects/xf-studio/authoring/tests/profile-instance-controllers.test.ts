@@ -1,3 +1,4 @@
+import { withEmptyChoices } from "../src/studio-ui/panels/empty-choices";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import type { StudioPickedFile } from "../src/app/studio-file-operations";
@@ -434,4 +435,79 @@ test("review preference rule: instance curves persist through the real preferenc
     expect(restored.easings?.[easingScopeFor("expression-intensity", "presets--scene1")]).toBe("out");
     expect(a.easing.get("expression-intensity")).toBe("inOut");
   } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+
+test("P3-vi real controllers: last look removal keeps collection recovery/imports; subject restoration reacquires its own context", async () => {
+  const s = await profileContextStudio(), look = s.looks[2]!, character = s.vs[2]!, preset = "presets--scene2", person = "character--target2";
+  arrange(s, [preset, person]);
+  const root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE);
+  const panels = new InstancePanels(root, { catalogue: () => STUDIO_CATALOGUE, changed() {}, make: (instance, rt) =>
+    withEmptyChoices(rt, instance.type === "character" ? characterPanel(rt) : presetsPanel(featureViewContext(rt, "eye-makeup"))) });
+  const paint = () => { panels.sync(); for (const p of panels.controllers()) { document.body.append(p.spec.element); p.update(new Frame(s.port)); } };
+  const visible = (n: LightElement) => { for (let at: LightElement | null = n; at; at = at.parentNode) if (at.hidden) return false; return true; };
+  try {
+    paint(); const before = s.session.session().views.scenes.map(scene => structuredClone(scene));
+    const collection = s.services.collections.collection(look.collection)!;
+    expect(collection.looks).toHaveLength(1);
+    s.services.collections.dispatch({ kind: "collection.removeLook", collection: collection.id, base: collection.revision, look: look.look }); paint();
+    const rt = panels.runtime(preset)!;
+    expect(rt.library.summary().draft!.removed.map(item => item.id)).toContain(look.look);
+    const content = node(panels.controllers().find(p => p.spec.id === preset)!.spec.element);
+    expect(content.querySelectorAll("button").some(b => visible(b) && b.textContent.startsWith("Restore "))).toBe(true);
+    expect(content.querySelectorAll("button").some(b => visible(b) && b.textContent.includes("Import recipe as preset"))).toBe(true);
+    expect(content.querySelectorAll("button").some(b => visible(b) && b.textContent === "Create a look")).toBe(false);
+    const restoreLook = s.emptyChoices.snapshot(preset)!.choices.find(c => "restore" in c.action.choice)!.action;
+    expect(await s.emptyChoices.execute(restoreLook)).toEqual({ ok: true }); paint();
+    expect(panels.runtime(preset)!.library.summary().draft!.selected).toBe(look.look);
+    const ready = async () => { const deadline = performance.now() + 5000;
+      while (!panels.runtime(person)!.authoring.characterPanel() && performance.now() < deadline) { await Bun.sleep(5); paint(); }
+      expect(panels.runtime(person)!.authoring.characterPanel()).not.toBeNull(); };
+    await ready();
+    await s.services.characters.delete(character, s.services.characters.character(character)!.revision); paint();
+    expect(panels.runtime(person)!.authoring.characterPanel()).toBeNull();
+    const restoreV = s.emptyChoices.snapshot(person)!.choices.find(c => "restore" in c.action.choice)!.action;
+    expect(await s.emptyChoices.execute(restoreV)).toEqual({ ok: true }); paint(); await ready();
+    expect(panels.runtime(person)!.authoring.characterPanel()).not.toBeNull();
+    expect(s.session.session().views.scenes).toEqual(before);
+    expect(s.targets.describe(person).statuses.subject).toMatchObject({ state: "present", instance: person, owner: { kind: "character", id: character } });
+  } finally { panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+
+for (const route of ["root", "scene", "pin"] as const) test(`P3-vi: ${route} imports remain usable beside a removed last look and replace only the captured destination`, async () => {
+  const s = await profileContextStudio(), ref = s.looks[2]!, view = s.session.graph.viewIds()[2]!, scene = s.session.graph.node(view, "scene").id;
+  try {
+    const recipe = s.bind("presets--unseen").context.current().feature("eye-makeup").view().recipe(), text = JSON.stringify(recipeFile(structuredClone(recipe) as Recipe));
+    s.fileDevice.pick = async () => ({ name: "recovery-import.json", size: text.length, text: async () => text, bytes: async () => new TextEncoder().encode(text) });
+    s.draw(view); const collection = s.services.collections.collection(ref.collection)!;
+    s.services.collections.dispatch({ kind: "collection.removeLook", collection: ref.collection, base: collection.revision, look: ref.look });
+    const port = route === "root" ? s.port : s.bind(route === "scene" ? "presets--scene2" : "presets--unseen").context.current();
+    const before = s.session.session().views.scenes;
+    expect((await port.files.execute({ kind: "recipe.import" })).ok).toBe(true);
+    expect(s.services.collections.targetStatus(ref).state).toBe("removed");
+    const added = s.services.collections.collection(ref.collection)!.looks[0]!; expect(added).not.toBe(ref.look);
+    if (route === "pin") { expect(s.session.scene(scene).look).toEqual(ref); expect(s.session.panel("presets--unseen")!.binding).toEqual({ policy: "pinned", target: { look: { collection: ref.collection, look: added } } }); }
+    else expect(s.session.scene(scene).look).toEqual({ collection: ref.collection, look: added });
+    for (const peer of before.filter(s => s.id !== scene)) expect(s.session.scene(peer.id)).toEqual({ subject: peer.subject, look: peer.look, gen: peer.gen });
+    expect(s.targets.held()).toBe(0);
+  } finally { await s.dispose(); s.library.close(); }
+});
+
+test("P3-vi: restoring a removed look while its import picker is open refuses the old recovery capture", async () => {
+  let answer!: (file: StudioPickedFile | undefined) => void;
+  const s = await profileContextStudio({ pick: () => new Promise(resolve => { answer = resolve; }) }), ref = s.looks[2]!;
+  let pending: Promise<unknown> | undefined;
+  try {
+    const text = JSON.stringify(recipeFile(structuredClone(s.bind("presets--unseen").context.current().feature("eye-makeup").view().recipe()) as Recipe));
+    const collection = s.services.collections.collection(ref.collection)!;
+    s.services.collections.dispatch({ kind: "collection.removeLook", collection: ref.collection, base: collection.revision, look: ref.look });
+    pending = s.bind("presets--scene2").context.current().files.execute({ kind: "recipe.import" });
+    expect(s.targets.held()).toBeGreaterThan(0);
+    const removed = s.services.collections.collection(ref.collection)!;
+    s.services.collections.dispatch({ kind: "collection.restoreLook", collection: ref.collection, base: removed.revision, look: ref.look });
+    answer({ name: "late.json", size: text.length, text: async () => text, bytes: async () => new TextEncoder().encode(text) });
+    expect(await pending).toMatchObject({ ok: false, code: "missing_target" });
+    expect(s.services.collections.collection(ref.collection)!.looks).toEqual([ref.look]); expect(s.targets.held()).toBe(0);
+  } finally { answer?.(undefined); await pending; await s.dispose(); s.library.close(); }
 });

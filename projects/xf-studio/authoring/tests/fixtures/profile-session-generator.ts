@@ -1,3 +1,4 @@
+import { statusWorld } from "./target-status";
 /** G3 state machine: independent recorded-state oracle, live navigation invariants and arrangement round trips. */
 import { parentPort, workerData } from "node:worker_threads";
 import { ProfileSessions, TabRefusal, type TabContent } from "../../src/app/profiles/profile-sessions";
@@ -10,7 +11,7 @@ import { ViewGraph } from "../../src/platform/core/view-graph";
 import { PanelActions } from "../../src/app/profiles/panel-actions";
 import type { Recipe } from "../../src/engines/layered-makeup/recipe";
 import { livePart } from "../../src/app/workspace/collection-workspace";
-import { AsyncContextModel, EditContextModel, SessionModel, sessionAccount } from "./profile-session-model";
+import { AsyncContextModel, EditContextModel, RecoveryModel, SessionModel, sessionAccount } from "./profile-session-model";
 import { seededRandom } from "./profile-sessions";
 
 const KINDS = ["add", "show", "park", "bind", "drag", "new", "reset", "close", "reopen", "duplicate", "undo", "redo", "start", "end", "point", "switch", "focus", "scene", "addView", "closeView", "link", "hide", "collapse", "resize", "split", "activate", "readonly", "withdraw"] as const;
@@ -82,7 +83,7 @@ export function run(seed: number, commands: readonly Command[]) {
     graph: (data, owner) => new ViewGraph(data, rules, owner) }), scope = history.scope(viewScope(s.profile))!, m = new SessionModel(initial);
   let available = true, readonly = false;
   const actions = new PanelActions(s, { types: () => available ? [{ id: "presets", context: { kind: "look" } }] : [], factory: () => null,
-    world: () => ({ views: {}, scenes: {}, focus: {}, subject: () => true, look: () => true }), access: () => readonly ? { available: false, reason: "Read only" } : { available: true } });
+    world: () => ({ views: {}, scenes: {}, focus: {}, ...statusWorld() }), access: () => readonly ? { available: false, reason: "Read only" } : { available: true } });
   check(s, m);
   for (const cmd of commands) {
     if (["undo", "redo", "start", "end", "point"].includes(cmd.op)) {
@@ -387,4 +388,74 @@ if (parentPort) {
 export function generateInstanceCommands(seed: number, length = 48) {
   const random = seededRandom(seed), operations = ["show", "park", "withdraw", "resume", "focus", "capture", "abort"] as const;
   return Array.from({ length }, () => ({ op: operations[Math.floor(random() * operations.length)]!, panel: Math.floor(random() * 3) }));
+}
+
+
+/** Retention operations run through the real owners; restart reconstructs the outbox, resolver and editing services. */
+export async function generateRecoverySeeds(first: number, last: number) {
+  const { profileContextStudio } = await import("./profile-context-studio"), { ManualClock } = await import("./platform-doubles");
+  let count = 0, restarts = 0, purges = 0;
+  for (let seed = first; seed <= last; seed++) {
+    const clock = new ManualClock(), random = seededRandom(seed + 61000), model = new RecoveryModel(), trace: unknown[] = [];
+    let w = await profileContextStudio({ clock });
+    for (const id of w.vs) {
+      const p = w.services.profiles.profile(w.session.profile)!;
+      const added = await w.services.profiles.dispatch({ kind: "profile.addSubject", profile: p.id, base: p.revision, subject: { kind: "character", id } });
+      equal(added.ok, true, "retention fixture membership");
+    }
+    const subjects = [...w.vs], looks = structuredClone(w.looks), initialScenes = structuredClone(w.session.session().views.scenes);
+    const pins = subjects.map((id, index) => ({ instance: `character--target${index}`, subject: { kind: "character", id } }));
+    const verify = () => {
+      for (let i = 0; i < 3; i++) {
+        equal(w.services.characters.targetStatus(subjects[i]!).state, model.subjects[i], "retained subject state");
+        equal(w.services.collections.targetStatus(looks[i]!).state, model.looks[i], "retained look state");
+        equal(w.session.panel(pins[i]!.instance)!.binding, { policy: "pinned", target: { subject: pins[i]!.subject } }, "preserved subject pin");
+        const resolved = w.targets.resolve(pins[i]!.instance);
+        equal(resolved.state, model.subjects[i] === "present" ? "resolved" : "dangling", "restored subject pin resolves again");
+        const p = w.services.profiles.profile(w.session.profile)!;
+        equal(p.subjects.some(ref => ref.id === subjects[i]), model.members[i], "membership is independent of deletion");
+      }
+      equal(w.session.session().views.scenes, initialScenes, "retention never replaces scene references");
+      for (let i = 0; i < 3; i++) if (model.looks[i] !== "present") {
+        const missing = w.emptyChoices.snapshot(`presets--scene${i}`)!;
+        equal(missing.status?.state, model.looks[i], "removed look recovery state");
+        equal(missing.choices.some(choice => "createLook" in choice.action.choice), false, "restorable work is not an empty slot");
+        equal(missing.choices.some(choice => "restore" in choice.action.choice), model.looks[i] === "removed", "only retained work offers restore");
+      }
+    };
+    try {
+      for (let n = 0; n < 64; n++) {
+        const index = n < 2 ? 0 : n < 4 ? 2 : Math.floor(random() * 3), operation = n < 4 ? n : n === 40 ? 5 : n === 20 || n === 45 || n === 63 ? 6 : Math.floor(random() * 5);
+        trace.push({ operation, index });
+        if (operation === 0) {
+          const expected = model.remove("subject", index), status = w.services.characters.targetStatus(subjects[index]!);
+          equal((await w.services.characters.delete(subjects[index]!, status.revision!)).ok, expected, "generated subject deletion");
+        } else if (operation === 1) {
+          const expected = model.restore("subject", index), status = w.services.characters.targetStatus(subjects[index]!);
+          equal(w.services.characters.restore(subjects[index]!, status.revision!).ok, expected, "generated subject restore");
+        } else if (operation === 2 || operation === 3) {
+          const ref = looks[index]!, collection = w.services.collections.collection(ref.collection)!, expected = operation === 2 ? model.remove("look", index) : model.restore("look", index);
+          equal(w.services.collections.dispatch({ kind: operation === 2 ? "collection.removeLook" : "collection.restoreLook", collection: ref.collection,
+            base: collection.revision, look: ref.look }).ok, expected, "generated look retention command");
+        } else if (operation === 4) {
+          if (model.members[index]) {
+            const p = w.services.profiles.profile(w.session.profile)!;
+            equal((await w.services.profiles.dispatch({ kind: "profile.removeSubject", profile: p.id, base: p.revision, subject: pins[index]!.subject })).ok, true, "generated detach");
+            model.members[index] = false;
+          }
+          w.session.focus.focusView(w.session.graph.viewIds()[index]!);
+        } else if (operation === 5) {
+          await w.settle(); clock.advance(31 * 24 * 3600_000); model.purge(31);
+          await w.services.collections.load(); await w.settle();
+          w.library.documents.cleanup(); purges++;
+        } else {
+          await w.settle(); const stored = w.stored(); await w.dispose();
+          w = await profileContextStudio({ restart: stored, clock }); restarts++;
+        }
+        await w.settle(); verify(); count++;
+      }
+    } catch (error) { throw Error(`P3-vi retention seed ${seed}; trace ${JSON.stringify(trace)}: ${error instanceof Error ? error.message : String(error)}`); }
+    finally { await w.dispose(); w.library.close(); }
+  }
+  return { seeds: last - first + 1, count, restarts, purges };
 }

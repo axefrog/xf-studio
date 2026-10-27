@@ -1,3 +1,4 @@
+import { statusWorld } from "./fixtures/target-status";
 /** Reproductions from the independent P3-i review of 94664e06. */
 import { expect, test } from "bun:test";
 import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
@@ -57,7 +58,7 @@ test("review H1: panels.add with New scene copies source B's V/look, including a
   s.setSubject(sourceScene, { kind: "character", id: "c-2" }); s.setLook(sourceScene, look(2));
   const actions = new PanelActions(s, { types: () => [{ id: "view" }], factory: () => null, world: () => ({
     views: Object.fromEntries(s.graph.viewIds().map(id => [id, { tab, scene: s.graph.node(id, "scene").id }])),
-    scenes: Object.fromEntries([a, sourceScene].map(id => [id, { kind: "character", ...s.scene(id) }])), focus: {}, subject: () => true, look: () => true }) });
+    scenes: Object.fromEntries([a, sourceScene].map(id => [id, { kind: "character", ...s.scene(id) }])), focus: {}, ...statusWorld() }) });
   for (const empty of [false, true]) {
     if (empty) { s.setSubject(sourceScene, undefined); s.setLook(sourceScene, undefined); }
     const source = s.scene(sourceScene), first = s.scene(a), depth = scope.state().depth;

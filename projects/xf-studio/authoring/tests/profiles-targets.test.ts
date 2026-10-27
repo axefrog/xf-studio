@@ -1,3 +1,4 @@
+import { targetStatus } from "./fixtures/target-status";
 /**
  * Profiles phase 1e: focus, binding resolution and captures (profiles design §3.1–3.5), as plain data with a few operations, tested
  * deterministically before anything is wired: the focus service's ordering and editing context, `resolveBinding`'s policies, eligibility,
@@ -91,8 +92,8 @@ function world(overrides: Partial<BindingWorld> = {}): BindingWorld {
       s5: { kind: "location", gen: 0 },
     },
     focus: { a: 1, b: 4, c: 2, d: 5, e: 6 },
-    subject: ref => ["c-1", "c-2", "c-3"].includes(ref.id),
-    look: ref => ["l1", "l2", "l3"].includes(ref.look),
+    subject: ref => targetStatus(["c-1", "c-2", "c-3"].includes(ref.id), ref.kind, ref.id),
+    look: ref => targetStatus(["l1", "l2", "l3"].includes(ref.look), "look", ref.look),
     ...overrides,
   };
 }
@@ -114,10 +115,10 @@ describe("binding resolution", () => {
     expect(resolveBinding(world(), { tab: "t1", context: { kind: "profile" } })).toEqual({ state: "resolved", target: {}, candidates: 0, named: false });
   });
 
-  test("a scene without its look offers U6 with its captured partial context, and actions say what they need", () => {
-    const resolved = resolveBinding(world({ look: ref => ref.look !== "l2" }), { tab: "t1", context: { kind: "look" } });
-    expect(resolved).toMatchObject({ state: "empty", missing: "look", target: { view: "b", subject: v("c-2") } });
-    const target = resolved.state === "empty" ? resolved.target! : {};
+  test("a removed scene look dangles with its captured partial context; it is never an unassigned slot", () => {
+    const resolved = resolveBinding(world({ look: ref => targetStatus(ref.look !== "l2") }), { tab: "t1", context: { kind: "look" } });
+    expect(resolved).toMatchObject({ state: "dangling", missing: "look", target: { view: "b", subject: v("c-2") } });
+    const target = resolved.state === "dangling" ? resolved.target! : {};
     expect("look" in target).toBe(false);
     expect(requirementsMet(target, ["scene"])).toEqual({ available: true });
     expect(requirementsMet(target, ["scene", "look"])).toEqual(refusal("missing_target", "Choose a look first."));
@@ -169,8 +170,8 @@ describe("captures", () => {
     expect(at({ views: { ...world().views, b: { tab: "t1", scene: "s1" } } })).toEqual(refusal("missing_target", "This view now shows another scene."));
     const { b: _closed, ...views } = world().views;
     expect(at({ views })).toEqual(refusal("missing_target", "That 3D view was closed."));
-    expect(at({ look: () => false })).toEqual(refusal("missing_target", "That look was removed."));
-    expect(at({ subject: () => false })).toEqual(refusal("missing_target", "That V was deleted."));
+    expect(at({ look: () => targetStatus(false) })).toEqual(refusal("missing_target", "That look was removed."));
+    expect(at({ subject: () => targetStatus(false) })).toEqual(refusal("missing_target", "That V was deleted."));
     expect(captureCurrent(world(), capture, () => 5)).toEqual(refusal("missing_target", "This changed in another window. Try again."));
   });
 });
@@ -190,7 +191,7 @@ describe("the input layer's resolver", () => {
     const targets = new TargetResolver({
       session: { tab: () => "t1", views: () => Object.entries(state.world.views).filter(([, view]) => view.tab === "t1").map(([id, view]) => ({ id, scene: view.scene })),
         scene: id => state.world.scenes[id], panel: id => panels[id] },
-      focus, acting: scopes => history.acting(scopes)?.id, exists: { subject: ref => state.world.subject(ref), look: ref => state.world.look(ref) },
+      focus, acting: scopes => history.acting(scopes)?.id, status: { subject: ref => state.world.subject(ref), look: ref => state.world.look(ref) },
       context: type => type === "character" ? { kind: "subject", subjects: ["character"] } : type === "presets" ? { kind: "look" } : { kind: "view" },
       revisions: target => target.subject ? { [`character/${target.subject.id}`]: state.revisions[`character/${target.subject.id}`]! } : {},
       revision: key => state.revisions[key],
@@ -219,7 +220,7 @@ describe("the input layer's resolver", () => {
     // A Character panel's own Undo (the panel's button and keys) steps the V it shows, whatever was edited last.
     expect(["character--v1", "character--v2", "character--v3"].map(panel => targets.undoScope(panel))).toEqual(["character:c-1", "character:c-2", "character:c-3"]);
     // A panel pinned to a deleted V has nothing to undo: never another scope.
-    expect(resolver({ world: world({ subject: ref => ref.id !== "c-2" }), revisions: {} }).targets.undoScope("character--v2")).toBeUndefined();
+    expect(resolver({ world: world({ subject: ref => targetStatus(ref.id !== "c-2") }), revisions: {} }).targets.undoScope("character--v2")).toBeUndefined();
     expect(targets.undoScope("presets--p")).toBeUndefined();
     let value = 0;
     history.open("look:k/l2", { read: () => value, apply: () => true }).checkpoint(["v"], { label: "A", actionKind: "a" });

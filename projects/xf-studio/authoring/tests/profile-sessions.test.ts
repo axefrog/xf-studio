@@ -1,3 +1,4 @@
+import { statusWorld } from "./fixtures/target-status";
 /**
  * Profiles phase 2, chunk P2-i (experiment 044 §4): `ProfileSessions`, the one owner of a profile session's tabs, view graph and focus, and
  * the one View and lighting history over all three (profiles design §3.7, §4.1).
@@ -392,7 +393,7 @@ describe("P3-i instance operations and minimal replay", () => {
     const data = startData(seed), s = openSession({ ...data, tabs: data.tabs.map(tab => ({ ...tab, panels: tab.panels.map(panel => panel.type === "presets"
       ? { ...panel, state: { search: "kept", folds: ["looks"] } } : panel) })) }, { random: seededRandom(seed + 7919) }), tab = s.tabId();
     const actions = new PanelActions(s, { types: () => [{ id: "presets", context: { kind: "look" } }, { id: "layers", context: { kind: "look" } }],
-      factory: () => null, world: () => ({ views: {}, scenes: {}, focus: {}, subject: () => true, look: () => true }) });
+      factory: () => null, world: () => ({ views: {}, scenes: {}, focus: {}, ...statusWorld() }) });
     return { s, tab, actions };
   };
   const float = (s: ProfileSessions, tab: string, id: string, x: number) => {
@@ -460,12 +461,12 @@ describe("P3-i instance operations and minimal replay", () => {
     actions.dispatch({ kind: "panels.reveal", destination: s.panelTarget(first) }); expect(s.graph.history().depth).toBe(revealDepth);
     s.setPanelsOpen(tab, [first], false); expect(s.focus.focusedPanel()).toBeUndefined();
     const readonly = new PanelActions(s, { types: () => [{ id: "presets" }], factory: () => null,
-      world: () => ({ views: {}, scenes: {}, focus: {}, subject: () => true, look: () => true }), access: () => ({ available: false, reason: "Read only" }) });
+      world: () => ({ views: {}, scenes: {}, focus: {}, ...statusWorld() }), access: () => ({ available: false, reason: "Read only" }) });
     const before = json(s), history = s.graph.history();
     expect(() => readonly.dispatch({ kind: "panels.remove", destination: s.panelTarget(first) })).toThrow("Read only");
     expect(json(s)).toBe(before); expect(s.graph.history()).toEqual(history);
     const character = s.addPanel(tab, "character"), subjectActions = new PanelActions(s, { types: () => [{ id: "character", context: { kind: "subject", subjects: ["character"] } }],
-      factory: () => null, world: () => ({ views: {}, scenes: { location: { kind: "location", gen: 0 } }, focus: {}, subject: () => true, look: () => true }) });
+      factory: () => null, world: () => ({ views: {}, scenes: { location: { kind: "location", gen: 0 } }, focus: {}, ...statusWorld() }) });
     const wrongScene: PanelAction = { kind: "panels.setBinding", destination: s.panelTarget(character), binding: { policy: "pinned", target: { scene: "location" } } };
     const unchanged = json(s), depth = s.graph.history().depth;
     expect(subjectActions.capability(wrongScene)).toMatchObject({ available: false, code: "incompatible_mode" });

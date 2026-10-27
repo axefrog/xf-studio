@@ -16,6 +16,7 @@ import { COMMAND_LIMITS, type CurrentDocument, type DocumentRef, documentKey, is
   type TransactAnswer, type TransactRequest, type TransactWrite } from "../api/document-commands";
 import type { LibraryDatabase } from "./library-database";
 import type { Clock } from "../core/clock";
+import { TOMBSTONE_RETENTION_MS } from "../api/target-status";
 
 export type DocumentStoreOptions = {
   /** Wall time for `updatedAt` (the host clock's `now`). */
@@ -247,7 +248,7 @@ export class DocumentStore {
 }
 
 /** How long a tombstone is kept before the cleanup purges it (and how long an unreferenced immutable document is kept). */
-export const TOMBSTONE_TTL_MS = 30 * 24 * 3600_000;
+export const TOMBSTONE_TTL_MS = TOMBSTONE_RETENTION_MS;
 export type CleanupOptions = { readonly tombstoneMs?: number; readonly receiptMs?: number; readonly immutable?: readonly string[];
   readonly children?: Readonly<Record<string, string>>;
   /** A child kind (IDs `<parent>/<child>`) whose tombstone is kept while its live parent lists it in `field`. */

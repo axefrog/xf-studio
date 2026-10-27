@@ -23,6 +23,7 @@
  * and the look editor (`look-editor.ts`) writes the shown look through its session.
  */
 import { refusal, type Capability } from "../platform/api/capability";
+import type { OwnerTargetStatus } from "../platform/api/target-status";
 import { COMMAND_LIMITS, type CurrentDocument, documentKey, type DocumentRef, isTombstone, tombstoneOf } from "../platform/api/document-commands";
 import type { DocumentStorePort } from "../platform/api/document-store";
 import { type DocumentOutbox, type OutboxEdit, type OutboxEntry, OutboxRecoveringError, OutboxTooLargeError } from "../platform/core/document-outbox";
@@ -169,6 +170,20 @@ export class CollectionOwner {
     const doc = held ? lookWorkingOf(held.value) : null;
     return doc ? { ...doc, ref: { collection: ref.collection, look: ref.look }, revision: held!.version, pending: held!.pending, conflict: held!.conflict } : null;
   }
+  /** Owner-reported retention/recovery facts; reading this never selects or creates a look. */
+  targetStatus(ref: LookRef): OwnerTargetStatus {
+    const address = lookRef(ref), held = this.deps.outbox.document(address), look = this.look(ref), collection = this.collection(ref.collection);
+    const common = { owner: address, revision: held?.version ?? 0, pending: held?.pending ?? false,
+      conflict: !!held?.conflict || !!collection?.conflict, ...(look ? { label: look.name } : {}) };
+    if (this.deps.outbox.recovering(address) || this.deps.outbox.recovering(collectionRef(ref.collection)))
+      return { ...common, state: "pending", ...(look ? { content: look.state === "live" ? "present" as const : "removed" as const } : {}), reason: "This look is still being restored from your last session." };
+    if (look?.state === "live" && collection?.looks.includes(ref.look)) return { ...common, state: "present" };
+    if (look?.state === "removed" && this.restorable(ref.collection).some(item => item.look === ref.look))
+      return { ...common, state: "removed", restore: this.capability({ kind: "collection.restoreLook", collection: ref.collection,
+        base: collection!.revision, look: ref.look }) };
+    return { ...common, state: held?.value === undefined || isTombstone(held.value) || look?.state === "removed" ? "purged" : "unavailable",
+      reason: "That look is no longer available to edit or restore." };
+  }
   /** A collection's live looks, in order. */
   looksOf(collection: string): readonly LookView[] {
     return (this.collection(collection)?.looks ?? []).flatMap(look => { const view = this.look({ collection, look }); return view?.state === "live" ? [view] : []; });
@@ -208,6 +223,12 @@ export class CollectionOwner {
     }
     const view = this.target(command.collection, command.base);
     if (!("id" in view)) return view;
+    if (command.kind === "collection.restoreLook") {
+      if (this.deps.outbox.status().stopped) return refusal("unavailable", "This workspace is read-only.");
+      if (view.conflict || this.look({ collection: view.id, look: command.look })?.conflict) return refusal("stale", IN_CONFLICT);
+      if (this.deps.outbox.recovering(collectionRef(view.id)) || this.deps.outbox.recovering(lookRef({ collection: view.id, look: command.look })))
+        return refusal("unavailable", "This look is still being restored from your last session.");
+    }
     switch (command.kind) {
       case "collection.rename": return nameOf(command.name) ? { available: true } : refusal("invalid_value", NAME_REASON);
       case "collection.plan": return { available: true };

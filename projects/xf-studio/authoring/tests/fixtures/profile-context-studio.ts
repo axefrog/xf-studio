@@ -1,3 +1,7 @@
+import type { Clock } from "../../src/platform/core/clock";
+import { emptyChoicesPort } from "../../src/app/profiles/empty-choices";
+import { starterParts } from "../../src/app/workspace/collection-workspace";
+import { defaultViewGraph } from "../../src/preview/preview-view-graph";
 import { layoutTabsPort } from "../../src/app/profiles/tab-presentation";
 import { tabDefaults } from "../../src/app/profiles/profile-window";
 import type { ModuleService } from "../../src/platform/api";
@@ -37,11 +41,11 @@ import { openTestLibrary, type TestLibrary } from "./library-file";
 import { libraryPort, libraryVersions, storedLook } from "./profile-studio";
 
 export type ContextRestart = { library: TestLibrary; session: ProfileSessionData; profile: string; looks: LookRef[]; vs: string[] };
-export async function profileContextStudio(options: { restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"]; diagnostics?: DiagnosticsActions; starters?: boolean; recipe?: () => Recipe; modInstall?: ModInstallActions; presets?: PartPresetService; modules?: readonly ModuleService[]; viewPanels?: boolean; available?: (type: string) => boolean; panelViewport?: Parameters<typeof createTrustedStudioBootstrap<HTMLElement>>[0]["panelViewport"] } = {}) {
-  const library = options.restart?.library ?? openTestLibrary(), transport = libraryPort(library), storage = memoryOutboxStorage();
+export async function profileContextStudio(options: { clock?: Clock; now?: () => number; restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"]; diagnostics?: DiagnosticsActions; starters?: boolean; recipe?: () => Recipe; modInstall?: ModInstallActions; presets?: PartPresetService; modules?: readonly ModuleService[]; viewPanels?: boolean; available?: (type: string) => boolean; panelViewport?: Parameters<typeof createTrustedStudioBootstrap<HTMLElement>>[0]["panelViewport"] } = {}) {
+  const library = options.restart?.library ?? openTestLibrary(undefined, { clock: options.clock }), transport = libraryPort(library), storage = memoryOutboxStorage();
   const outbox = new DocumentOutbox(transport, storage, { retryMs: 5 }); outbox.open();
   const history = createHistoryService(), workspace = freshWorkspace(), host = await fixtureHost();
-  const services = createProfileServices({ documents: transport, outbox, history, subjects: createStudioSubjects(),
+  const services = createProfileServices({ documents: transport, outbox, now: options.now ?? (options.clock ? () => options.clock!.now() : undefined), history, subjects: createStudioSubjects(),
     catalogue: new CreatorCatalogue(host.port), versions: libraryVersions(library) });
   await services.load();
   let data: ProfileSessionData, profile: string, looks: LookRef[], vs: string[];
@@ -102,7 +106,11 @@ export async function profileContextStudio(options: { restart?: ContextRestart; 
   const viewport = new ViewportAttachment<HTMLElement>({ moveHost: () => {}, measure: () => ({ width: 300, height: 600 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => false,
     hitAt: () => undefined, queryContext: hit => core.app.contextQuery(hit) });
-  const boot = createTrustedStudioBootstrap({ core, diagnostics: options.diagnostics, modInstall: options.modInstall, preferences: new UIPreferenceActions(workspace.uiPreferences), viewport,
+  const emptyChoices = emptyChoicesPort({ session, resolver: targets, services, panels: panelCommands(session, targets),
+    ownerType: (instance, route) => route === "look" ? "presets" : route === "subject" ? "view" : STUDIO_CATALOGUE.primary(session.panel(instance)?.type ?? "")?.id,
+    starter: () => starterParts(core.documents), createLookCapability: () => ({ available: true }), access: () => ({ available: true }),
+    baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) });
+  const boot = createTrustedStudioBootstrap({ core, emptyChoices, diagnostics: options.diagnostics, modInstall: options.modInstall, preferences: new UIPreferenceActions(workspace.uiPreferences), viewport,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 512, pending: 0, waiting: false, estimatedBytes: 0, layers: [] }), subscribe: () => () => {} },
     fileDevice,
     collections: { owner: services.collections, scene: { look: () => { const id = sceneOf(); return id ? session.knownScene(id)?.look : undefined; }, setLook: ref => { const id = sceneOf(); if (id) session.setLook(id, ref); }, subscribe: listener => session.subscribe(listener) },
@@ -128,6 +136,6 @@ export async function profileContextStudio(options: { restart?: ContextRestart; 
   let disposed = false;
   const dispose = async () => { if (disposed) return; disposed = true; for (const life of lives) life.abort(); off(); await settle(); boot.dispose(); authoring.drawn.dispose();
     for (const id of vs) await services.characters.release(id); outbox.stop(); };
-  return { library, transport, outbox, storage, services, history, session, authoring, core, port, targets, looks, vs, get drawn() { return drawn; }, draw, scene, bind, collectionTransport, fileDevice, starters, settle, stored, dispose,
+  return { emptyChoices, library, transport, outbox, storage, services, history, session, authoring, core, port, targets, looks, vs, get drawn() { return drawn; }, draw, scene, bind, collectionTransport, fileDevice, starters, settle, stored, dispose,
     failures, notes, counters: () => ({ resets, shows }) };
 }

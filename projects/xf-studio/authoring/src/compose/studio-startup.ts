@@ -332,7 +332,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, generation: type => type === "view" || STUDIO_CATALOGUE.ids.includes(type) ? 0 : experiments.registrationGeneration(), available: type => type === "view" || layouts.catalogue().ids.includes(type), contexts: type => layouts.catalogue().context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
-  core.app.attach({ targetCheck: targets, panels: panelCommands(sessionState, targets, layouts.catalogue) });
+  const panelActions = panelCommands(sessionState, targets, layouts.catalogue);
+  core.app.attach({ targetCheck: targets, panels: panelActions });
   const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.namedView(drawnView())), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
@@ -533,7 +534,9 @@ async function start(host: StudioHost, root: HTMLElement) {
       return () => { const current = structural(); return current.available ? core.app.capability({ kind: "panels.show", destination }) : current; };
     } },
     tabs: layoutTabsPort(sessionState, layoutTabs, services), starters: starterActions.port(),
-    emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
+    emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, panels: panelActions,
+      ownerType: (instance, route) => route === "look" ? "presets" : route === "subject" ? "view" : layouts.catalogue().primary(sessionState.panel(instance)?.type ?? "")?.id,
+      registration: () => experiments.registrationGeneration(), access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
       createLookCapability: collection => core.app.capability({ kind: "preset.edit", collection, command: { kind: "add" } }),
       starter: () => starterParts(core.documents, region.starter(starterShapes.shapeOf())), baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) }),
     // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.

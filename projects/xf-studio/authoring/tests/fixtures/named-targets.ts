@@ -1,3 +1,4 @@
+import { statusWorld } from "./target-status";
 /**
  * The input layer for tests that drive the application directly (profiles design §3.6): actions are named with the targets the real
  * resolver (app/profiles/targets.ts) reaches over a fixture session, the way the presentation port names them. The fixture's one scene
@@ -61,7 +62,7 @@ export function fixtureTargets(core: FixtureCore, options: { scene?: FixtureScen
     },
     focus: core.history.focus,
     acting: scopes => core.history.acting(scopes)?.id,
-    exists: { subject: () => true, look: () => true },
+    status: statusWorld(),
     context: () => ({ kind: "view" }),
     ...(options.collection ? { collection: options.collection } : {}),
   });

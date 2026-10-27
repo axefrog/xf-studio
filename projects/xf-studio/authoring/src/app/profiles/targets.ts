@@ -8,6 +8,7 @@ import { refusal, type Capability } from "../../platform/api/capability";
 import type { ViewId } from "../../platform/api/view-graph";
 import type { SubjectRef } from "../../platform/api/subjects";
 import { CHARACTER_KIND } from "../../platform/api/characters";
+import type { BoundTargetStatus } from "../../platform/api/target-status";
 import type { FocusService } from "../../platform/core/focus";
 import { lookScope } from "../../platform/core/history-service";
 import { characterScope } from "../../character/character-history";
@@ -38,8 +39,9 @@ export type TargetResolverDeps = {
   readonly focus: Pick<FocusService, "viewOrder" | "recent" | "focusedPanel">;
   /** The first editing context that can act now (the history service's `acting`), by scope ID. */
   acting(scopes: readonly string[]): string | undefined;
-  /** Whether a subject and a look still exist (a deleted V, a removed look). */
-  readonly exists: { subject(ref: SubjectRef): boolean; look(ref: LookRef): boolean };
+  /** Detached owner facts distinguish retained work, purge and recovery from unassigned slots. */
+  readonly status: Pick<BindingWorld, "subject" | "look">;
+  available?(type: string): boolean;
   /** A panel type's context (§3.1, §5); unknown types follow the focused view's whole chain. */
   context(type: string): PanelContext;
   readonly rules?: readonly ConstraintRule[];
@@ -55,29 +57,78 @@ const WHOLE_CHAIN: PanelContext = { kind: "view" };
 
 export class TargetResolver {
   focusedInstance() { return this.deps.focus.focusedPanel(); }
+  context(instance: string): PanelContext {
+    const panel = this.deps.session.panel(instance);
+    return panel ? this.deps.context(panel.type) : WHOLE_CHAIN;
+  }
+  available(instance: string): boolean {
+    const panel = this.deps.session.panel(instance);
+    return !!panel && this.deps.available?.(panel.type) !== false;
+  }
+  /** Choices obey the same declared kinds and constraints as resolution, again at dispatch. */
+  accepts(instance: string, target: Target): Capability {
+    const context = this.context(instance), scene = target.scene ? this.world().scenes[target.scene] : undefined;
+    if (context.kind === "subject" && target.subject && !context.subjects.includes(target.subject.kind)
+      || scene && "scenes" in context && context.scenes && !context.scenes.includes(scene.kind))
+      return refusal("incompatible_mode", "This panel can't use that kind of target.");
+    for (const rule of this.deps.rules ?? []) if (rule.applies(context)) {
+      const allowed = rule.check(target); if (!allowed.available) return allowed;
+    }
+    return { available: true };
+  }
   private captures = new Set<number>();
   private next = 0;
   constructor(private readonly deps: TargetResolverDeps) {}
 
   /** The session as resolution reads it, now. */
   world(): BindingWorld {
-    const { session, focus, exists } = this.deps, tab = session.tab();
+    const { session, focus, status } = this.deps, tab = session.tab();
     const views: Record<ViewId, { tab: TabId; scene: string }> = {}, scenes: BindingWorld["scenes"] = {};
     for (const view of session.views()) {
       views[view.id] = { tab: view.tab ?? tab, scene: view.scene };
       const scene = session.scene(view.scene);
       if (scene) (scenes as Record<string, unknown>)[view.scene] = scene;
     }
-    return { views, scenes, focus: focus.viewOrder(), subject: ref => exists.subject(ref), look: ref => exists.look(ref) };
+    return { views, scenes, focus: focus.viewOrder(), subject: ref => status.subject(ref), look: ref => status.look(ref) };
   }
   /**
    * What `instance` resolves to through its binding, among the views of its own tab; without one (a key binding or palette command outside
    * any panel), the whole chain of the most recently focused view in the shown tab.
    */
   resolve(instance?: string): Resolution {
+    return this.resolveIn(this.world(), instance);
+  }
+  private resolveIn(world: BindingWorld, instance?: string): Resolution {
     const panel = instance === undefined ? undefined : this.deps.session.panel(instance);
-    return resolveBinding(this.world(), { tab: panel?.tab ?? this.deps.session.tab(), ...(panel?.binding ? { binding: panel.binding } : {}),
+    if (panel && this.deps.available?.(panel.type) === false)
+      return { state: "dangling", missing: "view", reason: "This panel's contribution is unavailable. Enable its experiment to use it again." };
+    return resolveBinding(world, { tab: panel?.tab ?? this.deps.session.tab(), ...(panel?.binding ? { binding: panel.binding } : {}),
       context: panel ? this.deps.context(panel.type) : WHOLE_CHAIN, ...(this.deps.rules ? { rules: this.deps.rules } : {}) });
+  }
+  /** U5 seam: complete detached status facts, including references the editable chain cannot resolve. */
+  describe(instance: string): { readonly instance: string; readonly resolution: Resolution; readonly target: Target;
+    readonly statuses: Readonly<Record<"view" | "scene" | "subject" | "look", BoundTargetStatus>>; readonly available: boolean } {
+    const panel = this.deps.session.panel(instance), world = this.world(), resolution = this.resolveIn(world, instance);
+    const pin = panel?.binding?.policy === "pinned" ? panel.binding.target : undefined;
+    const partial = resolution.target ?? {};
+    const view = partial.view ?? (pin && "view" in pin ? pin.view : undefined);
+    const scene = partial.scene ?? (view ? world.views[view]?.scene : undefined) ?? (pin && "scene" in pin ? pin.scene : undefined);
+    const record = scene ? world.scenes[scene] : undefined;
+    const subject = partial.subject ?? record?.subject ?? (pin && "subject" in pin ? pin.subject : undefined);
+    const look = partial.look ?? record?.look ?? (pin && "look" in pin ? pin.look : undefined);
+    const available = !!panel && this.deps.available?.(panel.type) !== false;
+    const slot = (kind: "view" | "scene", id: string | undefined, present: boolean): BoundTargetStatus => ({ instance,
+      owner: { kind, id: id ?? instance }, state: !available ? "unavailable" : id === undefined ? "empty" : present ? "present" : "purged" });
+    const statuses = { view: slot("view", view, !!(view && world.views[view])), scene: slot("scene", scene, !!record),
+      subject: subject ? { ...world.subject(subject), instance } : { instance, state: "empty" as const, owner: { kind: "subject", id: scene ?? instance } },
+      look: look ? { ...world.look(look), instance } : { instance, state: "empty" as const, owner: { kind: "look", id: scene ?? instance } } };
+    const context = this.context(instance);
+    if (resolution.state === "empty" && !resolution.missing && context.kind !== "profile")
+      statuses[context.kind] = { ...statuses[context.kind], state: "unavailable", reason: resolution.reason, restore: undefined };
+    if (!available) for (const key of ["view", "scene", "subject", "look"] as const) statuses[key] = { ...statuses[key], state: "unavailable",
+      reason: "This panel's contribution is unavailable. Enable its experiment to use it again.", restore: undefined };
+    return structuredClone({ instance, resolution, available, statuses, target: { ...(view ? { view } : {}), ...(scene ? { scene } : {}),
+      ...(record ? { sceneGen: record.gen } : {}), ...(subject ? { subject } : {}), ...(look ? { look } : {}) } });
   }
   /** The editing context Undo acts on now (§3.7): the newest that can act, if any. */
   editing(): string | undefined { return this.deps.acting(this.deps.focus.recent()); }
@@ -99,7 +150,7 @@ export class TargetResolver {
   /** What a resolution names, by target field (`bindings.ts` `Target` to the actions' fields), with the editing context as `scope`. */
   named(instance?: string): NamedTargets {
     const resolved = this.resolve(instance);
-    return this.namedOf(resolved.state === "resolved" || resolved.state === "empty" ? resolved.target ?? {} : {},
+    return this.namedOf(resolved.target ?? {},
       instance === undefined ? undefined : this.deps.session.panel(instance)?.tab, instance === undefined);
   }
   /** The drawn compatibility input names a view explicitly, even before its pane exists. */
@@ -128,7 +179,7 @@ export class TargetResolver {
   // ----- Captures -----
   /** Freeze what `instance` resolves to now (§3.3) until `signal` is aborted. */
   capture(instance: string | undefined, signal: AbortSignal): Capture {
-    const resolved = this.resolve(instance), target = resolved.state === "resolved" || resolved.state === "empty" ? resolved.target ?? {} : {};
+    const resolved = this.resolve(instance), target = resolved.target ?? {};
     return this.captureTarget(target, signal, instance);
   }
   /** File requests at the root retain the explicitly drawn semantic chain, independently of focus. */
