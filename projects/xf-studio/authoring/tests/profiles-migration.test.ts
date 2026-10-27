@@ -7,7 +7,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import { PROFILES_MIGRATION_ENABLED, profilesMigrationTransport, startProfilesMigration } from "../src/app/browser/profiles-migration-device";
 import { checkMigrationRequest, createProfilesMigrationHandler } from "../src/app/profiles/host/profiles-migrate";
-import { buildProfileSession, dockPanels, LAYOUT_DEFAULT_DOCUMENT, migrationSnapshot, type MigrationResult, snapshotDigest } from "../src/app/profiles/profiles-migration-data";
+import { buildProfileSession, characterOf, dockPanels, LAYOUT_DEFAULT_DOCUMENT, migrationSnapshot, type MigrationResult, snapshotDigest } from "../src/app/profiles/profiles-migration-data";
 import { PANEL_INSTANCE_ID, profileSessionOf } from "../src/app/profiles/profile-session";
 import { ProfilesMigration } from "../src/app/profiles/profiles-migration";
 import { decodedSaveId } from "../src/character/character-document";
@@ -25,6 +25,17 @@ import { STUDIO_INITIAL_LAYOUT } from "../src/compose/layout-defaults";
 import { openSession } from "./fixtures/profile-sessions";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { tempDir } from "./temp-dir";
+import { expectCaptureStable } from "./fixtures/capture-ownership";
+
+test("migration snapshots own nested character and decoded-save values independently of the workspace", () => {
+  const state = realWorkspace(), before = JSON.stringify(state);
+  const character = characterOf(state), snapshot = migrationSnapshot(state, MODEL, "ownership");
+  expectCaptureStable(() => JSON.stringify(state),
+    () => { Object.assign(character.document.clothing!, { state: "changed" }); },
+    () => { Object.assign(snapshot.character.document.clothing!, { state: "changed" }); },
+    () => { Object.assign(snapshot.character.saved!.value, { name: "changed" }); });
+  expect(JSON.stringify(state)).toBe(before);
+});
 
 const scratch = tempDir("xfs-profiles-migration-");
 afterAll(() => { try { rmSync(scratch, { recursive: true, force: true }); } catch { /* A file a failed test left open; the system cleans its temp folder. */ } });
@@ -271,8 +282,11 @@ describe("the route", () => {
   test("the session builds from a result alone, and checkMigrationRequest keeps what it validated", () => {
     const state = realWorkspace();
     const snapshot = migrationSnapshot(state, MODEL, "browser-a");
-    const checked = checkMigrationRequest(JSON.parse(JSON.stringify({ token: "00000000-0000-4000-8000-0000000000f2", digest: snapshotDigest(snapshot), snapshot })));
+    const input = JSON.parse(JSON.stringify({ token: "00000000-0000-4000-8000-0000000000f2", digest: snapshotDigest(snapshot), snapshot }));
+    const checked = checkMigrationRequest(input);
     expect(checked.snapshot.drafts.map(draft => draft.looks.length)).toEqual(snapshot.drafts.map(draft => draft.looks.length));
+    expectCaptureStable(() => checked, () => { input.snapshot.character.document.clothing.state = "changed"; },
+      () => { Object.assign(checked.snapshot.character.document.clothing!, { state: "changed" }); });
     const result = { schema: "xfs/profiles-migration-1", token: checked.token, digest: checked.digest, at: 1, profile: "p-abcd", character: "c-abcd", collection: COLLECTION, members: [COLLECTION],
       recovered: [], defaults: ["d-1", "d-2"], idMap: { collections: {}, looks: {} }, made: [] } as MigrationResult;
     const session = buildProfileSession(state, snapshot, result, () => 0.5);
@@ -404,6 +418,20 @@ describe("review of chunk 1d-i", () => {
     expect(rows(path, "look-working").find(doc => doc.id === `${scene.look!.collection}/${scene.look!.look}`)!.value.name).toBe("Added while the answer was lost");
     expect(rows(path, "migration")).toHaveLength(2);
     host.close();
+  });
+
+  test("a transport callback cannot rewrite the private snapshot used for reconciliation", async () => {
+    const { path } = library(), host = new HarnessHost(path), workspace = new HarnessWorkspace(realWorkspace(), "browser-a");
+    try {
+      const migration = new ProfilesMigration({ workspace: "browser-a", model: MODEL, state: () => workspace.state(), record: recordInto(workspace),
+        send: async request => {
+          const answer = await host.send(request);
+          Object.assign(request.snapshot.character.document.clothing!, { state: "changed by adapter" });
+          return answer;
+        } });
+      expect(await migration.run(new AbortController().signal)).toBe("done");
+      expect(rows(path, "migration")).toHaveLength(1);
+    } finally { host.close(); }
   });
 
   test("an edit made while the answer was on its way is migrated too", async () => {

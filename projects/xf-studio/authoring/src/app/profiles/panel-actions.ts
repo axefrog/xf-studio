@@ -9,6 +9,7 @@ import { resolveBinding, bindingKey, bindingKindCompatible, bindingRules, bindin
 import type { OwnerTargetStatus } from "../../platform/api/target-status";
 import type { BindingTargetOption, PanelBindingSnapshot, PanelBindingsPort } from "./panel-bindings";
 import { openIn } from "./panel-dock";
+import { frozenData } from "./frozen-data";
 
 function bindingStatuses(world: BindingWorld, target: Target): Partial<Record<"view" | "scene" | "subject" | "look", OwnerTargetStatus>> {
   return { ...(target.view ? { view: { owner: { kind: "view", id: target.view }, state: world.views[target.view] ? "present" as const : "purged" as const } } : {}),
@@ -84,7 +85,7 @@ export class PanelActions {
     const capture = (binding: PanelBinding): Extract<PanelAction, { kind: "panels.setBinding" }> => {
       const choice = ++this.nextChoice, action = structuredClone({ kind: "panels.setBinding" as const, destination, binding, choice });
       // Neither the returned candidate nor its action may share nested references with private validation state.
-      const validationBinding = structuredClone(binding);
+      const validationBinding = frozenData(binding);
       const target = bindingTarget(this.deps.world(), validationBinding), current = this.deps.captureBinding?.(instance, validationBinding, signal)
         ?? (() => signal.aborted ? refusal("missing_target", "That chooser was closed.") : captureCurrent(this.deps.world(), { target, revisions: {} }, () => undefined));
       if (!signal.aborted) {

@@ -145,8 +145,8 @@ export function migrationSnapshot(state: WorkspaceState, model: DocumentModel, w
       ...(stored.look.memory !== undefined ? { memory: stored.look.memory } : {}) }], removed: [] });
     selected = look;
   }
-  return { schema: MIGRATION_SNAPSHOT_SCHEMA, workspace, drafts, ...(selected ? { selected } : {}),
-    ...(state.library.current ? { current: { ...state.library.current } } : {}), character: characterOf(state), layouts: layoutsOf(state) };
+  return structuredClone({ schema: MIGRATION_SNAPSHOT_SCHEMA, workspace, drafts, ...(selected ? { selected } : {}),
+    ...(state.library.current ? { current: { ...state.library.current } } : {}), character: characterOf(state), layouts: layoutsOf(state) });
 }
 
 /** The V as `character.create` makes it: its source, body, choices, clothing and own-makeup setting, and the decoded save it comes from. */
@@ -157,7 +157,8 @@ export function characterOf(state: Pick<WorkspaceState, "preview" | "savedV">): 
   const decoded = save ? decodedSaveId(save) : null;
   const { id: _id, ...document } = documentOfForm("c-migrating", form, body, form.origin === "save" ? decoded : null);
   // The decoded save is kept even when the V no longer comes from it: it is the save the workspace had loaded.
-  return { document, ...(save && decoded ? { saved: { id: decoded, value: save } } : {}) };
+  // This is transport data, including the decoded save: detach nested clothing/source/save values from the live workspace.
+  return JSON.parse(JSON.stringify({ document, ...(save && decoded ? { saved: { id: decoded, value: save } } : {}) })) as MigrationCharacter;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -278,12 +279,12 @@ export function layoutFragment(name: string, dock: DockLayout, graph: ViewGraphD
     nodes.push({ key: id, slot, ...(node.kind !== undefined ? { kind: node.kind } : {}), state: structuredClone(nodeState(node)),
       ...(scene ? { subject: FRAGMENT_SUBJECT, look: FRAGMENT_LOOK } : {}) });
   }
-  return { schema: LAYOUT_FRAGMENT_SCHEMA,
+  return structuredClone({ schema: LAYOUT_FRAGMENT_SCHEMA,
     tab: { name, dock: rewriteDock(dock, panel => { const view = viewOfPanel(panel); return view ? `view:${view}` : panel; })! },
     subjects: character ? [{ key: FRAGMENT_SUBJECT, kinds: ["character"] }] : [], looks: character ? [{ key: FRAGMENT_LOOK }] : [], nodes,
     views: views.map(view => ({ key: view.id, ...(view.title !== undefined ? { title: view.title } : {}),
       scene: view.scene, camera: view.camera, lights: view.lights, display: view.display, tools: view.tools })),
-    panels: panels.filter(panel => !viewOfPanel(panel)).map(panel => ({ key: panel, type: panel })) };
+    panels: panels.filter(panel => !viewOfPanel(panel)).map(panel => ({ key: panel, type: panel })) });
 }
 /** The saved layouts as own defaults: each layout's saved arrangement (an inactive layout's working state is dropped, §8). */
 function layoutsOf(state: WorkspaceState): MigrationLayout[] {

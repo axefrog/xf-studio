@@ -12,6 +12,9 @@ import { CollectionOwner } from "../src/library/collection-owner";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
 import { memoryOutboxStorage } from "./fixtures/platform-doubles";
 import { profileContextStudio } from "./fixtures/profile-context-studio";
+import { expectCaptureStable } from "./fixtures/capture-ownership";
+import { PanelEditingContexts } from "../src/app/profiles/panel-editing-contexts";
+import type { FileWriter, StudioFileOperations } from "../src/app/studio-file-operations";
 
 type Studio = Awaited<ReturnType<typeof profileContextStudio>>;
 const viewRecords = (w: Studio) => w.session.session().views.views as readonly (ViewRecord & { tab: string })[];
@@ -253,12 +256,84 @@ for (const field of ["binding", "target"] as const) test(`captured candidate ${f
     expect(w.services.collections.updateLook(ref, { name: "Changed after capture" }).ok).toBe(true);
     expect(w.port.authoring.capability(action)).toMatchObject({ available: false, code: "missing_target" });
     const exposed = field === "binding" ? (row.binding.target as { look: typeof ref }).look : row.target.look!;
-    Object.assign(exposed, peer);
+    expectCaptureStable(() => ({ capability: w.port.authoring.capability(action), action }), () => Object.assign(exposed, peer));
     const before = state(w);
     expect(action.binding).toEqual(pinned({ look: ref }));
     expect(w.port.authoring.capability(action)).toMatchObject({ available: false, code: "missing_target" });
     expect(w.port.authoring.dispatch(action)).toMatchObject({ ok: false, code: "missing_target" }); expect(state(w)).toBe(before);
   } finally { life.abort(); expect(w.targets.held()).toBe(0); expect(w.panelActions.heldBindingChoices()).toBe(0); await w.dispose(); }
+});
+
+for (const path of ["captureNamed", "capture", "capture(undefined)", "captureView", "bindingCapture"] as const)
+  test(`capture ownership: ${path} cannot be redirected from removed A to live B`, async () => {
+    const w = await profileContextStudio(); const life = new AbortController();
+    try {
+      const fromView = path === "captureView" || path === "capture(undefined)", ref = structuredClone(w.looks[fromView ? 0 : 2]!), peer = w.looks[1]!;
+      const view = viewRecords(w)[0]!.id; w.session.focus.focusView(view);
+      const inputLook = { ...ref }, input = pinned({ look: inputLook });
+      const held = path === "bindingCapture" ? undefined : path === "captureNamed" ? w.targets.captureNamed({ look: inputLook }, life.signal, "presets--shared")
+        : path === "captureView" ? w.targets.captureView(view, life.signal) : w.targets.capture(path === "capture" ? "presets--unseen" : undefined, life.signal);
+      const check = held ? () => w.targets.current(held) : w.targets.bindingCapture("presets--shared", input, life.signal);
+      expect(check().available).toBe(true);
+      const collection = w.services.collections.collection(ref.collection)!;
+      expect(w.services.collections.dispatch({ kind: "collection.removeLook", collection: ref.collection, base: collection.revision, look: ref.look }).ok).toBe(true);
+      expect(check()).toMatchObject({ available: false, code: "missing_target" });
+      expectCaptureStable(() => ({ capability: check(), named: held?.named, data: held?.data }),
+        () => Object.assign((input.target as { look: typeof ref }).look, peer),
+        ...held ? [() => Object.assign(held.named.look!, peer), () => Object.assign(held.data.target.look!, peer),
+          () => Object.assign(held.data.revisions, Object.fromEntries(Object.keys(held.data.revisions).map(key => [key, -1])))] : []);
+      if (held) expect(held.named.look).toEqual(ref);
+      expect(Object.isFrozen(input.target)).toBe(false); // The constructor owns a copy; it never freezes the caller's data.
+    } finally { life.abort(); expect(w.targets.held()).toBe(0); await w.dispose(); }
+  });
+
+test("context-menu capture owns caller named data and deep-freezes its returned destination", async () => {
+  const w = await profileContextStudio();
+  try {
+    const input = { look: { ...w.looks[2]! } }, context = w.core.app.contextFor({ kind: "collection" }, input);
+    expectCaptureStable(() => context, () => Object.assign(input.look, w.looks[0]!), () => Object.assign(context.named.look!, w.looks[1]!));
+    expect(Object.isFrozen(input.look)).toBe(false);
+  } finally { await w.dispose(); }
+});
+
+for (const path of ["panel", "panel capture", "root capture"] as const) test(`editing capture ownership: ${path} keeps its named look`, async () => {
+  const w = await profileContextStudio(); const life = new AbortController();
+  try {
+    const panel = w.bind("presets--unseen").context.current(), port = path === "panel" ? panel : (path === "panel capture" ? panel : w.port).capture!(life.signal);
+    const exposed = port.authoring.contextFor({ kind: "collection" }), original = exposed.named.look!;
+    expectCaptureStable(() => port.authoring.contextFor({ kind: "collection" }).named,
+      () => Object.assign(exposed.named.look!, w.looks.find(ref => !same(ref, original))!));
+  } finally { life.abort(); await w.dispose(); }
+});
+
+test("cached profile snapshots cannot be mutated through their nested membership", async () => {
+  const w = await profileContextStudio();
+  try {
+    const profiles = w.services.profiles, list = profiles.list(), row = list.find(profile => profile.id === w.session.profile)!;
+    expectCaptureStable(() => profiles.list(), () => Object.assign(row.subjects[0]!, { id: "changed" }),
+      () => { (row.collections as string[]).splice(0); });
+    expect(row.subjects).toEqual(profiles.profile(row.id)!.subjects);
+  } finally { await w.dispose(); }
+});
+
+test("editing/file capture owns target data even across its adapter callback and scene port", async () => {
+  const w = await profileContextStudio(); const life = new AbortController();
+  type Input = Parameters<ConstructorParameters<typeof PanelEditingContexts<HTMLElement>>[0]["create"]>[0];
+  const inputs: Input[] = []; let held: ReturnType<Input["capture"]> | undefined;
+  try {
+    // Only adapter mechanics are stubbed: the real context, resolver, history and look owners perform all validation.
+    const router = new PanelEditingContexts({ session: w.session, targets: w.targets, looks: w.authoring.contexts, empty: w.core,
+      context: () => ({ kind: "look" }), character: () => undefined,
+      create: input => { inputs.push(input); return { port: w.port, writer: {} as FileWriter,
+        files: { observeInput() {} } as unknown as StudioFileOperations, dispose() {} }; } });
+    expect(router.acquire("presets--unseen", life.signal)).toBeDefined();
+    const input = inputs[0]!, ref = { ...input.named.look! }; held = input.capture();
+    const collection = w.services.collections.collection(ref.collection)!;
+    expect(w.services.collections.dispatch({ kind: "collection.removeLook", collection: ref.collection, base: collection.revision, look: ref.look }).ok).toBe(true);
+    expect(held.check()).toMatchObject({ available: false, code: "missing_target" });
+    expectCaptureStable(() => ({ named: input.named, scene: input.scene.look(), capability: held!.check() }),
+      () => Object.assign(input.named.look!, w.looks[0]!), () => Object.assign(input.scene.look()!, w.looks[0]!));
+  } finally { held?.release(); life.abort(); await w.dispose(); }
 });
 
 test("withdrawal/return invalidates old choices and abort releases all choice and resolver captures", async () => {

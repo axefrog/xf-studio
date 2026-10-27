@@ -23,6 +23,7 @@ import type { ViewAction, ViewActions } from "./view-actions";
 import type { SceneAction, SceneCommands } from "./profiles/scene-commands";
 import type { LayoutTabAction } from "./profiles/tab-defaults";
 import type { PanelAction } from "./profiles/panel-actions";
+import { frozenData } from "./profiles/frozen-data";
 import type { StarterAction, StarterActions } from "./starters/starter-actions";
 import type { ShapeStarters } from "./starters/shape-starters";
 import type { EmptyChoiceRequest, EmptyChoicesPort } from "./profiles/empty-choices";
@@ -474,7 +475,7 @@ export class StudioApplication {
    */
   contextFor(hit: StudioContextHit, named: NamedTargets = {}): StudioBoundContext {
     const draft = this.services.collection?.draftIdentity();
-    return Object.freeze({ hit: Object.freeze(structuredClone(hit)), named: Object.freeze({ ...named }), collectionId: draft?.collectionId,
+    return frozenData({ hit, named, collectionId: draft?.collectionId,
       contextIdentity: this.contextIdentity,
       selectedPresetId: draft?.selected,
       collectionRevision: this.collectionRevision,

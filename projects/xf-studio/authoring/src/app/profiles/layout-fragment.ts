@@ -227,10 +227,10 @@ export function fragmentOfTab(session: ProfileSessionData, tab: TabId, options: 
   const stale = dockPanels(source.dock).filter(id => !dockKey(id));
   const dock = source.dock ? rewriteDock(stale.length ? withoutDockPanels(source.dock, id => stale.includes(id)) : source.dock, id => dockKey(id) ?? id)!
     : clone(EMPTY_DOCK);
-  return { schema: LAYOUT_FRAGMENT_SCHEMA, tab: { name: options.name ?? source.name, dock: dock as FragmentDock },
+  return clone({ schema: LAYOUT_FRAGMENT_SCHEMA, tab: { name: options.name ?? source.name, dock: dock as FragmentDock },
     subjects: subjects.map(({ key, kinds }) => ({ key, kinds })), looks: looks.map(({ key }) => ({ key })), nodes,
     views: views.map(view => ({ key: viewKeys.get(view.id)!, ...(view.title !== undefined ? { title: view.title } : {}),
-      ...Object.fromEntries(VIEW_SLOTS.map(slot => [slot, nodeKeys.get(`${slot}:${view[slot]}`)!])) }) as FragmentView), panels };
+      ...Object.fromEntries(VIEW_SLOTS.map(slot => [slot, nodeKeys.get(`${slot}:${view[slot]}`)!])) }) as FragmentView), panels });
 }
 /** A panel's binding in a fragment: a pin names the fragment's key; a pin to something the tab doesn't hold is dropped. */
 function fragmentBinding(binding: PanelBinding | undefined, keys: { view(id: string): string | undefined; scene(id: string): string | undefined;
@@ -423,8 +423,8 @@ export function substitutionOf(fragment: LayoutFragment, context: SubstitutionCo
 /** The fill a substitution gives `instantiateFragment`. */
 export function fillOf(substitution: Substitution): FragmentFill {
   return {
-    subjects: Object.fromEntries(substitution.subjects.map(slot => [slot.key, slot.chosen ?? null])),
-    looks: Object.fromEntries(substitution.looks.map(slot => [slot.key, slot.chosen ?? null])),
+    subjects: Object.fromEntries(substitution.subjects.map(slot => [slot.key, clone(slot.chosen ?? null)])),
+    looks: Object.fromEntries(substitution.looks.map(slot => [slot.key, clone(slot.chosen ?? null)])),
     share: Object.fromEntries(substitution.scenes.flatMap(scene => {
       const lights = scene.shares.find(item => item.scene === scene.chosen)?.lights;
       return scene.chosen ? [[scene.key, { scene: scene.chosen, ...(lights ? { lights } : {}) }]] : [];

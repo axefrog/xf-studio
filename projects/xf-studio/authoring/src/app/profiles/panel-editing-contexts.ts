@@ -15,6 +15,7 @@ import { targetPresent } from "../../platform/api/target-status";
 import type { ProfileSessions } from "./profile-sessions";
 import { TabRefusal } from "./profile-sessions";
 import type { TargetResolver } from "./targets";
+import { frozenData } from "./frozen-data";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 export type PanelEditingPort<Slot> = {
@@ -78,6 +79,7 @@ export class PanelEditingContexts<Slot> {
   }
   /** Management/import controls can act beside a missing document, but never after that exact recovery state changes. */
   private captureInput(named: NamedTargets, signal: AbortSignal, instance?: string): () => Capability {
+    named = frozenData(named);
     const { targets } = this.deps, world = targets.world(), subject = named.character ? { kind: "character", id: named.character } : undefined;
     const look = named.look ? world.look(named.look) : undefined, person = subject ? world.subject(subject) : undefined;
     const missingLook = look && !targetPresent(look), missingPerson = person && !targetPresent(person);
@@ -101,9 +103,10 @@ export class PanelEditingContexts<Slot> {
   }
   private bind(target: NamedTargets, context: PanelContext, signal: AbortSignal, instance?: string,
     destination?: ReturnType<ProfileSessions["panelTarget"]>, extraCheck?: () => Capability, fileOwner?: StudioFileOperations) {
+    target = frozenData(target); context = frozenData(context); destination = frozenData(destination);
     const { session, targets } = this.deps, life = new AbortController();
-    const named: NamedTargets = { ...target, scope: context.kind === "subject" && target.character ? characterScope(target.character)
-      : target.look ? lookScope(target.look) : undefined };
+    const named: NamedTargets = frozenData({ ...target, scope: context.kind === "subject" && target.character ? characterScope(target.character)
+      : target.look ? lookScope(target.look) : undefined });
     const check = (): Capability => {
       if (signal.aborted || life.signal.aborted) return refusal("missing_target", "This editing context was released.");
       if (extraCheck) { const allowed = extraCheck(); if (!allowed.available) return allowed; }
@@ -135,7 +138,7 @@ export class PanelEditingContexts<Slot> {
     };
     const retire = () => { retired = true; if (!captures) destroy(); };
     const capture = (): InputCapture | FileWriterCapture => {
-      const accepted = check();
+      const accepted = frozenData(check());
       if (!accepted.available) return { check: () => accepted, release() {} };
       if (extraCheck) {
         // Acceptance transfers out of the shell surface's signal before that menu or palette closes.
@@ -164,7 +167,7 @@ export class PanelEditingContexts<Slot> {
     };
     try { made = this.deps.create({ core, instance: instance ?? "", named, scene, choose, check, signal: life.signal, capture, fileOwner, captured: !!extraCheck,
       capturePort: (signal, fileOwner) => {
-        const allowed = check(), held = this.captureInput(named, signal, instance);
+        const allowed = frozenData(check()), held = this.captureInput(named, signal, instance);
         return this.bind(named, context, signal, instance, destination, () => allowed.available ? held() : allowed, fileOwner).port;
       } }); }
     catch (error) { app.dispose(); life.abort(); throw error; }

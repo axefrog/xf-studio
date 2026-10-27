@@ -95,7 +95,8 @@ export class ProfilesMigration {
         try {
           snapshot = migrationSnapshot(deps.state(), deps.model, deps.workspace);
           digest = snapshotDigest(snapshot);
-          const sent = deps.send({ token: mark.token, digest, snapshot }, signal);
+          // The adapter receives its own request copy; callbacks cannot rewrite the snapshot kept for reconciliation.
+          const sent = deps.send(structuredClone({ token: mark.token, digest, snapshot }), signal);
           point("w-sent");
           answer = await sent;
           break;

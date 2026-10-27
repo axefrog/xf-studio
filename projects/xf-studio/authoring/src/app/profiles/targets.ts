@@ -18,6 +18,7 @@ import type { ActionDescriptor } from "../../platform/api/actions";
 import { type BindingWorld, type CaptureData, captureCurrent, type ConstraintRule, type PanelContext, type Resolution, resolveBinding,
   type Target, bindingTarget } from "./bindings";
 import type { PanelBinding, TabId } from "./profile-session";
+import { frozenData } from "./frozen-data";
 
 /** One frozen resolution (§3.3): what it named, until its signal is aborted. */
 export type Capture = { readonly id: number; readonly instance?: string; readonly data: CaptureData; readonly named: NamedTargets;
@@ -59,7 +60,7 @@ export class TargetResolver {
   focusedInstance() { return this.deps.focus.focusedPanel(); }
   context(instance: string): PanelContext {
     const panel = this.deps.session.panel(instance);
-    return panel ? this.deps.context(panel.type) : WHOLE_CHAIN;
+    return frozenData(panel ? this.deps.context(panel.type) : WHOLE_CHAIN);
   }
   available(instance: string): boolean {
     const panel = this.deps.session.panel(instance);
@@ -89,7 +90,8 @@ export class TargetResolver {
       const scene = session.scene(view.scene);
       if (scene) (scenes as Record<string, unknown>)[view.scene] = scene;
     }
-    return { views, scenes, focus: focus.viewOrder(), subject: ref => status.subject(ref), look: ref => status.look(ref) };
+    return Object.freeze({ ...frozenData({ views, scenes, focus: focus.viewOrder() }),
+      subject: (ref: SubjectRef) => frozenData(status.subject(ref)), look: (ref: LookRef) => frozenData(status.look(ref)) });
   }
   /**
    * What `instance` resolves to through its binding, among the views of its own tab; without one (a key binding or palette command outside
@@ -161,9 +163,9 @@ export class TargetResolver {
   }
   private namedOf(target: Target, tab?: TabId, fallback = true): NamedTargets {
     const scope = this.editing(), collection = target.look?.collection ?? (fallback ? this.deps.collection?.() : undefined);
-    return { ...(target.view !== undefined ? { view: target.view } : {}), ...(target.scene !== undefined ? { scene: target.scene, sceneGen: target.sceneGen } : {}),
+    return frozenData({ ...(target.view !== undefined ? { view: target.view } : {}), ...(target.scene !== undefined ? { scene: target.scene, sceneGen: target.sceneGen } : {}),
       ...(target.subject?.kind === CHARACTER_KIND ? { character: target.subject.id } : {}), ...(target.look ? { look: target.look } : {}),
-      ...(collection ? { collection } : {}), ...(scope ? { scope } : {}), tab: tab ?? this.deps.session.tab() };
+      ...(collection ? { collection } : {}), ...(scope ? { scope } : {}), tab: tab ?? this.deps.session.tab() });
   }
   /** `action` with the targets its descriptor declares and it leaves out named: from a capture when given, else from `instance`'s resolution. */
   complete<A extends object>(action: A, descriptor: Pick<ActionDescriptor, "payload"> | undefined, from: { instance?: string; capture?: Capture } = {}): A {
@@ -179,6 +181,7 @@ export class TargetResolver {
 
   /** A binding choice validates the old structural destination and the chosen new chain, never the old dangling document. */
   bindingCapture(instance: string, binding: PanelBinding, signal: AbortSignal): () => Capability {
+    binding = frozenData(binding);
     if (binding.policy === "follow-focus") {
       const structural = this.structural(instance);
       return () => signal.aborted ? refusal("missing_target", "That chooser was closed.") : structural();
@@ -212,7 +215,8 @@ export class TargetResolver {
     return this.captureTarget({ ...(view !== undefined ? { view } : {}), ...(scene !== undefined ? { scene, sceneGen } : {}),
       ...(look ? { look } : {}), ...(character ? { subject: { kind: CHARACTER_KIND, id: character } } : {}) }, signal, instance);
   }
-  private captureTarget(target: Target, signal: AbortSignal, instance?: string): Capture {
+  private captureTarget(source: Target, signal: AbortSignal, instance?: string): Capture {
+    const target = frozenData(source);
     const id = ++this.next, tab = instance ? this.deps.session.panel(instance)?.tab : target.view ? this.world().views[target.view]?.tab : this.deps.session.tab(),
       origin = JSON.stringify(this.deps.origin?.(instance, tab));
     let released = signal.aborted;
@@ -220,9 +224,9 @@ export class TargetResolver {
       this.captures.add(id);
       signal.addEventListener("abort", () => { released = true; this.captures.delete(id); }, { once: true });
     }
-    return Object.freeze({ id, ...(instance !== undefined ? { instance } : {}), data: Object.freeze({ target, revisions: this.deps.revisions?.(target) ?? {} }),
-      named: Object.freeze(this.namedOf(target, instance === undefined ? target.view === undefined ? undefined : this.world().views[target.view]?.tab
-        : this.deps.session.panel(instance)?.tab, instance === undefined)), released: () => released || origin !== JSON.stringify(this.deps.origin?.(instance, tab)) });
+    return Object.freeze({ id, ...(instance !== undefined ? { instance } : {}), data: Object.freeze({ target, revisions: frozenData(this.deps.revisions?.(target) ?? {}) }),
+      named: this.namedOf(target, instance === undefined ? target.view === undefined ? undefined : this.world().views[target.view]?.tab
+        : this.deps.session.panel(instance)?.tab, instance === undefined), released: () => released || origin !== JSON.stringify(this.deps.origin?.(instance, tab)) });
   }
   /** Whether a capture still names what it named (refused with `missing_target`, saying what changed), and was not released. */
   current(capture: Capture): Capability {

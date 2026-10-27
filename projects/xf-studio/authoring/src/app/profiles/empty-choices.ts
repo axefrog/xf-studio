@@ -214,12 +214,12 @@ export function emptyChoicesPort(deps: Deps): EmptyChoicesPort {
     const body = !info.available ? info.resolution.state === "dangling" ? info.resolution.reason : "This contribution is unavailable."
       : recovery ? d.status?.reason ?? `This ${route} was removed. Its reference is kept.` : route === "look" ? (looks().length ? "This scene has no look yet." : "There are no looks in this profile yet.")
         : mode === "view" ? "This tab has no 3D view." : "This 3D view has no V yet.";
-    return { title: recovery ? `Missing ${route}` : mode === "view" ? "Open a 3D view" : route === "look" ? "Show which look?" : "Show which V?",
+    return structuredClone({ title: recovery ? `Missing ${route}` : mode === "view" ? "Open a 3D view" : route === "look" ? "Show which look?" : "Show which V?",
       body, choices, recovery, status: d.status, capability: !info.available ? refusal("unavailable", body)
         : choices.length === 1 && "createLook" in choices[0]!.action.choice ? choices[0]!.capability! : deps.access(),
       ...(pointer ? { owner: { panel: owner?.id ?? leader?.id, label: deps.panels?.types().find(item => item.id === type)?.title ?? "chooser",
         prompt: route === "look" ? "No look in this scene. Choose one in" : mode === "view" ? "No 3D view in this tab. Open one in" : "Choose a V in",
-        ...(type ? { action: { kind: "empty.choose" as const, destination: ownerDestination, choice: { showOwner: true as const } } } : {}) } } : {}) };
+        ...(type ? { action: { kind: "empty.choose" as const, destination: ownerDestination, choice: { showOwner: true as const } } } : {}) } } : {}) });
   }
   async function execute(action: EmptyChoiceRequest): Promise<StudioDispatchResult> {
     const allowed = capability(action); if (!allowed.available) return failed(allowed);

@@ -16,6 +16,7 @@ import type { PanelBinding } from "../src/app/profiles/profile-session";
 import type { LookRef } from "../src/library/collection-documents";
 import { createStudioViewGraph } from "../src/preview/preview-view-graph";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { expectCaptureStable } from "./fixtures/capture-ownership";
 
 const v = (id: string) => ({ kind: "character", id });
 const look = (collection: string, id: string): LookRef => ({ collection, look: id });
@@ -178,7 +179,7 @@ describe("captures", () => {
 
 describe("the input layer's resolver", () => {
   /** A resolver over the multi-subject world: three Character panels pinned to three Vs, a Presets panel following focus, a 3D view. */
-  function resolver(state = { world: world(), revisions: { "character/c-1": 1, "character/c-2": 1, "character/c-3": 1 } as Record<string, number> }) {
+  function resolver(state = { world: world(), revisions: { "character/c-1": 1, "character/c-2": 1, "character/c-3": 1 } as Record<string, number> }, heldRevisions?: Record<string, number>) {
     const panels: Record<string, { type: string; binding?: PanelBinding }> = {
       "character--v1": { type: "character", binding: { policy: "pinned", target: { subject: v("c-1") } } },
       "character--v2": { type: "character", binding: { policy: "pinned", target: { subject: v("c-2") } } },
@@ -193,7 +194,7 @@ describe("the input layer's resolver", () => {
         scene: id => state.world.scenes[id], panel: id => panels[id] },
       focus, acting: scopes => history.acting(scopes)?.id, status: { subject: ref => state.world.subject(ref), look: ref => state.world.look(ref) },
       context: type => type === "character" ? { kind: "subject", subjects: ["character"] } : type === "presets" ? { kind: "look" } : { kind: "view" },
-      revisions: target => target.subject ? { [`character/${target.subject.id}`]: state.revisions[`character/${target.subject.id}`]! } : {},
+      revisions: target => heldRevisions ?? (target.subject ? { [`character/${target.subject.id}`]: state.revisions[`character/${target.subject.id}`]! } : {}),
       revision: key => state.revisions[key],
     });
     return { targets, focus, history, state };
@@ -212,6 +213,32 @@ describe("the input layer's resolver", () => {
       .toEqual({ kind: "preview.setNormals", enabled: true, view: "b", sceneGen: 3 });
     expect(targets.complete({ kind: "preview.setNormals", enabled: true, view: "a" }, descriptor) as object).toEqual({ kind: "preview.setNormals", enabled: true, view: "a", sceneGen: 3 });
     expect(nameTargets({ kind: "x" }, undefined, { view: "a" })).toEqual({ kind: "x" });
+  });
+
+  test("resolver world, resolution, named and status snapshots never expose the source session's references", () => {
+    const { targets, state } = resolver();
+    const snapshots = [targets.world().scenes.s2!.look!, targets.resolve("presets--p").target!.look!, targets.named("presets--p").look!,
+      targets.namedView("b").look!, targets.describe("presets--p").target.look!];
+    expectCaptureStable(() => ({ source: state.world.scenes, named: targets.named("presets--p") }),
+      ...snapshots.map(ref => () => Object.assign(ref, look("k", "l1"))));
+  });
+
+  test("binding resolution returns an owned immutable target rather than its caller's direct pin", () => {
+    const pin: PanelBinding = { policy: "pinned", target: { look: look("k", "l1") } };
+    const resolved = resolveBinding(world(), { tab: "t1", context: { kind: "look" }, binding: pin });
+    expectCaptureStable(() => resolved, () => Object.assign((pin.target as { look: LookRef }).look, look("k", "l2")),
+      () => Object.assign(resolved.target!.look!, look("k", "l3")));
+  });
+
+  test("capture revisions own the provider's map rather than sharing its later writes", () => {
+    const held = { "character/c-2": 1 }, { targets, state } = resolver(undefined, held), life = new AbortController();
+    try {
+      const capture = targets.capture("presets--p", life.signal);
+      state.revisions["character/c-2"] = 2;
+      expect(targets.current(capture).available).toBe(false);
+      expectCaptureStable(() => ({ capability: targets.current(capture), data: capture.data }), () => { held["character/c-2"] = 2; },
+        () => { (capture.data.revisions as Record<string, number>)["character/c-2"] = 2; });
+    } finally { life.abort(); }
   });
 
   test("Ctrl+Z in a 3D view steps the look its scene shows; in a Character panel its V; elsewhere the editing context (none: nothing)", () => {

@@ -21,6 +21,7 @@
  * 5. **The record**, with the ID map.
  */
 import { basename } from "node:path";
+import { frozenData } from "../frozen-data";
 import { CHARACTER_DOCUMENT, CHARACTER_SCHEMA, characterDocumentOf, decodedSaveId, newCharacterId, SAVED_V_DOCUMENT } from "../../../character/character-document";
 import { COLLECTION_WORKING, COLLECTION_WORKING_SCHEMA, LOOK_WORKING, LOOK_WORKING_SCHEMA, nameOf, pruneRemoved, REMOVED_LIMIT, type RemovedLook, suffixed } from "../../../library/collection-documents";
 import { isTombstone } from "../../../platform/api/document-commands";
@@ -110,9 +111,9 @@ export function checkMigrationRequest(value: unknown): MigrationRequest {
   const current = object(snapshot.current) && typeof snapshot.current.id === "string" && Number.isSafeInteger(snapshot.current.revision)
     ? { id: snapshot.current.id, revision: snapshot.current.revision } : undefined;
   const { id: _id, ...doc } = document!;
-  return { token: (value as { token: string }).token, digest: (value as { digest: string }).digest, snapshot: { schema: MIGRATION_SNAPSHOT_SCHEMA, workspace: snapshot.workspace, drafts,
+  return frozenData({ token: (value as { token: string }).token, digest: (value as { digest: string }).digest, snapshot: { schema: MIGRATION_SNAPSHOT_SCHEMA, workspace: snapshot.workspace, drafts,
     ...(typeof snapshot.selected === "string" ? { selected: snapshot.selected } : {}), ...(current ? { current } : {}),
-    character: { document: doc, ...(saved ? { saved } : {}) }, layouts } };
+    character: { document: doc, ...(saved ? { saved } : {}) }, layouts } });
 }
 
 type Row = { id: string; revision: number; value: Record<string, any> };

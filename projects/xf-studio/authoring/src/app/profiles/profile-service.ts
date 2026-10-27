@@ -18,6 +18,7 @@ import { commandId, type DocumentRef, isTombstone, tombstoneOf } from "../../pla
 import type { DocumentStorePort } from "../../platform/api/document-store";
 import { sameSubject, type SubjectRef, type SubjectRegistryPort } from "../../platform/api/subjects";
 import type { DocumentOutbox, OutboxEdit } from "../../platform/core/document-outbox";
+import { frozenData } from "./frozen-data";
 
 export const PROFILE_DOCUMENT = "profile";
 export const PROFILE_SCHEMA = "xfs/profile-1";
@@ -118,10 +119,10 @@ export class ProfileService {
    * resolution (Keep both reads theirs before announcing it) the outbox has changed and no event has been heard yet.
    */
   private read(): readonly ProfileView[] {
-    return Object.freeze([...this.ids].flatMap(id => {
+    return frozenData([...this.ids].flatMap(id => {
       const held = this.deps.outbox.document(profileRef(id));
       const value = held && !isTombstone(held.value) ? profileDocumentOf(held.value) : null;
-      return value ? [Object.freeze({ ...value, revision: held!.version })] : [];
+      return value ? [{ ...value, revision: held!.version }] : [];
     }).sort((a, b) => a.createdAt - b.createdAt));
   }
   profile(id: ProfileId): ProfileView | null { return this.read().find(profile => profile.id === id) ?? null; }
