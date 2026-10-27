@@ -426,5 +426,25 @@ const nested = (depth: number) => "[".repeat(depth) + "]".repeat(depth);
   rmSync(dir, { recursive: true, force: true });
 }
 
+// 0.8.24: completed writer observations are published through the ordinary reader event feed.
+{
+  const host = await startHost([]);
+  const writer = new BridgeClient(host.session, 5000), reader = new BridgeClient(host.session, 5000);
+  try {
+    await writer.connect(); await reader.connect({ readOnly: true });
+    for (const method of ["world.probe", "scene.read", "world.district"]) {
+      const response = await writer.call(method, method === "world.probe" ? { around_v: true, count: 1 } : {}, "observe-selftest");
+      check(`${method}: writer observation completes`, response.ok, response.error);
+      const page = await reader.call("session.events", { kinds: ["observe.result"] });
+      const event = (page.result as any)?.events?.at(-1);
+      check(`${method}: reader receives bounded result with writer cid/connection`, page.ok && event?.data.command === method &&
+        event.data.cid === response.cid && event.data.connection === 1 && Buffer.byteLength(JSON.stringify(event)) <= 8192, event?.data);
+    }
+  } finally {
+    reader.close(); writer.close(); if (host.child.exitCode === null) host.child.kill();
+    await waitExit(host.child, 3000); rmSync(host.dir, { recursive: true, force: true });
+  }
+}
+
 console.log(failures === 0 ? `\nALL ${checks} CHECKS PASSED` : `\n${failures} OF ${checks} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

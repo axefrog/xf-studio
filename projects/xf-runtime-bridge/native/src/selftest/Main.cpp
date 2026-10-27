@@ -152,6 +152,7 @@ int wmain(int argc, wchar_t** argv)
     bool pump = true;
     bool allowCreatorLeave = false;
     uint32_t idleSeconds = 120;
+    uint32_t readerSlots = xfb::Config{}.maxReadOnlyConnections;
     bool cet = true;
     bool allowLivePose = false;
     bool allowTestHooks = false;
@@ -237,6 +238,10 @@ int wmain(int argc, wchar_t** argv)
         {
             cet = false; // game.options.read then answers that the CET layer isn't there
         }
+        else if (arg == L"--reader-slots" && i + 1 < argc)
+        {
+            readerSlots = static_cast<uint32_t>(std::clamp(std::stoi(argv[++i]), 0, static_cast<int>(xfb::kMaxReadOnlyConnections)));
+        }
         else if (arg == L"--idle-seconds" && i + 1 < argc)
         {
             // Below config.ini's 5 s minimum on purpose: the idle test shouldn't wait long.
@@ -271,6 +276,7 @@ int wmain(int argc, wchar_t** argv)
     config.maxRequestsPerSecond = 20;
     config.requestTimeoutMs = 1000;
     config.idleDisconnectSeconds = idleSeconds;
+    config.maxReadOnlyConnections = readerSlots;
 
     xfb::Session session;
     std::string error;
@@ -299,6 +305,7 @@ int wmain(int argc, wchar_t** argv)
     dispatcher.Register({"bridge.info", xfb::Access::Read, xfb::RunOn::BridgeThread, "Versions and bridge status.",
                          [&](const xfb::MethodContext&) {
                              return json{{"host", "selftest"},
+                                         {"pipe_cpu_ms", bridge.PipeThreadCpuMs()},
                                          {"plugin_version", XFB_VERSION_STRING},
                                          {"build_commit", std::string(xfb::BuildCommit())},
                                          {"sid", session.sessionId},
@@ -2763,7 +2770,7 @@ int wmain(int argc, wchar_t** argv)
         simNpc = std::make_unique<xfb::selftest::SimNpc>(dispatcher, std::move(hooksNpc));
         simInput = std::make_unique<xfb::selftest::SimInput>(dispatcher, *simNpc, sim060->Events(), config.allowTestHooks,
             [] { std::scoped_lock lock(sim.mutex); return sim.phase; },
-            [] { return simLayer.WorldGeneration(); }, [&bridge] { return simLayer.Ready() && bridge.HasClient(); }, [&bridge] { return bridge.ConnectionsAccepted(); });
+            [] { return simLayer.WorldGeneration(); }, [&bridge] { return simLayer.Ready() && bridge.HasClient(); }, [&bridge] { return bridge.ConnectionsAccepted(); }, session);
     }
     {
         // Bridge 0.8.12's live-direction toolkit against a simulated world (selftest/SimDm080.cpp), with the plugin's shared service.

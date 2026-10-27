@@ -110,6 +110,21 @@ struct DispatchResult
     bool throttled = false;
 };
 
+// One connection's pipe-thread request budget. Never shared by concurrent readers.
+// Clamp independently of writer tuning: at most eight slots, 20/s and a 40-request
+// burst each. The transport's endpoint backoff still survives reconnection.
+class ReaderRequestBudget
+{
+public:
+    static constexpr uint32_t kMaxRate = 20;
+    explicit ReaderRequestBudget(uint32_t rate = kMaxRate);
+    bool Take(std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now());
+private:
+    double m_rate, m_tokens;
+    // Initialise on first Take(now), using the same clock as the owning dispatcher.
+    std::optional<std::chrono::steady_clock::time_point> m_lastRefill;
+};
+
 // Deepest array/object nesting allowed in a request. nlohmann/json parses iteratively, but
 // copying, comparing and serialising a value recurse, so a deeply nested value (for example a
 // 20 KB "id" of nested arrays) would overflow the thread's stack. Checked before parsing.
@@ -126,7 +141,11 @@ std::string SerializeJson(const nlohmann::json& aValue);
 class Dispatcher
 {
 public:
-    Dispatcher(const Config& aConfig, const Session& aSession, GameThreadQueue& aQueue);
+    // Inject only pacing time; queue deadlines, emergency receipts and audit timestamps
+    // keep their real monotonic clock even when a test freezes token refill.
+    using PacingClock = std::function<std::chrono::steady_clock::time_point()>;
+    Dispatcher(const Config& aConfig, const Session& aSession, GameThreadQueue& aQueue,
+               PacingClock aPacingClock = std::chrono::steady_clock::now);
 
     void Register(MethodSpec aSpec);
     // 0.8.12: the access class a registered method has (the watchers' micro-actions check it), or nothing for an unknown name.
@@ -134,7 +153,9 @@ public:
 
     // Never throws: an unexpected failure is logged and answered with code "failed". aControlRoute (0.8.1, RB-121): the
     // request came on the control pipe, which answers only IsControlRouteMethod's methods (refused not_on_control_route).
-    DispatchResult Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute = false, bool aReadOnly = false, uint64_t aConnection = 0) noexcept;
+    // A non-null budget denotes a read-only connection; its owner is the pipe worker.
+    DispatchResult Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute = false,
+                          ReaderRequestBudget* aReaderBudget = nullptr, uint64_t aConnection = 0) noexcept;
     // Trusted in-process caller only. Propagates an execution-frame guard to every queued step;
     // never accepted from request data. Cleanup inside RestoreScope remains unconditional.
     using ExecutionGuard = std::function<void(bool changing)>;
@@ -188,6 +209,7 @@ public:
     // the kill switch and handovers through this sink; unset, nothing is reported.
     using EventSink = std::function<void(const std::string& aKind, const std::string& aLevel, const std::string& aText, const nlohmann::json& aData)>;
     void SetEventSink(EventSink aSink);
+    void SetConnectionReader(std::function<uint64_t()> reader) { m_connectionReader = std::move(reader); }
 
     // Test candidate: a read-only snapshot taken on the executing game frame. No cached state.
     using PreconditionReader = std::function<nlohmann::json(const nlohmann::json&)>;
@@ -202,12 +224,14 @@ public:
 private:
     DispatchResult HandleUnchecked(const std::string& aLine, uint32_t aClientPid, bool aControlRoute);
     bool TakeRateToken(bool aReadOnly);
+    bool TakeReaderRequestToken();
     static bool TakeReaderLogToken(std::atomic<int64_t>& next, int64_t now);
     std::string NextCid();
 
     const Config& m_config;
     const Session& m_session;
     GameThreadQueue& m_queue;
+    PacingClock m_pacingClock;
     std::map<std::string, MethodSpec> m_methods;
 
     mutable std::mutex m_mutex;
@@ -217,6 +241,7 @@ private:
     std::atomic<bool> m_writesPaused{false};
     std::atomic<bool> m_handover{false};
     EventSink m_eventSink;
+    std::function<uint64_t()> m_connectionReader;
     PreconditionReader m_preconditionReader;
     std::function<void(const std::string&)> m_safetyCancellation;
     std::atomic<uint64_t> m_requests{0};
@@ -237,6 +262,10 @@ private:
     // Token bucket: capacity = 2 s of the configured rate.
     double m_tokens = 0.0;
     std::chrono::steady_clock::time_point m_lastRefill;
+    // Separate observer ceiling (8 * connection budget), including reconnect bursts.
+    // Does not borrow writer/game-thread tokens. Same mutex; fixed-size state.
+    double m_readerTokens = 0.0;
+    std::chrono::steady_clock::time_point m_readerLastRefill;
 };
 
 // Runs aTask on the game thread through aQueue and waits for it, like a RunOn::GameThread method.

@@ -229,7 +229,7 @@ Config ParseConfig(const std::string& aText)
         }
         else if (key == "bridge.max_read_only_connections")
         {
-            ok = ParseU32(value, 0, 8, config.maxReadOnlyConnections);
+            ok = ParseU32(value, 0, kMaxReadOnlyConnections, config.maxReadOnlyConnections);
         }
         else if (key == "bridge.idle_disconnect_seconds")
         {

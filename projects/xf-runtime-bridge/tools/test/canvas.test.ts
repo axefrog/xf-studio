@@ -5,10 +5,11 @@ import { createRequire } from "node:module";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { BridgeClient } from "../bridge-lib";
+import { CommandApi } from "../api/command-api";
 import { canonical, digest } from "../overlay/canvas-fixtures";
 import { flatten, glyphPaths, glyphTable, vocabulary } from "../overlay/canvas-glyphs";
 import { modelFromFov, project } from "../scene/camera";
-import { startSelftestHost, projectDir, sleep, type Host } from "./helpers";
+import { startSelftestHost, projectDir, sleep, requireAutonomousSelftest, type Host } from "./helpers";
 
 const fixtures = JSON.parse(readFileSync(join(projectDir, "fixtures/canvas/conformance.json"), "utf8"));
 test("shared JCS and digest vectors agree with ECMAScript, including RFC number boundaries and UTF-16 sort", () => {
@@ -26,7 +27,7 @@ test("shared fixed camera projects the same points through the TypeScript scene 
 test("generated glyph geometry comes from Studio; missing vocabulary falls back without invented paths", () => {
   expect(glyphPaths("warning")?.reduce((n, path) => n + path.points.length, 0)).toBe(7);
   expect(glyphPaths("person")).toBeNull(); expect(vocabulary()).toContain("gang-member");
-  expect(readFileSync(join(projectDir,"native/src/core/overlay/CanvasGlyphs.inc"),"utf8")).toBe(glyphTable());
+  expect(readFileSync(join(projectDir,"native/src/core/overlay/CanvasGlyphs.inc"),"utf8").replaceAll("\r\n","\n")).toBe(glyphTable());
 });
 test("SVG flattening handles relative/absolute line, cubic, smooth, quadratic and elliptical arc commands", () => {
   for (const d of ["M0 0h2v2H0V0z", "M0 0C0 2 2 2 2 0s2 -2 2 0", "M0 0Q1 2 2 0t2 0", "M0 0A2 2 0 0 1 4 0a2 2 0 0 1 -4 0"]) {
@@ -135,3 +136,29 @@ describe("canvas over a persistent read-only observer and MCP", () => {
     other.close();await sleep(100);const clean=await tool("canvas_state");expect(clean.value.result.producers.some((p:any)=>p.producer==="direct")).toBe(false);
   },15000);
 });
+
+
+test("16 feeds plus a one-page 1 Hz catch-up share one observer budget without retries",async()=>{
+  requireAutonomousSelftest();
+  const host=await startSelftestHost(["--allow-test-hooks"],60);
+  const writer=new BridgeClient(host.session,5000);
+  const reader=new CommandApi({runtimeDir:host.dir,readOnly:true,idleCloseMs:60000,rateLimitPatienceMs:0,auditDir:join(host.dir,"audit")});
+  try{
+    await writer.connect();
+    const shown=await writer.call("selftest.canvas",{visible:true});expect(shown.ok).toBe(true);
+    const world=(shown.result as any).world;
+    const start=await writer.call("test.record.start",{channels:["v"],duration_s:20});expect(start.ok).toBe(true);
+    const run=(start.result as any).run;let cursor:unknown;
+    for(let second=0;second<6;++second){
+      for(let layer=0;layer<16;++layer){
+        const fed=await reader.run("canvas.feed",{schema:"canvas@1",producer:"pacing",layer:String(layer),world,seq:second+1,views:["world"],items:[]});
+        expect(fed).toMatchObject({ok:true,result:{accepted:true}});
+      }
+      const fedAt=performance.now();
+      const caught=await reader.run("game.catchup",{run,...(cursor?{cursor}:{}),detail:true,now:second%2===1});
+      expect(caught.ok).toBe(true);if(caught.ok){cursor=(caught.result as any).cursor;expect((caught.result as any).more).toBe(false);}
+      // Allow timer quantisation at the one-second canvas rate boundary; the native test freezes/advances exact seconds.
+      if(second<5)await sleep(Math.max(0,fedAt+1005-performance.now()));
+    }
+  }finally{reader.close();writer.close();await host.stop();}
+},20000);

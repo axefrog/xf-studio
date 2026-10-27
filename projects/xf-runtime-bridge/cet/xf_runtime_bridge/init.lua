@@ -859,7 +859,7 @@ end)
 
 return {
   Canvas = require("canvas"),
-  version = "0.8.23",
+  version = "0.8.24",
   -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,
 }

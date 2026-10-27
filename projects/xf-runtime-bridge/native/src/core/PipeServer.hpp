@@ -87,6 +87,7 @@ public:
     uint64_t ConnectionsAccepted() const;
     uint64_t ConnectionIdentity() const { return m_connectionIdentity.load(); }
     void SetDisconnectCallback(std::function<void(uint64_t)> fn) { m_onDisconnect = std::move(fn); }
+    double ThreadCpuMs() const; // worker kernel + user CPU time; no game work
 
 private:
     enum class EndReason
@@ -125,5 +126,6 @@ private:
     std::atomic<uint64_t> m_connections{0};
     std::atomic<uint64_t> m_connectionIdentity{0};
     std::function<void(uint64_t)> m_onDisconnect;
+    std::atomic<uint32_t> m_threadId{0};
 };
 } // namespace xfb

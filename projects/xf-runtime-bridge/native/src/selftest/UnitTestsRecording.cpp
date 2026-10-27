@@ -2,6 +2,7 @@
 #include "core/Bridge.hpp"
 #include "core/Lifecycle.hpp"
 #include "core/Dispatcher.hpp"
+#include "core/Events.hpp"
 #include <cstdio>
 #include <fstream>
 #include <future>
@@ -19,18 +20,83 @@ int RecordingUnitTests()
 {
     using namespace xfb::recording;
     {
+        Service identities;
+        identities.Start({{"channels", {"v", "actors"}}, {"duration_s", 300}}, 10, 4, 2, "identity");
+        Ops sample; sample.guard = [] {};
+        std::string entity = "42";
+        sample.sample = [&](const std::string& channel, const auto&) -> json {
+            json actor{{"entity", entity}, {"identity", {{"record", "Character.fixture"}, {"affiliation", nullptr}, {"crowd", true}, {"display_name", "fixture"}}}};
+            if (channel == "v") { actor["game_time_s"] = nullptr; return actor; }
+            return {{"actors", json::array({actor})}};
+        };
+        identities.Tick(10, 4, 2, true, 1, sample);
+        identities.Tick(10.1, 4, 2, true, 2, sample);
+        auto page = identities.Read({{"run", 1}}, 10.2);
+        Check(page["latest"] == 5 && page["actor_identities"] == 1 && page["records"][0]["channel"] == "actor.identity" &&
+            page["records"][0]["data"]["entity"] == "42" && page["records"][0]["world_generation"] == 4,
+            "identity: once per entity across channels, joinable by decimal entity and run/world");
+        Check(page["records"][1]["data"]["game_time_s"].is_null() && page["records"][1]["valid"] == true &&
+            !page["records"][1]["data"].contains("identity"), "null game time keeps the sample without repeating metadata");
+        for (size_t i = 1; i <= kActorIdentityCap; ++i) {
+            entity = std::to_string(100 + i); identities.Tick(10.1 + i * 0.1, 4, 2, true, i + 2, sample);
+        }
+        page = identities.Read({{"run", 1}}, 220);
+        Check(page["actor_identities"] == kActorIdentityCap && page["actor_identity_omitted"] == 2,
+            "identity: run cap is bounded and counts omitted attempts across both channels");
+        identities.Stop("test", 220);
+        identities.Read({{"run", 1}, {"since", page["latest"]}}, 220);
+        identities.Start({{"channels", {"v"}}}, 221, 5, 2, "identity");
+        entity = "42"; identities.Tick(221, 5, 2, true, 1, sample);
+        Check(identities.Read({{"run", 2}}, 221)["records"][0]["channel"] == "actor.identity", "identity: new run/world resets identity admission");
+        sample.sample = [](const auto&, const auto&) -> json { throw MethodError("failed", "fixture time read failed"); };
+        identities.Tick(221.1, 5, 2, true, 2, sample);
+        page = identities.Read({{"run", 2}}, 222);
+        Check(page["records"][2]["data"]["game_time_s"].is_null(), "failed V read still writes null game time");
+    }
+    {
+        Config config; config.maxRequestsPerSecond = 1000;
+        Session session; session.token = "fixture";
+        GameThreadQueue queue; Dispatcher dispatcher(config, session, queue); EventLog events; ReaderRequestBudget readerBudget;
+        dispatcher.SetConnectionReader([] { return 17; });
+        dispatcher.SetEventSink([&](const auto& kind, const auto& level, const auto& text, const auto& data) { events.Push(kind, level, "bridge", text, data); });
+        json result{{"a", "leading"}, {"b", json::array({std::string(16000, '\\'), "tail"})}, {"z", "omitted"}};
+        for (const auto* method : {"world.probe", "scene.read", "world.district"}) {
+            dispatcher.Register({method, Access::Read, RunOn::BridgeThread, "fixture", [&](const auto&) { return result; }});
+            const auto request = SerializeJson(json{{"v", 1}, {"token", session.token}, {"method", method}, {"cid", "caller-42"}, {"params", json::object()}});
+            Check(json::parse(dispatcher.Handle(request, 1).line)["result"] == result, "observe result leaves full caller response unchanged");
+            const auto row = events.Read(0, 100)["events"].back();
+            Check(row["kind"] == "observe.result" && row["data"]["command"] == method && row["data"]["cid"] == "caller-42" && row["data"]["connection"] == 17 &&
+                row["data"]["truncated"] == true && row["data"]["result"]["a"] == "leading" && SerializeJson(row).size() <= EventLog::kMaxObserveBytes,
+                "observe result: bounded whole event preserves provenance and structured leading fields");
+            const auto latest = events.Latest(); dispatcher.Handle(request, 1, false, &readerBudget);
+            Check(events.Latest() == latest, "read-only observer reads do not republish results");
+        }
+        result = {{"small", true}};
+        dispatcher.Handle(SerializeJson(json{{"v", 1}, {"token", session.token}, {"method", "world.probe"}, {"params", json::object()}}), 1);
+        const auto row = events.Read(0, 100)["events"].back();
+        Check(row["data"]["result"] == result && row["data"]["truncated"] == false, "small observation keeps complete structured result");
+        for (const auto& large : {json{{"a", std::string(20000, 'x')}}, json(std::vector<json>(10000, 1)), json{{std::string(10000, 'k'), true}}}) {
+            events.Push("observe.result", "info", "bridge", "bounded fixture", {{"command", "scene.read"}, {"cid", "fixture"}, {"connection", 17}, {"result", large}});
+            const auto bounded = events.Read(0, 100)["events"].back();
+            Check(bounded["data"]["truncated"] == true && SerializeJson(bounded).size() <= EventLog::kMaxObserveBytes,
+                "observe result cap includes strings, arrays and oversized object keys");
+        }
+        events.Push("note", "info", "client", "ordinary cap", {{"large", std::string(5000, 'x')}});
+        Check(events.Read(0, 100)["events"].back()["data"]["cut"] == true, "ordinary event cap remains 4096 bytes");
+    }
+    {
         // RS1: discovery works before the first run and on reader connections, with no game queue or lease.
         Config config; config.maxRequestsPerSecond = 1000;
         Session session; session.token = "fixture"; session.sessionId = "observer-session";
         GameThreadQueue queue; // deliberately not pumping: an accidental game-thread call must fail
-        Dispatcher dispatcher(config, session, queue); Service recorder;
+        Dispatcher dispatcher(config, session, queue); Service recorder; ReaderRequestBudget readerBudget;
         int gameCalls = 0;
         RegisterMethods(dispatcher, recorder, true,
             [&] { ++gameCalls; return 99; }, [&] { ++gameCalls; return 99; },
             [&] { return session.sessionId; }, [&] { ++gameCalls; });
         auto request = [&](bool reader, json params = json::object()) {
             return json::parse(dispatcher.Handle(SerializeJson(json{{"v", 1}, {"token", session.token},
-                {"method", "recorder.status"}, {"params", params}}), 1, false, reader).line);
+                {"method", "recorder.status"}, {"params", params}}), 1, false, reader ? &readerBudget : nullptr).line);
         };
         const auto empty = request(true);
         Check(empty["ok"] == true && empty["result"] == json{{"active", false}, {"run", nullptr},
@@ -82,7 +148,7 @@ int RecordingUnitTests()
         Dispatcher off(config, session, queue); Service disabled;
         RegisterMethods(off, disabled, false, [] { return 1; }, [] { return 1; }, [] { return "fixture"; }, [] {});
         const auto refused = json::parse(off.Handle(SerializeJson(json{{"v", 1}, {"token", session.token},
-            {"method", "recorder.status"}, {"params", json::object()}}), 1, false, true).line);
+            {"method", "recorder.status"}, {"params", json::object()}}), 1, false, &readerBudget).line);
         Check(refused["error"]["code"] == "test_hooks_off", "RS1: status mirrors recorder test-hook gate");
     }
     {
@@ -417,6 +483,10 @@ int RecordingUnitTests()
         std::ifstream input(dir / sid / "run-1" / "manifest.json"); json manifest; input >> manifest;
         Check(manifest["complete"] == true && manifest["latest"] == 1 && manifest["reason"] == "kill", "kill drains chunks and final manifest");
         Check(manifest["chunks"].size() == 1 && !manifest["writer_pending"].get<bool>(), "writer joined and accounted");
+        const auto status = files.ObserverStatus(sid);
+        Check(manifest["start_s"] == status["start"]["s"] && manifest["start_at"] == status["start"]["at"] && manifest["start_sync"] == status["start"] &&
+            manifest["start_sync"]["uncertainty_ms"].get<double>() >= 0 && manifest["chunks"][0]["sync"]["at"].get<std::string>().size() == 24,
+            "manifest: frozen live start mapping, measured uncertainty and per-chunk UTC sync");
     }
     if (std::filesystem::equivalent(dir.parent_path(), std::filesystem::temp_directory_path()) && dir.filename().string().starts_with("xfb-record-"))
         std::filesystem::remove_all(dir);

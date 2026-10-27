@@ -3,6 +3,24 @@ module XFRuntimeBridge
 // Autonomous -writes only. Called on the game thread behind ScriptCall's live guard.
 // No NPC poll: its hub refresh changes state. These reads resolve each selected puppet afresh.
 public abstract class XFRecording {
+  // The same TimeSystem route as XFWorld.SetTime, independent of photo mode's time-of-day slider.
+  public static func GameTimeSeconds() -> String {
+    let time = GameInstance.GetTimeSystem(GetGameInstance());
+    if !IsDefined(time) { return "null"; }
+    let now = time.GetGameTime();
+    return IntToString(GameTime.GetSeconds(now));
+  }
+  // Read only the puppet/record already resolved by this sample. No display-name native or localisation lookup.
+  public static func ActorIdentity(puppet: ref<ScriptedPuppet>) -> String {
+    let id = puppet.GetRecordID();
+    let record = TweakDBInterface.GetCharacterRecord(id);
+    let affiliation = IsDefined(record) ? record.Affiliation() : null;
+    let crowd = puppet.IsCrowd();
+    return "{\"record\":" + XFJson.Str(TDBID.ToStringDEBUG(id))
+      + ",\"affiliation\":" + (IsDefined(affiliation) ? "{\"record\":" + XFJson.Str(TDBID.ToStringDEBUG(affiliation.GetID())) + ",\"name\":" + XFJson.Name(affiliation.EnumName()) + "}" : "null")
+      + ",\"crowd\":" + XFJson.Flag(crowd)
+      + ",\"display_name\":" + (IsDefined(record) ? XFJson.Name(record.DisplayName()) : "null") + "}";
+  }
   // A fresh, read-only observation in the same game-thread task as the action.
   public static func GuardState(cid: String) -> String {
     let player = XFPlayer.Player();
@@ -38,7 +56,7 @@ public abstract class XFRecording {
     }
     let player = XFPlayer.Player();
     if !IsDefined(player) || !player.IsAttached() {
-      return "{\"ok\":true,\"valid\":false,\"reason\":\"not_v\"}";
+      return "{\"ok\":true,\"valid\":false,\"reason\":\"not_v\",\"game_time_s\":null}";
     }
     let game = GetGameInstance();
     let defs = GetAllBlackboardDefs().PlayerStateMachine;
@@ -50,7 +68,8 @@ public abstract class XFRecording {
     let heat = XFSenses.Heat(game);
     let vehicle = XFSenses.Vehicle(game, player);
     let busy = XFPlayer.Busy(player);
-    return "{\"ok\":true,\"valid\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"velocity\":" + XFScene.Arr(velocity) + ",\"vitals\":" + vitals + ",\"heat\":" + heat + ",\"vehicle\":" + vehicle + ",\"busy\":" + XFJson.Str(busy) + ",\"weapon_state\":" + XFPlayer.WeaponState(player) + ",\"psm\":{\"locomotion\":" + IntToString(XFPlayer.Psm(player, defs.Locomotion)) + ",\"high_level\":" + IntToString(XFPlayer.Psm(player, defs.HighLevel)) + ",\"combat\":" + IntToString(XFPlayer.Psm(player, defs.Combat)) + "}}";
+    let extra = ",\"game_time_s\":" + XFRecording.GameTimeSeconds() + ",\"identity\":" + XFRecording.ActorIdentity(player);
+    return "{\"ok\":true,\"valid\":true,\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + extra + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"velocity\":" + XFScene.Arr(velocity) + ",\"vitals\":" + vitals + ",\"heat\":" + heat + ",\"vehicle\":" + vehicle + ",\"busy\":" + XFJson.Str(busy) + ",\"weapon_state\":" + XFPlayer.WeaponState(player) + ",\"psm\":{\"locomotion\":" + IntToString(XFPlayer.Psm(player, defs.Locomotion)) + ",\"high_level\":" + IntToString(XFPlayer.Psm(player, defs.HighLevel)) + ",\"combat\":" + IntToString(XFPlayer.Psm(player, defs.Combat)) + "}}";
   }
 }
 
@@ -81,7 +100,8 @@ public abstract class XFRecordingActors {
             let commandState = ai.GetCommandState(entry.command);
             state = EnumValueToString("AICommandState", Cast<Int64>(EnumInt(commandState)));
           }
-          item += ",\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"command_state\":" + XFJson.Str(state) + ",\"prepared\":" + XFJson.Flag(entry.prepared);
+          let extra = ",\"identity\":" + XFRecording.ActorIdentity(puppet);
+          item += ",\"entity\":" + XFJson.Str(EntityID.ToDebugString(id)) + extra + ",\"position\":" + XFScene.Arr(position) + ",\"yaw\":" + XFJson.Num(yaw) + ",\"command_state\":" + XFJson.Str(state) + ",\"prepared\":" + XFJson.Flag(entry.prepared);
         }
         out += (StrLen(out) > 0 ? "," : "") + item + "}";
       }

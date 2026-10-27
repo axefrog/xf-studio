@@ -19,7 +19,7 @@ describe("MCP reference", () => {
     const entry = text.slice(from, text.indexOf("\n### ", from + 1));
     expect(entry).toContain("(`read`)");
     expect(entry).toContain("No parameters");
-    expect(entry).toContain("start.at is derived UTC ISO time with milliseconds");
+    expect(entry).toContain("start.at is UTC ISO time with milliseconds, calibrated once at start");
     expect(entry).toContain("no game-thread call, lease, acknowledgement or recorder change");
     expect(entry).toContain("stop_reason");
     expect(entry).toContain("test_hooks_off");

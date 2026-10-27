@@ -6,7 +6,7 @@ namespace xfb::selftest
 {
 namespace { double Now() { return static_cast<double>(win32::MonotonicMs()) / 1000.0; } }
 SimInput::SimInput(Dispatcher& d, SimNpc& npc, EventLog& events, bool hooks, std::function<std::string()> context,
-                   std::function<uint64_t()> world, std::function<bool()> live, std::function<uint64_t()> connection)
+                   std::function<uint64_t()> world, std::function<bool()> live, std::function<uint64_t()> connection, const Session& session)
     : m_service(events), m_dispatcher(d), m_npc(npc), m_context(std::move(context)), m_world(std::move(world)), m_live(std::move(live)), m_connection(std::move(connection)), m_hooks(hooks)
 {
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
@@ -20,7 +20,8 @@ SimInput::SimInput(Dispatcher& d, SimNpc& npc, EventLog& events, bool hooks, std
         events.Push("lifecycle.probe", "info", "simulation", "Read-only lifecycle plan; native UI unavailable", out);
         return out;
     }});
-    recording::RegisterMethods(d, m_recording, hooks, m_world, m_connection, [] { return "simulated"; }, [this] {
+    m_recording.SetDirectory(session.runtimeDir / "recordings");
+    recording::RegisterMethods(d, m_recording, hooks, m_world, m_connection, [&session] { return session.sessionId; }, [this] {
         if (!m_live() || m_dispatcher.IsKilled()) throw MethodError("game_loading", "Simulation gate closed.");
     });
     // No retail actor/input adapter in this host; state-machine/frame races have native fixtures.

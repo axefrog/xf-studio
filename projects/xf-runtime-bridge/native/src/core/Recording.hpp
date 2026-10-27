@@ -14,6 +14,7 @@ namespace xfb::recording
 using json = nlohmann::json;
 // One bounded owner. Producers copy bounded payloads; only Read encodes wire records.
 inline constexpr size_t kCapacity = 512, kPayload = 8192;
+inline constexpr size_t kActorIdentityCap = 2048;
 inline constexpr double kUiHeartbeat = 2.0; // seconds between records of an unchanged UI snapshot
 // 0.8.22 (B318-1 tripped on a load): the subtitle and voice taps find the HUD's subtitle controllers a moment after the world
 // starts. Until a channel's tap has once been ready, a coverage sample with no controllers in a run's first kTapNotReadyS
@@ -70,6 +71,9 @@ private:
     std::set<std::string> m_tapReady;                 // the tap channels that have answered ready in this run
     uint64_t m_notReady = 0;
     std::string m_session, m_reason;
+    json m_startSync;
+    std::set<std::string> m_actorIdentities; // this run/world only; bounded by kActorIdentityCap
+    uint64_t m_identityOmitted = 0;
     uint64_t m_run = 0, m_world = 0, m_connection = 0, m_latest = 0, m_ack = 0;
     uint64_t m_dropped = 0, m_missed = 0, m_samples = 0, m_bytes = 0, m_cap = 0, m_invalid = 0;
     double m_start = 0, m_end = 0, m_next = 0, m_until = 0, m_last = 0, m_gap = 0;

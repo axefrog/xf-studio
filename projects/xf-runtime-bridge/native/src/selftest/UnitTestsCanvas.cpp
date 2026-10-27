@@ -207,6 +207,47 @@ void CaptureAndFade()
     const double deadline=10+.1+.25;service.Resolve({{"1",std::nullopt}},deadline,0);service.Publish(Cam(),deadline+1,0);
     Check(Near(service.Take().anchors.at("1").opacity,.4),"anchor fade reaches exactly 40 percent after freshness grace and one second");service.Publish(Cam(),deadline+1.001,0);Check(service.Take().anchors.at("1").state==AnchorState::Lost,"anchor lost after fade deadline");
 }
+void ObserverPacing()
+{
+    using namespace xfb;
+    Config config; Session session; session.token="canvas-pacing";
+    GameThreadQueue queue;
+    auto now=std::chrono::steady_clock::time_point{};
+    double canvasNow=10;
+    Dispatcher dispatcher(config,session,queue,[&]{return now;});
+    Service service;Ready(service);RegisterMethods(dispatcher,service);
+    // Exercise the real service with the same explicit clock as the dispatcher, without wall-clock waits.
+    dispatcher.Register({"canvas.feed",Access::Display,RunOn::BridgeThread,"",[&](const MethodContext& c){
+        try{return service.Feed(c.connection,c.rawParams,canvasNow);}
+        catch(const Refusal& e){MethodError error(e.detail.value("code","failed"),"canvas refusal");error.detail=e.detail;throw error;}
+    }});
+    int catchups=0;
+    for(const auto* method:{"bridge.info","test.record.read","session.events","game.digest"})
+        dispatcher.Register({method,Access::Read,RunOn::BridgeThread,"",[&](const MethodContext&){++catchups;return json::object();}});
+    ReaderRequestBudget budget;
+    auto call=[&](const char* method,const json& params,ReaderRequestBudget& credit,uint64_t connection=81){
+        return json::parse(dispatcher.Handle(json{{"token",session.token},{"method",method},{"params",params}}.dump(),42,false,&credit,connection).line);
+    };
+    bool allAccepted=true;
+    for(int second=0;second<60;++second){
+        now=std::chrono::steady_clock::time_point{}+std::chrono::seconds(second);canvasNow=10+second;
+        for(int layer=0;layer<16;++layer){auto b=BatchOf();b["layer"]=std::to_string(layer);b["seq"]=second+1;
+            const auto reply=call("canvas.feed",b,budget);allAccepted&=reply.value("ok",false)&&reply.value("result",json::object()).value("accepted",false);}
+        // A one-page tool catch-up is three native calls, plus the optional current digest.
+        for(const auto* method:{"bridge.info","test.record.read","session.events","game.digest"})
+            allAccepted&=call(method,json::object(),budget).value("ok",false);
+    }
+    Check(allAccepted&&catchups==240,"observer sustains 16 feeds/s plus 1 Hz catch-up for sixty injected seconds");
+    auto extra=BatchOf();extra["layer"]="0";extra["seq"]=100;
+    Check(call("canvas.feed",extra,budget)["error"]["code"]=="rate","canvas producer rate still applies inside observer budget");
+    ReaderRequestBudget other;
+    Check(call("canvas.feed",extra,other,82)["error"]["code"]=="producer_in_use","paced dispatcher preserves connection identity, independently of PID");
+    for(const auto* method:{"canvas.feed","canvas.clear","canvas.view"}){
+        ReaderRequestBudget small(1);
+        call("canvas.view",json::object(),small);call("canvas.view",json::object(),small);
+        Check(call(method,json::object(),small)["error"]["code"]=="rate_limited","every display method consumes its observer connection budget before validation");
+    }
+}
 void FuzzAndBench()
 {
     std::mt19937 rng(5781);std::vector<std::string> corpus{BatchOf().dump()};
@@ -227,7 +268,7 @@ int CanvasUnitTests()
     checks=failures=0;
     const char* stage = "fixtures";
     try {
-        Fixtures(); stage="parser"; Parser(); stage="lifecycle"; Lifecycle(); stage="rates/caps"; RatesAndCaps(); stage="clear rates/cap order"; ClearRatesAndCapOrder(); stage="key persistence"; KeyPersistence(); stage="anchors/projection"; AnchorsAndProjection(); stage="capture/fade"; CaptureAndFade(); stage="fuzz/bench"; FuzzAndBench();
+        Fixtures(); stage="parser"; Parser(); stage="lifecycle"; Lifecycle(); stage="rates/caps"; RatesAndCaps(); stage="clear rates/cap order"; ClearRatesAndCapOrder(); stage="key persistence"; KeyPersistence(); stage="anchors/projection"; AnchorsAndProjection(); stage="capture/fade"; CaptureAndFade(); stage="observer pacing"; ObserverPacing(); stage="fuzz/bench"; FuzzAndBench();
     } catch (const std::exception& e) { ++failures; std::printf("CANVAS EXCEPTION stage=%s %s\n",stage,e.what()); }
     std::printf("CANVAS %d checks, %d failures\n",checks,failures);return failures;
 }

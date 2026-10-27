@@ -29,6 +29,7 @@ public:
     static constexpr size_t kMaxEvents = 1000;
     static constexpr size_t kMaxText = 300;
     static constexpr size_t kMaxData = 4096;
+    static constexpr size_t kMaxObserveBytes = 8192; // whole serialized event, including its envelope
 
     // Adds an event: kind (write, refused, kill, handover, resume, behaviour, note, rearm, ...), level (info, warn, done,
     // ask), source (bridge, client, game, behaviour), a one-line text and optional data. Returns its sequence number.
