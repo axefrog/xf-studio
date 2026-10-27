@@ -33,6 +33,7 @@ export const IMGUI_COLOUR_SLOTS = [
 export const XF_COLOUR_SLOTS = [
   "XfAccent", "XfAccentInk", "XfAccentEdge", "XfAccentText", "XfAccentHover", "XfSignal", "XfSignalBg", "XfSignalLine",
   "XfTextMuted", "XfLine", "XfLineStrong", "XfSuccess", "XfSuccessBg", "XfWarning", "XfWarningBg", "XfDanger", "XfDangerBg",
+  "XfCanvasPlate",
 ] as const;
 
 export type ColourSlotName = typeof IMGUI_COLOUR_SLOTS[number] | typeof XF_COLOUR_SLOTS[number];
@@ -144,6 +145,7 @@ export const IN_GAME_COLOURS: readonly ColourSlot[] = [
   { slot: "XfSuccessBg", token: "--success-bg", use: "The success chip's fill", added: true, why: "The Studio's .chip/.badge success wash." },
   { slot: "XfWarningBg", token: "--warning-bg", use: "The warning chip's fill, a note card's fill", added: true, why: "The Studio's .chip/.badge warning wash." },
   { slot: "XfDangerBg", token: "--danger-bg", use: "The danger chip's fill, the stop button's hover", added: true, why: "The Studio's .badge.error wash." },
+  { slot: "XfCanvasPlate", token: "--bg-overlay", alpha: 0.74, use: "The in-game canvas's plate behind its chips, panels and radar (about 72 %, so the world shows through). Text on it is --text, never muted; a long read belongs in a window", added: true, why: "The canvas sits over play, where a 97 % window plate would hide too much; muted text on a 72 % plate can't hold contrast over a bright scene." },
 ];
 
 /**
