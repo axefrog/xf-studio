@@ -33,10 +33,16 @@ position-only actor uses its observed coordinates. An invalid/missing position
 is counted and is never presented as a new position reading. `valid:false` breaks
 the actor's track even if a malformed sample carries coordinates. The host
 immediately removes a previously published actor from the people snapshot, letting
-the existing writer retract it at the break's QPC time on the current branch.
+the existing writer retract it on the current branch. A retrospective break's
+tombstone uses the later of its QPC start and the actor's latest published snapshot
+time, so an older timestamp cannot lose to an already published item. Holotable
+chooses later spool order at equal timestamps (the [layer evaluator](../../xf-holotable/src/layers.ts)),
+so the explicit tombstone follows the preserved snapshot at that time. When a
+gap is known before an actor's first publication, that window emits the same
+tombstone even though the actor's item is suppressed.
 Later windows suppress it until a valid position reobserves it. Historical game
 readings remain evidence: S1 does not permit withdrawing them. Failed whole-channel
-actor reads and shared recorder gaps break every known actor at the gap's start,
+actor reads and shared recorder gaps invalidate every known actor at the gap's start,
 before any window inside a missing interval can republish an old position.
 An actor sample at the left endpoint remains historical, not a reobservation.
 The end of a gap does not restore an actor without a valid reobservation.
@@ -165,11 +171,13 @@ retractions and reappearance, actor-only gaps without V or clock advancement,
 sorted channel coverage, raw incident deduplication/timing/schema admission,
 unmapped incident receipts, schema refusal, byte-identical reruns with incidents
 and breaks, read-only command enforcement, simulated live cadence and exact live-log replay.
+Holotable's own spool reader and layer evaluator check late and up-front gap
+discovery, equal-time tombstones, later revisions and sibling-branch preservation.
 The live safety regression traverses the real shadow adapter and `CommandApi.run`
 with an injected native transport that requires reader selection and rejects
 every method outside the retained-data read allowlist. Transport-log failure tests
 cover both discovery and catch-up receipts, with budget and disk failures.
-Validation: 23 shadow tests pass; the guarded default suite has 1,735 passes,
+Validation: 26 shadow tests pass; the guarded default suite has 1,738 passes,
 46 skips and no failures. The frozen v3 digest remains
 `746601727380a3fdff647f873c91c971`, and v4 remains
 `8fce55b19462a1e02f03ca5336bd8c16`. Typechecking, Markdown links and the

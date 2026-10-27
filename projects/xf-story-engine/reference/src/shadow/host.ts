@@ -12,6 +12,7 @@ import { ShadowClock } from './clock.ts';
 import type { Actor, Batch, FeedSession, HoloReader, WorldPack } from './feed.ts';
 import { districtAt } from '../../../../xf-holotable/src/world.ts';
 import type { IncidentCoverage, IncidentReport, TimelineEvent } from '../../../../xf-holotable/src/model.ts';
+import type { Item } from '../holotable/schema.ts';
 
 const vec = (x: unknown): x is [number, number, number] => Array.isArray(x) && x.length === 3 && x.every(Number.isFinite);
 const ABSENT = ['actors.record', 'actors.affiliation', 'actors.crowd', 'deaths', 'combat events', 'crimes'];
@@ -29,9 +30,9 @@ export class ShadowHost {
   readonly session: FeedSession;
   private entities = new Map<string, string>();
   private actorFacts = new Map<string, Actor>();
-  private brokenActors = new Set<string>();
+  private brokenActors = new Map<string, { from: number; pending: boolean }>();
   private actorGapUntil = -Infinity;
-  private publishedActors = new Set<string>();
+  private publishedActors = new Map<string, { layer: string; item: Item }>();
   private incidents = new Set<string>();
   private mapped: Record<string, number> = {};
   private incidentReceipts: Array<{ t: number; seq: number; receipt: IncidentReport | IncidentCoverage }> = [];
@@ -111,7 +112,7 @@ export class ShadowHost {
     for (const id of ids) {
       this.entities.delete(id);
       if (this.brokenActors.has(id)) continue;
-      this.brokenActors.add(id);
+      this.brokenActors.set(id, { from: qpc, pending: true });
       published ||= this.publishedActors.has(id);
     }
     if (published) this.publish(qpc, this.publishedDerived, true);
@@ -239,12 +240,8 @@ export class ShadowHost {
   private publish(qpc: number, derived: boolean, peopleOnly = false) {
     if (!peopleOnly) this.publishedDerived = derived;
     const observation = this.observer.sample(), game = observation.t; observation.t = qpc;
-    for (const [layer, items] of observation.layers) {
+    for (const [layer] of observation.layers) {
       if (peopleOnly && layer !== 'people' && !layer.startsWith('people-')) { observation.layers.delete(layer); continue; }
-      if (layer === 'people' || layer.startsWith('people-')) {
-        observation.layers.set(layer, items.filter(item => !this.brokenActors.has(item.id)));
-        for (const item of observation.layers.get(layer)!) if (this.actorFacts.has(item.id)) this.publishedActors.add(item.id);
-      }
     }
     for (const items of observation.layers.values()) for (const item of items) {
       const interval = item.until === undefined ? undefined : `${item.t} to ${item.until}`;
@@ -268,7 +265,40 @@ export class ShadowHost {
       }
     }
     for (const records of observation.retractions?.values() ?? []) for (const r of records) r.t = qpc;
+    const candidates = new Map<string, string>(), visible = new Map<string, { layer: string; item: Item }>();
+    for (const [layer, items] of observation.layers) if (layer === 'people' || layer.startsWith('people-')) {
+      observation.layers.set(layer, items.filter(item => {
+        if (!this.actorFacts.has(item.id)) return true;
+        candidates.set(item.id, layer);
+        if (this.brokenActors.has(item.id)) return false;
+        visible.set(item.id, { layer, item: structuredClone(item) }); return true;
+      }));
+    }
+    const completed: Array<{ pending: boolean }> = [];
+    for (const [id, broken] of this.brokenActors) {
+      const previous = this.publishedActors.get(id);
+      if (!broken.pending || !previous && !candidates.has(id)) continue;
+      const layer = previous?.layer ?? candidates.get(id)!;
+      const t = Math.max(broken.from, previous?.item.t ?? qpc);
+      observation.t = Math.max(observation.t, t);
+      // Keep the exact previous item in this snapshot so automatic removal does
+      // not precede our timed tombstone. Holotable breaks equal-time ties by
+      // spool order (layers.ts:178); the explicit retraction is appended last.
+      if (previous) {
+        const items = observation.layers.get(layer) ?? [];
+        items.push(previous.item); observation.layers.set(layer, items);
+      }
+      observation.retractions ??= new Map();
+      const records = observation.retractions.get(layer) ?? [];
+      records.push({ retract: id, t }); observation.retractions.set(layer, records);
+      completed.push(broken);
+    }
     this.publisher.publish(observation);
+    for (const [id, snapshot] of visible) {
+      snapshot.item.t = Math.max(observation.t, this.publishedActors.get(id)?.item.t ?? -Infinity);
+      this.publishedActors.set(id, snapshot);
+    }
+    for (const broken of completed) broken.pending = false;
   }
   summary() {
     return { schema: 'xfse/shadow-summary-1', session: this.session.meta.session, run: this.session.meta.run,

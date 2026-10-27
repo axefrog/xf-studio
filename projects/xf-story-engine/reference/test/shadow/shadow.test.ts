@@ -14,6 +14,8 @@ import type { LiveClock } from '../../../../xf-holotable/src/live.ts';
 import type { LiveBridge } from '../../../../xf-holotable/src/live-bridge.ts';
 import { mirroredId } from '../../src/id.ts';
 import { People } from '../../src/sim/people.ts';
+import { createLayerSpool } from '../../../../xf-holotable/src/layer-spool.ts';
+import { evaluateLayers } from '../../../../xf-holotable/src/layers.ts';
 
 setDefaultTimeout(180_000);
 const scratch = resolve(import.meta.dir, '../../../../../.scratch-shadow');
@@ -94,6 +96,55 @@ for (const channel of ['actors', undefined] as const) test(`${channel ?? 'shared
   expect(peopleRows(host).slice(before).filter(row => row.id === actor)).toEqual([]);
   host.consume({ ...emptyBatch(), actors: [{ t: 331, who: 'a1', valid: true, position: [25, 20, 0] }], v: [v(410)] });
   expect(peopleRows(host).filter(row => row.id === actor).at(-1)).toMatchObject({ t: 410, anchor: { at: [25, 20, 0] } });
+});
+
+for (const channel of ['actors', undefined] as const) {
+  const publishedAt = 180;
+  test(`${channel ?? 'shared'} retrospective gap supersedes the ${publishedAt} revision in Holotable, matching up-front discovery`, async () => {
+    const roots = [temp(), temp()];
+    const [live, offline] = roots.map(root => new ShadowHost(defaultReader, world, meta, join(root, 'story-engine')));
+    const readers = roots.map(root => createLayerSpool(root));
+    const initial: Batch = { ...batch(), actors: [{ ...batch().actors[0], entity: undefined }], v: [v(100), v(180)] };
+    const gap = { from: publishedAt - 0.1, to: publishedAt + 1, fromSeq: 5, toSeq: 8, reason: 'sequence' as const, ...(channel ? { channel } : {}) };
+    const actor = mirroredId(live.key('a1'));
+    const visible = (data: Awaited<ReturnType<typeof readers[0]['read']>>, host: ShadowHost, t: number) =>
+      evaluateLayers(data, host.session, t, 'full', [], world).flatMap(layer => layer.items).some(item => item.id === actor);
+    try {
+      live.consume(initial);
+      const before = await readers[0].read();
+      expect(visible(before, live, publishedAt)).toBe(true);
+      expect(evaluateLayers(before, live.session, publishedAt, 'full', [], world).flatMap(layer => layer.items).find(item => item.id === actor)?.place).toEqual([21, 20, 0]);
+      live.consume({ ...emptyBatch(), gaps: [gap] });
+      offline.consume({ ...initial, gaps: [gap] });
+      const tombstones = (host: ShadowHost) => peopleRows(host).filter(row => row.retract === actor);
+      expect(tombstones(live)).toEqual([{ retract: actor, t: publishedAt }]);
+      expect(tombstones(offline)).toEqual(tombstones(live));
+      for (const host of [live, offline]) host.consume({ ...emptyBatch(), v: [v(330), v(410)] });
+      for (let i = 0; i < readers.length; i++) {
+        const data = await readers[i].read();
+        expect(data.every(layer => layer.refused === 0)).toBe(true);
+        for (const t of [publishedAt - 0.05, publishedAt, publishedAt + 0.5, gap.to, 330, 410]) expect(visible(data, [live, offline][i], t)).toBe(false);
+      }
+      expect(tombstones(offline)).toEqual(tombstones(live));
+    } finally { for (const reader of readers) reader.close(); }
+  });
+}
+
+test('a retrospective gap supersedes the latest revision on its save branch and preserves the sibling prefix', async () => {
+  const root = temp(), host = new ShadowHost(defaultReader, world, meta, join(root, 'story-engine'));
+  const reader = createLayerSpool(root), actor = mirroredId(host.key('a1'));
+  try {
+    host.consume({ ...batch(), v: [v(100), v(180), v(250)] });
+    host.sim.k.persistence.save('late-gap-branch');
+    host.consume({ ...emptyBatch(), gaps: [{ from: 249.9, to: 251, fromSeq: 5, toSeq: 8, reason: 'sequence', channel: 'actors' }] });
+    expect(peopleRows(host).filter(row => row.retract === actor)).toEqual([{ retract: actor, t: 250, branch: 'late-gap-branch' }]);
+    const data = await reader.read();
+    const visible = (t: number, branch: string) => evaluateLayers(data, host.session, t, 'full', [], world, branch).flatMap(layer => layer.items).some(item => item.id === actor);
+    for (const t of [250, 250.5, 251, 330]) {
+      expect(visible(t, 'late-gap-branch')).toBe(false);
+      expect(visible(t, 'sibling')).toBe(true);
+    }
+  } finally { reader.close(); }
 });
 
 test('channel coverage carries read/kept/dropped/reasons, sorted, including unmapped channels', () => {

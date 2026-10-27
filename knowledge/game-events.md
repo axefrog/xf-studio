@@ -36,7 +36,11 @@ identity fields and separate death/combat/crime event channels remain explicit
 limits; the V combat flag is not a combat event. The named private street recording
 contains zero actor observations and witness reports, but 619 incident coverage
 receipts; synthetic offline fixtures exercise actor and raw-incident mapping,
-gap scopes and live-log replay. This is a feed-coverage limit, not
+gap scopes and live-log replay. Retrospective actor-gap invalidation is checked
+through Holotable's own spool reader and [layer evaluator](../projects/xf-holotable/src/layers.ts):
+the greatest timestamp wins, then later spool order at equal timestamps; a
+tombstone must supersede the affected published revision [source/offline].
+This is a feed-coverage limit, not
 evidence that no actors or incidents existed in the game. Sources:
 [recorder catalogue](../projects/xf-runtime-bridge/native/src/core/Recording.cpp),
 [Holotable model](../projects/xf-holotable/src/model.ts) and
