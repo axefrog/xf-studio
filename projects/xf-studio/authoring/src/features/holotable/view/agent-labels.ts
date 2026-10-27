@@ -3,10 +3,30 @@ import type { AgentItem, AgentLayer } from "../agent-types";
 
 export interface AgentLabel {
   key: string; text: string; x: number; y: number; priority: number;
-  colour: string; alpha: number; caption?: boolean; overlay?: boolean; align?: "end";
+  colour: string; alpha: number; caption?: boolean; overlay?: boolean; align?: "end"; selected?: boolean;
 }
 export interface PlacedLabel extends AgentLabel { width: number }
 export interface LabelBounds { x: number; y: number; width: number }
+export interface PlateObstacle { key: string; x: number; y: number; radius: number }
+export interface PlateObstacles { add(plate:PlateObstacle):void; overlaps(key:string,x:number,y:number,width:number):boolean }
+
+/** Conservative 8 px occupancy cells keep dense plates from making label checks quadratic.
+ * Two distinct owners are enough to ignore an item's own plate without ignoring a neighbour. */
+export function createPlateObstacles():PlateObstacles {
+  const cells=new Map<string,{owner:string;other:boolean}>(),size=8;
+  return { add(plate){
+    const {key,x,y,radius}=plate;
+    for(let row=Math.floor((y-radius)/size);row<=Math.floor((y+radius)/size);row++)for(let col=Math.floor((x-radius)/size);col<=Math.floor((x+radius)/size);col++){
+      const cellKey=`${col}:${row}`,cell=cells.get(cellKey);
+      if(!cell)cells.set(cellKey,{owner:key,other:false});else if(cell.owner!==key)cell.other=true;
+    }
+  },overlaps(key,x,y,width){
+    for(let row=Math.floor((y-13)/size);row<=Math.floor((y+4)/size);row++)for(let col=Math.floor(x/size);col<=Math.floor((x+width)/size);col++){
+      const cell=cells.get(`${col}:${row}`);if(cell&&(cell.owner!==key||cell.other))return true;
+    }
+    return false;
+  }};
+}
 
 export function labelPriority(item: AgentItem, important: ReadonlySet<string>): number {
   return important.has(item.key) ? 0 : item.kind === "actor" ? 1 : ["target", "point"].includes(item.kind) ? 2 : item.kind === "relation" ? 3 : 4;
@@ -23,10 +43,12 @@ export function actorCaption(value: string): string {
   return line.length > 28 ? line.slice(0, 27).trimEnd() + "…" : line;
 }
 /** Greedy, deterministic label culling. Important labels displace ordinary text by being placed first. */
-export function placeLabels(candidates: readonly AgentLabel[], measure: (text: string) => number, width: number, height: number, cap = 40, reserved: readonly LabelBounds[] = []): PlacedLabel[] {
+export function placeLabels(candidates: readonly AgentLabel[], measure: (text: string) => number, width: number, height: number, cap = 40, reserved: readonly LabelBounds[] = [],plates:readonly PlateObstacle[]|PlateObstacles=[]): PlacedLabel[] {
   const placed: PlacedLabel[] = [], names = new Set<string>();
   if (width < 8 || height < 18) return placed;
-  const ordered = [...candidates].sort((a, b) => a.priority - b.priority || Number(!!a.caption) - Number(!!b.caption) || a.key.localeCompare(b.key));
+  const obstacles="overlaps" in plates?plates:createPlateObstacles();
+  if(!("overlaps" in plates))for(const plate of plates)obstacles.add(plate);
+  const ordered = [...candidates].sort((a, b) => Number(!!b.selected)-Number(!!a.selected) || a.priority - b.priority || Number(!!a.caption) - Number(!!b.caption) || a.key.localeCompare(b.key));
   for (const candidate of ordered) {
     if (placed.length >= cap) break;
     if (candidate.caption && !names.has(candidate.key)) continue;
@@ -38,7 +60,7 @@ export function placeLabels(candidates: readonly AgentLabel[], measure: (text: s
     }
     const x = Math.max(4, Math.min(width - size - 4, candidate.x - (candidate.align === "end" ? size : 0))), y = Math.max(14, Math.min(height - 4, candidate.y));
     const overlaps = (p: LabelBounds) => x < p.x + p.width + 4 && x + size + 4 > p.x && y - 12 < p.y + 3 && y + 3 > p.y - 12;
-    if (size > width - 8 || reserved.some(overlaps) || placed.some(overlaps)) continue;
+    if (size > width - 8 || !candidate.selected&&(obstacles.overlaps(candidate.key,x,y,size)||reserved.some(overlaps)||placed.some(overlaps))) continue;
     placed.push({ ...candidate, text: value, x, y, width: size });
     if (!candidate.caption) names.add(candidate.key);
   }

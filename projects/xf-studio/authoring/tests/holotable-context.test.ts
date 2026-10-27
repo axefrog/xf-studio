@@ -61,3 +61,25 @@ test("a late startup poll after hide/re-show cannot schedule a second watch loop
  service.withdraw();service.shown();await settle();expect(timers.size).toBe(1);
  releasePoll(ok(agents));await settle();expect(timers.size).toBe(1);ctl.abort();expect(timers.size).toBe(0);
 });
+
+
+test("each real service view lease fetches its own target and its end drops only its own geometry",async()=>{
+ const ctl=new AbortController(),a=new AbortController(),b=new AbortController(),timers=new Set<()=>void>(),calls:{params:Record<string,unknown>;signal:AbortSignal}[]=[];
+ const box=(id:string,x:number)=>({id,kind:"box" as const,center:[x,0,0] as const,axes:[[1,0,0],[0,1,0],[0,0,1]] as const,size:[1,1,1] as const});
+ const service=createHolotable({later:(ms,fn)=>{if(ms===250)timers.add(fn);return()=>{timers.delete(fn);};},transport:async(method,params,signal)=>{
+  if(method==="runs.list")return ok(runs);if(method==="session.open")return ok({...session,meta:{...session.meta,standalone:undefined}});
+  if(method==="layers.watch")return ok({watch:"w"});
+  if(method==="world.around"&&params.center){calls.push({params,signal});const x=(params.center as number[])[0];return ok({...world,solids:[box(String(x),x)]});}
+  return ok(method==="world.around"?world:agents);
+ }},ctl.signal);
+ try{
+  service.shown();await settle();await service.dispatch({kind:"holo.open",dir:"recording"});
+  const generation=service.snapshot().openGeneration;await service.dispatch({kind:"holo.open",dir:"recording"});expect(service.snapshot().openGeneration).toBe(generation+1);
+  service.context(a.signal).want([0,0,0],true);service.context(b.signal).want([1000,0,0],true);
+  expect(calls).toHaveLength(0);for(const run of [...timers]){timers.delete(run);run();}await settle();
+  expect(calls.map(call=>call.params)).toEqual([{dir:"recording",center:[0,0,0],margin:350},{dir:"recording",center:[1000,0,0],margin:350}]);
+  expect(service.snapshot().open!.world.solids!.map(s=>s.id)).toEqual(["0","1000"]);
+  a.abort();expect(service.snapshot().open!.world.solids!.map(s=>s.id)).toEqual(["1000"]);
+  b.abort();expect(service.snapshot().open!.world.solids).toEqual([]);expect(timers.size).toBe(0);
+ }finally{a.abort();b.abort();ctl.abort();}
+});

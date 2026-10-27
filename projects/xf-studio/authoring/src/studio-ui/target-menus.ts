@@ -8,6 +8,15 @@ import { scaleText } from "./dom";
 import { isIconName, type IconName } from "./icons";
 import { menuFromSections, openMenu, openValuePopover, type MenuAnchor, type MenuItem, type MenuSection } from "./menu";
 import type { StudioRuntime } from "./runtime";
+import type { ModuleService } from "../platform/api";
+
+/** Module-owned row targets use the same menu sections and captured-runtime gate as feature rows. */
+export function moduleTargetMenu(facade:ModuleService, definition:{title:string;label:string;items:readonly {label:string;action:{kind:string}}[]},
+  dispatch:(action:{kind:string})=>void,anchor:MenuAnchor,options:Omit<Parameters<typeof openMenu>[2],"label">) {
+  const items=menuFromSections([{label:definition.label,items:definition.items.map(item=>({kind:"action" as const,label:item.label,
+    capability:facade.capability(item.action),run:()=>dispatch(item.action)}))}]);
+  return openMenu(items,anchor,{...options,label:definition.title});
+}
 
 type Query = ReturnType<StudioRuntime["port"]["authoring"]["contextQuery"]>;
 type Option = Query["options"][number];

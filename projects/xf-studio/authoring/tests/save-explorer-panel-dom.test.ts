@@ -37,7 +37,7 @@ function harness(overrides: Partial<SaveExplorerDevice> = {}, options: Construct
   const ctx: ModuleViewContext<SaveExplorerFacade> = {
     // 044 D2 / P3-i D1: mounting the remaining type controller uses the named input adapter;
     // instance() is now a detached read and must never allocate a missing optional panel.
-    facade: module, instance: panelId => session ? session.inputInstance(panelId) : `${panelId}--test`, targets: () => ({}),
+    targetMenu(){}, facade: module, instance: panelId => session ? session.inputInstance(panelId) : `${panelId}--test`, targets: () => ({}),
     dispatch: async (action, _options) => { dispatched.push(action); const outcome = await module.dispatch(action); if (!outcome.ok) toasts.push(outcome.message); panel.update(undefined as never); return outcome.ok; },
     feedback: { toast: (_tone, _source, message) => { toasts.push(message); return undefined as never; }, announce: () => {}, record: () => undefined as never },
     anchors: { register: () => () => {} }, reveal: () => {}, openSettings: section => { settingsOpened.push(section); }, links: { open: async () => ({ ok: true }) }, changed: () => panel.update(undefined as never),

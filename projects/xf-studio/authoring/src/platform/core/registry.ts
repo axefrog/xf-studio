@@ -37,7 +37,7 @@ export class Registry<O extends AnyOwner = ActionOwner> {
    * Throws when two owners share an ID or a kind is owned twice (synchronous and asynchronous kinds
    * share one namespace).
    */
-  constructor(owners: readonly O[]) {
+  constructor(owners: readonly O[], private readonly live?: { generation(): number; owners(): readonly O[] }) {
     this.list = Object.freeze([...owners]);
     const table: Record<string, ActionDescriptor> = {};
     for (const owner of owners) {
@@ -63,40 +63,72 @@ export class Registry<O extends AnyOwner = ActionOwner> {
     }
     this.table = Object.freeze(table);
   }
-  owners(): readonly O[] { return this.list; }
-  owner(id: string): O | undefined { return this.byId.get(id); }
+  private liveGeneration = -1;
+  private liveSnapshot?: Registry<O>;
+  /** A private live instance: never mutates the build's shared registry. Generation is checked on every read. */
+  withLiveOwners(source: { generation(): number; owners(): readonly AnyOwner[] }): Registry<AnyOwner> {
+    return new Registry<AnyOwner>(this.list, source);
+  }
+  private current(): Registry<O> {
+    if (!this.live) return this;
+    const generation = this.live.generation();
+    if (this.liveGeneration !== generation || !this.liveSnapshot) {
+      const snapshot = new Registry<O>([...this.list, ...this.live.owners()]);
+      // No stale registration may escape a getter that changed the source during construction.
+      if (generation !== this.live.generation()) throw Error("Module registrations changed while building the action registry.");
+      this.liveSnapshot = snapshot; this.liveGeneration = generation;
+    }
+    return this.liveSnapshot;
+  }
+  owners(): readonly O[] { return this.live ? this.current().owners() : this.list; }
+  owner(id: string): O | undefined {
+    if (this.live) return this.current().owner(id);
+    return this.byId.get(id);
+  }
   /** Total over synchronous kinds: every kind resolves to its one owner or to `unknown_action` (async kinds too). */
   route(kind: string): RegistryRoute<SyncOwner<O>> {
+    if (this.live) return this.current().route(kind);
     const found = this.byKind.get(kind);
     return found ? { ok: true, owner: found.owner, kind, qualified: `${found.owner.id}/${kind}`, spec: found.spec }
       : { ok: false, code: "unknown_action", kind };
   }
   /** Total over asynchronous kinds (library requests, file workflows): their family or `unknown_action`. */
   routeAsync(kind: string): AsyncRoute<AsyncOwner<O>> {
+    if (this.live) return this.current().routeAsync(kind);
     const found = this.byAsyncKind.get(kind);
     return found ? { ok: true, owner: found.owner, kind, qualified: `${found.owner.id}/${kind}`, descriptor: found.descriptor }
       : { ok: false, code: "unknown_action", kind };
   }
   /** Every synchronous kind in registration order, or one owner's kinds (for an async family, its requests). */
   kinds(ownerId?: string): readonly string[] {
+    if (this.live) return this.current().kinds(ownerId);
     return ownerId === undefined ? Object.keys(this.table) : this.ownedKinds.get(ownerId) ?? [];
   }
   /** One async family's descriptors in registration order (shared and frozen: clone before handing out). */
   asyncDescriptors(ownerId: string): Readonly<Record<string, AsyncDescriptor>> {
+    if (this.live) return this.current().asyncDescriptors(ownerId);
     return Object.fromEntries((this.ownedKinds.get(ownerId) ?? []).flatMap(kind => {
       const found = this.byAsyncKind.get(kind);
       return found ? [[kind, found.descriptor]] : [];
     }));
   }
-  descriptor(kind: string): ActionDescriptor | undefined { return this.byKind.get(kind)?.spec.descriptor; }
+  descriptor(kind: string): ActionDescriptor | undefined {
+    if (this.live) return this.current().descriptor(kind);
+    return this.byKind.get(kind)?.spec.descriptor;
+  }
   /** The union of every owner's descriptors, in registration order. Shared and frozen at the top level: clone before handing out. */
-  descriptors(): Readonly<Record<string, ActionDescriptor>> { return this.table; }
+  descriptors(): Readonly<Record<string, ActionDescriptor>> {
+    if (this.live) return this.current().descriptors();
+    return this.table;
+  }
   /** Undo policy of a concrete action (its command or key variant first); `none` for an unknown kind. */
   undoPolicy(action: { kind: string }): UndoPolicy {
+    if (this.live) return this.current().undoPolicy(action);
     const descriptor = this.descriptor(action.kind);
     return descriptor ? undoPolicyOf(descriptor, action) : "none";
   }
   entries(): RegistryEntry[] {
+    if (this.live) return this.current().entries();
     return [...this.byKind].map(([kind, { owner, spec }]) => ({ kind, qualified: `${owner.id}/${kind}`, owner: owner.id,
       ownerKind: owner.owner, scope: [...spec.descriptor.scope], effect: spec.descriptor.effect, undo: spec.descriptor.undo }));
   }

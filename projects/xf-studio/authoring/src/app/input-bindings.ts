@@ -48,6 +48,7 @@ export type ViewCommandId = `uv.${UVViewCommand}` | "uv.pan" | "uv.zoom";
  * against the action registry in tests (the catalogue imports neither: CORE-86).
  */
 export type BindingAction =
+  | { kind: "module"; id: string }
   | { kind: "action"; id: string; variant?: string }
   | { kind: "request"; id: string }
   | { kind: "view"; id: ViewCommandId }
@@ -76,6 +77,14 @@ export function pointerInputOf(event: { button: number; pointerType?: string; is
   if (event.pointerType === "touch" && event.isPrimary === false) return "two-finger-drag";
   return event.button === 0 ? "drag" : event.button === 1 ? "middle-drag" : event.button === 2 ? "right-drag" : undefined;
 }
+/** Holotable navigation is view-local and ignores modifiers, including Shift. It offers no shape gestures. */
+export const HOLOTABLE_POINTER_BINDINGS = [
+  { id:"holotable.drag", input:"drag", effect:"orbit", label:"Orbit (click to pick)" },
+  { id:"holotable.right-drag", input:"right-drag", effect:"pan", label:"Pan" },
+  { id:"holotable.middle-drag", input:"middle-drag", effect:"pan", label:"Pan" },
+  { id:"holotable.wheel", input:"wheel", effect:"zoom", label:"Zoom" },
+] as const;
+export const holotablePointerBinding = (input: PointerInput | undefined) => HOLOTABLE_POINTER_BINDINGS.find(binding=>binding.input===input);
 export type CursorKind = "default" | "grab" | "grabbing" | "move" | "rotate" | "scale" | "pan";
 /**
  * The handler an adapter runs. `camera-*` effects are performed by the head renderer's orbit
@@ -186,7 +195,7 @@ export type EditorInputState = Readonly<{ target?: PointerTarget; gesture?: Gest
 // ---------- Keyboard bindings ----------
 /** `any` ignores modifiers entirely (Escape must work while Shift is still held). */
 export type KeyChord = Readonly<{ key: string; ctrl?: boolean; alt?: boolean; shift?: boolean; any?: boolean }>;
-export type KeyScope = "global" | "gesture" | "head" | "uv" | "tabs" | "rows" | "tour";
+export type KeyScope = "global" | "gesture" | "head" | "uv" | "tabs" | "rows" | "tour" | "holotable";
 export type KeyBinding = Readonly<{
   id: string; scope: KeyScope; chords: readonly KeyChord[]; action: BindingAction; label: string;
   /** Compact label for hint strips, when the reference label is a sentence. */
@@ -201,6 +210,8 @@ export type KeyBinding = Readonly<{
 const k = (key: string, mods: Partial<Omit<KeyChord, "key">> = {}): KeyChord => ({ key, ...mods });
 
 export const KEY_BINDINGS: readonly KeyBinding[] = [
+  { id: "holo.change.previous", scope: "holotable", chords: [k("[")], action: { kind: "module", id: "holo.change.previous" }, label: "Previous change in visible Holotable layers, then pause" },
+  { id: "holo.change.next", scope: "holotable", chords: [k("]")], action: { kind: "module", id: "holo.change.next" }, label: "Next change in visible Holotable layers, then pause" },
   { id: "shell.palette", scope: "global", chords: [k("k", { ctrl: true }), k("p", { ctrl: true }), k("p", { ctrl: true, shift: true })], action: shell("palette"), label: "Command palette — every command, with reasons when unavailable", inText: true },
   { id: "shell.save", scope: "global", chords: [k("s", { ctrl: true })], action: { kind: "request", id: "save" }, label: "Save the collection to the local library", inText: true },
   { id: "shell.undo", scope: "global", chords: [k("z", { ctrl: true })], action: act("history.undo"), label: "Undo the last change (outside text fields)" },
@@ -453,6 +464,7 @@ export function bindingReference(): ReferenceSection[] {
     { id: "global", title: "Anywhere", rows: keyRows("global") },
     { id: "head", title: "3D view", detail: "Shift always means a shape tool; editing on the head needs Surface controls on.",
       rows: [...pointerRows("head"), ...keyRows("head").map(row => ({ ...row, where: "viewport focused" }))] },
+    { id: "holotable", title: "Holotable view", rows: [...HOLOTABLE_POINTER_BINDINGS.map(binding=>({input:pointerInputLabel(binding.input),label:binding.label,ids:[binding.id]})),...keyRows("holotable")] },
     { id: "uv", title: "UV map", detail: "View changes (zoom, pan, eye modes) are never edits.",
       rows: [...pointerRows("uv"), ...keyRows("uv").map(row => ({ ...row, where: "UV map focused" }))] },
     { id: "gesture", title: "During a drag or Shift-wheel", detail: "Each gesture is one Undo entry; wheel notches within 250 ms share it.",

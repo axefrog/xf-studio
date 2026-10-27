@@ -7,7 +7,7 @@ import { HOLOTABLE_MODULE } from "./module";
 import type { HolotableService } from "./service";
 
 export type HolotableFacade = { readonly module: ModuleService["module"] } &
-  Pick<HolotableService, "capability" | "dispatch" | "snapshot" | "subscribe">;
+  Pick<HolotableService, "capability" | "dispatch" | "snapshot" | "subscribe" | "speedOptions" | "context">;
 
 export function holotableFacade(service: HolotableService): HolotableFacade {
   return Object.freeze({
@@ -15,6 +15,8 @@ export function holotableFacade(service: HolotableService): HolotableFacade {
     capability: action => service.capability(action),
     dispatch: action => service.dispatch(action),
     snapshot: () => service.snapshot(),
+    speedOptions: () => service.speedOptions(),
+    context: signal => service.context(signal),
     subscribe: listener => service.subscribe(listener),
   } satisfies HolotableFacade);
 }

@@ -6,6 +6,7 @@
  *
  * Types and pure helpers only: data a composition lists (`compose/modules.ts`), which the application derives from.
  */
+import type { ActionDescriptor } from "./actions";
 import type { Capability, ReasonCode } from "./capability";
 import type { SceneKind } from "./view-graph";
 import type { DefaultLayoutContribution } from "./layout-fragment";
@@ -31,6 +32,8 @@ export type StudioModule = {
    * checked at composition against the panels and view tools the build has.
    */
   readonly defaults?: readonly DefaultLayoutContribution[];
+  /** Application actions owned by this module, live only while its registration exists. */
+  readonly actions?: Readonly<Record<string, ActionDescriptor>>;
 };
 
 /**

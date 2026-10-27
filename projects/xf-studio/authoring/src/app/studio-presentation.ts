@@ -1,3 +1,4 @@
+import { liveModuleActions } from "../platform/core/module-actions";
 import type { ExperimentPort } from "../platform/api/experiments";
 import type { FacialPreviewSnapshot } from "../platform/api/facial";
 import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "../library/part-presets";
@@ -452,6 +453,8 @@ export function createStudioPresentation<Slot>(sources: {
   const a = sources.authoring, l = sources.library, f = sources.files,
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
     e = sources.editor;
+  const moduleActions = sources.experiments ? liveModuleActions(a.actionRegistry(), sources.experiments) : undefined;
+  if (moduleActions) a.useActionRegistry(moduleActions.registry);
   const s: StatusSource = sources.status ?? { snapshot: () => emptyPresentationStatus(),
     subscribe: () => () => {} };
   // The lease's gate for the families that don't route through the application (which refuses by itself, `Services.access`).
@@ -701,7 +704,8 @@ export function createStudioPresentation<Slot>(sources: {
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, views, features: () => infos, feature, module: (id: string) => {
       const service = moduleServices.get(id) ?? sources.experiments?.registrations().find(item => item.module.id === id)?.service;
-      return service && lease ? leased(service) : service;
+      const routed = service && sources.experiments?.registrations().some(item => item.service === service && item.module?.actions) ? moduleActions!.bind(service) : service;
+      return routed && lease ? leased(routed) : routed;
     },
     experiments: sources.experiments && lease ? { ...sources.experiments, subscribe: sources.experiments.subscribe.bind(sources.experiments),
       snapshot: () => sources.experiments!.snapshot(), registrations: () => sources.experiments!.registrations(),

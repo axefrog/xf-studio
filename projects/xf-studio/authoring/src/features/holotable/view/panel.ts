@@ -4,7 +4,8 @@
  * service. Controls come from the component library; the drawing is the projection's primitives written as SVG, coloured only by Studio
  * tokens. It acts only through its context's facade.
  */
-import { applyCapability, button, emptyState, Segmented, setButtonLabel, SliderWithValue } from "../../../studio-ui/components";
+import { applyCapability, closeMenus, openMenu, iconButton, button, emptyState, Segmented, setButtonLabel, SliderWithValue } from "../../../studio-ui/components";
+import { holotablePointerBinding, pointerInputOf, keyBinding } from "../../../app/input-bindings";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
@@ -14,6 +15,9 @@ import { ORBITS, fitOrbit, project, type Orbit, type Primitive, type Style } fro
 import { HOLOTABLE_PANEL_META } from "./contribution";
 import { f1, heading, vAt } from "./shared";
 import { solidCanvas } from "./solid-canvas";
+import { playbackBarStage, type BarStage } from "./playback-bar";
+import { groundPoint, panExtent, panOrbit, type Extent } from "./pan";
+import { scopeChip,SCOPE_MIN_WIDTH } from "./scope-chip";
 import { agentCanvas } from "./agent-canvas";
 import { pickPlace } from "./place-picking";
 import { createSolidSelection } from "./solid-selection";
@@ -21,6 +25,7 @@ import type { AgentLabel } from "./agent-labels";
 import type { Vec3 } from "../types";
 
 type Ctx = ModuleViewContext<HolotableFacade>;
+const CHANGE_ICON = "dot"; // UI track will supply the step icons; swap here.
 const NS = "http://www.w3.org/2000/svg";
 
 /** Every colour is a Studio token: cyan for live data and selection, the stage's strongest neutral for V, warning for gaps. */
@@ -33,17 +38,18 @@ const DASH: Partial<Record<Style, string>> = { gap: "2 5", area: "10 4 2 4", cam
 /** Each dash pattern's length (an odd-length list repeats twice), so a line cut at the edge continues its pattern in phase. */
 const DASH_PERIOD = Object.fromEntries(Object.entries(DASH).map(([style, d]) => { const xs = d!.split(" ").map(Number), sum = xs.reduce((a, b) => a + b, 0); return [style, xs.length % 2 ? sum * 2 : sum]; })) as Partial<Record<Style, number>>;
 
-export interface HolotableFrame { ms: number; projectMs: number; drawMs: number; width: number; height: number; solids: number; cut: number; pending?: boolean; preparationFrames?: number; preparationMs?: number }
-export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => void): PanelController {
+export interface HolotableFrame { ms: number; projectMs: number; drawMs: number; width: number; height: number; target: Vec3; solids: number; cut: number; pending?: boolean; preparationFrames?: number; preparationMs?: number }
+export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => void, motionClock?: () => number): PanelController {
   const facade = ctx.facade;
   let orbit: Orbit = { ...ORBITS.tilt };
   let fittedDir = "", hovered: string | null = null, zoomLimit = 1500;
   let drawnKey = "", emptyKey = "";
+  let contextCtl: AbortController | undefined, contextLease: ReturnType<HolotableFacade["context"]> | undefined, contextMoved = false;
 
   // The drawing takes all the height the panel has: no scrollbar, the controls in one line under it.
   const svg = document.createElementNS(NS, "svg");
   svg.setAttribute("role", "img"); svg.setAttribute("tabindex", "0");
-  svg.setAttribute("aria-label", "Replay drawn from above: drag to orbit, scroll to zoom, arrow keys turn and tilt");
+  svg.setAttribute("aria-label", "Replay drawn from above: drag to orbit, right-drag to pan, scroll to zoom, arrow keys turn and tilt");
   // The drawing gives way first in a short panel (it may shrink to nothing), so the controls under it stay in reach.
   svg.setAttribute("style", "position:absolute;inset:0;display:block;height:100%;width:100%;cursor:grab;touch-action:none");
   const canvas = document.createElement("canvas"); canvas.setAttribute("aria-hidden", "true");
@@ -51,20 +57,44 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   const agents = document.createElement("canvas"); agents.setAttribute("aria-hidden", "true"); agents.style.cssText = canvas.style.cssText;
   const stage = h("div", { style: "position:relative;flex:1 1 auto;min-height:0;width:100%;background:var(--stage);border:1px solid var(--line);overflow:hidden" }, canvas, agents, svg);
   const solidsCanvas = solidCanvas(canvas, () => { drawnKey = ""; ctx.changed(); });
-  const layersCanvas = agentCanvas(agents, () => { drawnKey = ""; ctx.changed(); });
+  const layersCanvas = agentCanvas(agents, () => { drawnKey = ""; ctx.changed(); }, motionClock);
   let currentScene: ReturnType<typeof project> | undefined;
   const solidSelection = createSolidSelection();
   let resumeFrame: number | undefined, disposed = false, preparationFrames = 0, preparationMs = 0;
   const emptySolids: never[] = [];
   const empty = h("div", { style: "flex:1 1 auto;min-height:0" });
   // The panel can be resized, docked or floated at any time: redraw at the new size.
-  // A press orbits or picks without taking keyboard focus, so the focus ring shows only when someone tabs in to turn the view by keys.
+  // A press focuses this view for its scoped shortcuts; :focus-visible keeps pointer orbiting free of a keyboard ring.
   svg.addEventListener("mousedown", event => event.preventDefault());
-  const resized = new ResizeObserver(() => ctx.changed());
+  const resized = new ResizeObserver(() => { barMeasureKey = ""; syncContext(); ctx.changed(); });
   resized.observe(svg);
+  let viewPreset: keyof typeof ORBITS = "tilt";
   const view = new Segmented<keyof typeof ORBITS>({ label: "View", showLabel: false, compact: true, options: [{ value: "top", label: "Top" }, { value: "tilt", label: "Tilt" }, { value: "low", label: "Low" }],
-    onSelect: value => { orbit = { ...ORBITS[value] }; drawnKey = ""; ctx.changed(); } });
+    onSelect: value => { viewPreset = value; orbit = { ...ORBITS[value] }; contextMoved = true; drawnKey = ""; ctx.changed(); } });
   const play = button({ label: "Play", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.play", on: !facade.snapshot().playing }, { quiet: true }); } });
+  const speed = new Segmented<number>({ label: "Playback speed", showLabel: false, compact: true, options: [...facade.speedOptions()],
+    onSelect: speed => { void ctx.dispatch({ kind: "holo.speed", speed }, { quiet: true }); } });
+  let speedPopup: ReturnType<typeof openMenu> | undefined;
+  const speedMenu = button({ label: "4×", small: true, variant: "quiet", onClick: () => {
+    speedPopup?.close(false);
+    speedMenu.setAttribute("aria-expanded", "true");
+    speedPopup=openMenu(facade.speedOptions().map(option=>({kind:"action" as const,label:option.label,
+      checked:facade.snapshot().speed===option.value,capability:facade.capability({kind:"holo.speed",speed:option.value}),
+      run:()=>{void ctx.dispatch({kind:"holo.speed",speed:option.value},{quiet:true});}})),speedMenu,
+      {label:"Playback speed",invoker:speedMenu,onClose:()=>{speedPopup=undefined;speedMenu.setAttribute("aria-expanded","false");}});
+  } });
+  speedMenu.setAttribute("aria-haspopup", "menu"); speedMenu.setAttribute("aria-expanded", "false"); speedMenu.hidden = true;
+  const previous = iconButton({ label: "Previous change", title: "Previous change ([)", icon: CHANGE_ICON, small: true,
+    onClick: () => { void ctx.dispatch({ kind: "holo.change.previous" }, { quiet: true }); } });
+  const next = iconButton({ label: "Next change", title: "Next change (])", icon: CHANGE_ICON, small: true,
+    onClick: () => { void ctx.dispatch({ kind: "holo.change.next" }, { quiet: true }); } });
+  const scopeSlot=h("span",{style:`display:inline-flex;flex:0 1 auto;min-width:${SCOPE_MIN_WIDTH}px;max-width:180px`});scopeSlot.hidden=true;
+  let scopeKey="";
+  const viewMenu = button({ label: "Tilt", small: true, variant: "quiet", menu: true, onClick: () => {
+    openMenu((Object.keys(ORBITS) as (keyof typeof ORBITS)[]).map(value => ({ kind: "action" as const,
+      label: value[0].toUpperCase()+value.slice(1), checked: viewPreset === value, run: () => { viewPreset = value; orbit = { ...ORBITS[value] }; contextMoved = true; drawnKey = ""; ctx.changed(); } })), viewMenu, { label: "View", invoker: viewMenu });
+  } });
+  viewMenu.hidden = true;
   const time = new SliderWithValue({ label: "Moment", min: 0, max: 1, step: 0.1, format: v => `${f1(v)} s`,
     transaction: { edit: v => { const s = facade.snapshot().open?.session; if (s) void ctx.dispatch({ kind: "holo.seek", t: s.meta.from + v }, { quiet: true }); } } });
   const readout = h("span", { class: "note muted mono", role: "status", style: "flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" });
@@ -72,19 +102,70 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   const branches = new Segmented<string>({ label: "Branch", options: [], onSelect: branch => { void ctx.dispatch({ kind: "holo.branch", branch }); } });
   branches.element.style.flex = "0 0 auto";
 
-  for (const control of [play, view.element, backToLive]) control.style.flex = "0 0 auto";
-  const controls = h("div", { class: "control-line", style: "flex:0 0 auto;flex-wrap:nowrap" }, play, view.element, readout, backToLive);
+  for (const control of [play, speed.element, speedMenu, previous, next, view.element, viewMenu, backToLive]) control.style.flex = "0 0 auto";
+  const controls = h("div", { class: "control-line", style: "flex:0 0 auto;flex-wrap:nowrap" }, play, speed.element, speedMenu, previous, next, scopeSlot, view.element, viewMenu, readout, backToLive);
+  resized.observe(controls);
+  let barStage: BarStage = 0, barMeasureKey = "", barWidths = { full: 0, viewCollapsed: 0 };
+  const intrinsicWidth = (control: HTMLElement) => {
+    const hidden = control.hidden; control.hidden = false;
+    const width = control.getBoundingClientRect().width; control.hidden = hidden; return width;
+  };
+  function updateBar() {
+    const width = controls.clientWidth; if (!width) return;
+    const key = JSON.stringify([facade.speedOptions(), play.textContent, speedMenu.textContent, viewPreset, backToLive.hidden,scopeKey]);
+    if (barMeasureKey !== key) {
+      barMeasureKey = key;
+      const gap = parseFloat(getComputedStyle(controls).columnGap) || 0;
+      const base = intrinsicWidth(play) + intrinsicWidth(previous) + intrinsicWidth(next) + (backToLive.hidden ? 0 : intrinsicWidth(backToLive));
+      const scopeWidth=scopeSlot.hidden?0:SCOPE_MIN_WIDTH;
+      const gaps = gap * ((backToLive.hidden ? 5 : 6)+(scopeSlot.hidden?0:1)), speedWidth = intrinsicWidth(speed.element),readoutRoom=scopeSlot.hidden?48:0;
+      barWidths = { full: base + speedWidth + intrinsicWidth(view.element) + gaps + scopeWidth + readoutRoom,
+        viewCollapsed: base + speedWidth + intrinsicWidth(viewMenu) + gaps + scopeWidth + readoutRoom };
+    }
+    barStage = playbackBarStage(barStage, width, barWidths.full, barWidths.viewCollapsed);
+    view.element.hidden = barStage > 0; viewMenu.hidden = barStage === 0;
+    speed.element.hidden = barStage === 2; speedMenu.hidden = barStage !== 2;
+    controls.style.flexWrap = width < 220 ? "wrap" : "nowrap";
+    controls.dataset.collapse = String(barStage);
+  }
   time.element.style.flex = "0 0 auto"; // the drawing takes the room; the controls keep their own height
   const element = h("div", { class: "panel-content holotable-panel", style: "display:flex;flex-direction:column;height:100%;min-height:0;box-sizing:border-box;overflow:auto" },
     empty, stage, branches.element, time.element, controls);
 
+  element.addEventListener("keydown", event => {
+    const target = event.target as HTMLElement;
+    const binding = keyBinding("holotable", event, { textInput: target.matches("input,textarea,[contenteditable=true]") });
+    if (binding?.action.kind !== "module") return;
+    event.preventDefault(); event.stopPropagation();
+    void ctx.dispatch({ kind: binding.id === "holo.change.previous" ? "holo.change.previous" : "holo.change.next" }, { quiet: true });
+  });
+
   // Gestures: orbit, zoom, pick. The viewpoint is this view's own; the selection is the service's.
   // The mark under the pointer is read on press: pointer capture retargets the release to the drawing itself.
-  let drag: { id: number; x: number; y: number; yaw: number; pitch: number; moved: boolean; mark: string | null } | null = null;
+  function syncContext(target?: Vec3, moved = false) {
+    if (disposed || !element.isConnected || !svg.getClientRects().length || stage.style.display === "none") {
+      const old=contextCtl;contextCtl=undefined;contextLease=undefined;old?.abort();return;
+    }
+    if (!target) return;
+    if (!contextCtl) { contextCtl=new AbortController();contextLease=facade.context(contextCtl.signal); }
+    contextLease!.want(target,moved);
+  }
+  function viewCenter(state: HoloState): Vec3 {
+    return state.open?.session.meta.standalone ? focusAt(state) : vAt(state)?.position ?? state.open?.session.v[0]?.position ?? [0,0,0];
+  }
+  let drag: { id: number; mode: "pan" | "orbit"; press: Vec3 | null; extent?: Extent; x: number; y: number; yaw: number; pitch: number; moved: boolean; mark: string | null } | null = null;
+  svg.addEventListener("contextmenu",event=>event.preventDefault());
   svg.addEventListener("pointerdown", event => {
+    const binding=holotablePointerBinding(pointerInputOf(event));
+    if (drag || !binding || binding.effect==="zoom") return;
+    event.preventDefault();
+    svg.focus({ preventScroll: true });
     const bounds = svg.getBoundingClientRect();
-    const mark = (event.target as Element | null)?.closest?.("[data-id]")?.getAttribute("data-id") ?? layersCanvas.pick(event.clientX - bounds.left, event.clientY - bounds.top);
-    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, yaw: orbit.yaw, pitch: orbit.pitch, moved: false, mark };
+    const mode = binding.effect, state=facade.snapshot();
+    const mark = mode==="orbit" ? (event.target as Element | null)?.closest?.("[data-id]")?.getAttribute("data-id") ?? layersCanvas.pick(event.clientX - bounds.left, event.clientY - bounds.top) : null;
+    drag = { id: event.pointerId, mode, press: mode==="pan"&&currentScene ? groundPoint(currentScene.solidCamera,event.clientX-bounds.left,event.clientY-bounds.top) : null,
+      extent:state.open?panExtent(state.open.session,state.open.world):undefined, x: event.clientX, y: event.clientY, yaw: orbit.yaw, pitch: orbit.pitch, moved: false, mark };
+    if(mode==="pan")svg.style.cursor="grabbing";
     svg.setPointerCapture(event.pointerId);
   });
   svg.addEventListener("pointermove", event => {
@@ -95,16 +176,22 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       return;
     }
     if (event.pointerId !== drag.id) return;
+    event.preventDefault();
     const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
     if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
-    orbit = { ...orbit, yaw: drag.yaw - dx * 0.006, pitch: Math.max(0.12, Math.min(1.52, drag.pitch + dy * 0.005)) };
+    if(drag.mode==="pan"){
+      if(!drag.press)return;
+      const bounds=svg.getBoundingClientRect();
+      orbit=panOrbit(orbit,viewCenter(facade.snapshot()),drag.press,event.clientX-bounds.left,event.clientY-bounds.top,svg.clientWidth,svg.clientHeight,drag.extent);
+      contextMoved=true;svg.style.cursor="grabbing";
+    }else orbit = { ...orbit, yaw: drag.yaw - dx * 0.006, pitch: Math.max(0.12, Math.min(1.52, drag.pitch + dy * 0.005)) };
     drawnKey = ""; ctx.changed();
   });
-  svg.addEventListener("pointerleave", () => { if (hovered) { hovered = null; drawnKey = ""; ctx.changed(); } });
+  svg.addEventListener("pointerleave", () => { if (drag) return; if (hovered) { hovered = null; drawnKey = ""; ctx.changed(); } });
   const endDrag = (event: PointerEvent) => {
     if (!drag || event.pointerId !== drag.id) return;
-    const clicked = !drag.moved, picked = clicked ? drag.mark : null;
-    drag = null;
+    const clicked = drag.mode==="orbit"&&!drag.moved, picked = clicked ? drag.mark : null;
+    drag = null; svg.style.cursor="grab";
     if (picked) void ctx.dispatch({ kind: "holo.select", id: picked }, { quiet: true });
     else if (clicked && currentScene) {
       const bounds = svg.getBoundingClientRect(), state = facade.snapshot();
@@ -113,7 +200,8 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     }
   };
   svg.addEventListener("pointerup", endDrag);
-  svg.addEventListener("pointercancel", () => { drag = null; });
+  svg.addEventListener("pointercancel", () => { drag = null; svg.style.cursor="grab"; });
+  svg.addEventListener("lostpointercapture", () => { drag = null; svg.style.cursor="grab"; });
   svg.addEventListener("wheel", event => { event.preventDefault(); orbit = { ...orbit, distance: Math.max(40, Math.min(zoomLimit, orbit.distance * (event.deltaY > 0 ? 1.12 : 1 / 1.12))) }; drawnKey = ""; ctx.changed(); }, { passive: false });
   svg.addEventListener("keydown", event => {
     const turn = { ArrowLeft: [-0.12, 0], ArrowRight: [0.12, 0], ArrowUp: [0, 0.08], ArrowDown: [0, -0.08] }[event.key];
@@ -144,24 +232,27 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     if (!open || state.phase === "opening") { solidsCanvas.clear(svg.clientWidth, svg.clientHeight); layersCanvas.clear(svg.clientWidth, svg.clientHeight); trim(linesLayer, 0); trim(marksLayer, 0); trim(textLayer, 0); trim(chrome, 0); message.textContent = ""; messageKey = ""; chromeSize = ""; return; }
     const width = svg.clientWidth || 800, height = svg.clientHeight || 480;
     const started = performance.now();
-    if (fittedDir !== open.dir) {
+    const fitKey=JSON.stringify([open.dir,open.session.meta.session,open.session.meta.run,state.openGeneration]);
+    if (fittedDir !== fitKey) {
+      viewPreset = "tilt"; view.update(viewPreset); setButtonLabel(viewMenu, "Tilt");
       const extent = open.session.meta.standalone?.extent;
       orbit = extent ? fitOrbit(extent, ORBITS.tilt, width, height) : { ...ORBITS.tilt };
-      zoomLimit = Math.max(1500, orbit.distance * 4); fittedDir = open.dir;
+      zoomLimit = Math.max(1500, orbit.distance * 4); fittedDir = fitKey; contextMoved=true;
     }
     const scene = project(open.session, open.world, state.t, state.layers, orbit, width, height, state.selected, open.session.meta.standalone ? focusAt(state) : undefined, { instances: [], cut: 0 });
     currentScene = scene;
-    if (open.session.meta.standalone) void ctx.dispatch({ kind: "holo.focus", position: scene.solidCamera.target }, { quiet: true });
+    syncContext(scene.solidCamera.target,contextMoved);contextMoved=false;
     const projectedAt = performance.now();
     set(svg, "viewBox", `0 0 ${width} ${height}`);
     const bx = width - 24 - scene.barPx, by = height - 22;
     const worldText = scene.primitives.filter((p): p is Extract<Primitive, { kind: "text" }> => p.kind === "text");
-    const extraLabels: AgentLabel[] = worldText.map((p, i) => ({ key: `world:${i}`, text: p.text, x: p.at[0], y: p.at[1], priority: p.id === state.selected ? -1 : 4, colour: "", alpha: 1, overlay: true }));
+    const extraLabels: AgentLabel[] = worldText.map((p, i) => ({ key: `world:${i}`, text: p.text, x: p.at[0], y: p.at[1], priority: p.id === state.selected ? -1 : 4, colour: "", alpha: 1, overlay: true,selected:p.id===state.selected }));
     extraLabels.push({ key: "scale", text: `${scene.metresPerBar} m`, x: bx + scene.barPx, y: by - 8, priority: 4, colour: "", alpha: 1, overlay: true, align: "end" });
     const extent = open.session.meta.standalone?.extent;
     const radius = extent ? Math.max(350, Math.hypot(...extent.max.map((n, axis) => n - extent.min[axis]))) : 350;
-    const agentProgress = layersCanvas.draw(state.agents, state.agentEnabled, scene.solidCamera, state.selected, Math.max(0, Math.min(4, started + 6 - performance.now())), hovered, extraLabels, radius);
-    const target = open.session.meta.standalone ? focusAt(state) : scene.v?.position ?? [0,0,0] as Vec3;
+    const agentProgress = layersCanvas.draw(state.agents, state.agentEnabled, scene.solidCamera, state.selected, Math.max(0, Math.min(4, started + 6 - performance.now())), hovered, extraLabels, radius, { playing: state.playing || state.live.following, epoch: JSON.stringify([open.dir,state.motionEpoch,orbit,width,height]) });
+    animate();
+    const target = scene.solidCamera.target;
     const solidStarted = performance.now();
     const prepared = solidSelection.step(state.layers.solids ? open.world.solids ?? emptySolids : emptySolids, target, scene.solidCamera, Math.min(started + 3.5, solidStarted + 1.5));
     const solidProgress = solidsCanvas.draw(prepared.instances, scene.solidCamera, started + 5.5);
@@ -188,13 +279,21 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     trim(textLayer, textList.length);
     // Markers are few (V and the placed events): rebuilt each frame.
     marksLayer.replaceChildren(...scene.primitives.filter(p => p.kind === "marker").map(p => marker(p as Extract<Primitive, { kind: "marker" }>)));
-    measured?.({ ms: performance.now() - started, projectMs: projectedAt - started, drawMs: paintedAt - projectedAt, width, height, solids: scene.solidsDrawn, cut: scene.solidsCut, pending, preparationFrames, preparationMs });
+    measured?.({ ms: performance.now() - started, projectMs: projectedAt - started, drawMs: paintedAt - projectedAt, width, height, target, solids: scene.solidsDrawn, cut: scene.solidsCut, pending, preparationFrames, preparationMs });
     if (pending && !disposed) resumeFrame = requestAnimationFrame(() => {
       resumeFrame = undefined;
       if (!disposed && element.isConnected && element.getClientRects().length) { drawnKey = ""; draw(facade.snapshot()); }
       else solidSelection.cancel();
     });
     else { preparationFrames = 0; preparationMs = 0; }
+  }
+  let animationFrame: number | undefined;
+  function animate() {
+    if (animationFrame !== undefined) return;
+    if (layersCanvas.animate() && !disposed) animationFrame = requestAnimationFrame(() => {
+      animationFrame = undefined;
+      if (!disposed && element.isConnected && element.getClientRects().length) animate();
+    });
   }
   function focusAt(state: HoloState): Vec3 {
     if (state.position) return state.position;
@@ -267,6 +366,24 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
         empty.replaceChildren(...(s && !opening && !state.openError ? [] : [openNotice(state, dir => { void ctx.dispatch({ kind: "holo.open", dir }); })]));
         empty.hidden = !!s && !opening && !state.openError; stage.style.display = s && !opening && !state.openError ? "block" : "none";
       }
+      speed.setOptions([...facade.speedOptions()]);
+      speed.update(state.speed, value => facade.capability({ kind: "holo.speed", speed: value }), { disabled: !s || state.live.following });
+      speed.element.title = state.live.following ? "Live always plays at 1×. Pause to replay at another speed." : "";
+      applyCapability(previous, facade.capability({ kind: "holo.change.previous" }));
+      applyCapability(next, facade.capability({ kind: "holo.change.next" }));
+      const scoped=state.agents.layers.find(layer=>layer.id===state.changeScope),key=scoped?JSON.stringify([scoped.id,scoped.title]):"";
+      if(scopeKey!==key){scopeKey=key;scopeSlot.replaceChildren(...(scoped?[scopeChip(scoped.title,()=>{void ctx.dispatch({kind:"holo.change.scope",layer:null},{quiet:true});})]:[]));}
+      scopeSlot.hidden=!scoped;readout.style.flex=scoped?"1 1000 auto":"1 1 auto";
+      for(const [control,label,shortcut] of [[previous,"Previous","["],[next,"Next","]"]] as const){
+        const name=`${label} change${scoped?` in ${scoped.title}`:""}`,tip=`${name} (${shortcut})`;
+        control.setAttribute("aria-label",name);control.title=tip;control.dataset.title=tip;
+      }
+      view.update(viewPreset);
+      setButtonLabel(viewMenu, viewPreset[0].toUpperCase()+viewPreset.slice(1));
+      const speedLabel = facade.speedOptions().find(option => option.value === state.speed)?.label ?? "1×";
+      setButtonLabel(speedMenu, speedLabel); speedMenu.setAttribute("aria-label", `Playback speed: ${speedLabel}`);
+      applyCapability(speedMenu, facade.capability({ kind: "holo.speed", speed: state.speed }));
+      if (speedPopup&&!facade.capability({kind:"holo.speed",speed:state.speed}).available) closeMenus(false);
       applyCapability(play, facade.capability({ kind: "holo.play", on: true }));
       setButtonLabel(play, state.live.following || state.playing ? "Pause" : "Play");
       play.setAttribute("aria-pressed", String(state.live.following || state.playing));
@@ -280,10 +397,11 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
         setText(readout, s.meta.standalone ? momentItems(state) : `${reconnecting ? "Reconnecting · " : state.live.following ? "Live · " : ""}${f1(state.t - s.meta.from)} s${state.live.following ? "" : ` of ${f1(s.meta.to - s.meta.from)} s`}${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}${state.live.following && !reconnecting && state.live.behindS > 2 ? ` · ${f1(state.live.behindS)} s behind` : ""}`);
       } else setText(readout, "");
       readout.title = readout.textContent ?? "";
+      updateBar();
       const dk = JSON.stringify([state.revision, orbit, svg.clientWidth, svg.clientHeight]);
       if (dk !== drawnKey) { drawnKey = dk; draw(state); }
     },
-    dispose() { disposed = true; if (resumeFrame !== undefined) cancelAnimationFrame(resumeFrame); solidSelection.cancel(); resized.disconnect(); solidsCanvas.dispose(); layersCanvas.dispose(); },
+    dispose() { disposed = true; contextCtl?.abort(); speedPopup?.close(false); if (animationFrame !== undefined) cancelAnimationFrame(animationFrame); if (resumeFrame !== undefined) cancelAnimationFrame(resumeFrame); solidSelection.cancel(); resized.disconnect(); solidsCanvas.dispose(); layersCanvas.dispose(); },
   };
 }
 function gameTime(t: number) { const day = Math.floor(t / 86400) + 1, hour = Math.floor(t / 3600) % 24, minute = Math.floor(t / 60) % 60; return `Day ${day} · ${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`; }

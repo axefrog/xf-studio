@@ -44,9 +44,9 @@ const CORE_VALUES = new Map<string, readonly string[]>([
   ["platform/api/easing", ["centredAmount", "EASING_IDS", "EASING_LABELS", "easingPreset"]],
   // Choice previews' pure colour matrix (choice-preview.ts): the preview tile builds its per-theme filter from the tokens with it.
   ["character/choice-preview", ["previewColourMatrix"]],
-  // The pure input binding catalogue: hint/cursor/label derivation and key matching.
+  // The pure input binding catalogue: hint/cursor/label derivation and keyboard/view-local pointer matching.
   ["app/input-bindings", ["bindingReference", "chordLabel", "chordsLabel", "cursorFor", "editingReference", "KEY_BINDINGS", "keyBinding",
-    "keyBindingById", "modifierKey", "modifiersOf", "panelModifiersHeld", "pointerBinding", "shortcutLabel", "TARGET_LABELS", "targetTip", "viewportHints"]],
+    "keyBindingById", "modifierKey", "modifiersOf", "panelModifiersHeld", "pointerBinding", "pointerInputOf", "holotablePointerBinding", "shortcutLabel", "TARGET_LABELS", "targetTip", "viewportHints"]],
 ]);
 /**
  * What a feature's view may take by value from the shell (UI-73, UI-74): the stateless presentation toolkit

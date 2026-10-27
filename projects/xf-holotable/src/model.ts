@@ -145,6 +145,7 @@ export interface SolidRegion {
 export interface ShapeCounts { box: number; sphere: number; capsule: number; convexMesh: number; triangleMesh: number }
 
 export interface WorldPack {
+  extent?: { min: Vec3; max: Vec3 };
   schema: "xfh/world-pack-1";
   /** Which game data it was built from: offline geometry is an estimate of the live world. */
   provenance: { game: string; source: string; built: string };

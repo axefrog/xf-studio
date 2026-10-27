@@ -211,6 +211,8 @@ export function featureView<V extends ViewContribution,
  * module's service, as for feature views.
  */
 export type ModuleViewContext<F extends ModuleService = ModuleService> = {
+  /** A module's own target actions, bound to the captured view and rechecked by its service. */
+  targetMenu(menu: {title:string;label:string;items:readonly {label:string;action:Parameters<F["dispatch"]>[0]}[]},anchor:MenuAnchor,invoker?:Element):void;
   viewKey?(key: string): string;
   readonly facade: F;
   /** A panel's instance (`<panel>--<base36>`, profiles design §1.1): what names its own session in the module's service. */

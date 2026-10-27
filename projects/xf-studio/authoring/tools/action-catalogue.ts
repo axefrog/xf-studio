@@ -6,6 +6,8 @@
  */
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { moduleActionOwner } from "../src/platform/core/module-actions";
+import { HOLOTABLE_MODULE } from "../src/features/holotable/module";
 import { STUDIO_OWNERS } from "../src/compose/studio-registry";
 import type { PayloadSchema, UndoPolicy } from "../src/platform/api";
 
@@ -31,11 +33,12 @@ function table(rows: readonly Row[], async: boolean): string[] {
 /** The catalogue's Markdown, from the owners as registered (registration order is catalogue order). */
 export function renderCatalogue(): string {
   let actions = 0, requests = 0, gestures = 0;
-  const sections = STUDIO_OWNERS.flatMap(owner => {
+  const owners = [...STUDIO_OWNERS, moduleActionOwner(HOLOTABLE_MODULE, "holotable")];
+  const sections = owners.flatMap(owner => {
     const async = "async" in owner && owner.async === true;
     const rows: Row[] = Object.entries(owner.actions as unknown as Record<string, { descriptor: Omit<Row, "kind"> }>)
       .map(([kind, spec]) => ({ ...spec.descriptor, kind }));
-    const kind = owner.owner === "feature" ? "feature module" : async ? "system family, asynchronous requests" : "system family";
+    const kind = "module" in owner ? `module, experiment ${owner.experiment}` : owner.owner === "feature" ? "feature module" : async ? "system family, asynchronous requests" : "system family";
     const lines = ["", `## ${owner.label} (\`${owner.id}\`, ${kind})`, "", ...table(rows, async)];
     if (async) requests += rows.length; else actions += rows.length;
     const proposals = owner.owner === "feature" ? owner.gestures?.descriptors : undefined;
@@ -59,8 +62,13 @@ export function renderCatalogue(): string {
       "registry (`capability`, `limitsFor`, `choicesFor`). Modules whose actions route through their own service instead are recorded " +
       "exceptions in the [UI architecture boundary](ui-architecture-boundary.md).",
     "",
-    `${actions} actions, ${gestures} gesture proposals and ${requests} asynchronous requests from ${STUDIO_OWNERS.length} owners.`,
+    `${actions} actions, ${gestures} gesture proposals and ${requests} asynchronous requests from ${owners.length} owners (including optional experiment registrations).`,
     ...sections,
+    "",
+    "## Catalogue history",
+    "",
+    "- 27 October 2026: appended all 17 Holotable module actions, including playback speed and stepping, marked with the `holotable` experiment (claude/holotable-playback).",
+    "- 27 October 2026: appended `holo.change.scope` for temporary shared layer-scoped stepping (claude/holotable-playback).",
     "",
   ].join("\n");
 }

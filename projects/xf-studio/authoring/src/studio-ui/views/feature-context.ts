@@ -13,7 +13,7 @@ import { ViewportInputHints } from "../input-hints";
 import { menuCapability, menuFromSections, openMenu, type MenuItem, type MenuSection } from "../menu";
 import { Frame, type StudioRuntime } from "../runtime";
 import { readinessText } from "../readiness-text";
-import { collectionMenu, collectionSections, contextItems, presetMenu, viewportMenu } from "../target-menus";
+import { collectionMenu, collectionSections, contextItems, moduleTargetMenu, presetMenu, viewportMenu } from "../target-menus";
 import { importCollection, libraryState, reopenPreviousAction } from "../panels/collection";
 import type { FacadeOf, FeatureMenuItem, FeaturePresetRequest, FeatureTargetMenu, FeatureViewBinding, FeatureViewContext, MenuTarget, ModuleViewContext } from "./feature-view";
 import type { PartPresetRequest } from "../../library/part-presets";
@@ -148,6 +148,11 @@ export function moduleViewContext(rt: StudioRuntime, owner: string, tab?: () => 
   return Object.freeze({
     viewKey: (key: string) => rt.key(key),
     facade,
+    targetMenu:(definition,anchor,invoker)=>{
+      const held=captureRuntime(rt),captured=moduleViewContext(held.runtime,owner,tab);
+      if(!moduleTargetMenu(captured.facade,definition,action=>{if(held.active())void captured.dispatch(action);},anchor,
+        {invoker,signal:held.signal,onClose:held.release}))held.release();
+    },
     instance: (panel: string) => rt.instance?.id ?? rt.port.panels.instance(panel, tab?.()),
     targets: () => rt.port.focus.targets(),
     dispatch: async (action: { kind: string }, options?: Parameters<StudioRuntime["report"]>[2]) => {

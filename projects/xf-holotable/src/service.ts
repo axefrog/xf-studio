@@ -114,10 +114,11 @@ export function createService(options: ServiceOptions) {
     return run.dir;
   };
   const pathFor = (s: Session, center?: unknown) => {
-    if (!s.meta.standalone) return s.v.map(x => x.position);
     if (center !== undefined && (!Array.isArray(center) || center.length !== 3 || !center.every(n => typeof n === "number" && Number.isFinite(n)))) throw coded("bad_request", "Centre must be three finite coordinates.");
+    if (center !== undefined) return [center as [number,number,number]];
+    if (!s.meta.standalone) return s.v.map(x => x.position);
     const extent = s.meta.standalone.extent!;
-    return [center as [number,number,number] ?? extent.min.map((n,i)=>(n+extent.max[i])/2) as [number,number,number]];
+    return [extent.min.map((n,i)=>(n+extent.max[i])/2) as [number,number,number]];
   };
   async function layerAnswer(p: Record<string, unknown>, signal: AbortSignal, watching = false) {
     if (watching) layers.renew(String(p.watch));
@@ -151,12 +152,13 @@ export function createService(options: ServiceOptions) {
       return solids.status ? solids.status(pathFor(s), signal) : { cold: false };
     },
     "world.around": async (p, signal) => {
-      if (typeof p.watch === "string") {
+      if (typeof p.watch === "string" && p.center === undefined) {
         // Validate and renew this watch without asking the bridge for anything.
         live.renew(p.watch);
         return { version: worldVersion, world: p.since === worldVersion ? null : liveWorld, pending: worldPending, cold: worldCold };
       }
-      const s = await open(await known(p.dir, true, signal), signal), w = pack();
+      const s = typeof p.watch === "string" ? (live.renew(p.watch), live.session()) : await open(await known(p.dir, true, signal), signal), w = pack();
+      if (!s) throw coded("bad_request", "No live recording yet.");
       const margin = s.meta.standalone ? 350 : typeof p.margin === "number" ? p.margin : 250;
       if (!Number.isFinite(margin) || margin < 0 || margin > 1000) throw coded("bad_request", "Margin must be between 0 and 1000 metres.");
       const path = pathFor(s, p.center), geometry = await solids.around(path, margin, signal);

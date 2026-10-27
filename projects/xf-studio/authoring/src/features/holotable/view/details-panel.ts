@@ -1,5 +1,6 @@
+import { unknownGlyphs } from "./glyphs";
 /** Details composes existing switches, groups and property lists over the application snapshot. */
-import { GroupSection, note, propertyList, Toggle, button } from "../../../studio-ui/components";
+import { GroupSection, note, propertyList, Toggle, button, type Property } from "../../../studio-ui/components";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
@@ -19,7 +20,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
   const story = new Toggle({ label: "Story content", onChange: on => { void ctx.dispatch({ kind: "holo.level", level: on ? "full" : "structure" }); } });
   layers.body.append(...toggles.map(t => t.toggle.element), story.element);
   const agentGroup = new GroupSection({ title: "Agent layers", key: "holotable:agents", expanded: true });
-  const producers = new Map<string, { toggle: Toggle; body: HTMLElement }>();
+  const producers = new Map<string, { toggle: Toggle; body: HTMLElement; title: string }>();
   const agentRows = new Map<string, Toggle>();
   const inspect = h("div", {}), inspector = new GroupSection({ title: "Selected", key: "holotable:inspector", expanded: true }); inspector.body.append(inspect);
   const limits = note("", "muted");
@@ -29,10 +30,10 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
   const find = (state: HoloState, key: string) => visible(state).flatMap(l => l.items).find(i => i.key === key);
   const title = (item: AgentItem, state: HoloState, owner?: string) => itemTitle(item, visible(state).flatMap(l => l.items), owner);
   function itemFacts(item: AgentItem, state: HoloState): HTMLElement {
-    const facts: [string, string][] = [[item.kind === "relation" ? "Relation" : "Kind", item.kind === "relation" ? title(item, state) : item.kind]];
+    const facts: (Property|[string, string])[] = [[item.kind === "relation" ? "Relation" : "Kind", item.kind === "relation" ? title(item, state) : item.kind]];
     if (item.value?.name) facts.push(["Name", item.value.name]);
     if (item.label) facts.push(["Label", item.label]);
-    if (item.detail) facts.push(["Detail", item.detail]);
+    if (item.detail) facts.push({term:"Detail",value:detailText(item.detail)});
     for (const [name, value] of Object.entries(item.facets ?? item.value?.facets ?? {})) facts.push([name, value]);
     facts.push(["Time span", `${item.t === undefined ? "Beginning" : f1(item.t)} – ${item.until === undefined ? "end" : f1(item.until)}`]);
     if (item.region) facts.push([`Placed by ${item.region.kind}`, item.region.name]);
@@ -69,7 +70,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
       }
       const item = find(state, state.selected); if (item) return itemFacts(item, state);
       const e = s.events.find(x => x.id === state.selected); if (!e) return note("That mark isn't visible at this moment.");
-      return propertyList([["Kind", e.incident ? `${e.kind} � ${e.incident.kind ?? e.incident.event}` : e.kind], ["What", e.summary], ...(e.detail ? [["Said", e.detail] as [string, string]] : []), { term: "When", value: `${f1(e.t - m.from)} s`, mono: true }, ...(e.at ? [{ term: "Where", value: e.at.map(f1).join(", "), mono: true }] : []), { term: "Why", value: e.cite, mono: true }], { label: "Selected mark" });
+      return propertyList([["Kind", e.incident ? `${e.kind} · ${e.incident.kind ?? e.incident.event}` : e.kind], ["What", e.summary], ...(e.detail ? [{term:"Said",value:detailText(e.detail)}] : []), { term: "When", value: `${f1(e.t - m.from)} s`, mono: true }, ...(e.at ? [{ term: "Where", value: e.at.map(f1).join(", "), mono: true }] : []), { term: "Why", value: e.cite, mono: true }], { label: "Selected mark" });
     }
     const v = vAt(state); if (!v) return note(m.standalone ? "Select an item or a place to inspect it." : "V has no sample yet at this moment.");
     return propertyList([{ term: "Position", value: v.position.map(f1).join(", "), mono: true }, { term: "Heading", value: heading(v.yaw), mono: true }, { term: "Speed", value: `${f1(v.speed)} m/s`, mono: true }, { term: "Health", value: `${v.health} of ${v.healthMax}`, mono: true }, ["State", [v.inCombat ? "in combat" : "", v.vehicle ? "in a vehicle" : "", v.busy].filter(Boolean).join(", ") || "on foot"], { term: "Why", value: `recorder:${m.session}:${m.run}:${v.seq}`, mono: true }], { label: "V" });
@@ -79,18 +80,34 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
     for (const [id, toggle] of agentRows) if (!current.has(id)) { toggle.element.remove(); agentRows.delete(id); }
     for (const [name, producer] of producers) if (!names.has(name)) { producer.toggle.element.remove(); producer.body.remove(); producers.delete(name); }
     for (const name of names) {
-      let producer = producers.get(name);
-      if (!producer) {
-        const toggle = new Toggle({ label: name, mixedLabel: `${name} · some layers`, onChange: on => { void ctx.dispatch({ kind: "holo.producer", producer: name, on }); } });
-        const body = h("div", { style: "padding-inline-start:16px" }); producer = { toggle, body }; producers.set(name, producer); agentGroup.body.append(toggle.element, body);
-      }
       const owned = state.agents.layers.filter(l => l.producer === name), count = owned.filter(l => state.agentEnabled[l.id] !== false).length;
+      const title = owned.find(l => l.producer_title)?.producer_title ?? name;
+      let producer = producers.get(name);
+      if (!producer || producer.title !== title) {
+        const toggle = new Toggle({ label: title, mixedLabel: `${title} · some layers`, onChange: on => { void ctx.dispatch({ kind: "holo.producer", producer: name, on }); } });
+        if (producer) {
+          const focused = producer.toggle.input === document.activeElement;
+          producer.toggle.element.replaceWith(toggle.element); producer.toggle = toggle; producer.title = title;
+          if (focused) toggle.input.focus();
+        } else {
+          const body = h("div", { style: "padding-inline-start:16px" }); producer = { toggle, body, title }; producers.set(name, producer); agentGroup.body.append(toggle.element, body);
+        }
+      }
       producer.toggle.update(count === owned.length, { mixed: count > 0 && count < owned.length });
       for (const l of owned) {
+        const unknown = unknownGlyphs(l.items);
         let toggle = agentRows.get(l.id);
-        if (!toggle) { toggle = new Toggle({ label: l.title, onChange: on => { void ctx.dispatch({ kind: "holo.agentLayer", id: l.id, on }); } }); agentRows.set(l.id, toggle); producer.body.append(toggle.element); }
-        toggle.update(state.agentEnabled[l.id] !== false, { note: layerCounts(l) });
-        toggle.element.title = [l.reason, l.notPlaced.length ? `Not placed: ${l.notPlaced.join(", ")}` : "", l.otherBranches.length ? `Other branches: ${[...new Set(l.otherBranches)].join(", ")}` : ""].filter(Boolean).join("\n");
+        if (!toggle) {
+          toggle = new Toggle({ label: l.title, onChange: on => { void ctx.dispatch({ kind: "holo.agentLayer", id: l.id, on }); } });
+          const row=toggle.element;
+          row.dataset.holotableLayer=l.id;
+          const menu=(anchor:HTMLElement|{x:number;y:number})=>ctx.targetMenu({title:`${l.title} layer actions`,label:l.title,items:[{label:"Step through this layer",action:{kind:"holo.change.scope",layer:l.id}}]},anchor,row.querySelector("button,input")??row);
+          row.addEventListener("contextmenu",event=>{event.preventDefault();event.stopPropagation();menu(event.clientX||event.clientY?{x:event.clientX,y:event.clientY}:row);});
+          row.addEventListener("keydown",event=>{if(event.key==="ContextMenu"||event.key==="F10"&&event.shiftKey){event.preventDefault();event.stopPropagation();menu(row);}});
+          agentRows.set(l.id, toggle); producer.body.append(row);
+        }
+        toggle.update(state.agentEnabled[l.id] !== false, { note: [layerCounts(l), unknown.count ? `${unknown.count} unknown ${unknown.count===1?"glyph":"glyphs"}` : ""].filter(Boolean).join(" · ") });
+        toggle.element.title = [l.reason, unknown.count ? `Unknown glyphs: ${unknown.names.join(", ")}` : "", l.notPlaced.length ? `Not placed: ${l.notPlaced.join(", ")}` : "", l.otherBranches.length ? `Other branches: ${[...new Set(l.otherBranches)].join(", ")}` : ""].filter(Boolean).join("\n");
       }
     }
     agentGroup.element.hidden = !state.agents.layers.length;
@@ -109,3 +126,4 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
     if (k !== inspectKey) { inspectKey = k; inspect.replaceChildren(rows(state)); }
   } };
 }
+export const detailText=(text:string)=>h("span",{style:"white-space:pre-line",text});

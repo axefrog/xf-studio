@@ -103,3 +103,11 @@ The presentation reads the combined read-only snapshot through `port.viewport.in
   - It checks that every hint the strip or a tooltip can show names a binding whose input the adapters consult, and that the adapter sources resolve those inputs through the catalogue.
 - An isolated `?verify=1` session in the desktop app's browser pane drove the live head with synthetic pointer and wheel events. It covered left, middle and right drags with no modifier, Ctrl, Shift, Alt, Meta, Ctrl+Shift and Ctrl+Alt, off makeup and over a shape and a contour point. Every result matched the table. Right-drag panned with every modifier set; left orbited, Ctrl-left panned, Alt-left orbited over makeup, and Shift-left or Ctrl+Alt-left did nothing. The wheel zoomed with no modifier or Ctrl, and did nothing with Shift or Alt off makeup. The Shift and Ctrl hint strips matched. Touch was covered by the automated suite only.
 - An isolated `?verify=1` CDP session (headless Chrome, throwaway data) checked the live hints for the default state, Shift over makeup, Shift off makeup and during rotate and scale. It also checked the cursors, the blur reset, the preference and the dialog. It confirmed that a Shift-drag off makeup leaves the camera unchanged. Screenshots stay in the ignored `evidence/screenshots/input-hints/`.
+
+
+## Holotable view
+
+`[` and `]` invoke registered `holo.change.previous` and `holo.change.next` only while focus is within the Holotable view, outside text inputs. They jump to the previous/next change in visible agent layers and pause; unavailable directions do nothing. These chords had no global or Holotable conflict when added. The view resolves them through `KEY_BINDINGS` and dispatches through the module facade, which revalidates the experiment's live registration. The keyboard reference includes this scope.
+
+
+`HOLOTABLE_POINTER_BINDINGS` supplies the view's local navigation and its generated mouse reference: left-drag Orbit (click to pick), right-drag Pan, middle-drag Pan, and wheel Zoom. Both pan buttons ignore modifiers, including Shift, and suppress the browser context menu in the view. No keyboard pan is assigned. A right press without motion neither moves nor picks. The accessible name describes right-drag pan beside the existing orbit/zoom/arrow controls.

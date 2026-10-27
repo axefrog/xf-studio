@@ -45,6 +45,7 @@ export interface HoloSolid {
   readonly axes: readonly [Vec3, Vec3, Vec3]; readonly size: Vec3;
 }
 export interface HoloWorld {
+  readonly extent?: { readonly min: Vec3; readonly max: Vec3 };
   readonly provenance: { readonly game: string; readonly source: string } | null; readonly areas: readonly HoloArea[]; readonly cells: readonly HoloCell[];
   readonly solids?: readonly HoloSolid[];
   readonly solidInfo?: { readonly available: boolean; readonly omittedMeshShapes: number; readonly cut: number; readonly cap: number };

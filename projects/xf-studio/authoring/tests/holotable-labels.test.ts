@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { actorCaption, gameSpan, itemTitle, labelContext, labelPriority, layerCounts, placeLabels, type AgentLabel } from "../src/features/holotable/view/agent-labels";
+import { actorCaption, gameSpan, itemTitle, labelContext, labelPriority, layerCounts, placeLabels, type AgentLabel, type PlateObstacle } from "../src/features/holotable/view/agent-labels";
 import { agentInRange } from "../src/features/holotable/view/agent-bounds";
 import { camera, fitOrbit, ORBITS } from "../src/features/holotable/view/projection";
 import type { AgentItem } from "../src/features/holotable/agent-types";
@@ -8,6 +8,24 @@ import type { Vec3 } from "../src/features/holotable/types";
 const item = (key: string, kind = "point"): AgentItem => ({ id: key, key, kind, anchor: { at: [0,0,0] } });
 const label = (key: string, priority: number, x = 20, y = 30): AgentLabel => ({ key, text: key, priority, x, y, colour: "signal", alpha: 1 });
 const measure = (s: string) => s.length * 7;
+
+test("neighbouring plates cull ordinary labels, own plates do not, and selection always wins",()=>{
+  const plates=[{key:"one",x:20,y:30,radius:10},{key:"two",x:70,y:30,radius:10}];
+  const one=label("one",1,40,30),two=label("two",1,90,30);
+  expect(placeLabels([one,two],measure,300,200,40,[],plates).map(l=>l.key)).toEqual(["two"]);
+  expect(placeLabels([one],measure,300,200,40,[],plates.slice(0,1)).map(l=>l.key)).toEqual(["one"]);
+  const selected={...one,selected:true};
+  const placed=placeLabels([label("hovered",-2,40,30),two,selected],measure,300,200,40,[{x:40,y:30,width:100}],plates);
+  expect(placed.map(l=>l.key)).toEqual(["one"]);
+});
+
+test("dense plate layout indexes obstacles once rather than testing every plate for every culled label",()=>{
+  let inspected=0;
+  const plates:PlateObstacle[]=Array.from({length:5000},(_,i)=>({key:String(i),get x(){inspected++;return 20;},y:30,radius:10}));
+  const candidates=Array.from({length:5000},(_,i)=>label(String(i),1,200,30));
+  const placed=placeLabels(candidates,measure,460,300,40,[{x:200,y:30,width:200}],plates);
+  expect(placed).toHaveLength(0);expect(inspected).toBeLessThanOrEqual(5000*2);
+});
 
 test("overlapping labels yield to selection, relation ends, actors, points, then relation text; markers remain outside text layout", () => {
   const actor = item("actor", "actor"), target = item("target", "target"), edge = { ...item("edge", "relation"), links: { from: "actor", to: "target" } };

@@ -2,29 +2,104 @@
 import type { AgentAnswer, AgentAnchor, AgentItem } from "../agent-types";
 import type { Vec3 } from "../types";
 import type { camera } from "./projection";
-import { actorCaption, labelContext, labelPriority, placeLabels, type AgentLabel, type LabelBounds, type PlacedLabel } from "./agent-labels";
+import { actorCaption, createPlateObstacles, labelContext, labelPriority, placeLabels, type AgentLabel, type LabelBounds, type PlacedLabel } from "./agent-labels";
 
+import { BADGE_TONES, glyphIcon } from "./glyphs";
+import { playbackEffects } from "./playback-effects";
+import { icon, isIconName } from "../../../studio-ui/icons";
 import { agentInRange } from "./agent-bounds";
 
 type Camera = ReturnType<typeof camera>;
 type XY = readonly [number, number];
-export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
+export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now: () => number = () => performance.now()) {
   const context = canvas.getContext("2d"); if (!context) throw Error("Canvas 2D is unavailable for Agent layers.");
-  const ctx = context;
-  const labels = document.createElement("canvas"); labels.style.cssText = canvas.style.cssText; labels.setAttribute("aria-hidden", "true"); canvas.after(labels);
+  type Command = { method: string; args: unknown[] } | { property: string; value: unknown };
+  type Visual = { commands: Command[]; xy?: XY; colour?: string; size?: number };
+  let recording: Command[] | undefined, stageColour = "";
+  // Cache each painted item's display list. Retraction animation replays only that geometry, never all markers.
+  const ctx = new Proxy(context, {
+    get(target, key) { const value = Reflect.get(target, key, target); return typeof value === "function" ? (...args: unknown[]) => {
+      if (recording && key !== "measureText") recording.push({ method: String(key), args });
+      return value.apply(target, args);
+    } : value; },
+    set(target, key, value) { if (recording) recording.push({ property: String(key), value }); return Reflect.set(target, key, value, target); },
+  });
+  const motionCanvas = document.createElement("canvas"); motionCanvas.style.cssText = canvas.style.cssText; motionCanvas.setAttribute("aria-hidden", "true");
+  const motion = motionCanvas.getContext("2d")!;
+  const effects = playbackEffects<Visual>(now);
+  let visuals = new Map<string, Visual>(), observed: AgentAnswer | undefined, motionKey = "", previousPlaying = false;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  const stopMotion = () => { effects.clear(); observed = undefined; motion.clearRect(0, 0, motionCanvas.width, motionCanvas.height); changed(); };
+  reduced.addEventListener("change", stopMotion);
+  const paths = new Map<string, { path: Path2D; fill: boolean; dash: string; faint: boolean }[]>();
+  function iconShapes(name: string) {
+    let shapes = paths.get(name);
+    if (!shapes && isIconName(name)) { shapes = [...icon(name).children].map(path => ({ path: new Path2D(path.getAttribute("d")!), fill: path.getAttribute("fill") === "currentColor", dash: path.getAttribute("stroke-dasharray") ?? "", faint: !!path.getAttribute("stroke-opacity") })); paths.set(name, shapes); }
+    return shapes ?? [];
+  }
+  function defaultMark(draw: string, xy: XY, size: number) {
+    const [x,y] = xy; ctx.beginPath();
+    if (draw === "diamond" || draw === "volume") { ctx.moveTo(x,y-size); ctx.lineTo(x+size,y); ctx.lineTo(x,y+size); ctx.lineTo(x-size,y); ctx.closePath(); }
+    else if (draw === "crosshair") { ctx.moveTo(x-size,y); ctx.lineTo(x+size,y); ctx.moveTo(x,y-size); ctx.lineTo(x,y+size); }
+    else if (["polyline", "curve", "arrow"].includes(draw)) { ctx.moveTo(x-size,y+size/2); ctx.lineTo(x,y-size/2); ctx.lineTo(x+size,y+size/2); }
+    else if (draw === "grid") { ctx.rect(x-size,y-size,size*2,size*2); ctx.moveTo(x-size,y); ctx.lineTo(x+size,y); ctx.moveTo(x,y-size); ctx.lineTo(x,y+size); }
+    else if (draw === "text") { ctx.moveTo(x-size,y-size); ctx.lineTo(x+size,y-size); ctx.moveTo(x,y-size); ctx.lineTo(x,y+size); }
+    else ctx.arc(x,y,size,0,Math.PI*2);
+    ctx.stroke();
+  }
+  function plate(item: AgentItem, draw: string, xy: XY, selected: boolean, colour: string, alpha: number) {
+    const glyph = glyphIcon(item.glyph, isIconName); if (!glyph.known) return false;
+    const radius = selected ? 11 : 9;
+    ctx.globalAlpha = 1; ctx.lineWidth = 1.5; ctx.fillStyle = stageColour;
+    ctx.beginPath(); ctx.arc(...xy,radius,0,Math.PI*2); ctx.fill(); ctx.globalAlpha = alpha; ctx.stroke(); ctx.fillStyle = colour;
+    if (glyph.icon) {
+      ctx.save(); ctx.translate(xy[0]-6,xy[1]-6); ctx.scale(0.75,0.75); ctx.lineWidth = 1.5;
+      for (const shape of iconShapes(glyph.icon)) { ctx.globalAlpha = alpha * (shape.faint ? 0.45 : 1); ctx.setLineDash(shape.dash ? shape.dash.split(/\s+/).map(Number) : []); if (shape.fill) ctx.fill(shape.path); else ctx.stroke(shape.path); }
+      ctx.restore();
+    } else defaultMark(draw,xy,4.5);
+    const tone = item.badge && Object.hasOwn(BADGE_TONES,item.badge) ? BADGE_TONES[item.badge] : undefined;
+    if (tone) { ctx.globalAlpha = 1; ctx.fillStyle = palette[tone] ?? colour; ctx.beginPath(); ctx.arc(xy[0]+radius*0.72,xy[1]-radius*0.72,3,0,Math.PI*2); ctx.fill(); ctx.stroke(); }
+    return true;
+  }
+  function animate() {
+    const frame = effects.frame(), dpr = window.devicePixelRatio || 1;
+    motion.setTransform(dpr,0,0,dpr,0,0); motion.clearRect(0,0,motionCanvas.width/dpr,motionCanvas.height/dpr);
+    const deadline = performance.now()+1;
+    for (const effect of frame.effects) {
+      if (performance.now() > deadline) break;
+      const visual = effect.item.visual;
+      if (effect.kind === "pulse" && visual.xy) {
+        motion.globalAlpha = 1-effect.progress; motion.strokeStyle = visual.colour!; motion.lineWidth = 1.5;
+        motion.beginPath(); motion.arc(...visual.xy,(visual.size ?? 9)+3+effect.progress*10,0,Math.PI*2); motion.stroke();
+      } else if (effect.kind === "fade") {
+        // Each list consists of the original item's canvas operations (including zones, paths and its plate).
+        motion.save(); let depth = 0;
+        for (const command of visual.commands) {
+          if (performance.now()>deadline) break;
+          if ("method" in command) { if (command.method === "save") depth++; else if (command.method === "restore") depth--; (motion as unknown as Record<string, (...args: unknown[])=>unknown>)[command.method](...command.args); }
+          else (motion as unknown as Record<string, unknown>)[command.property] = command.property === "globalAlpha" ? Number(command.value)*(1-effect.progress) : command.value;
+        }
+        while (depth-- > 0) motion.restore();
+        motion.restore();
+      }
+    }
+    motion.globalAlpha = 1; return frame.pending;
+  }
+  const labels = document.createElement("canvas"); labels.style.cssText = canvas.style.cssText; labels.setAttribute("aria-hidden", "true"); canvas.after(labels); labels.after(motionCanvas);
   const text = labels.getContext("2d")!;
   let candidates: AgentLabel[] = [], labelsPainted = false, previousHover: string | null = null;
   let overlayLabels: PlacedLabel[] = [], previousOverlay = "";
   let badges: LabelBounds[] = [];
+  let plates = createPlateObstacles();
   const swatches = new Map<string, HTMLElement>();
   let palette: Record<string, string> = {}, hits: { key: string; points: XY[]; fill: boolean; priority: number }[] = [];
-  const invalidate = () => { palette = {}; previous = undefined; changed(); }, theme = new MutationObserver(invalidate);
+  const invalidate = () => { effects.clear(); observed = undefined; palette = {}; previous = undefined; changed(); }, theme = new MutationObserver(invalidate);
   for (const root of [document.documentElement, document.body]) theme.observe(root, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
   const media = matchMedia("(prefers-color-scheme: dark)"); media.addEventListener("change", invalidate);
   let previous: AgentAnswer | undefined, previousEnabled: Readonly<Record<string, boolean>> | undefined, previousCamera = "", previousSelection: string | null = null, cursor = 0, fieldCell = 0;
   const path = (ps: readonly XY[], closed = false) => { if (!ps.length) return; ctx.moveTo(...ps[0]); for (let i = 1; i < ps.length; i++) ctx.lineTo(...ps[i]); if (closed) ctx.closePath(); };
   function clear(width: number, height: number) {
-    previous = undefined; cursor = 0; fieldCell = 0; candidates = []; labelsPainted = false; badges = []; overlayLabels = [];
+    recording = undefined; previous = undefined; cursor = 0; fieldCell = 0; candidates = []; labelsPainted = false; badges = []; plates = createPlateObstacles(); overlayLabels = [];
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) { canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); }
     labels.width = Math.round(width * dpr); labels.height = Math.round(height * dpr);
@@ -33,18 +108,32 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
     if (!palette.signal) palette = Object.fromEntries([...swatches].map(([t, e]) => [t, getComputedStyle(e).color]));
   }
   return {
-    clear,
+    clear: (width: number, height: number) => { effects.clear(); observed = undefined; motion.clearRect(0,0,motionCanvas.width,motionCanvas.height); clear(width,height); }, animate,
     overlayLabels: () => overlayLabels,
-    draw(answer: AgentAnswer, enabled: Readonly<Record<string, boolean>>, C: Camera, selected: string | null, budgetMs = 8, hovered: string | null = null, overlays: readonly AgentLabel[] = [], radius = 350) {
+    draw(answer: AgentAnswer, enabled: Readonly<Record<string, boolean>>, C: Camera, selected: string | null, budgetMs = 8, hovered: string | null = null, overlays: readonly AgentLabel[] = [], radius = 350, playback = { playing: false, epoch: "" }) {
       for (const [tone, token] of Object.entries(answer.specs.tones ?? {})) if (!swatches.has(tone) && /^[a-z-]+$/.test(token)) {
         const span = document.createElement("span"); span.style.cssText = `position:absolute;visibility:hidden;color:var(--${token})`;
         canvas.parentElement!.append(span); swatches.set(tone, span); palette = {};
       }
+      for (const [name, token] of [["good", "success"], ["stage", "pv-ground"]]) if (!swatches.has(name)) { const span = document.createElement("span"); span.style.cssText = `position:absolute;visibility:hidden;color:var(--${token})`; canvas.parentElement!.append(span); swatches.set(name,span); palette = {}; }
       const cameraKey = JSON.stringify([C.position, C.ray(C.width / 2, C.height / 2).direction, C.width, C.height, radius]);
       const overlayKey = JSON.stringify(overlays);
-      const fresh = previous !== answer || previousEnabled !== enabled || previousCamera !== cameraKey || previousSelection !== selected || previousHover !== hovered || previousOverlay !== overlayKey;
-      if (fresh) { clear(C.width, C.height); previous = answer; previousEnabled = enabled; previousCamera = cameraKey; previousSelection = selected; previousHover = hovered; previousOverlay = overlayKey; }
+      const key = `${playback.epoch}:${cameraKey}:${JSON.stringify(enabled)}`;
+      const fresh = previousPlaying !== playback.playing || motionKey !== key || observed !== answer || previous !== answer || previousEnabled !== enabled || previousCamera !== cameraKey || previousSelection !== selected || previousHover !== hovered || previousOverlay !== overlayKey;
+      if (fresh) {
+        if (previousPlaying !== playback.playing || observed !== answer || motionKey !== key || !playback.playing || reduced.matches) {
+          const items = answer.layers.filter(l=>enabled[l.id] !== false).flatMap(l=>l.items);
+          const next = new Map<string, Visual>();
+          for (const item of items) next.set(item.key, { commands: [] });
+          // New effects point at the new display lists; removed effects retain the old lists.
+          effects.observe(items.map(item=>({key:item.key,version:item.version ?? item.t ?? 0,visual:next.get(item.key)!})), playback.playing, key, reduced.matches);
+          visuals = next; observed = answer; motionKey = key; previousPlaying = playback.playing;
+        }
+        clear(C.width, C.height); previous = answer; previousEnabled = enabled; previousCamera = cameraKey; previousSelection = selected; previousHover = hovered; previousOverlay = overlayKey; }
       if (answer.specs.schema !== "xfh/projections-1") return;
+      const dpr = window.devicePixelRatio || 1;
+      if (motionCanvas.width !== Math.round(C.width*dpr) || motionCanvas.height !== Math.round(C.height*dpr)) { motionCanvas.width = Math.round(C.width*dpr); motionCanvas.height = Math.round(C.height*dpr); }
+      stageColour = palette.stage;
       const deadline = performance.now() + budgetMs;
       const far = Math.max(1500, Math.hypot(...C.position.map((n, axis) => n - C.target[axis])) + radius), fade = Math.max(1800, far * 1.2);
       ctx.font = "11px " + getComputedStyle(canvas).getPropertyValue("--font-mono"); ctx.lineJoin = "round";
@@ -69,6 +158,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
       }
       let drawn = 0;
       for (; cursor < items.length; cursor++) {
+        recording = undefined;
         const item = items[cursor];
         if (performance.now() > deadline) break;
         if (collapsed.has(item.key)) continue;
@@ -82,8 +172,11 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
         if (Math.hypot(...p.map((n, j) => n - C.position[j])) > far || xy[0] < -64 || xy[0] > C.width + 64 || xy[1] < -64 || xy[1] > C.height + 64) {
           if (!extended) continue;
         }
+        const visual = visuals.get(item.key);
+        if (visual) { if (!fieldCell) visual.commands.length = 0; recording = visual.commands; visual.xy = xy; }
         const weight = item.weight ?? 0.7, size = 4 + weight * 4, alpha = (0.35 + weight * 0.65) * Math.max(0.12, 1 - Math.hypot(...p.map((n, j) => n - C.position[j])) / fade);
         const colour = palette[rule.style === "tone" ? item.tone ?? "signal" : rule.style] ?? palette.signal;
+        if (visual) { visual.colour = colour; visual.size = item.glyph && glyphIcon(item.glyph,isIconName).known ? 9 : size; }
         ctx.strokeStyle = colour; ctx.fillStyle = colour; ctx.lineWidth = 1 + weight * 2; ctx.globalAlpha = alpha; ctx.setLineDash([]);
         const hit = (ps: XY[], fill = false, priority = fill ? 1 : 2) => hits.push({ key: item.key, points: ps, fill, priority });
         const stroke = (ps: readonly Vec3[], opacity = 1, closed = false) => { for (const run of C.line(ps, closed)) { ctx.beginPath(); path(run.points); ctx.globalAlpha = alpha * opacity; ctx.stroke(); hit(run.points); } ctx.globalAlpha = alpha; };
@@ -99,7 +192,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
           stroke(bottom, fill ? 0.7 : 0.2, true); stroke(top, 0.12, true);
         };
         const arrow = (a: XY, b: XY) => { const angle = Math.atan2(b[1] - a[1], b[0] - a[0]); ctx.beginPath(); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle - 0.45), b[1] - 7 * Math.sin(angle - 0.45)); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle + 0.45), b[1] - 7 * Math.sin(angle + 0.45)); ctx.stroke(); };
-        const addLabel = (value: string, at: XY, caption = false) => { if (value) candidates.push({ key: item.key, text: value, x: at[0], y: at[1], priority: caption ? 1.5 : item.key === hovered ? -2 : item.key === selected ? -1 : labelPriority(item, important), colour: caption ? palette.muted ?? colour : colour, alpha: caption ? 0.85 : alpha, caption }); };
+        const addLabel = (value: string, at: XY, caption = false) => { if (value) candidates.push({ key: item.key, text: value, x: at[0], y: at[1], priority: caption ? 1.5 : item.key === hovered ? -2 : item.key === selected ? -1 : labelPriority(item, important), colour: caption ? palette.muted ?? colour : colour, alpha: caption ? 0.85 : alpha, caption,selected:!caption&&item.key===selected }); };
         let label = rule.label.replace("{label}", item.label ?? "").replace("{name}", item.value?.name ?? "actor").replace("{type}", item.value?.type ?? "");
         const a = item.resolvedAnchor ?? item.anchor;
         if (item.region && selected === item.key && !["actor", "zone"].includes(item.kind)) volume(a, false);
@@ -112,7 +205,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
           const scalars = item.value?.scalars, vectors = item.value?.vectors;
           const max = scalars ? Math.max(1e-9, ...scalars.map(Math.abs)) : 1;
           for (; fieldCell < g.rows * g.cols; fieldCell++) {
-            if (fieldCell % 16 === 0 && performance.now() > deadline) return { pending: true, drawn, total: items.length };
+            if (fieldCell % 16 === 0 && performance.now() > deadline) { recording = undefined; return { pending: true, drawn, total: items.length }; }
             const row = Math.floor(fieldCell / g.cols), col = fieldCell % g.cols, n = fieldCell;
             const x = g.origin[0] + col * g.cell, y = g.origin[1] + row * g.cell, z = g.origin[2];
             if (scalars) polygon([[x, y, z], [x + g.cell, y, z], [x + g.cell, y + g.cell, z], [x, y + g.cell, z]], 0.05 + Math.abs(scalars[n]) / max * 0.4);
@@ -132,28 +225,37 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
           } else { ctx.beginPath(); path([xy, to]); ctx.stroke(); hit([xy, to]); arrow(xy, to); }
         } else {
           if (!markerXY) { if (rule.draw === "diamond") volume(area, false); if (rule.draw === "crosshair" && item.to) drawn++; continue; }
-          if (rule.draw === "diamond") { volume(a, false); ctx.beginPath(); path([[xy[0], xy[1]-size], [xy[0]+size,xy[1]], [xy[0],xy[1]+size], [xy[0]-size,xy[1]]], true); ctx.stroke(); }
+          if (glyphIcon(item.glyph,isIconName).known) { if (rule.draw === "diamond") volume(a,false); }
+          else if (rule.draw === "diamond") { volume(a, false); ctx.beginPath(); path([[xy[0], xy[1]-size], [xy[0]+size,xy[1]], [xy[0],xy[1]+size], [xy[0]-size,xy[1]]], true); ctx.stroke(); }
           else if (rule.draw === "ring") { ctx.beginPath(); ctx.arc(...xy, size, 0, Math.PI*2); ctx.stroke(); }
           else if (rule.draw === "crosshair") {
             ctx.beginPath(); ctx.moveTo(xy[0]-size,xy[1]); ctx.lineTo(xy[0]+size,xy[1]); ctx.moveTo(xy[0],xy[1]-size); ctx.lineTo(xy[0],xy[1]+size); ctx.stroke();
           }
           hit([[xy[0]-size-3,xy[1]-size-3], [xy[0]+Math.max(size+3, rule.draw === "text" ? label.length*7 : size+3),xy[1]-size-3], [xy[0]+size+3,xy[1]+size+3], [xy[0]-size-3,xy[1]+size+3]], true, 3);
         }
-        if (label && xy[0] >= -32 && xy[0] <= C.width+32 && xy[1] >= -32 && xy[1] <= C.height+32) addLabel(label, [xy[0]+size+4, xy[1]-4]);
+        const plated = markerXY ? plate(item,rule.draw,xy,selected === item.key,colour,alpha) : false;
+        if (plated) { hit([[xy[0]-12,xy[1]-12],[xy[0]+12,xy[1]-12],[xy[0]+12,xy[1]+12],[xy[0]-12,xy[1]+12]],true,3);
+          // Index construction belongs to this marker's existing budgeted slice, including resumed frames.
+          if(xy[0]>=-16&&xy[0]<=C.width+16&&xy[1]>=-16&&xy[1]<=C.height+16) plates.add({key:item.key,x:xy[0],y:xy[1],radius:selected===item.key?15:10}); }
+        if (label && xy[0] >= -32 && xy[0] <= C.width+32 && xy[1] >= -32 && xy[1] <= C.height+32) addLabel(label, [xy[0]+(plated ? 11 : size)+4, xy[1]-4]);
         const facet = Object.entries(item.facets ?? item.value?.facets ?? {})[0];
-        if (facet && rule.draw === "diamond") addLabel(actorCaption(facet[1]), [xy[0]+size+4, xy[1]+13], true);
-        if (selected === item.key) { ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(...xy, size+5, 0, Math.PI*2); ctx.stroke(); }
+        if (facet && rule.draw === "diamond") addLabel(actorCaption(facet[1]), [xy[0]+(plated ? 11 : size)+4, xy[1]+13], true);
+        if (selected === item.key) { ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(...xy, plated ? 14 : size+5, 0, Math.PI*2); ctx.stroke(); }
         drawn++;
       }
+      recording = undefined;
       if (cursor >= items.length && !labelsPainted) {
         text.font = ctx.font;
-        text.strokeStyle = getComputedStyle(canvas.parentElement!).backgroundColor; text.lineWidth = 3; text.lineJoin = "round";
-        const placed = placeLabels([...candidates, ...overlays], value => text.measureText(value).width, C.width, C.height, 40, badges);
+        text.strokeStyle = stageColour; text.lineWidth = 3; text.lineJoin = "round";
+        const placed = placeLabels([...candidates, ...overlays], value => text.measureText(value).width, C.width, C.height, 40, badges,plates);
         overlayLabels = placed.filter(label => label.overlay);
         for (const label of placed.filter(label => !label.overlay)) {
           text.globalAlpha = label.alpha; text.fillStyle = label.colour;
           text.strokeText(label.text, label.x, label.y);
           text.fillText(label.text, label.x, label.y);
+          visuals.get(label.key)?.commands.push({ property: "font", value: text.font }, { property: "lineJoin", value: "round" },
+            { property: "lineWidth", value: 3 }, { property: "globalAlpha", value: label.alpha }, { property: "strokeStyle", value: stageColour },
+            { property: "fillStyle", value: label.colour }, { method: "strokeText", args: [label.text,label.x,label.y] }, { method: "fillText", args: [label.text,label.x,label.y] });
         }
         labelsPainted = true;
       }
@@ -167,6 +269,6 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void) {
       }
       return null;
     },
-    dispose() { labels.remove(); theme.disconnect(); media.removeEventListener("change", invalidate); for (const e of swatches.values()) e.remove(); },
+    dispose() { effects.clear(); motionCanvas.remove(); reduced.removeEventListener("change",stopMotion); labels.remove(); theme.disconnect(); media.removeEventListener("change", invalidate); for (const e of swatches.values()) e.remove(); },
   };
 }

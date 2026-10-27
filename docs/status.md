@@ -14,7 +14,7 @@ live polls, and adds an opt-in People layer. Review fixes retain whole-channel a
 failures and live sequence breaks without valid V, bound People gap lookups to the
 trail window, and clear a selected person when People is hidden. It is verified with
 synthetic offline tests
-and isolated light/dark captures, and its independent review's findings are fixed; integration remains pending.
+and isolated light/dark captures, and its independent review's findings are fixed; it landed on main as `4dfe2db1`.
 The [model contract](../projects/xf-holotable/README.md#recorded-people-incidents-and-coverage)
 documents exact fields and source limitations.
 

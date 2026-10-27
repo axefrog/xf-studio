@@ -18,7 +18,10 @@ export function holotableTransport(verification: boolean, send: typeof fetch = f
 }
 
 export async function create(context: ExperimentContext, options: { verification: boolean }) {
-  const service = createHolotable({ transport: holotableTransport(options.verification) }, context.signal);
+  const stored = (await context.loadDocuments<{ schema: string; playback: { recording: number; game: number } }>("holotable-view-state", context.signal)).find(d => d.id === "playback");
+  const document = stored ?? context.document("holotable-view-state", "playback", { schema: "xfh/view-state-1", playback: { recording: 4, game: 600 } });
+  const service = createHolotable({ transport: holotableTransport(options.verification), playback: document.value?.playback,
+    rememberPlayback: playback => { void document.save({ schema: "xfh/view-state-1", playback }).catch(() => {}); } }, context.signal);
   return {
     module: HOLOTABLE_MODULE, service: holotableFacade(service),
     renderer: { feature: featureId("holotable"), create: () => ({ dispose() {} }) },

@@ -136,3 +136,13 @@ test("live appends people and clears incident story payload immediately when hid
   expect(f.service.snapshot().open?.session.events.every(e=>!e.incident)).toBe(true);
   expect(f.service.snapshot().open?.session.actors).toHaveLength(1);
 });
+
+
+test("following is always 1x and replay restores the remembered speed when paused or scrubbed",async()=>{
+ const f=setup();f.service.shown();await settle();await f.service.dispatch({kind:"holo.watch"});
+ expect(f.service.snapshot().speed).toBe(1);expect(f.service.capability({kind:"holo.speed",speed:16}).available).toBe(false);
+ expect((await f.service.dispatch({kind:"holo.speed",speed:16})).ok).toBe(false);
+ await f.service.dispatch({kind:"holo.play",on:false});expect(f.service.snapshot().speed).toBe(4);
+ await f.service.dispatch({kind:"holo.speed",speed:16});await f.service.dispatch({kind:"holo.follow"});expect(f.service.snapshot().speed).toBe(1);
+ await f.service.dispatch({kind:"holo.seek",t:100.5});expect(f.service.snapshot().speed).toBe(16);expect(f.service.snapshot().live.following).toBe(false);
+});

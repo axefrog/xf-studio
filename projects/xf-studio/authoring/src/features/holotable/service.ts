@@ -10,6 +10,8 @@
  */
 import { refusal, type Capability, type ReasonCode } from "../../platform/api";
 import type { ContentLevel, HoloRun, HoloSession, HoloTransport, HoloWorld, HoloLiveState, HoloLiveCursor, HoloLiveUpdate } from "./types";
+import { changeMoment, clockFamily, playbackMemory, SPEEDS, type PlaybackMemory } from "./playback";
+import { worldContexts } from "./world-context";
 import type { AgentAnswer } from "./agent-types";
 import type { Vec3 } from "./types";
 
@@ -24,6 +26,10 @@ export type HoloAction =
   | { kind: "holo.follow" }
   | { kind: "holo.seek"; t: number }
   | { kind: "holo.play"; on: boolean }
+  | { kind: "holo.speed"; speed: number }
+  | { kind: "holo.change.previous" }
+  | { kind: "holo.change.next" }
+  | { kind: "holo.change.scope"; layer: string | null }
   | { kind: "holo.layer"; id: HoloLayer; on: boolean }
   | { kind: "holo.level"; level: ContentLevel }
   | { kind: "holo.select"; id: string | null }
@@ -41,9 +47,15 @@ export interface HoloState {
   readonly openError: { readonly dir: string; readonly title: string; readonly reason: string } | null;
   readonly runs: readonly HoloRun[];
   readonly open: { readonly dir: string; readonly session: HoloSession; readonly world: HoloWorld } | null;
+  /** An explicit open asks each view to fit again, including reopening the same recording. */
+  readonly openGeneration: number;
   /** The moment shown, in the recording's own seconds (QPC source time). */
   readonly t: number;
   readonly playing: boolean;
+  readonly speed: number;
+  readonly changeScope: string | null;
+  /** Changes whenever navigation invalidates playback animation continuity. */
+  readonly motionEpoch: number;
   readonly level: ContentLevel;
   readonly layers: Readonly<Record<HoloLayer, boolean>>;
   /** "v", or an event's id. */
@@ -58,6 +70,8 @@ export interface HoloState {
 
 export interface HoloDevice {
   readonly transport: HoloTransport | null;
+  readonly playback?: Partial<PlaybackMemory>;
+  readonly rememberPlayback?: (memory: PlaybackMemory) => void;
   /** Calls `tick` about every `ms` until the returned function is called (a test seam; default: a timer). */
   readonly every?: (ms: number, tick: () => void) => () => void;
   /** A one-shot timer for status and live updates; cancelled whenever the module is hidden. */
@@ -65,21 +79,26 @@ export interface HoloDevice {
 }
 
 const STEP_MS = 50;
-const SPEED = 4; // a quarter-hour session plays in under four minutes
+
 
 export function createHolotable(device: HoloDevice, signal: AbortSignal) {
-  let state: HoloState = { phase: "idle", message: "", openError: null, runs: [], open: null, t: 0, playing: false, level: "full",
+  let memory = playbackMemory(device.playback);
+  let state: HoloState = { phase: "idle", message: "", openError: null, runs: [], open: null, openGeneration: 0, t: 0, playing: false, speed: memory.recording, changeScope: null, motionEpoch: 0, level: "full",
     agents: { layers: [], here: [], specs: { schema: "xfh/projections-1", kinds: {} } }, agentEnabled: {}, position: null, branch: undefined,
     layers: { v: true, camera: true, people: false, events: true, gaps: true, areas: true, cells: false, solids: true }, selected: null, revision: 0,
     live: { available: false, recording: false, watching: false, following: false, phase: "idle", behindS: 0, more: false, droppedBatches: 0, message: "" } };
   const listeners = new Set<() => void>();
-  const set = (patch: Partial<HoloState>) => { state = { ...state, ...patch, revision: state.revision + 1 }; for (const l of listeners) l(); };
+  const set = (patch: Partial<HoloState>) => {
+    let changeScope=patch.changeScope===undefined?state.changeScope:patch.changeScope;
+    if(changeScope&&(!(patch.agents??state.agents).layers.some(l=>l.id===changeScope)||(patch.agentEnabled??state.agentEnabled)[changeScope]===false))changeScope=null;
+    state = { ...state, ...patch, changeScope, revision: state.revision + 1 }; for (const l of listeners) l();
+  };
   let loading: AbortController | null = null;
   let contextCtl: AbortController | null = null, contextCentre: { dir: string; position: Vec3 } | null = null;
   function stopContext() { contextCtl?.abort(); contextCtl = null; contextCentre = null; }
   async function wantContext(position: Vec3) {
     const opened = state.open;
-    if (!visible || !opened?.session.meta.standalone || signal.aborted) return;
+    if (!visible || !opened?.session.meta.standalone || signal.aborted || contexts.active()) return;
     if (contextCentre?.dir === opened.dir && Math.hypot(...position.map((n, i) => n - contextCentre!.position[i])) <= 150) return;
     contextCtl?.abort(); const ctl = new AbortController(); contextCtl = ctl;
     contextCentre = { dir: opened.dir, position: [...position] as Vec3 };
@@ -105,6 +124,12 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     if (!answer.ok || !data?.ok) throw Object.assign(new Error(data?.error?.message ?? `The Holotable service answered ${answer.status}.`), { code: answer.status === 404 ? "unavailable" : data?.error?.code ?? "failed" });
     return data.result as T;
   };
+  const contexts=worldContexts({later,
+    source:()=>visible&&state.open&&(state.open.dir!=="live"||watchId) ? {identity:`${state.open.dir}:${state.open.session.meta.session}:${state.open.session.meta.run}`,
+      params:state.open.dir==="live"?{watch:watchId}:{dir:state.open.dir}} : undefined,
+    load:(params,cancel)=>call<HoloWorld>("world.around",params,cancel),
+    changed:world=>{if(state.open&&!signal.aborted)set({open:{...state.open,world:{...world,extent:world.extent??state.open.world.extent}}});},
+  },signal);
   // Listing and opening are separate requests: a refresh never cancels an open in flight. Each supersedes only its own kind.
   let listing: AbortController | null = null;
   /** The level the open in flight was asked for (null: none in flight). A newer request for the committed level supersedes it. */
@@ -175,7 +200,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     const id = watchId; watchId = null;
     if (!keepCursor) { liveSince = undefined; worldSince = -1; }
     if (id && !signal.aborted) void call("live.stop", { watch: id }, signal).catch(() => {});
-    if (clear) set({ live: { ...state.live, watching: false, following: false }, playing: false });
+    if (clear) set({ live: { ...state.live, watching: false, following: false }, playing: false, speed: memory[clockFamily(state)] });
   }
   const emptyWorld = (): HoloWorld => ({ provenance: null, areas: [], cells: [] });
   async function takeLive(cancel: AbortSignal) {
@@ -202,13 +227,13 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
         const behindS = update.state.behindS + (session?.v.length ? Math.max(0, session.meta.to - session.v.at(-1)!.t) : 0);
         set({ live: { ...update.state, following, behindS }, selected, ...(session ? { open: { dir: "live", session, world: update.reset ? emptyWorld() : state.open?.world ?? emptyWorld() }, phase: "ready", t } : {}),
           message: update.state.message || (!session?.v.length ? "Waiting for recorder samples…" : "") });
-        if (update.reset) clearAgents();
+        if (update.reset) { contexts.reset(); set({ motionEpoch: state.motionEpoch + 1 }); clearAgents(); }
         if (!update.more) break;
       }
       const geometry = await call<{ version: number; world: HoloWorld | null; pending: boolean; cold: boolean }>("world.around", { watch: id, since: worldSince }, cancel);
       if (cancel.aborted || watchId !== id) return;
       worldSince = geometry.version;
-      if (geometry.world && state.open?.dir === "live") set({ open: { ...state.open, world: geometry.world } });
+      if (geometry.world && state.open?.dir === "live" && !contexts.active()) set({ open: { ...state.open, world: geometry.world } });
       void takeLayers();
       if (geometry.cold && !state.live.message) set({ message: "Reading the city around this recording from the game files… This happens once." });
     } catch (e) {
@@ -226,9 +251,9 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     }
   }
   async function watch(keep = false) {
-    stopWatching(false, keep); stopContext(); loading?.abort(); pendingLevel = null; pause();
+    stopWatching(false, keep); stopContext(); contexts.reset(); loading?.abort(); pendingLevel = null; pause();
     liveCtl = new AbortController(); const cancel = liveCtl.signal;
-    set({ live: { ...state.live, watching: true, following: true }, playing: true, open: keep ? state.open : null, phase: "ready", openError: null, message: "Waiting for recorder samples…", selected: null });
+    set({ live: { ...state.live, watching: true, following: true }, playing: true, speed: 1, motionEpoch: state.motionEpoch + 1, openGeneration: state.openGeneration+(keep?0:1), open: keep ? state.open : null, phase: "ready", openError: null, message: "Waiting for recorder samples…", selected: null });
     try {
       // A late watch response is stopped explicitly even after the view has been hidden.
       const result = await call<{ watch: string }>("live.watch", {}, signal);
@@ -248,7 +273,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     } catch (e) { failed(e, cancel); }
   }
   async function open(dir: string, level: ContentLevel, keepTime: boolean) {
-    stopWatching(); stopContext();
+    stopWatching(); stopContext(); contexts.reset();
     const cancel = fresh();
     pendingLevel = level;
     pause();
@@ -269,7 +294,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       if (cancel.aborted) return;
       pendingLevel = null;
       const t = keepTime && state.open?.dir === dir ? state.t : session.meta.from;
-      set({ open: { dir, session, world }, phase: "ready", message: "", t, level, selected: keepTime ? state.selected : null,
+      set({ speed: session.meta.standalone?.clock === "game" ? memory.game : memory.recording, motionEpoch: state.motionEpoch + 1, openGeneration: state.openGeneration+(keepTime?0:1), open: { dir, session, world }, phase: "ready", message: "", t, level, selected: keepTime ? state.selected : null,
         position: keepTime ? state.position : null, branch: keepTime ? state.branch : session.meta.standalone?.branches[0] });
       const extent = session.meta.standalone?.extent;
       if (extent) void wantContext(extent.min.map((n,i)=>(n+extent.max[i])/2) as unknown as Vec3);
@@ -283,6 +308,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
   }
   /** Asking again for the level already shown cancels a switch still loading, so a late answer can never show what was taken back. */
   function setLevel(level: ContentLevel) {
+    set({ motionEpoch: state.motionEpoch + 1 });
     clearAgents();
     if (state.open?.dir === "live") {
       // Refetch bounded deltas at the requested disclosure level; clear words immediately when hiding them.
@@ -306,20 +332,27 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     if (state.t >= s.meta.to) set({ t: s.meta.from });
     set({ playing: true });
     stopTimer = every(STEP_MS, () => {
-      const end = state.open?.session.meta.to ?? 0, next = Math.min(end, state.t + SPEED * STEP_MS / 1000);
+      const end = state.open?.session.meta.to ?? 0, next = Math.min(end, state.t + state.speed * STEP_MS / 1000);
       set({ t: next });
       void takeLayers();
       if (next >= end) pause();
     });
   }
-  signal.addEventListener("abort", () => { visible = false; stopContext(); stopLayers(); stopWatching(false); statusCtl?.abort(); stopStatusTimer?.(); pause(); listeners.clear(); }, { once: true });
+  const dropSolids=()=>{if(state.open?.world.solids?.length)set({open:{...state.open,world:{...state.open.world,solids:[]}}});};
+  signal.addEventListener("abort", () => { visible = false; stopContext(); stopLayers(); stopWatching(false); statusCtl?.abort(); stopStatusTimer?.(); pause(); dropSolids(); listeners.clear(); }, { once: true });
 
   function capability(action: HoloAction): Capability {
+    if (signal.aborted) return refusal("unavailable", "Holotable is switched off. Turn the experiment on to use it.");
     switch (action.kind) {
       case "holo.refresh": return device.transport ? { available: true } : refusal("unavailable", "Holotable isn't available in this copy of XF Studio.");
       case "holo.open": return state.runs.some(r => r.dir === action.dir) ? { available: true } : refusal("missing_target", "That recording isn't in the list any more.");
       case "holo.watch": return state.live.available && state.live.recording ? { available: true } : refusal("not_ready", "The recorder is off. It runs during XF test sessions.");
       case "holo.follow": return state.live.watching ? { available: true } : refusal("not_ready", "Watch the live game first.");
+      case "holo.speed": return state.open && !state.live.following && SPEEDS[clockFamily(state)].some(s => s.value === action.speed)
+        ? { available: true } : refusal("not_ready", state.live.following ? "Live always plays at 1×. Pause to replay at another speed." : "Open a recording and choose one of its speeds.");
+      case "holo.change.previous": case "holo.change.next": return state.open && changeMoment(state, action.kind === "holo.change.previous" ? -1 : 1) !== undefined
+        ? { available: true } : refusal("not_ready", action.kind === "holo.change.previous" ? "No earlier change in visible layers." : "No later change in visible layers.");
+      case "holo.change.scope": return action.layer===null||state.agents.layers.some(l=>l.id===action.layer&&state.agentEnabled[l.id]!==false) ? {available:true} : refusal("missing_target","That layer is hidden or no longer available.");
       case "holo.seek": case "holo.play": case "holo.select": return state.open ? { available: true } : refusal("not_ready", "Open a recording first.");
       case "holo.focus": return state.open?.session.meta.standalone && action.position.length === 3 && action.position.every(Number.isFinite) ? { available: true } : refusal("not_ready", "Open a layers-only set first.");
       case "holo.place": return state.open && action.position.length === 3 && action.position.every(Number.isFinite) ? { available: true } : refusal("invalid_value", "Select a place in an open view.");
@@ -339,17 +372,26 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       case "holo.focus": void wantContext(action.position); break;
       case "holo.watch": await watch(); break;
       case "holo.follow": {
-        pause(); set({ live: { ...state.live, following: true }, playing: true, t: state.open?.session.v.at(-1)?.t ?? state.t }); break;
+        pause(); set({ live: { ...state.live, following: true }, speed: 1, motionEpoch: state.motionEpoch + 1, playing: true, t: state.open?.session.v.at(-1)?.t ?? state.t }); break;
+      }
+      case "holo.speed": {
+        memory = { ...memory, [clockFamily(state)]: action.speed };
+        device.rememberPlayback?.({ ...memory }); set({ speed: action.speed }); break;
+      }
+      case "holo.change.scope": set({changeScope:action.layer});break;
+      case "holo.change.previous": case "holo.change.next": {
+        const t = changeMoment(state, action.kind === "holo.change.previous" ? -1 : 1)!;
+        pause(); set({ t, motionEpoch: state.motionEpoch + 1, live: { ...state.live, following: false }, speed: memory[clockFamily(state)] }); break;
       }
       case "holo.seek": {
         pause();
         if (state.live.watching) set({ live: { ...state.live, following: false } });
         const m = state.open!.session.meta;
-        set({ t: Math.max(m.from, Math.min(m.to, action.t)) });
+        set({ t: Math.max(m.from, Math.min(m.to, action.t)), speed: memory[clockFamily(state)], motionEpoch: state.motionEpoch + 1 });
         break;
       }
       case "holo.play":
-        if (state.live.following) set({ live: { ...state.live, following: false }, playing: false });
+        if (state.live.following) set({ live: { ...state.live, following: false }, playing: false, speed: memory[clockFamily(state)] });
         if (action.on) play(); else pause(); break;
       case "holo.layer": set({ layers: { ...state.layers, [action.id]: action.on },
         selected: !action.on && action.id === "people" && state.selected?.startsWith("person:") ? null : state.selected }); break;
@@ -358,18 +400,21 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       case "holo.place": set({ position: action.position, selected: null }); break;
       case "holo.agentLayer": set({ agentEnabled: { ...state.agentEnabled, [action.id]: action.on } }); break;
       case "holo.producer": set({ agentEnabled: { ...state.agentEnabled, ...Object.fromEntries(state.agents.layers.filter(l => l.producer === action.producer).map(l => [l.id, action.on])) } }); break;
-      case "holo.branch": set({ branch: action.branch, selected: null, position: null }); clearAgents(); break;
+      case "holo.branch": set({ motionEpoch: state.motionEpoch + 1, branch: action.branch, selected: null, position: null }); clearAgents(); break;
     }
-    if (["holo.seek", "holo.place", "holo.agentLayer", "holo.producer", "holo.branch", "holo.level"].includes(action.kind)) await takeLayers();
+    if (["holo.change.previous", "holo.change.next", "holo.seek", "holo.place", "holo.agentLayer", "holo.producer", "holo.branch", "holo.level"].includes(action.kind)) await takeLayers();
     return { ok: true };
   }
   return {
     capability,
     dispatch,
     snapshot: () => state,
+    /** Read-only asset demand for one visible view. Its AbortSignal owns the lease, never the shared clock. */
+    context(lifetime:AbortSignal) { stopContext(); return contexts.lease(lifetime); },
+    speedOptions: () => SPEEDS[clockFamily(state)],
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     /** The module was hidden: playback stops (nothing runs for a view no one sees). */
-    withdraw() { resumeWatch = state.live.watching; visible = false; stopContext(); stopLayers(); stopStatusTimer?.(); statusCtl?.abort(); pause(); stopWatching(true, resumeWatch); },
+    withdraw() { set({ motionEpoch: state.motionEpoch + 1 }); resumeWatch = state.live.watching; visible = false; stopContext(); contexts.reset(); dropSolids(); stopLayers(); stopStatusTimer?.(); statusCtl?.abort(); pause(); stopWatching(true, resumeWatch); },
     /** The module was shown: list the recordings once, on demand (nothing is asked of the host before the view is wanted). */
     shown() {
       if (visible || signal.aborted) return; visible = true;

@@ -14,8 +14,9 @@ export type Primitive =
   | { kind: "marker"; at: [number, number]; size: number; style: Style; id?: string; shape: "chevron" | "diamond" | "dot"; angle?: number }
   | { kind: "text"; at: [number, number]; text: string; style: Style; id?: string };
 
-export interface Orbit { yaw: number; pitch: number; distance: number; fov: number }
-export const ORBITS = { top: { yaw: -Math.PI / 2, pitch: 1.5, distance: 420, fov: 0.8 }, tilt: { yaw: -2.3, pitch: 0.85, distance: 300, fov: 0.8 }, low: { yaw: -2.3, pitch: 0.32, distance: 170, fov: 0.9 } } satisfies Record<string, Orbit>;
+export interface Orbit { yaw: number; pitch: number; distance: number; fov: number; pan?: readonly [number, number] }
+export const ORBITS = { top: { yaw: -Math.PI / 2, pitch: 1.5, distance: 420, fov: 0.8, pan: [0,0] }, tilt: { yaw: -2.3, pitch: 0.85, distance: 300, fov: 0.8, pan: [0,0] }, low: { yaw: -2.3, pitch: 0.32, distance: 170, fov: 0.9, pan: [0,0] } } satisfies Record<string, Orbit>;
+export const orbitTarget = (center: Vec3, orbit: Orbit): Vec3 => [center[0]+(orbit.pan?.[0]??0), center[1]+(orbit.pan?.[1]??0), center[2]];
 
 /** Fit all eight extent corners with room for marker labels, using this camera's perspective. */
 export function fitOrbit(bounds: { min: Vec3; max: Vec3 }, orbit: Orbit, width: number, height: number): Orbit {
@@ -30,7 +31,7 @@ export function fitOrbit(bounds: { min: Vec3; max: Vec3 }, orbit: Orbit, width: 
     const dot = (axis: number[]) => delta.reduce((sum, n, i) => sum + n * axis[i], 0), depth = dot(forward);
     distance = Math.max(distance, Math.abs(dot(right)) * focal / halfWidth - depth, Math.abs(dot(up)) * focal / halfHeight - depth, 2 - depth);
   }
-  return { ...orbit, distance };
+  return { ...orbit, distance, pan: [0,0] };
 }
 
 /** The last sample at or before t (binary search over a time-sorted array). */
@@ -151,7 +152,7 @@ const distanceViews = new WeakMap<readonly HoloSolid[], { target: string; eligib
 export function project(s: HoloSession, world: HoloWorld, t: number, layers: Readonly<Record<HoloLayer, boolean>>, orbit: Orbit,
   width: number, height: number, selected: string | null, focus?: Vec3, prepared?: { instances: SolidInstance[]; cut: number }): Scene {
   const v = at(s.v, t) ?? s.v[0], cam = at(s.camera, t);
-  const target: Vec3 = focus ?? (v ? v.position : [0, 0, 0]);
+  const target = orbitTarget(focus ?? (v ? v.position : [0, 0, 0]), orbit);
   const C = camera(target, orbit, width, height), out: Primitive[] = [];
   const fade = (p: Vec3) => { const d = Math.hypot(p[0] - C.position[0], p[1] - C.position[1], p[2] - C.position[2]); return Math.max(0.15, Math.min(1, 1.3 - d / (orbit.distance * 2.6))); };
   const lines = (ps: readonly Vec3[], style: Style, opacity: number, closed = false) => { for (const r of C.line(ps, closed)) out.push({ kind: "line", points: r.points, style, opacity, dashOffset: r.offset }); };

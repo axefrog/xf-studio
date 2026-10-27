@@ -1,5 +1,5 @@
 {
- "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator) + rendering options (claude/rendering-options) + transition.set (claude/expression-transition) + character.resolveConflict (claude/profiles-p1; additions only) + collection.exportWindowCopy (claude/polish-2; additions only) + tabs.rename and tabs.move (claude/profiles-p2; additions only) + tabs.new, tabs.reset, tabs.saveAsDefault, tabs.updateDefault, defaults.rename, defaults.delete and defaults.restore (claude/profiles-p2; additions only) + P2-iv tab keys and palette (claude/profiles-p2; spec fields unchanged) + P2-vi empty.choose (claude/profiles-p2; spec fields unchanged) + P2-vi review: registered empty.choose request owner (claude/profiles-p2; additions only, spec fields unchanged) + P2-vi U6 design fixes (claude/profiles-p2; spec fields unchanged) + workspace.showInFolder (claude/polish-4; additions only) + package.stop (claude/polish-5; additions only) + starter shapes (claude/starter-shapes; additions only) + P3-i panel action family (claude/profiles-p3; additions only, spec fields unchanged)",
+ "capturedFrom": "a0aa2b1 + character context family (claude/cc-panel) + hideOwnMakeup, retry and the shared creator name rule (claude/cleanup-ccpanel) + package-plan actions (claude/platform-step8) + Clothing setting (claude/clothing-render) + idle choice (claude/body-fidelity) + expressions feature (claude/expressions-p1) + mottle actions (claude/mottle) + expression.setAxis and setLinks (claude/expressions-drawer); the dense-field note shortened on claude/ui-copy-polish (text only) + lighting setups (claude/lighting-setups) + expression.intensity (claude/expression-interpolator) + rendering options (claude/rendering-options) + transition.set (claude/expression-transition) + character.resolveConflict (claude/profiles-p1; additions only) + collection.exportWindowCopy (claude/polish-2; additions only) + tabs.rename and tabs.move (claude/profiles-p2; additions only) + tabs.new, tabs.reset, tabs.saveAsDefault, tabs.updateDefault, defaults.rename, defaults.delete and defaults.restore (claude/profiles-p2; additions only) + P2-iv tab keys and palette (claude/profiles-p2; spec fields unchanged) + P2-vi empty.choose (claude/profiles-p2; spec fields unchanged) + P2-vi review: registered empty.choose request owner (claude/profiles-p2; additions only, spec fields unchanged) + P2-vi U6 design fixes (claude/profiles-p2; spec fields unchanged) + workspace.showInFolder (claude/polish-4; additions only) + package.stop (claude/polish-5; additions only) + starter shapes (claude/starter-shapes; additions only) + P3-i panel action family (claude/profiles-p3; additions only, spec fields unchanged) + Holotable live module actions (claude/holotable-playback; additions only in experimentActions, existing states unchanged) + holo.change.scope (claude/holotable-playback; additions only in experimentActions, existing states unchanged)",
  "states": {
   "starter": {
    "modes": {
@@ -22062,6 +22062,31 @@
      "recoverableBy": "none",
      "confirm": false,
      "writes": "private-files"
+    }
+   }
+  }
+ },
+ "experimentActions": {
+  "holotable": {
+   "speed": {
+    "values": [
+     1,
+     4,
+     16,
+     60,
+     600,
+     3600
+    ]
+   },
+   "scope": [
+    "holotable"
+   ],
+   "undo": "none",
+   "changeScope": {
+    "layer": {
+     "type": "string",
+     "required": false,
+     "from": "input"
     }
    }
   }

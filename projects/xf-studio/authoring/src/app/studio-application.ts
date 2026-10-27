@@ -215,7 +215,7 @@ export class StudioApplication {
   private get gesture() { return this.edits.gesture; }
   private set gesture(value: EditingState["gesture"]) { this.edits.gesture = value; }
   /** The action registry: owners, descriptors, Undo policy and routes. */
-  private readonly routes: Registry<AnyOwner>;
+  private routes: Registry<AnyOwner>;
   /** One handler per registered owner: the compiler requires every owner in the composition list. */
   private readonly handlers: Handlers;
   /** One handler per asynchronous family (library requests, file workflows). */
@@ -259,12 +259,15 @@ export class StudioApplication {
         this.featureHandlers.set(owner.id, this.featureHandler(owner.id));
       }
     // Exhaustive at run time too: an owner without a handler, or a handler without an owner, is a composition error.
-    const owners = registry.owners().map(owner => owner.id).sort(),
+    const owners = registry.owners().filter(owner => !("module" in owner)).map(owner => owner.id).sort(),
       bound = [...Object.keys(this.handlers), ...Object.keys(this.asyncHandlers), ...this.featureHandlers.keys()].sort();
     if (owners.join() !== bound.join())
       throw Error(`Registered owners (${owners.join(", ")}) do not match the application's handlers (${bound.join(", ")}).`);
     this.subscribeSources();
   }
+  /** The injected registry, including the current experiment registrations when the presentation binds them. */
+  actionRegistry() { return this.routes; }
+  useActionRegistry(registry: Registry<AnyOwner>) { this.routes = registry; }
   attach(next: Partial<Omit<Services, "document" | "eyeMakeup" | "gestures" | "controls">>) {
     if (next.collection && next.collection !== this.services.collection) this.collectionRevision++;
     this.services = this.bindServices({ ...this.services, ...next }); this.subscribeSources(); this.notify();
@@ -335,7 +338,8 @@ export class StudioApplication {
   }
   /** Every action, request, gesture proposal and file workflow ID with its family, scope and Undo policy. */
   registry() {
-    return actionRegistry(this.routes.descriptors() as Record<string, ActionDescriptor>, { requests: { ...this.routes.asyncDescriptors("library"), ...this.routes.asyncDescriptors("empty") },
+    const modules = Object.assign({}, ...this.routes.owners().filter(owner => "module" in owner).map(owner => this.routes.asyncDescriptors(owner.id)));
+    return actionRegistry(this.routes.descriptors() as Record<string, ActionDescriptor>, { requests: { ...this.routes.asyncDescriptors("library"), ...this.routes.asyncDescriptors("empty"), ...modules },
       gestures: this.gestureDescriptors(), files: this.routes.asyncDescriptors("files") });
   }
   /** The registered feature modules in catalogue order, for the presentation's feature facades (step 5). */

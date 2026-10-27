@@ -12,6 +12,16 @@ export function loadWorldPack(path: string): WorldPack | undefined {
 }
 
 export interface Box { min: [number, number]; max: [number, number] }
+const extents = new WeakMap<WorldPack, WorldPack["extent"]>();
+function fullExtent(pack: WorldPack): WorldPack["extent"] {
+  if (pack.extent) return pack.extent;
+  if (extents.has(pack)) return extents.get(pack);
+  const min: Vec3=[Infinity,Infinity,Infinity],max: Vec3=[-Infinity,-Infinity,-Infinity];
+  const include=(point:Vec3)=>{for(let i=0;i<3;i++){min[i]=Math.min(min[i],point[i]);max[i]=Math.max(max[i],point[i]);}};
+  for(const cell of pack.cells){include(cell.min);include(cell.max);}
+  for(const area of pack.areas)for(const [x,y] of area.poly){include([x,y,area.zlo]);include([x,y,area.zhi]);}
+  const result=Number.isFinite(min[0])?{min,max}:undefined;extents.set(pack,result);return result;
+}
 
 /** The part of a pack around a box (for example a session's path plus a margin). */
 export function region(pack: WorldPack, box: Box, margin = 250): WorldPack {
@@ -19,7 +29,7 @@ export function region(pack: WorldPack, box: Box, margin = 250): WorldPack {
   const overlaps = (ax0: number, ay0: number, ax1: number, ay1: number) => ax0 <= x1 && ax1 >= x0 && ay0 <= y1 && ay1 >= y0;
   const areas = pack.areas.filter(a => { const xs = a.poly.map(p => p[0]), ys = a.poly.map(p => p[1]); return overlaps(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)); });
   const cells = pack.cells.filter(c => overlaps(c.min[0], c.min[1], c.max[0], c.max[1]));
-  return { ...pack, areas, cells };
+  return { ...pack, extent: fullExtent(pack), areas, cells };
 }
 
 export function boxOf(points: Vec3[]): Box {

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, ren
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { tempDir } from "../../xf-studio/authoring/tests/temp-dir.ts";
-import { KINDS, evaluateLayers, validateManifest, validateRecord, whatsHere, NO_WALL_CLOCK, recordingTime, type LayerManifest, type LayerItem, type LayerData } from "../src/layers.ts";
+import { KINDS, layerChanges, evaluateLayers, validateManifest, validateRecord, whatsHere, NO_WALL_CLOCK, recordingTime, type LayerManifest, type LayerItem, type LayerData } from "../src/layers.ts";
 import { createLayerSpool } from "../src/layer-spool.ts";
 import { admitId, ITEM_LIMIT_REASON } from "../src/layer-line.ts";
 import { readBatch } from "../src/bounded-input.ts";
@@ -315,9 +315,128 @@ test("CLI rejects oversized stdin before its writer sends EOF",async()=>{
 
 test("glyph and badge accept bounded lowercase slugs and survive both content levels",()=>{
  for(const field of ["glyph","badge"] as const){
-  for(const value of ["", "Upper", "two words", "bad_name", "bad/name", "-leading", "trailing-", "a".repeat(33), 1, null, true]) expect(validateRecord({...item(),[field]:value},manifest())).toContain("lowercase slug of at most 32 characters");
-  expect(validateRecord({...item(),[field]:"a".repeat(32)},manifest())).toBeNull();
+  for(const value of ["", "Upper", "two words", "bad_name", "bad/name", "-leading", "trailing-", "a".repeat(41), 1, null, true]) expect(validateRecord({...item(),[field]:value},manifest())).toContain("lowercase slug of at most 40 characters");
+  expect(validateRecord({...item(),[field]:"a".repeat(40)},manifest())).toBeNull();
  }
  const d=data([item({glyph:"not-yet-known",badge:"pending",label:"story"})]);
  for(const level of ["structure","full"] as const){const row=evaluateLayers([d],session(),1000,level)[0].items[0];expect(row.glyph).toBe("not-yet-known");expect(row.badge).toBe("pending");}
+});
+
+
+test("glyph and badge names have the shared 40-character bound and remain structural through publish, validation and service",async()=>{
+ const root=tempDir("holo-glyphs"), spool=createLayerSpool(root);
+ const m=manifest({standalone:{set:"glyphs",from:0,to:10,clock:"recording"}});
+ const record=item({t:0,glyph:"x".repeat(40),badge:"ready",label:"private story"});
+ try {
+   for(const field of ["glyph","badge"]){
+     expect(validateRecord({...record,[field]:"x".repeat(40)},m)).toBeNull();
+     for(const bad of ["x".repeat(41),"Bad","has space","",12,null,"bad/name"])
+       expect(validateRecord({...record,[field]:bad},m)).toBeString();
+   }
+   expect((await spool.publish("test/diagnostics",[m,record])).refused).toBe(0);
+   expect(validateFiles(root)).toEqual([]);
+   const service=createService({recordingsRoot:"",worldPackPath:"",layersRoot:root});
+   try {
+     const result=await service.handlers["layers.at"]({dir:"layers:test/glyphs",t:0,level:"structure"},new AbortController().signal) as {layers:{items:LayerItem[]}[]};
+     expect(result.layers[0].items[0]).toMatchObject({glyph:"x".repeat(40),badge:"ready"});expect(result.layers[0].items[0].label).toBeUndefined();
+   }finally{service.close();}
+ }finally{spool.close();}
+});
+
+test("change timelines include replacements, effective expiries, both ends and chosen branches, excluding superseded expiries and empty retractions",()=>{
+ const s=session();s.meta.from=0;s.meta.to=10;
+ const d=data([item({t:0,until:6}),item({t:2,until:4}),{retract:"one",t:3},item({t:5,until:10}),item({id:"branch",t:1,branch:"b"}),{retract:"missing",t:7}]);
+ expect(layerChanges(d,s)).toEqual([0,2,3,5,10]);expect(layerChanges(d,s,"b")).toEqual([0,1,2,3,5,10]);
+ expect(evaluateLayers([d],s,0,"structure")[0].changes).toEqual([0,2,3,5,10]);
+ expect(evaluateLayers([d],s,2,"structure")[0].items[0].version).toBe(1);
+ const wall=data([item({t:"2026-10-27T00:00:02Z",until:"2026-10-27T00:00:04Z"})],manifest({clock:"wall"}));
+ s.meta.start=0;s.meta.wallStart="2026-10-27T00:00:00Z";expect(layerChanges(wall,s)).toEqual([2,4]);
+});
+
+
+test("change history reuse invalidates when the live span grows or a spool appends",()=>{
+ const s=session();s.meta.from=0;s.meta.to=2;const d=data([item({t:1}),{retract:"one",t:4}]);
+ const first=layerChanges(d,s);expect(layerChanges(d,s)).toBe(first);expect(first).toEqual([1]);
+ s.meta.to=5;expect(layerChanges(d,s)).toEqual([1,4]);d.records.push(item({t:5}));expect(layerChanges(d,s)).toEqual([1,4,5]);
+});
+
+
+test("stepping derives from timestamp-first, spool-order-second revisions including gap tombstones",()=>{
+ const s=session();s.meta.from=0;s.meta.to=10;
+ const d=data([item({t:4,label:"latest timestamp"}),item({t:2,label:"late spool older time"}),{retract:"one",t:5},item({t:5,label:"same-time revision after tombstone"}),{retract:"one",t:7},item({label:"untimed published last"}),{retract:"one",t:8},item({t:9})]);
+ expect(layerChanges(d,s)).toEqual([0,2,4,5,7,9]);
+ expect(evaluateLayers([d],s,4,"full")[0].items[0].label).toBe("latest timestamp");
+ expect(evaluateLayers([d],s,5,"full")[0].items[0].label).toBe("same-time revision after tombstone");
+ expect(evaluateLayers([d],s,7,"full")[0].items).toEqual([]);
+ expect(evaluateLayers([d],s,8,"full")[0].items).toEqual([]);
+ const off=data([item({t:5}),{retract:"one",t:5}]);expect(layerChanges(off,s)).toEqual([]);
+});
+
+test("unmapped clocks and a refused expiry match projection rather than reviving older items",()=>{
+ const s=session();s.meta.from=0;s.meta.to=10;
+ for(const clock of ["wall","game"] as const){const d=data([item()],manifest({clock}));expect(layerChanges(d,s)).toEqual([]);expect(evaluateLayers([d],s,0,"full")[0].items).toEqual([]);}
+ s.meta.gameTimeSamples=[{source:0,game:0},{source:10,game:10}];
+ const d=data([item({t:0}),item({t:5,until:1000})],manifest({clock:"game"}));
+ expect(layerChanges(d,s)).toEqual([0,5]);expect(evaluateLayers([d],s,5,"full")[0].items).toEqual([]);
+});
+
+
+test("explicit world centres are honoured for recordings and live watches, with shared sectors delegated to the existing source owner",async()=>{
+ const fixture=writeFixture(),root=tempDir("holo-pan-centres-"),bridge=new FakeBridge(),calls:{path:readonly (readonly number[])[];signal:AbortSignal}[]=[];
+ const service=createService({recordingsRoot:fixture.root,worldPackPath:"",layersRoot:root,liveBridge:bridge,liveClock:bridge.clock,solidSource:{around:async(path,_margin,signal)=>{calls.push({path,signal});return emptySolids();}}});
+ const ctl=new AbortController();
+ try{
+  await service.handlers["world.around"]({dir:fixture.dir,center:[1000,2000,10]},ctl.signal);expect(calls.at(-1)!.path).toEqual([[1000,2000,10]]);
+  await expect(Promise.resolve(service.handlers["world.around"]({dir:fixture.dir,center:[1,2,Infinity]},ctl.signal))).rejects.toThrow("Centre must be three finite coordinates");
+  bridge.pages.push(bridge.page([{schema:"xfb/source-record-1",session:"abc123",run:1,world_generation:1,seq:1,source_s:1000,channel:"v",valid:true,data:{position:[0,0,10],yaw:0}}]));
+  const watch=await service.handlers["live.watch"]({},ctl.signal) as {watch:string};await settle();
+  await service.handlers["world.around"]({...watch,center:[-1000,500,30]},ctl.signal);expect(calls.at(-1)!.path).toEqual([[-1000,500,30]]);
+ }finally{ctl.abort();service.close();fixture.dispose();}
+});
+
+
+describe("friendly manifest metadata and multiline detail contract",()=>{
+ test("producer title accepts both bounds and refuses empty, non-text and controls",()=>{
+  for(const producer_title of ["S","S".repeat(80)]) expect(validateManifest(manifest({producer_title}))).toBeNull();
+  for(const producer_title of ["","S".repeat(81),1,null,"Story\nEngine","Story\rEngine","Story\tEngine","Story\u007fEngine","Story\u0085Engine"]) expect(validateManifest({...manifest(),producer_title})).toBeString();
+ });
+ test("facet titles accept bounded keys and names and refuse every invalid dimension",()=>{
+  for(const facet_titles of [{},{a:"B"},{["k".repeat(40)]:"T".repeat(60)},Object.fromEntries(Array.from({length:16},(_,i)=>[`k${i}`,"Title"]))]) expect(validateManifest(manifest({facet_titles}))).toBeNull();
+  const bad=[null,[],"title",1,{"":"Title"},{["k".repeat(41)]:"Title"},{k:""},{k:"T".repeat(61)},{k:1},{k:null},Object.fromEntries(Array.from({length:17},(_,i)=>[`k${i}`,"Title"]))];
+  for(const control of ["\0","\t","\n","\r","\u001f","\u007f","\u0085","\u009f"]) bad.push({[`k${control}`]:"Title"},{k:`Title${control}`});
+  for(const facet_titles of bad) expect(validateManifest({...manifest(),facet_titles})).toBeString();
+ });
+ test("detail permits LF and canonical CRLF within 4,000 characters and 40 lines",()=>{
+  for(const detail of ["x","x".repeat(4000),Array(40).fill("cause").join("\n"),"x".repeat(3998)+"\r\nx","first\r\nsecond\nthird"]) expect(validateRecord(item({detail}),manifest())).toBeNull();
+  for(const detail of ["","x".repeat(4001),Array(41).fill("cause").join("\n"),Array(41).fill("cause").join("\r\n"),null,1]) expect(validateRecord({...item(),detail},manifest())).toBeString();
+  for(const control of ["\0","\t","\r","\u000b","\u001f","\u007f","\u0085","\u009f"]) expect(validateRecord(item({detail:`cause${control}next`}),manifest())).toBeString();
+  expect(validateRecord(item({label:"first\nsecond"}),manifest())).toBeString();
+ });
+ test("CLI validate/publish, raw spool and service preserve structural titles and normalize detail",async()=>{
+  const root=tempDir("holo-friendly-"),source=tempDir("holo-friendly-source-"),signal=new AbortController().signal;
+  const m=manifest({producer_title:"Story Engine",facet_titles:{doing:"Doing"},standalone:{set:"friendly",from:0,to:10,clock:"recording"}}),record=item({t:0,detail:"Cause one\r\nCause two\nCause three"});
+  const path=join(source,"input.jsonl");writeFileSync(path,[m,record].map(x=>JSON.stringify(x)).join("\n")+"\n");
+  for(const args of [["validate",path],["publish","test/diagnostics",path]]){
+   const proc=Bun.spawn([process.execPath,resolve(import.meta.dir,"../tools/holo.ts"),...args],{env:{...process.env,HOLOTABLE_LAYERS:root},stdout:"pipe",stderr:"pipe"});
+   const [exit,stdout,stderr]=await Promise.all([proc.exited,new Response(proc.stdout).text(),new Response(proc.stderr).text()]);
+   expect({exit,stderr}).toEqual({exit:0,stderr:""});expect(stdout.length).toBeGreaterThan(0);
+  }
+  expect(record.detail).toContain("\r\n"); // Canonicalization never mutates caller data.
+  const stored=readFileSync(join(root,"test/diagnostics.jsonl"),"utf8").trim().split("\n").map(x=>JSON.parse(x));
+  expect(stored[0]).toEqual(m);expect(stored[1].detail).toBe("Cause one\nCause two\nCause three");expect(await validateFiles(root)).toEqual([]);
+  const raw=tempDir("holo-friendly-raw-");mkdirSync(join(raw,"test"));writeFileSync(join(raw,"test/diagnostics.jsonl"),[m,record].map(x=>JSON.stringify(x)).join("\n")+"\n");
+  const spool=createLayerSpool(raw);
+  try{const rows=await spool.read();expect(rows[0].manifest).toEqual(m);expect((rows[0].records[0] as LayerItem).detail).toBe(stored[1].detail);}finally{spool.close();}
+  const service=createService({recordingsRoot:"",worldPackPath:"",layersRoot:root});
+  try{
+   const full=await service.handlers["layers.at"]({dir:"layers:test/friendly",t:0,level:"full"},signal) as any;
+   expect(full.layers[0].producer_title).toBe("Story Engine");expect(full.layers[0].facet_titles).toEqual({doing:"Doing"});expect(full.layers[0].items[0].detail).toBe(stored[1].detail);
+   const safe=await service.handlers["layers.at"]({dir:"layers:test/friendly",t:0,level:"structure"},signal) as any;
+   expect(safe.layers[0].producer_title).toBe("Story Engine");expect(safe.layers[0].facet_titles).toEqual({doing:"Doing"});expect(safe.layers[0].items[0].detail).toBeUndefined();
+   const result=await service.handlers["layers.publish"]({layer:"test/extra",lines:[{...m,layer:"extra"},item({t:0,detail:"New\r\nCause"}),item({id:"bad",detail:"Bare\rreturn"}),item({id:"lines",detail:Array(41).fill("x").join("\n")})]},signal) as any;
+   expect(result.accepted).toBe(2);expect(result.refused).toBe(2);
+   const after=await service.handlers["layers.at"]({dir:"layers:test/friendly",t:0,level:"full"},signal) as any;
+   expect(after.layers.find((l:any)=>l.id==="test/extra").items[0].detail).toBe("New\nCause");
+  }finally{service.close();}
+ });
 });
