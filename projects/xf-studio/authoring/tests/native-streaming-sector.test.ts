@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { DecodeSession, DEFAULT_LIMITS } from "../src/native/limits";
 import { NativeBudgetError, NativeMalformedError, NativeUnsupportedError } from "../src/native/native-errors";
-import { readCollisionActors, readSectorAppendix, readSectorPlacements, readStreamingSector, readStreamingSectorCollisions, type CollisionCounts } from "../src/native/streaming-sector";
+import { readCollisionActors, readSectorAppendix, readSectorPlacements, readStreamingSector, readStreamingSectorCollisions, readStreamingSectorContent, type CollisionCounts } from "../src/native/streaming-sector";
 import { Cursor } from "../src/native/red-values";
 import { readResourceJson } from "../src/native/resource-document";
 import { Bytes, Cr2wBuilder, prop, v } from "./fixtures/native-cr2w";
@@ -98,6 +98,39 @@ test("unknown appendix versions, short sizes and overflowing VLQ counts refuse",
   expect(() => readSectorAppendix(new Cursor(bad), () => null)).toThrow(NativeMalformedError);
   const huge = new Bytes().i32(62).i32(9).u8(64).u8(255).u8(255).u8(255).u8(127).done();
   expect(() => readSectorAppendix(new Cursor(huge), () => null)).toThrow(NativeMalformedError);
+});
+
+test("W1 reads only the verified content classes, preserving placements and bounded node refusals", () => {
+  const f = new Cr2wBuilder(), data=f.buffer(placement());
+  f.export("worldStreamingSector",[],w=>{
+    w.i32(62);const size=w.length;w.i32(0);v.buffer(data)(w);
+    w.u8(2).i32(2).i32(3).u8(0).u8(1).i32(0).i32(-1);w.set32(size,w.length-size);
+  });
+  f.export("worldAISpotNode",[prop("isWorkspotInfinite","Bool",v.bool(true))]);
+  // Unrelated node payloads must never be decoded as a side effect of a W1 read.
+  f.export("worldStaticMeshNode",[],w=>w.u32(123));
+  const s=readStreamingSectorContent(f.build(),fakeDecompress);
+  expect(s.nodes).toHaveLength(1);expect(s.nodes[0].object?.fields.isWorkspotInfinite).toBe(1);
+  expect(s.placements[0].position).toEqual([10,20,30]);expect(s.variantIndices).toEqual([0]);
+  f.exports[1].appendix=w=>w.u32(42);
+  const refused=readStreamingSectorContent(f.build(),fakeDecompress);
+  expect(refused.nodes[0]).toMatchObject({nodeIndex:0,type:"worldAISpotNode",refusal:"NativeUnsupportedError"});
+  const tiny=new DecodeSession({...DEFAULT_LIMITS,maxNodes:10});
+  expect(()=>readStreamingSectorContent(f.build(),fakeDecompress,tiny)).toThrow(NativeBudgetError);
+});
+
+test("a refused shared content handle cannot become a successful partial object on the next node",()=>{
+  const f=new Cr2wBuilder(),data=f.buffer(placement());
+  f.export("worldStreamingSector",[],w=>{
+    w.i32(62);const size=w.length;w.i32(0);v.buffer(data)(w);
+    w.u8(2).i32(2).i32(3).u8(0).u8(1).i32(0).i32(-1);w.set32(size,w.length-size);
+  });
+  f.export("worldAISpotNode",[prop("spot","handle:AISpot",v.handle(3))]);
+  f.export("worldAISpotNode",[prop("spot","handle:AISpot",v.handle(3))]);
+  f.export("AIActionSpot",[],w=>w.u32(42));
+  const s=readStreamingSectorContent(f.build(),fakeDecompress);
+  expect(s.nodes.map(n=>n.refusal)).toEqual(["NativeUnsupportedError","NativeUnsupportedError"]);
+  expect(s.nodes.every(n=>n.object===undefined)).toBe(true);
 });
 
 // No game payload fixtures. Generate private references with tools/native-sector-diff.ts, under the memory guard.

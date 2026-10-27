@@ -21,7 +21,7 @@ export class SectorWorkers {
   private slots: Slot[] = [];
   private queue: Task[] = [];
   private idle: ReturnType<typeof setTimeout> | undefined;
-  constructor(private readonly concurrency = 2) {}
+  constructor(private readonly concurrency = 2, private readonly mode: "collisions" | "content" = "collisions") {}
   read = (request: SectorRequest, signal: AbortSignal): Promise<Uint8Array> => new Promise((resolve, reject) => {
     signal.throwIfAborted();
     clearTimeout(this.idle);
@@ -56,7 +56,7 @@ export class SectorWorkers {
         };
       }
       const task = this.queue.shift()!; if (task.cancelled) continue;
-      slot.task = task; slot.worker.postMessage({ root: task.request.root, archive: task.request.source.path, resource: task.request.resource });
+      slot.task = task; slot.worker.postMessage({ root: task.request.root, archive: task.request.source.path, resource: task.request.resource, mode: this.mode });
     }
   }
   /** Finish the bounded current read before closing, so each worker releases its Oodle load cleanly. */
@@ -67,10 +67,11 @@ export class SectorWorkers {
   }
 }
 
-type Job = { ctl: AbortController; promise: Promise<CachedSector>; waiters: number };
-export function createSectorCache(dir: string, reader: (r: SectorRequest, s: AbortSignal) => Promise<Uint8Array>) {
-  const jobs = new Map<string, Job>(), memory = new Map<string, Uint8Array>(); let held = 0, leases = 0, unavailable = false, db: Database | undefined;
-  const file = join(dir, "sectors-v4.sqlite"), name = "sectors-v4.sqlite";
+export function createSectorCache<T = CachedSector>(dir: string, reader: (r: SectorRequest, s: AbortSignal) => Promise<Uint8Array>, codec?: { version: number; decode: (bytes: Uint8Array) => T }) {
+  const decode = codec?.decode ?? (decodeSector as (bytes: Uint8Array) => T);
+  const keyOf = (request: SectorRequest) => sectorCacheKey(request.source, request.resource, codec?.version ?? SECTOR_CACHE_VERSION);
+  const jobs = new Map<string, { ctl: AbortController; promise: Promise<T>; waiters: number }>(), memory = new Map<string, Uint8Array>(); let held = 0, leases = 0, unavailable = false, db: Database | undefined;
+  const name = codec ? `sectors-content-v${codec.version}.sqlite` : "sectors-v4.sqlite", file = join(dir, name);
   const discard = () => { try { db?.close(); } catch { /* A damaged connection must not fail the open. */ } db = undefined; };
   const database = () => {
     if (!db) {
@@ -123,21 +124,21 @@ export function createSectorCache(dir: string, reader: (r: SectorRequest, s: Abo
     begin() { if (!leases && !jobs.size) unavailable = false; leases++; },
     end() { if (!leases) throw Error("Unbalanced sector-cache lease."); leases--; close(); },
     has(request: SectorRequest) {
-      const key = sectorCacheKey(request.source, request.resource); if (memory.has(key)) return true;
+      const key = keyOf(request); if (memory.has(key)) return true;
       try { return useDisk(false, d => Boolean(d.query("SELECT 1 FROM sectors WHERE key = ? AND length(bytes) <= ?").get(key, SECTOR_BYTES_LIMIT))); } finally { close(); }
     },
-    async read(request: SectorRequest, signal: AbortSignal): Promise<CachedSector> {
-      signal.throwIfAborted(); const key = sectorCacheKey(request.source, request.resource);
-      const ready = memory.get(key); if (ready) return decodeSector(ready);
+    async read(request: SectorRequest, signal: AbortSignal): Promise<T> {
+      signal.throwIfAborted(); const key = keyOf(request);
+      const ready = memory.get(key); if (ready) return decode(ready);
       try {
         const row = useDisk(null, d => d.query("SELECT bytes FROM sectors WHERE key = ? AND length(bytes) <= ?").get(key, SECTOR_BYTES_LIMIT) as { bytes: Uint8Array } | null);
-        if (row) { try { const data = decodeSector(row.bytes); remember(key, row.bytes); return data; } catch { /* Rebuild corrupt cache data. */ } }
+        if (row) { try { const data = decode(row.bytes); remember(key, row.bytes); return data; } catch { /* Rebuild corrupt cache data. */ } }
       } finally { close(); }
       let job = jobs.get(key);
       if (!job) {
         const ctl = new AbortController();
         const promise = reader(request, ctl.signal).then(bytes => {
-          ctl.signal.throwIfAborted(); const result = decodeSector(bytes);
+          ctl.signal.throwIfAborted(); const result = decode(bytes);
           useDisk(undefined, d => d.transaction(() => d.query("INSERT INTO sectors (key, bytes, size, written) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET bytes=excluded.bytes, size=excluded.size, written=excluded.written").run(key, bytes, bytes.byteLength, Date.now())).immediate());
           remember(key, bytes); return result;
         });
@@ -147,7 +148,7 @@ export function createSectorCache(dir: string, reader: (r: SectorRequest, s: Abo
       const mine = job; mine.waiters++;
       return new Promise((resolve, reject) => {
         let done = false;
-        const finish = (error?: unknown, data?: CachedSector) => {
+        const finish = (error?: unknown, data?: T) => {
           if (done) return; done = true; signal.removeEventListener("abort", abort);
           if (--mine.waiters === 0 && signal.aborted && jobs.get(key) === mine) { mine.ctl.abort(); jobs.delete(key); close(); }
           if (error) reject(error); else resolve(data!);

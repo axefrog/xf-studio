@@ -6,7 +6,7 @@ import { Cr2wDecoder } from "./cr2w-reader";
 import type { Decompress } from "./kark";
 import { DecodeSession } from "./limits";
 import { NativeBudgetError, NativeMalformedError, NativeUnsupportedError } from "./native-errors";
-import { RedBuffer } from "./red-model";
+import { RedBuffer, type RedObject } from "./red-model";
 import { Cursor, readVarString } from "./red-values";
 
 export const SECTOR_READER_VERSION = 3;
@@ -197,3 +197,29 @@ export function readStreamingSectorCollisions(bytes: Uint8Array, decompress: Dec
   validateVariants(appendix, n);
   return { ...appendix, placements, ...collisions(file, decoder, appendix, session, true) };
 }
+
+/** W1's additive, selective path. Ordinary content properties already use verified CR2W encodings.
+ * Do not decode collision/instance payloads when a caller only wants world content. */
+export function readStreamingSectorContent(bytes: Uint8Array, decompress: Decompress, session = new DecodeSession()) {
+  const { file, decoder, appendix } = openSector(bytes, decompress, session);
+  const placements = readSectorPlacements(appendix.nodeData?.bytes() ?? new Uint8Array(), appendix.nodes.length, session);
+  validateVariants(appendix, placements.length);
+  const nodes: { nodeIndex: number; type: string; object?: RedObject; refusal?: string }[] = [];
+  let contentDecoder = decoder;
+  for (const [nodeIndex, index] of appendix.nodes.entries()) {
+    const entry = file.exports[index];
+    if (!entry) throw new NativeMalformedError("Sector references a missing node export.");
+    if (!CONTENT_NODE_TYPES.includes(entry.className)) continue;
+    try { nodes.push({ nodeIndex, type: entry.className, object: contentDecoder.exportObject(index) }); }
+    catch (error) {
+      // Budget failures stop the resource, rather than continuing a depleted decode session.
+      if (error instanceof NativeBudgetError) throw error;
+      if (!(error instanceof NativeMalformedError || error instanceof NativeUnsupportedError)) throw error;
+      nodes.push({ nodeIndex, type: entry.className, refusal: error.name });
+      // A failed handle decode may have cached incomplete objects. Never let another node reuse them.
+      contentDecoder = new Cr2wDecoder(file, decompress);
+    }
+  }
+  return { placements, variantIndices: appendix.variantIndices, persistentNodeIndex: appendix.persistentNodeIndex, nodes };
+}
+export const CONTENT_NODE_TYPES: readonly string[] = ["worldCompiledCommunityAreaNode_Streamable", "worldCompiledCommunityAreaNode", "worldCommunityRegistryNode", "worldAISpotNode", "worldPopulationSpawnerNode"];

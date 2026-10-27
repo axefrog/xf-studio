@@ -2,10 +2,11 @@
 import { NativeArchivePool } from "../../xf-studio/authoring/src/native/archive-reader";
 import { loadGameOodle } from "../../xf-studio/authoring/src/native/oodle";
 import { depotHash } from "../../xf-studio/authoring/src/game/depot-path";
-import { readStreamingSectorCollisions } from "../../xf-studio/authoring/src/native/streaming-sector";
+import { readStreamingSectorCollisions, readStreamingSectorContent } from "../../xf-studio/authoring/src/native/streaming-sector";
 import { NativeBudgetError } from "../../xf-studio/authoring/src/native/native-errors";
 import { actorPose } from "./solids.ts";
 import { COLLIDER_STRIDE, encodeSector } from "./sector-data.ts";
+import { compactContentSector, encodeContentSector } from "./world-content-data.ts";
 
 let oodle: ReturnType<typeof loadGameOodle> | undefined, pool: NativeArchivePool | undefined, root: string | undefined;
 self.onmessage = event => {
@@ -16,6 +17,10 @@ self.onmessage = event => {
     root = m.root;
     oodle ??= loadGameOodle(m.root); pool ??= new NativeArchivePool(oodle.decompress, 4);
     const bytes = pool.read(m.archive, depotHash(m.resource)); if (!bytes) throw Error(`Missing sector ${m.resource}.`);
+    if (m.mode === "content") {
+      const data = encodeContentSector(compactContentSector(readStreamingSectorContent(bytes, oodle.decompress)));
+      self.postMessage({ data }, [data.buffer as ArrayBuffer]); return;
+    }
     const s = readStreamingSectorCollisions(bytes, oodle.decompress);
     const count = s.collisions.reduce((n, c) => n + c.actors.reduce((n, a) => n + a.shapes.length, 0), 0);
     if (count * COLLIDER_STRIDE * 8 > 60 * 1024 * 1024) throw new NativeBudgetError("Prepared sector geometry exceeds 60 MiB.");

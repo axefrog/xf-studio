@@ -112,6 +112,14 @@ showing the layer again does not restore the selection.
 narrow/wide widths, beside the library Toggle pattern, under ignored
 `local/holotable/evidence/model/`, using its own headless browser and `?verify=1` workspace.
 
+## Offline world content
+
+`bun tools/build-world-content.ts --slice kabuki` builds the private `xfh/world-content-1` file at `local/holotable/world/kabuki.content.json` from the configured vanilla game and the existing world pack. It prints coverage and elapsed milliseconds; `--pack`, `--game` and `--out` override inputs/output directory. No game session or live bridge is used. Run installed-game builds under the repository memory guard (4 GiB).
+
+The file joins communities and their entry records/phases to retained AI spots, reduces referenced workspots to verified root idle names and tags, and reads population spawners and cooked map pins (with journal variants). Place assignment uses the smallest containing world-pack outline and its Z band. Default/persistent/enabled-by-default sector ranges are included; this does not claim every community entry is active. Missing geometry, schedules, activity names and other unverified fields are omitted and counted. Kabuki keeps 663 communities, 7,534 spots, 166 spawners and 268 pins. Drawing these layers is a later step.
+
+The assembled file keys on all ordered vanilla archive stamps, the world pack, slice, reader versions and policy; an unchanged rerun avoids archive indexes. Content sectors reuse W0's worker and SQLite owner with an isolated content codec. Synthetic tests are in `tests/world-content.test.ts`. The [W1 contract and mapping](../../research/live-world-view/w1-world-content.md) and [world knowledge](../../knowledge/world-and-streaming.md#141-w1-world-content-field-mapping) state the source fields, omission counts and evidence limits. This candidate awaits the dispatching chat's independent review and integration.
+
 ## Bounds and lifetime
 
 - At most one catch-up call per second, with no concurrent read; empty reads back off to 2, 4 and 5 s. Reconnect and status discovery run at most every 5 s while wanted.
