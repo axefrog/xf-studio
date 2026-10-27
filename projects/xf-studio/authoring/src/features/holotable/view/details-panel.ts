@@ -1,3 +1,8 @@
+import { expander, expanderLabel, setExpanded } from "../../../studio-ui/expander";
+import { uid } from "../../../studio-ui/dom";
+import { icon, isIconName } from "../../../studio-ui/icons";
+import { cardDetail, facetTitle, humanSpan, plainCounts } from "./friendly";
+import { glyphIcon } from "./glyphs";
 import { unknownGlyphs } from "./glyphs";
 /** Details composes existing switches, groups and property lists over the application snapshot. */
 import { GroupSection, note, propertyList, Toggle, button, type Property } from "../../../studio-ui/components";
@@ -10,7 +15,7 @@ import type { AgentItem, AgentLayer } from "../agent-types";
 import { HOLOTABLE_PANEL_META } from "./contribution";
 import { f1, heading, LAYER_LABELS, vAt } from "./shared";
 import { peopleAt } from "./projection";
-import { itemTitle, layerCounts } from "./agent-labels";
+import { itemTitle } from "./agent-labels";
 
 type Ctx = ModuleViewContext<HolotableFacade>;
 export function holotableDetailsPanel(ctx: Ctx): PanelController {
@@ -22,6 +27,12 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
   const agentGroup = new GroupSection({ title: "Agent layers", key: "holotable:agents", expanded: true });
   const producers = new Map<string, { toggle: Toggle; body: HTMLElement; title: string }>();
   const agentRows = new Map<string, Toggle>();
+  const producerNotes = new Map<string, HTMLElement>();
+  function focusItem(id:string) {
+    const view=facade.resolveView(ctx.targets?.().view);
+    void ctx.dispatch({kind:"holo.select",id});
+    if(view)void ctx.dispatch({kind:"holo.view.focus",view,id});
+  }
   const inspect = h("div", {}), inspector = new GroupSection({ title: "Selected", key: "holotable:inspector", expanded: true }); inspector.body.append(inspect);
   const limits = note("", "muted");
   const element = h("div", { class: "panel-content holotable-details" }, inspector.element, layers.element, agentGroup.element, limits);
@@ -30,21 +41,34 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
   const find = (state: HoloState, key: string) => visible(state).flatMap(l => l.items).find(i => i.key === key);
   const title = (item: AgentItem, state: HoloState, owner?: string) => itemTitle(item, visible(state).flatMap(l => l.items), owner);
   function itemFacts(item: AgentItem, state: HoloState): HTMLElement {
-    const facts: (Property|[string, string])[] = [[item.kind === "relation" ? "Relation" : "Kind", item.kind === "relation" ? title(item, state) : item.kind]];
-    if (item.value?.name) facts.push(["Name", item.value.name]);
-    if (item.label) facts.push(["Label", item.label]);
-    if (item.detail) facts.push({term:"Detail",value:detailText(item.detail)});
-    for (const [name, value] of Object.entries(item.facets ?? item.value?.facets ?? {})) facts.push([name, value]);
-    facts.push(["Time span", `${item.t === undefined ? "Beginning" : f1(item.t)} – ${item.until === undefined ? "end" : f1(item.until)}`]);
-    if (item.region) facts.push([`Placed by ${item.region.kind}`, item.region.name]);
-    if (item.toRegion) facts.push([`Other end by ${item.toRegion.kind}`, item.toRegion.name]);
-    if (item.cite) facts.push(["Why", item.cite]);
-    const body = h("div", {}, propertyList(facts, { label: "Selected item" }));
-    for (const key of item.relations ?? []) { const relation = find(state, key); if (relation) body.append(button({ label: title(relation, state, item.key), small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.select", id: key }); } })); }
+    const owner=state.agents.layers.find(l=>l.items.some(i=>i.key===item.key));
+    const facts: (Property|[string, string])[] = [["Kind", item.kind], ["Id",item.id]];
+    if(item.cite)facts.push(["Citation",item.cite]);
+    facts.push(["Clock",state.open?.session.meta.standalone?.clock??"recording"], ["Raw times",`${item.t??"Beginning"} – ${item.until??"end"}`]);
+    for (const [name,value] of Object.entries(item.facets??item.value?.facets??{})) facts.push([facetTitle(name,owner?.facet_titles),value]);
+    if(item.region)facts.push([`Placed by ${item.region.kind}`,item.region.name]);
+    if(item.toRegion)facts.push([`Other end by ${item.toRegion.kind}`,item.toRegion.name]);
+    const glyph=glyphIcon(item.glyph,isIconName),plate=h("span",{style:"display:inline-flex;align-items:center;justify-content:center;flex:none;width:22px;height:22px;border:1.5px solid var(--signal);border-radius:50%;background:var(--pv-ground);color:var(--signal)","aria-hidden":"true"},icon(glyph.icon&&isIconName(glyph.icon)?glyph.icon:"dot"));
+    const body=h("div",{"data-holo-card":item.key},h("h4",{style:"display:flex;gap:8px;align-items:center;overflow-wrap:anywhere"},plate,title(item,state)));
+    const detail=cardDetail(item.detail);
+    if(detail.summary)body.append(h("p",{style:"white-space:pre-line;overflow-wrap:anywhere",text:detail.summary}));
+    body.append(note(humanSpan(item,state.open?.session.meta.standalone?.clock==="game",state.open?.session.meta.from),"muted"));
+    const involved=h("div",{class:"control-line",style:"flex-wrap:wrap"});
+    for(const key of item.relations??[]) {
+      const relation=find(state,key);if(!relation)continue;
+      const end=relation.links?.from===item.key?relation.links.to:relation.links?.from;
+      involved.append(button({label:title(relation,state,item.key),small:true,variant:"quiet",onClick:()=>focusItem(end??key)}));
+    }
+    if(involved.childNodes.length)body.append(h("h5",{text:"Involved"}),involved);
+    if(detail.why)body.append(h("h5",{text:"Why"}),h("p",{style:"white-space:pre-line;overflow-wrap:anywhere",text:detail.why}));
+    const open=facade.preference("technical"),id=uid("holotable-technical"),technical=propertyList(facts,{label:"Technical details"});technical.id=id;technical.hidden=!open;
+    const disclosure=expander("row",{expanded:open,controls:id},expanderLabel("Technical"));
+    disclosure.addEventListener("click",()=>{const expanded=disclosure.getAttribute("aria-expanded")!=="true";facade.remember("technical",expanded);setExpanded(disclosure,expanded);technical.hidden=!expanded;});
+    body.append(disclosure,technical);
     return body;
   }
   function itemList(items: readonly AgentItem[], state: HoloState): HTMLElement {
-    return h("div", {}, ...items.map(item => h("div", {}, button({ label: title(item, state), small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.select", id: item.key }); } }), itemFacts(item, state))));
+    return h("div", {}, ...items.map(item => h("div", {}, button({ label: title(item, state), small: true, variant: "quiet", onClick: () => { focusItem(item.key); } }), itemFacts(item, state))));
   }
   function rows(state: HoloState): HTMLElement {
     const open = state.open; if (!open) return note("Open a recording to see what it holds.");
@@ -59,7 +83,10 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
       if (!state.agents.here.length) body.append(note("No visible items cover this place."));
       return body;
     }
-    if (state.selected?.startsWith("cluster:")) return itemList(visible(state).flatMap(l => l.items.filter(i => !l.notPlaced.includes(i.id))).filter(i => ["point", "target", "label", "actor", "influence"].includes(i.kind) && (JSON.stringify(i.place) === state.selected!.slice(8) || JSON.stringify(i.to) === state.selected!.slice(8))), state);
+    if (state.selected?.startsWith("cluster:")) {
+      const items=visible(state).flatMap(l=>l.items.filter(i=>!l.notPlaced.includes(i.id))).filter(i=>["point","target","label","actor","influence"].includes(i.kind)&&(JSON.stringify(i.place)===state.selected!.slice(8)||JSON.stringify(i.to)===state.selected!.slice(8)));
+      return h("div",{},h("h4",{text:`${items.length} at this spot`}),...items.map(item=>button({label:title(item,state),small:true,variant:"quiet",onClick:()=>focusItem(item.key)})));
+    }
     if (state.selected && state.selected !== "v") {
       if (state.selected.startsWith("person:") && state.layers.people) {
         const actor = peopleAt(s, state.t).get(state.selected.slice(7))?.at(-1);
@@ -70,14 +97,14 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
       }
       const item = find(state, state.selected); if (item) return itemFacts(item, state);
       const e = s.events.find(x => x.id === state.selected); if (!e) return note("That mark isn't visible at this moment.");
-      return propertyList([["Kind", e.incident ? `${e.kind} · ${e.incident.kind ?? e.incident.event}` : e.kind], ["What", e.summary], ...(e.detail ? [{term:"Said",value:detailText(e.detail)}] : []), { term: "When", value: `${f1(e.t - m.from)} s`, mono: true }, ...(e.at ? [{ term: "Where", value: e.at.map(f1).join(", "), mono: true }] : []), { term: "Why", value: e.cite, mono: true }], { label: "Selected mark" });
+      return itemFacts({id:e.id,key:e.id,kind:e.incident?`${e.kind} · ${e.incident.kind??e.incident.event}`:e.kind,label:e.summary,detail:e.detail,anchor:{at:e.at??[0,0,0]},place:e.at,t:e.t,until:e.t,cite:e.cite,glyph:"warning"},state);
     }
     const v = vAt(state); if (!v) return note(m.standalone ? "Select an item or a place to inspect it." : "V has no sample yet at this moment.");
     return propertyList([{ term: "Position", value: v.position.map(f1).join(", "), mono: true }, { term: "Heading", value: heading(v.yaw), mono: true }, { term: "Speed", value: `${f1(v.speed)} m/s`, mono: true }, { term: "Health", value: `${v.health} of ${v.healthMax}`, mono: true }, ["State", [v.inCombat ? "in combat" : "", v.vehicle ? "in a vehicle" : "", v.busy].filter(Boolean).join(", ") || "on foot"], { term: "Why", value: `recorder:${m.session}:${m.run}:${v.seq}`, mono: true }], { label: "V" });
   }
   function updateAgents(state: HoloState) {
     const current = new Set(state.agents.layers.map(l => l.id)), names = new Set(state.agents.layers.map(l => l.producer));
-    for (const [id, toggle] of agentRows) if (!current.has(id)) { toggle.element.remove(); agentRows.delete(id); }
+    for (const [id, toggle] of agentRows) if (!current.has(id)) { toggle.element.remove(); producerNotes.get(id)?.remove();producerNotes.delete(id);agentRows.delete(id); }
     for (const [name, producer] of producers) if (!names.has(name)) { producer.toggle.element.remove(); producer.body.remove(); producers.delete(name); }
     for (const name of names) {
       const owned = state.agents.layers.filter(l => l.producer === name), count = owned.filter(l => state.agentEnabled[l.id] !== false).length;
@@ -101,13 +128,19 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
           toggle = new Toggle({ label: l.title, onChange: on => { void ctx.dispatch({ kind: "holo.agentLayer", id: l.id, on }); } });
           const row=toggle.element;
           row.dataset.holotableLayer=l.id;
-          const menu=(anchor:HTMLElement|{x:number;y:number})=>ctx.targetMenu({title:`${l.title} layer actions`,label:l.title,items:[{label:"Step through this layer",action:{kind:"holo.change.scope",layer:l.id}}]},anchor,row.querySelector("button,input")??row);
+          const menu=(anchor:HTMLElement|{x:number;y:number})=>ctx.targetMenu({title:`${l.title} layer actions`,label:l.title,items:[{label:"Step through this layer",action:{kind:"holo.change.scope",layer:l.id}},{label:"Focus on this layer",action:{kind:"holo.view.focus",view:facade.resolveView(ctx.targets?.().view)??"",layer:l.id}}]},anchor,row.querySelector("button,input")??row);
           row.addEventListener("contextmenu",event=>{event.preventDefault();event.stopPropagation();menu(event.clientX||event.clientY?{x:event.clientX,y:event.clientY}:row);});
           row.addEventListener("keydown",event=>{if(event.key==="ContextMenu"||event.key==="F10"&&event.shiftKey){event.preventDefault();event.stopPropagation();menu(row);}});
-          agentRows.set(l.id, toggle); producer.body.append(row);
+          agentRows.set(l.id, toggle);const notes=h("div",{});producerNotes.set(l.id,notes);producer.body.append(row,notes);
         }
-        toggle.update(state.agentEnabled[l.id] !== false, { note: [layerCounts(l), unknown.count ? `${unknown.count} unknown ${unknown.count===1?"glyph":"glyphs"}` : ""].filter(Boolean).join(" · ") });
-        toggle.element.title = [l.reason, unknown.count ? `Unknown glyphs: ${unknown.names.join(", ")}` : "", l.notPlaced.length ? `Not placed: ${l.notPlaced.join(", ")}` : "", l.otherBranches.length ? `Other branches: ${[...new Set(l.otherBranches)].join(", ")}` : ""].filter(Boolean).join("\n");
+        toggle.update(state.agentEnabled[l.id] !== false, { note: plainCounts(l,state.agentEnabled[l.id]!==false) });
+        const notes=producerNotes.get(l.id)!;
+        const content=[l.refused?`${l.refused} refused${l.reason?`: ${l.reason}`:""}`:"",unknown.count?`${unknown.count} unknown ${unknown.count===1?"glyph":"glyphs"}: ${unknown.names.join(", ")}`:"",l.notPlaced.length?`${l.notPlaced.length} not placed: ${l.notPlaced.join(", ")}`:"",l.otherBranches.length?`${l.otherBranches.length} on other branches: ${[...new Set(l.otherBranches)].join(", ")}`:""].filter(Boolean).join("\n");
+        if(notes.dataset.content!==content){notes.dataset.content=content;notes.replaceChildren();if(content){
+          const section=new GroupSection({title:"Producer notes",key:`holotable:producer-notes:${l.id}`,level:"maker",expanded:false});
+          section.body.append(note(content,"muted"));section.body.style.whiteSpace="pre-line";notes.append(section.element);
+        }}
+        toggle.element.title="";
       }
     }
     agentGroup.element.hidden = !state.agents.layers.length;
@@ -122,7 +155,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
     updateAgents(state);
     setText(limits, s ? `${s.meta.standalone ? "Layers only; no recorded observations. Solid shapes are drawn within 350 m of where you're looking. " : `${s.meta.dropped} dropped, ${s.meta.missedDeadlines} missed, largest gap ${f1(s.meta.largestGapS)} s. `}Districts and solid shapes are offline estimates of the live world.` : "");
     inspector.element.hidden = !s;
-    const k = JSON.stringify([state.open?.dir, state.selected, state.position, state.level, state.layers.people, state.agents, state.agentEnabled, Math.round(state.t * 10)]);
+    const k = JSON.stringify([state.open?.dir, state.selected, state.position, state.level, state.layers.people, state.agents, state.agentEnabled, state.selected&&find(state,state.selected)?null:Math.round(state.t * 10)]);
     if (k !== inspectKey) { inspectKey = k; inspect.replaceChildren(rows(state)); }
   } };
 }

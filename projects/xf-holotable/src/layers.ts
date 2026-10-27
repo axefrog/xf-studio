@@ -12,7 +12,7 @@ export interface Retraction { retract: string; t: number | string; branch?: stri
 export type LayerRecord = LayerItem | Retraction;
 export interface LayerData { manifest: LayerManifest; records: LayerRecord[]; refused: number; reason: string }
 export interface PlacedItem extends Omit<LayerItem, "t" | "until"> { t?: number; until?: number; key: string; version?: number; place?: Vec3; to?: Vec3; resolvedAnchor?: Anchor; toResolvedAnchor?: Anchor; relations?: string[]; region?: { id: string; name: string; kind: "district" | "cell" }; toRegion?: { id: string; name: string; kind: "district" | "cell" }; links?: { from: string; to: string } }
-export interface LayerView { id: string; title: string; producer: string; producer_title?: string; facet_titles?: Record<string, string>; layer: string; items: PlacedItem[]; changes?: number[]; refused: number; reason: string; notPlaced: string[]; otherBranches: string[] }
+export interface LayerView { id: string; title: string; producer: string; producer_title?: string; facet_titles?: Record<string, string>; layer: string; items: PlacedItem[]; total?: number; changes?: number[]; refused: number; reason: string; notPlaced: string[]; otherBranches: string[] }
 export interface HereGroup { layer: string; title: string; items: { item: PlacedItem; distance: number; sample?: number | [number, number] }[] }
 export const LAYER_BOUNDS = { items: 5000, bytes: 16 * 1024 * 1024, cells: 128, batches: 2 } as const;
 export const NO_WALL_CLOCK = "This recording has no wall-clock time; publish with the recording clock instead.";
@@ -209,7 +209,7 @@ export function evaluateLayers(data: readonly LayerData[], s: Session, t: number
     const m = d.manifest, id = `${m.producer}/${m.layer}`;
     if (s.meta.standalone ? !m.standalone || `${m.producer}/${m.standalone.set}` !== s.meta.standalone.set : m.standalone) continue;
     if (m.session !== undefined && m.session !== s.meta.session || m.run !== undefined && m.run !== s.meta.run) continue;
-    const view: LayerView = { id, title: m.title, producer: m.producer, ...(m.producer_title === undefined ? {} : { producer_title: m.producer_title }), ...(m.facet_titles === undefined ? {} : { facet_titles: m.facet_titles }), layer: m.layer, items: [], changes: layerChanges(d, s, branch), refused: d.refused, reason: d.reason, notPlaced: [], otherBranches: [] };
+    const view: LayerView = { id, title: m.title, producer: m.producer, ...(m.producer_title === undefined ? {} : { producer_title: m.producer_title }), ...(m.facet_titles === undefined ? {} : { facet_titles: m.facet_titles }), layer: m.layer, items: [], total: new Set(d.records.flatMap(r => "retract" in r || (r.branch ?? m.branch) && (r.branch ?? m.branch) !== branch ? [] : [r.id])).size, changes: layerChanges(d, s, branch), refused: d.refused, reason: d.reason, notPlaced: [], otherBranches: [] };
     const active = new Map<string, { record: LayerRecord; t: number; order: number }>();
     const shared = new Map<string, { record: LayerRecord; t: number; order: number }>();
     const other = new Map<string, { record: LayerRecord; t: number; order: number; branch: string }>();

@@ -3,6 +3,7 @@
  * browser device (the host's `/api/holotable`, or its verification twin) and registers the module, its facade and its view. The view is
  * an SVG panel for now, so the renderer on the character scene draws nothing (research/live-world-view/proposal.md §4).
  */
+import type { HoloPreferences } from "../features/holotable/service";
 import { featureId } from "../platform/api";
 import type { ExperimentContext } from "../platform/api/experiment-context";
 import { createHolotable, holotableFacade, HOLOTABLE_MODULE, type HoloTransport } from "../features/holotable";
@@ -18,10 +19,13 @@ export function holotableTransport(verification: boolean, send: typeof fetch = f
 }
 
 export async function create(context: ExperimentContext, options: { verification: boolean }) {
-  const stored = (await context.loadDocuments<{ schema: string; playback: { recording: number; game: number } }>("holotable-view-state", context.signal)).find(d => d.id === "playback");
-  const document = stored ?? context.document("holotable-view-state", "playback", { schema: "xfh/view-state-1", playback: { recording: 4, game: 600 } });
+  const stored = (await context.loadDocuments<{ schema: string; playback: { recording: number; game: number }; preferences?: HoloPreferences }>("holotable-view-state", context.signal)).find(d => d.id === "playback");
+  const document = stored ?? context.document("holotable-view-state", "playback", { schema: "xfh/view-state-1", playback: { recording: 4, game: 600 }, preferences: {} as HoloPreferences });
+  let saved = { ...document.value };
+  const save = (patch: Partial<typeof saved>) => { saved={...saved,...patch};void document.save(saved).catch(()=>{}); };
   const service = createHolotable({ transport: holotableTransport(options.verification), playback: document.value?.playback,
-    rememberPlayback: playback => { void document.save({ schema: "xfh/view-state-1", playback }).catch(() => {}); } }, context.signal);
+    preferences: document.value?.preferences, rememberPreferences: preferences => save({preferences}),
+    rememberPlayback: playback => save({playback}) }, context.signal);
   return {
     module: HOLOTABLE_MODULE, service: holotableFacade(service),
     renderer: { feature: featureId("holotable"), create: () => ({ dispose() {} }) },

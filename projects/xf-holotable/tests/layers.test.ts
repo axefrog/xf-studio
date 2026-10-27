@@ -440,3 +440,9 @@ describe("friendly manifest metadata and multiline detail contract",()=>{
   }finally{service.close();}
  });
 });
+
+
+test("layer totals count distinct branch-relevant ids across time without story text at structure",()=>{
+ const d=data([item({id:"past",t:1000,until:1001}),item({id:"now",t:1001}),item({id:"now",t:1002,label:"Changed"}),item({id:"future",t:1009}),item({id:"other",branch:"elsewhere"})]);
+ const view=evaluateLayers([d],session(),1003,"structure")[0];expect(view.total).toBe(3);expect(view.items).toHaveLength(1);expect(view.items[0].label).toBeUndefined();
+});

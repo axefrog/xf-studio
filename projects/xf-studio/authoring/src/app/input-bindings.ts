@@ -82,6 +82,7 @@ export const HOLOTABLE_POINTER_BINDINGS = [
   { id:"holotable.drag", input:"drag", effect:"orbit", label:"Orbit (click to pick)" },
   { id:"holotable.right-drag", input:"right-drag", effect:"pan", label:"Pan" },
   { id:"holotable.middle-drag", input:"middle-drag", effect:"pan", label:"Pan" },
+  { id:"holotable.double-click", input:"double-click", effect:"focus", label:"Focus a plate or cluster" },
   { id:"holotable.wheel", input:"wheel", effect:"zoom", label:"Zoom" },
 ] as const;
 export const holotablePointerBinding = (input: PointerInput | undefined) => HOLOTABLE_POINTER_BINDINGS.find(binding=>binding.input===input);
@@ -210,6 +211,7 @@ export type KeyBinding = Readonly<{
 const k = (key: string, mods: Partial<Omit<KeyChord, "key">> = {}): KeyChord => ({ key, ...mods });
 
 export const KEY_BINDINGS: readonly KeyBinding[] = [
+  { id: "holo.view.back", scope: "holotable", chords: [k("Escape")], action: { kind: "module", id: "holo.view.back" }, notInDialogs: true, label: "Return to the previous Holotable viewpoint" },
   { id: "holo.change.previous", scope: "holotable", chords: [k("[")], action: { kind: "module", id: "holo.change.previous" }, label: "Previous change in visible Holotable layers, then pause" },
   { id: "holo.change.next", scope: "holotable", chords: [k("]")], action: { kind: "module", id: "holo.change.next" }, label: "Next change in visible Holotable layers, then pause" },
   { id: "shell.palette", scope: "global", chords: [k("k", { ctrl: true }), k("p", { ctrl: true }), k("p", { ctrl: true, shift: true })], action: shell("palette"), label: "Command palette — every command, with reasons when unavailable", inText: true },

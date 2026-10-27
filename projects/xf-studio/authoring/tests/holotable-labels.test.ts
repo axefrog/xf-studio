@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { actorCaption, gameSpan, itemTitle, labelContext, labelPriority, layerCounts, placeLabels, type AgentLabel, type PlateObstacle } from "../src/features/holotable/view/agent-labels";
+import { actorCaption, createPlateObstacles, gameSpan, itemTitle, labelContext, labelPriority, layerCounts, placeLabels, type AgentLabel, type PlateObstacle } from "../src/features/holotable/view/agent-labels";
 import { agentInRange } from "../src/features/holotable/view/agent-bounds";
 import { camera, fitOrbit, ORBITS } from "../src/features/holotable/view/projection";
 import type { AgentItem } from "../src/features/holotable/agent-types";
@@ -8,6 +8,21 @@ import type { Vec3 } from "../src/features/holotable/types";
 const item = (key: string, kind = "point"): AgentItem => ({ id: key, key, kind, anchor: { at: [0,0,0] } });
 const label = (key: string, priority: number, x = 20, y = 30): AgentLabel => ({ key, text: key, priority, x, y, colour: "signal", alpha: 1 });
 const measure = (s: string) => s.length * 7;
+
+test("selected name and caption choose right, left, above, below, then fall back right as one block",()=>{
+  const selected={...label("selected",-1),text:"Fixer",selected:true,plate:{x:150,y:120,radius:11}},caption={...label("selected",1.5),text:"Independent",caption:true};
+  const blockers=[{key:"count-right",x:210,y:122,radius:12},{key:"plate-left",x:70,y:122,radius:12},{key:"plate-above",x:150,y:85,radius:10},{key:"plate-below",x:150,y:150,radius:10}];
+  const expected=[[165,116],[58,116],[111.5,86],[111.5,150],[165,116]];
+  for(let n=0;n<=4;n++){
+    const obstacles=createPlateObstacles();for(const plate of blockers.slice(0,n))obstacles.add(plate);
+    let probes=0;const placed=placeLabels([selected,caption],measure,300,250,40,[],{add:p=>obstacles.add(p),overlaps:(...args)=>{probes++;return obstacles.overlaps(...args);}});
+    expect(placed.map(p=>p.text)).toEqual(["Fixer","Independent"]);expect([placed[0].x,placed[0].y]).toEqual(expected[n]);
+    expect(placed[1].x).toBe(placed[0].x);expect(placed[1].y-placed[0].y).toBe(17);expect(probes).toBeLessThanOrEqual(8);
+  }
+  // A clear name is insufficient if only its second line would cover a neighbour.
+  const placed=placeLabels([selected,caption],measure,300,250,40,[],[{key:"caption-neighbour",x:210,y:140,radius:8}]);
+  expect(placed[0].x).toBe(58);expect(placed[1].x).toBe(58);
+});
 
 test("neighbouring plates cull ordinary labels, own plates do not, and selection always wins",()=>{
   const plates=[{key:"one",x:20,y:30,radius:10},{key:"two",x:70,y:30,radius:10}];

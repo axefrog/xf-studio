@@ -7,6 +7,6 @@ export interface AgentItem {
   glyph?: string; badge?: string; label?: string; detail?: string; facets?: Record<string, string>; tone?: string; weight?: number; cite?: string; relations?: string[]; region?: { id: string; name: string; kind: string };
   toRegion?: { id: string; name: string; kind: string }; toResolvedAnchor?: AgentAnchor; links?: { from: string; to: string };
 }
-export interface AgentLayer { id: string; title: string; producer: string; producer_title?: string; facet_titles?: Readonly<Record<string, string>>; layer: string; items: readonly AgentItem[]; changes?: readonly number[]; refused: number; reason: string; notPlaced: readonly string[]; otherBranches: readonly string[] }
+export interface AgentLayer { id: string; title: string; producer: string; producer_title?: string; facet_titles?: Readonly<Record<string, string>>; layer: string; items: readonly AgentItem[]; total?: number; changes?: readonly number[]; refused: number; reason: string; notPlaced: readonly string[]; otherBranches: readonly string[] }
 export interface HereGroup { layer: string; title: string; items: readonly { item: AgentItem; distance: number; sample?: number | readonly [number, number] }[] }
 export interface AgentAnswer { layers: readonly AgentLayer[]; here: readonly HereGroup[]; specs: { schema: string; tones?: Readonly<Record<string, string>>; kinds: Readonly<Record<string, { style: string; label: string; draw: string }>> } }

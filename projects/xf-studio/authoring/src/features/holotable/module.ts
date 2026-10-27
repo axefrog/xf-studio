@@ -11,6 +11,8 @@ const input = (type: "string" | "number" | "boolean" | "object" | "enum", values
 const action = (payload: ActionDescriptor["payload"] = {}): ActionDescriptor => ({ scope: ["holotable"], effect: "workspace", undo: "none", payload });
 export const HOLOTABLE_ACTIONS = {
   "holo.refresh": action(), "holo.open": action({ dir: input("string") }), "holo.focus": action({ position: input("object") }),
+  "holo.view.focus": action({ view: input("string"), id: {...input("string"),required:false}, layer: {...input("string"),required:false}, position: {...input("object"),required:false} }),
+  "holo.view.back": action({ view: input("string") }),
   "holo.watch": action(), "holo.follow": action(), "holo.seek": action({ t: input("number") }), "holo.play": action({ on: input("boolean") }),
   "holo.speed": action({ speed: input("enum", [1, 4, 16, 60, 600, 3600]) }), "holo.change.previous": action(), "holo.change.next": action(),
   "holo.change.scope": action({layer:{...input("string"),required:false}}),

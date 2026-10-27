@@ -17,6 +17,10 @@ The active product is an eye-makeup authoring studio. A user authors complete na
 
 Four separate kinds of state must stay intelligible. A **portable recipe** contains makeup layers only. A **portable collection** contains named presets and stable identities. **SQLite** stores explicit immutable collection revisions with conflict protection. The **browser workspace** autosaves the unsaved draft, selections, Undo, viewing state and decoded V locally. Preview quality and camera are workspace preferences, not recipe history or export quality. Exported build plans are compiler inputs, not installable mods. The current `?verify=1` URL has isolated draft and library storage for tests; do not use the active working draft as a design fixture.
 
+## Optional Holotable candidate
+
+Behind the Holotable experiment, the [friendly-map candidate](../live-world-view/friendly.md) adds per-view focus and Back (`holo.view.focus`, `holo.view.back`), count clusters, a foldable canvas key, overview district names, card inspection and a quiet-stretch jump. Layer target menus can focus their placed items; producer diagnostics fold under Producer notes. The card's Technical disclosure and per-view key state are workspace preferences. This candidate has synthetic offline checks and awaits independent code/UI review; the hover card requires a library component.
+
 ## Work a user can do now
 
 ### Collection and library — working

@@ -12,7 +12,7 @@ export type Primitive =
   | SolidInstance
   | { kind: "line"; points: [number, number][]; style: Style; opacity: number; closed?: boolean; /** How far into its dash pattern the line starts, in pixels: a line cut at the edge keeps its dashes where they were. */ dashOffset?: number }
   | { kind: "marker"; at: [number, number]; size: number; style: Style; id?: string; shape: "chevron" | "diamond" | "dot"; angle?: number }
-  | { kind: "text"; at: [number, number]; text: string; style: Style; id?: string };
+  | { kind: "text"; at: [number, number]; text: string; style: Style; id?: string; opacity?: number };
 
 export interface Orbit { yaw: number; pitch: number; distance: number; fov: number; pan?: readonly [number, number] }
 export const ORBITS = { top: { yaw: -Math.PI / 2, pitch: 1.5, distance: 420, fov: 0.8, pan: [0,0] }, tilt: { yaw: -2.3, pitch: 0.85, distance: 300, fov: 0.8, pan: [0,0] }, low: { yaw: -2.3, pitch: 0.32, distance: 170, fov: 0.9, pan: [0,0] } } satisfies Record<string, Orbit>;
@@ -169,6 +169,11 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
     if (Math.hypot(cx - target[0], cy - target[1]) <= CELL_RADIUS) box(c, (ps, o) => lines(ps, "cell", o * fade(ps[0])));
   }
   if (layers.areas) for (const a of world.areas) plate(a, target, (ps, style, o) => lines(ps, style, o * fade(ps[0]), true));
+  if(layers.areas&&orbit.distance>300)for(const area of world.areas){
+    if(area.kind!=="district"||!area.poly.length)continue;
+    const p:Vec3=[area.poly.reduce((n,p)=>n+p[0],0)/area.poly.length,area.poly.reduce((n,p)=>n+p[1],0)/area.poly.length,target[2]],xy=C.point(p);
+    if(xy&&xy[0]>=0&&xy[0]<=width&&xy[1]>=0&&xy[1]<=height)out.push({kind:"text",at:[xy[0],xy[1]-44],text:area.name,style:"label-muted",opacity:Math.min(1,(orbit.distance-300)/150)});
+  }
   // Significance follows distance/frustum culling: buildings and walls win over small nearby props.
   const source = layers.solids ? world.solids ?? EMPTY_SOLIDS : EMPTY_SOLIDS, key = JSON.stringify([target, orbit, width, height]);
   let views = solidViews.get(source); if (!views) solidViews.set(source, views = new Map());

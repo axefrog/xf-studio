@@ -6,11 +6,15 @@
  */
 import { applyCapability, closeMenus, openMenu, iconButton, button, emptyState, Segmented, setButtonLabel, SliderWithValue } from "../../../studio-ui/components";
 import { holotablePointerBinding, pointerInputOf, keyBinding } from "../../../app/input-bindings";
-import { h, setText } from "../../../studio-ui/dom";
+import { navigation, type Viewpoint } from "./navigation";
+import { clusterPlates } from "./clusters";
+import { humanMoment, quietUntil } from "./friendly";
+import { camera } from "./projection";
+import { h, isTextInput, reducedMotion, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
 import type { HolotableFacade } from "../facade";
-import type { HoloState } from "../service";
+import type { HoloState, HoloNavigation } from "../service";
 import { ORBITS, fitOrbit, project, type Orbit, type Primitive, type Style } from "./projection";
 import { HOLOTABLE_PANEL_META } from "./contribution";
 import { f1, heading, vAt } from "./shared";
@@ -38,10 +42,15 @@ const DASH: Partial<Record<Style, string>> = { gap: "2 5", area: "10 4 2 4", cam
 /** Each dash pattern's length (an odd-length list repeats twice), so a line cut at the edge continues its pattern in phase. */
 const DASH_PERIOD = Object.fromEntries(Object.entries(DASH).map(([style, d]) => { const xs = d!.split(" ").map(Number), sum = xs.reduce((a, b) => a + b, 0); return [style, xs.length % 2 ? sum * 2 : sum]; })) as Partial<Record<Style, number>>;
 
-export interface HolotableFrame { ms: number; projectMs: number; drawMs: number; width: number; height: number; target: Vec3; solids: number; cut: number; pending?: boolean; preparationFrames?: number; preparationMs?: number }
+export interface HolotableFrame { ms: number; projectMs: number; drawMs: number; width: number; height: number; target: Vec3; solids: number; cut: number; pending?: boolean; preparationFrames?: number; preparationMs?: number; clusters?: readonly {x:number;y:number;count:number}[] }
 export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => void, motionClock?: () => number): PanelController {
   const facade = ctx.facade;
-  let orbit: Orbit = { ...ORBITS.tilt };
+  const viewId=ctx.instance?.("holotable.view")??"holotable.view";
+  const nav=navigation(motionClock??(()=>performance.now()));
+  let centerOverride:Vec3|undefined;
+  let navigationAdapter:HoloNavigation|undefined,navigationLifetime:AbortController|undefined;
+  let keyOpen=facade.preference("key",viewId);
+  let orbit: Orbit = { ...ORBITS.tilt },paintedOrbit:Orbit={...ORBITS.tilt},navigationEpoch=0;
   let fittedDir = "", hovered: string | null = null, zoomLimit = 1500;
   let drawnKey = "", emptyKey = "";
   let contextCtl: AbortController | undefined, contextLease: ReturnType<HolotableFacade["context"]> | undefined, contextMoved = false;
@@ -56,6 +65,12 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none";
   const agents = document.createElement("canvas"); agents.setAttribute("aria-hidden", "true"); agents.style.cssText = canvas.style.cssText;
   const stage = h("div", { style: "position:relative;flex:1 1 auto;min-height:0;width:100%;background:var(--stage);border:1px solid var(--line);overflow:hidden" }, canvas, agents, svg);
+  const keyCanvas=document.createElement("canvas");keyCanvas.style.cssText=canvas.style.cssText;keyCanvas.setAttribute("aria-hidden","true");stage.append(keyCanvas);
+  const keyContext=keyCanvas.getContext("2d")!;
+  const keyButton=button({label:"Key",small:true,variant:"quiet",onClick:()=>{keyOpen=!keyOpen;facade.remember("key",keyOpen,viewId);drawnKey="";ctx.changed();}});
+  keyButton.style.cssText="position:absolute;left:12px;bottom:12px";stage.append(keyButton);
+  const back=iconButton({label:"Back",title:"Back (Esc)",icon:"chevronLeft",small:true,onClick:()=>{void ctx.dispatch({kind:"holo.view.back",view:viewId});}});
+  back.style.cssText="position:absolute;left:12px;top:12px";back.hidden=true;stage.append(back);
   const solidsCanvas = solidCanvas(canvas, () => { drawnKey = ""; ctx.changed(); });
   const layersCanvas = agentCanvas(agents, () => { drawnKey = ""; ctx.changed(); }, motionClock);
   let currentScene: ReturnType<typeof project> | undefined;
@@ -66,11 +81,11 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   // The panel can be resized, docked or floated at any time: redraw at the new size.
   // A press focuses this view for its scoped shortcuts; :focus-visible keeps pointer orbiting free of a keyboard ring.
   svg.addEventListener("mousedown", event => event.preventDefault());
-  const resized = new ResizeObserver(() => { barMeasureKey = ""; syncContext(); ctx.changed(); });
+  const resized = new ResizeObserver(() => { barMeasureKey = ""; syncContext();syncNavigation(); ctx.changed(); });
   resized.observe(svg);
   let viewPreset: keyof typeof ORBITS = "tilt";
   const view = new Segmented<keyof typeof ORBITS>({ label: "View", showLabel: false, compact: true, options: [{ value: "top", label: "Top" }, { value: "tilt", label: "Tilt" }, { value: "low", label: "Low" }],
-    onSelect: value => { viewPreset = value; orbit = { ...ORBITS[value] }; contextMoved = true; drawnKey = ""; ctx.changed(); } });
+    onSelect: value => { nav.cancel(); centerOverride=undefined;viewPreset = value; orbit = { ...ORBITS[value] }; contextMoved = true; drawnKey = ""; ctx.changed(); } });
   const play = button({ label: "Play", small: true, onClick: () => { void ctx.dispatch({ kind: "holo.play", on: !facade.snapshot().playing }, { quiet: true }); } });
   const speed = new Segmented<number>({ label: "Playback speed", showLabel: false, compact: true, options: [...facade.speedOptions()],
     onSelect: speed => { void ctx.dispatch({ kind: "holo.speed", speed }, { quiet: true }); } });
@@ -92,18 +107,20 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   let scopeKey="";
   const viewMenu = button({ label: "Tilt", small: true, variant: "quiet", menu: true, onClick: () => {
     openMenu((Object.keys(ORBITS) as (keyof typeof ORBITS)[]).map(value => ({ kind: "action" as const,
-      label: value[0].toUpperCase()+value.slice(1), checked: viewPreset === value, run: () => { viewPreset = value; orbit = { ...ORBITS[value] }; contextMoved = true; drawnKey = ""; ctx.changed(); } })), viewMenu, { label: "View", invoker: viewMenu });
+      label: value[0].toUpperCase()+value.slice(1), checked: viewPreset === value, run: () => { nav.cancel(); centerOverride=undefined;viewPreset = value; orbit = { ...ORBITS[value] }; contextMoved = true; drawnKey = ""; ctx.changed(); } })), viewMenu, { label: "View", invoker: viewMenu });
   } });
   viewMenu.hidden = true;
   const time = new SliderWithValue({ label: "Moment", min: 0, max: 1, step: 0.1, format: v => `${f1(v)} s`,
     transaction: { edit: v => { const s = facade.snapshot().open?.session; if (s) void ctx.dispatch({ kind: "holo.seek", t: s.meta.from + v }, { quiet: true }); } } });
   const readout = h("span", { class: "note muted mono", role: "status", style: "flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" });
+  const quiet=button({label:"",small:true,variant:"quiet",onClick:()=>{void ctx.dispatch({kind:"holo.change.next"},{quiet:true});}});quiet.style.cssText="flex:0 1 auto;margin-inline-start:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";quiet.hidden=true;
+  const quietLabel=quiet.querySelector("span")!;quietLabel.style.cssText="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
   const backToLive = button({ label: "Back to live", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.follow" }, { quiet: true }); } });
   const branches = new Segmented<string>({ label: "Branch", options: [], onSelect: branch => { void ctx.dispatch({ kind: "holo.branch", branch }); } });
   branches.element.style.flex = "0 0 auto";
 
   for (const control of [play, speed.element, speedMenu, previous, next, view.element, viewMenu, backToLive]) control.style.flex = "0 0 auto";
-  const controls = h("div", { class: "control-line", style: "flex:0 0 auto;flex-wrap:nowrap" }, play, speed.element, speedMenu, previous, next, scopeSlot, view.element, viewMenu, readout, backToLive);
+  const controls = h("div", { class: "control-line", style: "flex:0 0 auto;flex-wrap:nowrap" }, play, speed.element, speedMenu, previous, next, scopeSlot, view.element, viewMenu, readout, quiet, backToLive);
   resized.observe(controls);
   let barStage: BarStage = 0, barMeasureKey = "", barWidths = { full: 0, viewCollapsed: 0 };
   const intrinsicWidth = (control: HTMLElement) => {
@@ -112,20 +129,23 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   };
   function updateBar() {
     const width = controls.clientWidth; if (!width) return;
-    const key = JSON.stringify([facade.speedOptions(), play.textContent, speedMenu.textContent, viewPreset, backToLive.hidden,scopeKey]);
+    const quietStyle=getComputedStyle(quiet),quietMinimum=quiet.hidden?0:[quietStyle.paddingLeft,quietStyle.paddingRight,quietStyle.borderLeftWidth,quietStyle.borderRightWidth].reduce((sum,n)=>sum+(parseFloat(n)||0),0);
+    const key = JSON.stringify([facade.speedOptions(), play.textContent, speedMenu.textContent, viewPreset, backToLive.hidden,scopeKey,quiet.hidden]);
     if (barMeasureKey !== key) {
       barMeasureKey = key;
       const gap = parseFloat(getComputedStyle(controls).columnGap) || 0;
       const base = intrinsicWidth(play) + intrinsicWidth(previous) + intrinsicWidth(next) + (backToLive.hidden ? 0 : intrinsicWidth(backToLive));
       const scopeWidth=scopeSlot.hidden?0:SCOPE_MIN_WIDTH;
-      const gaps = gap * ((backToLive.hidden ? 5 : 6)+(scopeSlot.hidden?0:1)), speedWidth = intrinsicWidth(speed.element),readoutRoom=scopeSlot.hidden?48:0;
+      const gaps = gap * ((backToLive.hidden ? 5 : 6)+(scopeSlot.hidden?0:1)), speedWidth = intrinsicWidth(speed.element),readoutRoom=quiet.hidden?(scopeSlot.hidden?48:0):quietMinimum;
       barWidths = { full: base + speedWidth + intrinsicWidth(view.element) + gaps + scopeWidth + readoutRoom,
         viewCollapsed: base + speedWidth + intrinsicWidth(viewMenu) + gaps + scopeWidth + readoutRoom };
     }
     barStage = playbackBarStage(barStage, width, barWidths.full, barWidths.viewCollapsed);
     view.element.hidden = barStage > 0; viewMenu.hidden = barStage === 0;
     speed.element.hidden = barStage === 2; speedMenu.hidden = barStage !== 2;
-    controls.style.flexWrap = width < 220 ? "wrap" : "nowrap";
+    const gap=parseFloat(getComputedStyle(controls).columnGap)||0;
+    const minimum=intrinsicWidth(play)+intrinsicWidth(previous)+intrinsicWidth(next)+intrinsicWidth(speedMenu)+intrinsicWidth(viewMenu)+(scopeSlot.hidden?0:SCOPE_MIN_WIDTH)+(backToLive.hidden?0:intrinsicWidth(backToLive))+quietMinimum+gap*((scopeSlot.hidden?5:6)+(backToLive.hidden?0:1));
+    controls.style.flexWrap = width < minimum ? "wrap" : "nowrap";
     controls.dataset.collapse = String(barStage);
   }
   time.element.style.flex = "0 0 auto"; // the drawing takes the room; the controls keep their own height
@@ -134,8 +154,9 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
 
   element.addEventListener("keydown", event => {
     const target = event.target as HTMLElement;
-    const binding = keyBinding("holotable", event, { textInput: target.matches("input,textarea,[contenteditable=true]") });
+    const binding = keyBinding("holotable", event, { textInput: isTextInput(target), modalOpen: !!document.querySelector("dialog[open],[role=dialog],[role=alertdialog],[role=menu]") });
     if (binding?.action.kind !== "module") return;
+    if(binding.id==="holo.view.back"){if(facade.capability({kind:"holo.view.back",view:viewId}).available){event.preventDefault();event.stopPropagation();void ctx.dispatch({kind:"holo.view.back",view:viewId},{quiet:true});}return;}
     event.preventDefault(); event.stopPropagation();
     void ctx.dispatch({ kind: binding.id === "holo.change.previous" ? "holo.change.previous" : "holo.change.next" }, { quiet: true });
   });
@@ -151,14 +172,17 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     contextLease!.want(target,moved);
   }
   function viewCenter(state: HoloState): Vec3 {
+    if(centerOverride)return centerOverride;
     return state.open?.session.meta.standalone ? focusAt(state) : vAt(state)?.position ?? state.open?.session.v[0]?.position ?? [0,0,0];
   }
+  let clusterClick:ReturnType<typeof setTimeout>|undefined,lastPicked:string|null=null;
   let drag: { id: number; mode: "pan" | "orbit"; press: Vec3 | null; extent?: Extent; x: number; y: number; yaw: number; pitch: number; moved: boolean; mark: string | null } | null = null;
   svg.addEventListener("contextmenu",event=>event.preventDefault());
   svg.addEventListener("pointerdown", event => {
     const binding=holotablePointerBinding(pointerInputOf(event));
-    if (drag || !binding || binding.effect==="zoom") return;
+    if (drag || !binding || (binding.effect==="zoom"||binding.effect==="focus")) return;
     event.preventDefault();
+    stopNavigation();facade.focusView(viewId);
     svg.focus({ preventScroll: true });
     const bounds = svg.getBoundingClientRect();
     const mode = binding.effect, state=facade.snapshot();
@@ -192,7 +216,9 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     if (!drag || event.pointerId !== drag.id) return;
     const clicked = drag.mode==="orbit"&&!drag.moved, picked = clicked ? drag.mark : null;
     drag = null; svg.style.cursor="grab";
-    if (picked) void ctx.dispatch({ kind: "holo.select", id: picked }, { quiet: true });
+    lastPicked=picked;
+    if (picked?.startsWith("plates:")) {clearTimeout(clusterClick);clusterClick=setTimeout(()=>{clusterClick=undefined;void ctx.dispatch({kind:"holo.view.focus",view:viewId,id:picked},{quiet:true});},250);}
+    else if (picked) void ctx.dispatch({ kind: "holo.select", id: picked }, { quiet: true });
     else if (clicked && currentScene) {
       const bounds = svg.getBoundingClientRect(), state = facade.snapshot();
       const place = pickPlace(currentScene.solidCamera, event.clientX-bounds.left, event.clientY-bounds.top, currentScene.solids.map(s=>s.source), currentScene.v?.position[2] ?? focusAt(state)[2]);
@@ -200,13 +226,19 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     }
   };
   svg.addEventListener("pointerup", endDrag);
+  svg.addEventListener("dblclick",event=>{
+    if(holotablePointerBinding("double-click")?.effect!=="focus")return;
+    event.preventDefault();event.stopPropagation();drag=null;clearTimeout(clusterClick);clusterClick=undefined;
+    const bounds=svg.getBoundingClientRect(),id=(event.target as Element)?.closest?.("[data-id]")?.getAttribute("data-id")??layersCanvas.pick(event.clientX-bounds.left,event.clientY-bounds.top)??lastPicked;
+    if(id)void ctx.dispatch({kind:"holo.view.focus",view:viewId,id},{quiet:true});
+  });
   svg.addEventListener("pointercancel", () => { drag = null; svg.style.cursor="grab"; });
   svg.addEventListener("lostpointercapture", () => { drag = null; svg.style.cursor="grab"; });
-  svg.addEventListener("wheel", event => { event.preventDefault(); orbit = { ...orbit, distance: Math.max(40, Math.min(zoomLimit, orbit.distance * (event.deltaY > 0 ? 1.12 : 1 / 1.12))) }; drawnKey = ""; ctx.changed(); }, { passive: false });
+  svg.addEventListener("wheel", event => { event.preventDefault();stopNavigation(); orbit = { ...orbit, distance: Math.max(40, Math.min(zoomLimit, orbit.distance * (event.deltaY > 0 ? 1.12 : 1 / 1.12))) }; drawnKey = ""; ctx.changed(); }, { passive: false });
   svg.addEventListener("keydown", event => {
     const turn = { ArrowLeft: [-0.12, 0], ArrowRight: [0.12, 0], ArrowUp: [0, 0.08], ArrowDown: [0, -0.08] }[event.key];
     if (!turn) return;
-    event.preventDefault();
+    event.preventDefault();stopNavigation();
     orbit = { ...orbit, yaw: orbit.yaw + turn[0], pitch: Math.max(0.12, Math.min(1.52, orbit.pitch + turn[1])) };
     drawnKey = ""; ctx.changed();
   });
@@ -237,27 +269,35 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       viewPreset = "tilt"; view.update(viewPreset); setButtonLabel(viewMenu, "Tilt");
       const extent = open.session.meta.standalone?.extent;
       orbit = extent ? fitOrbit(extent, ORBITS.tilt, width, height) : { ...ORBITS.tilt };
+      nav.reset();centerOverride=undefined;back.hidden=true;
       zoomLimit = Math.max(1500, orbit.distance * 4); fittedDir = fitKey; contextMoved=true;
     }
-    const scene = project(open.session, open.world, state.t, state.layers, orbit, width, height, state.selected, open.session.meta.standalone ? focusAt(state) : undefined, { instances: [], cut: 0 });
+    const frame=nav.frame({center:viewCenter(state),orbit});paintedOrbit=frame.orbit;
+    syncNavigation();
+    const scene = project(open.session, open.world, state.t, state.layers, frame.orbit, width, height, state.selected, frame.center, { instances: [], cut: 0 });
     currentScene = scene;
     syncContext(scene.solidCamera.target,contextMoved);contextMoved=false;
     const projectedAt = performance.now();
     set(svg, "viewBox", `0 0 ${width} ${height}`);
     const bx = width - 24 - scene.barPx, by = height - 22;
     const worldText = scene.primitives.filter((p): p is Extract<Primitive, { kind: "text" }> => p.kind === "text");
-    const extraLabels: AgentLabel[] = worldText.map((p, i) => ({ key: `world:${i}`, text: p.text, x: p.at[0], y: p.at[1], priority: p.id === state.selected ? -1 : 4, colour: "", alpha: 1, overlay: true,selected:p.id===state.selected }));
+    const extraLabels: AgentLabel[] = worldText.map((p, i) => ({ key: `world:${i}`, text: p.text, x: p.at[0], y: p.at[1], priority: p.id === state.selected ? -1 : 4, colour: "", alpha: p.opacity??1, overlay: true,selected:p.id===state.selected }));
     extraLabels.push({ key: "scale", text: `${scene.metresPerBar} m`, x: bx + scene.barPx, y: by - 8, priority: 4, colour: "", alpha: 1, overlay: true, align: "end" });
     const extent = open.session.meta.standalone?.extent;
     const radius = extent ? Math.max(350, Math.hypot(...extent.max.map((n, axis) => n - extent.min[axis]))) : 350;
-    const agentProgress = layersCanvas.draw(state.agents, state.agentEnabled, scene.solidCamera, state.selected, Math.max(0, Math.min(4, started + 6 - performance.now())), hovered, extraLabels, radius, { playing: state.playing || state.live.following, epoch: JSON.stringify([open.dir,state.motionEpoch,orbit,width,height]) });
+    const agentProgress = layersCanvas.draw(state.agents, state.agentEnabled, scene.solidCamera, state.selected, Math.max(0, Math.min(4, started + 6 - performance.now())), hovered, extraLabels, radius, { playing: state.playing || state.live.following, epoch: JSON.stringify([open.dir,state.motionEpoch,navigationEpoch,orbit,width,height]) });
+    const dpr=window.devicePixelRatio||1;if(keyCanvas.width!==Math.round(width*dpr)||keyCanvas.height!==Math.round(height*dpr)){keyCanvas.width=Math.round(width*dpr);keyCanvas.height=Math.round(height*dpr);}keyContext.setTransform(dpr,0,0,dpr,0,0);keyContext.clearRect(0,0,width,height);
+    if(keyOpen)layersCanvas.drawLegend(keyContext,width,height);
+    keyButton.setAttribute("aria-expanded",String(keyOpen));keyButton.title=keyOpen?"Fold map key":"Show map key";
+    keyButton.style.bottom=keyOpen?`${48+layersCanvas.legend().length*24}px`:"12px";
+    back.hidden=!nav.depth;
     animate();
     const target = scene.solidCamera.target;
     const solidStarted = performance.now();
     const prepared = solidSelection.step(state.layers.solids ? open.world.solids ?? emptySolids : emptySolids, target, scene.solidCamera, Math.min(started + 3.5, solidStarted + 1.5));
     const solidProgress = solidsCanvas.draw(prepared.instances, scene.solidCamera, started + 5.5);
     scene.solids = prepared.instances.slice(0, solidProgress.drawn); scene.solidsDrawn = solidProgress.drawn; scene.solidsCut = prepared.cut;
-    const pending = prepared.pending || solidProgress.pending || !!agentProgress?.pending;
+    const pending = nav.moving || prepared.pending || solidProgress.pending || !!agentProgress?.pending;
     preparationFrames++; preparationMs += performance.now() - solidStarted;
     const paintedAt = performance.now();
     if (chromeSize !== `${width}x${height}`) {
@@ -275,11 +315,11 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       scene.camStale && state.layers.camera ? "No fresh camera sample at this moment" : "";
     paintMessage(notice, width);
     const textList = layersCanvas.overlayLabels();
-    textList.forEach((p, i) => paintText(pooled(textLayer, "text", i), [p.x, p.y], p.text, p.key === "scale" ? "label-muted" : worldText[Number(p.key.slice(6))].style));
+    textList.forEach((p,i)=>{const e=pooled(textLayer,"text",i);paintText(e,[p.x,p.y],p.text,p.key==="scale"?"label-muted":worldText[Number(p.key.slice(6))].style);set(e,"opacity",String(p.alpha));});
     trim(textLayer, textList.length);
     // Markers are few (V and the placed events): rebuilt each frame.
     marksLayer.replaceChildren(...scene.primitives.filter(p => p.kind === "marker").map(p => marker(p as Extract<Primitive, { kind: "marker" }>)));
-    measured?.({ ms: performance.now() - started, projectMs: projectedAt - started, drawMs: paintedAt - projectedAt, width, height, target, solids: scene.solidsDrawn, cut: scene.solidsCut, pending, preparationFrames, preparationMs });
+    measured?.({ ms: performance.now() - started, projectMs: projectedAt - started, drawMs: paintedAt - projectedAt, width, height, target, solids: scene.solidsDrawn, cut: scene.solidsCut, pending, preparationFrames, preparationMs,clusters:layersCanvas.clusters().map(c=>({x:c.x,y:c.y,count:c.items.length})) });
     if (pending && !disposed) resumeFrame = requestAnimationFrame(() => {
       resumeFrame = undefined;
       if (!disposed && element.isConnected && element.getClientRects().length) { drawnKey = ""; draw(facade.snapshot()); }
@@ -296,13 +336,50 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     });
   }
   function focusAt(state: HoloState): Vec3 {
-    if (state.position) return state.position;
+
     const items = state.agents.layers.filter(l => state.agentEnabled[l.id] !== false).flatMap(l=>l.items).filter(i=>i.place);
-    const selected = items.find(i=>i.key===state.selected); if (selected?.place) return selected.place;
+
     const extent = state.open?.session.meta.standalone?.extent;
     if (extent) return extent.min.map((n, axis) => (n + extent.max[axis]) / 2) as unknown as Vec3;
     if (!items.length) return [0,0,0];
     return [0,1,2].map(axis => (Math.min(...items.map(i=>i.place![axis]))+Math.max(...items.map(i=>i.place![axis])))/2) as unknown as Vec3;
+  }
+
+  function viewpoint():Viewpoint {return {center:currentScene?.solidCamera.target??viewCenter(facade.snapshot()),orbit:{...paintedOrbit,pan:[0,0]}};}
+  function stopNavigation(){if(!nav.moving)return;const current=viewpoint();nav.cancel();centerOverride=current.center;orbit=current.orbit;}
+  function applyPoint(next:Viewpoint){navigationEpoch++;centerOverride=next.center;orbit=next.orbit;contextMoved=true;drawnKey="";ctx.changed();}
+  navigationAdapter={
+    available:()=>!disposed&&element.isConnected&&!!element.getClientRects().length,
+    canBack:()=>nav.depth>0,
+    back:()=>{const next=nav.back(viewpoint(),reducedMotion());if(next)applyPoint(next);return !!next;},
+    focus:target=>{
+      const state=facade.snapshot();if(!state.open)return false;
+      const cluster=layersCanvas.clusters().find(c=>c.key===target.id);
+      const items=state.agents.layers.filter(l=>state.agentEnabled[l.id]!==false&&(!target.layer||l.id===target.layer)).flatMap(l=>{const missing=new Set(l.notPlaced);return l.items.filter(i=>i.place&&!missing.has(i.id)&&(!target.id||i.key===target.id));});
+      const points=cluster?cluster.items.map(i=>i.place!):target.position?[target.position]:items.flatMap(i=>[i.place!,...(i.to?[i.to]:[])]);
+      if(!points.length&&target.id){const event=state.open.session.events.find(e=>e.id===target.id);if(event?.at)points.push(event.at);else if(target.id==="v"){const v=vAt(state);if(v)points.push(v.position);}}
+      if(!points.length)return false;
+      const min=[0,1,2].map(a=>Math.min(...points.map(p=>p[a]))) as unknown as Vec3,max=[0,1,2].map(a=>Math.max(...points.map(p=>p[a]))) as unknown as Vec3;
+      const center=min.map((n,a)=>(n+max[a])/2) as unknown as Vec3;
+      let next=fitOrbit({min,max},{...orbit,pan:[0,0]},svg.clientWidth,svg.clientHeight);
+      if(cluster){
+        next={...orbit,pan:[0,0]};
+        for(let step=0;step<24;step++){
+          next={...next,distance:Math.max(40,next.distance*.72)};
+          const C=camera(center,next,svg.clientWidth,svg.clientHeight),projected=cluster.items.flatMap(item=>{const xy=C.point(item.place!);return xy?[{item,x:xy[0],y:xy[1]}]:[];});
+          if(clusterPlates(projected,next.distance<=100).clusters.every(c=>c.items.length<cluster.items.length)||next.distance===40)break;
+        }
+      }
+      zoomLimit=Math.max(zoomLimit,next.distance*4);
+      if(cluster&&next.distance===40){void ctx.dispatch({kind:"holo.select",id:`cluster:${JSON.stringify(cluster.items[0].place)}`},{quiet:true});}
+      else if(target.id&&!cluster)void ctx.dispatch({kind:"holo.select",id:target.id},{quiet:true});
+      applyPoint(nav.focus(viewpoint(),{center,orbit:next},reducedMotion()));return true;
+    },
+  };
+  function syncNavigation(){
+    const visible=!disposed&&element.isConnected&&!!svg.getClientRects().length&&stage.style.display!=="none";
+    if(!visible){navigationLifetime?.abort();navigationLifetime=undefined;return;}
+    if(!navigationLifetime&&navigationAdapter){navigationLifetime=new AbortController();facade.navigation(viewId,navigationAdapter,navigationLifetime.signal);}
   }
 
   function marker(p: Extract<Primitive, { kind: "marker" }>): Element {
@@ -331,7 +408,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   }
   function paintText(e: Element, at: readonly [number, number], value: string, style: Style, anchor: "start" | "end" = "start") {
     set(e, "x", f1(at[0])); set(e, "y", f1(at[1])); set(e, "text-anchor", anchor);
-    set(e, "style", `fill:${STROKES[style]};font:11px var(--font-mono);paint-order:stroke;stroke:var(--bg-app);stroke-width:3px;stroke-linejoin:round`);
+    set(e, "style", `fill:${STROKES[style]};font:11px var(--font-mono);paint-order:stroke;stroke:var(--pv-ground);stroke-width:3px;stroke-linejoin:round`);
     if (e.textContent !== value) e.textContent = value;
   }
   /** The drawing's top-left notice wraps inside the stage, without changing its height. */
@@ -354,6 +431,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   return {
     spec: { id: "holotable.view", ...HOLOTABLE_PANEL_META["holotable.view"], element },
     update() {
+      syncNavigation();
       const state = facade.snapshot(), s = state.open?.session;
       const branchNames = s?.meta.standalone?.branches ?? [];
       branches.element.hidden = branchNames.length < 2;
@@ -396,12 +474,16 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
         const reconnecting = state.live.watching && state.live.phase === "disconnected";
         setText(readout, s.meta.standalone ? momentItems(state) : `${reconnecting ? "Reconnecting · " : state.live.following ? "Live · " : ""}${f1(state.t - s.meta.from)} s${state.live.following ? "" : ` of ${f1(s.meta.to - s.meta.from)} s`}${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}${state.live.following && !reconnecting && state.live.behindS > 2 ? ` · ${f1(state.live.behindS)} s behind` : ""}`);
       } else setText(readout, "");
+      const until=quietUntil(state);quiet.hidden=until===undefined;readout.hidden=until!==undefined;
+      if(until!==undefined){const game=s?.meta.standalone?.clock==="game",full=humanMoment(until,game,s?.meta.from),sameDay=game&&Math.floor(until/86400)===Math.floor(state.t/86400),label=`Quiet until ${full}. Jump there`;
+        setButtonLabel(quiet,`Quiet until ${sameDay?full.split(" · ")[1]:full}`);quiet.title=label;quiet.dataset.title=label;quiet.setAttribute("aria-label",label);
+      }
       readout.title = readout.textContent ?? "";
       updateBar();
       const dk = JSON.stringify([state.revision, orbit, svg.clientWidth, svg.clientHeight]);
       if (dk !== drawnKey) { drawnKey = dk; draw(state); }
     },
-    dispose() { disposed = true; contextCtl?.abort(); speedPopup?.close(false); if (animationFrame !== undefined) cancelAnimationFrame(animationFrame); if (resumeFrame !== undefined) cancelAnimationFrame(resumeFrame); solidSelection.cancel(); resized.disconnect(); solidsCanvas.dispose(); layersCanvas.dispose(); },
+    dispose() { disposed = true;clearTimeout(clusterClick);navigationLifetime?.abort();nav.reset(); contextCtl?.abort(); speedPopup?.close(false); if (animationFrame !== undefined) cancelAnimationFrame(animationFrame); if (resumeFrame !== undefined) cancelAnimationFrame(resumeFrame); solidSelection.cancel(); resized.disconnect(); solidsCanvas.dispose(); layersCanvas.dispose(); },
   };
 }
 function gameTime(t: number) { const day = Math.floor(t / 86400) + 1, hour = Math.floor(t / 3600) % 24, minute = Math.floor(t / 60) % 60; return `Day ${day} · ${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}`; }
