@@ -181,7 +181,11 @@ export class Layer3 {
     return this.sifter.install(patterns);
   }
   private registerVocabulary(patterns: SiftPattern[]): void {
-    if (patterns.some((p) => p.graph) && !this.k.eventKinds.eventKind('meta:story')) this.k.eventKinds.register({ name: 'meta:story', producers: ['s3'],
+    const graphs = patterns.some((p) => p.graph);
+    // With graphs loaded the declaration follows from configuration. Once they
+    // unload, keep that adoption in the layer record, even before the first story.
+    if (!graphs && this.k.eventKinds.eventKind('meta:story')?.dataFields) this.state.storyData = true;
+    if ((graphs || this.state.storyData) && !this.k.eventKinds.eventKind('meta:story')) this.k.eventKinds.register({ name: 'meta:story', producers: ['s3'],
       dataFields: { pattern: { t: 'text' }, instance: { t: 'ref' }, outcome: { t: 'text' }, kind: { t: 'enum', values: ['resolved', 'failed', 'parked'] }, depth: { t: 'int' } } });
     for (const [name, values] of [
       ['core:event-kind', ['meta:story']],
@@ -580,6 +584,7 @@ export class Layer3 {
     this.state.buffer ??= [];
     this.state.evidence ??= [];
     this.state.consumedOutcomes ??= [];
+    if (this.state.storyData) this.registerVocabulary([...this.sifter.patterns.values()]);
     if (this.k.readOnly) {
       this.threadView = threads(this.lv.instances(), this.l2.playTotal(), this.data);
       this.counts = counts(this.threadView);

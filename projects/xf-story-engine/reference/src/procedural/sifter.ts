@@ -147,16 +147,20 @@ export class Sifter {
   boundary(boundary: number, lag: number, budget?: Budget): boolean {
     const horizon = boundary - lag * this.k.config.wSim,
       st = this.state();
+    const order = (a: Layer3State['buffer'][number], b: Layer3State['buffer'][number]) =>
+      a.event.time - b.event.time || cmp(a.event.id, b.event.id) || cmp(a.pattern, b.pattern);
     const ready = st.buffer
       .filter((b) => b.event.time <= horizon)
-      .sort((a, b) => a.event.time - b.event.time || cmp(a.event.id, b.event.id) || cmp(a.pattern, b.pattern));
+      .sort(order);
     let cost = 0;
-    for (const b of ready) {
+    while (ready.length) {
       if (cost > 0 && budget && cost >= budget.remaining) {
         this.changed();
         return false;
       }
+      const b = ready.shift()!;
       st.buffer = st.buffer.filter((x) => x !== b);
+      const buffered = st.buffer.length;
       const p = this.patterns.get(b.pattern);
       const before = this.work;
       if (this.active && p?.version === b.version) {
@@ -171,9 +175,18 @@ export class Sifter {
         else this.onEvent(p, b.event);
       }
       cost += this.work - before;
+      // Matching can publish a story at this occurrence's time. Merge it before
+      // any later occurrence, retaining the same budget across the whole chain.
+      for (const next of st.buffer.slice(buffered)) if (next.event.time <= horizon) {
+        let low = 0, high = ready.length;
+        while (low < high) {
+          const mid = (low + high) >>> 1;
+          if (order(ready[mid], next) <= 0) low = mid + 1;
+          else high = mid;
+        }
+        ready.splice(low, 0, next);
+      }
     }
-    // Story events created during dispatch may themselves feed a bounded chain.
-    if (st.buffer.some((b) => b.event.time <= horizon)) return this.boundary(boundary, lag, budget);
     this.graph.boundary(horizon);
     this.sweep(boundary, horizon);
     this.changed();
@@ -274,10 +287,18 @@ export class Sifter {
   }
   sweep(now: number, openHorizon = now, reclaimSown = true): void {
     const st = this.state();
+    // A stage descriptor owns its telling seed and the child's legibility. Keep
+    // that connection until the last graph consumer retires (including queued ones).
+    const heldStories = new Set([
+      ...st.pool.flatMap((e) => e.graph && !e.graph.retired
+        ? Object.values(e.graph.junctures).flatMap((j) => j.filler?.fn === 'story' ? [j.filler.id] : []) : []),
+      ...st.buffer.filter((b) => b.event.kind === 'meta:story').map((b) => b.event.id),
+    ]);
     for (const e of st.pool.slice().sort((a, b) => a.seq - b.seq)) {
       const p = this.patterns.get(e.pattern);
       if (!p) continue;
       if (e.graph) { if (e.graph.retired) st.pool = st.pool.filter((x) => x !== e); continue; }
+      if (e.story && heldStories.has(e.story)) continue;
       if (e.seed && reclaimSown) this.drop(e, 'match-sown');
       else if (
         (e.complete ? now : openHorizon) >

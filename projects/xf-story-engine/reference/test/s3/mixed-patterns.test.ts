@@ -1,15 +1,20 @@
 import { expect, test } from 'bun:test';
 import { graphWorld, simple } from './graph-fixture.ts';
 import { library } from './library.ts';
-import { complete, event, pack, pattern } from './helpers.ts';
+import { complete, event, pack, pattern, world } from './helpers.ts';
 import { layeredWeek } from './layered-week.ts';
 import { HolotableObserver } from '../../src/holotable/observe.ts';
 import { serialize } from 'node:v8';
+import { H, s, id } from '../../src/id.ts';
 
-function mixedWorld(name: string) {
+function mixedWorld(name: string, aftermath = false) {
   const stage = pattern({ version: 7 });
   const parent = simple({ id: 'xf.test:stage-parent' });
   parent.junctures.first = { fn: 'story', args: { pattern: stage.id, outcome: 'complete' }, binds: { a: '?a', b: '?b' } };
+  if (aftermath) {
+    parent.junctures.tail = { fn: 'repay', args: { debtor: '?a', creditor: '?b' }, optional: true };
+    parent.outcomes.done.aftermath = { junctures: ['tail'], days: 10 };
+  }
   const w = graphWorld(name, [...library, parent]);
   expect(w.l3.installPatterns([...library, parent, stage]).filter((f) => f.level === 'error')).toEqual([]);
   return { ...w, stage, parent };
@@ -39,10 +44,69 @@ test('mixed stage/composite patterns: stage completion carries the declared stor
   expect(w.l3.kv.event(later.story!)?.data?.instance).toBe(later.id);
 });
 
+test('graph schema adoption survives graph unloading and fresh stage-only loads before and after typed stories', () => {
+  for (const snapshot of [false, true]) {
+    const name = `mixed-unload-${snapshot}`, p = pattern({ version: 7 });
+    const make = () => { const w = world(name, { patterns: [p] }); w.k.config.snapshotEvery = snapshot ? 1 : 10000; return w; };
+    const worlds = [graphWorld(name, library), graphWorld(name, library), graphWorld(name, library)];
+    for (const w of worlds) {
+      w.k.config.snapshotEvery = snapshot ? 1 : 10000;
+      expect(w.l3.installPatterns([p])).toEqual([]);
+    }
+    worlds[0].k.retention.scheduleSweep = () => 0;
+    const replace = (key: string) => {
+      const old = worlds[2]; old.l3.flush(); old.k.persistence.save(key);
+      const fresh = make();
+      for (const [id, record] of old.k.persistence.chain) fresh.k.persistence.chain.set(id, structuredClone(record));
+      fresh.k.persistence.load(key);
+      expect(fresh.k.eventKinds.eventKind('meta:story')).toEqual(old.k.eventKinds.eventKind('meta:story'));
+      expect(fresh.l3.state).toEqual(old.l3.state);
+      worlds[2] = fresh;
+    };
+    replace('no-stories-yet');
+    for (let step = 0; step < 2; step++) {
+      for (const w of worlds) { complete(w, 100 + step * 2400); w.l3.flush(); }
+      for (const w of worlds.slice(1)) { w.k.retention.scheduleSweep(); w.k.settle(); }
+      replace(`typed-${step}`);
+      const observe = (w: typeof worlds[number]) => ({ state: w.l3.state,
+        stories: w.l3.state.pool.map((e) => w.l3.kv.event(e.story!)), candidates: w.l3.sower.collect(w.l3.counts) });
+      expect(observe(worlds[1])).toEqual(observe(worlds[0]));
+      expect(observe(worlds[2])).toEqual(observe(worlds[0]));
+      expect(worlds[2].l3.kv.event(worlds[2].l3.state.pool.at(-1)!.story!)?.data?.outcome).toBe('complete');
+    }
+  }
+});
+
+test('a stage story precedes later occurrences in the same batch, independent of settle grouping and work budget', () => {
+  const run = (split: boolean, budgeted = false) => {
+    const w = mixedWorld('mixed-grouping', true);
+    w.k.now = 100;
+    const first = event(w, 'insult', 'insult', 100);
+    w.k.now = 101;
+    event(w, 'assault', 'assault', 101, { causes: [first.id], effects: [{ on: w.b, effect: 'harm' }] });
+    if (split) { w.k.settle({ to: 105 }); w.l3.sifter.boundary(105, 0); }
+    // Use the mandated story identity to cite the child before its grouped completion.
+    const bindings = { '?a': w.a, '?b': w.b };
+    const match = w.l3.keys.match(w.stage.id, w.l3.keys.bindings('bind', w.stage.id, bindings), first.id);
+    const story = H(s('mint'), id(w.l3.keys.director), id(match), s('meta:story'));
+    w.k.now = 110;
+    event(w, 'help', 'helped', 110, { participants: [{ who: w.b, role: 'actor' }, { who: w.a, role: 'target' }], causes: [story] });
+    w.k.settle({ to: 600, budget: budgeted ? 1 : 100000 }); w.l3.refresh();
+    const parent = w.l3.state.pool.find((e) => e.pattern === w.parent.id)!;
+    expect(parent.complete).toBe(true);
+    expect(parent.graph!.junctures.first.filler?.id).toBe(story);
+    expect(parent.graph!.junctures.second.filler?.at).toBe(110);
+    return { state: w.l3.state, threads: w.l3.threadView, story: w.l3.kv.event(parent.story!), candidates: w.l3.sower.collect(w.l3.counts) };
+  };
+  const split = run(true);
+  expect(run(false)).toEqual(split);
+  expect(run(false, true)).toEqual(split);
+});
+
 test('mixed stories survive unswept, swept and replacement-load executions in both save modes', () => {
   for (const snapshot of [false, true]) for (let seed = 0; seed < 4; seed++) {
     const make = (unswept = false) => {
-      const w = mixedWorld(`mixed-replay-${snapshot}-${seed}`);
+      const w = mixedWorld(`mixed-replay-${snapshot}-${seed}`, true);
       w.k.config.snapshotEvery = snapshot ? 1 : 10000;
       if (unswept) { w.k.retention.scheduleSweep = () => 0; w.l3.sifter.sweep = () => {}; }
       return w;
@@ -80,6 +144,18 @@ test('mixed stories survive unswept, swept and replacement-load executions in bo
         const boundary = Math.ceil(at / 600) * 600;
         w.k.settle({ to: boundary }); w.l3.refresh();
         const child = w.l3.state.pool.find((e) => e.pattern === w.stage.id && e.firstTime === at)!;
+        w.k.settings.set({ tempo: 'restless' });
+        w.l3.data.schedule.theta.restless = 1;
+        const slot = 1 + step;
+        w.l2.baseTotal = w.l3.keys.slot(slot, w.l3.data.schedule.slotGap).time;
+        w.l3.state.slots.open.next = slot;
+        w.l3.sower.resolve(w.l3.counts);
+        expect(child.seed).toBeDefined();
+        w.l3.refresh();
+        const connected = structuredClone({ threads: w.l3.threadView, counts: w.l3.counts });
+        expect(connected.threads.some((t) => t.patterns?.includes(child.id) && t.instances.includes(child.seed!))).toBe(true);
+        w.l3.sifter.sweep(w.k.now); w.l3.refresh();
+        expect({ threads: w.l3.threadView, counts: w.l3.counts }).toEqual(connected);
         event(w, `help-${step}`, 'helped', boundary + 10, { participants: [{ who: w.b, role: 'actor' }, { who: w.a, role: 'target' }], causes: [child.story!], witnesses: [w.v] });
         w.k.settle({ to: boundary + 600 }); w.l3.refresh(); w.l3.flush();
         const parent = w.l3.state.pool.find((e) => e.pattern === w.parent.id && e.firstTime === at + 1)!;
@@ -93,6 +169,14 @@ test('mixed stories survive unswept, swept and replacement-load executions in bo
       expect(observe(worlds[1])).toEqual(observe(worlds[0]));
       expect(observe(worlds[2])).toEqual(observe(worlds[0]));
     }
+    // Storage is held only while something needs the stage/graph/seed connection.
+    const swept = worlds[1], held = swept.l3.state.pool.filter((e) => !e.graph && e.seed).map((e) => e.id);
+    expect(held).toHaveLength(2);
+    swept.l3.sifter.sweep(swept.k.now + swept.l3.data.sifter.candidateTtl + 1);
+    expect(held.every((id) => swept.l3.state.pool.some((e) => e.id === id))).toBe(true);
+    expect(swept.l3.installPatterns([swept.stage])).toEqual([]);
+    swept.l3.sifter.sweep(swept.k.now);
+    expect(held.some((id) => swept.l3.state.pool.some((e) => e.id === id))).toBe(false);
   }
 }, 30_000);
 
