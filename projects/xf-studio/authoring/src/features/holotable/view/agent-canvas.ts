@@ -215,9 +215,14 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       if(performance.now()>deadline){paintFailed=true;effects.clear();return {pending:true,drawn:0,total:0};}
       ctx.font = "11px " + getComputedStyle(canvas).getPropertyValue("--font-mono"); ctx.lineJoin = "round";
       const items: AgentItem[] = [], layerIds = new Map<string,string>(), missing = new Set(effects.keys());
-      for (const layer of answer.layers) for (const item of layer.items) {
-        missing.delete(item.key);
-        if (enabled[layer.id] !== false && item.place && !layer.notPlaced.includes(item.id)) { items.push(item); layerIds.set(item.key,layer.id); }
+      // Hidden layers are skipped whole: the fade check also requires an enabled layer, so nothing in them needs reading.
+      for (const layer of answer.layers) {
+        if (enabled[layer.id] === false) continue;
+        const notPlaced = new Set(layer.notPlaced);
+        for (const item of layer.items) {
+          missing.delete(item.key);
+          if (item.place && !notPlaced.has(item.id)) { items.push(item); layerIds.set(item.key,layer.id); }
+        }
       }
       const important = labelContext(items, selected, hovered);
       const positions = new Map<string, XY>(), clusters = new Map<string, AgentItem[]>();
