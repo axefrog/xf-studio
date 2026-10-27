@@ -67,6 +67,11 @@ struct Config
     // [overlay] (0.7, the ImGui overlay host P0: research/runtime/imgui-overlay-feasibility.md §8): off by default; draw-only
     // (a diagnostic panel); refuses in HDR. theme: dark (default) or light, chosen by hand, never switched automatically.
     bool overlayEnabled = false;
+    bool canvasEnabled = true;
+    uint32_t canvasAnchorHz = 10;
+    uint32_t canvasAnchorsPerRead = 16;
+    killkey::Chord canvasToggle{true, false, false, false, 0x2d, "Insert"};
+    killkey::Chord canvasMode{true, false, false, false, 0x2e, "Delete"};
     std::string overlayTheme = "dark";
     uint32_t overlayScalePercent = 100; // 50-300, on top of the back buffer's height / 1080
     // 0.8 (the UI review): the XF box's diagnostic lines (frames, CPU time, the back buffer, frame-generation modules,

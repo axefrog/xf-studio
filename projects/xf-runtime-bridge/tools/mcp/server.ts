@@ -33,7 +33,7 @@ export type McpServerOptions = {
 export function parsePermissionFlags(args: readonly string[]): { allow?: Permission[] } | { error: string } {
   const readOnly = args.includes("--read-only");
   const at = args.indexOf("--allow");
-  if (at < 0) return readOnly ? { allow: ["read", "control"] } : {};
+  if (at < 0) return readOnly ? { allow: ["read", "display", "control"] } : {};
   if (readOnly) return { error: "Use either --read-only or --allow <classes>, not both." };
   if (args.indexOf("--allow", at + 1) >= 0) return { error: "Give --allow once, with a comma-separated list." };
   const value = args[at + 1];

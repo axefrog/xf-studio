@@ -80,12 +80,14 @@ void ScriptLayer::OnDetach(Clock::time_point aNow)
     m_puppet = false;
     m_loadPending = false; // the load the bridge asked for has started
     ++m_detaches;
+    m_worldGeneration.fetch_add(1);
     log::Info("script_layer.detached", "calls=off detaches=" + std::to_string(m_detaches));
 }
 
 void ScriptLayer::OnLoadRequested(Clock::time_point aNow)
 {
     std::scoped_lock _(m_mutex);
+    if (!m_loadPending) m_worldGeneration.fetch_add(1);
     m_loadPending = true;
     m_loadRequestedAt = aNow;
     log::Info("script_layer.load_requested", "calls=off until the loaded session is ready");

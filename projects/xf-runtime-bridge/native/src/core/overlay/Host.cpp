@@ -253,6 +253,7 @@ void OverlayHost::NoteHooks(bool aPresent, bool aResize, bool aShutdown, const s
 
 void OverlayHost::NoteInit(const DeviceFacts& aFacts, const std::string& aRefusal)
 {
+    m_viewWidth.store(aFacts.width); m_viewHeight.store(aFacts.height);
     std::scoped_lock _(m_mutex);
     m_facts = aFacts;
     m_refusal = aRefusal;
@@ -273,6 +274,7 @@ void OverlayHost::NoteShutdown()
 
 void OverlayHost::NoteResize(uint32_t aWidth, uint32_t aHeight)
 {
+    m_viewWidth.store(aWidth); m_viewHeight.store(aHeight);
     std::scoped_lock _(m_mutex);
     ++m_resizes;
     m_facts.width = aWidth;
@@ -330,7 +332,7 @@ bool OverlayHost::OffForFrameGeneration() const
 bool OverlayHost::ShouldDraw(std::chrono::steady_clock::time_point aNow) const
 {
     return EnabledNow() && !m_passThrough.load() && m_phase.load() == Phase::Drawing && !m_killed.load() && (!m_cetOpen.load() || DiagnosticsRequested()) &&
-           !HiddenForCapture(aNow);
+           (!HiddenForCapture(aNow) || m_captureCanvas.load());
 }
 
 void OverlayHost::HideForCapture(bool aHidden, uint32_t aMs, std::chrono::steady_clock::time_point aNow)

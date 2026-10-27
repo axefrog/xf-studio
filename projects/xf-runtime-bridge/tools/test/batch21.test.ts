@@ -87,6 +87,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.7 the CET layer: the CET line's dot, 
       json = { decode = function(s) return DECODE[s] end, encode = function() return "{}" end }
       package.preload["panel"] = function() return (function() ${panel} end)() end
       package.preload["theme"] = function() error("no theme") end
+      package.preload["canvas"] = function() return (function() ${read("cet", "xf_runtime_bridge", "canvas.lua")} end)() end
       Game = setmetatable({
         XFBridge_Info = function() return "INFO" end,
         XFBridge_Hud = function() return "xfhud\\t1\\nsurface\\tcet_line\\nkeys\\t1\\n" end,

@@ -207,6 +207,9 @@ public:
     // Captures hide the panel for their frames (overlay.hide); the flag lapses by itself after aMs.
     void HideForCapture(bool aHidden, uint32_t aMs, std::chrono::steady_clock::time_point aNow = std::chrono::steady_clock::now());
     bool HiddenForCapture(std::chrono::steady_clock::time_point aNow = std::chrono::steady_clock::now()) const;
+    void IncludeCanvasForCapture(bool include) { m_captureCanvas.store(include); }
+    bool CanvasOnlyCapture() const { return m_captureCanvas.load() && HiddenForCapture(); }
+    std::pair<uint32_t,uint32_t> Viewport() const { return {m_viewWidth.load(),m_viewHeight.load()}; }
     // CET's overlay, as the CET layer last reported it (XFBridge_CetOverlay), whether or not this host is enabled. Until the CET
     // layer has reported (no CET, an older layer, before its onInit) the snapshot says null: unknown, never a guessed false.
     void SetCetOpen(bool aOpen)
@@ -233,6 +236,8 @@ private:
     std::atomic<bool> m_killed{false};
     std::atomic<bool> m_passThrough{false};
     std::atomic<int64_t> m_hiddenUntilNs{0};
+    std::atomic<bool> m_captureCanvas{false};
+    std::atomic<uint32_t> m_viewWidth{0}, m_viewHeight{0};
     std::atomic<uint64_t> m_frames{0};
     std::atomic<double> m_cpuMicros{0.0};
     std::atomic<double> m_cpuMicrosMax{0.0};

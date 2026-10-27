@@ -12,6 +12,7 @@ import type { CommandContext, CommandDef, CommandResult } from "./catalogue.ts";
 import { bool, type JsonSchema } from "./schema.ts";
 import { NPC_REFUSALS } from "./catalogue080npc.ts";
 import { DM_REFUSALS } from "./catalogue080dm.ts";
+import { CANVAS_COMMANDS } from "./catalogueCanvas.ts";
 import { TIMELINE_COMMANDS } from "./catalogueTimeline.ts";
 import { TESTING_COMMANDS } from "./catalogueTesting.ts";
 import { INPUT_CHOICE_COMMANDS } from "./catalogueInputChoices.ts";
@@ -242,6 +243,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   ...NPC_REFUSALS,
   // The live-direction toolkit (0.8.12): its own map, kept beside its commands (catalogue080dm.ts).
   ...DM_REFUSALS,
+  ...Object.fromEntries(CANVAS_COMMANDS.map(command => [command.name, command.refusals ?? []])),
   // Derive from the single contribution instead of maintaining another refusal catalogue.
   ...Object.fromEntries(INPUT_CHOICE_COMMANDS.map((command) => [command.name, command.refusals ?? []])),
   ...Object.fromEntries(TESTING_COMMANDS.map((command) => [command.name, command.refusals ?? []])),

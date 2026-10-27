@@ -217,6 +217,9 @@ std::string Spelling(const Chord& aChord)
 }
 
 std::string WithKillKey(const std::string& aIni, const std::string& aValue)
+{ return WithSetting(aIni, "ui", "kill_key", aValue); }
+
+std::string WithSetting(const std::string& aIni, const std::string& aSection, const std::string& aKey, const std::string& aValue)
 {
     const std::string eol = aIni.find("\r\n") != std::string::npos ? "\r\n" : "\n";
     std::vector<std::string> lines;
@@ -240,7 +243,7 @@ std::string WithKillKey(const std::string& aIni, const std::string& aValue)
         const auto first = aLine.find_first_not_of(" \t");
         return first == std::string::npos ? std::string() : aLine.substr(first);
     };
-    const std::string setting = "kill_key = " + aValue;
+    const std::string setting = aKey + " = " + aValue;
     const auto join = [&eol](const std::vector<std::string>& aLines) {
         std::string out;
         for (const auto& line : aLines)
@@ -259,7 +262,7 @@ std::string WithKillKey(const std::string& aIni, const std::string& aValue)
         const auto t = trimmed(lines[i]);
         if (!t.empty() && t[0] == '[')
         {
-            inUi = Squash(t) == "[ui]";
+            inUi = Squash(t) == "[" + aSection + "]";
             if (inUi)
             {
                 hasUi = true;
@@ -277,7 +280,7 @@ std::string WithKillKey(const std::string& aIni, const std::string& aValue)
         {
             continue;
         }
-        if (Squash(t.substr(0, eq)) == "kill_key")
+        if (Squash(t.substr(0, eq)) == aKey)
         {
             lastKill = i;
         }
@@ -297,7 +300,7 @@ std::string WithKillKey(const std::string& aIni, const std::string& aValue)
         {
             lines.push_back("");
         }
-        lines.push_back("[ui]");
+        lines.push_back("[" + aSection + "]");
         lines.push_back(setting);
     }
     return join(lines);

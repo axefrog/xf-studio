@@ -51,6 +51,7 @@ enum class Access
     WriteNpc,       // 0.8: NPC direction (npc.*: XF actors, commands, lines, gestures, dialogue choices); "npc"
     WriteDm,        // 0.8.12: the live-direction toolkit (props, vehicles, doors, sounds, phone, tracker, lights, watchers); "dm"
     Notify,         // shows a message in the bridge's own in-game label (ui.message); not a write, never changes the game
+    Display,        // changes only the bridge's canvas; permitted on observer connections
     Control         // changes only the bridge itself (bridge.kill); always allowed, never touches the game
 };
 
@@ -71,6 +72,8 @@ struct MethodContext
 {
     std::string cid;
     nlohmann::json params;
+    std::string rawParams; // exact params slice, including whitespace, for canvas's byte cap and digest
+    uint64_t connection = 0; // transport-issued identity; never supplied by a client or inferred from PID
     uint32_t clientPid = 0;
     bool readOnlyConnection = false;
     // Authenticated client may narrow config permissions. Missing claims are forbidden for arming.
@@ -87,6 +90,7 @@ public:
     {
     }
     std::string code;
+    nlohmann::json detail;
 };
 
 struct MethodSpec
@@ -130,7 +134,7 @@ public:
 
     // Never throws: an unexpected failure is logged and answered with code "failed". aControlRoute (0.8.1, RB-121): the
     // request came on the control pipe, which answers only IsControlRouteMethod's methods (refused not_on_control_route).
-    DispatchResult Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute = false, bool aReadOnly = false) noexcept;
+    DispatchResult Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute = false, bool aReadOnly = false, uint64_t aConnection = 0) noexcept;
     // Trusted in-process caller only. Propagates an execution-frame guard to every queued step;
     // never accepted from request data. Cleanup inside RestoreScope remains unconditional.
     using ExecutionGuard = std::function<void(bool changing)>;

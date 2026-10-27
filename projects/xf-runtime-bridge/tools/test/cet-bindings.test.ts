@@ -219,6 +219,7 @@ const IMPL = `
 
 const panel = read("cet", "xf_runtime_bridge", "panel.lua");
 const theme = read("cet", "xf_runtime_bridge", "theme.lua");
+const canvas = read("cet", "xf_runtime_bridge", "canvas.lua");
 const init = read("cet", "xf_runtime_bridge", "init.lua");
 const drawPanel = (body: string) => runCet(`${IMPL}
   local panel = (function() ${panel} end)()
@@ -344,6 +345,7 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
       json = { decode = function(s) return DECODE[s] end, encode = function() return "{}" end }
       package.preload["panel"] = function() return (function() ${panel} end)() end
       package.preload["theme"] = function() return (function() ${theme} end)() end
+      package.preload["canvas"] = function() return (function() ${canvas} end)() end
       Game = setmetatable({ XFBridge_Info = function() return "INFO" end, XFBridge_Hud = function() return "xfhud\\t1\\nsurface\\tcet_line\\nkeys\\t1\\n" end,
         XFBridge_Messages = function() return "" end, XFBridge_Ping = function() return "pong" end,
         XFBridge_CetOverlay = function(open) natives[#natives + 1] = "cet_overlay:" .. tostring(open); return true end },
@@ -484,6 +486,7 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
         end }
       package.preload["panel"] = function() return (function() ${panel} end)() end
       package.preload["theme"] = function() return (function() ${theme} end)() end
+      package.preload["canvas"] = function() return (function() ${canvas} end)() end
       Game = setmetatable({ XFBridge_Info = function() return "INFO" end, XFBridge_Hud = function() return "xfhud\\t1\\nsurface\\tcet_line\\nkeys\\t1\\n" end,
         XFBridge_Messages = function() return "" end, XFBridge_Ping = function() return "pong" end,
         XFBridge_CetPanel = function(body)

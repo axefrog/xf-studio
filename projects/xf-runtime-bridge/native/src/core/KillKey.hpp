@@ -51,6 +51,7 @@ std::string Spelling(const Chord& aChord);
 // reader applies; the review of 0.8.4) replaced in place (everything else kept, the
 // file's line endings too), or added at the end of [ui], or a [ui] section added at the end when there is none.
 std::string WithKillKey(const std::string& aIni, const std::string& aValue);
+std::string WithSetting(const std::string& ini, const std::string& section, const std::string& key, const std::string& value);
 
 // 0.8.4: what else may react to the chord, in plain words, from the files the game and CET read (only read; any may be
 // empty): the game's own bindings (r6/config/inputUserMappings.xml, and Input Loader's r6/input/*.xml, which the game merges

@@ -83,6 +83,8 @@
 #include "core/Win32.hpp"
 #include "core/overlay/Motion.hpp"
 #include "plugin/Overlay.hpp"
+#include "plugin/CanvasDraw.hpp"
+#include "plugin/Plugin.hpp"
 
 #if !defined(XFB_IMGUI_ASSERT_OVERRIDDEN)
 #error "Dear ImGui must be built with the bridge's IM_ASSERT (IMGUI_USER_CONFIG=xfb_imconfig.h): Release builds would otherwise ignore backend failures (RB-98)"
@@ -1248,7 +1250,8 @@ void DrawFrame()
     gR.last = started;
     ImGui_ImplDX12_NewFrame();
     ImGui::NewFrame();
-    DrawPanel(std::chrono::duration<double>(started - gR.started).count());
+    if (!gHost->CanvasOnlyCapture()) DrawPanel(std::chrono::duration<double>(started - gR.started).count());
+    if (!Get().cetOverlayOpen.load()) DrawCanvas(Get().canvas, *gHost, static_cast<float>(gR.width), static_cast<float>(gR.height), gR.scale, gR.fonts.value, gR.fonts.title);
     ImGui::Render();
     if (WantsUpload() && !gR.uploadsAllowed)
     {

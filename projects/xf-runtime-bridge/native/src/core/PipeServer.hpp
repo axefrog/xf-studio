@@ -85,6 +85,8 @@ public:
     bool IsRunning() const;
     bool HasClient() const;
     uint64_t ConnectionsAccepted() const;
+    uint64_t ConnectionIdentity() const { return m_connectionIdentity.load(); }
+    void SetDisconnectCallback(std::function<void(uint64_t)> fn) { m_onDisconnect = std::move(fn); }
 
 private:
     enum class EndReason
@@ -121,5 +123,7 @@ private:
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_hasClient{false};
     std::atomic<uint64_t> m_connections{0};
+    std::atomic<uint64_t> m_connectionIdentity{0};
+    std::function<void(uint64_t)> m_onDisconnect;
 };
 } // namespace xfb

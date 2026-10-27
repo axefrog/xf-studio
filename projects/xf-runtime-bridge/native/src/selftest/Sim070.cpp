@@ -528,10 +528,11 @@ void RegisterSim070(Dispatcher& aDispatcher, GameThreadQueue&, const Config& aCo
                               out["simulated"] = true;
                               return out;
                           }});
-    aDispatcher.Register({"overlay.hide", Access::Notify, RunOn::BridgeThread, "Hides the overlay for a capture (simulated).", [](const MethodContext& aContext) {
-                              params::RequireOnly(aContext.params, {"hidden", "ms"});
+    aDispatcher.Register({"overlay.hide", Access::Display, RunOn::BridgeThread, "Hides the overlay for a capture (simulated).", [](const MethodContext& aContext) {
+                              params::RequireOnly(aContext.params, {"hidden", "ms", "canvas"});
                               const auto hidden = params::CheckBoolean(aContext.params, "hidden").value_or(true);
                               const auto ms = static_cast<uint32_t>(params::CheckInteger(aContext.params, "ms", 50, 10000).value_or(3000));
+                              state.overlay.IncludeCanvasForCapture(params::CheckBoolean(aContext.params, "canvas").value_or(false));
                               state.overlay.HideForCapture(hidden, ms);
                               return json{{"simulated", true}, {"hidden_for_capture", state.overlay.HiddenForCapture()}, {"ms", ms}, {"undo", {{"method", "overlay.hide"}, {"params", {{"hidden", false}}}}}};
                           }});

@@ -324,6 +324,7 @@ json OverlaySet(const MethodContext& aContext)
     const bool testHooks = false;
 #endif
     auto out = xfb::overlay::SetLive(Get().overlayHost, aContext.params, testHooks);
+    if (!Get().overlayHost.EnabledNow()) Get().canvas.Stop();
     log::Info("overlay.set", "theme=" + out.value("theme", std::string()) + " motion=" + out["motion"].value("setting", std::string()) +
                                  " diagnostics=" + (out.value("diagnostics", false) ? "true" : "false") + " enabled=" + (out.value("enabled", false) ? "true" : "false"),
               aContext.cid);
@@ -342,10 +343,11 @@ json CetPanelRequest(const MethodContext& aContext)
 
 json OverlayHide(const MethodContext& aContext)
 {
-    params::RequireOnly(aContext.params, {"hidden", "ms"});
+    params::RequireOnly(aContext.params, {"hidden", "ms", "canvas"});
     const auto hidden = params::CheckBoolean(aContext.params, "hidden").value_or(true);
     const auto ms = static_cast<uint32_t>(params::CheckInteger(aContext.params, "ms", 50, 10000).value_or(3000));
     auto& host = Get().overlayHost;
+    host.IncludeCanvasForCapture(params::CheckBoolean(aContext.params, "canvas").value_or(false));
     host.HideForCapture(hidden, ms);
     return json{{"hidden_for_capture", host.HiddenForCapture()}, {"ms", ms}, {"undo", {{"method", "overlay.hide"}, {"params", {{"hidden", false}}}}},
                 {"undo_note", "the panel comes back by itself after ms"}};
@@ -365,7 +367,7 @@ void RegisterMethods070(Dispatcher& aDispatcher)
     aDispatcher.Register({"game.saves", Access::Read, RunOn::BridgeThread, "The save list with each save's details.", &GameSaves});
     aDispatcher.Register(MarkedWrite("photo.scene.set", Access::WritePhoto, RunOn::GameThread, "Photo mode's surrounding NPCs, weather and game speed rows.", &PhotoScene));
     aDispatcher.Register({"overlay.state", Access::Read, RunOn::BridgeThread, "The XF overlay host's state.", &OverlayState});
-    aDispatcher.Register({"overlay.hide", Access::Notify, RunOn::BridgeThread, "Hides the XF overlay for a capture.", &OverlayHide});
+    aDispatcher.Register({"overlay.hide", Access::Display, RunOn::BridgeThread, "Hides the XF overlay for a capture.", &OverlayHide});
     aDispatcher.Register({"cet.panel", Access::Notify, RunOn::BridgeThread, "Opens or closes the CET window's DIAGNOSTICS header, or presses its Pause changes button.", &CetPanelRequest});
     aDispatcher.Register({"overlay.set", Access::Notify, RunOn::BridgeThread, "Sets the XF overlay's theme, motion, diagnostics and drawing live (in memory).", &OverlaySet});
 }

@@ -5532,6 +5532,7 @@ int SupervisorUnitTests();
 int IncidentUnitTests();
 // UnitTestsOverlay.cpp: the in-game styling (the theme table, the motion rule, the chip labels) (0.8.22); answers the number of failed checks.
 int OverlayUnitTests();
+int CanvasUnitTests();
 
 int RunUnitTests()
 {
@@ -5760,6 +5761,7 @@ int RunUnitTests()
     gFailures += RecordingUnitTests();
     gFailures += IncidentUnitTests();
     gFailures += OverlayUnitTests();
+    gFailures += CanvasUnitTests();
     gFailures += SupervisorUnitTests();
     std::printf(gFailures == 0 ? "UNIT OK\n" : "UNIT FAILED %d\n", gFailures);
     return gFailures == 0 ? 0 : 1;

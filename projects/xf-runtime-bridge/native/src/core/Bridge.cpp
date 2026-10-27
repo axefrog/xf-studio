@@ -47,10 +47,14 @@ bool Bridge::Start(std::string& aError)
     }
 
     m_server.SetIdleCallback([this] { m_idleDisconnect.store(true); });
+    const auto disconnected = [this](uint64_t id) { if (m_disconnectObserver) m_disconnectObserver(id); };
+    m_server.SetDisconnectCallback(disconnected);
+    m_control.SetDisconnectCallback(disconnected);
+    for (auto& reader : m_readers) reader->SetDisconnectCallback(disconnected);
     if (!m_server.Start(
             m_session.pipeName, m_config.idleDisconnectSeconds,
             [this](const std::string& aLine, uint32_t aPid) {
-                auto result = m_dispatcher.Handle(aLine, aPid);
+                auto result = m_dispatcher.Handle(aLine, aPid, false, false, m_server.ConnectionIdentity());
                 return PipeReply{std::move(result.line), result.rejected};
             },
             aError))
@@ -64,7 +68,7 @@ bool Bridge::Start(std::string& aError)
     const bool control = m_control.Start(
         controlName, m_config.idleDisconnectSeconds,
         [this](const std::string& aLine, uint32_t aPid) {
-            auto result = m_dispatcher.Handle(aLine, aPid, true);
+            auto result = m_dispatcher.Handle(aLine, aPid, true, false, m_control.ConnectionIdentity());
             return PipeReply{std::move(result.line), result.rejected};
         },
         controlError);
@@ -79,8 +83,8 @@ bool Bridge::Start(std::string& aError)
         auto& reader = m_readers[i];
         const auto name = m_session.pipeName + L"-read-" + std::to_wstring(i);
         if (!reader->Start(name, m_config.idleDisconnectSeconds,
-            [this](const std::string& line, uint32_t pid) {
-                auto reply = m_dispatcher.Handle(line, pid, false, true);
+            [this, endpoint = reader.get()](const std::string& line, uint32_t pid) {
+                auto reply = m_dispatcher.Handle(line, pid, false, true, endpoint->ConnectionIdentity());
                 return PipeReply{std::move(reply.line), reply.rejected, reply.backoffMs, reply.throttled};
             }, aError)) {
             for (auto& started : m_readers) started->Stop();

@@ -24,6 +24,7 @@
 #include <thread>
 
 #include "core/Bridge.hpp"
+#include "core/overlay/Canvas.hpp"
 #include "core/BuildInfo.hpp"
 #include "core/Layers.hpp"
 #include "core/LivePose.hpp"
@@ -49,6 +50,7 @@
 #include <mutex>
 
 int RunUnitTests();
+int CanvasUnitTests();
 int RecordingUnitTests();
 int SupervisorUnitTests();
 int RunPipeStress(int aRounds);
@@ -159,6 +161,7 @@ int wmain(int argc, wchar_t** argv)
     for (int i = 1; i < argc; ++i)
     {
         const std::wstring arg = argv[i];
+        if (arg == L"--unit-canvas") return CanvasUnitTests() ? 1 : 0;
         if (arg == L"--unit-recording") return RecordingUnitTests();
         if (arg == L"--unit-supervisor")
         {
@@ -476,6 +479,8 @@ int wmain(int argc, wchar_t** argv)
     // selftest.script_layer moves it, and the simulated load detaches, attaches and lets the player in. With
     // detach_before_next_task, the next game-thread task sees the detach first, as session 5's game.status did.
     static xfb::ScriptLayer simLayer;
+    static std::unique_ptr<xfb::canvas::Service> simCanvas;
+    static std::atomic<bool> canvasKilled{false};
     static std::atomic<bool> detachBeforeNextTask{false};
     simLayer.OnAttach();
     simLayer.OnPlayerAttach();
@@ -642,7 +647,7 @@ int wmain(int argc, wchar_t** argv)
                                          {"face_index", sim.faceIndex},
                                          {"world_time_seconds", sim.clock},
                                          {"game_version", {{"product", "0.0.0"}, {"file", "0.0.0.0"}}},
-                                         {"script_layer", simLayer.Describe()}};
+                                         {"script_layer", simLayer.Describe()}, {"world_generation", simLayer.WorldGeneration()}};
     };
     dispatcher.Register({"game.status", xfb::Access::Read, xfb::RunOn::BridgeThread, "Game phase (simulated).",
                          [&queue, &config, &dispatcher, simStatus, applyPendingDetach](const xfb::MethodContext& aContext) {
@@ -651,6 +656,7 @@ int wmain(int argc, wchar_t** argv)
                              const auto loading = [&config, &dispatcher] {
                                  auto out = w::StatusWhileLoading(simLayer.Phase(), simLayer.Describe());
                                  out["simulated"] = true;
+                                 out["world_generation"] = simLayer.WorldGeneration();
                                  out["allow_writes"] = config.allowWrites;
                                  out["writes_paused"] = dispatcher.WritesPaused();
                                  out["handed_over"] = dispatcher.HandedOver();
@@ -2682,6 +2688,21 @@ int wmain(int argc, wchar_t** argv)
         sim060 = std::make_unique<xfb::selftest::Sim060>(dispatcher, queue, config, std::move(hooks));
         sim060->Register();
     }
+    simCanvas = std::make_unique<xfb::canvas::Service>(&sim060->Events());
+    simCanvas->Configure(true, config.canvasToggle, config.canvasMode, config.canvasAnchorHz, config.canvasAnchorsPerRead);
+    simCanvas->SetStateFile(session.runtimeDir / "canvas-view.json");
+    xfb::canvas::RegisterMethods(dispatcher, *simCanvas);
+    bridge.SetDisconnectObserver([](uint64_t id) { simCanvas->Disconnect(id); });
+    bridge.AddStopObserver([&bridge] {
+        if (bridge.GetDispatcher().IsKilled() && !canvasKilled.exchange(true)) simLayer.InvalidateWorld();
+        simCanvas->Stop(); simCanvas->SetWorld(simLayer.WorldGeneration());
+    });
+    dispatcher.Register({"selftest.canvas", xfb::Access::Read, xfb::RunOn::BridgeThread, "Simulate canvas keys (offline only).", [](const xfb::MethodContext& c) {
+        p::RequireOnly(c.params, {"visible", "mode"});
+        if (auto visible = p::CheckBoolean(c.params, "visible"); visible && *visible != simCanvas->Visible()) simCanvas->Toggle();
+        if (p::CheckBoolean(c.params, "mode").value_or(false)) simCanvas->Mode();
+        return simCanvas->State();
+    }});
     {
         // Bridge 0.7's methods against a simulated world (selftest/Sim070.cpp).
         xfb::selftest::Sim070Hooks hooks070;
@@ -2742,7 +2763,7 @@ int wmain(int argc, wchar_t** argv)
         simNpc = std::make_unique<xfb::selftest::SimNpc>(dispatcher, std::move(hooksNpc));
         simInput = std::make_unique<xfb::selftest::SimInput>(dispatcher, *simNpc, sim060->Events(), config.allowTestHooks,
             [] { std::scoped_lock lock(sim.mutex); return sim.phase; },
-            [] { return simLayer.Describe().value("detaches", uint64_t{0}); }, [&bridge] { return simLayer.Ready() && bridge.HasClient(); }, [&bridge] { return bridge.ConnectionsAccepted(); });
+            [] { return simLayer.WorldGeneration(); }, [&bridge] { return simLayer.Ready() && bridge.HasClient(); }, [&bridge] { return bridge.ConnectionsAccepted(); });
     }
     {
         // Bridge 0.8.12's live-direction toolkit against a simulated world (selftest/SimDm080.cpp), with the plugin's shared service.
@@ -2829,6 +2850,15 @@ int wmain(int argc, wchar_t** argv)
         }
         if (pump)
         {
+            simCanvas->SetWorld(simLayer.WorldGeneration());
+            if (!bridge.GetDispatcher().IsKilled()) canvasKilled.store(false);
+            if (simCanvas->Visible() && simLayer.Ready()) {
+                const double start = xfb::canvas::Now(); const auto wanted = simCanvas->Wanted(start);
+                xfb::canvas::Camera camera; camera.valid = true;
+                std::vector<xfb::canvas::EntityPosition> positions; for (const auto& id : wanted) positions.push_back({id, xfb::canvas::Vec{0,10,0}});
+                if (!wanted.empty()) simCanvas->Resolve(positions, start, (xfb::canvas::Now()-start)*1000);
+                simCanvas->Publish(camera, start, 0);
+            }
             queue.Drain(4); // the plugin does this once per engine tick
             queue.DrainCleanup(4); // 0.8.2: and the kill switch's cleanup lane
             {

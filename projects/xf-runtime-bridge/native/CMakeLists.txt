@@ -141,6 +141,9 @@ add_library(xfb_core STATIC
   src/core/Hooks070.cpp
   src/core/Incidents.cpp
   src/core/overlay/Host.cpp
+  src/core/overlay/Canvas.cpp
+  src/core/overlay/CanvasParse.cpp
+  src/core/overlay/CanvasProjection.cpp
   src/core/overlay/Motion.cpp
   src/core/overlay/Theme.cpp
   src/core/InkUi.cpp
@@ -199,6 +202,8 @@ add_library(XFRuntimeBridge SHARED
   src/plugin/HandlersIncidents.cpp
   src/plugin/LivePoseMemory.cpp
   src/plugin/Overlay.cpp
+  src/plugin/Canvas.cpp
+  src/plugin/CanvasDraw.cpp
   src/plugin/ScriptCall.cpp
   src/plugin/Plugin.cpp
   src/plugin/Resource.rc
@@ -223,7 +228,9 @@ target_compile_options(xfb_companion_probe PRIVATE ${XFB_OPTIONS} /WX)
 # -----------------------------------------------------------------------------
 # Offline self-test host: runs the same bridge core with a simulated game thread.
 # -----------------------------------------------------------------------------
-add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/Sim070.cpp src/selftest/SimDm080.cpp src/selftest/SimNpc.cpp src/selftest/SimInput.cpp src/selftest/SimSenses.cpp src/selftest/UnitTests.cpp src/selftest/UnitTestsDm.cpp src/selftest/UnitTestsInput.cpp src/selftest/UnitTestsIncidents.cpp src/selftest/UnitTestsOverlay.cpp src/selftest/UnitTestsRecording.cpp src/selftest/UnitTestsSupervisor.cpp src/selftest/UnitTestsSupervisorNpc.cpp src/selftest/UnitTestsNpc.cpp src/selftest/UnitTestsNpcSubstitute.cpp src/selftest/UnitTestsSenses.cpp)
+add_executable(xfb_selftest src/selftest/Main.cpp src/selftest/Sim060.cpp src/selftest/Sim070.cpp src/selftest/SimDm080.cpp src/selftest/SimNpc.cpp src/selftest/SimInput.cpp src/selftest/SimSenses.cpp src/selftest/UnitTests.cpp src/selftest/UnitTestsCanvas.cpp src/selftest/UnitTestsDm.cpp src/selftest/UnitTestsInput.cpp src/selftest/UnitTestsIncidents.cpp src/selftest/UnitTestsOverlay.cpp src/selftest/UnitTestsRecording.cpp src/selftest/UnitTestsSupervisor.cpp src/selftest/UnitTestsSupervisorNpc.cpp src/selftest/UnitTestsNpc.cpp src/selftest/UnitTestsNpcSubstitute.cpp src/selftest/UnitTestsSenses.cpp)
 target_compile_options(xfb_selftest PRIVATE ${XFB_OPTIONS} /WX)
 target_link_libraries(xfb_selftest PRIVATE xfb_core)
 add_dependencies(xfb_selftest xfb_header_stamp xfb_companion_probe)
+
+target_compile_definitions(xfb_selftest PRIVATE XFB_CANVAS_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/../fixtures/canvas")

@@ -41,7 +41,7 @@ std::atomic<bool> gTap{true};
 
 uint64_t World()
 {
-    return Get().scriptLayer.Describe().value("detaches", uint64_t{0});
+    return Get().scriptLayer.WorldGeneration();
 }
 
 bool Available()

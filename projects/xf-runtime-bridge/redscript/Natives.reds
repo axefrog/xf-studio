@@ -81,3 +81,5 @@ public static native func XFBridge_IncidentAdmit(evidence: String, key: String) 
 // or "" when there is none. Read only; asked every half second.
 public static native func XFBridge_IncidentSightPlan() -> String
 // END XFB_AUTONOMOUS_TEST_HOOKS
+
+public native func XFBridge_Canvas(module: String, action: String, payload: String) -> String;

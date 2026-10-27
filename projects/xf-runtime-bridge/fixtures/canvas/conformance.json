@@ -1,0 +1,449 @@
+{
+  "schema": "canvas-fixtures@1",
+  "camera": {
+    "position": [
+      0,
+      0,
+      0
+    ],
+    "forward": [
+      0,
+      1,
+      0
+    ],
+    "right": [
+      1,
+      0,
+      0
+    ],
+    "up": [
+      0,
+      0,
+      1
+    ],
+    "player": [
+      0,
+      0,
+      0
+    ],
+    "yaw": 0,
+    "fov": 90,
+    "width": 800,
+    "height": 600
+  },
+  "cases": [
+    {
+      "name": "projection",
+      "batch": {
+        "schema": "canvas@1",
+        "producer": "fixture",
+        "layer": "actors",
+        "world": 7,
+        "seq": 1,
+        "views": [
+          "world",
+          "radar"
+        ],
+        "items": [
+          {
+            "id": "centre",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                0,
+                10,
+                0
+              ]
+            }
+          },
+          {
+            "id": "right",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                1,
+                10,
+                0
+              ]
+            }
+          },
+          {
+            "id": "up",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                0,
+                10,
+                1
+              ]
+            }
+          },
+          {
+            "id": "behind",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                0,
+                -10,
+                0
+              ]
+            }
+          }
+        ]
+      },
+      "projected": [
+        [
+          400,
+          300
+        ],
+        [
+          430,
+          300
+        ],
+        [
+          400,
+          270
+        ],
+        null
+      ]
+    },
+    {
+      "name": "unknown field",
+      "batch": {
+        "schema": "canvas@1",
+        "producer": "fixture",
+        "layer": "actors",
+        "world": 7,
+        "seq": 1,
+        "views": [
+          "world",
+          "radar"
+        ],
+        "items": [
+          {
+            "id": "centre",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                0,
+                10,
+                0
+              ]
+            }
+          },
+          {
+            "id": "right",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                1,
+                10,
+                0
+              ]
+            }
+          },
+          {
+            "id": "up",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                0,
+                10,
+                1
+              ]
+            }
+          },
+          {
+            "id": "behind",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                0,
+                -10,
+                0
+              ]
+            }
+          }
+        ],
+        "extra": true
+      },
+      "refusal": {
+        "code": "bad_batch",
+        "path": "$.extra"
+      }
+    },
+    {
+      "name": "bad anchor",
+      "batch": {
+        "schema": "canvas@1",
+        "producer": "fixture",
+        "layer": "actors",
+        "world": 7,
+        "seq": 1,
+        "views": [
+          "world",
+          "radar"
+        ],
+        "items": [
+          {
+            "id": "p",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                0,
+                0,
+                0
+              ],
+              "entity": "1"
+            }
+          }
+        ]
+      },
+      "refusal": {
+        "code": "bad_batch",
+        "path": "$.items[0].anchor"
+      }
+    },
+    {
+      "name": "optional heat absent",
+      "batch": {
+        "schema": "canvas@1",
+        "producer": "fixture",
+        "layer": "actors",
+        "world": 7,
+        "seq": 1,
+        "views": [
+          "world",
+          "radar"
+        ],
+        "items": [
+          {
+            "id": "h",
+            "kind": "heat",
+            "anchor": {
+              "world": [
+                0,
+                0,
+                0
+              ]
+            }
+          }
+        ]
+      },
+      "refusal": {
+        "code": "unsupported_kind",
+        "path": "$.items[0].kind"
+      }
+    }
+  ],
+  "digests": [
+    {
+      "value": {
+        "schema": "canvas@1",
+        "producer": "fixture",
+        "layer": "actors",
+        "world": 7,
+        "seq": 1,
+        "views": [
+          "world",
+          "radar"
+        ],
+        "items": [
+          {
+            "id": "centre",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                0,
+                10,
+                0
+              ]
+            }
+          },
+          {
+            "id": "right",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                1,
+                10,
+                0
+              ]
+            }
+          },
+          {
+            "id": "up",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                0,
+                10,
+                1
+              ]
+            }
+          },
+          {
+            "id": "behind",
+            "kind": "point",
+            "anchor": {
+              "world": [
+                0,
+                -10,
+                0
+              ]
+            }
+          }
+        ]
+      },
+      "canonical": "{\"items\":[{\"anchor\":{\"world\":[0,10,0]},\"id\":\"centre\",\"kind\":\"point\"},{\"anchor\":{\"world\":[1,10,0]},\"id\":\"right\",\"kind\":\"point\"},{\"anchor\":{\"world\":[0,10,1]},\"id\":\"up\",\"kind\":\"point\"},{\"anchor\":{\"world\":[0,-10,0]},\"id\":\"behind\",\"kind\":\"point\"}],\"layer\":\"actors\",\"producer\":\"fixture\",\"schema\":\"canvas@1\",\"seq\":1,\"views\":[\"world\",\"radar\"],\"world\":7}",
+      "sha256": "c97ad387176dfd8bceadb3229d2ec4e34626c6926f796db747fa5503e3783bfc"
+    },
+    {
+      "value": {
+        "z": 0,
+        "a": [
+          1e-7,
+          0.000001,
+          100000000000000000000,
+          1e+21,
+          333333333.3333333
+        ],
+        "s": "€\u000f\nA'B\"\\/"
+      },
+      "canonical": "{\"a\":[1e-7,0.000001,100000000000000000000,1e+21,333333333.3333333],\"s\":\"€\\u000f\\nA'B\\\"\\\\/\",\"z\":0}",
+      "sha256": "30aca23a952408993774635d5982bfca00dbc2c27320dbe1cfe47ea6ae1df90d"
+    },
+    {
+      "value": {
+        "1": 5,
+        "€": 1,
+        "\r": 2,
+        "😀": 3,
+        "דּ": 4,
+        "ö": 6
+      },
+      "canonical": "{\"\\r\":2,\"1\":5,\"ö\":6,\"€\":1,\"😀\":3,\"דּ\":4}",
+      "sha256": "c3971ebd1b16b9ce617d26b9b0e1fd25c224dfdb01be488d4d57576b6f4f7b23"
+    },
+    {
+      "value": 0,
+      "canonical": "0",
+      "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+    },
+    {
+      "value": 0,
+      "canonical": "0",
+      "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+    },
+    {
+      "value": 5e-324,
+      "canonical": "5e-324",
+      "sha256": "c46e7ca1be4c8734f373a56530787288fa2058d73d07855e9247e949f811a42a"
+    },
+    {
+      "value": -5e-324,
+      "canonical": "-5e-324",
+      "sha256": "046f4049d09944fcb2efbf2ddb0ea8f05e0204591d6d02c9106efc88190fa7f9"
+    },
+    {
+      "value": 1.7976931348623157e+308,
+      "canonical": "1.7976931348623157e+308",
+      "sha256": "c2784e1abd6317452708f3fbf9641c16b959561bc621a1d408c23a20aa2cb585"
+    },
+    {
+      "value": -1.7976931348623157e+308,
+      "canonical": "-1.7976931348623157e+308",
+      "sha256": "f0347276b171ff0c36491c912285a2833de7313d1a103a4b1be0274bfe7c021f"
+    },
+    {
+      "value": 9007199254740992,
+      "canonical": "9007199254740992",
+      "sha256": "c681da39d7273a6a24c15c9cac3a75526ff2ecf8ba4ee60346a0c70c8163bdb2"
+    },
+    {
+      "value": -9007199254740992,
+      "canonical": "-9007199254740992",
+      "sha256": "83e109bfd7fb4984b47a46f363627c18dbbd7e57e36b05a04cd162d304df72e9"
+    },
+    {
+      "value": 295147905179352830000,
+      "canonical": "295147905179352830000",
+      "sha256": "7933ef1b34c194c7a327ef424e54282dd2872bc7bda27812f9edf7882ca340c0"
+    },
+    {
+      "value": 9.999999999999997e+22,
+      "canonical": "9.999999999999997e+22",
+      "sha256": "143eadc1fc2fe10a563df313c717399d1835652d710fa189119ff2e1d5cde33d"
+    },
+    {
+      "value": 1e+23,
+      "canonical": "1e+23",
+      "sha256": "0b1af6b73e932475817f8eb620deecf21ad7570df3400a23db5c79a9001597f7"
+    },
+    {
+      "value": 1.0000000000000001e+23,
+      "canonical": "1.0000000000000001e+23",
+      "sha256": "de7cb5db5ee06bf7ef5b74ebcf94cd9d7efda28125905f7ff590724953173c7b"
+    },
+    {
+      "value": 999999999999999700000,
+      "canonical": "999999999999999700000",
+      "sha256": "dcabf7269f6bb6ec5ba8b9530825cd7ffe215d4dd26e0a237f9d753513792c07"
+    },
+    {
+      "value": 999999999999999900000,
+      "canonical": "999999999999999900000",
+      "sha256": "914b4f8b4bbe2f6e7c36ad7791fc842a7516d149e694b3a71b78cee465ff6d7a"
+    },
+    {
+      "value": 1e+21,
+      "canonical": "1e+21",
+      "sha256": "241c4643fa70b1dcde1205b71be4e3bebb17e9f880c8e1a33d0ead6c27271d3c"
+    },
+    {
+      "value": 9.999999999999997e-7,
+      "canonical": "9.999999999999997e-7",
+      "sha256": "2ace34b29d30d300aeacd4f2bb83367fa186f11a3f02ed461f35f00fd741a242"
+    },
+    {
+      "value": 0.000001,
+      "canonical": "0.000001",
+      "sha256": "159fb29a827ad04b260aa6c8ab6d8637f8f2b38af5c4f3cb49d6a21205e040f8"
+    },
+    {
+      "value": 333333333.3333332,
+      "canonical": "333333333.3333332",
+      "sha256": "0fdb7bafaf219ccaf278cd0c0a580473db01c774a0baafe72a07d01230ac5c6d"
+    },
+    {
+      "value": 333333333.33333325,
+      "canonical": "333333333.33333325",
+      "sha256": "bcbe1777b7d3c91c19c7f90100c595a9b3f1d9b395567da4258baf7ac655d403"
+    },
+    {
+      "value": 333333333.3333333,
+      "canonical": "333333333.3333333",
+      "sha256": "6bd9be1c141028789cc35db62f1b43e80d5d4ee24d6d542e775deb16799ff4c7"
+    },
+    {
+      "value": 333333333.3333334,
+      "canonical": "333333333.3333334",
+      "sha256": "1e099031ca0cb3cf4054688f7e2e8c95fc72828de5fa7605ce3f729e6cf79d43"
+    },
+    {
+      "value": 333333333.33333343,
+      "canonical": "333333333.33333343",
+      "sha256": "cf68ab5e198a77538aafd967fb122a305ba1df95c9348b1fe3dff453c7f7215f"
+    },
+    {
+      "value": -0.0000033333333333333333,
+      "canonical": "-0.0000033333333333333333",
+      "sha256": "4e703d4e0928e4f339d03e1fb5454ddc33db657ad735b02530d98123b4fd4b61"
+    },
+    {
+      "value": 1424953923781206.2,
+      "canonical": "1424953923781206.2",
+      "sha256": "e1547479d27f057e3197d49417a1dcbe19dd8781b34fa9f83b789925943d00cb"
+    }
+  ]
+}

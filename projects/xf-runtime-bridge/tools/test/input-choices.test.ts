@@ -56,6 +56,7 @@ const luaFixture = `
            decode = function(s) return DECODE[s] end }
   package.preload.panel = function() return (function() ${read("cet", "xf_runtime_bridge", "panel.lua")} end)() end
   package.preload.theme = function() error("no theme") end
+  package.preload.canvas = function() return (function() ${read("cet", "xf_runtime_bridge", "canvas.lua")} end)() end
   package.preload["test-input"] = function() if missingModule then error("not packaged") end; return (function() ${read("cet", "xf_runtime_bridge", "test-input.lua")} end)() end
   DECODE.INFO = { plugin_version = "0.8.13", answer_keys = {},
     bridge = { enabled = true, listening = true, killed = false, allow_writes = true },
@@ -136,7 +137,7 @@ describe("autonomous package isolation", () => {
     for (const variant of VARIANTS) expect(() => stage(variant)).toThrow("explicit autonomous");
     expect(() => stage("diagnostic", true)).toThrow();
     const m = stage("writes", true);
-    expect(m.native_count).toBe(37);
+    expect(m.native_count).toBe(38);
     expect(m.files.map(f => f.path)).toContain(`${PLUGIN_DIR}/Scripts/XFRuntimeBridgeRecording.reds`);
     expect(m.files.map(f => f.path)).toContain(`${PLUGIN_DIR}/Scripts/XFRuntimeBridgeTestUi.reds`);
     expect(m.files.some(f => f.path.endsWith("/test-input.lua"))).toBe(true);

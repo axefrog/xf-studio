@@ -477,9 +477,9 @@ describe("MCP server permissions, no bridge, and captures", () => {
     synthetic?.close();
   });
 
-  test("--read-only exposes only read and control tools", async () => {
+  test("--read-only exposes read, display and control tools", async () => {
     const { tools } = await mcp.client.listTools();
-    expect(tools.length).toBe(CATALOGUE.filter((c) => ["read", "control"].includes(c.permission)).length);
+    expect(tools.length).toBe(CATALOGUE.filter((c) => ["read", "display", "control"].includes(c.permission)).length);
     expect(tools.some((t) => t.name === "ui_message")).toBe(false);
     expect(tools.some((t) => t.name === "game_save" || t.name === "inventory_equip")).toBe(false);
     expect(tools.some((t) => t.name === "photo_enter")).toBe(false);
@@ -546,7 +546,7 @@ describe("MCP server permissions, no bridge, and captures", () => {
 describe("MCP permission flags", () => {
   test("--read-only and --allow are exclusive; an empty or missing --allow list is refused", () => {
     expect(parsePermissionFlags([])).toEqual({});
-    expect(parsePermissionFlags(["--read-only"])).toEqual({ allow: ["read", "control"] });
+    expect(parsePermissionFlags(["--read-only"])).toEqual({ allow: ["read", "display", "control"] });
     for (const args of [["--read-only", "--allow", "read"], ["--allow", "read", "--read-only"], ["--allow", ""], ["--allow", " , "], ["--allow"], ["--allow", "--no-inline-images"], ["--allow", "read", "--allow", "write-world"], ["--allow", "read,constructor"], ["--allow", "read,write-everything"]]) {
       expect("error" in parsePermissionFlags(args), args.join(" ")).toBe(true);
     }

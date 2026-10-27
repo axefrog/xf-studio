@@ -858,6 +858,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
+  Canvas = require("canvas"),
   version = "0.8.23",
   -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,

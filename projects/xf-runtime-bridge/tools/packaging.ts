@@ -259,6 +259,7 @@ export function stageVariant(options: StageOptions): Manifest {
   // the distribution package must not, since they replace four of the player's presets.
   if (variant !== "default") put(join(projectDir, "tweaks", "test-profile", "xf_photo_mode_presets.yaml"), PRESETS_FILE);
   put(join(projectDir, "cet", "xf_runtime_bridge", "init.lua"), `${CET_DIR}/init.lua`);
+  put(join(projectDir, "cet", "xf_runtime_bridge", "canvas.lua"), `${CET_DIR}/canvas.lua`);
   // The in-game panel (reconnect after the kill switch, pause changes): test builds only. Without it the
   // distribution package's CET layer shows its plain status window.
   if (variant !== "default") put(join(projectDir, "cet", "xf_runtime_bridge", "panel.lua"), PANEL_FILE);

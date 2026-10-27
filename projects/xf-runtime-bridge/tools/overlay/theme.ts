@@ -25,6 +25,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { glyphTable } from "./canvas-glyphs";
 
 import { CET_SCALE_RANGE, IN_GAME_LABELLED_BAR_ALPHA, IN_GAME_THEME } from "../../../xf-studio/authoring/src/studio-ui/style-guide/in-game-theme";
 
@@ -32,6 +33,7 @@ export const PROJECT_DIR = resolve(import.meta.dir, "..", "..");
 export const STUDIO_CSS = resolve(PROJECT_DIR, "..", "xf-studio", "authoring", "public", "studio.css");
 export const NATIVE_OUT = join(PROJECT_DIR, "native", "src", "core", "overlay", "ThemeTable.inc");
 export const LUA_OUT = join(PROJECT_DIR, "cet", "xf_runtime_bridge", "theme.lua");
+export const GLYPHS_OUT = join(PROJECT_DIR, "native", "src", "core", "overlay", "CanvasGlyphs.inc");
 
 export type Rgba = [number, number, number, number];
 export type Token = { light: string; dark: string };
@@ -346,11 +348,12 @@ if (import.meta.main) {
         return false;
       }
     };
-    const ok = same(NATIVE_OUT, native) && same(LUA_OUT, lua);
+    const ok = same(NATIVE_OUT, native) && same(LUA_OUT, lua) && same(GLYPHS_OUT, glyphTable());
     console.log(ok ? "theme tables match the Studio's tokens" : "theme tables are out of date: run bun tools/overlay/theme.ts");
     process.exit(ok ? 0 : 1);
   }
   writeFileSync(NATIVE_OUT, native);
   writeFileSync(LUA_OUT, lua);
+  writeFileSync(GLYPHS_OUT, glyphTable());
   console.log(`wrote ${NATIVE_OUT} and ${LUA_OUT}`);
 }

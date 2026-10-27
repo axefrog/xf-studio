@@ -253,7 +253,7 @@ export class CommandApi {
     name = findCommand(name)?.name ?? name;
     const command = findCommand(name);
     if (this.options.readOnly && !EMERGENCY_COMMANDS.has(name) &&
-        (command?.permission !== "read" || name === "test.record.start" || name === "npc.pick")) {
+        (!["read", "display"].includes(command?.permission ?? "") || name === "test.record.start" || name === "npc.pick")) {
       return Promise.resolve({ ok: false, command: name, cid: options.cid ?? nextCid("read"),
         error: { code: "read_only_connection", message: "This connection observes only; use a writer for this command." } });
     }
@@ -437,7 +437,7 @@ export class CommandApi {
       if (prop === "keySender") return () => async () => { throw Object.assign(new Error("External keys cannot compare-and-act on a game frame"), { code: "precondition_unavailable" }); };
       if (prop === "callBridge") return (method: string, params: Record<string, unknown>, cid: string, timeoutMs?: number, signal?: AbortSignal) => {
         const write = CATALOGUE.some(c => (c.bridge?.method ?? c.name) === method && c.permission.startsWith("write-")) || method === "player.action";
-        const knownRead = CATALOGUE.some(c => (c.bridge?.method ?? c.name) === method && ["read", "notify", "control"].includes(c.permission)) || method === "game.status";
+        const knownRead = CATALOGUE.some(c => (c.bridge?.method ?? c.name) === method && ["read", "notify", "display", "control"].includes(c.permission)) || method === "game.status";
         if (signal && !write && !knownRead) throw Object.assign(new Error(`No execution-frame guard contract for ${method}`), { code: "precondition_unavailable" });
         // Cleanup helpers omit the forward signal and must still be allowed to put things back.
         return target.callBridge(method, write && signal ? { ...params, when } : params, cid, timeoutMs, signal);

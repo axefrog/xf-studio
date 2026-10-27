@@ -301,6 +301,14 @@ Config ParseConfig(const std::string& aText)
         {
             ok = ParseBool(value, config.overlayEnabled);
         }
+        else if (key == "overlay.canvas") { ok = ParseBool(value, config.canvasEnabled); }
+        else if (key == "overlay.canvas_anchor_hz") { ok = ParseU32(value, 1, 20, config.canvasAnchorHz); }
+        else if (key == "overlay.canvas_anchors_per_read") { ok = ParseU32(value, 4, 32, config.canvasAnchorsPerRead); }
+        else if (key == "overlay.canvas_toggle" || key == "overlay.canvas_mode") {
+            killkey::Chord chord; std::string why;
+            ok = killkey::Parse(value, chord, why) && (!chord.enabled || (!chord.ctrl && !chord.shift && !chord.alt));
+            if (ok) (key == "overlay.canvas_toggle" ? config.canvasToggle : config.canvasMode) = chord;
+        }
         else if (key == "overlay.theme")
         {
             const auto theme = Lower(value);
@@ -350,6 +358,10 @@ Config ParseConfig(const std::string& aText)
             config.warnings.push_back("line " + std::to_string(lineNumber) + ": invalid value for '" + key +
                                       "', default kept");
         }
+    }
+    if (config.canvasToggle.enabled && config.canvasMode.enabled && config.canvasToggle.vk == config.canvasMode.vk) {
+        config.canvasMode.enabled = false;
+        config.warnings.push_back("canvas_mode disabled: it used the same key as canvas_toggle");
     }
     return config;
 }

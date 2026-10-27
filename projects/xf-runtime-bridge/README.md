@@ -85,6 +85,12 @@ A set of small, verbosely logged Cyberpunk 2077 base mods, one per mod type, plu
 
 Release builds would compile the research commands out and keep the link off until the player agrees. The MCP tools, CLI and session scripts keep working because command names don't change. Until then, everything below describes the bridge as it is. Design, decisions and phases: [XF Core architecture](../../research/runtime/xf-core-architecture.md).
 
+## Canvas candidate
+
+The [world-space canvas](docs/canvas.md) is built offline and has not run in game. It draws producer-owned `canvas@1` snapshots as world markers and a V-centred radar through the existing draw-only overlay host. Insert shows/hides it; Delete switches radar-only/world markers. It starts hidden. `canvas.feed`, `canvas.clear` and `canvas.view` use the new **display** permission on observer connections; `canvas.state` is read. Notify commands remain refused on observers. CET modules use `GetMod("XF_Runtime_Bridge").Canvas.ForModule("module")`; the native adapter fixes their producer and world.
+
+The candidate includes generated Studio vector icons (missing glyphs draw counted points), the Studio's canvas plate and its text-contrast rule, ownership/disconnect withdrawal, TTL, world/sequence guards, bounded geometry/rates/anchors, canonical digest receipts and capture suppression. Heat is unsupported. [Offline evidence, missing glyphs and prepared CV session rows](docs/canvas-candidate.md) record the limits; no game or visual commissioning is claimed, and the version remains 0.8.23 until integration assigns one. Run `xfb_selftest --unit-canvas` for the focused core fixtures, bounded fuzz corpus and offline budget measurements.
+
 ## Layers
 
 | Layer | Folder | Ships to (MO2 mod root) | Does |
@@ -281,7 +287,7 @@ bun test tools                                         # from this folder (bunfi
 bunx tsc --noEmit
 bun tools/lint-redscript.ts --bundle <COPY of r6/cache/final.redscripts>                               # the fallback showroom class
 bun tools/lint-redscript.ts --bundle <COPY> --codeware <Codeware repository>/scripts                 # the spawning class
-bun tools/lint-redscript.ts --bundle <COPY> --codeware <Codeware repository>/scripts --extra redscript-probes   # 0.8.7: with the -writes package's test probes
+bun tools/lint-redscript.ts --bundle <COPY> --codeware <Codeware repository>/scripts --extra redscript-probes --extra redscript-dm   # the -writes probes include the supervisor's DM lookup
 bun tools/lint-redscript.ts --bundle <COPY> --codeware <Codeware repository>/scripts --extra tools/lint-stubs/equipment-ex --extra <TweakXL repository>/scripts
                                                        # 0.6: the Equipment-EX and TweakXL branches (0.6.1: the Equipment-EX branch needs Codeware too)
 bun tools/lint-lua.ts

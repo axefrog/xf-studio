@@ -10,6 +10,13 @@ export type PlainError = { code: string; message: string; detail?: string; cause
 
 /** The shared plain wording per refusal code (also published in docs/mcp-reference.md). */
 export const BRIDGE_MESSAGES: Readonly<Record<string, string>> = {
+  bad_batch: "The canvas batch has an invalid field or value. Check the reported path and send a corrected snapshot.",
+  unsupported_kind: "This canvas build does not draw that primitive. Read canvas_state for supported features and use a supported kind.",
+  canvas_cap: "The canvas snapshot exceeds the reported limit. Reduce its items or geometry and resend; the previous snapshot remains.",
+  rate: "This canvas producer or layer refreshed too quickly. Wait for retry_after_ms before sending its next snapshot.",
+  producer_in_use: "Another connection owns that canvas producer. Use your own producer name or wait for its owner to disconnect.",
+  stale_seq: "The canvas already accepted this sequence or a newer one. Send a snapshot with a higher sequence.",
+  stale_world: "The world changed since this canvas snapshot was prepared. Read game_status.world_generation and rebuild the snapshot for that world.",
   paused_by_player: "The player paused changes with the XF Runtime Bridge window's own button, so only the player can resume them there. Ask the player, then try again.",
   cet_not_answering: "The XF Runtime Bridge window in Cyber Engine Tweaks hasn't taken the last requests. Check that the game runs with Cyber Engine Tweaks and the bridge's CET mod, then try again.",
   needs_restart: "The XF overlay was off when the game started, and it can only be switched on at start. Set [overlay] enabled = true in the bridge's config.ini and restart the game; after that it switches on and off live.",

@@ -58,7 +58,7 @@ export const point3 = (description: string): JsonSchema => ({ type: "array", des
  * it away, ending the player's chance to answer); the panel is hidden, so it isn't in the picture either way. Without a
  * bridge (or a bridge too old for ui.hud) the capture just runs.
  */
-export async function withOverlayCleared<T>(context: CommandContext, run: () => T | Promise<T>, hideMs = 5000, enabled = true): Promise<{ value: T; overlay: Json }> {
+export async function withOverlayCleared<T>(context: CommandContext, run: () => T | Promise<T>, hideMs = 5000, enabled = true, canvas = false): Promise<{ value: T; overlay: Json }> {
   if (!enabled) {
     stopIfCancelled(context, "the capture");
     return { value: await run(), overlay: { cleared: false, why: "consumer evidence requested" } };
@@ -72,7 +72,7 @@ export async function withOverlayCleared<T>(context: CommandContext, run: () => 
   const hud = await forward(context, "ui.hud", { show: false, cet_label: false });
   // 0.7: the XF ImGui overlay too (it lapses by itself after hideMs, 5 s by default and at most 10 s), and whether Cyber
   // Engine Tweaks' overlay is open (its windows would be in the picture: session 4's teeth frames were lost to it).
-  const host = await forward(context, "overlay.hide", { hidden: true, ms: Math.max(1000, Math.min(10000, Math.round(hideMs))) });
+  const host = await forward(context, "overlay.hide", { hidden: true, ms: Math.max(1000, Math.min(10000, Math.round(hideMs))), ...(canvas ? { canvas: true } : {}) });
   const ui = await forward(context, "ui.state", {});
   const restore = hud.error ? null : ((hud.undo as Json | undefined)?.params as Json | undefined) ?? null;
   if (!hud.error || !host.error) await sleep(120); // the panel's next frames (the overlay pulls every sixth tick)

@@ -38,7 +38,7 @@ describe("0.8.22 the theme generator reads the Studio's in-game table", () => {
     expect(MAPPING.length + IN_GAME_THEME.ruleColours.length).toBe(written.length);
     // 63 ImGui slots and 17 XF slots (the brief said 66 ImGui slots; the pinned enum has 63).
     expect(IMGUI_COLOUR_SLOTS.length).toBe(63);
-    expect(XF_COLOUR_SLOTS.length).toBe(17);
+    expect(XF_COLOUR_SLOTS.length).toBe(18);
   });
 
   test("Border takes --line-strong and CheckMark --signal; the soft line is the XfLine alias; every new alias slot the table marks is written", () => {
@@ -48,7 +48,7 @@ describe("0.8.22 the theme generator reads the Studio's in-game table", () => {
     expect(token("XfLine")).toBe("--line");
     expect(token("CheckboxSelectedBg")).toBe("--signal-bg");
     const added = IN_GAME_THEME.colours.filter((c) => c.added).map((c) => c.slot);
-    expect(added.length).toBe(23); // the brief counted 19; the table marks 17 ImGui aliases and 6 XF ones
+    expect(added.length).toBe(24); // the brief counted 19; the table marks 17 ImGui aliases and 6 XF ones
     for (const slot of added) expect(theme.colors.some((c) => c.name === slot), slot).toBe(true);
   });
 
@@ -108,7 +108,7 @@ describe("0.8.22 the theme generator reads the Studio's in-game table", () => {
 
   test("the native table has one line per entry, the CET table loads and carries the type roles", () => {
     const native = read("native", "src", "core", "overlay", "ThemeTable.inc");
-    expect((native.match(/^XF_THEME_COLOR\(/gm) ?? []).length).toBe(80);
+    expect((native.match(/^XF_THEME_COLOR\(/gm) ?? []).length).toBe(81);
     expect((native.match(/^XF_THEME_METRIC\(/gm) ?? []).length).toBe(IN_GAME_THEME.metrics.length);
     expect((native.match(/^XF_THEME_VALUE\(/gm) ?? []).length).toBe(8);
     expect((native.match(/^XF_THEME_TYPE\(/gm) ?? []).length).toBe(5);
@@ -448,6 +448,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.22 the CET layer under fengari", () =
       json = { decode = function(s) return DECODE[s] end, encode = function() return "{}" end }
       package.preload["panel"] = function() return (function() ${panel} end)() end
       package.preload["theme"] = function() return (function() ${theme} end)() end
+      package.preload["canvas"] = function() return (function() ${read("cet", "xf_runtime_bridge", "canvas.lua")} end)() end
       Game = setmetatable({ XFBridge_Info = function() return "INFO" end, XFBridge_Hud = function() return "xfhud\\t1\\nsurface\\tcet_line\\nkeys\\t1\\n" end,
         XFBridge_Messages = function() return "" end }, { __index = function() return function() return "" end end })
       DECODE.INFO = { plugin_version = "0.8.22", bridge = { enabled = true, listening = true, killed = false },

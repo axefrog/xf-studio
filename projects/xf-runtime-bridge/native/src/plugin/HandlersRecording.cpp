@@ -11,7 +11,7 @@ namespace xfb::plugin
 namespace
 {
 recording::Service& Recorder() { static recording::Service s; return s; }
-uint64_t World() { return Get().scriptLayer.Describe().value("detaches", uint64_t{0}); }
+uint64_t World() { return Get().scriptLayer.WorldGeneration(); }
 uint64_t Connection() { return Get().bridge ? Get().bridge->ConnectionsAccepted() : 0; }
 void Guard()
 {

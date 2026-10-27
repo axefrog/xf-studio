@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 159 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 163 tools, 92 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -25,7 +25,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (4)
-- [Other tools](#other-tools) (14)
+- [Other tools](#other-tools) (18)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -34,7 +34,8 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 58 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `display` | Draw on the canvas | 3 | Yes | Changes only XF canvas drawing, without game writes; allowed on observer connections. | Draws only XF canvas primitives; allowed on observer connections and needs no game write gate. |
+| `read` | Look | 59 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 5 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -2585,6 +2586,7 @@ Screenshots from outside the game (they work without the bridge), re-crops, burs
 | `scale` | number | 0.01 to 1 | Shrink the returned picture by this factor (0.01 to 1) instead of a size limit. |
 | `name` | string | at most 80 characters; matches `^[A-Za-z0-9._-]{1,80}$` | Short label for the files (letters, digits, '.', '_', '-'). |
 | `route` | string | `auto`, `printwindow`, `screen` | How to grab the window. auto (default) reads Windows' copy of the game window, then the screen if the game is in front; printwindow and screen force one route. The screen route reads only while the game is the front window (checked right before and after each grab), otherwise it refuses capture_not_foreground. |
+| `overlay` | string | `canvas` | Include only the canvas in an evidence capture; other XF surfaces stay hidden. |
 | `clear_overlay` | boolean | `true`, `false` | Keep the bridge's own overlay out of the picture: its message lines are cleared and its HUD panel and label hidden for the capture, then the panel comes back (default true; needs the game bridge). |
 | `expect` | object | the fields below | Checks judged before the capture from the scene report (subject in frame with a margin, not blocked, lit) and after it on the subject's region (mean luminance, clipped highlights, crushed shadows); on_fail says what a failure does. |
 | `expect.subject` | string | at most 80 characters | The subject: v, face, head or body (V), piece:&lt;index> (a showroom head) or an NPC's id. Default V, else the first showroom head. |
@@ -3229,6 +3231,73 @@ Tools not yet sorted into an area above.
 | `now` | boolean | `true`, `false` | Include current digest, default true; false avoids another game-thread read |
 | `replay_files` | boolean | `true`, `false` | Recover older history from the native private chunks, default true; bounded 8 MiB/1024 rows per call, more requests the next page |
 
+### `canvas_feed`
+
+**Draw a canvas layer.** Replace one canvas@1 layer. Display class: allowed on observer connections without game writes. Hidden feeds are dropped; resend on canvas.visible. Whole-batch caps, connection ownership, world generation, rising seq and TTL apply. Heat is not supported in this candidate.
+
+- **Command:** `canvas.feed`, the bridge method `canvas.feed`
+- **Permission:** Draw on the canvas (`display`)
+- **Changes the game:** Yes
+- **Undo:** Clear this layer with canvas_clear, or resend its previous snapshot with a higher sequence.
+- **Refusals:** [`bad_batch`](#refusal-bad-batch), [`unsupported_kind`](#refusal-unsupported-kind), [`canvas_cap`](#refusal-canvas-cap), [`rate`](#refusal-rate), [`producer_in_use`](#refusal-producer-in-use), [`stale_seq`](#refusal-stale-seq), [`stale_world`](#refusal-stale-world)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `schema` (required) | string | `canvas@1` | Canvas schema |
+| `producer` (required) | string | matches `^[a-z0-9_-]{1,32}$` | This connection's producer name; a name belongs to one connection until disconnect. |
+| `layer` (required) | string | matches `^[a-z0-9_.-]{1,48}$` | Layer replaced atomically; at most 16 per producer. |
+| `world` (required) | integer | 0 to 9007199254740991 | game_status.world_generation |
+| `seq` (required) | integer | 0 to 9007199254740991 | Must rise per producer/layer |
+| `ttl_s` | number | 0.5 to 30 | Lifetime; default 5 seconds |
+| `views` (required) | array of string | 1 to 2 items; each `world`, `radar` | Views that may draw these items |
+| `items` (required) | array of object or object or object or object or object or object or object or object or object | at most 256 items; each the fields below | Replacement layer snapshot |
+
+### `canvas_clear`
+
+**Clear a canvas layer.** Withdraw one layer, or all layers, owned by this connection's producer. Explicit clear releases the sequence record; expiry retains it.
+
+- **Command:** `canvas.clear`, the bridge method `canvas.clear`
+- **Permission:** Draw on the canvas (`display`)
+- **Changes the game:** Yes
+- **Undo:** Feed the cleared layers again for the current world; clear releases their sequence records.
+- **Refusals:** [`bad_batch`](#refusal-bad-batch), [`producer_in_use`](#refusal-producer-in-use)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `producer` (required) | string | matches `^[a-z0-9_-]{1,32}$` | This connection's producer name; a name belongs to one connection until disconnect. |
+| `layer` | string | matches `^[a-z0-9_.-]{1,48}$` | Layer replaced atomically; at most 16 per producer. |
+
+### `canvas_view`
+
+**Set the canvas radar.** Set and remember radar settings. Defaults: bottom_right, 240 pixels, 50 metres, heading_up, opacity 1. Does not show the canvas; Insert shows it and Delete changes mode.
+
+- **Command:** `canvas.view`, the bridge method `canvas.view`
+- **Permission:** Draw on the canvas (`display`)
+- **Changes the game:** Yes
+- **Undo:** Call canvas_view with the earlier radar settings returned by canvas_state.
+- **Refusals:** [`bad_batch`](#refusal-bad-batch)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `radar` (required) | object | the fields below | Radar settings to change |
+| `radar.corner` | string | `top_left`, `top_right`, `bottom_left`, `bottom_right` | Screen corner |
+| `radar.size_px` | number | 120 to 640 | Square size at 1x |
+| `radar.range_m` | number | 1 to 2000 | Centre to edge, metres |
+| `radar.orientation` | string | `heading_up`, `north_up` | Orientation |
+| `radar.opacity` | number | 0 to 1 | Radar opacity |
+
+### `canvas_state`
+
+**Read the canvas.** Visibility, mode, keys, world, radar, producers and layers with counts, last accepted seq and last refusal, anchor states, anchor read rate/bound/refresh interval, missing glyph counts and supported schemas/features. Separate measured costs for the per-tick camera, paced anchor reads, publication and render. Offline validation is not game commissioning.
+
+- **Command:** `canvas.state`, the bridge method `canvas.state`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`bad_batch`](#refusal-bad-batch)
+
+No parameters.
+
 ## Refusal codes
 
 The shared plain wording each code is answered with (`tools/api/errors.ts`), whichever tool gives it. The bridge's own technical message, when there is one, follows as `detail`.
@@ -3239,6 +3308,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-activation-expired"></a>`activation_expired` | The test activation expired. Check the current screen before arming a fresh fixture. |
 | <a id="refusal-actor-unavailable"></a>`actor_unavailable` | This supervisor supports V and the bridge's own XF actors (a1, a2, ...). Picked passers-by and spawned objects need their own validated actor adapter. |
 | <a id="refusal-arms-drawn"></a>`arms_drawn` | V has her arm cyberware out, and the game doesn't swap arm cyberware while it is drawn. Nothing was changed. Holster it first (player_action with weapon.holster), or leave holster_first on so the tools do it. |
+| <a id="refusal-bad-batch"></a>`bad_batch` | The canvas batch has an invalid field or value. Check the reported path and send a corrected snapshot. |
 | <a id="refusal-bad-input"></a>`bad_input` | A value doesn't fit the tool's input schema (the message lists each problem), or two options that exclude each other were both given. Nothing was sent to the game. |
 | <a id="refusal-bad-params"></a>`bad_params` | Some of the values given aren't valid for this action. |
 | <a id="refusal-bad-request"></a>`bad_request` | The game bridge didn't understand the request. This is a bug in the tool that sent it. |
@@ -3249,6 +3319,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-bridge-save-lock"></a>`bridge_save_lock` | The bridge has changed the game since the last load, so it keeps saving locked (a save now would keep those changes). Nothing was saved. Load a save first, or ask again with override_lock if the save should keep them. |
 | <a id="refusal-busy"></a>`busy` | The game has too many requests waiting. Wait a moment and try again. |
 | <a id="refusal-call-failed"></a>`call_failed` | The game refused the call, and nothing is known to have changed. |
+| <a id="refusal-canvas-cap"></a>`canvas_cap` | The canvas snapshot exceeds the reported limit. Reduce its items or geometry and resend; the previous snapshot remains. |
 | <a id="refusal-carrier-not-loaded"></a>`carrier_not_loaded` | The animation set isn't loaded. For the XF live carrier: install the XF Live Pose test package, open photo mode and select the carrier pose (photo_pose_set with record xfs_live_carrier), then try again. |
 | <a id="refusal-carrier-not-selected"></a>`carrier_not_selected` | The XF live carrier isn't the selected photo-mode pose, so nothing was written. Select it with photo_pose_set (record xfs_live_carrier), then try again. |
 | <a id="refusal-cet-not-answering"></a>`cet_not_answering` | The XF Runtime Bridge window in Cyber Engine Tweaks hasn't taken the last requests. Check that the game runs with Cyber Engine Tweaks and the bridge's CET mod, then try again. |
@@ -3318,7 +3389,9 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-player-busy"></a>`player_busy` | V is busy (jumping, sliding, falling or landing, swimming, in a workspot, a takedown or grapple, carrying a body, in a menu, or photo mode is open), so the bridge won't move her now. Nothing was changed. Try again once she stands still in normal play; player_state's busy_state says which. |
 | <a id="refusal-precondition-failed"></a>`precondition_failed` | The game state changed before this step could act. The detail contains the required and observed state; read catch-up and prepare the next action. |
 | <a id="refusal-precondition-unavailable"></a>`precondition_unavailable` | This route cannot compare conditions on the executing game frame. Use the autonomous test candidate's native action route. |
+| <a id="refusal-producer-in-use"></a>`producer_in_use` | Another connection owns that canvas producer. Use your own producer name or wait for its owner to disconnect. |
 | <a id="refusal-quest-scene"></a>`quest_scene` | A story scene is playing, and the story may hold the weather itself, so the bridge didn't change it. Nothing was changed. Try again once the scene is over. |
+| <a id="refusal-rate"></a>`rate` | This canvas producer or layer refreshed too quickly. Wait for retry_after_ms before sending its next snapshot. |
 | <a id="refusal-rate-limited"></a>`rate_limited` | The game bridge was sent too many requests in a short time, and it was still refusing after the tools waited a few seconds. Nothing was changed by the refused request. Wait a moment and try again. |
 | <a id="refusal-recording-busy"></a>`recording_busy` | The recorder is still active or draining. Stop it and finish saving its records before starting another run. |
 | <a id="refusal-recording-changed"></a>`recording_changed` | That recording is no longer current. Use the run identifier returned by its start; never join samples from different runs. |
@@ -3338,6 +3411,8 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-spawn-refused"></a>`spawn_refused` | The game's entity spawner refused the showroom entity, so nothing was spawned. The plugin log has the details. |
 | <a id="refusal-stale-context"></a>`stale_context` | The expected game screen or choices changed. Read the current state and prepare a fresh fixture. |
 | <a id="refusal-stale-match"></a>`stale_match` | The appearance screen changed between reading the option and applying the value (another row is in use, or the value at that position has another name), so nothing was applied. Try again; it reads the option afresh. |
+| <a id="refusal-stale-seq"></a>`stale_seq` | The canvas already accepted this sequence or a newer one. Send a snapshot with a higher sequence. |
+| <a id="refusal-stale-world"></a>`stale_world` | The world changed since this canvas snapshot was prepared. Read game_status.world_generation and rebuild the snapshot for that world. |
 | <a id="refusal-superseded"></a>`superseded` | An emergency control (bridge_kill or session_handover) came after this command and cancelled it: a command still waiting never ran, and a running one stopped at its next step. Check the game's state, then send it again if it is still wanted. |
 | <a id="refusal-supervisor-busy"></a>`supervisor_busy` | The bounded supervisor action queue is full. Read its receipts and clear or replace the entry before trying again. |
 | <a id="refusal-supervisor-limit"></a>`supervisor_limit` | The supervisor already holds five entries (V plus four XF actors, or five actors). Clear one with supervisor_clear and its actor before arming another. |
@@ -3356,6 +3431,7 @@ The shared plain wording each code is answered with (`tools/api/errors.ts`), whi
 | <a id="refusal-unavailable"></a>`unavailable` | That part of the game isn't available right now. |
 | <a id="refusal-unknown-method"></a>`unknown_method` | The running game bridge doesn't know this action. It may be an older build: stage the current XF Runtime Bridge build. |
 | <a id="refusal-unsupported"></a>`unsupported` | This game doesn't offer a safe way to do that yet. |
+| <a id="refusal-unsupported-kind"></a>`unsupported_kind` | This canvas build does not draw that primitive. Read canvas_state for supported features and use a supported kind. |
 | <a id="refusal-unverified-index"></a>`unverified_index` | That face table index matches an expression only by its place in the list, which isn't reliable with an expression pack installed, so nothing was applied. Use an index photo_state found by name (table_index_verified), or pass force: true to apply it anyway. |
 | <a id="refusal-user-took-over"></a>`user_took_over` | The player took over (their own movement, jump, crouch, sprint, dodge, mouse or stick), so the glide or look stopped and gave V back. Nothing more was changed. Start it again once the player has let go. |
 | <a id="refusal-write-class-disabled"></a>`write_class_disabled` | This kind of change is switched off in the bridge's config.ini (allow_write_classes lists the kinds allowed: photo, world, character, inventory, save, showroom, player, act, npc, dm; inventory stays off until the maintainer allows it, and showroom, player, act, npc and dm are listed only by the XF test profile's build). Nothing was changed. |

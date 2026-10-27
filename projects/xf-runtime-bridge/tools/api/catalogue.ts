@@ -35,6 +35,7 @@ import { isMatch, matchLabel } from "./labels.ts";
 import { runShowroomLight, runShowroomRotate, runShowroomSpawn } from "../showroom/commands.ts";
 import { eyesOf, facingOf, toWorld, type Vec3 as ShowroomVec3 } from "../showroom/plan.ts";
 import { BEHAVE_COMMANDS, PLAYER_COMMANDS, PRESET_COMMAND, SCENE_COMMANDS, stopIfCancelled, withOverlayCleared } from "./catalogue060.ts";
+import { CANVAS_COMMANDS } from "./catalogueCanvas";
 import { COMMANDS_070 } from "./catalogue070.ts";
 import { COMMANDS_080_NPC } from "./catalogue080npc.ts";
 import { TIMELINE_COMMANDS, addWhen } from "./catalogueTimeline.ts";
@@ -56,9 +57,10 @@ const WAIT_THROUGH = new Set(["timeout", "timeout_after_start", "busy", "game_no
 /** Game phases game.status reports (XFBridgeActions.Phase in the redscript layer). */
 export const PHASES = ["starting", "main_menu", "loading", "gameplay", "photo_mode", "character_menu", "menu", "paused", "shutting_down"] as const;
 
-export type Permission = "read" | "notify" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "write-showroom" | "write-player" | "act-player" | "write-npc" | "write-dm" | "control";
+export type Permission = "read" | "notify" | "display" | "write-photo" | "write-world" | "write-character" | "write-inventory" | "write-save" | "write-showroom" | "write-player" | "act-player" | "write-npc" | "write-dm" | "control";
 
 export const PERMISSIONS: Record<Permission, { label: string; description: string }> = {
+  display: { label: "Draw on the canvas", description: "Changes only XF canvas drawing, without game writes; allowed on observer connections." },
   read: { label: "Look", description: "Reads what the game is doing, or takes a screenshot of its window. Changes nothing." },
   notify: {
     label: "Show messages in the game",
@@ -266,7 +268,7 @@ async function runScreenshot(input: Record<string, unknown>, context: CommandCon
   try {
     if (input.clear_overlay === false) record = grab();
     else {
-      const done = await withOverlayCleared(context, grab);
+      const done = await withOverlayCleared(context, grab, 5000, true, input.overlay === "canvas");
       record = done.value;
       overlay = done.overlay;
     }
@@ -789,6 +791,7 @@ export const CATALOGUE: readonly CommandDef[] = addWhen(applyCatalogue080([
         "How to grab the window. auto (default) reads Windows' copy of the game window, then the screen if the game is in front; printwindow and screen force one route. The screen route reads only while the game is the front window (checked right before and after each grab), otherwise it refuses capture_not_foreground.",
         ["auto", "printwindow", "screen"],
       ),
+      overlay: oneOf("Include only the canvas in an evidence capture; other XF surfaces stay hidden.", ["canvas"]),
       clear_overlay: bool("Keep the bridge's own overlay out of the picture: its message lines are cleared and its HUD panel and label hidden for the capture, then the panel comes back (default true; needs the game bridge)."),
       expect: {
         description:
@@ -1789,6 +1792,7 @@ export const CATALOGUE: readonly CommandDef[] = addWhen(applyCatalogue080([
   ...TIMELINE_COMMANDS,
   // The senses for the Story Engine (read-only): quest facts in a batch, V's district, V's status.
   ...SENSES_COMMANDS,
+  ...CANVAS_COMMANDS,
 ]));
 
 export function findCommand(name: string): CommandDef | undefined {

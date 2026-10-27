@@ -68,6 +68,8 @@ public:
 
     // Detaches seen since the last call (the plugin drops a save relock owed to the unloaded session).
     uint64_t TakeDetaches();
+    uint64_t WorldGeneration() const { return m_worldGeneration.load(); }
+    void InvalidateWorld() { m_worldGeneration.fetch_add(1); }
 
 private:
     void ExpireLoad(Clock::time_point aNow);
@@ -80,6 +82,7 @@ private:
     uint64_t m_attaches = 0;
     uint64_t m_detaches = 0;
     uint64_t m_detachesTaken = 0;
+    std::atomic<uint64_t> m_worldGeneration{0};
     bool m_puppet = false; // 0.8.2: a puppet event since the last attach
     Clock::time_point m_puppetAt{};
 };

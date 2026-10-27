@@ -40,6 +40,7 @@
 #include "plugin/GameHandlers.hpp"
 #include "plugin/LivePoseMemory.hpp"
 #include "plugin/Plugin.hpp"
+#include "plugin/Canvas.hpp"
 #include "plugin/Lifecycle.hpp"
 #include "plugin/ScriptCall.hpp"
 
@@ -531,7 +532,9 @@ json GameStatus(const MethodContext& aContext)
              {"writes_paused", state.bridge && state.bridge->GetDispatcher().WritesPaused()},
              {"handed_over", state.bridge && state.bridge->GetDispatcher().HandedOver()},
              {"allow_live_pose", state.config.allowLivePose}};
-    auto finish = [&out] {
+    out["world_generation"] = state.scriptLayer.WorldGeneration();
+    auto finish = [&out, &state] {
+        out["world_generation"] = state.scriptLayer.WorldGeneration();
         auto observation = LifecycleStatus();
         out["lifecycle"] = observation;
         for (auto* key : {"prompt_state", "prompt_observed", "waiting_for_input"}) out[key] = observation[key];
@@ -1194,6 +1197,7 @@ json GameLoadMethod(const MethodContext& aContext)
                 CancelSupervisor("load_requested");
                 StopRecording("load_requested");
                 Get().scriptLayer.OnLoadRequested();
+                Get().canvas.SetWorld(Get().scriptLayer.WorldGeneration());
                 return result;
             },
             "game.load.latest");
@@ -1211,7 +1215,8 @@ json GameLoadMethod(const MethodContext& aContext)
                 auto result = CallScript("XFGame", "LoadNamed", {"String"}, {&name}, cid);
                 CancelSupervisor("load_requested");
                 StopRecording("load_requested");
-                Get().scriptLayer.OnLoadRequested(); // as for the latest save (RB-76)
+                Get().scriptLayer.OnLoadRequested();
+                Get().canvas.SetWorld(Get().scriptLayer.WorldGeneration()); // as for the latest save (RB-76)
                 return result;
             },
             "game.load");
@@ -2184,6 +2189,7 @@ void RegisterMethods(Dispatcher& aDispatcher)
     RegisterSupervisor(aDispatcher);
     RegisterMethodsDm(aDispatcher);
     RegisterMethodsSenses(aDispatcher);
+    RegisterCanvas(aDispatcher);
     auto& state = Get();
 
     aDispatcher.Register({"bridge.info", Access::Read, RunOn::BridgeThread,

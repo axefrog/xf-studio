@@ -43,7 +43,7 @@ int OverlayUnitTests()
     o::ThemeMetrics(metrics);
     o::ThemeValues(values);
     o::ThemeTypes(types);
-    Check(colours == 80 && metrics == 25 && values == 8 && types == 5, "theme: 80 colours (63 ImGui slots, 17 XF), 25 metrics, 8 values, 5 type roles");
+    Check(colours == 81 && metrics == 25 && values == 8 && types == 5, "theme: 81 colours (63 ImGui slots, 18 XF), 25 metrics, 8 values, 5 type roles");
     Check(o::ThemeColorOf("CheckboxSelectedBg", o::ThemeKind::Dark, rgba) && o::ThemeColorOf("XfLine", o::ThemeKind::Light, rgba) &&
               o::ThemeColorOf("XfAccentHover", o::ThemeKind::Dark, rgba) && o::ThemeColorOf("TabSelectedOverline", o::ThemeKind::Dark, rgba),
           "theme: the newer ImGui slots and the XF alias slots are in the table");

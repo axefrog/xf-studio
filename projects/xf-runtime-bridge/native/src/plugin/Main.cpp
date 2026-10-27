@@ -35,6 +35,7 @@
 #include "plugin/Natives.hpp"
 #include "plugin/Overlay.hpp"
 #include "plugin/Plugin.hpp"
+#include "plugin/Canvas.hpp"
 #include "plugin/Lifecycle.hpp"
 #include "plugin/ScriptCall.hpp"
 
@@ -84,6 +85,13 @@ void PollKillKey(State& aState)
     {
         log::Warn("bridge.kill_key", "key=" + chord.label + " (the bridge's own kill key)");
         aState.bridge->Kill("kill_key");
+    }
+    if (aState.canvasKeysChanged.exchange(false)) { aState.canvasToggleWatch = {}; aState.canvasModeWatch = {}; }
+    if (aState.config.canvasEnabled && aState.overlayHost.EnabledNow()) {
+        if (const auto keys = aState.canvas.TryKeys()) {
+            if (aState.canvasToggleWatch.Poll(keys->first, armedNow(), down, armedNow)) aState.canvas.Toggle();
+            if (aState.canvasModeWatch.Poll(keys->second, armedNow(), down, armedNow)) aState.canvas.Mode();
+        }
     }
 }
 
@@ -313,6 +321,7 @@ bool OnRunningUpdate(RED4ext::CGameApplication*)
         }
         HandleRearm(state);
         PollKillKey(state);
+        TickCanvas(scriptsReady);
         SoundNewQuestion(state, scriptsReady);
         // 0.8.22: frame generation is looked for here whether or not the overlay draws ([overlay] enabled = false never starts its
         // renderer), at most once per two seconds, so CET's auto motion and the info answer stay current.

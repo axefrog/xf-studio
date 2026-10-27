@@ -76,6 +76,8 @@ std::string_view AccessName(Access aAccess)
         return "write-dm";
     case Access::Notify:
         return "notify";
+    case Access::Display:
+        return "display";
     case Access::Control:
         return "control";
     }
@@ -214,6 +216,7 @@ GameGate gGate;
 thread_local int tRestoreDepth = 0;
 thread_local bool tReadOnly = false;
 thread_local bool tEmergency = false;
+thread_local uint64_t tConnection = 0;
 struct ReaderScope {
     bool previous = tReadOnly, previousEmergency = tEmergency;
     explicit ReaderScope(bool value) { tReadOnly = value; tEmergency = false; }
@@ -696,9 +699,11 @@ DispatchResult Dispatcher::HandleGuarded(const std::string& line, uint32_t pid, 
     return Handle(line, pid);
 }
 
-DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute, bool aReadOnly) noexcept
+DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute, bool aReadOnly, uint64_t aConnection) noexcept
 {
     ReaderScope readerScope(aReadOnly);
+    struct ConnectionScope { uint64_t previous = tConnection; ~ConnectionScope() { tConnection = previous; } } connectionScope;
+    tConnection = aConnection;
     try
     {
         return HandleUnchecked(aLine, aClientPid, aControlRoute);
@@ -838,7 +843,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     // Readers cannot acquire recorder leases or overwrite the legacy singleton
     // save-list/CET request exchanges. Those reads remain writer-only this round.
     // test.events may observe the tap but cannot switch it.
-    if (tReadOnly && ((!IsEmergencyMethod(methodName) && spec.access != Access::Read) ||
+    if (tReadOnly && ((!IsEmergencyMethod(methodName) && spec.access != Access::Read && spec.access != Access::Display) ||
                      methodName == "npc.pick" || methodName == "test.record.start" || methodName == "game.saves" || methodName == "game.options.read" ||
                      (methodName == "test.events" && request.contains("params") &&
                       request["params"].is_object() && request["params"].contains("stims")))) {
@@ -929,8 +934,34 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     context.readOnlyConnection = tReadOnly;
     context.cid = cid;
     context.clientPid = aClientPid;
+    context.connection = tConnection;
     const auto paramsIt = request.find("params");
     context.params = paramsIt != request.end() && paramsIt->is_object() ? *paramsIt : json::object();
+    if (methodName == "canvas.feed") {
+        // Find the top-level params value, preserving the exact bytes and duplicate keys for canvas validation.
+        size_t valueStart = 0; int paramsDepth = 0; bool inString = false, escape = false;
+        for (size_t i = 0; i < aLine.size(); ++i) {
+            const char c = aLine[i];
+            if (inString) { if (escape) escape = false; else if (c == '\\') escape = true; else if (c == '"') inString = false; continue; }
+            if (c == '"') {
+                if (paramsDepth == 1) {
+                    size_t end = i + 1; bool quoted = false;
+                    for (; end < aLine.size(); ++end) { if (quoted) quoted = false; else if (aLine[end] == '\\') quoted = true; else if (aLine[end] == '"') break; }
+                    const auto key = json::parse(aLine.substr(i, end - i + 1), nullptr, false);
+                    size_t colon = aLine.find_first_not_of(" \t\r\n", end + 1);
+                    if (key == "params" && colon != std::string::npos && aLine[colon] == ':') {
+                        valueStart = aLine.find_first_not_of(" \t\r\n", colon + 1);
+                        if (valueStart == std::string::npos || aLine[valueStart] != '{') break;
+                        size_t j = valueStart; int nested = 0; bool text = false, escaped = false;
+                        for (; j < aLine.size(); ++j) { char ch = aLine[j]; if (text) { if (escaped) escaped = false; else if (ch == '\\') escaped = true; else if (ch == '"') text = false; }
+                            else if (ch == '"') text = true; else if (ch == '{' || ch == '[') ++nested; else if ((ch == '}' || ch == ']') && --nested == 0) { ++j; break; } }
+                        context.rawParams = aLine.substr(valueStart, j - valueStart); break;
+                    }
+                }
+                inString = true;
+            } else if (c == '{' || c == '[') ++paramsDepth; else if (c == '}' || c == ']') --paramsDepth;
+        }
+    }
 
     json response;
     std::string code = "ok";
@@ -1052,6 +1083,7 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     {
         code = e.code;
         response = ErrorResponse(id, cid, e.code, e.what());
+        if (e.detail.is_object()) response["error"].update(e.detail);
     }
     catch (const std::exception& e)
     {

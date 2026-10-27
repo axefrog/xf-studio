@@ -144,6 +144,7 @@ export function changesGame(permission: Permission): string {
 
 /** The game-side switch for each class, in the plugin's config.ini (red4ext/plugins/XFRuntimeBridge/config.ini). */
 const GATES: Record<Permission, string> = {
+  display: "Draws only XF canvas primitives; allowed on observer connections and needs no game write gate.",
   read: "Always allowed while the bridge is on.",
   notify: "Always allowed while the bridge is on, read-only builds included.",
   control: "Always allowed; every MCP configuration includes it.",

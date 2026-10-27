@@ -31,6 +31,7 @@
 #include "core/Session.hpp"
 #include "core/Writes.hpp"
 #include "core/overlay/Host.hpp"
+#include "core/overlay/Canvas.hpp"
 
 namespace xfb::plugin
 {
@@ -94,6 +95,9 @@ struct State
     // Bridge 0.6: the session event stream (session.events; XFBridge_Note adds notes from the game), the behaviour runner
     // (behave.*, ticked on the game thread from the Running update) and player.teleport's pacer (2 a second).
     EventLog events;
+    canvas::Service canvas{&events};
+    killkey::Watch canvasToggleWatch, canvasModeWatch;
+    std::atomic<bool> canvasKeysChanged{false}, canvasKilled{false};
     behave::Runner behaviours;
     player::TeleportPacer teleports;
     // 0.8.2: player.stop's count (core/Player.hpp StopCount), checked by player.look's and player.teleport's later steps.

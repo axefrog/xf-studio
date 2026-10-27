@@ -18,7 +18,7 @@ namespace
 using json = nlohmann::json;
 using supervisor::Work;
 std::atomic<bool> gWatchOwed{false};
-uint64_t World() { return Get().scriptLayer.Describe().value("detaches", uint64_t{0}); }
+uint64_t World() { return Get().scriptLayer.WorldGeneration(); }
 uint64_t Connection() { return Get().bridge ? Get().bridge->ConnectionsAccepted() : 0; }
 supervisor::Service& Owner()
 {

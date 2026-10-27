@@ -12,7 +12,7 @@ using json = nlohmann::json;
 namespace
 {
 double Now() { return static_cast<double>(win32::MonotonicMs()) / 1000.0; }
-uint64_t World() { return Get().scriptLayer.Describe().value("detaches", uint64_t{0}); }
+uint64_t World() { return Get().scriptLayer.WorldGeneration(); }
 std::string Context() { return ScriptCall("XFInputActions", "Context", {}, {}, "input-context").value("phase", std::string()); }
 std::mutex contextMutex;
 std::string cachedContext;

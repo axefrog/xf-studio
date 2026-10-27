@@ -26,6 +26,7 @@
 #include "plugin/GameHandlers.hpp"
 #include "plugin/Natives.hpp"
 #include "plugin/Plugin.hpp"
+#include "plugin/Canvas.hpp"
 
 namespace xfb::plugin
 {
@@ -416,7 +417,7 @@ void ScriptLayerEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool*
     }
     Guarded("XFBridge_ScriptLayer", [&] {
         const bool known = Get().scriptLayer.OnEvent(ToStd(event));
-        if (known && ToStd(event) == "detach") InvalidateLifecycle();
+        if (known && ToStd(event) == "detach") { InvalidateLifecycle(); Get().canvas.SetWorld(Get().scriptLayer.WorldGeneration()); }
         if (known && ToStd(event) == "detach") StopRecording("world_detach");
         if (known && ToStd(event) == "detach") CancelSupervisor("world_detach");
         if (!known)
@@ -1057,6 +1058,13 @@ void RegisterGlobalTyped(RED4ext::CRTTISystem* aRtti, const char* aName, auto aF
 }
 } // namespace
 
+void CanvasNative(RED4ext::IScriptable*, RED4ext::CStackFrame* frame, RED4ext::CString* out, int64_t)
+{
+    RED4ext::CString module, action, payload;
+    RED4ext::GetParameter(frame, &module); RED4ext::GetParameter(frame, &action); RED4ext::GetParameter(frame, &payload); frame->code++;
+    Guarded("XFBridge_Canvas", [&] { if (out) *out = RED4ext::CString(SerializeJson(CanvasLua(ToStd(module), ToStd(action), ToStd(payload)))); });
+}
+
 void RegisterTypes()
 {
     log::Info("rtti.register_types", "phase=register");
@@ -1069,6 +1077,7 @@ void PostRegisterTypes()
         auto* rtti = RED4ext::CRTTISystem::Get();
         RegisterGlobal(rtti, "XFBridge_Ping", &Ping, "String", {"layer", "cid"});
         RegisterGlobal(rtti, "XFBridge_Info", &Info, "String", {});
+        RegisterGlobal(rtti, "XFBridge_Canvas", &CanvasNative, "String", {"module", "action", "payload"});
         RegisterGlobal(rtti, "XFBridge_Log", &LogFromScript, nullptr, {"layer", "level", "cid", "message"});
         RegisterGlobal(rtti, "XFBridge_Announce", &Announce, nullptr, {"layer", "detail"});
         RegisterGlobal(rtti, "XFBridge_Kill", &Kill, "Bool", {"reason"});
@@ -1112,9 +1121,9 @@ void PostRegisterTypes()
         // 0.8.9: the pins' views, OR-ed natively (the Sol review's finding 3).
         RegisterGlobalTyped(rtti, "XFBridge_PinDrawn", &PinDrawn, "Int32", {{"Int32", "pin"}, {"Int32", "bits"}});
         #ifdef XFB_AUTONOMOUS_TEST_HOOKS
-        log::Info("rtti.register_types", "phase=post_register natives=37");
+        log::Info("rtti.register_types", "phase=post_register natives=38");
 #else
-        log::Info("rtti.register_types", "phase=post_register natives=28");
+        log::Info("rtti.register_types", "phase=post_register natives=29");
 #endif
     }
     catch (const std::exception& e)

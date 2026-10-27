@@ -284,6 +284,8 @@ void PipeServer::Run()
         ULONG clientPid = 0;
         GetNamedPipeClientProcessId(pipe, &clientPid);
         m_connections.fetch_add(1);
+        static std::atomic<uint64_t> nextIdentity{1};
+        m_connectionIdentity.store(nextIdentity.fetch_add(1));
         m_hasClient.store(true);
         ResetEvent(drop);
         // 0.8.3: which pipe (session 10 couldn't tell the control pipe's connections from the main pipe's in the log).
@@ -294,6 +296,7 @@ void PipeServer::Run()
                                                  " connection=" + std::to_string(m_connections.load()) + " pipe=" + PipeKind());
 
         const auto reason = ServeClient(clientPid);
+        if (m_onDisconnect) m_onDisconnect(m_connectionIdentity.load());
         if (reason == EndReason::Dropped || reason == EndReason::TooLarge || reason == EndReason::TooManyRejected)
         {
             Linger();

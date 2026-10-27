@@ -140,6 +140,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.6 init.lua: the CET line and Reconnec
       json = { decode = function(s) return DECODE[s] end, encode = function() return "{}" end }
       package.preload["panel"] = function() return (function() ${panel} end)() end
       package.preload["theme"] = function() error("no theme") end
+      package.preload["canvas"] = function() return (function() ${read("cet", "xf_runtime_bridge", "canvas.lua")} end)() end
       Game = setmetatable({
         XFBridge_Info = function() return "INFO" end,
         XFBridge_Hud = function() return "xfhud\\t1\\nsurface\\tcet_line\\nkeys\\t1\\n" end,
@@ -270,6 +271,6 @@ describe("0.8.6 the panel inside photo mode's menu (knowledge/photo-mode.md §15
     expect(natives).toContain("public static native func XFBridge_MouseHeld() -> Bool");
     // 0.8.7: four more (XFBridge_SaveRefused, XFBridge_SaveAnyway, XFBridge_Event, XFBridge_ProbeFlags; batch21); 0.8.9:
     // XFBridge_PinDrawn (batch22).
-    expect(read("native", "src", "plugin", "Natives.cpp")).toContain('log::Info("rtti.register_types", "phase=post_register natives=28");');
+    expect(read("native", "src", "plugin", "Natives.cpp")).toContain('log::Info("rtti.register_types", "phase=post_register natives=29");');
   });
 });
