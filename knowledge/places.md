@@ -489,6 +489,21 @@ the absent cell nor the schematic box is a measured navigable game surface.
 Evidence: [mapping tests](../projects/xf-story-engine/reference/test/shadow/shadow.test.ts)
 and [shadow host notes](../projects/xf-story-engine/reference/SHADOW.md).
 
+## S1 world import v0
+
+**S1 import checkpoint [offline, 28 October 2026].** The optional Story Engine
+[world importer](../projects/xf-story-engine/reference/WORLD-IMPORT.md) clips an
+origin-anchored 200 m grid to Kabuki's actual outline/Z band: **25 blocks**, plus
+**three venue cells**, retaining all seven venue volumes. Their XY footprint
+unions total **4,228.52 m²**; stacked volumes are not counted twice. Venue
+membership takes precedence and includes height. Geometric neighbours do not
+establish traversability. The observer emits the polygons, with extra zone items
+for additional volumes, rather than replacing them with bounding boxes. Existing
+stand-in/shadow layouts remain schematic. Evidence: synthetic geometry/import
+tests, a private real import, and a complete offline S1 day whose spool passed
+Holotable's independent validator. These checks establish importer behaviour,
+not the game's live location-stack or walking routes.
+
 ## Related pages
 
 [Population and affiliations](population-and-affiliations.md) · [Open-world activities](open-world-activities.md) · [Player channels](player-channels.md) · [World and streaming](world-and-streaming.md) · [NPC reactions](npc-reactions.md) · [Quests and story](quests-and-story.md) · [P2 game-substrate plan](../research/story-engine/p2-game-substrate.md) · [Design seeds](../research/story-engine/design-seeds.md) · [World and interactive ideas](../research/backlog/world-and-interactive-ideas.md)

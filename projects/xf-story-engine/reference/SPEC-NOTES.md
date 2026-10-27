@@ -2439,3 +2439,46 @@ An open S2 role whose target kind has no discoverable structural members anywher
 The coordinator reports this casting rule is now specified on main in S2 §5.2 (`e52ab106`); the WIP worktree has not changed the specification text. Person-only M3 roles use S1's structural `xf:resident` kind, compatible with `core:person`, so their free casts find the actual synthetic population while concrete person queries retain their old membership. `test/m3/adapters3.test.ts` verifies unbound person and actor casting in the real Kabuki fixture, without identity overlays.
 
 Compatible queries run in ascending kind-id order. Their results are deduplicated in first-occurrence order (kind id, then query result order) before the existing source, root-actor, minor, claim, preference and keyed-draw checks. Concrete casts retain their old node-id sort; nominal pools retain the specified kind-id/query order across runs and reloads. No union type or actor-specific branch is introduced. `test/s2/nominal-cast.test.ts` directly casts both a person and a group through an open actor role, excludes a place and the protagonist, checks unchanged person-only/group-only casting (including empty local scopes), and checks the pool and recomputed draw after save/load. All four regressions pass. Both frozen digest tests still pass unchanged after this S2 addition: v3 `746601727380a3fdff647f873c91c971`, v4 `8fce55b19462a1e02f03ca5336bd8c16`.
+
+## S1 world import v0 (28 October 2026)
+
+The additional [W1 import](WORLD-IMPORT.md) follows the coordinator's import brief;
+the S1 specification, existing fixtures, archived M3 runs and frozen digests stay
+unchanged. All extensions are offline plain data under `worldImport`, carried
+through the existing optional world index. `importW1`, `validateInputs`,
+`stableJson`, `importedWorld`, the geometry functions and `importedLayout` inspect
+only supplied data; no kernel recovery or identity materialisation is involved.
+
+**Open calibration:** `worldImport.gameCoverageEvidence` counts POIs by their
+original kind. It is not a fraction and never replaces `CellIndex.gameCoverage`.
+S1 retains the selected stand-in template's existing coverage multiplier until
+an evidence-to-rate calibration is decided.
+
+Origin anchoring preserves a block's `(gx, gy)` key and geometry. The brief also
+requires venue-first, then `(gx, gy)` ordered **ordinal** member IDs. Adding an
+earlier-sorting bin necessarily shifts subsequent ordinals; the importer does
+not promise otherwise. The report declares a new lineage for changed inputs,
+and stable keys support later mapping. The anchoring test adds higher-sorting
+bins and checks unchanged keys, geometry and IDs of earlier bins.
+
+Unsupported fields copy grid/venue stand-in templates cyclically within each
+kind, unchanged, with every source template ID in the private report. This
+includes opportunity, propensity, gang pairs, public/market flags and coverage;
+district totals are re-summed from those opportunities. Stub/rest totals and
+S1Data defaults remain unchanged. Measured presence does not recalibrate these
+priors. The residential scale is 2,964; S1's unchanged per-cell rounding yields
+2,963 headcount units on real Kabuki. Household draws remain estimates, not an
+exact population enumeration.
+
+Unknown schedules give flat population periods. Distinct person-entry/spot
+links vote once across phases; shared-community links remain separate. Empty
+blocks get 1% of the mean block link count (mean one if all are empty), with
+census affiliation shares as the explicit fallback. Population distributes the
+census scale over these links and floors, including venue presence. Quantities,
+period names, registry IDs and binding ordinals await a versioned W1 contract;
+runtime body binding and an opt-in W1 census remain deferred.
+
+The observer uses polygon `zone` anchors already supported by Holotable, one
+place item per retained volume (the first keeps the cell ID). Venue display names
+are presentation labels; membership always uses the real polygons and Z bands.
+The default shadow host still uses its unchanged stand-in schematic layout.

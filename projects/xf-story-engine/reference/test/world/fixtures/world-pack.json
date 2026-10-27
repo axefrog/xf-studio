@@ -1,0 +1,8 @@
+{
+  "schema": "xfh/world-pack-1",
+  "areas": [
+    { "id": "Districts.Kabuki", "kind": "district", "name": "Kabuki", "poly": [[0,0],[400,0],[400,400],[0,400]], "zlo": -20, "zhi": 200 },
+    { "id": "Districts.JudysApartment", "kind": "venue", "name": "Judy's Apartment", "parent": "Districts.Kabuki", "poly": [[180,20],[220,20],[220,80],[180,80]], "zlo": 10, "zhi": 20 },
+    { "id": "Districts.JudysApartment", "kind": "venue", "name": "Judy's Apartment", "parent": "Districts.Kabuki", "poly": [[180,20],[220,20],[220,80],[180,80]], "zlo": 30, "zhi": 35 }
+  ]
+}

@@ -3,7 +3,8 @@
 export type Kind = 'zone' | 'actor' | 'relation' | 'point' | 'target';
 export type Vec3 = [number, number, number];
 export type Box = { box: { min: Vec3; max: Vec3 } };
-export type Anchor = { region: string } | { entity: string } | { at: Vec3 } | { item: string } | Box;
+export type Zone = { zone: { poly: [number, number][]; zlo: number; zhi: number } };
+export type Anchor = { region: string } | { entity: string } | { at: Vec3 } | { item: string } | Box | Zone;
 export interface Manifest {
   schema: 'xfh/layer-1'; producer: 'story-engine'; layer: string; title: string; description?: string;
   producer_title?: string; facet_titles?: Record<string, string>;
@@ -48,7 +49,10 @@ export function validateManifest(v: unknown): asserts v is Manifest {
 function anchor(v: unknown): v is Anchor {
   return obj(v) && Object.keys(v).length === 1 &&
     (text(v.region) || text(v.entity) || text(v.item) && /^[^/]+(?:\/[^/]+){0,2}$/.test(v.item) ||
-      Array.isArray(v.at) && v.at.length === 3 && v.at.every(num) || obj(v.box) && keys(v.box, ['min', 'max']) &&
+      Array.isArray(v.at) && v.at.length === 3 && v.at.every(num) || obj(v.zone) && keys(v.zone, ['poly', 'zlo', 'zhi']) &&
+      Array.isArray(v.zone.poly) && v.zone.poly.length >= 3 && v.zone.poly.length <= 4096 &&
+      v.zone.poly.every((p: unknown) => Array.isArray(p) && p.length === 2 && p.every(num)) && num(v.zone.zlo) && num(v.zone.zhi) && v.zone.zlo <= v.zone.zhi ||
+      obj(v.box) && keys(v.box, ['min', 'max']) &&
       [v.box.min, v.box.max].every((a) => Array.isArray(a) && a.length === 3 && a.every(num)) && v.box.min.every((n: number, i: number) => n <= v.box.max[i]));
 }
 export function validateRecord(v: unknown, m: Manifest): asserts v is RecordLine {
@@ -76,5 +80,5 @@ export function validateRecord(v: unknown, m: Manifest): asserts v is RecordLine
   } else if (v.kind === 'actor') {
     if (!['region', 'entity', 'at', 'box', 'item'].includes(a) || !obj(v.value) || !keys(v.value, ['name', 'role']) || !text(v.value.name) ||
       v.value.role !== undefined && !text(v.value.role)) throw Error('Invalid actor');
-  } else if ((v.kind === 'zone' ? !['region', 'box'].includes(a) : !['region', 'entity', 'at', 'item'].includes(a)) || v.value !== undefined) throw Error('Invalid spatial item');
+  } else if ((v.kind === 'zone' ? !['region', 'box', 'zone'].includes(a) : !['region', 'entity', 'at', 'item'].includes(a)) || v.value !== undefined) throw Error('Invalid spatial item');
 }

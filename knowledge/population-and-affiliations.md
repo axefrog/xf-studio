@@ -370,6 +370,22 @@ For a booked session on the [runtime bridge](../projects/xf-runtime-bridge/READM
 10. **Hostile pairs without a record.** What an attitude lookup returns when no `Attitude` links two groups.
 11. **The bridge reads** wanted by the population mirror: current district record, affiliation, entity template path and `savable` per NPC (row 16). Built in bridge 0.8.8 and checked in session 15: the district (`world.district`) and the affiliation with the type, rarity, archetype, attitude group and crowd flags (`scene.read` with `npc_detail`) [runtime]. Still open: the entity template path (a resource reference has no path or hash in script) and `savable`.
 
+## S1 world import v0
+
+**S1 import checkpoint [offline, 28 October 2026].** The optional
+[world importer](../projects/xf-story-engine/reference/WORLD-IMPORT.md) uses
+**1,843 person entries** (106 vehicle, nine unknown entries excluded from
+presence), and **4,779 distinct person-entry/spot links**. W1's counts are
+potential casting links, not quantities or simultaneous population. In this
+input, Tyger Claws have 211 person entries, Scavengers 51 and The Mox 48; the
+unchanged census priors remain 205, 48 and 112 respectively. S1's residential
+scale remains 2,964, allocated by clipped block area; unchanged per-cell rounding
+yields 2,963 headcount units, with household membership still drawn from the
+existing recipe. Population periods are flat because the exported schedules
+remain unknown. Empty-link cells explicitly fall back to census affiliations;
+vehicles never supply affiliation votes. Evidence: synthetic import tests and
+the private real import report; no runtime count or new demographic claim.
+
 ## Related pages
 
 [Open-world activities](open-world-activities.md) · [World and streaming](world-and-streaming.md) · [NPC reactions](npc-reactions.md) · [NPC direction](npc-direction.md) · [Crowd adoption and identity](crowd-adoption-and-identity.md) · [Main story as game state](main-story-state.md) · [Save files](save-files.md) · [Quests and story](quests-and-story.md) · [P2 game-substrate plan](../research/story-engine/p2-game-substrate.md) · [Design seeds](../research/story-engine/design-seeds.md)

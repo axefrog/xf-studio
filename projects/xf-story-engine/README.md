@@ -83,6 +83,14 @@ events, silent restatement, nominal kind compatibility), the cores of S1 v0.6 an
 
 The model's runtime dependency is `@noble/hashes` (BLAKE3). The source audits use the pinned TypeScript dev dependency's compiler AST API.
 
+The optional [S1 world import v0](reference/WORLD-IMPORT.md) builds an additional
+Kabuki index from the private world pack and Holotable W1 content: 25 clipped
+200 m blocks and three real venues. The observer publishes real polygon volumes
+for that index. Residential census/recipe priors remain declared stand-ins;
+entry/spot presence, services, binding tuples and coverage evidence use W1.
+The existing fixture and shadow-host defaults remain unchanged. This is offline
+validation, with no runtime body binding or game session claimed.
+
 ## Running the tests
 
 The reference model also has a [Holotable spool writer](reference/HOLOTABLE.md)

@@ -1,0 +1,34 @@
+{
+  "schema": "xfh/world-content-1",
+  "slice": { "id": "kabuki", "places": ["Districts.Kabuki", "Districts.JudysApartment"] },
+  "records": {
+    "1": { "kind": "person", "affiliationName": "Factions.Civilian" },
+    "2": { "kind": "person", "affiliationName": "Factions.TygerClaws" },
+    "3": { "kind": "vehicle" },
+    "4": { "kind": "other" }
+  },
+  "communities": [
+    { "id": "c1", "entries": [
+      { "name": "civilian", "record": "1", "phases": [{ "name": "day", "spots": ["shared", "v", "missing"] }, { "name": "night", "spots": ["shared"] }] },
+      { "name": "car", "record": "3", "phases": [{ "name": "parked", "spots": ["car"] }] },
+      { "name": "empty", "record": "4", "phases": [] }
+    ] },
+    { "id": "sector:2", "entries": [
+      { "name": "gang", "record": "2", "phases": [{ "name": "day", "spots": ["shared"] }] }
+    ] }
+  ],
+  "spots": [
+    { "id": "shared", "at": [50,50,0], "communities": ["c1", "sector:2"] },
+    { "id": "v", "at": [200,50,12], "communities": ["c1"] },
+    { "id": "car", "at": [300,300,0], "communities": ["c1"] },
+    { "id": "sector:3", "at": [50,300,0], "communities": [] },
+    { "id": "outside", "at": [450,300,0], "communities": [] }
+  ],
+  "pois": [
+    { "id": "food", "at": [50,50,0], "kind": "Food vendor" },
+    { "id": "quest", "at": [50,50,0], "kind": "Quest" },
+    { "id": "activity", "at": [200,50,12], "kind": "Gang activity" },
+    { "id": "unknown", "at": [50,50,0], "kind": "FutureVariant" }
+  ],
+  "spawners": []
+}

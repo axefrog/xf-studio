@@ -426,6 +426,21 @@ The [runtime bridge](runtime-access.md) could later preview additions in game un
 7. Can a mutation from one mod bring back a node another mod deleted (a scale or position mutation on a scaled-to-zero static mesh)? The code suggests yes (§2.2).
 8. Does Codeware's `Resource/PostLoad` fire for every streamed sector, making it a usable sector-load event for the bridge?
 
+## S1 world import v0
+
+**Downstream S1 binding checkpoint [offline, 28 October 2026].** The optional
+[world importer](../projects/xf-story-engine/reference/WORLD-IMPORT.md) reduces
+the retained 4,932 phase spot links to **4,917 distinct community/entry/spot
+tuples** by removing 15 repeats across phases of the same entry. All **72 spots
+shared across two communities** retain both memberships. **3,847 spots** have
+no entry link and **132 entries** have no spots; neither case invents occupancy.
+This binding table uses each spot's geometry-selected cell, rather than the
+community's placement-origin place. Registry identity and binding ordinals are
+still absent, and no runtime body binding is implemented. The importer records
+247 POI coverage-evidence pins separately from its 17 service pins and the four
+other pins; evidence counts do not set S1's fractional coverage rate. Evidence:
+synthetic binding tests and the private W1 import; no additional game read.
+
 ## Related pages
 
 [Archive and resource formats](archive-format.md) · [Mod loading](mod-loading.md) · [Runtime access](runtime-access.md) · [Terminals and arcade](terminals-and-arcade.md) · [World and interactive ideas](../research/backlog/world-and-interactive-ideas.md) · [Population and affiliations](population-and-affiliations.md) · [Places](places.md)

@@ -13,7 +13,7 @@ import { recordedTieStrength } from '../sim/tie-policy.ts';
 import { memberId, ownedId, isId } from '../id.ts';
 import { contains } from '../region.ts';
 import { BOUNDS, type Anchor, type Item, type Kind, type Retraction } from './schema.ts';
-import type { PlaceLayout } from './layout.ts';
+import { importedLayout, type PlaceLayout } from './layout.ts';
 import { boundText } from './facets.ts';
 import { KIND_GLYPHS, personGlyph, eventGlyph, placeGlyph, storyGlyph, decisionGlyph } from './glyphs.ts';
 import * as wording from '../wording/index.ts';
@@ -47,11 +47,12 @@ export class HolotableObserver {
   private peopleLayers = new Set<string>();
   private stops = new Map<string, { key: string; item: Item }>();
   private displayNames = new Map<string, string>();
+  private get layout(): PlaceLayout | undefined { return importedLayout(this.sim.w.index) ?? this.options.layout; }
   constructor(readonly sim: Sim, readonly l2?: Layer2, readonly l3?: Layer3, readonly options: ObserveOptions = {}) {}
   get epoch(): number { return this.options.gameEpochSeconds ?? this.sim.w.index.clock?.sod0 ?? 0; }
 
   sample(): Observation {
-    const { sim, l2, l3 } = this, k = sim.k, now = k.now, t = now + this.epoch;
+    const { sim, l2, l3 } = this, k = sim.k, now = k.now, t = now + this.epoch, layout = this.layout;
     const layers = new Map(Object.keys(LAYERS).map((l) => [l, [] as Item[]]));
     const headers = k.store.headers;
     const frames = k.frames.all(); // existing records only
@@ -68,8 +69,10 @@ export class HolotableObserver {
     const put = (layer: string, id: string, kind: Kind, anchor: Anchor, cite: string, rest: Partial<Item> = {}) => {
       const glyph = layer === 'groups' ? 'group' : layer === 'items' ? 'item' : layer === 'placement' ? 'scene' : KIND_GLYPHS[kind];
       const item: Item = { schema: 'xfh/item-1', id, kind, t, anchor, cite, glyph, ...rest };
-      if (layer === 'places' && this.options.layout?.cells.has(id))
-        item.facets = { ...item.facets, about: wording.phrase('schematic-block-about') };
+      if (layer === 'places' && layout?.cells.has(id)) {
+        const about = layout.about ? layout.about.get(id) : wording.phrase('schematic-block-about');
+        if (about) item.facets = { ...item.facets, about };
+      }
       item.label = wording.displayText(item.label);
       item.detail = wording.displayText(item.detail, true);
       if (item.facets) item.facets = Object.fromEntries(Object.entries(item.facets).filter(([key, value]) => wording.displayText(key) && wording.displayText(value)));
@@ -92,7 +95,7 @@ export class HolotableObserver {
       if (h?.origin.by === 'member' || h?.origin.by === 'value') return ownerRegion(h.origin.owner, seen);
       return undefined;
     };
-    const regionAnchor = (id?: string): Anchor => this.options.layout?.cells.get(id ?? '') ?? { region: this.options.layout?.districts.get(id ?? '') ?? id ?? 'unplaced' };
+    const regionAnchor = (id?: string): Anchor => layout?.cells.get(id ?? '') ?? { region: layout?.districts.get(id ?? '') ?? id ?? 'unplaced' };
     const cellFallback = (id?: string): Anchor => id && sim.w.index.cells[id] ? { item: `story-engine/places/${id}` } : regionAnchor(id);
     const placeAnchor = (id?: string): Anchor => {
       if (!id) return regionAnchor();
@@ -112,6 +115,7 @@ export class HolotableObserver {
     };
     const placeName = (id?: string): string | undefined => {
       if (!id) return undefined;
+      if (layout?.names?.has(id)) return layout.names.get(id);
       const c = sim.w.index.cells[id], d = sim.w.index.districts[c?.district ?? id];
       if (!d) return undefined;
       const name = ({ wat_kab: 'Kabuki', wat_nor: 'Northside', wat_lch: 'Little China' } as Record<string, string>)[d.key];
@@ -252,6 +256,8 @@ export class HolotableObserver {
       put('places', c.id, 'zone', regionAnchor(c.id), `se:node:${c.id}`, { label: placeName(c.id), glyph: placeGlyph(regimes, refuge), facets: {
         ...(ed ? { mood: mood(ed.bands[c.id]?.band ?? 0, regimes) } : {}), ...(shares ? { "who's here": shares } : {}), ...(refuge ? { refuge: 'a refuge: people hide here' } : {}),
       } });
+      for (const [i, anchor] of (layout?.extraVolumes?.get(c.id) ?? []).entries())
+        put('places', `${c.id}-volume-${i + 2}`, 'zone', anchor, `se:node:${c.id}`, { label: placeName(c.id), glyph: placeGlyph(regimes, refuge) });
     }
     const detail = new Map<string, { tier: number; frame: string }>();
     for (const f of frames.filter((f) => f.status === 'active' || f.status === 'blocked')) for (const node of f.focus.nodes) {
