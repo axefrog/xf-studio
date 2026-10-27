@@ -98,13 +98,12 @@ for (const channel of ['actors', undefined] as const) test(`${channel ?? 'shared
   expect(peopleRows(host).filter(row => row.id === actor).at(-1)).toMatchObject({ t: 410, anchor: { at: [25, 20, 0] } });
 });
 
-for (const channel of ['actors', undefined] as const) {
-  const publishedAt = 180;
+for (const channel of ['actors', undefined] as const) for (const publishedAt of [180, 250]) {
   test(`${channel ?? 'shared'} retrospective gap supersedes the ${publishedAt} revision in Holotable, matching up-front discovery`, async () => {
     const roots = [temp(), temp()];
     const [live, offline] = roots.map(root => new ShadowHost(defaultReader, world, meta, join(root, 'story-engine')));
     const readers = roots.map(root => createLayerSpool(root));
-    const initial: Batch = { ...batch(), actors: [{ ...batch().actors[0], entity: undefined }], v: [v(100), v(180)] };
+    const initial: Batch = { ...batch(), actors: [{ ...batch().actors[0], entity: undefined }], v: [v(100), v(180), ...(publishedAt === 250 ? [v(250)] : [])] };
     const gap = { from: publishedAt - 0.1, to: publishedAt + 1, fromSeq: 5, toSeq: 8, reason: 'sequence' as const, ...(channel ? { channel } : {}) };
     const actor = mirroredId(live.key('a1'));
     const visible = (data: Awaited<ReturnType<typeof readers[0]['read']>>, host: ShadowHost, t: number) =>
@@ -117,15 +116,17 @@ for (const channel of ['actors', undefined] as const) {
       live.consume({ ...emptyBatch(), gaps: [gap] });
       offline.consume({ ...initial, gaps: [gap] });
       const tombstones = (host: ShadowHost) => peopleRows(host).filter(row => row.retract === actor);
-      expect(tombstones(live)).toEqual([{ retract: actor, t: publishedAt }]);
-      expect(tombstones(offline)).toEqual(tombstones(live));
       for (const host of [live, offline]) host.consume({ ...emptyBatch(), v: [v(330), v(410)] });
+      const data = await Promise.all(readers.map(reader => reader.read()));
       for (let i = 0; i < readers.length; i++) {
-        const data = await readers[i].read();
-        expect(data.every(layer => layer.refused === 0)).toBe(true);
-        for (const t of [publishedAt - 0.05, publishedAt, publishedAt + 0.5, gap.to, 330, 410]) expect(visible(data, [live, offline][i], t)).toBe(false);
+        expect(data[i].every(layer => layer.refused === 0)).toBe(true);
+        for (const t of [gap.from, publishedAt - 0.05, publishedAt, publishedAt + 0.5, gap.to, 330, 410]) {
+          expect(visible(data[i], [live, offline][i], t)).toBe(visible(data[1], offline, t));
+          expect(visible(data[i], [live, offline][i], t)).toBe(false);
+        }
       }
-      expect(tombstones(offline)).toEqual(tombstones(live));
+      expect(tombstones(live)).toEqual([{ retract: actor, t: gap.from }, { retract: actor, t: publishedAt }]);
+      expect(tombstones(offline)).toEqual([{ retract: actor, t: gap.from }]);
     } finally { for (const reader of readers) reader.close(); }
   });
 }
@@ -134,16 +135,16 @@ test('a retrospective gap supersedes the latest revision on its save branch and 
   const root = temp(), host = new ShadowHost(defaultReader, world, meta, join(root, 'story-engine'));
   const reader = createLayerSpool(root), actor = mirroredId(host.key('a1'));
   try {
-    host.consume({ ...batch(), v: [v(100), v(180), v(250)] });
+    host.consume({ ...batch(), v: [v(100), v(180), v(250), v(330)] });
     host.sim.k.persistence.save('late-gap-branch');
-    host.consume({ ...emptyBatch(), gaps: [{ from: 249.9, to: 251, fromSeq: 5, toSeq: 8, reason: 'sequence', channel: 'actors' }] });
-    expect(peopleRows(host).filter(row => row.retract === actor)).toEqual([{ retract: actor, t: 250, branch: 'late-gap-branch' }]);
+    host.consume({ ...emptyBatch(), gaps: [{ from: 249.9, to: 331, fromSeq: 5, toSeq: 8, reason: 'sequence', channel: 'actors' }] });
     const data = await reader.read();
     const visible = (t: number, branch: string) => evaluateLayers(data, host.session, t, 'full', [], world, branch).flatMap(layer => layer.items).some(item => item.id === actor);
-    for (const t of [250, 250.5, 251, 330]) {
+    for (const t of [249.9, 249.95, 250, 250.5, 300, 330, 331, 410]) {
       expect(visible(t, 'late-gap-branch')).toBe(false);
       expect(visible(t, 'sibling')).toBe(true);
     }
+    expect(peopleRows(host).filter(row => row.retract === actor)).toEqual([249.9, 250, 330].map(t => ({ retract: actor, t, branch: 'late-gap-branch' })));
   } finally { reader.close(); }
 });
 

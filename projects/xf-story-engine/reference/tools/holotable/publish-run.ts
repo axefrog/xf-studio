@@ -14,10 +14,12 @@ interface LayerState {
   manifest: Manifest; bytes: number;
   values: Map<string, { signature: string; item: Item }>;
   retracted: Set<string>;
+  retractionTimes: Map<string, Set<number>>;
   records: RecordLine[];
   truncations: number;
   unknownGlyphs: number;
 }
+export interface ItemRevision { layer: string; id: string; t: number; branch?: string }
 const history = new Set(['events', 'director']);
 const signature = ({ t: _t, ...value }: Item) => JSON.stringify(value);
 const key = (id: string, branch?: string) => JSON.stringify([branch ?? null, id]);
@@ -53,20 +55,24 @@ export class RunPublisher {
   private create(m: Manifest): LayerState {
     const line = spoolLine(m);
     writeFileSync(join(this.directory, `${m.layer}.jsonl`), line, { flag: 'wx' });
-    const state: LayerState = { manifest: m, bytes: Buffer.byteLength(line), values: new Map(), retracted: new Set(), records: [], truncations: 0, unknownGlyphs: 0 };
+    const state: LayerState = { manifest: m, bytes: Buffer.byteLength(line), values: new Map(), retracted: new Set(), retractionTimes: new Map(), records: [], truncations: 0, unknownGlyphs: 0 };
     this.layers.set(m.layer, state);
     return state;
   }
-  publish(observation: Observation): void {
+  publish(observation: Observation, onItem?: (revision: ItemRevision) => void): void {
     if (!Number.isFinite(observation.t) || observation.t < this.run.from || observation.t > this.run.to) throw Error('Observation lies outside standalone span');
-    const plans: Array<{ state: LayerState; lines: RecordLine[]; values: LayerState['values']; retracted: Set<string>; text: string; fresh: boolean; truncations: number }> = [];
+    const plans: Array<{ state: LayerState; lines: RecordLine[]; values: LayerState['values']; retracted: Set<string>; retractionTimes: LayerState['retractionTimes']; text: string; fresh: boolean; truncations: number }> = [];
     for (const layer of new Set([...observation.layers.keys(), ...(observation.retractions?.keys() ?? [])])) {
       const incoming = observation.layers.get(layer) ?? [];
       const old = this.layers.get(layer);
       const m = old?.manifest ?? this.manifest(layer, ['actor']);
       validateManifest(m);
-      const state = old ?? { manifest: m, bytes: Buffer.byteLength(spoolLine(m)), values: new Map(), retracted: new Set<string>(), records: [], truncations: 0, unknownGlyphs: 0 };
+      const state = old ?? { manifest: m, bytes: Buffer.byteLength(spoolLine(m)), values: new Map(), retracted: new Set<string>(), retractionTimes: new Map<string, Set<number>>(), records: [], truncations: 0, unknownGlyphs: 0 };
       const values = new Map(state.values), retracted = new Set(state.retracted), seen = new Set<string>(), lines: RecordLine[] = [];
+      const retractionTimes = new Map([...state.retractionTimes].map(([id, times]) => [id, new Set(times)]));
+      const noteRetraction = (id: string, t: number) => { const times = retractionTimes.get(id) ?? new Set<number>(); times.add(t); retractionTimes.set(id, times); };
+      const explicit = observation.retractions?.get(layer) ?? [];
+      const explicitlyRetracted = new Set(explicit.map(r => key(r.retract, r.branch ?? observation.branch)));
       const branchedIds = new Set([...values.values()].filter(({ item }) => item.branch !== undefined).map(({ item }) => item.id));
       for (const id of retracted) { const [branch, item] = JSON.parse(id); if (branch !== null) branchedIds.add(item); }
       let truncations = 0;
@@ -97,6 +103,11 @@ export class RunPublisher {
           branchedIds.delete(item.id);
         }
         values.set(id, { signature: sig, item }); retracted.delete(id); lines.push(item); truncations += shortened;
+        // A new item can win an equal-time tie against an earlier tombstone.
+        // The same timed retraction must therefore be admitted again afterwards.
+        if (item.branch === undefined) {
+          for (const other of retractionTimes.keys()) if (JSON.parse(other)[1] === item.id) retractionTimes.delete(other);
+        } else retractionTimes.delete(id);
         if (item.branch !== undefined) branchedIds.add(item.id);
       }
       if (!history.has(layer)) {
@@ -108,23 +119,27 @@ export class RunPublisher {
         for (const { item } of values.values()) if (item.branch === observation.branch) effective.set(item.id, item);
         for (const item of effective.values()) {
           const id = key(item.id, observation.branch);
-          if (seen.has(id)) continue;
+          if (seen.has(id) || explicitlyRetracted.has(id)) continue;
           lines.push({ retract: item.id, t: observation.t, ...(observation.branch ? { branch: observation.branch } : {}) });
+          noteRetraction(id, observation.t);
           values.delete(id); retracted.add(id);
           if (observation.branch === undefined) for (const [other, prior] of values) if (prior.item.id === item.id) {
             values.delete(other); retracted.add(other);
           }
         }
       }
-      for (const value of observation.retractions?.get(layer) ?? []) {
+      for (const value of explicit) {
         const record = { ...value, branch: value.branch ?? observation.branch };
         validateRecord(record, m);
         if (record.t < this.run.from || record.t > observation.t) throw Error(`${layer}: retraction lies outside observed span`);
         const id = key(record.retract, record.branch);
-        if (retracted.has(id)) continue;
-        if ((values.get(id)?.item.t ?? -Infinity) > record.t) throw Error(`${layer}: retraction precedes item`);
-        lines.push(record); values.delete(id); retracted.add(id);
-        if (record.branch === undefined) for (const [other, prior] of values) if (prior.item.id === record.retract) {
+        if (retractionTimes.get(id)?.has(record.t)) continue;
+        lines.push(record); noteRetraction(id, record.t);
+        // A historical tombstone hides older revisions, not a newer live value.
+        const current = values.get(id) ?? (record.branch ? values.get(key(record.retract)) : undefined);
+        if (!current || current.item.t <= record.t) retracted.add(id);
+        if ((values.get(id)?.item.t ?? Infinity) <= record.t) values.delete(id);
+        if (record.branch === undefined) for (const [other, prior] of values) if (prior.item.id === record.retract && prior.item.t <= record.t) {
           values.delete(other); retracted.add(other);
         }
       }
@@ -133,15 +148,18 @@ export class RunPublisher {
       const text = lines.map(spoolLine).join('');
       if (state.bytes + Buffer.byteLength(text) > BOUNDS.bytes) throw Error(`${layer}: spool exceeds 16 MB`);
       checkItemBounds([...state.records, ...lines], layer);
-      plans.push({ state, lines, values, retracted, text, fresh: !old, truncations });
+      plans.push({ state, lines, values, retracted, retractionTimes, text, fresh: !old, truncations });
     }
     for (const plan of plans) {
       const state = plan.fresh ? this.create(plan.state.manifest) : plan.state;
       if (plan.text) appendFileSync(join(this.directory, `${state.manifest.layer}.jsonl`), plan.text);
       state.bytes += Buffer.byteLength(plan.text); state.values = plan.values; state.retracted = plan.retracted; state.records.push(...plan.lines);
+      state.retractionTimes = plan.retractionTimes;
       state.truncations += plan.truncations;
       state.unknownGlyphs += plan.lines.reduce((n, r) => n + ('id' in r ? unknownGlyphs(r) : 0), 0);
     }
+    if (onItem) for (const plan of plans) for (const record of plan.lines) if ('id' in record)
+      onItem({ layer: plan.state.manifest.layer, id: record.id, t: record.t, branch: record.branch });
   }
   /** Distinct ids ever published, latest live ids, item revisions, and actual bytes. */
   counts(): Record<string, { items: number; live: number; revisions: number; bytes: number; truncations: number; unknownGlyphs: number }> {

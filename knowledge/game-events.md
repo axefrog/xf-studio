@@ -39,7 +39,10 @@ receipts; synthetic offline fixtures exercise actor and raw-incident mapping,
 gap scopes and live-log replay. Retrospective actor-gap invalidation is checked
 through Holotable's own spool reader and [layer evaluator](../projects/xf-holotable/src/layers.ts):
 the greatest timestamp wins, then later spool order at equal timestamps; a
-tombstone must supersede the affected published revision [source/offline].
+tombstone at the gap start hides earlier revisions, and additional tombstones at
+every published revision time within the gap supersede those equal-time items.
+Consumer read-back checks identical late/up-front visibility between revisions,
+at revisions and after the gap, including branch scope [source/offline].
 This is a feed-coverage limit, not
 evidence that no actors or incidents existed in the game. Sources:
 [recorder catalogue](../projects/xf-runtime-bridge/native/src/core/Recording.cpp),

@@ -43,6 +43,18 @@ batches per wall-clock second does not constrain offline file creation. A disk
 failure can interrupt an append; this is an offline spool, not an atomic multi-file
 database. Use a new output directory to retry a failed run.
 
+Explicit retrospective retractions may precede the latest item revision. Each
+branch/id/time tombstone is deduplicated separately; a backdated tombstone retains
+newer live values until their own tombstone. Explicitly retracted ids bypass
+automatic disappearance at the observation time, so the producer controls their
+historical times. Re-publishing an item permits a later equal-time tombstone again.
+All schema, line, layer-byte and distinct-id gates still apply. An optional
+`publish` callback receives `{layer, id, t, branch}` for item lines actually
+appended; ordinary callers and standalone output are unchanged.
+The Kabuki week CLI's twelve spools are byte-identical to the pre-change HEAD
+output. Existing writer tests pass unchanged; added regressions cover historical
+times, preservation of newer values, duplicate timestamps and refusal atomicity.
+
 ## Layer mapping
 
 | Layer | Contents |

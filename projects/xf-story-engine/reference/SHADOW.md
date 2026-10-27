@@ -33,13 +33,16 @@ position-only actor uses its observed coordinates. An invalid/missing position
 is counted and is never presented as a new position reading. `valid:false` breaks
 the actor's track even if a malformed sample carries coordinates. The host
 immediately removes a previously published actor from the people snapshot, letting
-the existing writer retract it on the current branch. A retrospective break's
-tombstone uses the later of its QPC start and the actor's latest published snapshot
-time, so an older timestamp cannot lose to an already published item. Holotable
+the existing writer retract it on the current branch. A retrospective gap `[a,b]`
+emits a tombstone at `a` and at every actually published actor revision time inside
+the closed interval. The start hides older revisions between samples; the later
+tombstones supersede revisions already published inside the gap. Holotable
 chooses later spool order at equal timestamps (the [layer evaluator](../../xf-holotable/src/layers.ts)),
-so the explicit tombstone follows the preserved snapshot at that time. When a
-gap is known before an actor's first publication, that window emits the same
-tombstone even though the actor's item is suppressed.
+so equal-time tombstones win without replaying old item copies. The writer's
+optional revision callback reports only item lines actually appended, including
+their layer, time and branch. Up-front discovery emits the gap-start tombstone
+and suppresses the affected items; consumer-visible state matches late discovery
+between revisions, at revision times and after the gap.
 Later windows suppress it until a valid position reobserves it. Historical game
 readings remain evidence: S1 does not permit withdrawing them. Failed whole-channel
 actor reads and shared recorder gaps invalidate every known actor at the gap's start,
@@ -58,7 +61,7 @@ as unmapped rather than guessed into S1 roles or turned into actor-track reading
 These raw kinds have no effects, fills or inferred derived events. Schema admission
 and registration live entirely inside the [host adapter](src/shadow/host.ts): S1Data's raw-kind list
 does not extend its schema enum, so the adapter extends only its own schema
-instance and registers the two evidence-only kinds. Engine code is unchanged.
+instance and registers the two evidence-only kinds. Engine core is unchanged.
 
 `witness.gap`, `witness.unwitnessed` and `incident.coverage` receipts are counted
 under `unmapped` and listed individually under `incidentReceipts`, with their
@@ -177,7 +180,8 @@ The live safety regression traverses the real shadow adapter and `CommandApi.run
 with an injected native transport that requires reader selection and rejects
 every method outside the retained-data read allowlist. Transport-log failure tests
 cover both discovery and catch-up receipts, with budget and disk failures.
-Validation: 26 shadow tests pass; the guarded default suite has 1,738 passes,
+Validation: 28 shadow tests pass; writer tests have 35 passes and one opt-in skip,
+with the existing writer tests unchanged. The guarded default suite has 1,743 passes,
 46 skips and no failures. The frozen v3 digest remains
 `746601727380a3fdff647f873c91c971`, and v4 remains
 `8fce55b19462a1e02f03ca5336bd8c16`. Typechecking, Markdown links and the
