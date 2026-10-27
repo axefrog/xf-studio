@@ -1,43 +1,55 @@
-/** Resolved revision deltas queue structural markers only. Drawing never diffs items or prepares visuals. */
-import type { AgentRevisionChange } from "../agent-types";
-export const EFFECT_MS = 300;
-export const EFFECT_WORK = 256;
+/** Cosmetic effects compare only small, complete painted frames; snapshots contain no story data. */
+import type { Vec3 } from "../types";
+type XY = readonly [number, number];
+export interface PaintedMarker {
+  key: string; id: string; layer: string; version: number;
+  screen: XY; point: Vec3; offset: XY; tone: string; marker: string; glyph?: string; fades: boolean;
+}
+export const EFFECT_MS = 300, EFFECT_WORK = 256, EFFECT_MARKERS = 512;
 export function playbackEffects(now: () => number) {
-  let epoch: unknown, playing = false, reduced = false;
-  type Effect = AgentRevisionChange & { start: number };
+  let context: unknown, playing = false, reduced = false;
+  let previous: ReadonlyMap<string, PaintedMarker> | undefined;
+  type Effect = { kind: "pulse" | "fade"; marker: PaintedMarker; start: number };
   const effects = new Map<string, Effect>();
-  let queue: string[] = [], cursor = 0;
-  let pending: { changes: readonly AgentRevisionChange[]; cursor: number; at: number }[] = [];
-  const clear = () => { effects.clear(); queue = []; cursor = 0; pending = []; };
+  const clear = () => { previous = undefined; effects.clear(); };
   return {
-    observe(changes: readonly AgentRevisionChange[], on: boolean, context: unknown, minimal: boolean) {
-      const continuous = epoch === context && playing === on && reduced === minimal;
-      if (!continuous || !on || minimal) clear();
-      else { const at=now(); pending=pending.filter(batch=>at-batch.at<EFFECT_MS); if(changes.length)pending.push({ changes, cursor: 0, at }); }
-      epoch = context; playing = on; reduced = minimal;
-    },
-    /** At most 256 changed/queued markers visited. Batches keep all deltas, independent of the painting cursor. */
-    frame() {
-      const at = now(), result = new Map<string, Effect & { progress: number }>();
-      pending=pending.filter(batch=>at-batch.at<EFFECT_MS);
-      let visited = 0;
-      while (pending.length && visited < EFFECT_WORK) {
-        const batch = pending[0], change = batch.changes[batch.cursor++]; visited++;
-        if (!effects.has(change.key)) queue.push(change.key);
-        const effect = { ...change, start: batch.at }; effects.set(change.key, effect);
-        if (at - effect.start < EFFECT_MS) { result.set(change.key,{ ...effect, progress: Math.max(0, (at-effect.start)/EFFECT_MS) }); }
-        if (batch.cursor === batch.changes.length) pending.shift();
-      }
-      const count = queue.length;
-      let scanned = 0;
-      while (queue.length && visited < EFFECT_WORK && scanned++ < count) {
-        if (cursor >= queue.length) cursor = 0;
-        const key = queue[cursor], effect = effects.get(key); visited++;
-        if (!effect || at - effect.start >= EFFECT_MS) { effects.delete(key); queue[cursor] = queue[queue.length-1]; queue.pop(); continue; }
-        if (!result.has(key)) result.set(key,{ ...effect, progress: Math.max(0, (at-effect.start)/EFFECT_MS) }); cursor++;
-      }
-      return { effects: [...result.values()], pending: effects.size > 0 || pending.length > 0, visited };
-    },
     clear,
+    configure(on: boolean, epoch: unknown, minimal: boolean) {
+      if (context !== epoch || playing !== on || reduced !== minimal || !on || minimal) clear();
+      context = epoch; playing = on; reduced = minimal;
+    },
+    keys: () => previous?.keys() ?? [],
+    paint(markers: ReadonlyMap<string, PaintedMarker>, retracted: (marker: PaintedMarker) => boolean) {
+      if (!playing || reduced || markers.size > EFFECT_MARKERS) { clear(); return; }
+      const at = now();
+      const add = (key: string, effect: Effect) => {
+        effects.delete(key); effects.set(key, effect);
+        if (effects.size > EFFECT_MARKERS) effects.delete(effects.keys().next().value!);
+      };
+      if (previous) {
+        for (const [key, marker] of markers) {
+          const old = previous.get(key), effect = effects.get(key);
+          if (!old || old.version !== marker.version) add(key, { kind: "pulse", marker, start: at });
+          else if (effect?.kind === "pulse") effect.marker = marker;
+        }
+        for (const [key, marker] of previous) if (!markers.has(key)) {
+          effects.delete(key);
+          if (marker.fades && retracted(marker)) add(key, { kind: "fade", marker, start: at });
+        }
+      }
+      previous = markers;
+    },
+    /** Rotate through at most 256 of the at-most-512 retained effects per overlay frame. */
+    frame() {
+      const at = now(), result: (Effect & { progress: number })[] = [];
+      const count = Math.min(effects.size, EFFECT_WORK); let visited = 0;
+      for (const [key, effect] of effects) {
+        if (visited++ >= count) break;
+        effects.delete(key);
+        if (at - effect.start >= EFFECT_MS) continue;
+        effects.set(key, effect); result.push({ ...effect, progress: Math.max(0, (at-effect.start)/EFFECT_MS) });
+      }
+      return { effects: result, pending: effects.size > 0, visited: count };
+    },
   };
 }

@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import { agentCanvas } from "../src/features/holotable/view/agent-canvas";
-import { agentRevisions } from "../src/features/holotable/agent-revisions";
 import type { AgentAnswer, AgentItem } from "../src/features/holotable/agent-types";
 import { camera, ORBITS } from "../src/features/holotable/view/projection";
 
@@ -55,10 +54,10 @@ test("known plates retain kind geometry, selection is 22px and badges 6px; unkno
 
 const point=(id="a",version=0):AgentItem=>({id,key:`p/a/${id}`,version,kind:"point",anchor:{at:[10,0,0]},place:[10,0,0]});
 const answer=(items:readonly AgentItem[]):AgentAnswer=>({specs:{schema:"xfh/projections-1",kinds:{point:{style:"tone",label:"{label}",draw:"ring"},actor:{style:"tone",label:"{name}",draw:"diamond"},path:{style:"tone",label:"{label}",draw:"polyline"},zone:{style:"tone",label:"{label}",draw:"volume"},field:{style:"tone",label:"",draw:"grid"}}},here:[],layers:[{id:"p/a",title:"A",producer:"p",layer:"a",notPlaced:[],otherBranches:[],refused:0,reason:"",items}]});
-async function resolved(...answers:AgentAnswer[]){const revisions=agentRevisions(),signal=new AbortController().signal,result:AgentAnswer[]=[];for(const raw of answers)result.push({...raw,revisions:await revisions.answer(raw,signal)});return result;}
+
 
 test("only marker snapshots fade for 300 ms, with an opacity ramp and reduced-motion refusal",async()=>{
- const [base,removed]=await resolved(answer([point()]),answer([]));
+ const [base,removed]=[answer([point()]),answer([])];
  for(const reduced of [false,true]){
   let now=0;
   withCanvas((renderer,_arcs,strokes,_names,alphas)=>{
@@ -72,7 +71,7 @@ test("only marker snapshots fade for 300 ms, with an opacity ramp and reduced-mo
 });
 
 test("pause and navigation clear an in-flight ring before a new layer response",async()=>{
- const [base,changed]=await resolved(answer([point()]),answer([point("a",1)]));
+ const [base,changed]=[answer([point()]),answer([point("a",1)])];
  withCanvas(renderer=>{
   const C=camera([0,0,0],ORBITS.top,800,500),enabled={};
   for(const mode of ["pause","seek"]){
@@ -95,7 +94,7 @@ test("painted glyph plates block other labels while either selected item's name 
 
 
 test("following a moving camera preserves pulse and fade age and reprojects both at each frame",async()=>{
- const [base,changed,removed]=await resolved(answer([point()]),answer([point("a",1)]),answer([]));
+ const [base,changed,removed]=[answer([point()]),answer([point("a",1)]),answer([])];
  let now=0;withCanvas((renderer,arcs)=>{
   const enabled={},playback={playing:true,epoch:"continuous"},start=camera([0,0,0],ORBITS.top,800,500);
   renderer.draw(base,enabled,start,null,1000,null,[],350,playback);renderer.draw(changed,enabled,start,null,1000,null,[],350,playback);
@@ -110,41 +109,78 @@ test("following a moving camera preserves pulse and fade age and reprojects both
 
 test("full to structure to retraction cannot redraw a stale name, label or story text",async()=>{
  const full={...point(),kind:"actor",glyph:"fixer",label:"secret label",detail:"secret detail",value:{name:"secret name",facets:{doing:"secret thought"}}};
- const [base,structure,removed]=await resolved(answer([full]),answer([{...point(),kind:"actor",glyph:"fixer",value:{name:"actor"}}]),answer([]));
+ const [base,structure,removed]=[answer([full]),answer([{...point(),kind:"actor",glyph:"fixer",value:{name:"actor"}}]),answer([])];
  let now=0;withCanvas((renderer,_arcs,strokes,names)=>{
   const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"same"};
   renderer.draw(base,enabled,C,null,1000,null,[],350,playback);expect(names).toContain("secret name");
-  names.length=0;renderer.draw(structure,enabled,C,null,-1,null,[],350,playback);renderer.draw(removed,enabled,C,null,-1,null,[],350,playback);
+  renderer.draw(structure,enabled,C,null,1000,null,[],350,playback);names.length=0;renderer.draw(removed,enabled,C,null,1000,null,[],350,playback);
   const before=strokes();now=150;expect(renderer.animate()).toBe(true);expect(strokes()).toBeGreaterThan(before);expect(names).toEqual([]);
  },{now:()=>now});
 });
 
-test("the last of 513 markers retracts even when no painting or preparation slice reached it",async()=>{
- const items=Array.from({length:513},(_,i)=>({...point(String(i)),glyph:"fixer",place:[-200+i*.8,0,0] as const}));
- const [base,removed]=await resolved(answer(items),answer(items.slice(0,-1)));
- expect(removed.revisions!.changes.map(change=>change.key)).toEqual([items.at(-1)!.key]);
- let now=0;withCanvas((renderer,arcs,_strokes,names)=>{
-  const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"one"};
-  renderer.draw(base,enabled,C,null,-1,null,[],350,playback);renderer.draw(removed,enabled,C,null,-1,null,[],350,playback);
-  now=150;expect(renderer.animate()).toBe(true);expect(arcs.find(arc=>arc[2]===9)!.slice(0,2)).toEqual(C.point(items.at(-1)!.place!)!);expect(names).toEqual([]);
- },{now:()=>now});
-});
+test("two answers before a paint preserve the last painted marker's retraction",()=>withCanvas((renderer,arcs)=>{
+ const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"one"};
+ renderer.draw(answer([point()]),enabled,C,null,1000,null,[],350,playback);
+ let latest=answer([point("a",1),point("unseen")]);latest=answer([]); // Answers arrive without an intervening paint.
+ renderer.draw(latest,enabled,C,null,1000,null,[],350,playback);
+ arcs.length=0;expect(renderer.animate()).toBe(true);expect(arcs).toHaveLength(1);expect(arcs[0].slice(0,2)).toEqual(C.point(point().place!)!);expect(arcs[0][2]).toBe(6.8);
+}));
 
-test("paths and zones vanish; a retired field draws one tiny plate without reading its geometry",async()=>{
- const [base,removed]=await resolved(answer([
-  {...point("path"),kind:"path",glyph:"waypoint"},{...point("zone"),kind:"zone",glyph:"place"},
-  {...point("field"),kind:"field",glyph:"goal",get anchor():never{throw Error("Fade read geometry");},get value():never{throw Error("Fade read field cells");}},
- ]),answer([]));
- expect(removed.revisions!.changes.map(change=>change.key)).toEqual(["p/a/field"]);
- withCanvas((renderer,arcs,strokes,names)=>{
-  const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"one"};
-  renderer.draw(base,enabled,C,null,-1,null,[],350,playback);renderer.draw(removed,enabled,C,null,-1,null,[],350,playback);
-  const before=strokes();expect(renderer.animate()).toBe(true);expect(strokes()-before).toBeLessThanOrEqual(2);expect(arcs.filter(arc=>arc[2]===9)).toHaveLength(1);expect(names).toEqual([]);
- });
-});
+test("not-placed, culled, offscreen and hidden items never pulse or fade",()=>withCanvas(renderer=>{
+ const C=camera([0,0,0],ORBITS.top,800,500),playback={playing:true,epoch:"one"};
+ const draw=(a:AgentAnswer,enabled={})=>renderer.draw(a,enabled,C,null,1000,null,[],350,playback);
+ const unplaced={...answer([point()]),layers:[{...answer([point()]).layers[0],notPlaced:["a"]}]};
+ draw(answer([]));draw(unplaced);expect(renderer.animate()).toBe(false);draw(answer([]));expect(renderer.animate()).toBe(false);
+ draw(answer([point()]));draw(unplaced);expect(renderer.animate()).toBe(false);
+ draw(answer([point()]));draw(answer([{...point(),place:[10000,0,0]}]));expect(renderer.animate()).toBe(false);
+ draw(answer([point()]));
+ renderer.draw(answer([point()]),{}, {...C,point:()=>[1000,0] as const},null,1000,null,[],350,playback);expect(renderer.animate()).toBe(false);
+ draw(answer([point()]));draw(answer([]),{"p/a":false});expect(renderer.animate()).toBe(false);
+ draw(answer([point()]));draw({...answer([]),layers:[]});expect(renderer.animate()).toBe(false);
+}));
 
-test("painting does not read or diff any of 5,000 resolved revision versions",async()=>{
+test("pulses use the 12 px fan-out and a retraction keeps that offset while following",()=>withCanvas((renderer,arcs)=>{
+ const items=[{...point("a"),glyph:"fixer"},{...point("b"),glyph:"fixer"}],enabled={},playback={playing:true,epoch:"one"},C=camera([0,0,0],ORBITS.top,800,500);
+ renderer.draw(answer(items),enabled,C,null,1000,null,[],350,playback);
+ renderer.draw(answer(items.map(i=>({...i,version:1}))),enabled,C,null,1000,null,[],350,playback);
+ arcs.length=0;renderer.animate();const center=C.point(items[0].place!)!;
+ expect(arcs.map(a=>a.slice(0,2))).toEqual([[center[0]+12,center[1]],[center[0]-12,center[1]+Math.sin(Math.PI)*12]]);
+ const followed=camera([1,2,0],ORBITS.top,800,500);
+ renderer.draw(answer([{...items[0],version:1}]),enabled,followed,null,1000,null,[],350,playback);
+ arcs.length=0;renderer.animate();const fade=arcs.find(a=>a[2]===9)!,projected=followed.point(items[1].place!)!;
+ expect(fade[0]).toBeCloseTo(projected[0]-12);expect(fade[1]).toBeCloseTo(projected[1]);
+}));
+
+test("a budget-hit frame and its resumed slices reset the baseline without effects",()=>withCanvas(renderer=>{
+ const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"one"};
+ const draw=(a:AgentAnswer,budget=1000)=>renderer.draw(a,enabled,C,null,budget,null,[],350,playback);
+ draw(answer([point()]));const partial=answer([point("a",1)]);
+ expect(draw(partial,-1)!.pending).toBe(true);expect(renderer.animate()).toBe(false);
+ expect(draw(partial)!.pending).toBe(false);expect(renderer.animate()).toBe(false);
+ draw(answer([point("a",2)]));expect(renderer.animate()).toBe(false);
+ draw(answer([point("a",3)]));expect(renderer.animate()).toBe(true);
+}));
+
+test("more than 512 painted markers give no effects and reset the baseline",()=>withCanvas(renderer=>{
+ const items=Array.from({length:513},(_,i)=>({...point(String(i)),place:[-50+(i%30)*3,-30+Math.floor(i/30)*3,0] as const}));
+ const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"one"};
+ const draw=(a:AgentAnswer)=>renderer.draw(a,enabled,C,null,1000,null,[],350,playback);
+ draw(answer(items.slice(0,512)));draw(answer(items.map(i=>({...i,version:1}))));expect(renderer.animate()).toBe(false);
+ draw(answer([point()]));expect(renderer.animate()).toBe(false);
+ draw(answer([point("a",1)]));expect(renderer.animate()).toBe(true);
+}));
+
+test("paths and zones vanish; a retired field fades only its plate without reading old geometry",()=>withCanvas((renderer,arcs,strokes,names)=>{
+ let retired=false;
+ const field:AgentItem={...point("field"),kind:"field",glyph:"goal",get anchor(){if(retired)throw Error("Fade read geometry");return {grid:{origin:[10,0,0] as const,rows:1,cols:1,cell:10}};},get value(){if(retired)throw Error("Fade read field values");return {scalars:[1]};}};
+ const base=answer([{...point("path"),kind:"path",glyph:"waypoint",anchor:{path:[[0,0,0],[10,0,0]]}},{...point("zone"),kind:"zone",glyph:"place",anchor:{box:{min:[0,0,0],max:[10,10,10]}}},field]);
+ const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"one"};
+ renderer.draw(base,enabled,C,null,1000,null,[],350,playback);retired=true;
+ renderer.draw(answer([]),enabled,C,null,1000,null,[],350,playback);
+ const before=strokes();arcs.length=0;names.length=0;expect(renderer.animate()).toBe(true);expect(strokes()-before).toBeLessThanOrEqual(2);expect(arcs.filter(a=>a[2]===9)).toHaveLength(1);expect(names).toEqual([]);
+}));
+
+test("a deadline before painting reads none of 5,000 versions",()=>{
  let reads=0;const items=Array.from({length:5000},(_,i)=>({...point(String(i)),get version(){reads++;return 1;}}));
- const [base]=await resolved(answer(items));expect(reads).toBe(5000);reads=0;
- withCanvas(renderer=>{const result=renderer.draw(base,{},camera([0,0,0],ORBITS.top,800,500),null,-1,null,[],350,{playing:true,epoch:"one"});expect(result!.pending).toBe(true);expect(reads).toBe(0);});
+ withCanvas(renderer=>{const result=renderer.draw(answer(items),{},camera([0,0,0],ORBITS.top,800,500),null,-1,null,[],350,{playing:true,epoch:"one"});expect(result!.pending).toBe(true);expect(reads).toBe(0);expect(renderer.animate()).toBe(false);});
 });

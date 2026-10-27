@@ -4,7 +4,7 @@ import type { ExperimentPort } from "../src/platform/api/experiments";
 import { expect, test } from "bun:test";
 import { createHolotable } from "../src/features/holotable/service";
 import { SPEEDS, changeMoment } from "../src/features/holotable/playback";
-import { playbackEffects, EFFECT_WORK } from "../src/features/holotable/view/playback-effects";
+import { playbackEffects, EFFECT_WORK, type PaintedMarker } from "../src/features/holotable/view/playback-effects";
 import { GLYPHS, glyphIcon, unknownGlyphs, BADGE_TONES } from "../src/features/holotable/view/glyphs";
 import { HOLOTABLE_MODULE, HOLOTABLE_ACTIONS } from "../src/features/holotable/module";
 import { holotableFacade } from "../src/features/holotable/facade";
@@ -65,21 +65,34 @@ test("stepping binary-searches long histories",()=>{
   expect(changeMoment({t:50000,agentEnabled:{},agents:{...layers,layers:[{...layers.layers[0],changes:times}]}},1)).toBe(50001);expect(reads).toBeLessThan(22);
 });
 
-test("resolved marker deltas pulse and fade for 300 ms, with reset, pause and reduced motion",()=>{
- let now=0;const effects=playbackEffects(()=>now),marker={point:[0,0,0] as const,tone:"signal",marker:"ring"};
- effects.observe([],true,0,false);expect(effects.frame().effects).toEqual([]);
- effects.observe([{key:"a",layer:"p/a",kind:"pulse",marker}],true,0,false);now=150;expect(effects.frame().effects[0]).toMatchObject({kind:"pulse",progress:.5});
- effects.observe([{key:"a",layer:"p/a",kind:"fade",marker}],true,0,false);now=300;expect(effects.frame().effects[0]).toMatchObject({kind:"fade",progress:.5,marker});
+const painted=(key="a",version=0):PaintedMarker=>({key,id:key,layer:"p/a",version,screen:[0,0],point:[0,0,0],offset:[0,0],tone:"signal",marker:"ring",fades:true});
+test("complete painted markers pulse and fade for 300 ms, with reset, pause and reduced motion",()=>{
+ let now=0;const effects=playbackEffects(()=>now),marker=painted();
+ effects.configure(true,"appearance",false);effects.paint(new Map(),()=>true);effects.paint(new Map([["a",marker]]),()=>true);
+ expect(effects.frame().effects[0].kind).toBe("pulse");
+ effects.configure(true,0,false);effects.paint(new Map([["a",marker]]),()=>true);expect(effects.frame().effects).toEqual([]);
+ effects.paint(new Map([["a",painted("a",1)]]),()=>true);now=150;expect(effects.frame().effects[0]).toMatchObject({kind:"pulse",progress:.5});
+ effects.paint(new Map(),()=>true);now=300;expect(effects.frame().effects[0]).toMatchObject({kind:"fade",progress:.5});
  now=450;expect(effects.frame().pending).toBe(false);
- for(const [playing,epoch,reduced] of [[true,1,false],[false,1,false],[true,1,true]] as const){effects.observe([{key:"a",layer:"p/a",kind:"pulse",marker}],playing,epoch,reduced);expect(effects.frame().effects).toEqual([]);}
+ for(const [playing,epoch,reduced] of [[true,1,false],[false,1,false],[true,1,true]] as const){effects.configure(playing,epoch,reduced);effects.paint(new Map([["a",marker]]),()=>true);expect(effects.frame().effects).toEqual([]);}
 });
 
-test("5,000 changed markers are admitted lazily and frame visits stay capped at 256",()=>{
- let now=0,reads=0;const effects=playbackEffects(()=>now),changes=Array.from({length:5000},(_,n)=>({get key(){reads++;return String(n);},layer:"p/a",kind:"fade" as const,marker:{point:[n,0,0] as const,tone:"signal",marker:"ring"}}));
- effects.observe([],true,0,false);effects.observe(changes,true,0,false);expect(reads).toBe(0);
- expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);expect(reads).toBeGreaterThan(0);expect(reads).toBeLessThan(5000);
- for(let i=0;i<30;i++)expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);
- now=300;for(let i=0;i<30;i++)expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);expect(effects.frame().pending).toBe(false);
+test("layer toggles reset motion continuity even when toggled off and on before a paint",async()=>{
+ const f=await fixture();try{
+  const epoch=f.service.snapshot().motionEpoch;
+  await f.service.dispatch({kind:"holo.agentLayer",id:"p/a",on:false});await f.service.dispatch({kind:"holo.agentLayer",id:"p/a",on:true});
+  expect(f.service.snapshot().motionEpoch).toBe(epoch+2);
+  await f.service.dispatch({kind:"holo.producer",producer:"p",on:false});expect(f.service.snapshot().motionEpoch).toBe(epoch+3);
+ }finally{f.ctl.abort();}
+});
+
+test("512 painted markers keep effect visits capped at 256; dense frames reset the baseline",()=>{
+ let now=0;const effects=playbackEffects(()=>now),markers=(n:number,v:number)=>new Map(Array.from({length:n},(_,i)=>[String(i),painted(String(i),v)]));
+ effects.configure(true,0,false);effects.paint(markers(512,0),()=>true);effects.paint(markers(512,1),()=>true);
+ expect(effects.frame().effects).toHaveLength(EFFECT_WORK);expect(effects.frame().visited).toBe(EFFECT_WORK);
+ now=300;effects.frame();expect(effects.frame().pending).toBe(false);
+ effects.paint(markers(513,2),()=>true);expect(effects.frame().pending).toBe(false);
+ effects.paint(markers(1,3),()=>true);expect(effects.frame().pending).toBe(false);
 });
 
 test("glyph resolution: exact icon, family, known kind fallback, then unknown without a plate",()=>{

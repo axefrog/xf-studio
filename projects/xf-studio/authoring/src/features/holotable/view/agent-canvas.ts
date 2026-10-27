@@ -5,7 +5,7 @@ import type { camera } from "./projection";
 import { actorCaption, createPlateObstacles, labelContext, labelPriority, placeLabels, type AgentLabel, type LabelBounds, type PlacedLabel } from "./agent-labels";
 
 import { BADGE_TONES, glyphIcon } from "./glyphs";
-import { playbackEffects } from "./playback-effects";
+import { playbackEffects, EFFECT_MARKERS, type PaintedMarker } from "./playback-effects";
 import { icon, isIconName } from "../../../studio-ui/icons";
 import { agentInRange } from "./agent-bounds";
 
@@ -20,9 +20,10 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
   const motion = motionCanvas.getContext("2d")!;
   const effects = playbackEffects(now);
   let currentAnswer:AgentAnswer|undefined;
-  let observed: AgentAnswer | undefined, motionKey = "", previousPlaying = false;
+  let motionKey = "", previousPlaying = false;
+  let painted = new Map<string, PaintedMarker>(), paintFailed = false;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-  const stopMotion = () => { effects.clear(); observed = undefined; motion.clearRect(0, 0, motionCanvas.width, motionCanvas.height); changed(); };
+  const stopMotion = () => { effects.clear(); motion.clearRect(0, 0, motionCanvas.width, motionCanvas.height); changed(); };
   reduced.addEventListener("change", stopMotion);
   const paths = new Map<string, { path: Path2D; fill: boolean; dash: string; faint: boolean }[]>();
   function iconShapes(name: string) {
@@ -60,10 +61,11 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     const deadline = performance.now()+1, C = currentCamera;
     for (const effect of frame.effects) {
       if (performance.now() > deadline) break;
-      if (!C || currentEnabled[effect.layer] === false) continue;
-      const marker = effect.kind === "pulse" ? currentAnswer?.revisions?.current[effect.key] ?? effect.marker : effect.marker;
+      if (!C || currentEnabled[effect.marker.layer] === false) continue;
+      const marker = effect.marker;
       if (Math.hypot(...marker.point.map((n,i)=>n-C.target[i])) > currentRadius) continue;
-      const xy = C.point(marker.point); if (!xy) continue;
+      const projected = C.point(marker.point); if (!projected) continue;
+      const xy: XY = [projected[0]+marker.offset[0],projected[1]+marker.offset[1]];
       const colour = palette[marker.tone] ?? palette.signal, opacity = 1-effect.progress;
       motion.globalAlpha = opacity; motion.strokeStyle = colour; motion.fillStyle = colour; motion.setLineDash([]);
       if (effect.kind === "pulse") {
@@ -83,12 +85,13 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
   let plates = createPlateObstacles();
   const swatches = new Map<string, HTMLElement>();
   let palette: Record<string, string> = {}, hits: { key: string; points: XY[]; fill: boolean; priority: number }[] = [];
-  const invalidate = () => { effects.clear(); observed = undefined; palette = {}; previous = undefined; changed(); }, theme = new MutationObserver(invalidate);
+  const invalidate = () => { effects.clear(); palette = {}; previous = undefined; changed(); }, theme = new MutationObserver(invalidate);
   for (const root of [document.documentElement, document.body]) theme.observe(root, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
   const media = matchMedia("(prefers-color-scheme: dark)"); media.addEventListener("change", invalidate);
   let previous: AgentAnswer | undefined, previousEnabled: Readonly<Record<string, boolean>> | undefined, previousCamera = "", previousSelection: string | null = null, cursor = 0, fieldCell = 0;
   const path = (ctx: CanvasRenderingContext2D, ps: readonly XY[], closed = false) => { if (!ps.length) return; ctx.moveTo(...ps[0]); for (let i = 1; i < ps.length; i++) ctx.lineTo(...ps[i]); if (closed) ctx.closePath(); };
   function clear(width: number, height: number) {
+    painted = new Map(); paintFailed = false;
     previous = undefined; cursor = 0; fieldCell = 0; candidates = []; labelsPainted = false; badges = []; plates = createPlateObstacles(); overlayLabels = [];
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) { canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); }
@@ -97,7 +100,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, width, height); hits = [];
     if (!palette.signal) palette = Object.fromEntries([...swatches].map(([t, e]) => [t, getComputedStyle(e).color]));
   }
-  function paintItem(item:AgentItem,C:Camera,selected:string|null,hovered:string|null,positions:ReadonlyMap<string,XY>,important:ReadonlySet<string>,radius:number,deadline:number,ctx:CanvasRenderingContext2D):"drawn"|"skip"|"pending" {
+  function paintItem(item:AgentItem,layer:string,C:Camera,selected:string|null,hovered:string|null,positions:ReadonlyMap<string,XY>,important:ReadonlySet<string>,radius:number,deadline:number,ctx:CanvasRenderingContext2D):"drawn"|"skip"|"pending" {
     let cell=fieldCell;
     const far=Math.max(1500,Math.hypot(...C.position.map((n,i)=>n-C.target[i]))+radius),fade=Math.max(1800,far*1.2);
     const answer=currentAnswer!;
@@ -177,11 +180,17 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     const facet = Object.entries(item.facets ?? item.value?.facets ?? {})[0];
     if (facet && rule.draw === "diamond") addLabel(actorCaption(facet[1]), [xy[0]+(plated ? 11 : size)+4, xy[1]+13], true);
     if (selected === item.key) { ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(...xy, plated ? 14 : size+5, 0, Math.PI*2); ctx.stroke(); }
+    if (markerXY && xy[0]>=0 && xy[0]<=C.width && xy[1]>=0 && xy[1]<=C.height && (plated || ["ring","diamond","crosshair"].includes(rule.draw))) {
+      if (painted.size < EFFECT_MARKERS) {
+        const projected = C.point(p);
+        if (projected) painted.set(item.key,{ key:item.key,id:item.id,layer,version:item.version??item.t??0,screen:[...xy],point:[...p],offset:[xy[0]-projected[0],xy[1]-projected[1]],tone:rule.style==="tone"?item.tone??"signal":rule.style,marker:rule.draw,glyph:item.glyph,fades:item.kind!=="path"&&item.kind!=="zone" });
+      } else paintFailed = true;
+    }
     fieldCell=0;
     return "drawn";
   }
   return {
-    clear: (width: number, height: number) => { effects.clear(); observed = undefined; motion.clearRect(0,0,motionCanvas.width,motionCanvas.height); clear(width,height); }, animate,
+    clear: (width: number, height: number) => { effects.clear(); motion.clearRect(0,0,motionCanvas.width,motionCanvas.height); clear(width,height); }, animate,
     overlayLabels: () => overlayLabels,
     draw(answer: AgentAnswer, enabled: Readonly<Record<string, boolean>>, C: Camera, selected: string | null, budgetMs = 8, hovered: string | null = null, overlays: readonly AgentLabel[] = [], radius = 350, playback = { playing: false, epoch: "" }) {
       const deadline = performance.now() + budgetMs;
@@ -193,21 +202,23 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       for (const [name, token] of [["good", "success"], ["stage", "pv-ground"]]) if (!swatches.has(name)) { const span = document.createElement("span"); span.style.cssText = `position:absolute;visibility:hidden;color:var(--${token})`; canvas.parentElement!.append(span); swatches.set(name,span); palette = {}; }
       const cameraKey = JSON.stringify([C.position, C.ray(C.width / 2, C.height / 2).direction, C.width, C.height, radius]);
       const overlayKey = JSON.stringify(overlays);
-      const key = playback.epoch;
-      const fresh = previousPlaying !== playback.playing || motionKey !== key || observed !== answer || previous !== answer || previousEnabled !== enabled || previousCamera !== cameraKey || previousSelection !== selected || previousHover !== hovered || previousOverlay !== overlayKey;
+      const key = JSON.stringify([playback.epoch,enabled]);
+      effects.configure(playback.playing,key,reduced.matches);
+      const fresh = previousPlaying !== playback.playing || motionKey !== key || previous !== answer || previousEnabled !== enabled || previousCamera !== cameraKey || previousSelection !== selected || previousHover !== hovered || previousOverlay !== overlayKey;
       if (fresh) {
-        if (previousPlaying !== playback.playing || observed !== answer || motionKey !== key || previousEnabled !== enabled) {
-          effects.observe(observed?.revisions === answer.revisions ? [] : answer.revisions?.changes ?? [], playback.playing, key, reduced.matches);
-          observed = answer; motionKey = key; previousPlaying = playback.playing;
-        }
+        motionKey = key; previousPlaying = playback.playing;
         clear(C.width, C.height); previous = answer; previousEnabled = enabled; previousCamera = cameraKey; previousSelection = selected; previousHover = hovered; previousOverlay = overlayKey; }
-      if (answer.specs.schema !== "xfh/projections-1") return;
+      if (answer.specs.schema !== "xfh/projections-1") { effects.clear(); return; }
       const dpr = window.devicePixelRatio || 1;
       if (motionCanvas.width !== Math.round(C.width*dpr) || motionCanvas.height !== Math.round(C.height*dpr)) { motionCanvas.width = Math.round(C.width*dpr); motionCanvas.height = Math.round(C.height*dpr); }
       stageColour = palette.stage;
-      if(performance.now()>deadline)return {pending:true,drawn:0,total:0};
+      if(performance.now()>deadline){paintFailed=true;effects.clear();return {pending:true,drawn:0,total:0};}
       ctx.font = "11px " + getComputedStyle(canvas).getPropertyValue("--font-mono"); ctx.lineJoin = "round";
-      const items = answer.layers.filter(l => enabled[l.id] !== false).flatMap(l => l.items.filter(i => i.place && !l.notPlaced.includes(i.id)));
+      const items: AgentItem[] = [], layerIds = new Map<string,string>(), missing = new Set(effects.keys());
+      for (const layer of answer.layers) for (const item of layer.items) {
+        missing.delete(item.key);
+        if (enabled[layer.id] !== false && item.place && !layer.notPlaced.includes(item.id)) { items.push(item); layerIds.set(item.key,layer.id); }
+      }
       const important = labelContext(items, selected, hovered);
       const positions = new Map<string, XY>(), clusters = new Map<string, AgentItem[]>();
       const positionItems = [...items, ...items.filter(i => i.kind !== "relation" && i.to).map(i => ({ ...i, key: i.key + ":to", region: i.toRegion, place: i.to }))];
@@ -220,6 +231,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
         group.sort((a, b) => a.key.localeCompare(b.key)); const center = positions.get(group[0].key); if (!center) continue;
         if (group.length > 12) {
           for (const i of group) collapsed.add(i.key);
+          paintFailed = true;
           const key = `cluster:${JSON.stringify(group[0].place)}`;
           ctx.fillStyle = palette.signal; ctx.globalAlpha = 1; if (fresh) ctx.fillText(`+${group.length}`, center[0] + 3, center[1] - 3);
           if (fresh) badges.push({ x: center[0] + 3, y: center[1] - 3, width: ctx.measureText(`+${group.length}`).width });
@@ -229,10 +241,10 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       let drawn = 0;
       for (; cursor < items.length; cursor++) {
         const item = items[cursor];
-        if (performance.now() > deadline) break;
+        if (performance.now() > deadline) { paintFailed=true; effects.clear(); break; }
         if (collapsed.has(item.key)) continue;
-        const result=paintItem(item,C,selected,hovered,positions,important,radius,deadline,ctx);
-        if(result==="pending")return {pending:true,drawn,total:items.length};
+        const result=paintItem(item,layerIds.get(item.key)!,C,selected,hovered,positions,important,radius,deadline,ctx);
+        if(result==="pending"){paintFailed=true;effects.clear();return {pending:true,drawn,total:items.length};}
         if(result==="drawn")drawn++;
       }
       if (cursor >= items.length && !labelsPainted) {
@@ -244,7 +256,14 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
           text.globalAlpha = label.alpha; text.fillStyle = label.colour;
           text.strokeText(label.text, label.x, label.y);
           text.fillText(label.text, label.x, label.y);
-
+        }
+        if (paintFailed || performance.now()>deadline) effects.clear();
+        else {
+          const layers = new Map(answer.layers.map(layer=>[layer.id,layer]));
+          effects.paint(painted,marker=>{
+            const layer=layers.get(marker.layer);
+            return missing.has(marker.key) && !!layer && enabled[marker.layer]!==false && !layer.notPlaced.includes(marker.id) && !layer.reason;
+          });
         }
         labelsPainted = true;
       }
