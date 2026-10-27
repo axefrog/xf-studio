@@ -1,13 +1,21 @@
 # Canvas candidate evidence
 
-The unversioned canvas candidate is implemented and has passed the clean Release build and full offline checks. No deployment, game session, visual approval or version change is claimed. All changes remain uncommitted for coordinator review.
+The unversioned canvas candidate and all five independent-review corrections to `fc667085` pass targeted and full offline verification. No deployment, game session, visual approval or version change is claimed. The review corrections remain uncommitted for coordinator review.
+
+## Review corrections
+
+- **Radar accounting:** admission and drawing reserve two endpoints per solid line segment, including shared corners, plus polygon fill points. A 64-segment circle reserves 128 endpoints. The full-frame regression admits four producers with 32 long-gap dashed circles each at the 16,384 cap, then projects/dashes every segment at 640 px / 1 m: exactly 16,384 endpoints are emitted, with dash downgrade and no solid culling. The former 64-circles-per-producer counterexample is refused.
+- **Rate histories:** accepted timestamps survive clear, disconnect and visibility/world reset for their one-second window, independently of drawing and seq records. Metadata bounds the union of drawing/seq and live rate keys to 1,024; pruning reclaims expired rate-only keys. Tests cover both alternating-feed/clear bypasses, handoff and bounded name churn.
+- **Key persistence:** the plugin uses the tested `PersistKeys` adapter, which requires `ReadFileExact` before replacement. Missing, locked and oversized-read failures leave config and backups untouched; a successful save preserves unrelated settings. Live rebinding with `saved:false` follows the existing stop-key behavior.
+- **Lua arrays:** recursive serialization preserves all schema arrays, including empty panel lines and nested point vectors, while retaining empty objects and quoted text. The regression uses the real ECMAScript JSON encoder over Fengari values rather than a canned encoding stub. It does not claim CET runtime execution.
+- **Refusal order:** the raw byte ceiling precedes parsing as the clarified safety prerequisite, then items, vertices, layers, metadata and rates. Multi-cap tests cover that order, including global item overflow when bounded expansion stops early at the vertex cap. An older rate test's backwards injected clock was made chronological.
 
 ## Decisions and boundaries
 
 - The runtime bridge coordinator decided to retain the observer refusal for `notify` and admit `display`, alongside existing reads and emergency controls. Display changes only XF drawing and needs no game-write permission.
 - The coordinator approved generated vector geometry in place of the original icon-atlas proposal. SVG paths are flattened once by the theme generator; no runtime SVG parser, texture upload or new dependency is involved. The implementation follows [SVG's endpoint-arc algorithm](https://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes).
 - The real Studio theme slot is `XfCanvasPlate`, with effective alpha 0.7178. Chip and panel text uses `text`; tones mark edges. Plain labels retain their tone. The fallback plate has been removed.
-- Counted vertices are **max(solid source vertices, expanded world-view vertices)** for each primitive. Source vertices are circle segments, polyline/polygon points, box edge endpoints and generated icon counts. Admission bounds every solid radar baseline. Only radar dashing can downgrade to solid; no radar budget culling or culling counter exists.
+- Counted vertices are **max(solid source vertices, expanded world-view vertices)** for each primitive. Solid line geometry uses segment endpoint pairs (including shared corners), polygon fill points and generated icon counts; a 64-segment circle reserves 128 endpoints. Admission bounds every solid radar baseline. Only radar dashing can downgrade to solid; no radar budget culling or culling counter exists.
 - `ground:false` circles use camera right/up at the anchor in world view. Both ground settings share the top-down radar circle. Regression cases cover yaw, a downward-looking camera and radar equivalence.
 - Heat is omitted (`features: []`). Missing glyphs draw counted points. Brackets use the documented 0.6 × 1.9 m person fallback because the bounded entity adapter reads positions, not engine bounds. Camera FOV alignment remains a game check.
 - Radar defaults are bottom-right, 240 logical pixels, 50 m centre-to-edge, heading-up, opacity 1. Size is bounded to 120–640 and range to 1–2,000 m. View settings persist independently of content; a view change cannot reject an admitted snapshot.
@@ -75,25 +83,22 @@ The final checks ran serially under the unchanged 6 GB guard and 4 GB machine-wi
 | Check | Final result | Guarded peak |
 |---|---|---|
 | Clean Release build | Passed, including plugin and self-test; autonomous and engine-input test flags enabled | 1.3 GB |
-| Native `--unit` | 2,686 checks passed: 1,247 named plus 1,439 grouped, including 757 canvas checks; 3,000 deterministic parser mutations | <0.05 GB |
-| `bun tools/selftest.ts` | All 1,332 checks passed | 0.3 GB |
-| `bun test tools` | 1,121 passed / 4 opt-in on-screen skipped / 0 failed; 1,125 tests across 69 files, 23,372 assertions, 318.88 s | 1.0 GB |
+| Native `--unit` | 2,708 checks passed: 1,247 named plus 1,461 grouped, including 779 canvas checks; 3,000 deterministic parser mutations | <0.05 GB |
+| `bun tools/selftest.ts` | All 1,332 checks passed | 0.2 GB |
+| `bun test tools` | 1,121 passed / 4 opt-in on-screen skipped / 0 failed; 1,125 tests across 69 files, 23,396 assertions, 313.95 s | 0.9 GB |
 | `bun run check` | TypeScript passed; 169 capabilities, 64 changelog lines; registry unchanged and current | 0.3 GB |
-| Lua lint | All 5 Lua files passed | 0.1 GB |
+| Lua lint | All 5 Lua files passed | <0.05 GB |
 | Theme, glyphs, fact presets and MCP reference | Generated data current | <0.05 GB each |
 | Native declaration lint | All four package variants passed, 29 normal / 38 autonomous native globals | Included in redscript checks |
-| Redscript, fallback | Passed against the fresh copied game bundle | 0.2 GB |
-| Redscript, Codeware | Passed | 0.3 GB |
+| Redscript, fallback | Passed against the fresh copied game bundle | <0.05 GB |
+| Redscript, Codeware | Passed | 0.2 GB |
 | Redscript, Codeware + probes + DM | Passed | 0.3 GB |
 | Redscript, Codeware + Equipment-EX stub + TweakXL | Passed | 0.3 GB |
-| Root Markdown links | 0 broken links/source paths across 479 Markdown files | <0.05 GB |
+| Root Markdown links | 0 broken links/source paths across 480 Markdown files | <0.05 GB |
 | Root private paths | 0 findings in tracked text files | <0.05 GB |
-| New project files | 0 private-path/link findings across 18 untracked project files, including this report | <0.05 GB |
 | `git diff --check` | Passed | — |
 
-The full tools checks caught missing Canvas preloads in older CET harnesses, catalogue descriptions/undo/refusal wording and refusal-index wiring, and one outdated native-count assertion. These are corrected; the final full run above passed. The README's probes lint command also needed the existing DM script dependency (`XFDmIds`); the command now includes `--extra redscript-dm` and passes. Codeware runs retain the pre-existing redundant NPC casts and upstream Reflection return-path warnings, with no errors.
-
-Earlier attempts were stopped by the unchanged machine-wide floor while the build held only 0.5–0.8 GB. No limit was raised and no unrelated process was stopped. After the coordinator supplied headroom, the clean build and final checks completed without a guard trip.
+Before the clean build, the targeted runs passed 779 canvas checks and 7 tools tests with 132 assertions. Full verification above passed serially. Codeware runs retain the pre-existing redundant NPC casts and upstream Reflection return-path warnings, with no errors. No limit was raised and no unrelated process was stopped.
 
 ### Offline budgets
 
@@ -101,14 +106,14 @@ Each benchmark uses 256 samples from the final native unit run.
 
 | Work | p99 | Maximum | Meaning |
 |---|---|---|---|
-| Parse/canonicalize/hash a 64 KiB padded batch expanding to 4,096 vertices | 0.4627 ms | 0.8656 ms | Below the 2 ms parser target |
-| Project and near/viewport clip 16,384 vertices | 0.4926 ms | 1.4439 ms | Geometry only; excludes ImGui submission and GPU execution |
+| Parse/canonicalize/hash a 64 KiB padded batch expanding to 4,096 vertices | 0.3025 ms | 0.3507 ms | Below the 2 ms parser target |
+| Project and near/viewport clip 16,384 vertices | 0.2604 ms | 0.2772 ms | Geometry only; excludes ImGui submission and GPU execution |
 
 The cached projection scale removed repeated `tan` calls per endpoint. The complete render target remains a game commissioning check even though offline projection is below 0.5 ms p99. Camera acquisition (≤0.05 ms per tick) and paced anchor acquisition (≤0.15 ms per read) also require game evidence; synthetic service timings do not establish engine cost. Live state records camera, anchor, publication and render timings separately.
 
-The built `build/Release/XFRuntimeBridge.dll` is an autonomous/engine-input-test candidate, SHA-256 `33a69a36b34b0f1875814f16b64bb849444899c3ea66df10a70371b8177c3354`. It has not been staged or deployed. The coordinator must review the source and identify the package/profile for the prepared session.
+The built `build/Release/XFRuntimeBridge.dll` is an autonomous/engine-input-test candidate, SHA-256 `b3c00c652ff692645ee1976940df4c329f02ef2ffb1bdb1ae942be9c8c54ddd4`. It has not been staged or deployed. The coordinator must review the source and identify the package/profile for the prepared session.
 
-Disk checkpoint: this worktree remains below 5 GB and C has approximately 264.8 GB free. No large task-owned payload is retained outside its ignored build directory; final logs replace superseded development logs.
+Disk checkpoint: this worktree remains below 5 GB and C has approximately 262.7 GB free. No large task-owned payload is retained outside its ignored build directory; final logs replace superseded development logs.
 
 ## Missing glyphs
 

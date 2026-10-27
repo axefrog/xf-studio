@@ -1,5 +1,7 @@
 #include "core/overlay/Canvas.hpp"
 #include "core/Config.hpp"
+#include "core/Win32.hpp"
+#include <Windows.h>
 #include "core/Dispatcher.hpp"
 #include "core/ScriptLayer.hpp"
 #include <cstdio>
@@ -42,7 +44,7 @@ void Parser()
     auto line=Point();line["kind"]="polyline";line["points"]={{0,0,0},{1,0,0}};line["dash"]={.25,.25};
     Check(Parse(BatchOf(json::array({line})).dump(),{}).vertices==4,"world dash units metres");line["points"]={{0,0,0},{1e7,0,0}};line["dash"]={.05,.05};Check(Refused([&]{Parse(BatchOf(json::array({line})).dump(),{});})["cap"]=="vertices","expansion refuses before huge allocation");
     auto circle=Point();circle["kind"]="circle";circle["radius_m"]=1;circle["segments"]=8;Check(Parse(BatchOf(json::array({circle})).dump(),{}).vertices==16,"circle expansion");
-    circle["segments"]=64; circle["dash"]={.05,20}; auto gapCircle=Parse(BatchOf(json::array({circle})).dump(),{}).items[0]; Check(gapCircle.worldLines.size()==2 && gapCircle.vertices==64 && SolidVertices(gapCircle)==64,"long-gap circle reserves its solid radar source at admission");
+    circle["segments"]=64; circle["dash"]={.05,20}; auto gapCircle=Parse(BatchOf(json::array({circle})).dump(),{}).items[0]; Check(gapCircle.worldLines.size()==2 && gapCircle.vertices==128 && SolidVertices(gapCircle)==128,"long-gap circle reserves its solid radar source at admission");
     circle.erase("dash");circle["ground"]=false; auto ring=Parse(BatchOf(json::array({circle})).dump(),{}).items[0];
     auto camera=Cam();camera.forward={-1,0,0};camera.right={0,1,0};XY xy{};
     auto world=WorldVertex(ring,camera,ring.worldLines[0],{-10,0,0});
@@ -79,7 +81,7 @@ void Lifecycle()
 void RatesAndCaps()
 {
     Service s;Ready(s);auto b=BatchOf();for(int n=1;n<=4;++n){b["seq"]=n;s.Feed(1,b.dump(),.01*n);}b["seq"]=5;Check(Refused([&]{s.Feed(1,b.dump(),.1);})["code"]=="rate","4 per layer second");Check(s.Feed(1,b.dump(),1.1)["accepted"]==true,"rate recovers");
-    Service many;Ready(many);b=BatchOf();for(int n=0;n<16;++n){b["layer"]=std::to_string(n);many.Feed(1,b.dump(),0);}b["layer"]="new";Check(Refused([&]{many.Feed(1,b.dump(),2);})["cap"]=="layers","16 layer cap");b["layer"]="0";b["seq"]=2;Check(Refused([&]{many.Feed(1,b.dump(),.1);})["code"]=="rate","16 per producer second");
+    Service many;Ready(many);b=BatchOf();for(int n=0;n<16;++n){b["layer"]=std::to_string(n);many.Feed(1,b.dump(),0);}b["layer"]="new";Check(Refused([&]{many.Feed(1,b.dump(),.1);})["cap"]=="layers","16 layer cap");b["layer"]="0";b["seq"]=2;Check(Refused([&]{many.Feed(1,b.dump(),.1);})["code"]=="rate","16 per producer second");
     Service items;Ready(items);b=BatchOf();b["items"]=json::array();for(int n=0;n<256;++n)b["items"].push_back(Point(std::to_string(n)));items.Feed(1,b.dump(),0);auto small=BatchOf();small["layer"]="other";Check(Refused([&]{items.Feed(1,small.dump(),0);})["cap"]=="items","all layers producer item cap");
     for(int n=1;n<4;++n){b["producer"]="p"+std::to_string(n);items.Feed(static_cast<uint64_t>(n+1),b.dump(),0);}small["producer"]="fifth";Check(Refused([&]{items.Feed(8,small.dump(),0);})["cap"]=="total_items","1024 total items");
     Service meta;Ready(meta);auto empty=BatchOf(json::array());for(int n=0;n<1024;++n){empty["producer"]="p"+std::to_string(n);meta.Feed(static_cast<uint64_t>(n+1),empty.dump(),0);}empty["producer"]="overflow";Check(Refused([&]{meta.Feed(2000,empty.dump(),0);})["cap"]=="metadata","metadata bounded with empty feeds");
@@ -87,10 +89,79 @@ void RatesAndCaps()
     Service vertices;Ready(vertices);for(int n=0;n<4;++n){b["producer"]="p"+std::to_string(n);vertices.Feed(static_cast<uint64_t>(n+1),b.dump(),0);}small=BatchOf();small["producer"]="overflow";Check(Refused([&]{vertices.Feed(5,small.dump(),0);})["cap"]=="total_vertices","16384 total vertices");
     small["producer"]="p0";small["layer"]="extra";Check(Refused([&]{vertices.Feed(1,small.dump(),0);})["cap"]=="vertices","4096 across producer layers");
     Service rings;Ready(rings);auto circle=Point();circle["kind"]="circle";circle["radius_m"]=1;circle["segments"]=64;circle["dash"]={.05,20};
-    auto circles=BatchOf(json::array());for(int n=0;n<64;++n){circle["id"]=std::to_string(n);circles["items"].push_back(circle);}
+    auto circles=BatchOf(json::array());for(int n=0;n<32;++n){circle["id"]=std::to_string(n);circles["items"].push_back(circle);}
     for(int n=0;n<4;++n){circles["producer"]="rings"+std::to_string(n);Check(rings.Feed(static_cast<uint64_t>(n+1),circles.dump(),0)["vertices"]==4096,"long-gap circles reserve 4096 solid vertices per producer");}
     auto extra=BatchOf(json::array({circle}));extra["producer"]="overflow";
     Check(Refused([&]{rings.Feed(5,extra.dump(),0);})["cap"]=="total_vertices","long-gap circles close solid radar baseline at admission");
+    auto oldCounterexample=circles;for(int n=32;n<64;++n){circle["id"]=std::to_string(n);oldCounterexample["items"].push_back(circle);}
+    Check(Refused([&]{Parse(oldCounterexample.dump(),{});})["cap"]=="vertices","64 long-gap circles cannot undercount their 8192 solid endpoints");
+    auto camera=Cam();camera.player={0,10,0};rings.Publish(camera,0,0);const auto& frame=rings.Take();
+    std::vector<const Item*> all;for(const auto& layer:frame.layers)for(const auto& item:layer.batch->items)all.push_back(&item);
+    size_t budget=RadarExtraBudget(all),downgraded=0,emitted=0;Check(budget==0&&all.size()==128,"full radar frame reserves all 16384 solid endpoints");
+    RadarView radar;radar.size=640;radar.range=1;
+    for(const auto* item:all){double phase=0;const auto& lines=item->radarLines;
+        for(size_t n=0;n+1<lines.size();n+=2){auto a=lines[n],b0=lines[n+1];for(size_t axis=0;axis<3;++axis){a[axis]+=item->anchor.point[axis];b0[axis]+=item->anchor.point[axis];}
+            auto x=RadarPoint(camera,radar,a),y=RadarPoint(camera,radar,b0),original=x;const auto length=std::hypot(y[0]-x[0],y[1]-x[1]);
+            if(ClipSegment(x,y,radar.size,radar.size))emitted+=RadarSegments(x,y,item->dash,budget,downgraded,phase+std::hypot(x[0]-original[0],x[1]-original[1])).size();
+            phase=std::fmod(phase+length,item->dash[0]+item->dash[1]);
+        }
+    }
+    Check(emitted==16384&&downgraded>0&&budget==0,"full frame emits every solid segment within the radar endpoint budget");
+
+}
+void ClearRatesAndCapOrder()
+{
+    Service layer;Ready(layer);auto batch=BatchOf();
+    for(int n=0;n<4;++n){layer.Feed(1,batch.dump(),.01*n);layer.Clear(1,{{"producer","test"}},.01*n);}
+    Check(layer.State(.04)["producers"].empty(),"clear releases drawing and sequence records");
+    Check(Refused([&]{layer.Feed(1,batch.dump(),.04);})["code"]=="rate","clear of last layer cannot bypass 4 per second");
+    Check(layer.Feed(2,batch.dump(),1.01)["accepted"]==true,"layer rate window expires independently of ownership");
+    Service producer;Ready(producer);
+    for(int n=0;n<16;++n){batch["layer"]=std::to_string(n);producer.Feed(1,batch.dump(),0);producer.Clear(1,{{"producer","test"}},0);}
+    batch["layer"]="new";Check(Refused([&]{producer.Feed(1,batch.dump(),.1);})["code"]=="rate","cleared producer retains 16 per second across layer churn");
+    Service handoff;Ready(handoff);batch=BatchOf();for(int n=0;n<4;++n){batch["seq"]=n;handoff.Feed(1,batch.dump(),0);}handoff.Disconnect(1);
+    Check(Refused([&]{handoff.Feed(2,batch.dump(),.1);})["code"]=="rate","disconnect releases owner but not live rate window");
+    Service churn;Ready(churn);auto empty=BatchOf(json::array());
+    for(int n=0;n<1024;++n){empty["producer"]="p"+std::to_string(n);churn.Feed(1,empty.dump(),0);churn.Clear(1,{{"producer",empty["producer"]}},0);}
+    empty["producer"]="new";Check(Refused([&]{churn.Feed(1,empty.dump(),.1);})["cap"]=="metadata","cleared rate history remains bounded by metadata cap");
+    Check(churn.Feed(1,empty.dump(),1)["accepted"]==true,"expired rate-only metadata is reclaimed");
+
+    Service order;Ready(order);batch=BatchOf(json::array());for(int n=0;n<256;++n)batch["items"].push_back(Point(std::to_string(n)));batch["layer"]="0";order.Feed(1,batch.dump(),0);
+    empty=BatchOf(json::array());for(int n=1;n<16;++n){empty["layer"]=std::to_string(n);order.Feed(1,empty.dump(),0);}
+    empty["layer"]="a";for(int n=0;n<1008;++n){empty["producer"]="other"+std::to_string(n);order.Feed(2,empty.dump(),0);}
+    auto incoming=BatchOf();incoming["layer"]="overflow";
+    auto huge=Point();huge["kind"]="polyline";huge["points"]={{0,0,0},{1e7,0,0}};huge["dash"]={.05,.05};
+    auto multiple=incoming;multiple["items"]=batch["items"];multiple["items"].push_back(huge);auto raw=multiple.dump();raw.append(65537-raw.size(),' ');
+    Check(Refused([&]{order.Feed(1,raw,.1);})["cap"]=="bytes","raw bytes are a safety prerequisite before all content caps");
+    Check(Refused([&]{order.Feed(1,incoming.dump(),.1);})["cap"]=="items","items precede layers metadata and rates");
+    incoming["items"]=json::array({huge});Check(Refused([&]{order.Feed(1,incoming.dump(),.1);})["cap"]=="items","global items precede early expansion vertex refusal");
+    empty=BatchOf(json::array());empty["layer"]="0";empty["seq"]=2;order.Feed(1,empty.dump(),1.1);
+    Check(Refused([&]{order.Feed(1,incoming.dump(),1.1);})["cap"]=="vertices","vertices precede layers and metadata");
+    incoming["items"]=json::array({Point()});Check(Refused([&]{order.Feed(1,incoming.dump(),1.1);})["cap"]=="layers","layers precede metadata");
+    order.Clear(1,{{"producer","test"},{"layer","0"}},1.1);for(int n=1;n<16;++n){empty["layer"]=std::to_string(n);order.Feed(1,empty.dump(),1.2);}
+    Check(Refused([&]{order.Feed(1,incoming.dump(),1.2);})["cap"]=="metadata","metadata precedes producer rate");
+    for(int n=0;n<1008;++n)order.Clear(2,{{"producer","other"+std::to_string(n)}},1.2);
+    Check(Refused([&]{order.Feed(1,incoming.dump(),1.2);})["code"]=="rate","rate follows the other admission caps");
+}
+void KeyPersistence()
+{
+    const auto build=std::filesystem::path(XFB_CANVAS_FIXTURES).parent_path().parent_path()/"build";
+    const auto dir=build/("canvas-keys-unit-"+std::to_string(GetCurrentProcessId())+"-"+std::to_string(GetTickCount64()));
+    if(dir.parent_path()!=build||!std::filesystem::create_directory(dir))throw std::runtime_error("unique canvas key test directory unavailable");
+    struct Cleanup{std::filesystem::path dir;~Cleanup(){std::error_code ec;std::filesystem::remove_all(dir,ec);}}cleanup{dir};
+    Service service;Ready(service);service.SetKeys({{"toggle","F12"}});const auto config=dir/"config.ini",backups=dir/"backups";
+    Check(PersistKeys(config,backups,service.Keys())["saved"]==false&&!std::filesystem::exists(backups),"missing config refuses persistence before any write");
+    const std::string original="[bridge]\nallow_writes=false\n[overlay]\ncanvas_toggle=Insert\ncanvas_mode=Delete\n[log]\nlevel=debug\n";
+    {std::ofstream out(config,std::ios::binary);out<<original;}
+    const auto locked=CreateFileW(config.c_str(),GENERIC_WRITE,0,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    Check(locked!=INVALID_HANDLE_VALUE,"key persistence fixture locks original");const auto refused=PersistKeys(config,backups,service.Keys());if(locked!=INVALID_HANDLE_VALUE)CloseHandle(locked);
+    std::string after,why;bool missing=false;xfb::win32::ReadFileExact(config,after,missing,why);
+    Check(refused["saved"]==false&&after==original&&!std::filesystem::exists(backups),"failed exact read leaves original and backup directory untouched");
+    {std::ofstream out(config,std::ios::binary);out<<std::string(4*1024*1024+1,'x');}
+    Check(PersistKeys(config,backups,service.Keys())["saved"]==false&&std::filesystem::file_size(config)==4*1024*1024+1&&!std::filesystem::exists(backups),"oversized exact read cannot replace config with partial content");
+    {std::ofstream out(config,std::ios::binary);out<<original;}
+    const auto saved=PersistKeys(config,backups,service.Keys());xfb::win32::ReadFileExact(config,after,missing,why);
+    Check(saved["saved"]==true&&after.find("canvas_toggle = F12")!=std::string::npos&&after.find("allow_writes=false")!=std::string::npos&&after.find("level=debug")!=std::string::npos,"successful whole read preserves unrelated config and saves keys");
 }
 void AnchorsAndProjection()
 {
@@ -156,7 +227,7 @@ int CanvasUnitTests()
     checks=failures=0;
     const char* stage = "fixtures";
     try {
-        Fixtures(); stage="parser"; Parser(); stage="lifecycle"; Lifecycle(); stage="rates/caps"; RatesAndCaps(); stage="anchors/projection"; AnchorsAndProjection(); stage="capture/fade"; CaptureAndFade(); stage="fuzz/bench"; FuzzAndBench();
+        Fixtures(); stage="parser"; Parser(); stage="lifecycle"; Lifecycle(); stage="rates/caps"; RatesAndCaps(); stage="clear rates/cap order"; ClearRatesAndCapOrder(); stage="key persistence"; KeyPersistence(); stage="anchors/projection"; AnchorsAndProjection(); stage="capture/fade"; CaptureAndFade(); stage="fuzz/bench"; FuzzAndBench();
     } catch (const std::exception& e) { ++failures; std::printf("CANVAS EXCEPTION stage=%s %s\n",stage,e.what()); }
     std::printf("CANVAS %d checks, %d failures\n",checks,failures);return failures;
 }

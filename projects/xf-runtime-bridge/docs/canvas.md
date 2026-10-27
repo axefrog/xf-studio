@@ -152,25 +152,27 @@ These rules answer §11a requirements 2 and 8.
 
 ## Caps and refusals
 
-The caps are the ones agreed on 26 October. A batch over a cap is refused whole, with the cap named, and the previous snapshot stays.
+These caps bound each replacement snapshot and all retained producers. A batch over a cap is refused whole, with the cap named, and the previous snapshot stays.
 
-| Cap | Limit | Refusal |
-|---|---|---|
-| Items per producer (all its layers) | 256 | `canvas_cap {cap: "items", limit, got}` |
-| Counted vertices per primitive | max(solid source vertices, expanded world-view vertices); source = circle segments, polyline/polygon points, box edge endpoints or generated icon count | Used at admission for both vertex caps; solid radar content is always admitted in full |
-| Vertices per producer, using the counting rule below | 4,096 | `canvas_cap {cap: "vertices", …}` |
-| Bytes per batch, as received | 64 KB | `canvas_cap {cap: "bytes", …}` |
-| Items across all producers | 1,024 | `canvas_cap {cap: "total_items", …}` |
-| Vertices across all producers | 16,384 | `canvas_cap {cap: "total_vertices", …}` |
-| Entity anchors per paced read | 16 by default; configurable 4–32 at 1–20 Hz (default 10 Hz) | Never refused: round-robin; freshness follows the expected cycle plus 0.25 s grace |
-| Batches per (producer, layer) | 4 per second | `rate {retry_after_ms}`; nothing is queued |
-| Batches per producer, all layers | 16 per second | `rate {retry_after_ms}` |
-| Layers per producer | 16 | `canvas_cap {cap: "layers", …}` |
-| Retained producer/layer records (including empty and expired layers) | 1,024 total | `canvas_cap {cap: "metadata", …}` |
+The raw 64 KiB ceiling is checked before parsing as a memory-safety prerequisite. After strict parsing, cap refusals follow the order in this table: **items, vertices, layers, metadata, rates**. Within items/vertices, the per-producer cap precedes the total cap; within rates, the layer cap precedes the producer cap. Whole-batch refusal keeps the previous snapshot.
 
-**Vertex counting:** for each primitive, count **max(solid source vertices, expanded world-view vertices)**. The solid source is circle segments, polyline and polygon points, a box's edge endpoints, and an icon's generated count. The expanded world count includes dashed segment endpoints and polygon fill vertices as well as its outline. Screen primitives reserve point/label 1, bracket 16 and panel 4; an unavailable icon reserves 1. The larger count is summed across items and layers. Thus even a long-gap dashed circle reserves its solid radar baseline at admission. The same 4,096/16,384 caps bound all solid radar content; only radar dash expansion needs a draw-time budget.
+| Order | Cap | Limit | Refusal |
+|---|---|---|---|
+| 0, before parsing | Bytes per batch, as received | 64 KiB | `canvas_cap {cap: "bytes", limit, got}` |
+| 1 | Items per producer (all its layers) | 256 | `canvas_cap {cap: "items", limit, got}` |
+| 1 | Items across all producers | 1,024 | `canvas_cap {cap: "total_items", …}` |
+| 2 | Vertices per producer | 4,096 | `canvas_cap {cap: "vertices", …}` |
+| 2 | Vertices across all producers | 16,384 | `canvas_cap {cap: "total_vertices", …}` |
+| Accounting for 2 | Counted vertices per primitive | max(solid geometry, expanded world geometry); line geometry uses two endpoints per segment, including shared corners, plus polygon fill points; icons use generated source vertices | Admission and radar expansion use the same endpoint unit; a 64-segment circle reserves 128 solid endpoints |
+| 3 | Layers per producer | 16 | `canvas_cap {cap: "layers", …}` |
+| 4 | Retained producer/layer keys, union of drawing/seq and live rate-history keys | 1,024 total, including empty/expired layers and cleared keys with a live one-second rate window | `canvas_cap {cap: "metadata", …}` |
+| 5 | Batches per (producer, layer) | 4 per second | `rate {retry_after_ms}`; nothing is queued |
+| 5 | Batches per producer, all layers | 16 per second | `rate {retry_after_ms}` |
+| Scheduling, not refusal | Entity anchors per paced read | 16 by default; configurable 4–32 at 1–20 Hz (default 10 Hz) | Round-robin; freshness follows the expected cycle plus 0.25 s grace |
 
-Expiry retains the owner and sequence record so late feeds remain `stale_seq`. Explicit `canvas.clear` releases the selected records; disconnect and a world reset release all corresponding records. Last refusal receipts are bounded to 1,024 records, including failed first feeds, and exposed in `last_refusals` as well as on admitted layers.
+**Vertex counting:** for each primitive, count **max(solid geometry vertices, expanded world-view vertices)**. Solid circle, polyline, polygon and box outlines use two endpoints per segment, even where segments share a corner. Polygon fill reserves its point count as well; an icon reserves its generated count. Expanded world geometry uses the same endpoint/fill unit. Screen primitives reserve point/label 1, bracket 16 and panel 4; an unavailable icon reserves 1. The larger count is summed across items and layers. Thus even a long-gap dashed 64-segment circle reserves 128 solid radar endpoints at admission. The same 4,096/16,384 caps bound all solid radar content; only extra radar dash endpoints need the draw-time budget. No solid content is culled to meet that budget.
+
+Expiry retains the owner and sequence record so late feeds remain `stale_seq`. Explicit `canvas.clear` releases drawing/sequence records, and disconnect/world reset releases the corresponding ownership records. **Rate histories are independent:** clear, disconnect and visibility/world resets do not erase accepted timestamps during their one-second window. Admission prunes expired rate histories and counts the union of retained layer keys against the metadata cap, so name churn cannot grow them unboundedly. Last refusal receipts are bounded to 1,024 records, including failed first feeds, and exposed in `last_refusals` as well as on admitted layers.
 
 Malformed batches are refused `bad_batch` with the first JSON path at fault.
 
@@ -180,7 +182,7 @@ Malformed batches are refused `bad_batch` with the first JSON path at fault.
   - `canvas.toggle` shows and hides the canvas (default **Insert**);
   - `canvas.mode` switches between radar only and radar with world markers (default **Delete**).
 
-  Both are toggles, never holds. The keys are `canvas_toggle` and `canvas_mode` under `[overlay]` in `config.ini`; `off` disables a key. CET can change and persist them with `XFBridge.Canvas.Keys({toggle="Insert", mode="Delete"})`. The CET binding parser refuses modifiers and duplicate active keys; if config.ini gives both actions the same active key, the mode key is disabled with a warning. The canvas starts hidden, in radar-only mode. Each is one bare key, so a player can press it mid-play without stopping. Modifiers are avoided because Ctrl and Shift are game keys on their own (crouch, sprint and dodge), so a Ctrl + Shift combination would make V crouch and sprint for a moment. The game's 2.31 default bindings use neither Insert nor Delete; they do use Home, which ruled it out. Among the 23 mods in the study library:
+  Both are toggles, never holds. The keys are `canvas_toggle` and `canvas_mode` under `[overlay]` in `config.ini`; `off` disables a key. CET can change and persist them with `XFBridge.Canvas.Keys({toggle="Insert", mode="Delete"})`. Persistence requires a successful exact read of the whole existing config; any read failure leaves it untouched and reports `saved:false` while the live binding lasts until exit. The CET binding parser refuses modifiers and duplicate active keys; if config.ini gives both actions the same active key, the mode key is disabled with a warning. The canvas starts hidden, in radar-only mode. Each is one bare key, so a player can press it mid-play without stopping. Modifiers are avoided because Ctrl and Shift are game keys on their own (crouch, sprint and dodge), so a Ctrl + Shift combination would make V crouch and sprint for a moment. The game's 2.31 default bindings use neither Insert nor Delete; they do use Home, which ruled it out. Among the 23 mods in the study library:
   - a HUD editor maps both keys, along with nearly every other key, as raw inputs for its own editor;
   - a photo-mode mod reads Delete only inside its text field.
 
@@ -228,7 +230,7 @@ Malformed batches are refused `bad_batch` with the first JSON path at fault.
 | `canvas.visible` | event | `{visible, mode, resend}`. |
 | `canvas.fed`, `canvas.refused` | events | As [above](#what-the-canvas-records). |
 
-**The Lua route.** Set `local XFBridge = GetMod("XF_Runtime_Bridge")`. `XFBridge.Canvas.ForModule(module)` returns `Feed(batch)`, `Clear(layer)`, `View(settings)` and `State()` bound to producer `cet.<module>`. Module names match `[a-z0-9_-]{1,24}`. The default `XFBridge.Canvas` binds to `cet.xf_runtime_bridge`. Both producer and current world are filled in by the native adapter, replacing supplied values. All routes share the native validation and caps; the digest is over that filled-in batch. Answers are `{ok, result}` or `{ok:false, error}`. `Keys(settings)` sets bare key bindings and saves them to `config.ini`; `Toggle()` and `Mode()` are the same transitions as the native keys. Call from CET's update, never its draw. Holotable feeds a few times a second. The read-only game snapshot (want 12, `surfaces.lua-snapshot`) is separate work.
+**The Lua route.** Set `local XFBridge = GetMod("XF_Runtime_Bridge")`. `XFBridge.Canvas.ForModule(module)` returns `Feed(batch)`, `Clear(layer)`, `View(settings)` and `State()` bound to producer `cet.<module>`. Module names match `[a-z0-9_-]{1,24}`. The default `XFBridge.Canvas` binds to `cet.xf_runtime_bridge`. Both producer and current world are filled in by the native adapter, replacing supplied values. All routes share the native validation and caps; the digest is over that filled-in batch. The Lua serializer preserves every schema array, including empty `items`, panel `lines`, points, views and coordinate vectors, without rewriting producer text. Answers are `{ok, result}` or `{ok:false, error}`. `Keys(settings)` sets bare key bindings and saves them to `config.ini`; `Toggle()` and `Mode()` are the same transitions as the native keys. Call from CET's update, never its draw. Holotable feeds a few times a second. The read-only game snapshot (want 12, `surfaces.lua-snapshot`) is separate work.
 
 **Candidate boundaries.** The camera route uses the same camera basis and FOV getters as `XFPlayer.CameraJson`, with a smaller payload omitting scene-only yaw/pitch/aspect fields, plus V's position/yaw and the host's back-buffer viewport. A separate paced route reads at most 32 direct entity positions (default 16); it does no nearby-NPC query or occlusion rays. Entity lookup returns a position only, so brackets use the documented 0.6 × 1.9 m fallback. FOV is interpreted as vertical, matching the existing scene model's fallback; alignment against the real camera and photo-mode drone remains a commissioning check. Hidden feeds are discarded before parsing, and no camera/entity read runs while hidden. Game publication uses try-locks and the host's triple buffer; the renderer reads no game objects and takes no canvas lock. It checks TTL and world/visibility generation again when drawing.
 

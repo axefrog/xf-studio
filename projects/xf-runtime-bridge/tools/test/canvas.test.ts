@@ -34,29 +34,60 @@ test("SVG flattening handles relative/absolute line, cubic, smooth, quadratic an
     expect(paths[0]!.points.flat().every(Number.isFinite)).toBe(true);
   }
 });
-test("CET ForModule binds each route and preserves empty item arrays", () => {
+test("CET routes preserve schema arrays through a real JSON encoder, including empty panel lines", () => {
   const require=createRequire(import.meta.url), {lua,lauxlib,lualib,to_luastring}=require("fengari");
   const L=lauxlib.luaL_newstate();lualib.luaL_openlibs(L);
+  // Adapt Lua values to the real ECMAScript JSON encoder. Like CET, unmarked empty tables encode as objects.
+  const valueAt=(index:number):unknown=>{
+    const at=lua.lua_absindex(L,index);
+    switch(lua.lua_type(L,at)) {
+      case lua.LUA_TNIL:return null;
+      case lua.LUA_TBOOLEAN:return lua.lua_toboolean(L,at);
+      case lua.LUA_TNUMBER:return lua.lua_tonumber(L,at);
+      case lua.LUA_TSTRING:return lua.lua_tojsstring(L,at);
+      case lua.LUA_TTABLE:{
+        const entries:[string|number,unknown][]=[];lua.lua_pushnil(L);
+        while(lua.lua_next(L,at)){entries.push([valueAt(-2) as string|number,valueAt(-1)]);lua.lua_pop(L,1);}
+        if(entries.length&&entries.every(([k])=>typeof k==="number"&&Number.isInteger(k)&&k>=1&&k<=entries.length)){
+          const out:unknown[]=[];for(const [key,value] of entries)out[Number(key)-1]=value;return out;
+        }
+        return Object.fromEntries(entries);
+      }
+      default:throw new Error("Unsupported Lua JSON value");
+    }
+  };
+  lua.lua_newtable(L);
+  lua.lua_pushcfunction(L,()=>{lua.lua_pushstring(L,to_luastring(JSON.stringify(valueAt(1))));return 1;});
+  lua.lua_setfield(L,-2,to_luastring("encode"));lua.lua_setglobal(L,to_luastring("json"));
   const path=join(projectDir,"cet/xf_runtime_bridge/canvas.lua").replaceAll("\\","/");
   const code=`
-    json={encode=function(v)
-      if type(v.items)=="table" then return '{"items":{}}' end
-      if v.layer~=nil then return '{"layer":'..tostring(v.layer)..'}' end
-      return '{}'
-    end, decode=function(raw) return {ok=true,result=raw} end}
-    Game={XFBridge_Canvas=function(module,action,payload) return module.."|"..action.."|"..payload end}
+    json.decode=function(raw) return {ok=true,result=raw} end
+    Game={XFBridge_Canvas=function(module,action,payload) return json.encode({module=module,action=action,payload=payload}) end}
     local canvas=dofile(${JSON.stringify(path)})
     local holo=canvas.ForModule("holotable")
-    local invalid=pcall(canvas.ForModule,"bad.module")
-    return table.concat({holo.Feed({items={}}).result,holo.Clear(false).result,holo.View({}).result,
-      holo.State().result,canvas.State().result,tostring(invalid)},";")
+    local text='quoted "lines":{} and \\"views\\" / snowman ☃'
+    local panel={id="panel",kind="panel",anchor={screen={0,0}},rect={0,0,1,1},title=text,lines={}}
+    local batch={schema="canvas@1",views={"world"},items={panel},extra={}}
+    local arrays={};for _,field in ipairs({"items","views","lines","points","world","screen","offset","offset_px","rect","dash","size","values"}) do arrays[field]={} end
+    return json.encode({feed=holo.Feed(batch).result,arrays=holo.Feed(arrays).result,empty=holo.Feed({items={}}).result,
+      clear=holo.Clear(false).result,view=holo.View({}).result,state=holo.State().result,default=canvas.State().result,
+      invalid=pcall(canvas.ForModule,"bad.module"),text=text})
   `;
   try {
     expect(lauxlib.luaL_loadstring(L,to_luastring(code))).toBe(lua.LUA_OK);
-    expect(lua.lua_pcall(L,0,1,0)).toBe(lua.LUA_OK);
-    expect(lua.lua_tojsstring(L,-1)).toBe('holotable|feed|{"items":[]};holotable|clear|{"layer":false};holotable|view|{};holotable|state|{};xf_runtime_bridge|state|{};false');
+    const status=lua.lua_pcall(L,0,1,0);expect(status,lua.lua_tojsstring(L,-1)).toBe(lua.LUA_OK);
+    const result=JSON.parse(lua.lua_tojsstring(L,-1));
+    const route=(name:string)=>JSON.parse(result[name]);const payload=(name:string)=>JSON.parse(route(name).payload);
+    expect(route("feed").module).toBe("holotable");expect(route("feed").action).toBe("feed");
+    expect(payload("feed").items[0].lines).toEqual([]);expect(payload("feed").items[0].title).toBe(result.text);
+    expect(payload("feed").items[0].rect).toEqual([0,0,1,1]);expect(payload("feed").extra).toEqual({});
+    for(const value of Object.values(payload("arrays")))expect(value).toEqual([]);
+    expect(payload("empty").items).toEqual([]);expect(payload("clear").layer).toBe(false);
+    expect(payload("view")).toEqual({});expect(route("state").module).toBe("holotable");
+    expect(route("default").module).toBe("xf_runtime_bridge");expect(result.invalid).toBe(false);
   } finally { lua.lua_close(L); }
 });
+
 describe("canvas over a persistent read-only observer and MCP", () => {
   let host: Host, writer: BridgeClient, other: BridgeClient, mcp: Client, transport: StdioClientTransport;
   const tool = async (name: string, args: Record<string,unknown> = {}) => {

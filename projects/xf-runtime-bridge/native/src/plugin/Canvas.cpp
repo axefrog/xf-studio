@@ -6,7 +6,6 @@
 #include "plugin/GameHandlers.hpp"
 #include "core/Win32.hpp"
 #include <charconv>
-#include <fstream>
 
 namespace xfb::plugin
 {
@@ -85,11 +84,7 @@ nlohmann::json CanvasLua(const std::string& module, const std::string& action, c
         else if (action == "mode") { s.canvas.Mode(); result = s.canvas.State(); }
         else if (action == "keys") {
             result = s.canvas.SetKeys(value); s.canvasKeysChanged.store(true);
-            std::ifstream in(s.config.sourcePath, std::ios::binary); const std::string before((std::istreambuf_iterator<char>(in)), {});
-            const auto keys = s.canvas.Keys(); const auto text = killkey::WithSetting(killkey::WithSetting(before, "overlay", "canvas_toggle", killkey::Spelling(keys.first)), "overlay", "canvas_mode", killkey::Spelling(keys.second));
-            win32::SettingsReplace replaced; std::string why;
-            result["saved"] = win32::ReplaceSettingsFile(s.config.sourcePath, text, s.session.runtimeDir / "settings-backups", 3, replaced, why);
-            if (!why.empty()) result["save_error"] = why;
+            result.update(canvas::PersistKeys(s.config.sourcePath,s.session.runtimeDir / "settings-backups",s.canvas.Keys()));
         } else throw canvas::Refusal({{"code", "bad_batch"}, {"path", "$.action"}});
         return {{"ok", true}, {"result", result}};
     } catch (const canvas::Refusal& e) { return {{"ok", false}, {"error", e.detail}}; }

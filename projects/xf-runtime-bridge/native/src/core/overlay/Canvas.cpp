@@ -42,6 +42,17 @@ json AtomicCosts::State(bool active) const
     for(size_t i=0;i<count;++i)copy.Add(m_samples[i].load());
     auto out=copy.State();out["total"]=total;out["last_ms"]=active?m_last.load():0;out["max_ms"]=m_max.load();return out;
 }
+json PersistKeys(const std::filesystem::path& config, const std::filesystem::path& backups,
+                 const std::pair<killkey::Chord,killkey::Chord>& keys)
+{
+    std::string before, why; bool missing = false;
+    if (!win32::ReadFileExact(config,before,missing,why))
+        return {{"saved",false},{"save_error",missing ? "config.ini is missing; the keys last only until the game closes" : "config.ini could not be read (" + why + "); it was left unchanged and the keys last only until the game closes"}};
+    const auto text = killkey::WithSetting(killkey::WithSetting(before,"overlay","canvas_toggle",killkey::Spelling(keys.first)),"overlay","canvas_mode",killkey::Spelling(keys.second));
+    win32::SettingsReplace replaced;
+    const bool saved = win32::ReplaceSettingsFile(config,text,backups,3,replaced,why);
+    json result = {{"saved",saved}}; if (!saved) result["save_error"] = why; return result;
+}
 void Service::Configure(bool enabled, killkey::Chord toggle, killkey::Chord mode, uint32_t anchorHz, uint32_t anchorsPerRead)
 {
     std::scoped_lock lock(m_mutex); m_enabled.store(enabled); m_visible.store(false); m_toggle = std::move(toggle); m_mode = std::move(mode);
@@ -64,6 +75,13 @@ void Service::Toggle() { std::scoped_lock lock(m_mutex); if (!m_enabled.load()) 
 void Service::Mode() { std::scoped_lock lock(m_mutex); if (!m_enabled.load()) return; m_worldMarkers = !m_worldMarkers; m_generation.fetch_add(1); VisibilityEvent(false); }
 void Service::Expire(double now)
 { for (auto& [p, producer] : m_producers) for (auto& [l, layer] : producer.layers) { (void)p; (void)l; if (layer.batch && layer.batch->expires <= now) layer.batch.reset(); } }
+void Service::PruneRates(double now)
+{
+    const auto prune = [now](auto& histories) {
+        for (auto it = histories.begin(); it != histories.end();) { Pace(it->second,now); if (it->second.empty()) it = histories.erase(it); else ++it; }
+    };
+    prune(m_layerRates); prune(m_producerRates);
+}
 json Service::Refuse(const std::string& p, const std::string& l, const json& reason, double now)
 {
     const auto name = p.empty() ? std::string("unknown") : p;
@@ -91,41 +109,51 @@ json Service::Feed(uint64_t connection, const std::string& raw, double now, bool
     const auto generation = m_admission.load();
     try { batch = Parse(raw, {}, cet); producer = batch.producer; layer = batch.layer; }
     catch (const Refusal& e) {
-        try { if (raw.size() <= 65536) { auto j = ParseJson(raw); producer = ProducerName(j, cet); if (j.contains("layer") && j["layer"].is_string()) layer = j["layer"].get<std::string>(); } } catch (...) {}
-        std::scoped_lock lock(m_mutex); m_parse.Add((Now() - start) * 1000); Refuse(producer, layer, e.detail, now); throw;
+        json input; try { if (raw.size() <= 65536) { input = ParseJson(raw); producer = ProducerName(input, cet); if (input.contains("layer") && input["layer"].is_string()) layer = input["layer"].get<std::string>(); } } catch (...) {}
+        std::scoped_lock lock(m_mutex); m_parse.Add((Now() - start) * 1000); Expire(now);
+        auto reason = e.detail;
+        // Expansion can stop early at its allocation cap. Live item totals still precede that vertex refusal.
+        if (reason.value("cap","") == "vertices" && input.contains("items") && input["items"].is_array()) {
+            size_t own = input["items"].size(), total = own;
+            for (const auto& [pn,p] : m_producers) for (const auto& [ln,l] : p.layers) if (l.batch && !(pn == producer && ln == layer)) {
+                total += l.batch->items.size(); if (pn == producer) own += l.batch->items.size();
+            }
+            if (own > 256) reason = {{"code","canvas_cap"},{"cap","items"},{"limit",256},{"got",own}};
+            else if (total > 1024) reason = {{"code","canvas_cap"},{"cap","total_items"},{"limit",1024},{"got",total}};
+        }
+        Refuse(producer, layer, reason, now); throw Refusal(reason);
     }
     std::scoped_lock lock(m_mutex); m_parse.Add((Now() - start) * 1000);
     if (!Visible() || generation != m_admission.load()) return {{"accepted", false}, {"dropped", "hidden"}};
-    Expire(now);
+    Expire(now); PruneRates(now);
     try {
         if (batch.world != m_world) throw Refusal({{"code", "stale_world"}, {"world", m_world}});
         auto owner = m_producers.find(producer);
         if (owner != m_producers.end() && owner->second.connection != connection) throw Refusal({{"code", "producer_in_use"}});
-        size_t totalItems = batch.items.size(), totalVertices = batch.vertices, ownItems = batch.items.size(), ownVertices = batch.vertices, metadata = 0;
+        size_t totalItems = batch.items.size(), totalVertices = batch.vertices, ownItems = batch.items.size(), ownVertices = batch.vertices, metadata = m_layerRates.size();
         for (const auto& [pn, p] : m_producers) {
-            metadata += p.layers.size();
+            for (const auto& [ln,l] : p.layers) { (void)l; if (!m_layerRates.count({pn,ln})) ++metadata; }
             for (const auto& [ln, l] : p.layers) if (l.batch && !(pn == producer && ln == layer)) {
                 totalItems += l.batch->items.size(); totalVertices += l.batch->vertices;
                 if (pn == producer) { ownItems += l.batch->items.size(); ownVertices += l.batch->vertices; }
             }
         }
         const bool exists = owner != m_producers.end() && owner->second.layers.count(layer);
-        if (!exists && metadata >= 1024) Cap("metadata", 1024, metadata + 1);
+        if (ownItems > 256) Cap("items", 256, ownItems); if (totalItems > 1024) Cap("total_items", 1024, totalItems);
+        if (ownVertices > 4096) Cap("vertices", 4096, ownVertices); if (totalVertices > 16384) Cap("total_vertices", 16384, totalVertices);
         if (!exists && owner != m_producers.end() && owner->second.layers.size() >= 16) Cap("layers", 16, owner->second.layers.size() + 1);
-        if (ownItems > 256) Cap("items", 256, ownItems); if (ownVertices > 4096) Cap("vertices", 4096, ownVertices);
-        if (totalItems > 1024) Cap("total_items", 1024, totalItems); if (totalVertices > 16384) Cap("total_vertices", 16384, totalVertices);
+        const auto rateKey = std::make_pair(producer,layer);
+        if (!exists && !m_layerRates.count(rateKey) && metadata >= 1024) Cap("metadata", 1024, metadata + 1);
         if (exists) {
             auto& previous = owner->second.layers.at(layer);
             if (previous.hasSeq && batch.seq <= previous.seq) throw Refusal({{"code", "stale_seq"}, {"seq", previous.seq}});
-            Pace(previous.rate, now);
-            if (previous.rate.size() >= 4) throw Refusal({{"code", "rate"}, {"retry_after_ms", static_cast<int>(std::ceil((previous.rate.front() + 1 - now) * 1000))}});
         }
-        if (owner != m_producers.end()) {
-            Pace(owner->second.rate, now);
-            if (owner->second.rate.size() >= 16) throw Refusal({{"code", "rate"}, {"retry_after_ms", static_cast<int>(std::ceil((owner->second.rate.front() + 1 - now) * 1000))}});
-        }
+        const auto layerRate = m_layerRates.find(rateKey);
+        const auto producerRate = m_producerRates.find(producer);
+        if (layerRate != m_layerRates.end() && layerRate->second.size() >= 4) throw Refusal({{"code", "rate"}, {"retry_after_ms", static_cast<int>(std::ceil((layerRate->second.front() + 1 - now) * 1000))}});
+        if (producerRate != m_producerRates.end() && producerRate->second.size() >= 16) throw Refusal({{"code", "rate"}, {"retry_after_ms", static_cast<int>(std::ceil((producerRate->second.front() + 1 - now) * 1000))}});
         auto& p = m_producers[producer]; p.connection = connection; auto& l = p.layers[layer];
-        l.seq = batch.seq; l.hasSeq = true; l.rate.push_back(now); p.rate.push_back(now); batch.expires = now + batch.ttl;
+        l.seq = batch.seq; l.hasSeq = true; m_layerRates[rateKey].push_back(now); m_producerRates[producer].push_back(now); batch.expires = now + batch.ttl;
         auto immutable = std::make_shared<const Batch>(std::move(batch)); l.batch = immutable;
         if (m_events) m_events->Push("canvas.fed", "info", "canvas", "Canvas snapshot accepted", {{"producer", producer}, {"layer", layer}, {"world", immutable->world}, {"seq", immutable->seq}, {"items", immutable->items.size()}, {"digest", immutable->digest}});
         return {{"accepted", true}, {"items", immutable->items.size()}, {"vertices", immutable->vertices}, {"digest", immutable->digest}};

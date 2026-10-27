@@ -65,12 +65,11 @@ void DrawCanvas(canvas::Service& service, xfb::overlay::OverlayHost& host, float
     const bool right = radar.corner.find("right") != std::string::npos, bottom = radar.corner.find("bottom") != std::string::npos;
     const ImVec2 origin{right ? width - margin - size : margin, bottom ? height - margin - size : margin};
     Plate(list, origin, {origin.x + size, origin.y + size}, scale, radar.opacity, palette.Colour("line", radar.opacity));
-    size_t radarBudget = 16384, downgraded = 0;
+    size_t downgraded = 0;
     Occupancy occupied;
     std::vector<const canvas::Item*> items; items.reserve(1024);
     for (const auto& layer : frame.layers) if (layer.batch->expires > now) for (const auto& i : layer.batch->items) items.push_back(&i);
-    size_t radarBase=0; for (const auto* item:items) if (item->views & canvas::Radar) radarBase += canvas::SolidVertices(*item);
-    radarBudget -= std::min(radarBudget,radarBase);
+    size_t radarBudget = canvas::RadarExtraBudget(items);
     std::stable_sort(items.begin(), items.end(), [](auto a, auto b) { return a->priority > b->priority; });
     for (const auto* item : items) {
         const auto& i = *item; Vec anchor = i.anchor.point; double opacity = i.opacity;

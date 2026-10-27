@@ -61,6 +61,9 @@ struct Batch
     std::vector<Item> items;
 };
 size_t SolidVertices(const Item&);
+size_t RadarExtraBudget(const std::vector<const Item*>&);
+json PersistKeys(const std::filesystem::path& config, const std::filesystem::path& backups,
+                 const std::pair<killkey::Chord,killkey::Chord>& keys);
 // Structured refusal travels unchanged through both the pipe and Lua routes.
 struct Refusal : std::runtime_error
 {
@@ -167,8 +170,9 @@ public:
     void RenderCost(double ms) { m_render.Add(ms); }
     void RadarDowngraded(size_t count) { m_radarDowngraded.store(count); }
 private:
-    struct Layer { uint64_t seq = 0; bool hasSeq = false; std::shared_ptr<const Batch> batch; json refused; std::deque<double> rate; };
-    struct Producer { uint64_t connection = 0; std::map<std::string, Layer> layers; std::deque<double> rate; double refusedAt = -1e9; };
+    struct Layer { uint64_t seq = 0; bool hasSeq = false; std::shared_ptr<const Batch> batch; json refused; };
+    struct Producer { uint64_t connection = 0; std::map<std::string, Layer> layers; };
+    void PruneRates(double now);
     void Expire(double now);
     void Reset();
     void VisibilityEvent(bool resend);
@@ -186,6 +190,9 @@ private:
     killkey::Chord m_toggle, m_mode;
     std::filesystem::path m_stateFile;
     std::map<std::string, Producer> m_producers;
+    // Independent of drawing and seq records; metadata bounds the union of layer keys to 1,024.
+    std::map<std::pair<std::string,std::string>,std::deque<double>> m_layerRates;
+    std::map<std::string,std::deque<double>> m_producerRates;
     std::map<std::string, AnchorState> m_anchors;
     std::map<std::pair<std::string,std::string>,json> m_refusals;
     std::map<std::string,double> m_refusalTimes;

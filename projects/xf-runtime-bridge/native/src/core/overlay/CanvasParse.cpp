@@ -182,11 +182,14 @@ std::string NumberText(double n)
 } // namespace
 size_t SolidVertices(const Item& i)
 {
-    if (i.kind == "polygon") return i.polygon.size();
-    if (i.kind == "circle") return i.radarLines.size() / 2;
-    if (i.kind == "box") return i.radarLines.size();
-    if (i.kind == "polyline" && !i.radarLines.empty()) return i.radarLines.size() / 2 + (i.radarLines.front() == i.radarLines.back() ? 0 : 1);
+    // Two endpoints per solid segment, including shared circle/polygon corners.
+    if (!i.radarLines.empty()) return i.radarLines.size() + i.polygon.size();
     return i.vertices;
+}
+size_t RadarExtraBudget(const std::vector<const Item*>& items)
+{
+    size_t solid = 0; for (const auto* item : items) if (item->views & Radar) solid += SolidVertices(*item);
+    return 16384 - std::min(size_t{16384},solid);
 }
 json ParseJson(const std::string& raw)
 {
