@@ -20,6 +20,44 @@ test("manifest clock interpolates chunk calibrations and round trips UTC millise
   expect(quantized.fromWallTime(quantized.toWallTime(10.0001))).toBeCloseTo(10.0001, 3);
 });
 
+test("clock offset rollback is ambiguous even when consecutive UTC stamps advance", () => {
+  const at = (seconds: number) => new Date(Date.parse("2026-10-27T00:00:00.000Z") + seconds * 1000).toISOString();
+  const clock = recordingClock({ start_sync: { s: 0, at: at(0), uncertainty_ms: 0.25 }, chunks: [
+    { sync: { s: 60, at: at(55), uncertainty_ms: 0.5 } },
+    { sync: { s: 120, at: at(115), uncertainty_ms: 0.25 } },
+  ] });
+  expect(clock.ambiguousIntervals).toHaveLength(1);
+  expect(clock.ambiguousIntervals[0]).toMatchObject({ from_s: 0, to_s: 60, offset_change_ms: -5000, tolerance_ms: 8.75,
+    wall_min_at: at(-5.009), wall_max_at: at(60.009) });
+  for (const seconds of [-4, 0, 30, 55, 59]) expect(() => clock.fromWallTime(at(seconds))).toThrow("ambiguous");
+  expect(() => clock.toWallTime(30)).toThrow("ambiguous");
+  expect(clock.toWallTime(60)).toBe(at(55)); // Measured anchors remain available.
+  expect(clock.fromWallTime(at(-6))).toBe(-6);
+  expect(clock.fromWallTime(at(61))).toBe(66);
+  expect(clock.toWallTime(90)).toBe(at(85));
+  expect(clock.fromWallTime(at(85))).toBe(90);
+  expect(clock.fromWallTime(at(121))).toBe(126);
+
+  const forward = recordingClock({ start_s: 0, start_at: at(0), chunks: [{ sync: { s: 60, at: at(65) } }] });
+  expect(forward.ambiguousIntervals[0]?.offset_change_ms).toBe(5000);
+  expect(() => forward.fromWallTime(at(30))).toThrow("ambiguous");
+  expect(forward.fromWallTime(at(66))).toBe(61);
+});
+
+test("clock offset tolerance includes read uncertainty, millisecond quantisation and 100 ppm drift", () => {
+  const start = { s: 0, at: "2026-10-27T00:00:00.000Z", uncertainty_ms: 2 };
+  const sync = { s: 60, at: "2026-10-27T00:01:00.013Z", uncertainty_ms: 3 };
+  const allowed = recordingClock({ start_sync: start, chunks: [{ sync }] });
+  expect(allowed.ambiguousIntervals).toEqual([]); // 5 ms reads + 2 ms quantisation + 6 ms drift.
+  const middle = allowed.toWallTime(20);
+  expect(allowed.fromWallTime(middle)).toBeCloseTo(20, 3);
+  const stepped = recordingClock({ start_sync: start, chunks: [{ sync: { ...sync, at: "2026-10-27T00:01:00.014Z" } }] });
+  expect(stepped.ambiguousIntervals).toHaveLength(1);
+  expect(() => stepped.fromWallTime(middle)).toThrow("ambiguous");
+  expect(() => recordingClock({ start_sync: { ...start, uncertainty_ms: -1 } })).toThrow("calibration");
+  expect(() => recordingClock({ start_sync: { ...start, uncertainty_ms: Infinity } })).toThrow("calibration");
+});
+
 test("writer observations reach reader session.events and detailed catchup; native manifest agrees with live start", async () => {
   requireAutonomousSelftest();
   const host = await startSelftestHost(["--allow-test-hooks"]);

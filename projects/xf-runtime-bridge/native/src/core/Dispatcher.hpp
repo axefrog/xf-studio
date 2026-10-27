@@ -117,7 +117,8 @@ public:
     bool Take(std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now());
 private:
     double m_rate, m_tokens;
-    std::chrono::steady_clock::time_point m_lastRefill;
+    // Initialise on first Take(now), using the same clock as the owning dispatcher.
+    std::optional<std::chrono::steady_clock::time_point> m_lastRefill;
 };
 
 // Deepest array/object nesting allowed in a request. nlohmann/json parses iteratively, but
@@ -136,7 +137,11 @@ std::string SerializeJson(const nlohmann::json& aValue);
 class Dispatcher
 {
 public:
-    Dispatcher(const Config& aConfig, const Session& aSession, GameThreadQueue& aQueue);
+    // Inject only pacing time; queue deadlines, emergency receipts and audit timestamps
+    // keep their real monotonic clock even when a test freezes token refill.
+    using PacingClock = std::function<std::chrono::steady_clock::time_point()>;
+    Dispatcher(const Config& aConfig, const Session& aSession, GameThreadQueue& aQueue,
+               PacingClock aPacingClock = std::chrono::steady_clock::now);
 
     void Register(MethodSpec aSpec);
     // 0.8.12: the access class a registered method has (the watchers' micro-actions check it), or nothing for an unknown name.
@@ -222,6 +227,7 @@ private:
     const Config& m_config;
     const Session& m_session;
     GameThreadQueue& m_queue;
+    PacingClock m_pacingClock;
     std::map<std::string, MethodSpec> m_methods;
 
     mutable std::mutex m_mutex;

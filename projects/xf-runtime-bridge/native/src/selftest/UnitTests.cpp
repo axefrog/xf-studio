@@ -5540,7 +5540,7 @@ int RunUnitTests()
         using namespace xfb;
         // Deterministic burst/refill checks, with no waiting or writer tuning loophole.
         ReaderRequestBudget capped(1000);
-        const auto at = std::chrono::steady_clock::now();
+        const auto at = std::chrono::steady_clock::time_point{};
         int admitted = 0;
         for (int i = 0; i < 41; ++i) admitted += capped.Take(at);
         Check("observer pacing: connection burst clamps at forty", admitted == 40);
@@ -5549,7 +5549,8 @@ int RunUnitTests()
 
         Config config; config.maxRequestsPerSecond = 2;
         Session session; session.token = "observer-pacing";
-        GameThreadQueue queue; Dispatcher dispatcher(config, session, queue);
+        auto pacingNow = at;
+        GameThreadQueue queue; Dispatcher dispatcher(config, session, queue, [&] { return pacingNow; });
         auto call = [&](const char* method, ReaderRequestBudget* budget) {
             return json::parse(dispatcher.Handle(json{{"token", session.token}, {"method", method}}.dump(), 1, false, budget).line);
         };
@@ -5567,13 +5568,26 @@ int RunUnitTests()
             ReaderRequestBudget fresh(2);
             freshAdmitted += call("ping", &fresh).value("ok", false);
         }
-        Check("observer pacing: aggregate ceiling bounds reconnect bursts", freshAdmitted <= 27);
+        Check("observer pacing: aggregate ceiling bounds reconnect bursts", freshAdmitted == 27);
+        pacingNow += 1s;
+        Check("observer pacing: connection refill follows injected time", call("ping", &first)["ok"] == true &&
+            call("ping", &first)["ok"] == true && call("ping", &first)["error"]["code"] == "rate_limited");
+        freshAdmitted = 0;
+        for (int i = 0; i < 20; ++i) {
+            ReaderRequestBudget fresh(2);
+            freshAdmitted += call("ping", &fresh).value("ok", false);
+        }
+        Check("observer pacing: aggregate refills exactly sixteen tokens per second", freshAdmitted == 14);
+        writerAdmitted = 0;
+        for (int i = 0; i < 3; ++i) writerAdmitted += call("ping", nullptr).value("ok", false);
+        Check("observer pacing: writer refills exactly two tokens per second", writerAdmitted == 2);
     }
     {
         using namespace xfb;
         Config config; config.maxRequestsPerSecond = 2;
         Session session; session.token = "game-pacing";
-        GameThreadQueue queue; queue.SetPumping(true); Dispatcher dispatcher(config, session, queue);
+        auto pacingNow = std::chrono::steady_clock::time_point{};
+        GameThreadQueue queue; queue.SetPumping(true); Dispatcher dispatcher(config, session, queue, [&] { return pacingNow; });
         int ran = 0;
         dispatcher.Register({"fixture.direct", Access::Read, RunOn::GameThread, "", [&](const MethodContext&) { ++ran; return json::object(); }});
         dispatcher.Register({"fixture.steps", Access::Read, RunOn::BridgeThread, "", [&](const MethodContext&) {
@@ -5596,6 +5610,10 @@ int RunUnitTests()
         Check("observer pacing: direct game read also refuses before enqueue", json::parse(call("fixture.direct", &third).line)["error"]["code"] == "rate_limited" && ran == 3);
         Check("observer pacing: game reads preserve writer reserve", json::parse(call("ping", nullptr).line)["ok"] == true && json::parse(call("ping", nullptr).line)["ok"] == true);
         Check("observer pacing: writer limit still enforced", json::parse(call("ping", nullptr).line)["error"]["code"] == "rate_limited");
+        pacingNow += 500ms;
+        Check("observer pacing: partial shared refill preserves writer reserve", json::parse(call("fixture.direct", &third).line)["error"]["code"] == "rate_limited" && ran == 3);
+        pacingNow += 1s;
+        Check("observer pacing: shared game refill follows injected time", json::parse(call("fixture.direct", &third).line)["ok"] == true && ran == 4);
     }
     {
         using namespace xfb;

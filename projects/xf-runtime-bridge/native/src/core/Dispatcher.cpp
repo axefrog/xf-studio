@@ -474,12 +474,13 @@ bool IsValidCid(const std::string& aCid)
     return true;
 }
 
-Dispatcher::Dispatcher(const Config& aConfig, const Session& aSession, GameThreadQueue& aQueue)
+Dispatcher::Dispatcher(const Config& aConfig, const Session& aSession, GameThreadQueue& aQueue, PacingClock aPacingClock)
     : m_config(aConfig)
     , m_session(aSession)
     , m_queue(aQueue)
+    , m_pacingClock(std::move(aPacingClock))
     , m_tokens(aConfig.maxRequestsPerSecond * 2.0)
-    , m_lastRefill(std::chrono::steady_clock::now())
+    , m_lastRefill(m_pacingClock())
     , m_readerTokens(std::clamp<uint32_t>(aConfig.maxRequestsPerSecond, 1, ReaderRequestBudget::kMaxRate) * (2.0 * kMaxReadOnlyConnections))
     , m_readerLastRefill(m_lastRefill)
 {
@@ -697,7 +698,7 @@ bool Dispatcher::TakeReaderLogToken(std::atomic<int64_t>& next, int64_t now)
 bool Dispatcher::TakeRateToken(bool aReadOnly)
 {
     std::scoped_lock _(m_mutex);
-    const auto now = std::chrono::steady_clock::now();
+    const auto now = m_pacingClock();
     const auto elapsed = std::chrono::duration<double>(now - m_lastRefill).count();
     m_lastRefill = now;
     const double capacity = m_config.maxRequestsPerSecond * 2.0;
@@ -711,16 +712,15 @@ bool Dispatcher::TakeRateToken(bool aReadOnly)
 }
 
 ReaderRequestBudget::ReaderRequestBudget(uint32_t rate)
-    : m_rate(std::clamp<uint32_t>(rate, 1, kMaxRate)), m_tokens(m_rate * 2.0),
-      m_lastRefill(std::chrono::steady_clock::now())
+    : m_rate(std::clamp<uint32_t>(rate, 1, kMaxRate)), m_tokens(m_rate * 2.0)
 {
 }
 
 bool Dispatcher::TakeReaderRequestToken()
 {
-    if (!tReaderBudget->Take()) return false;
+    if (!tReaderBudget->Take(m_pacingClock())) return false;
     std::scoped_lock _(m_mutex);
-    const auto now = std::chrono::steady_clock::now();
+    const auto now = m_pacingClock();
     const double rate = std::clamp<uint32_t>(m_config.maxRequestsPerSecond, 1, ReaderRequestBudget::kMaxRate) * static_cast<double>(kMaxReadOnlyConnections);
     m_readerTokens = std::min(rate * 2.0, m_readerTokens + std::chrono::duration<double>(now - m_readerLastRefill).count() * rate);
     m_readerLastRefill = now;
@@ -731,8 +731,9 @@ bool Dispatcher::TakeReaderRequestToken()
 
 bool ReaderRequestBudget::Take(std::chrono::steady_clock::time_point now)
 {
-    const auto elapsed = std::max(0.0, std::chrono::duration<double>(now - m_lastRefill).count());
-    m_lastRefill = std::max(now, m_lastRefill);
+    const auto previous = m_lastRefill.value_or(now);
+    const auto elapsed = std::max(0.0, std::chrono::duration<double>(now - previous).count());
+    m_lastRefill = std::max(now, previous);
     m_tokens = std::min(m_rate * 2.0, m_tokens + elapsed * m_rate);
     if (m_tokens < 1.0) return false;
     m_tokens -= 1.0;
