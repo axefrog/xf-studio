@@ -387,9 +387,11 @@ Key bindings and palette commands resolve targets in the input layer, then dispa
 - **Session data** (§4.1). Reading a session validates tab IDs, instance IDs (duplicates are dropped), bindings, scene references and generations, and focus.
 - **Boundary test.** It lists no family that still defaults a target. It also forbids reading focus below the input layer, naming `sceneGen` without `scene`, and naming the live feature in the root. The `liveSurface` row of §7 is built as `preview/browser/scene-editors.ts` (phase 4a-vi).
 - **Deferred.**
-  - The History panel's list of other recent scopes waits for a UI decision (phase 3).
+  - The History panel's visible list of other recent scopes waits for U6 presentation (phase 3); P3-vii's service projection and selection action are implemented below.
   - `layout.set` gives way to phase 2's `tabs.*`.
   - Shell menus other than context menus get captures in phase 3.
+
+**Built in P3-vii, service half (Part 1, uncommitted).** The existing history service projects at most eight recent scopes, newest first, as detached `authoring.historyScopes()` rows: plain label, exact owner identity, current/history/trimmed facts, owner recovery status and a selection capability. A withdrawn document, removed/purged/recovering look or V, closed target, open adjustment and external reset carry named refusals. Retired targets keep bounded metadata only, without retaining their stack or edit callbacks. Registered `history.selectScope { scope }` is navigation over existing history: it creates no scope, binding or step, and the next edit resumes following. Opening/focusing History remains ordinary panel navigation. Header and keyboard Undo still name their current scope; the existing 3D-view/Character-panel shortcut rules stay intact. U6's guide/component/list/timeline wiring, accessibility, four-way captures and independent UI PASS remain separate; [047's as-built record](../../experiments/047-profile-bindings/README.md#p3-vii-recent-history-scopes-service-half-part-1) holds validation and browser limits.
 
 ## 4. Layouts
 

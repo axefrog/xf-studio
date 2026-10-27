@@ -35,6 +35,8 @@ export interface TransactionHost<Id> {
   content(): string;
   /** Told when a commit keeps a change (its own step, or the top step that already reverts to the start). */
   kept?(): void;
+  /** Release the owner's adjustment hold after commit or cancel, including an empty run. */
+  closed?(): void;
 }
 
 /**
@@ -79,6 +81,9 @@ export class HistoryTransaction<Id> {
    * a kept change is undone by the top step, which then takes its name.
    */
   commit() {
+    try { this.keep(); } finally { this.host.closed?.(); }
+  }
+  private keep() {
     if (this.checkpoint === undefined) {
       if (this.top !== undefined && this.label && !this.empty()) { this.host.relabel(this.top, this.label); this.host.kept?.(); }
       return;
@@ -91,6 +96,9 @@ export class HistoryTransaction<Id> {
    * step). Only the transaction's own step is ever taken off.
    */
   cancel() {
+    try { this.revert(); } finally { this.host.closed?.(); }
+  }
+  private revert() {
     const revert = this.policy.revert === "changed" ? this.changedAny && this.present()
       : this.present() && this.host.content() !== this.baseline;
     if (revert) this.host.revert(this.checkpoint);

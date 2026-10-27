@@ -13,17 +13,23 @@ export type HistoryLabel = {
   layerId?: string;
 };
 
-/**
- * Undo, Redo and a jump. Undo and Redo may name the history scope they step (`scope`: `look:<collection>/<look>`, `character:<id>`),
- * as a focused panel's own Undo does (the 3D view steps the look it shows); without one they step the focused scope, the editing context.
- */
 /** A move through one history scope's steps, as the scope carries it out. */
 export type HistoryMove = { kind: "history.undo" } | { kind: "history.redo" } | { kind: "history.jumpTo"; entryId: string };
 /**
- * Undo, Redo or a jump as an action: the move and the history scope it acts on (profiles design §3.6, §3.7). The input layer names the
- * scope (the editing context, or a focused 3D view's look); nothing defaults it.
+ * A move or explicit selection as an action, naming its history scope (profiles design §3.6, §3.7). The input layer names the scope
+ * (the editing context, or a focused 3D view's look); nothing defaults it. Selection is navigation: it opens no stack and records no edit.
  */
-export type HistoryCommand = HistoryMove & { scope: string };
+export type HistoryCommand = (HistoryMove | { kind: "history.selectScope" }) & { scope: string };
+/** Navigation over existing histories. No recipe, stack or mutable owner escapes this projection. */
+export type HistoryScopeOwner = { readonly kind: "look"; readonly collection: string; readonly look: string }
+  | { readonly kind: "character" | "view" | "document" | "other"; readonly id: string };
+export type HistoryScopeDetails = { readonly label?: string; readonly status?: import("./target-status").OwnerTargetStatus };
+export type RecentHistoryScope = {
+  readonly scope: string; readonly label: string; readonly owner: HistoryScopeOwner;
+  readonly current: boolean; readonly hasHistory: boolean; readonly trimmed: boolean;
+  readonly status?: import("./target-status").OwnerTargetStatus;
+  readonly capability: import("./capability").Capability;
+};
 export type HistoryState = { undo?: HistoryLabel; redo?: HistoryLabel; depth: number; redoDepth: number };
 export type HistoryStep = HistoryLabel & { id: string; at?: number; state: "done" | "undone" };
 export type HistorySnapshot = { startId: string; steps: HistoryStep[]; current: number; redoCount: number; trimmed: boolean; documentLabel?: string };

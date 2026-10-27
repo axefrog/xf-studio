@@ -12,7 +12,7 @@ import { readStarterShape } from "../../src/engines/layered-makeup/starter-shape
 import type { DiagnosticsActions } from "../../src/diagnostics/actions";
 import type { Recipe } from "../../src/engines/layered-makeup/recipe";
 import { createProfileAuthoring } from "../../src/app/profiles/profile-authoring";
-import { createProfileServices, createTargetResolver, sceneCommands } from "../../src/app/profiles/profile-window";
+import { createProfileServices, createTargetResolver, sceneCommands, historyScopeDetails, historyScopeName } from "../../src/app/profiles/profile-window";
 import { sessionOfWorkspace } from "../../src/app/profiles/profiles-migration-data";
 import { profileSessionOf, type ProfileSessionData } from "../../src/app/profiles/profile-session";
 import { createTrustedStudioBootstrap } from "../../src/app/trusted-studio-bootstrap";
@@ -87,7 +87,8 @@ export async function profileContextStudio(options: { clock?: Clock; now?: () =>
     STUDIO_COMPOSITION, { owner: services.collections, sessions: services.looks, outbox, note: text => notes.push(text), report: error => failures.push(error), shown: () => { shows++; } });
   const core = authoring.core, targets = createTargetResolver({ state: session, history, services, available: options.available, contexts: type => STUDIO_CATALOGUE.context(type) });
   if (options.presets) core.app.attach({ presets: options.presets });
-  core.app.attach({ scenes: sceneCommands(session, services), panels: panelCommands(session, targets), targetCheck: targets });
+  core.app.attach({ scenes: sceneCommands(session, services), panels: panelCommands(session, targets), targetCheck: targets,
+    historyScopeDetails: scope => historyScopeDetails(scope, { services, history }) });
   let drawn = session.session().views.views[0]!.id;
   const scene = session.graph.node(drawn, "scene").id, sceneOf = () => session.graph.viewIds().includes(drawn) ? session.graph.node(drawn, "scene").id : undefined;
   let starters: ShapeStarters | undefined;
@@ -118,6 +119,7 @@ export async function profileContextStudio(options: { clock?: Clock; now?: () =>
     naming: () => targets.namedView(drawn),
     modules: options.modules, panelViewport: options.panelViewport,
     focus: session.focus, starters: starterActions?.port(),
+    scopeName: scope => historyScopeName(scope, { services, history }),
     panelInstance: (panel, tab) => session.instance(panel, tab),
     panelTargets: { target: id => session.panelTarget(id), tabTarget: id => session.panelTabTarget(id), capture: id => targets.structural(id) },
     tabs: layoutTabsPort(session, tabDefaults(session, services), services),

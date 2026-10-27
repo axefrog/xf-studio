@@ -52,6 +52,7 @@ export const ACTION_DESCRIPTORS = {
   "history.undo": desc("workspace", "content", "none", { scope: TARGET_SCHEMA.scope }),
   "history.redo": desc("workspace", "content", "none", { scope: TARGET_SCHEMA.scope }),
   "history.jumpTo": desc("workspace", "content", "none", { scope: TARGET_SCHEMA.scope, entryId: input("string") }),
+  "history.selectScope": desc("workspace", "workspace", "none", { scope: TARGET_SCHEMA.scope }),
   // Eye makeup's actions, in catalogue order (eye-makeup-descriptors.ts).
   ...EYE_MAKEUP_DESCRIPTORS,
   "preset.edit": desc(["preset", "collection"], "library", "none", { collection: TARGET_SCHEMA.collection, command: input("object") }, {

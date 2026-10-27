@@ -1,7 +1,7 @@
 import type { AuthoringDocument } from "./authoring/authoring-document";
 import type { AuthoringControlEdits } from "./authoring/authoring-control-edits";
 import { fromView3d, gestureSource, type AuthoringGestures, type GestureOrigin, type GestureSource } from "./authoring/authoring-gestures";
-import type { HistoryCommand as HistoryAction, HistoryMove, HistorySnapshot, HistoryState } from "../platform/api/history";
+import type { HistoryCommand as HistoryAction, HistoryMove, HistorySnapshot, HistoryState, HistoryScopeDetails } from "../platform/api/history";
 import { missingTarget as missingNamedTarget, nameTargets, NO_TARGET, type NamedTargets, type Naming, type Unnamed } from "./action-targets";
 import { nameIssue } from "../platform/api/validation-issues";
 import { consequenceOf, type Consequence, type ConsequenceSubject } from "./action-consequences";
@@ -131,6 +131,8 @@ export type StudioApplicationServices = { document: AuthoringDocument;
   newId?: () => string;
   /** The session's history service: Undo and Redo act on the scope they name (the look's, a V's, or an experiment's document). */
   history: HistoryService;
+  /** Owner facts for history navigation; never acquire an editor or open a document to describe one. */
+  historyScopeDetails?: (scope: string) => HistoryScopeDetails;
   /**
    * The session's scenes (profiles design §1.1): each scene's `gen` (which a view action that edits the scene names) and `scene.setLook`
    * and `scene.setSubject`.
@@ -303,7 +305,7 @@ export class StudioApplication {
   private subscribeSources() {
     for (const unsub of this.unsubs) unsub();
     const s = this.services;
-    this.unsubs = [s.document.subscribe(() => this.notify())];
+    this.unsubs = [s.document.subscribe(() => this.notify()), s.history.subscribe(() => this.notify())];
     this.seenContent = s.collection?.contentVersion();
     // Save progress, busy flags and list refreshes must not invalidate an open menu (audit A-14).
     if (s.collection) this.unsubs.push(s.collection.subscribe(() => {
@@ -633,6 +635,11 @@ export class StudioApplication {
    * "Earlier change"); with no scope (no editing context yet) or one that can't act now, nothing.
    */
   history(scope?: string): HistoryState { return this.historyScope(scope)?.state() ?? { depth: 0, redoDepth: 0 }; }
+  /** Read-only projection over the existing recent scopes; no History panel binding or second stack. */
+  historyScopes() {
+    return this.services.history.recentScopes(this.services.historyScopeDetails).map(row => ({ ...row,
+      capability: this.capability({ kind: "history.selectScope", scope: row.scope }) }));
+  }
   /** The scope a history command names, while it can act: an open scope, or a document its experiment offers. */
   private historyScope(scope: string | undefined): HistoryScope | undefined {
     return scope === undefined ? undefined : this.services.history.acting([scope]) ?? undefined;
@@ -772,7 +779,7 @@ export class StudioApplication {
   capability(action: StudioAction): StudioCapability {
     const s = this.services, route = this.routes.route(action.kind);
     if (!route.ok) return unknownCommand();
-    const denied = this.denied(action.kind === "tabs.show");
+    const denied = this.denied(action.kind === "tabs.show" || action.kind === "history.selectScope");
     if (denied) return denied;
     const adjusting = this.edits.controlOwner ?? this.edits.featureOwner ?? this.edits.gestureOwner;
     if (route.owner.owner === "feature" && route.spec.descriptor.effect === "content" && adjusting && adjusting !== this)
@@ -947,9 +954,15 @@ export class StudioApplication {
     return {
       // Undo, Redo and jumps act on the history scope they name, which decides what is available.
       history: {
-        capability: action => app.historyScope(action.scope)?.capability(moveOf(action)) ?? refusal("unavailable", NOTHING_TO_UNDO),
+        capability: action => action.kind === "history.selectScope"
+          ? app.services.history.selectCapability(action.scope, app.services.historyScopeDetails?.(action.scope))
+          : app.historyScope(action.scope)?.capability(moveOf(action)) ?? refusal("unavailable", NOTHING_TO_UNDO),
         // A document's move (through its experiment) has no result of its own; a look's says whether it moved.
         dispatch: action => {
+          if (action.kind === "history.selectScope") {
+            app.services.history.selectScope(action.scope, app.services.historyScopeDetails?.(action.scope));
+            return undefined;
+          }
           const scope = app.historyScope(action.scope);
           if (!scope) return undefined;
           const moved = scope.command(moveOf(action));
@@ -1428,6 +1441,6 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 }
 
 /** The move a scope carries out: the scope it named is already chosen. */
-function moveOf(action: HistoryAction): HistoryMove {
+function moveOf(action: Exclude<HistoryAction, { kind: "history.selectScope" }>): HistoryMove {
   return action.kind === "history.jumpTo" ? { kind: action.kind, entryId: action.entryId } : { kind: action.kind };
 }

@@ -66,7 +66,7 @@ test("derived kind sets equal the sets StudioApplication used to keep by hand", 
   // Choosing a preset is what its scene shows (profiles design §3.6): `scene.setLook` replaced `preset.select`.
   expect(kinds("scenes")).toEqual(["scene.setLook", "scene.setSubject"]);
   // Before step 1: literal comparisons and `startsWith` prefixes, with saved-V as the final fallback.
-  expect(kinds("history")).toEqual(["history.jumpTo", "history.redo", "history.undo"]);
+  expect(kinds("history")).toEqual(["history.jumpTo", "history.redo", "history.selectScope", "history.undo"]);
   expect(kinds("preview")).toEqual(all.filter(kind => kind.startsWith("preview.") || kind.startsWith("camera.")).sort());
   expect(kinds("motion")).toEqual(all.filter(kind => kind.startsWith("motion.")).sort());
   expect(kinds("quality")).toEqual(all.filter(kind => kind.startsWith("quality.")).sort());

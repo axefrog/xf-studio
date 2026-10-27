@@ -88,7 +88,7 @@ import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-s
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
-import { createProfileServices, createTargetResolver, drawnView as drawnViewOf, historyScopeName, openProfileSession,
+import { createProfileServices, createTargetResolver, drawnView as drawnViewOf, historyScopeName, historyScopeDetails, openProfileSession,
   sceneHeadTargets, sceneCommands, tabDefaults } from "../app/profiles/profile-window";
 import { starterParts } from "../app/workspace/collection-workspace";
 import { printDefault } from "../app/profiles/layout-fragment";
@@ -333,7 +333,8 @@ async function start(host: StudioHost, root: HTMLElement) {
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
   const panelActions = panelCommands(sessionState, targets, layouts.catalogue);
-  core.app.attach({ targetCheck: targets, panels: panelActions });
+  core.app.attach({ targetCheck: targets, panels: panelActions,
+    historyScopeDetails: scope => historyScopeDetails(scope, { services, history: historyService }) });
   const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
   const headHost = byId("device-head"), uvHost = byId("device-uv");
   const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.namedView(drawnView())), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),

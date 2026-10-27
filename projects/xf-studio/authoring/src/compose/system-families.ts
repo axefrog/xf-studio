@@ -46,7 +46,7 @@ const EMPTY_ID = familyId("empty");
 export const HISTORY_FAMILY: SystemFamily<HistoryAction, ActionScope, typeof HISTORY_ID> = Object.freeze({
   owner: "system", id: HISTORY_ID, label: "History",
   actions: actionTable<HistoryAction, ActionScope>(ACTION_DESCRIPTORS,
-    { "history.undo": true, "history.redo": true, "history.jumpTo": true }),
+    { "history.undo": true, "history.redo": true, "history.jumpTo": true, "history.selectScope": true }),
 });
 
 export const COLLECTION_FAMILY: SystemFamily<CollectionStudioAction, ActionScope, typeof COLLECTION_ID> = Object.freeze({

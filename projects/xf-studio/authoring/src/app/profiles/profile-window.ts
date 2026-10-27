@@ -238,6 +238,20 @@ export function historyScopeName(scope: string, deps: { services: Pick<ProfileSe
   return undefined;
 }
 
+/** History navigation consumes the same recovery facts as bound inspectors, without opening their targets. */
+export function historyScopeDetails(scope: string, deps: { services: Pick<ProfileServices, "characters" | "collections">; history: Pick<HistoryService, "documents"> }): import("../../platform/api/history").HistoryScopeDetails {
+  const label = historyScopeName(scope, deps);
+  if (scope.startsWith("look:")) {
+    const key = scope.slice(5), at = key.indexOf("/"), status = deps.services.collections.targetStatus({ collection: key.slice(0, at), look: key.slice(at + 1) });
+    return { label: status.label ?? label, status };
+  }
+  if (scope.startsWith("character:")) {
+    const status = deps.services.characters.targetStatus(scope.slice(10));
+    return { label: status.label ? `V · ${status.label}` : label, status };
+  }
+  return { label };
+}
+
 /** Only a workspace held by another window waits for that holder to migrate; startup failures show the in-memory session. */
 export function profileWorkspaceLease(lease: Pick<import("../workspace/workspace-lease").WorkspaceLease, "snapshot" | "writable">, stored: boolean) {
   const snapshot = lease.snapshot();

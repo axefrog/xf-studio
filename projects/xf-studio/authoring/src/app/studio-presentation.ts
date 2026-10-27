@@ -175,6 +175,8 @@ type PresentationAuthoring = Pick<StudioApplication,
   history(): HistoryState;
   /** The editing context's steps, for the History panel. */
   historyTimeline(): HistorySnapshot;
+  /** Recent existing scopes and owner/refusal facts for U6's Other changes list. */
+  historyScopes(): readonly import("../platform/api/history").RecentHistoryScope[];
 };
 /** The detection service's state with what the Mod frameworks group shows of the framework check (see `StudioPresentationPort.installDetection`). */
 export type InstallDetectionSnapshot = ReturnType<InstallDetectionActions["snapshot"]> & { readonly frameworkStatus: FrameworkStatusView };
@@ -522,6 +524,7 @@ export function createStudioPresentation<Slot>(sources: {
     endGesture: (source, cancel) => a.endGesture(source, cancel),
     previewState: () => a.previewState(), history: () => a.history(editingScope()),
     historyTimeline: () => a.historyTimeline(editingScope()),
+    historyScopes: () => a.historyScopes(),
     consequences: subject => a.consequences("action" in subject ? { ...subject, action: name<StudioAction>(subject.action) } as ConsequenceSubject : subject as ConsequenceSubject),
     finishCatalogue: () => a.finishCatalogue(),
     layerExport: layerId => a.layerExport(layerId),

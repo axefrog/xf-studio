@@ -28,10 +28,11 @@
 import type { Capability } from "../api/capability";
 import { HISTORY_LIMIT, HISTORY_START_ID, UNKNOWN_HISTORY_LABEL, type DocumentHistory, type HistoryMove, type HistoryEntryId,
   type HistoryJumpPlan, type HistoryLabel, type HistoryParticipant, type HistoryParts, type HistoryScope as StoredScope,
-  type HistoryScopeId, type HistorySnapshot, type HistoryState, type HistoryStep, type HistoryTarget, type LookHistoryData } from "../api/history";
+  type HistoryScopeId, type HistorySnapshot, type HistoryState, type HistoryStep, type HistoryTarget, type LookHistoryData,
+  type HistoryScopeDetails, type HistoryScopeOwner, type RecentHistoryScope } from "../api/history";
 import { HistoryStack, ReferenceStore, WHOLE_VALUES, type LookReader } from "./history-stack";
 import { HistoryTransaction, type TransactionHost, type TransactionPolicy } from "./history-transaction";
-import { FocusService } from "./focus";
+import { FocusService, RECENT_EDITING_LIMIT } from "./focus";
 import { notifyAll } from "./listeners";
 
 const VIEW_PREFIX = "view:";
@@ -133,6 +134,11 @@ export interface HistoryService {
   readonly focus: FocusService;
   /** The first of `scopes` (editing contexts, newest first) that can act now: an open scope, or a document its experiment offers. */
   acting(scopes: readonly HistoryScopeId[]): HistoryScope | null;
+  /** Detached recent scopes, newest first, at most eight including current. Reads never open a scope. */
+  recentScopes(describe?: (scope: string) => HistoryScopeDetails): readonly RecentHistoryScope[];
+  selectCapability(id: string, details?: HistoryScopeDetails): Capability;
+  /** Select existing history as navigation only; opening/focusing History never calls this. */
+  selectScope(id: string, details?: HistoryScopeDetails): boolean;
   /** The experiments' document histories: the existing API over `doc:*` scopes. */
   readonly documents: DocumentHistory;
   /** The documents an experiment currently offers to global Undo (`HistoryParticipant`); returns the unregister. */
@@ -148,6 +154,18 @@ class Scope implements HistoryScope {
   /** The scope as the last Undo, Redo or jump left it: the target's revision and content, and the top step. */
   private expected?: { revision: unknown; fingerprint: string; top?: HistoryEntryId };
   private recordingNow = true;
+  private adjustments = 0;
+  get adjusting() { return this.adjustments > 0; }
+  private reset = false;
+  private historySeen = false;
+  get remembered() { return this.historySeen || this.reset || this.stack.depth > 0 || this.stack.redoDepth > 0; }
+  /** Selection is independent of whether the current endpoint has an Undo or Redo step. */
+  selectionCapability(): Capability {
+    if (this.adjustments) return refusal("Finish or cancel the current adjustment first (Esc).", "busy");
+    const why = this.target.unavailable?.();
+    if (why) return refusal(why, "not_ready");
+    return this.reset ? refusal("History was cleared by an external change.", "stale") : { available: true };
+  }
   constructor(readonly id: HistoryScopeId, private readonly target: HistoryTarget, private readonly options: ScopeOptions,
     private readonly service: { changed(scope: Scope, kept: boolean): void }) {
     this.stack = options.stack ?? new HistoryStack(options.parts ?? WHOLE_VALUES, options.limit ?? HISTORY_LIMIT,
@@ -166,6 +184,7 @@ class Scope implements HistoryScope {
     if (!this.recordingNow) return undefined;
     const added = this.stack.checkpoint(options.read ?? this.read, keys, { label, coalesce: options.coalesce, scope: options.scope,
       timed: options.timed, distinct: options.distinct });
+    if (added !== undefined) { this.reset = false; this.historySeen = true; }
     this.changed(true);
     return added;
   }
@@ -177,21 +196,30 @@ class Scope implements HistoryScope {
   relabel(step: HistoryEntryId, label: HistoryLabel) { this.stack.relabel(step, label); }
   discard(step: HistoryEntryId) { const removed = this.stack.discard(step); if (removed) this.changed(); return removed; }
   seal() { this.stack.seal(); }
-  clear() { this.stack.clear(); this.expected = undefined; this.changed(); }
-  replace(stack: HistoryStack, activate = true) { this.stack = stack; this.expected = undefined; this.changed(activate); }
+  clear() { this.reset = true; this.stack.clear(); this.expected = undefined; this.changed(); }
+  replace(stack: HistoryStack, activate = true) {
+    this.historySeen ||= this.stack.depth > 0 || this.stack.redoDepth > 0;
+    this.stack = stack; this.expected = undefined;
+    if (stack.depth || stack.redoDepth) this.reset = false;
+    this.changed(activate);
+  }
   top() { return this.stack.topId; }
   data() { return this.stack.data(); }
   stats() { return this.stack.stats(); }
 
   begin(keys: readonly string[], policy: TransactionPolicy, options: { present?: () => boolean; label?: HistoryLabel; scope?: StoredScope } = {}) {
+    let open = true;
     const host: TransactionHost<HistoryEntryId> = {
       checkpoint: () => this.checkpointOpen(keys, options.label, options.scope), top: () => this.stack.topId,
       relabel: (step, label) => this.relabel(step, label), discard: step => this.discard(step),
       revert: step => { this.revertTransaction(step); }, content: () => this.target.fingerprint?.(keys) ?? "",
       // A kept step is a change to this scope like any other checkpoint.
-      kept: () => this.service.changed(this, true),
+      kept: () => { this.reset = false; this.historySeen = true; this.service.changed(this, true); },
+      closed: () => { if (open) { open = false; this.adjustments--; this.changed(); } },
     };
-    return HistoryTransaction.open(host, policy, options.present ?? (() => true));
+    this.adjustments++;
+    try { return HistoryTransaction.open(host, policy, options.present ?? (() => true)); }
+    catch (error) { this.adjustments--; throw error; }
   }
   revertTransaction(step: HistoryEntryId | undefined): boolean {
     const values = step === undefined ? (this.stack.canUndo ? this.stack.stepParts(this.stack.depth - 1) : undefined)
@@ -315,6 +343,8 @@ class Scope implements HistoryScope {
 export function createHistoryService(options: { focus?: FocusService } = {}): HistoryService {
   const focus = options.focus ?? new FocusService();
   const scopes = new Map<HistoryScopeId, Scope>();
+  // Metadata only for recently retired targets; never retain their stack, document or apply callbacks.
+  const retired = new Map<string, { label?: string; hasHistory: boolean; trimmed: boolean }>();
   const listeners = new Set<() => void>(), documentListeners = new Set<() => void>();
   const providers = new Set<() => readonly HistoryParticipant[]>();
   const emit = (set: Set<() => void>) => notifyAll(set);
@@ -349,6 +379,7 @@ export function createHistoryService(options: { focus?: FocusService } = {}): Hi
   const openScope = (id: HistoryScopeId, target: HistoryTarget, options: ScopeOptions = {}): Scope => {
     const scope = new Scope(id, target, options, hub);
     scopes.set(id, scope);
+    retired.delete(id);
     return scope;
   };
   // ----- Documents -----
@@ -413,11 +444,49 @@ export function createHistoryService(options: { focus?: FocusService } = {}): Hi
     subscribe(listener) { documentListeners.add(listener); return () => { documentListeners.delete(listener); }; },
   };
 
+  const ownerOf = (id: string): HistoryScopeOwner => {
+    const at = id.indexOf(":"), kind = id.slice(0, at), key = id.slice(at + 1);
+    if (kind === "look") { const slash = key.indexOf("/"); return { kind, collection: key.slice(0, slash), look: key.slice(slash + 1) }; }
+    return { kind: kind === "doc" ? "document" : kind === "character" || kind === "view" ? kind : "other", id: key };
+  };
+  const selectCapability = (id: string, details: HistoryScopeDetails = {}): Capability => {
+    if (!focus.recent().includes(id)) return refusal("That scope is no longer in recent history.", "missing_target");
+    if ([...scopes.values()].some(scope => scope.adjusting)) return refusal("Finish or cancel the current adjustment first (Esc).", "busy");
+    const status = details.status;
+    if (status && status.state !== "present") return refusal(status.reason ?? (status.state === "removed"
+      ? "This target was removed. Restore it through its owner first." : "This target is not available."), status.state === "pending" ? "not_ready" : "missing_target");
+    if (id.startsWith(DOCUMENT_PREFIX) && !participant(id.slice(DOCUMENT_PREFIX.length)))
+      return refusal("The experiment that owns this document is not available.", "unavailable");
+    const scope = scopes.get(id);
+    if (!scope) return refusal("This history target is no longer open.", "missing_target");
+    const ready = scope.selectionCapability();
+    return ready.available && !scope.timeline().steps.length ? refusal("There are no changes recorded in this scope.", "unavailable") : ready;
+  };
   return {
     open: openScope,
-    close(id) { scopes.delete(id); },
+    close(id) {
+      const scope = scopes.get(id);
+      if (!scope) return;
+      const t = scope.timeline();
+      retired.set(id, { label: t.documentLabel, hasHistory: scope.remembered, trimmed: t.trimmed });
+      while (retired.size > RECENT_EDITING_LIMIT) retired.delete(retired.keys().next().value!);
+      scopes.delete(id); notify(id.startsWith(DOCUMENT_PREFIX));
+    },
     scope: id => scopes.get(id),
     focus,
+    recentScopes(describe) {
+      const current = focus.recent().find(id => scopes.has(id) && (!id.startsWith(DOCUMENT_PREFIX) || !!participant(id.slice(DOCUMENT_PREFIX.length))));
+      return focus.recent().slice(0, RECENT_EDITING_LIMIT).flatMap(id => {
+        const scope = scopes.get(id), old = retired.get(id), t = scope?.timeline(), details = describe?.(id) ?? {}, owner = ownerOf(id);
+        if (!scope?.remembered && !old?.hasHistory) return [];
+        if (!scope && !old) return [];
+        const label = details.label ?? t?.documentLabel ?? old?.label ?? (owner.kind === "look" ? "Look" : owner.kind === "character" ? "V" : owner.kind === "view" ? "View and lighting" : "Document");
+        return [structuredClone({ scope: id, label, owner, current: current === id, hasHistory: !!t?.steps.length || !!old?.hasHistory,
+          trimmed: t?.trimmed ?? old?.trimmed ?? false, ...(details.status ? { status: details.status } : {}), capability: selectCapability(id, details) })];
+      });
+    },
+    selectCapability,
+    selectScope(id, details) { if (!selectCapability(id, details).available) return false; focus.edited(id); return true; },
     acting(ids) {
       for (const id of ids) {
         if (id.startsWith(DOCUMENT_PREFIX)) {
@@ -431,7 +500,7 @@ export function createHistoryService(options: { focus?: FocusService } = {}): Hi
       return null;
     },
     documents,
-    participants(provider) { providers.add(provider); return () => { providers.delete(provider); }; },
+    participants(provider) { providers.add(provider); notify(true); return () => { if (providers.delete(provider)) notify(true); }; },
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
 }

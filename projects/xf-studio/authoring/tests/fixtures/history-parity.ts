@@ -9,7 +9,7 @@
  * compared by first appearance; times are compared only for presence.
  */
 import { MAIN_VIEW, type ViewGraphChange, type ViewGraphData } from "../../src/platform/api/view-graph";
-import type { HistoryParticipant, HistorySnapshot, HistoryCommand } from "../../src/platform/api/history";
+import type { HistoryParticipant, HistorySnapshot, HistoryMove } from "../../src/platform/api/history";
 import { STUDIO_COMPOSITION } from "../../src/compose/studio-registry";
 import { DEFAULT_CREATOR_LIGHTING } from "../../src/preview/creator-lighting";
 import { createHistoryService } from "../../src/platform/core/history-service";
@@ -261,7 +261,7 @@ export function routedSession() {
   const wire = wiring(), c = wire.core(STUDIO_COMPOSITION, () => {}), { documents } = wire, ids = new Ids();
   let groom = 0, shown = true;
   // An experiment's participant, as Hair Lab moves its history: through the snapshot, then `move`.
-  const move = (action: HistoryCommand) => {
+  const move = (action: HistoryMove) => {
     const scope = "hair:g", t = documents.snapshot(scope);
     const desired = action.kind === "history.undo" ? t.current - 1 : action.kind === "history.redo" ? t.current + 1
       : action.entryId === t.startId ? -1 : t.steps.findIndex(step => step.id === action.entryId);
