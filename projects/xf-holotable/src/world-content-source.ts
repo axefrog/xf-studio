@@ -21,8 +21,10 @@ import type { WorldPack, Vec3 } from "./model.ts";
 import { TextTable, gameTextPaths } from "../../xf-studio/authoring/src/game/game-text";
 import { worldNameSources, worldRecordNames } from "./world-content-names.ts";
 import { addWorldTexts, resolvePoiTitles } from "./world-content-titles.ts";
-import { resolveCommunityPeople } from "./world-content-people.ts";
+import { resolveContentRecords } from "./world-content-people.ts";
 import { tweakDbOf } from "../../xf-studio/authoring/src/character/host/clothing-host";
+
+import { updateWorldIndex } from "./world-content-index.ts";
 
 const BASE="base\\worlds\\03_night_city\\_compiled\\default\\";
 const BLOCKS=[BASE+"blocks\\all.streamingblock",BASE+"ep1\\blocks\\all.streamingblock"];
@@ -83,10 +85,6 @@ export async function buildWorldContent(options:{root:string;pack:WorldPack;slic
       }
       out.finishCommunities();
       const records=worldRecordNames(names.files);
-      for(const c of out.communities)for(const e of c.entries) {
-        const name=e.record?records.get(e.record):undefined;if(name)e.recordName=name;
-        count(out.counts,"community.recordName",name?undefined:"record name absent from REDmod sources");
-      }
       const workspots=new Map<string,ReturnType<typeof mapWorkspot>|null>();
       for(const spot of out.spots) {
         const path=spot.workspot?.path;
@@ -109,14 +107,15 @@ export async function buildWorldContent(options:{root:string;pack:WorldPack;slic
       for(const ext of ["mappins","poimappins"]) {const path=BASE+"03_night_city."+ext;mapMappins(decode(path),depotHash(path).toString(),journal,out);}
       const texts=new TextTable("en-us");
       for(const path of gameTextPaths("en-us",ep1))if(owner(path)>=0)addWorldTexts(texts,decode(path),path);
-      resolveCommunityPeople(out.communities,db?.blob??null,records,texts,out.counts);
+      const recordTable=resolveContentRecords(out.communities,out.spawners,db?.blob??null,records,texts,out.counts,out.budget);
+      for(const spot of out.spots) {count(out.counts,"spot.capacity","not stored in workspot data");count(out.counts,"spot.posture","not stored in workspot data");}
       resolvePoiTitles(out.pois,journal,db?.blob??null,texts,out.counts);
       for(const poi of out.pois)count(out.counts,"poi.record",poi.record?undefined:"linked record not stored");
       unchanged();signal.throwIfAborted();
       return {schema:"xfh/world-content-1",slice:{id:slice.id,title:slice.title,places:slice.places},
         source:{game:pack.provenance.game,archives:digest(sources),reader:WORLD_CONTENT_READER,built:(options.now??(()=>new Date().toISOString()))(),key},
-        communities:out.communities,spots:out.spots,spawners:out.spawners,pois:out.pois,counts:out.counts};
+        records:recordTable,communities:out.communities,spots:out.spots,spawners:out.spawners,pois:out.pois,counts:out.counts};
     } finally {try {await workers.shutdown();cache.trim();}finally{cache.end();pool.close();oodle.close();}}
   },signal);
-  unchanged();return result;
+  unchanged();updateWorldIndex(directory,result.content,slice,signal);return result;
 }

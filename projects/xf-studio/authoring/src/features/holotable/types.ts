@@ -47,8 +47,9 @@ export interface HoloSolid {
 export interface HoloPoi { readonly id: string; readonly place: string; readonly at: Vec3; readonly kind: string; readonly variant?: string; readonly title?: string; readonly record?: string; readonly journal?: string }
 export interface HoloSpot { readonly id: string; readonly place: string; readonly at: Vec3; readonly yaw: number; readonly workspot?: { readonly path: string; readonly activity?: string; readonly tags: readonly string[] }; readonly communities: readonly string[] }
 export interface HoloAffiliation { readonly record:string; readonly recordName?:string; readonly title?:string }
-export interface HoloCommunity { readonly id: string; readonly place: string; readonly name?: string; readonly affiliation?:HoloAffiliation; readonly entries: readonly { readonly name: string; readonly record?: string; readonly recordName?: string; readonly kind?:"person"|"vehicle"; readonly displayName?:string; readonly affiliation?:HoloAffiliation; readonly phases: readonly { readonly name: string; readonly spots: readonly string[] }[] }[] }
-export interface HoloContent { readonly available: boolean; readonly slices: readonly string[]; readonly pois: readonly HoloPoi[]; readonly spots: readonly HoloSpot[]; readonly communities: readonly HoloCommunity[] }
+export interface HoloRecord { readonly name?:string; readonly displayName?:string; readonly kind:"person"|"vehicle"|"other"; readonly affiliation?:string; readonly affiliationTitle?:string; readonly affiliationName?:string; readonly role?:string; readonly crowd?:boolean; readonly gender?:string }
+export interface HoloCommunity { readonly id: string; readonly place: string; readonly name?: string; readonly affiliation?:HoloAffiliation; readonly entries: readonly { readonly name: string; readonly record?: string; readonly phases: readonly { readonly name: string; readonly spots: readonly string[] }[] }[] }
+export interface HoloContent { readonly records?: Readonly<Record<string,HoloRecord>>; readonly available: boolean; readonly slices: readonly string[]; readonly pois: readonly HoloPoi[]; readonly spots: readonly HoloSpot[]; readonly communities: readonly HoloCommunity[] }
 export interface HoloWorld {
   readonly content?: HoloContent;
   readonly extent?: { readonly min: Vec3; readonly max: Vec3 };

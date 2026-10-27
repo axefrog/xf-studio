@@ -5,14 +5,15 @@ import type { ContentNode, ContentPlacement, ContentSector, RegistryItem } from 
 import { NativeBudgetError, NativeMalformedError } from "../../xf-studio/authoring/src/native/native-errors";
 import { ContentBudget, stringBytes, type ContentUsage } from "./world-content-budget.ts";
 
-// The four provisional Story Engine decisions live here; none is inferred by an adapter.
-export const CONTENT_POLICY = Object.freeze({ files: "per-slice", workspots: "activity-and-tags", characters: "record-ids", variants: "defaults" });
-export const WORLD_CONTENT_READER = "w1.5";
-/** Prepared slices, shared by the reader and the demand-driven service. */
+// The agreed Story Engine policies live here; none is inferred by an adapter.
+export const CONTENT_POLICY = Object.freeze({ files: "per-slice", workspots: "activity-and-tags", characters: "record-table", variants: "defaults" });
+export const WORLD_CONTENT_READER = "w1.6";
+/** Friendly slice ids mapped to source districts; prepared slices are discovered through the index. */
 export const WORLD_CONTENT_SLICES = [{ id: "kabuki", place: "Districts.Kabuki" }] as const;
 export const CONTENT_CAP = 50_000, CONTENT_FILE_CAP = 32 * 1024 * 1024;
 export interface Affiliation { record:string; recordName?:string; title?:string }
-export interface Community { id: string; place: string; name?: string; affiliation?:Affiliation; entries: { name: string; record?: string; recordName?: string; kind?:"person"|"vehicle"; displayName?:string; affiliation?:Affiliation; phases: { name: string; time?: [number, number]; spots: string[] }[] }[] }
+export interface ContentRecord { name?:string; displayName?:string; kind:"person"|"vehicle"|"other"; affiliation?:string; affiliationTitle?:string; affiliationName?:string; role?:string; crowd?:boolean; gender?:string }
+export interface Community { id: string; place: string; name?: string; affiliation?:Affiliation; entries: { name: string; record?: string; phases: { name: string; time?: [number, number]; spots: string[] }[] }[] }
 export interface Spot { id: string; place: string; at: Vec3; yaw: number; workspot?: { path: string; activity?: string; tags: string[] }; communities: string[] }
 export interface Spawner { id: string; place: string; at: Vec3; yaw: number; record: string; onStart?: boolean }
 export interface Poi { id: string; place: string; at: Vec3; kind: string; variant?: string; title?: string; record?: string; journal?: string }
@@ -20,7 +21,7 @@ export interface Coverage { read: Record<string, number>; kept: Record<string, n
 export interface WorldContent {
   schema: "xfh/world-content-1"; slice: { id: string; title: string; places: string[] };
   source: { game: string; archives: string; reader: string; built: string; key: string };
-  communities: Community[]; spots: Spot[]; spawners: Spawner[]; pois: Poi[]; counts: Coverage;
+  records: Record<string,ContentRecord>; communities: Community[]; spots: Spot[]; spawners: Spawner[]; pois: Poi[]; counts: Coverage;
 }
 export function coverage(): Coverage { return { read: {}, kept: {}, dropped: {}, reasons: {} }; }
 export function count(c: Coverage, collection: string, reason?: string) {

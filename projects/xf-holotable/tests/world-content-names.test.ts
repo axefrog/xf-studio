@@ -33,7 +33,7 @@ test("assembled cache hits inspect only stamps; only a miss loads the TweakDB bl
  const pack:WorldPack={schema:"xfh/world-pack-1",provenance:{game:"fixture",source:"fixture",built:"fixture"},areas:[{id:"Districts.Test",kind:"district",name:"Test",poly:[[0,0],[10,0],[10,10],[0,10]],zlo:0,zhi:10}],cells:[]};
  const names=worldNameSources(root,false),key=worldContentCacheKey([],pack,"test",WORLD_CONTENT_READER,names.sources),counts=coverage();
  for(const k of ["communities","spots","spawners","pois"]){counts.read[k]=counts.kept[k]=counts.dropped[k]=0;counts.reasons[k]={};}
- const content:WorldContent={schema:"xfh/world-content-1",slice:{id:"test",title:"Test",places:["Districts.Test"]},source:{game:"fixture",archives:"fixture",reader:WORLD_CONTENT_READER,built:"fixture",key},communities:[],spots:[],spawners:[],pois:[],counts};
+ const content:WorldContent={schema:"xfh/world-content-1",slice:{id:"test",title:"Test",places:["Districts.Test"]},source:{game:"fixture",archives:"fixture",reader:WORLD_CONTENT_READER,built:"fixture",key},records:{},communities:[],spots:[],spawners:[],pois:[],counts};
  const file=join(directory,"test.content.json");writeFileSync(file,JSON.stringify(content));
  const options={root,pack,directory,slice:"test",signal:new AbortController().signal};
  expect((await buildWorldContent(options)).cached).toBe(true);

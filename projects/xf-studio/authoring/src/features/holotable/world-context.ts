@@ -1,5 +1,5 @@
 /** One owner for view-requested world regions. Leases debounce and supersede independently; identical reads share work. */
-import type { HoloSolid, HoloWorld, HoloPoi, HoloSpot, HoloCommunity, Vec3 } from "./types";
+import type { HoloSolid, HoloWorld, HoloPoi, HoloSpot, HoloCommunity, HoloRecord, Vec3 } from "./types";
 export const CONTEXT_SOLID_CAP = 12000;
 export type WorldContextLease = { want(position: Vec3, moved?: boolean): void; contentAvailable(): boolean|undefined };
 type Source = { identity: string; params: Record<string,unknown> };
@@ -29,6 +29,7 @@ export function worldContexts(options: {
       if(!any)break;
     }
     const areas=new Map<string,HoloWorld["areas"][number]>(),cells=new Map<string,HoloWorld["cells"][number]>();
+    const records:Record<string,HoloRecord>=Object.create(null);
     const pois=new Map<string,HoloPoi>(),spots=new Map<string,HoloSpot>(),communities=new Map<string,HoloCommunity>(),slices=new Set<string>();let contentAvailable=false;
     let cut=0,omitted=0,available=false;
     for(const row of ready){
@@ -38,14 +39,14 @@ export function worldContexts(options: {
       omitted=Math.max(omitted,world.solidInfo?.omittedMeshShapes??0);available||=world.solidInfo?.available??false;
       // Retain only the capped union. Shared identities refer to the same object; released-only solids are collectible.
       row.world={...world,solids:kept};
-      if(world.content){contentAvailable ||= world.content.available;for(const id of world.content.slices)slices.add(id);
+      if(world.content){Object.assign(records,world.content.records);contentAvailable ||= world.content.available;for(const id of world.content.slices)slices.add(id);
         for(const item of world.content.pois)pois.set(item.id,item);for(const item of world.content.spots)spots.set(item.id,item);for(const item of world.content.communities)communities.set(item.id,item);}
       for(const area of world.areas)areas.set(area.id,area);
       for(const cell of world.cells)cells.set(JSON.stringify(cell),cell);
     }
     options.changed({...empty(),provenance:ready[0]?.world?.provenance??null,extent:ready[0]?.world?.extent,
       areas:[...areas.values()],cells:[...cells.values()],solids:[...union.values()],
-      solidInfo:{available,omittedMeshShapes:omitted,cut,cap:CONTEXT_SOLID_CAP},content:{available:contentAvailable,slices:[...slices],pois:[...pois.values()],spots:[...spots.values()],communities:[...communities.values()]}});
+      solidInfo:{available,omittedMeshShapes:omitted,cut,cap:CONTEXT_SOLID_CAP},content:{records,available:contentAvailable,slices:[...slices],pois:[...pois.values()],spots:[...spots.values()],communities:[...communities.values()]}});
   }
   async function read(source: Source, position: Vec3, signal: AbortSignal){
     const params={...source.params,center:position,margin:350},key=JSON.stringify([source.identity,source.params,position]);

@@ -24,7 +24,7 @@ const pl=(index:number,nodeIndex:number,ref="0"):ContentPlacement=>({index,nodeI
 const sector=(nodes:ContentSector["nodes"],placements:ContentSector["placements"]):ContentSector=>({version:CONTENT_SECTOR_VERSION,nodes,placements,variantIndices:[0],persistentNodeIndex:-1});
 function result(key:string):WorldContent {
   const a=new ContentAssembler(pack,selectSlice(pack,"test"));
-  return {schema:"xfh/world-content-1",slice:{id:"test",title:"Test",places:[area.id]},source:{game:"test",archives:"test",reader:WORLD_CONTENT_READER,built:"test",key},communities:[],spots:[],spawners:[],pois:[],counts:a.counts};
+  return {schema:"xfh/world-content-1",slice:{id:"test",title:"Test",places:[area.id]},source:{game:"test",archives:"test",reader:WORLD_CONTENT_READER,built:"test",key},records:{},communities:[],spots:[],spawners:[],pois:[],counts:a.counts};
 }
 
 test("every node class maps stored fields through the actual handles and id structs",()=>{
@@ -238,4 +238,19 @@ test("W0 requester cancellation and closeIdle preserve an active worker for the 
   expect(await second).toEqual(new Uint8Array([2]));
   const closed=workers.closeIdle();expect(sent[2]).toEqual({close:true});worker.onmessage!({data:{closed:true}});await closed;
   await workers.shutdown();
+});
+
+test("workspot list entries, sync slots, tags and guessed fields never invent capacity or posture",()=>{
+ for(const fields of [{},{capacity:4,posture:"sit",tags:obj("redTagList",{tags:[name("stand"),name("sit")]})}]) {
+ const root=obj("workWorkspotResource",{workspotTree:h("workWorkspotTree",{...fields,rootEntry:h("workSequence",{idleAnim:name("sit_idle"),list:[h("workSequence",{category:"Sleeping",idleAnim:name("lean")}),h("workSyncAnimClip",{slotName:name("A")})]})})});
+ const mapped=mapWorkspot(root,"sit.workspot",coverage());expect(mapped).not.toHaveProperty("capacity");expect(mapped).not.toHaveProperty("posture");
+ }
+});
+test("w1.6 validates referenced records and their field types; w1.5 and missing tables rebuild",async()=>{
+ const dir=tempDir("w1-record-cache-"),file=join(dir,"content.json"),signal=new AbortController().signal;
+ const good=result("key");good.records={"1":{name:"Character.test",kind:"person",crowd:false,role:"humanoid"}};good.spawners=[{id:"s",place:area.id,at:[1,2,3],yaw:0,record:"1"}];count(good.counts,"spawners");
+ validateContent(good,"key");
+ for(const bad of [{...good,records:undefined},{...good,records:{}},{...good,records:{"1":{kind:"person",crowd:0}}},{...good,source:{...good.source,reader:"w1.5"}},{...good,records:{"1":{kind:"not-person"}}}]) {
+ writeFileSync(file,JSON.stringify(bad));expect((await cachedWorldContent(file,"key",async()=>good,signal)).cached).toBe(false);
+ }
 });

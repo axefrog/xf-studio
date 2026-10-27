@@ -1,5 +1,6 @@
 /** Static world content projected into the existing marker/cluster vocabulary. No timeline or effects. */
 import type { HoloContent, HoloPoi, Vec3 } from "../types";
+import { communityAffiliation } from "./content-selectors";
 import type { AgentItem } from "../agent-types";
 import type { camera } from "./projection";
 
@@ -20,7 +21,11 @@ export const readable = (s: string) => { const text=s.replace(/[-_]+/g," ").trim
 export const communityOpacity = (distance: number) => Math.max(0, Math.min(1, (distance-100)/100));
 const AFFILIATION_TITLES:Readonly<Record<string,string>>=Object.freeze({"No Affiliation":"Unaffiliated"});
 const affiliationTitle = (title:string) => Object.hasOwn(AFFILIATION_TITLES,title)?AFFILIATION_TITLES[title]:title;
-const communityLabel = (c:HoloContent["communities"][number],n:number) => `${c.affiliation?.title?affiliationTitle(c.affiliation.title):"Community"} · ${n} ${n===1?"spot":"spots"}`;
+const affiliationLabels=new WeakMap<HoloContent,Map<string,string|undefined>>();
+const communityLabel = (c:HoloContent["communities"][number],n:number,content:HoloContent) => {
+  const cached=affiliationLabels.get(content),title=cached?.has(c.id)?cached.get(c.id):communityAffiliation(c.entries,content.records)?.title;
+  return `${title?affiliationTitle(title):"Community"} · ${n} ${n===1?"spot":"spots"}`;
+};
 export type BaseSwitches = Readonly<{ pois: boolean; spots: boolean; communities: boolean }>;
 const marker = (type: "pois"|"spots"|"communities", id: string, at: Vec3, label: string): AgentItem => ({
   id, key:`base:${type}:${id}`, base:type, kind:type==="communities"?"label":"point", anchor:{at}, place:at, label, tone:"muted",
@@ -29,10 +34,13 @@ const communityOrders=new WeakMap<HoloContent,readonly HoloContent["communities"
 /** Stable source-size order belongs to a content response, not to a camera frame. */
 function* communityOrder(content:HoloContent):Generator<void,readonly HoloContent["communities"][number][]> {
   const cached=communityOrders.get(content);if(cached)return cached;
+  const labels=new Map<string,string|undefined>();
   let work=0,rows:{community:HoloContent["communities"][number];size:number}[]=[];
   for(const community of content.communities){
     if(work++%64===0)yield;const ids=new Set<string>();
-    for(const entry of community.entries){if(work++%64===0)yield;for(const phase of entry.phases){if(work++%64===0)yield;for(const id of phase.spots){if(work++%64===0)yield;ids.add(id);}}}
+    const entries=community.entries;
+    for(const entry of entries){if(work++%64===0)yield;for(const phase of entry.phases){if(work++%64===0)yield;for(const id of phase.spots){if(work++%64===0)yield;ids.add(id);}}}
+    labels.set(community.id,communityAffiliation(entries,content.records)?.title);
     rows.push({community,size:ids.size});
   }
   // Cooperative merge sort also bounds the first load's uninterrupted work.
@@ -47,7 +55,7 @@ function* communityOrder(content:HoloContent):Generator<void,readonly HoloConten
     }
     rows=next;
   }
-  const ordered:HoloContent["communities"][number][]=[];for(const row of rows){if(work++%64===0)yield;ordered.push(row.community);}communityOrders.set(content,ordered);return ordered;
+  const ordered:HoloContent["communities"][number][]=[];for(const row of rows){if(work++%64===0)yield;ordered.push(row.community);}communityOrders.set(content,ordered);affiliationLabels.set(content,labels);return ordered;
 }
 /** Every source traversal and initial community ordering yields after 64 records. */
 export function* baseLayerSteps(content: HoloContent | undefined, on: BaseSwitches, C?: ReturnType<typeof camera>): Generator<void, AgentItem[]> {
@@ -73,7 +81,7 @@ export function* baseLayerSteps(content: HoloContent | undefined, on: BaseSwitch
       const sums=new Map<string,{at:[number,number,number];n:number}>();
       for(const s of spots){if(work++%64===0)yield;for(const id of s.communities){if(work++%64===0)yield;const sum=sums.get(id)??{at:[0,0,0],n:0};sum.n++;for(let i=0;i<3;i++)sum.at[i]+=s.at[i];sums.set(id,sum);}}
       // Keep presence independent of label opacity: the Show count includes close communities.
-      for(const c of yield* communityOrder(content)){if(work++%64===0)yield;const sum=sums.get(c.id);if(sum)items.push({...marker("communities",c.id,sum.at.map(n=>n/sum.n) as [number,number,number],communityLabel(c,sum.n)),opacity:alpha,communitySpots:sum.n});}
+      for(const c of yield* communityOrder(content)){if(work++%64===0)yield;const sum=sums.get(c.id);if(sum)items.push({...marker("communities",c.id,sum.at.map(n=>n/sum.n) as [number,number,number],communityLabel(c,sum.n,content)),opacity:alpha,communitySpots:sum.n});}
   }
   return items;
 }
@@ -88,7 +96,7 @@ export function baseItem(content:HoloContent|undefined,key:string):AgentItem|und
   if(s)return marker("spots",s.id,s.at,"");
   const c=content.communities.find(c=>`base:communities:${c.id}`===key);
   if(c){const spots=content.spots.filter(s=>s.communities.includes(c.id));if(!spots.length)return;
-    return {...marker("communities",c.id,[0,1,2].map(axis=>spots.reduce((sum,s)=>sum+s.at[axis],0)/spots.length) as [number,number,number],communityLabel(c,spots.length)),communitySpots:spots.length};}
+    return {...marker("communities",c.id,[0,1,2].map(axis=>spots.reduce((sum,s)=>sum+s.at[axis],0)/spots.length) as [number,number,number],communityLabel(c,spots.length,content)),communitySpots:spots.length};}
 }
 
 export interface BaseCard { title:string; summary:string; when?:string; involved:{key:string;label:string}[]; more:number; furtherAway:number; technical:[string,string][] }
@@ -99,7 +107,11 @@ const COMMUNITY_TECHNICAL_PREFIXES=new Set([
   "q000","q001","q004","q105","q305","mq019","mq024","mq025","mq026","mq028","mq038","mq057","sq017",
 ]);
 /** Counts come from compiled record types. Name cleanup is display-only fallback. */
-export function communityTypes(entries:HoloContent["communities"][number]["entries"]):string {
+function recordEntries(entries:HoloContent["communities"][number]["entries"],records:HoloContent["records"]) {
+  return entries.map(e=>{const r=e.record?records?.[e.record]:undefined;return {...e,recordName:r?.name,displayName:r?.displayName,kind:r?.kind,affiliation:r?.affiliation?{record:r.affiliation,recordName:r.affiliationName,title:r.affiliationTitle}:undefined};});
+}
+export function communityTypes(source:HoloContent["communities"][number]["entries"],records:HoloContent["records"]={}):string {
+  const entries=recordEntries(source,records);
   if(!entries.length)return "No entries";
   const people=entries.filter(e=>e.kind==="person"),vehicles=entries.filter(e=>e.kind==="vehicle").length,unknown=entries.length-people.length-vehicles;
   const unique=new Map(people.map(e=>[e.record??e.name,e]));
@@ -131,12 +143,14 @@ export function baseCard(content:HoloContent|undefined,key:string):BaseCard|unde
   if(c){
     card.title="Community";const phases=new Set<string>(),spots=new Set<string>();
     for(const e of c.entries)for(const p of e.phases){phases.add(p.name);for(const id of p.spots)spots.add(id);}
-    if(c.affiliation?.title)card.title=communityLabel(c,spots.size);
+    const affiliation=communityAffiliation(c.entries,content.records);
+    if(affiliation?.title)card.title=communityLabel(c,spots.size,content);
     const raw=[...new Set(c.entries.flatMap(e=>e.record?[e.record]:[]))];
-    card.summary=communityTypes(c.entries);
-    const names=[...new Set(c.entries.flatMap(e=>e.recordName?[e.recordName]:[]))];
-    const affiliations=[...new Set(c.entries.flatMap(e=>e.affiliation?[`${e.affiliation.recordName??e.affiliation.record} (${e.affiliation.record})`]:[]))];
-    const affiliationNames=[...new Set([c.affiliation?.title,...c.entries.map(e=>e.affiliation?.title)].filter((title):title is string=>!!title))];
+    card.summary=communityTypes(c.entries,content.records);
+    const entries=recordEntries(c.entries,content.records);
+    const names=[...new Set(entries.flatMap(e=>e.recordName?[e.recordName]:[]))];
+    const affiliations=[...new Set(entries.flatMap(e=>e.affiliation?[`${e.affiliation.recordName??e.affiliation.record} (${e.affiliation.record})`]:[]))];
+    const affiliationNames=[...new Set([affiliation?.title,...entries.map(e=>e.affiliation?.title)].filter((title):title is string=>!!title))];
     // Names containing code punctuation/digits, or <=3 characters, aren't presented as times.
     const coded=[...phases].some(name=>name.trim().length<=3||!/^\p{L}+(?:[ '\u2019-]\p{L}+)*$/u.test(name));
     card.when=coded?`${phases.size} time ${phases.size===1?"phase":"phases"}`:[...phases].join(", ");

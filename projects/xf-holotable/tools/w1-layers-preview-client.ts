@@ -28,7 +28,7 @@ service.subscribe(paint);service.shown();await new Promise(r=>setTimeout(r,0));a
 for(const id of ["pois","spots","communities"] as const)await service.dispatch({kind:"holo.layer",id,on:true});paint();
 (globalThis as any).w1={service,frames,paint,async missing(){missing=true;await service.dispatch({kind:"holo.layer",id:"pois",on:false});await service.dispatch({kind:"holo.layer",id:"pois",on:true});},async focus(type:"pois"|"spots"|"communities"){
  const c=service.snapshot().open!.world.content!;
- const named=q.has("names")&&type==="communities"?c.communities.find(r=>r.entries.some(e=>e.recordName?.includes(".kab_"))&&r.entries.every(e=>e.recordName)):undefined;
+ const named=q.has("names")&&type==="communities"?c.communities.find(r=>r.entries.some(e=>e.record&&c.records?.[e.record]?.name?.includes(".kab_"))&&r.entries.every(e=>e.record&&c.records?.[e.record]?.name)):undefined;
  const record=named||c[type].find(r=>type==="communities"?"entries" in r&&r.entries.length===1&&r.entries[0].phases.length<5:type!=="pois"||"kind" in r&&r.kind==="Ripperdoc")||c[type].find(r=>"entries" in r&&r.entries.length===1&&r.entries[0].phases.length<5)||c[type][0];if(!record)throw Error(`No ${type}`);
  const id=`base:${type}:${record.id}`;await service.dispatch({kind:"holo.select",id});if(type!=="communities")await service.dispatch({kind:"holo.view.focus",view:"holotable.view",id});paint();
 }};

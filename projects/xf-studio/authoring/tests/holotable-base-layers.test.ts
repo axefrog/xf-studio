@@ -1,9 +1,14 @@
 import { expect, test } from "bun:test";
-import { baseCard, baseItem, baseLayerItems, baseLayerSteps, communityTypes, communityOpacity, poiGlyph, poiTitle } from "../src/features/holotable/view/base-layers";
+import { baseCard, baseItem, baseLayerItems, baseLayerSteps, communityTypes as summaryFromRecords, communityOpacity, poiGlyph, poiTitle } from "../src/features/holotable/view/base-layers";
 import { camera, ORBITS } from "../src/features/holotable/view/projection";
 import { createHolotable } from "../src/features/holotable/service";
 import { worldContexts } from "../src/features/holotable/world-context";
-import type { HoloContent } from "../src/features/holotable/types";
+import type { HoloContent, HoloRecord } from "../src/features/holotable/types";
+
+function communityTypes(entries:readonly {name:string;record?:string;recordName?:string;kind?:"person"|"vehicle";displayName?:string;affiliation?:{record:string;title?:string};phases:never[]}[]) {
+ const records:Record<string,HoloRecord>=Object.fromEntries(entries.filter(e=>e.record).map(e=>[e.record!,{name:e.recordName,kind:e.kind??("other" as const),displayName:e.displayName,affiliation:e.affiliation?.record,affiliationTitle:e.affiliation?.title}]));
+ return summaryFromRecords(entries.map(e=>({name:e.name,record:e.record,phases:e.phases})),records);
+}
 const on={pois:true,spots:true,communities:true};
 test("people summaries use data kinds, strip body codes/digits, preserve affiliation acronyms and collapse labels",()=>{
  const entries=["kab_ncpd_police_ranged2_ma","kab_ncpd_police_ranged1_wa","kab_guard_mb","kab_sitter_wb","kab_runner_fa","kab_vendor_fb","kab_child_mc","kab_child_wc"].map((n,i)=>({name:String(i),record:String(i),recordName:`Character.${n}`,kind:"person" as const,affiliation:{record:"aff",title:"NCPD"},phases:[]}));
@@ -13,10 +18,10 @@ test("people summaries use data kinds, strip body codes/digits, preserve affilia
  expect(communityTypes([{...entries[0],kind:undefined}])).toBe("1 unknown entry");
  expect(communityTypes([])).toBe("No entries");
 });
-const content:HoloContent={available:true,slices:["kabuki"],pois:[{id:"p",place:"test",at:[0,0,0],kind:"Ripperdoc",variant:"ServicePointRipperdocVariant",record:"1",journal:"journal/p"}],spots:[
+const content:HoloContent={records:{"1234":{name:"Character.street_vendor",kind:"person"}},available:true,slices:["kabuki"],pois:[{id:"p",place:"test",at:[0,0,0],kind:"Ripperdoc",variant:"ServicePointRipperdocVariant",record:"1",journal:"journal/p"}],spots:[
  {id:"s1",place:"test",at:[-10,0,0],yaw:90,workspot:{path:"test.workspot",tags:["stand-around","talk_to_friend"]},communities:["c"]},
  {id:"s2",place:"test",at:[10,0,0],yaw:0,communities:["c"]},
- {id:"far",place:"test",at:[900,0,0],yaw:0,communities:["c"]}],communities:[{id:"c",place:"test",entries:[{name:"resident",record:"1234",recordName:"Character.street_vendor",kind:"person",phases:[{name:"day_shift",spots:["s1","s2","far"]}]}]}]};
+ {id:"far",place:"test",at:[900,0,0],yaw:0,communities:["c"]}],communities:[{id:"c",place:"test",entries:[{name:"resident",record:"1234",phases:[{name:"day_shift",spots:["s1","s2","far"]}]}]}]};
 test("POIs map only to Places glyphs and unknown raw variants say Place",()=>{
  expect(poiGlyph(content.pois[0])).toBe("clinic");expect(poiTitle(content.pois[0])).toBe("Ripperdoc");
  expect(poiGlyph({...content.pois[0],kind:"Food vendor"})).toBe("market");expect(poiGlyph({...content.pois[0],kind:"FutureVariant"})).toBe("place");expect(poiTitle({...content.pois[0],kind:"FutureVariant"})).toBe("Place");
@@ -97,13 +102,13 @@ test("view leases acquire content only while a base layer is enabled and static 
 test("separate view leases retain only their own nearby content and file availability",async()=>{
  const ctl=new AbortController(),a=new AbortController(),b=new AbortController(),timers=new Set<()=>void>();let published:HoloContent|undefined;
  const contexts=worldContexts({source:()=>({identity:"test",params:{content:true}}),later:(_ms,fn)=>{timers.add(fn);return()=>timers.delete(fn);},load:async p=>{
-  const x=(p.center as number[])[0];return {provenance:null,areas:[],cells:[],content:{...content,available:x===0,pois:x===0?content.pois:[],spots:x===0?content.spots:[],communities:x===0?content.communities:[]}};
+  const x=(p.center as number[])[0];return {provenance:null,areas:[],cells:[],content:{...content,records:x===0?content.records:{},available:x===0,pois:x===0?content.pois:[],spots:x===0?content.spots:[],communities:x===0?content.communities:[]}};
  },changed:world=>{published=world.content;}},ctl.signal);
  try{
   const first=contexts.lease(a.signal),second=contexts.lease(b.signal);first.want([0,0,0]);second.want([2000,0,0]);
   for(const fn of [...timers]){timers.delete(fn);fn();}await new Promise(r=>setTimeout(r,0));
-  expect(published?.pois.length).toBe(1);expect(first.contentAvailable()).toBe(true);expect(second.contentAvailable()).toBe(false);
-  a.abort();expect(published?.pois).toEqual([]);expect(published?.spots).toEqual([]);expect(second.contentAvailable()).toBe(false);
+  expect(published?.records?.["1234"]?.name).toBe("Character.street_vendor");expect(published?.pois.length).toBe(1);expect(first.contentAvailable()).toBe(true);expect(second.contentAvailable()).toBe(false);
+  a.abort();expect(published?.records).toEqual({});expect(published?.pois).toEqual([]);expect(published?.spots).toEqual([]);expect(second.contentAvailable()).toBe(false);
   b.abort();expect(published?.communities).toEqual([]);
  }finally{a.abort();b.abort();ctl.abort();}
 });
@@ -146,7 +151,7 @@ test("short or coded phases use a count and raw Technical names; words retain th
 });
 
 test("affiliation labels match cards, drawing and explicit selection; unknown stays Community",()=>{
- const c={...content.communities[0],affiliation:{record:"10",title:"NCPD"}},named={...content,communities:[c]};
+ const c={...content.communities[0],affiliation:{record:"10",title:"NCPD"}},named={...content,records:{"1234":{...content.records!["1234"],affiliation:"10",affiliationTitle:"NCPD"}},communities:[c]};
  expect(baseCard(named,"base:communities:c")?.title).toBe("NCPD · 3 spots");
  expect(baseLayerItems(named,on).find(i=>i.base==="communities")?.label).toBe("NCPD · 3 spots");
  expect(baseItem(named,"base:communities:c")?.label).toBe("NCPD · 3 spots");
@@ -165,11 +170,18 @@ test("only verified technical prefixes are stripped, retaining personal/role pre
 
 test("No Affiliation displays as Unaffiliated on cards and map labels while Technical keeps the raw text",()=>{
  const affiliation={record:"10",recordName:"Factions.Unit",title:"No Affiliation"};
- const named={...content,communities:[{...content.communities[0],affiliation}]};
+ const named={...content,records:{"1234":{...content.records!["1234"],affiliation:"10",affiliationTitle:"No Affiliation",affiliationName:"Factions.Unit"}},communities:[{...content.communities[0],affiliation}]};
  const card=baseCard(named,"base:communities:c")!;
  expect(card.title).toBe("Unaffiliated · 3 spots");
  expect(baseLayerItems(named,on).find(i=>i.base==="communities")?.label).toBe("Unaffiliated · 3 spots");
  expect(baseItem(named,"base:communities:c")?.label).toBe("Unaffiliated · 3 spots");
  expect(card.technical).toContainEqual(["Affiliation names","No Affiliation"]);
  expect(affiliation.title).toBe("No Affiliation");
+});
+
+test("cards read names and affiliation titles from records and retain unknown fallback",()=>{
+ const next={...content,records:{"1234":{kind:"person" as const,name:"Character.other",displayName:"Local officer",affiliation:"20",affiliationTitle:"NCPD",affiliationName:"Factions.NCPD"}}};
+ const card=baseCard(next,"base:communities:c")!;
+ expect(card.title).toBe("NCPD · 3 spots");expect(card.summary).toBe("1 type of person\nLocal officer");expect(card.technical).toContainEqual(["Record names","Character.other"]);expect(card.technical).toContainEqual(["Affiliation records","Factions.NCPD (20)"]);
+ const missing=baseCard({...next,records:{}},"base:communities:c")!;expect(missing.title).toBe("Community");expect(missing.summary).toBe("1 unknown entry");
 });

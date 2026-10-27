@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { TweakDbBlob, TWEAKDB_MAGIC, childId, type TweakValue } from "../../xf-studio/authoring/src/game/tweakdb-flats";
 import { TextTable } from "../../xf-studio/authoring/src/game/game-text";
-import { resolveCommunityPeople } from "../src/world-content-people";
+import { resolveContentRecords } from "../src/world-content-people";
 import { journalHash } from "../src/world-content-resources";
 import { coverage, type Community } from "../src/world-content";
 
@@ -24,15 +24,26 @@ test("affiliation and localized names come from compiled flats; vehicles and unr
  ]);
  const db={recordTypes:()=>types,lookup:(ids:Iterable<number>)=>new Map([...ids].flatMap(id=>flats.has(id)?[[id,flats.get(id)!] as const]:[]))};
  const texts=new TextTable("en-us");texts.add(["Unit A","Unit B","Officer"].map((female,i)=>({primaryKey:String(100+i),secondaryKey:"",female,male:""})),{id:"fixture",kind:"game",declaredBy:null});
- const group=(id:string,records:number[]):Community=>({id,place:"test",entries:records.map(record=>({name:String(record),record:String(record),recordName:record===3?"Character.misleading":"Vehicle.misleading",phases:[]}))});
+ const group=(id:string,records:number[]):Community=>({id,place:"test",entries:records.map(record=>({name:String(record),record:String(record),phases:[]}))});
  const communities=[group("same",[1,2,3]),group("mixed",[1,4]),group("unknown",[1,9]),group("vehicles",[3]),group("missingAffiliation",[5])],counts=coverage();
- resolveCommunityPeople(communities,db,new Map([["10","Factions.UnitA"]]),texts,counts);
+ const records=resolveContentRecords(communities,[{id:"sp",place:"test",at:[0,0,0],yaw:0,record:"6"}],db,new Map([["10","Factions.UnitA"]]),texts,counts);
  expect(communities[0].affiliation).toEqual({record:"10",recordName:"Factions.UnitA",title:"Unit A"});
- expect(communities[0].entries.map(e=>e.kind)).toEqual(["person","person","vehicle"]);
- expect(communities[0].entries[0].displayName).toBe("Officer");
+ expect(communities[0].entries.map(e=>records[e.record!].kind)).toEqual(["person","person","vehicle"]);
+ expect(records["1"].displayName).toBe("Officer");
  expect(communities.slice(1).every(c=>c.affiliation===undefined)).toBe(true);
- expect(counts.kept["community.personAffiliation"]).toBe(5);
- expect(counts.dropped["community.personAffiliation"]).toBe(1);
- resolveCommunityPeople(communities,db,new Map(),new TextTable("en-us"),coverage());expect(communities.every(c=>!c.affiliation)).toBe(true);
- resolveCommunityPeople(communities,null,new Map(),texts,coverage());expect(communities.every(c=>!c.affiliation&&c.entries.every(e=>!e.kind&&!e.affiliation&&!e.displayName))).toBe(true);
+ expect(counts.kept["record.affiliation"]).toBe(3);
+ expect(records["6"]).toEqual({kind:"other"});
+ expect(counts.dropped["record.affiliation"]).toBe(4);
+ resolveContentRecords(communities,[],db,new Map(),new TextTable("en-us"),coverage());expect(communities.every(c=>!c.affiliation)).toBe(true);
+ const absent=resolveContentRecords(communities,[],null,new Map(),texts,coverage());expect(communities.every(c=>!c.affiliation)).toBe(true);expect(Object.values(absent).every(r=>r.kind==="other")).toBe(true);
+});
+
+test("role and crowd use typed Character flats, including false; gender and appearance-like clues are not inferred",()=>{
+ const flats=new Map<number,TweakValue>([[childId(1,".archetypeName"),{type:"CName",value:"RangedT2"}],[childId(1,".isCrowd"),{type:"Bool",value:0}],[childId(2,".isCrowd"),{type:"Bool",value:1}],[childId(2,".archetypeName"),{type:"CName",value:"None"}],[childId(1,".genders"),{type:"array:TweakDBID",value:[99,100]}]]);
+ const db={recordTypes:()=>new Map([[1,journalHash("Character")],[2,journalHash("Character")]]),lookup:(ids:Iterable<number>)=>new Map([...ids].flatMap(id=>flats.has(id)?[[id,flats.get(id)!] as const]:[]))};
+ const counts=coverage(),communities:Community[]=[{id:"c",place:"test",entries:[1,2].map(id=>({name:"entry",record:String(id),phases:[]}))}];
+ const records=resolveContentRecords(communities,[],db,new Map([["1","Character.Woman"]]),new TextTable("en-us"),counts);
+ expect(records["1"]).toMatchObject({name:"Character.Woman",role:"RangedT2",crowd:false});expect(records["2"].crowd).toBe(true);expect(records["2"].role).toBeUndefined();
+ expect(records["1"].gender).toBeUndefined();expect(counts.dropped["record.gender"]).toBe(2);expect(counts.kept["record.crowd"]).toBe(2);
+ expect(communities[0].entries[0]).toEqual({name:"entry",record:"1",phases:[]});
 });

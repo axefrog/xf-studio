@@ -10,6 +10,16 @@ export function validateContent(value: unknown, key: string): asserts value is W
   string(value.slice.id,"slice id");string(value.slice.title,"slice title");
   const budget=new ContentBudget();stringList(value.slice.places,"slice places",budget);
   const affiliation=(value:unknown)=>{if(value===undefined)return;shape(value,"affiliation");string(value.record,"affiliation record");optionalString(value.recordName,"affiliation record name");optionalString(value.title,"affiliation title");budget.charge({nested:1,bytes:64+stringBytes(value.record)+stringBytes(value.recordName as string|undefined)+stringBytes(value.title as string|undefined)});};
+  shape(value.records,"content records");
+  const referenced=(id:unknown)=>{if(typeof id!=="string"||!Object.hasOwn(value.records as object,id))throw new NativeMalformedError("Referenced content record is missing.");};
+  for(const [id,row] of Object.entries(value.records)) {
+    if(!/^[1-9][0-9]*$/.test(id))throw new NativeMalformedError("Invalid TweakDB record id.");
+    shape(row,"content record");
+    if(!["person","vehicle","other"].includes(row.kind as string))throw new NativeMalformedError("Invalid content record kind.");
+    budget.charge({nested:1,bytes:128+stringBytes(id)});
+    for(const field of ["name","displayName","affiliation","affiliationTitle","affiliationName","role","gender"]) {optionalString(row[field],`record ${field}`);budget.charge({bytes:stringBytes(row[field] as string|undefined)});}
+    if(row.crowd!==undefined&&typeof row.crowd!=="boolean")throw new NativeMalformedError("Invalid crowd flag.");
+  }
   let total=0;
   for(const field of ["communities","spots","spawners","pois"]) {array(value[field],field);total+=value[field].length;}
   if(total>CONTENT_CAP)throw new NativeBudgetError("Slice exceeds 50,000 records; use a smaller slice.");
@@ -37,10 +47,10 @@ export function validateContent(value: unknown, key: string): asserts value is W
         affiliation(row.affiliation);
         array(row.entries,"community entries");
         for(const e of row.entries) {
-          shape(e,"community entry");string(e.name,"entry name");optionalString(e.record,"entry record");optionalString(e.recordName,"entry record name");array(e.phases,"entry phases");
-          optionalString(e.displayName,"entry display name");affiliation(e.affiliation);
-          if(e.kind!==undefined&&e.kind!=="person"&&e.kind!=="vehicle")throw new NativeMalformedError("Invalid community entry kind.");
-          budget.charge({nested:1,bytes:64+stringBytes(e.name)+stringBytes(e.record as string|undefined)+stringBytes(e.recordName as string|undefined)+stringBytes(e.displayName as string|undefined)+stringBytes(e.kind as string|undefined)});
+          shape(e,"community entry");string(e.name,"entry name");optionalString(e.record,"entry record");array(e.phases,"entry phases");
+          if(e.record!==undefined)referenced(e.record);
+          for(const field of ["recordName","displayName","kind","affiliation"])if(e[field]!==undefined)throw new NativeMalformedError("Duplicated community record metadata.");
+          budget.charge({nested:1,bytes:64+stringBytes(e.name)+stringBytes(e.record as string|undefined)});
           for(const phase of e.phases) {
             shape(phase,"community phase");string(phase.name,"phase name");
             if(phase.time!==undefined)finiteTuple(phase.time,2,"phase time");
@@ -53,7 +63,7 @@ export function validateContent(value: unknown, key: string): asserts value is W
         else {
           if(typeof row.yaw!=="number"||!Number.isFinite(row.yaw))throw new NativeMalformedError("Invalid record yaw.");
           if(collection==="spawners") {
-            string(row.record,"spawner record");if(row.onStart!==undefined&&typeof row.onStart!=="boolean")throw new NativeMalformedError("Invalid spawn flag.");
+            string(row.record,"spawner record");referenced(row.record);if(row.onStart!==undefined&&typeof row.onStart!=="boolean")throw new NativeMalformedError("Invalid spawn flag.");
           } else {
             stringList(row.communities,"spot communities",budget);
             if(row.workspot!==undefined) {
