@@ -65,20 +65,21 @@ test("stepping binary-searches long histories",()=>{
   expect(changeMoment({t:50000,agentEnabled:{},agents:{...layers,layers:[{...layers.layers[0],changes:times}]}},1)).toBe(50001);expect(reads).toBeLessThan(22);
 });
 
-test("pulses and retraction fades use 300 real ms; seek, step, pause and reduced motion clear continuity",()=>{
-  let now=0;const effects=playbackEffects<string>(()=>now), item=(version:number)=>({key:"a",version,visual:"geometry"});
-  effects.observe([item(0)],true,0,false);effects.prepare();expect(effects.frame().effects).toEqual([]);
-  effects.observe([item(1)],true,0,false);effects.prepare();now=150;expect(effects.frame().effects[0]).toMatchObject({kind:"pulse",progress:.5});
-  effects.observe([],true,0,false);effects.prepare();now=300;expect(effects.frame().effects[0]).toMatchObject({kind:"fade",progress:.5,item:{visual:"geometry"}});
-  now=450;expect(effects.frame().pending).toBe(false);
-  for(const [playing,epoch,reduced] of [[true,1,false],[false,1,false],[true,1,true]] as const){effects.observe([item(2)],playing,epoch,reduced);effects.prepare();expect(effects.frame().effects).toEqual([]);}
+test("resolved marker deltas pulse and fade for 300 ms, with reset, pause and reduced motion",()=>{
+ let now=0;const effects=playbackEffects(()=>now),marker={point:[0,0,0] as const,tone:"signal",marker:"ring"};
+ effects.observe([],true,0,false);expect(effects.frame().effects).toEqual([]);
+ effects.observe([{key:"a",layer:"p/a",kind:"pulse",marker}],true,0,false);now=150;expect(effects.frame().effects[0]).toMatchObject({kind:"pulse",progress:.5});
+ effects.observe([{key:"a",layer:"p/a",kind:"fade",marker}],true,0,false);now=300;expect(effects.frame().effects[0]).toMatchObject({kind:"fade",progress:.5,marker});
+ now=450;expect(effects.frame().pending).toBe(false);
+ for(const [playing,epoch,reduced] of [[true,1,false],[false,1,false],[true,1,true]] as const){effects.observe([{key:"a",layer:"p/a",kind:"pulse",marker}],playing,epoch,reduced);expect(effects.frame().effects).toEqual([]);}
 });
 
-test("many-marker pulse work is bounded per frame and expires without another observation",()=>{
-  let now=0;const effects=playbackEffects<number>(()=>now), items=Array.from({length:5000},(_,n)=>({key:String(n),version:0,visual:n}));
-  effects.observe([],true,0,false);effects.prepare();effects.observe(items,true,0,false);
-  for(let n=0;n<30;n++){expect(effects.prepare().visited).toBeLessThanOrEqual(EFFECT_WORK);expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);}
-  now=300;for(let n=0;n<30;n++){expect(effects.prepare().visited).toBeLessThanOrEqual(EFFECT_WORK);expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);}expect(effects.frame().pending).toBe(false);
+test("5,000 changed markers are admitted lazily and frame visits stay capped at 256",()=>{
+ let now=0,reads=0;const effects=playbackEffects(()=>now),changes=Array.from({length:5000},(_,n)=>({get key(){reads++;return String(n);},layer:"p/a",kind:"fade" as const,marker:{point:[n,0,0] as const,tone:"signal",marker:"ring"}}));
+ effects.observe([],true,0,false);effects.observe(changes,true,0,false);expect(reads).toBe(0);
+ expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);expect(reads).toBeGreaterThan(0);expect(reads).toBeLessThan(5000);
+ for(let i=0;i<30;i++)expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);
+ now=300;for(let i=0;i<30;i++)expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);expect(effects.frame().pending).toBe(false);
 });
 
 test("glyph resolution: exact icon, family, known kind fallback, then unknown without a plate",()=>{
@@ -175,31 +176,14 @@ test("a temporary shared stepping scope skips other layers and clears on hide, r
 });
 
 
-test("animation preparation is lazy, deadline-bound and resumable for 5,000 revisions and removals",()=>{
- let now=0,reads=0;
- const effects=playbackEffects<number>(()=>now);
- function* snapshot(version:number){for(let i=0;i<5000;i++){reads++;yield{key:String(i),version,visual:i};}}
- effects.observe(snapshot(0),true,"same",false);expect(reads).toBe(0);
- expect(effects.prepare(()=>false)).toEqual({visited:0,pending:true});expect(reads).toBe(0);
- let budget=5;expect(effects.prepare(()=>budget-->0)).toEqual({visited:5,pending:true});expect(reads).toBe(5);
- for(const version of [0,1]){
-  if(version)effects.observe(snapshot(version),true,"same",false);
-  let pending=true,frames=0;
-  while(pending&&frames++<50){const before=reads,step=effects.prepare();expect(step.visited).toBeLessThanOrEqual(EFFECT_WORK);expect(reads-before).toBeLessThanOrEqual(EFFECT_WORK);pending=step.pending;}
-  expect(pending).toBe(false);expect(frames).toBeGreaterThan(10);
- }
- effects.observe([],true,"same",false);
- let frames=0,pending=true;
- while(pending&&frames++<50){const step=effects.prepare();expect(step.visited).toBeLessThanOrEqual(EFFECT_WORK);pending=step.pending;}
- expect(pending).toBe(false);expect(frames).toBeGreaterThan(10);
- now=300;for(let i=0;i<25;i++)effects.frame();expect(effects.frame().pending).toBe(false);
-});
-
-test("preparation finishes its slice sequence while coalescing newer answers instead of restarting",()=>{
- const effects=playbackEffects<number>(()=>0),rows=Array.from({length:5000},(_,i)=>({key:String(i),version:0,visual:i}));
- effects.observe(rows,true,"one",false);
- for(let i=0;i<19;i++){effects.prepare();effects.observe(rows,true,"one",false);}
- // The first baseline completes after 5,000 visits despite repeated answers. The queued changed answer then pulses.
- const changed=rows.map(row=>({...row,version:1}));effects.observe(changed,true,"one",false);
- for(let i=0;i<25;i++)effects.prepare();expect(effects.frame().effects.some(effect=>effect.kind==="pulse")).toBe(true);
+test("presentation registration listeners are released after every capture lifetime",async()=>{
+ const f=await fixture(),listeners=new Set<()=>void>();
+ const experiments:ExperimentPort={snapshot:()=>[],registrations:()=>[],set:async()=>({ok:true}),subscribe:()=>()=>{},registrationGeneration:()=>0,onRegistrationsChanged:listener=>{listeners.add(listener);return()=>{listeners.delete(listener);};}};
+ try{
+  for(let i=0;i<20;i++){
+   const ctl=new AbortController();trustedFixture({presentation:{experiments,signal:ctl.signal}});
+   expect(listeners.size).toBe(1);ctl.abort();expect(listeners.size).toBe(0);
+  }
+  const ctl=new AbortController();ctl.abort();trustedFixture({presentation:{experiments,signal:ctl.signal}});expect(listeners.size).toBe(0);
+ }finally{f.ctl.abort();}
 });

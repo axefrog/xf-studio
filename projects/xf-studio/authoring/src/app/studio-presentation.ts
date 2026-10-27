@@ -454,7 +454,11 @@ export function createStudioPresentation<Slot>(sources: {
     v = sources.viewport, p = sources.preferences, r = sources.previewReadiness,
     e = sources.editor;
   const moduleActions = sources.experiments ? liveModuleActions(a.actionRegistry(), sources.experiments) : undefined;
-  if (moduleActions) a.useActionRegistry(moduleActions.registry);
+  if (moduleActions) {
+    a.useActionRegistry(moduleActions.registry);
+    if (sources.signal?.aborted) moduleActions.dispose();
+    else sources.signal?.addEventListener("abort", moduleActions.dispose, { once: true });
+  }
   const s: StatusSource = sources.status ?? { snapshot: () => emptyPresentationStatus(),
     subscribe: () => () => {} };
   // The lease's gate for the families that don't route through the application (which refuses by itself, `Services.access`).

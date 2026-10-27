@@ -1,14 +1,15 @@
 import { expect, test } from "bun:test";
 import { agentCanvas } from "../src/features/holotable/view/agent-canvas";
-import { EFFECT_WORK } from "../src/features/holotable/view/playback-effects";
+import { agentRevisions } from "../src/features/holotable/agent-revisions";
+import type { AgentAnswer, AgentItem } from "../src/features/holotable/agent-types";
 import { camera, ORBITS } from "../src/features/holotable/view/projection";
 
-function withCanvas(run: (renderer: ReturnType<typeof agentCanvas>, arcs: number[][], strokes: () => number, names: string[]) => void, options: { reduced?: boolean; now?: () => number } = {}) {
+function withCanvas(run: (renderer: ReturnType<typeof agentCanvas>, arcs: number[][], strokes: () => number, names: string[], alphas: number[]) => void, options: { reduced?: boolean; now?: () => number } = {}) {
   const keys=["document","window","MutationObserver","matchMedia","getComputedStyle"];
   const saved=new Map(keys.map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
-  let strokes=0;const arcs:number[][]=[],names:string[]=[];
+  let strokes=0;const arcs:number[][]=[],names:string[]=[],alphas:number[]=[];
   const makeCanvas=()=>({width:0,height:0,style:{cssText:""},parentElement:{append(){}},after(){},remove(){},setAttribute(){},getContext:()=>({
-    save(){},restore(){},rect(){},translate(){},scale(){},setTransform(){},clearRect(){},moveTo(){},lineTo(){},beginPath(){},closePath(){},stroke(){strokes++;},fill(){},setLineDash(){},arc(...values:number[]){arcs.push(values);},fillText(value:string){names.push(value);},strokeText(){},measureText:(text:string)=>({width:text.length*7}),
+    globalAlpha:1,save(){},restore(){},rect(){},translate(){},scale(){},setTransform(){},clearRect(){},moveTo(){},lineTo(){},beginPath(){},closePath(){},stroke(){strokes++;alphas.push(this.globalAlpha);},fill(){},setLineDash(){},arc(...values:number[]){arcs.push(values);},fillText(value:string){names.push(value);},strokeText(){},measureText:(text:string)=>({width:text.length*7}),
   })}) as unknown as HTMLCanvasElement;
   const install=(key:string,value:unknown)=>Object.defineProperty(globalThis,key,{value,configurable:true,writable:true});
   try {
@@ -16,7 +17,7 @@ function withCanvas(run: (renderer: ReturnType<typeof agentCanvas>, arcs: number
     install("MutationObserver",class {observe(){}disconnect(){}});install("matchMedia",()=>({matches:options.reduced,addEventListener(){},removeEventListener(){}}));
     install("getComputedStyle",()=>({getPropertyValue:()=>"monospace",backgroundColor:"black"}));
     const renderer=agentCanvas(makeCanvas(),()=>{},options.now);
-    try { run(renderer,arcs,()=>strokes,names); } finally { renderer.dispose(); }
+    try { run(renderer,arcs,()=>strokes,names,alphas); } finally { renderer.dispose(); }
   } finally { for(const key of keys){const descriptor=saved.get(key);if(descriptor)Object.defineProperty(globalThis,key,descriptor);else Reflect.deleteProperty(globalThis,key);} }
 }
 
@@ -52,32 +53,35 @@ test("known plates retain kind geometry, selection is 22px and badges 6px; unkno
  const radii=arcs.map(a=>a[2]);expect(radii).toContain(11);expect(radii).toContain(3);expect(radii).toContain(9);expect(radii).toContain(6.8);expect(strokes()).toBeGreaterThan(7);
 }));
 
-test("animation reprojects a retired item's world geometry, and reduced motion suppresses it",()=>{
+const point=(id="a",version=0):AgentItem=>({id,key:`p/a/${id}`,version,kind:"point",anchor:{at:[10,0,0]},place:[10,0,0]});
+const answer=(items:readonly AgentItem[]):AgentAnswer=>({specs:{schema:"xfh/projections-1",kinds:{point:{style:"tone",label:"{label}",draw:"ring"},actor:{style:"tone",label:"{name}",draw:"diamond"},path:{style:"tone",label:"{label}",draw:"polyline"},zone:{style:"tone",label:"{label}",draw:"volume"},field:{style:"tone",label:"",draw:"grid"}}},here:[],layers:[{id:"p/a",title:"A",producer:"p",layer:"a",notPlaced:[],otherBranches:[],refused:0,reason:"",items}]});
+async function resolved(...answers:AgentAnswer[]){const revisions=agentRevisions(),signal=new AbortController().signal,result:AgentAnswer[]=[];for(const raw of answers)result.push({...raw,revisions:await revisions.answer(raw,signal)});return result;}
+
+test("only marker snapshots fade for 300 ms, with an opacity ramp and reduced-motion refusal",async()=>{
+ const [base,removed]=await resolved(answer([point()]),answer([]));
  for(const reduced of [false,true]){
-   let now=0;
-   withCanvas((renderer,arcs,strokes)=>{
-     const C=camera([0,0,0],ORBITS.top,800,500), base={specs:{schema:"xfh/projections-1",kinds:{point:{style:"tone",label:"{label}",draw:"ring"}}},here:[],layers:[{id:"p/a",producer:"p",layer:"a",title:"A",notPlaced:[],otherBranches:[],refused:0,reason:"",items:[{id:"a",key:"p/a/a",version:0,kind:"point",anchor:{at:[0,0,0] as const},place:[0,0,0] as const}]}]};
-     renderer.draw(base,{},C,null,1000,null,[],350,{playing:true,epoch:"one"});
-     renderer.draw({...base,layers:[{...base.layers[0],items:[]}]},{},C,null,1000,null,[],350,{playing:true,epoch:"one"});
-     const before=strokes();now=150;const pending=renderer.animate();expect(strokes()>before).toBe(!reduced);expect(pending).toBe(!reduced);
-     now=300;expect(renderer.animate()).toBe(false);
-   },{reduced,now:()=>now});
+  let now=0;
+  withCanvas((renderer,_arcs,strokes,_names,alphas)=>{
+   const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"one"};
+   renderer.draw(base,enabled,C,null,1000,null,[],350,playback);renderer.draw(removed,enabled,C,null,1000,null,[],350,playback);
+   const before=strokes();alphas.length=0;now=150;expect(renderer.animate()).toBe(!reduced);expect(strokes()>before).toBe(!reduced);
+   if(!reduced)expect(alphas).toContain(.5);
+   now=300;expect(renderer.animate()).toBe(false);
+  },{reduced,now:()=>now});
  }
 });
 
-
-test("pause and navigation clear an in-flight ring before a new layer response",()=>{
- let now=0;withCanvas((renderer)=>{
-   const C=camera([0,0,0],ORBITS.top,800,500), enabled={}, base={specs:{schema:"xfh/projections-1",kinds:{point:{style:"tone",label:"{label}",draw:"ring"}}},here:[],layers:[{id:"p/a",producer:"p",layer:"a",title:"A",notPlaced:[],otherBranches:[],refused:0,reason:"",items:[{id:"a",key:"p/a/a",version:0,kind:"point",anchor:{at:[0,0,0] as const},place:[0,0,0] as const}]}]};
-   for(const mode of ["pause","seek"]){
-     renderer.draw(base,enabled,C,null,1000,null,[],350,{playing:true,epoch:"one"});
-     const changed={...base,layers:[{...base.layers[0],items:[{...base.layers[0].items[0],version:1}]}]};
-     renderer.draw(changed,enabled,C,null,1000,null,[],350,{playing:true,epoch:"one"});expect(renderer.animate()).toBe(true);
-     renderer.draw(changed,enabled,C,null,1000,null,[],350,{playing:mode!=="pause",epoch:mode==="seek"?"two":"one"});expect(renderer.animate()).toBe(false);
-   }
- },{now:()=>now});
+test("pause and navigation clear an in-flight ring before a new layer response",async()=>{
+ const [base,changed]=await resolved(answer([point()]),answer([point("a",1)]));
+ withCanvas(renderer=>{
+  const C=camera([0,0,0],ORBITS.top,800,500),enabled={};
+  for(const mode of ["pause","seek"]){
+   renderer.draw(base,enabled,C,null,1000,null,[],350,{playing:true,epoch:"one"});
+   renderer.draw(changed,enabled,C,null,1000,null,[],350,{playing:true,epoch:"one"});expect(renderer.animate()).toBe(true);
+   renderer.draw(changed,enabled,C,null,1000,null,[],350,{playing:mode!=="pause",epoch:mode==="seek"?"two":"one"});expect(renderer.animate()).toBe(false);
+  }
+ });
 });
-
 
 test("painted glyph plates block other labels while either selected item's name remains visible",()=>withCanvas((renderer,_arcs,_strokes,names)=>{
  const items=[{id:"a",key:"p/a",kind:"actor",glyph:"fixer",anchor:{at:[0,0,0] as const},place:[0,0,0] as const,value:{name:"Fixer"}},
@@ -90,40 +94,57 @@ test("painted glyph plates block other labels while either selected item's name 
 }));
 
 
-test("following a moving camera preserves pulse and fade age and reprojects both at each frame",()=>{
+test("following a moving camera preserves pulse and fade age and reprojects both at each frame",async()=>{
+ const [base,changed,removed]=await resolved(answer([point()]),answer([point("a",1)]),answer([]));
  let now=0;withCanvas((renderer,arcs)=>{
-  const enabled={},base={specs:{schema:"xfh/projections-1",kinds:{point:{style:"tone",label:"{label}",draw:"ring"}}},here:[],layers:[{id:"p/a",producer:"p",layer:"a",title:"A",notPlaced:[],otherBranches:[],refused:0,reason:"",items:[{id:"a",key:"p/a/a",version:0,kind:"point",anchor:{at:[10,0,0] as const},place:[10,0,0] as const}]}]};
-  const playback={playing:true,epoch:"continuous"};
-  renderer.draw(base,enabled,camera([0,0,0],ORBITS.top,800,500),null,1000,null,[],350,playback);
-  const changed={...base,layers:[{...base.layers[0],items:[{...base.layers[0].items[0],version:1}]}]};
-  renderer.draw(changed,enabled,camera([0,0,0],ORBITS.top,800,500),null,1000,null,[],350,playback);
-  now=100;const moving=camera([1,0,0],ORBITS.top,800,500);
-  renderer.draw(changed,enabled,moving,null,1000,null,[],350,playback);
-  arcs.length=0;expect(renderer.animate()).toBe(true);
-  expect(arcs.at(-1)!.slice(0,2)).toEqual(moving.point([10,0,0])!);expect(arcs.at(-1)![2]).toBeCloseTo(6.8+3+100/300*10);
-  const removed={...base,layers:[{...base.layers[0],items:[]}]};
+  const enabled={},playback={playing:true,epoch:"continuous"},start=camera([0,0,0],ORBITS.top,800,500);
+  renderer.draw(base,enabled,start,null,1000,null,[],350,playback);renderer.draw(changed,enabled,start,null,1000,null,[],350,playback);
+  now=100;const moving=camera([1,0,0],ORBITS.top,800,500);renderer.draw(changed,enabled,moving,null,1000,null,[],350,playback);
+  arcs.length=0;expect(renderer.animate()).toBe(true);expect(arcs.at(-1)!.slice(0,2)).toEqual(moving.point([10,0,0])!);expect(arcs.at(-1)![2]).toBeCloseTo(6.8+3+100/300*10);
   renderer.draw(removed,enabled,moving,null,1000,null,[],350,playback);
-  now=200;const followed=camera([2,3,0],ORBITS.top,800,500);
-  renderer.draw(removed,enabled,followed,null,1000,null,[],350,playback);
-  arcs.length=0;expect(renderer.animate()).toBe(true);
-  expect(arcs.at(-1)!.slice(0,2)).toEqual(followed.point([10,0,0])!);expect(arcs.at(-1)![2]).toBeCloseTo(6.8);
+  now=200;const followed=camera([2,3,0],ORBITS.top,800,500);renderer.draw(removed,enabled,followed,null,1000,null,[],350,playback);
+  arcs.length=0;expect(renderer.animate()).toBe(true);expect(arcs.at(-1)!.slice(0,2)).toEqual(followed.point([10,0,0])!);expect(arcs.at(-1)![2]).toBeCloseTo(6.8);
   now=400;expect(renderer.animate()).toBe(false);
  },{now:()=>now});
 });
 
-test("fresh answers prepare at most 256 animation visuals/revisions per draw and zero outside the deadline",()=>{
- let reads=0;withCanvas((renderer)=>{
-  const items=Array.from({length:5000},(_,i)=>({id:String(i),key:`p/a/${i}`,get version(){reads++;return 1;},kind:"point",anchor:{at:[i,0,0] as const},place:[i,0,0] as const}));
-  const answer={specs:{schema:"xfh/projections-1",kinds:{point:{draw:"ring",style:"tone",label:"{label}"}}},here:[],layers:[{id:"p/a",title:"A",producer:"p",layer:"a",items,notPlaced:[],otherBranches:[],refused:0,reason:""}]};
+test("full to structure to retraction cannot redraw a stale name, label or story text",async()=>{
+ const full={...point(),kind:"actor",glyph:"fixer",label:"secret label",detail:"secret detail",value:{name:"secret name",facets:{doing:"secret thought"}}};
+ const [base,structure,removed]=await resolved(answer([full]),answer([{...point(),kind:"actor",glyph:"fixer",value:{name:"actor"}}]),answer([]));
+ let now=0;withCanvas((renderer,_arcs,strokes,names)=>{
+  const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"same"};
+  renderer.draw(base,enabled,C,null,1000,null,[],350,playback);expect(names).toContain("secret name");
+  names.length=0;renderer.draw(structure,enabled,C,null,-1,null,[],350,playback);renderer.draw(removed,enabled,C,null,-1,null,[],350,playback);
+  const before=strokes();now=150;expect(renderer.animate()).toBe(true);expect(strokes()).toBeGreaterThan(before);expect(names).toEqual([]);
+ },{now:()=>now});
+});
+
+test("the last of 513 markers retracts even when no painting or preparation slice reached it",async()=>{
+ const items=Array.from({length:513},(_,i)=>({...point(String(i)),glyph:"fixer",place:[-200+i*.8,0,0] as const}));
+ const [base,removed]=await resolved(answer(items),answer(items.slice(0,-1)));
+ expect(removed.revisions!.changes.map(change=>change.key)).toEqual([items.at(-1)!.key]);
+ let now=0;withCanvas((renderer,arcs,_strokes,names)=>{
   const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"one"};
-  const first=renderer.draw(answer,enabled,C,null,-1,null,[],350,playback);expect(reads).toBe(0);expect(first?.prepared).toBe(0);
-  for(let i=0;i<25;i++){
-   const before=reads,result=renderer.draw(answer,enabled,C,null,1000,null,[],350,playback);
-   expect(reads-before).toBeLessThanOrEqual(EFFECT_WORK);expect(result!.prepared).toBeLessThanOrEqual(EFFECT_WORK);
-  }
-  expect(reads).toBe(5000);
-  reads=0;const next={...answer,layers:[{...answer.layers[0],items:items.map(item=>({...item,get version(){reads++;return 2;}}))}]};reads=0;
-  const result=renderer.draw(next,enabled,C,null,1000,null,[],350,playback);
-  expect(reads).toBeLessThanOrEqual(EFFECT_WORK);expect(result!.prepared).toBe(EFFECT_WORK);
+  renderer.draw(base,enabled,C,null,-1,null,[],350,playback);renderer.draw(removed,enabled,C,null,-1,null,[],350,playback);
+  now=150;expect(renderer.animate()).toBe(true);expect(arcs.find(arc=>arc[2]===9)!.slice(0,2)).toEqual(C.point(items.at(-1)!.place!)!);expect(names).toEqual([]);
+ },{now:()=>now});
+});
+
+test("paths and zones vanish; a retired field draws one tiny plate without reading its geometry",async()=>{
+ const [base,removed]=await resolved(answer([
+  {...point("path"),kind:"path",glyph:"waypoint"},{...point("zone"),kind:"zone",glyph:"place"},
+  {...point("field"),kind:"field",glyph:"goal",get anchor():never{throw Error("Fade read geometry");},get value():never{throw Error("Fade read field cells");}},
+ ]),answer([]));
+ expect(removed.revisions!.changes.map(change=>change.key)).toEqual(["p/a/field"]);
+ withCanvas((renderer,arcs,strokes,names)=>{
+  const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"one"};
+  renderer.draw(base,enabled,C,null,-1,null,[],350,playback);renderer.draw(removed,enabled,C,null,-1,null,[],350,playback);
+  const before=strokes();expect(renderer.animate()).toBe(true);expect(strokes()-before).toBeLessThanOrEqual(2);expect(arcs.filter(arc=>arc[2]===9)).toHaveLength(1);expect(names).toEqual([]);
  });
+});
+
+test("painting does not read or diff any of 5,000 resolved revision versions",async()=>{
+ let reads=0;const items=Array.from({length:5000},(_,i)=>({...point(String(i)),get version(){reads++;return 1;}}));
+ const [base]=await resolved(answer(items));expect(reads).toBe(5000);reads=0;
+ withCanvas(renderer=>{const result=renderer.draw(base,{},camera([0,0,0],ORBITS.top,800,500),null,-1,null,[],350,{playing:true,epoch:"one"});expect(result!.pending).toBe(true);expect(reads).toBe(0);});
 });

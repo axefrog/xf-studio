@@ -9,4 +9,8 @@ export interface AgentItem {
 }
 export interface AgentLayer { id: string; title: string; producer: string; producer_title?: string; facet_titles?: Readonly<Record<string, string>>; layer: string; items: readonly AgentItem[]; changes?: readonly number[]; refused: number; reason: string; notPlaced: readonly string[]; otherBranches: readonly string[] }
 export interface HereGroup { layer: string; title: string; items: readonly { item: AgentItem; distance: number; sample?: number | readonly [number, number] }[] }
-export interface AgentAnswer { layers: readonly AgentLayer[]; here: readonly HereGroup[]; specs: { schema: string; tones?: Readonly<Record<string, string>>; kinds: Readonly<Record<string, { style: string; label: string; draw: string }>> } }
+/** Animation data is structural: no item, label, facet, citation or story payload. */
+export interface AgentMarker { point: Vec3; tone: string; marker: string; glyph?: string }
+export interface AgentRevisionChange { key: string; layer: string; kind: "pulse" | "fade"; marker: AgentMarker }
+export interface AgentRevisions { sequence: number; current: Readonly<Record<string, AgentMarker>>; changes: readonly AgentRevisionChange[] }
+export interface AgentAnswer { revisions?: AgentRevisions; layers: readonly AgentLayer[]; here: readonly HereGroup[]; specs: { schema: string; tones?: Readonly<Record<string, string>>; kinds: Readonly<Record<string, { style: string; label: string; draw: string }>> } }

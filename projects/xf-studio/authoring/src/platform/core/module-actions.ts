@@ -9,8 +9,10 @@ export function moduleActionOwner(module: StudioModule, experiment?: string) {
       { ...descriptor, async: true as const, cancellable: false }]))) } satisfies AsyncSystemFamily & { module: string; experiment?: string };
 }
 export function liveModuleActions(base: Registry<AnyOwner>, source: { registrationGeneration(): number; registrations(): readonly ExperimentRegistration[]; onRegistrationsChanged(listener: () => void): () => void }) {
+  let disposed = false;
   let generation = -1, lifetimes = new Map<string, { registration: ExperimentRegistration; token: object }>();
   const current = () => {
+    if (disposed) return lifetimes;
     const next = source.registrationGeneration();
     if (next !== generation) {
       lifetimes = new Map(source.registrations().map(registration => {
@@ -22,7 +24,7 @@ export function liveModuleActions(base: Registry<AnyOwner>, source: { registrati
     return lifetimes;
   };
   // Observe every withdrawal, even when no captured facade is called while the module is off.
-  source.onRegistrationsChanged(current);
+  const unsubscribe = source.onRegistrationsChanged(current);
   const registry = base.withLiveOwners({ generation: () => source.registrationGeneration(),
     owners: () => source.registrations().filter(r => r.module?.actions).map(r => moduleActionOwner(r.module, r.module.id)) });
   const bind = <F extends ModuleService>(service: F): F => {
@@ -40,5 +42,5 @@ export function liveModuleActions(base: Registry<AnyOwner>, source: { registrati
       return cap.available ? service.dispatch(action) : { ok: false, code: cap.code, message: cap.reason };
     } } as F;
   };
-  return { registry, bind };
+  return { registry, bind, dispose() { if (!disposed) { disposed = true; unsubscribe(); lifetimes.clear(); } } };
 }

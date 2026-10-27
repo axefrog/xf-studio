@@ -11,6 +11,7 @@
 import { refusal, type Capability, type ReasonCode } from "../../platform/api";
 import type { ContentLevel, HoloRun, HoloSession, HoloTransport, HoloWorld, HoloLiveState, HoloLiveCursor, HoloLiveUpdate } from "./types";
 import { changeMoment, clockFamily, playbackMemory, SPEEDS, type PlaybackMemory } from "./playback";
+import { agentRevisions } from "./agent-revisions";
 import { worldContexts } from "./world-context";
 import type { AgentAnswer } from "./agent-types";
 import type { Vec3 } from "./types";
@@ -143,18 +144,21 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     set({ phase: code === "unavailable" ? "unavailable" : "failed", message: String((e as Error)?.message ?? e) });
   };
 
-  function clearAgents() { set({ agents: { ...state.agents, layers: [], here: [] } }); }
+  const revisions = agentRevisions();
+  function clearAgents() { revisions.reset(); set({ agents: { ...state.agents, revisions: undefined, layers: [], here: [] } }); }
   async function takeLayers() {
     if (!visible || !layerWatch || !state.open || signal.aborted) return;
     layerCtl?.abort(); const ctl = new AbortController(); layerCtl = ctl;
-    const at = state.t, dir = state.open.dir, level = state.level, branch = state.branch;
+    const at = state.t, dir = state.open.dir, level = state.level, branch = state.branch, epoch = state.motionEpoch;
     try {
       const answer = await call<AgentAnswer>("layers.poll", { watch: layerWatch, ...(dir === "live" ? { liveWatch: watchId } : { dir }), t: at, level, branch,
         hidden: Object.keys(state.agentEnabled).filter(k => !state.agentEnabled[k]), position: state.position }, ctl.signal);
       if (ctl.signal.aborted || state.t !== at || state.open?.dir !== dir || state.level !== level || !Array.isArray(answer.layers)) return;
-      set({ agents: answer });
+      const resolved = await revisions.answer(answer, ctl.signal);
+      if (ctl.signal.aborted || layerCtl !== ctl || state.motionEpoch !== epoch || state.t !== at || state.open?.dir !== dir || state.level !== level) return;
+      set({ agents: { ...answer, revisions: resolved } });
     } catch (e) {
-      if (!ctl.signal.aborted && state.t === at && state.open?.dir === dir) clearAgents();
+      if (!ctl.signal.aborted && layerCtl === ctl && state.motionEpoch === epoch && state.t === at && state.open?.dir === dir && (e as Error).name !== "AbortError") clearAgents();
       if (!ctl.signal.aborted && (e as { code?: string }).code === "bad_request") layerWatch = null;
     }
   }
@@ -410,7 +414,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     speedOptions: () => SPEEDS[clockFamily(state)],
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     /** The module was hidden: playback stops (nothing runs for a view no one sees). */
-    withdraw() { set({ motionEpoch: state.motionEpoch + 1 }); resumeWatch = state.live.watching; visible = false; stopContext(); contexts.reset(); dropSolids(); stopLayers(); stopStatusTimer?.(); statusCtl?.abort(); pause(); stopWatching(true, resumeWatch); },
+    withdraw() { revisions.reset(); set({ motionEpoch: state.motionEpoch + 1 }); resumeWatch = state.live.watching; visible = false; stopContext(); contexts.reset(); dropSolids(); stopLayers(); stopStatusTimer?.(); statusCtl?.abort(); pause(); stopWatching(true, resumeWatch); },
     /** The module was shown: list the recordings once, on demand (nothing is asked of the host before the view is wanted). */
     shown() {
       if (visible || signal.aborted) return; visible = true;

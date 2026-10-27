@@ -13,19 +13,14 @@ type Camera = ReturnType<typeof camera>;
 type XY = readonly [number, number];
 export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now: () => number = () => performance.now()) {
   const context = canvas.getContext("2d"); if (!context) throw Error("Canvas 2D is unavailable for Agent layers.");
-  type Visual = {
-    item: AgentItem; layer: string; rule?: AgentAnswer["specs"]["kinds"][string];
-    offset?: XY; toOffset?: XY; selected?: boolean; painted?: boolean; colour?: string; size?: number; fieldMax?: number;
-    labels?: { text: string; x: number; y: number; colour: string; alpha: number; font: string }[];
-  };
   const ctx = context;
   let stageColour = "", currentCamera: Camera | undefined, currentRadius = 350;
   let currentEnabled: Readonly<Record<string, boolean>> = {};
   const motionCanvas = document.createElement("canvas"); motionCanvas.style.cssText = canvas.style.cssText; motionCanvas.setAttribute("aria-hidden", "true");
   const motion = motionCanvas.getContext("2d")!;
-  const effects = playbackEffects<Visual>(now);
+  const effects = playbackEffects(now);
   let currentAnswer:AgentAnswer|undefined;
-  let visuals = new Map<string, Visual>(), observed: AgentAnswer | undefined, motionKey = "", previousPlaying = false;
+  let observed: AgentAnswer | undefined, motionKey = "", previousPlaying = false;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
   const stopMotion = () => { effects.clear(); observed = undefined; motion.clearRect(0, 0, motionCanvas.width, motionCanvas.height); changed(); };
   reduced.addEventListener("change", stopMotion);
@@ -45,50 +40,37 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     else ctx.arc(x,y,size,0,Math.PI*2);
     ctx.stroke();
   }
-  function plate(ctx: CanvasRenderingContext2D, item: AgentItem, draw: string, xy: XY, selected: boolean, colour: string, alpha: number) {
+  function plate(ctx: CanvasRenderingContext2D, item: {glyph?:string;badge?:string}, draw: string, xy: XY, selected: boolean, colour: string, alpha: number, opacity = 1) {
     const glyph = glyphIcon(item.glyph, isIconName); if (!glyph.known) return false;
     const radius = selected ? 11 : 9;
-    ctx.globalAlpha = 1; ctx.lineWidth = 1.5; ctx.fillStyle = stageColour;
-    ctx.beginPath(); ctx.arc(...xy,radius,0,Math.PI*2); ctx.fill(); ctx.globalAlpha = alpha; ctx.stroke(); ctx.fillStyle = colour;
+    ctx.globalAlpha = opacity; ctx.lineWidth = 1.5; ctx.fillStyle = stageColour;
+    ctx.beginPath(); ctx.arc(...xy,radius,0,Math.PI*2); ctx.fill(); ctx.globalAlpha = alpha * opacity; ctx.stroke(); ctx.fillStyle = colour;
     if (glyph.icon) {
       ctx.save(); ctx.translate(xy[0]-6,xy[1]-6); ctx.scale(0.75,0.75); ctx.lineWidth = 1.5;
-      for (const shape of iconShapes(glyph.icon)) { ctx.globalAlpha = alpha * (shape.faint ? 0.45 : 1); ctx.setLineDash(shape.dash ? shape.dash.split(/\s+/).map(Number) : []); if (shape.fill) ctx.fill(shape.path); else ctx.stroke(shape.path); }
+      for (const shape of iconShapes(glyph.icon)) { ctx.globalAlpha = alpha * opacity * (shape.faint ? 0.45 : 1); ctx.setLineDash(shape.dash ? shape.dash.split(/\s+/).map(Number) : []); if (shape.fill) ctx.fill(shape.path); else ctx.stroke(shape.path); }
       ctx.restore();
     } else defaultMark(ctx,draw,xy,4.5);
     const tone = item.badge && Object.hasOwn(BADGE_TONES,item.badge) ? BADGE_TONES[item.badge] : undefined;
-    if (tone) { ctx.globalAlpha = 1; ctx.fillStyle = palette[tone] ?? colour; ctx.beginPath(); ctx.arc(xy[0]+radius*0.72,xy[1]-radius*0.72,3,0,Math.PI*2); ctx.fill(); ctx.stroke(); }
+    if (tone) { ctx.globalAlpha = opacity; ctx.fillStyle = palette[tone] ?? colour; ctx.beginPath(); ctx.arc(xy[0]+radius*0.72,xy[1]-radius*0.72,3,0,Math.PI*2); ctx.fill(); ctx.stroke(); }
     return true;
   }
-  const faded = new Proxy(motion, { set(target, key, value) {
-    return Reflect.set(target, key, key === "globalAlpha" ? Number(value) * fadeOpacity : value, target);
-  }, get(target,key) { const value=Reflect.get(target,key,target); return typeof value === "function" ? value.bind(target) : value; } });
-  let fadeOpacity = 1;
-  const noPositions = new Map<string, XY>(), noImportant = new Set<string>();
-  const offsetPoint = (point: XY | null, offset?: XY): XY | null => point && [point[0]+(offset?.[0]??0),point[1]+(offset?.[1]??0)];
   function animate() {
     const frame = effects.frame(), dpr = window.devicePixelRatio || 1;
     motion.setTransform(dpr,0,0,dpr,0,0); motion.clearRect(0,0,motionCanvas.width/dpr,motionCanvas.height/dpr);
     const deadline = performance.now()+1, C = currentCamera;
     for (const effect of frame.effects) {
       if (performance.now() > deadline) break;
-      const visual = effect.item.visual;
-      if (!C || !visual.painted || !visual.item.place || currentEnabled[visual.layer] === false) continue;
-      // Retain world data, never the followed camera's old screen coordinates.
-      const raw = C.point(visual.item.place), xy = offsetPoint(raw,visual.offset);
-      if (effect.kind === "pulse" && xy) {
-        motion.globalAlpha = 1-effect.progress; motion.strokeStyle = visual.colour!; motion.lineWidth = 1.5;
-        motion.beginPath(); motion.arc(...xy,(visual.size ?? 9)+3+effect.progress*10,0,Math.PI*2); motion.stroke();
-      } else if (effect.kind === "fade") {
-        motion.save(); fadeOpacity = 1-effect.progress;
-        faded.lineJoin = "round";
-        const painted = paintItem(visual.item,C,visual.selected?visual.item.key:null,null,noPositions,noImportant,currentRadius,deadline,faded,visual);
-        if(raw && painted !== "skip")for(const label of visual.labels??[]) {
-          if(performance.now()>deadline)break;
-          faded.font=label.font;faded.lineWidth=3;faded.lineJoin="round";faded.globalAlpha=label.alpha;
-          faded.strokeStyle=stageColour;faded.fillStyle=label.colour;
-          faded.strokeText(label.text,raw[0]+label.x,raw[1]+label.y);faded.fillText(label.text,raw[0]+label.x,raw[1]+label.y);
-        }
-        motion.restore();
+      if (!C || currentEnabled[effect.layer] === false) continue;
+      const marker = effect.kind === "pulse" ? currentAnswer?.revisions?.current[effect.key] ?? effect.marker : effect.marker;
+      if (Math.hypot(...marker.point.map((n,i)=>n-C.target[i])) > currentRadius) continue;
+      const xy = C.point(marker.point); if (!xy) continue;
+      const colour = palette[marker.tone] ?? palette.signal, opacity = 1-effect.progress;
+      motion.globalAlpha = opacity; motion.strokeStyle = colour; motion.fillStyle = colour; motion.setLineDash([]);
+      if (effect.kind === "pulse") {
+        const size = marker.glyph && glyphIcon(marker.glyph,isIconName).known ? 9 : 6.8;
+        motion.lineWidth = 1.5; motion.beginPath(); motion.arc(...xy,size+3+effect.progress*10,0,Math.PI*2); motion.stroke();
+      } else if (!plate(motion,marker,marker.marker,xy,false,colour,1,opacity)) {
+        motion.lineWidth = 2.4; defaultMark(motion,marker.marker,xy,6.8);
       }
     }
     motion.globalAlpha = 1; return frame.pending;
@@ -115,32 +97,24 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, width, height); hits = [];
     if (!palette.signal) palette = Object.fromEntries([...swatches].map(([t, e]) => [t, getComputedStyle(e).color]));
   }
-  function paintItem(item:AgentItem,C:Camera,selected:string|null,hovered:string|null,positions:ReadonlyMap<string,XY>,important:ReadonlySet<string>,radius:number,deadline:number,ctx:CanvasRenderingContext2D,retired?:Visual):"drawn"|"skip"|"pending" {
-    let cell=retired?0:fieldCell;
+  function paintItem(item:AgentItem,C:Camera,selected:string|null,hovered:string|null,positions:ReadonlyMap<string,XY>,important:ReadonlySet<string>,radius:number,deadline:number,ctx:CanvasRenderingContext2D):"drawn"|"skip"|"pending" {
+    let cell=fieldCell;
     const far=Math.max(1500,Math.hypot(...C.position.map((n,i)=>n-C.target[i]))+radius),fade=Math.max(1800,far*1.2);
     const answer=currentAnswer!;
     const p = item.place!; if (!agentInRange(item, C.target, radius)) return "skip";
-    const rule = retired?.rule ?? answer.specs.kinds[item.kind]; if (!rule) return "skip";
+    const rule = answer.specs.kinds[item.kind]; if (!rule) return "skip";
     const area = item.resolvedAnchor ?? item.anchor;
     const extended = ["polyline", "volume", "grid", "curve", "arrow"].includes(rule.draw) || rule.draw === "crosshair" && !!item.to || "box" in area || "zone" in area || "sphere" in area;
     const clipped = item.to ? C.line([p,item.to]) : [];
-    const markerXY = retired ? offsetPoint(C.point(p),retired.offset) : positions.get(item.links?.from ?? item.key);
+    const markerXY = positions.get(item.links?.from ?? item.key);
     const xy = markerXY ?? clipped[0]?.points[0] ?? (extended ? C.point(C.target) : null); if (!xy) return "skip";
     if (Math.hypot(...p.map((n, j) => n - C.position[j])) > far || xy[0] < -64 || xy[0] > C.width + 64 || xy[1] < -64 || xy[1] > C.height + 64) {
       if (!extended) return "skip";
     }
-    const visual = retired ?? visuals.get(item.key);
-    if (visual && !retired) {
-      const raw = C.point(p), to = item.to && C.point(item.to), placedTo = positions.get(item.links?.to ?? item.key+":to");
-      visual.item=item;visual.rule=rule;visual.painted=true;visual.selected=selected===item.key;visual.labels=[];
-      visual.offset=raw&&markerXY?[markerXY[0]-raw[0],markerXY[1]-raw[1]]:undefined;
-      visual.toOffset=to&&placedTo?[placedTo[0]-to[0],placedTo[1]-to[1]]:undefined;
-    }
     const weight = item.weight ?? 0.7, size = 4 + weight * 4, alpha = (0.35 + weight * 0.65) * Math.max(0.12, 1 - Math.hypot(...p.map((n, j) => n - C.position[j])) / fade);
     const colour = palette[rule.style === "tone" ? item.tone ?? "signal" : rule.style] ?? palette.signal;
-    if (visual) { visual.colour = colour; visual.size = item.glyph && glyphIcon(item.glyph,isIconName).known ? 9 : size; }
     ctx.strokeStyle = colour; ctx.fillStyle = colour; ctx.lineWidth = 1 + weight * 2; ctx.globalAlpha = alpha; ctx.setLineDash([]);
-    const hit = (ps: XY[], fill = false, priority = fill ? 1 : 2) => { if(!retired)hits.push({ key: item.key, points: ps, fill, priority }); };
+    const hit = (ps: XY[], fill = false, priority = fill ? 1 : 2) => { hits.push({ key: item.key, points: ps, fill, priority }); };
     const stroke = (ps: readonly Vec3[], opacity = 1, closed = false) => { for (const run of C.line(ps, closed)) { ctx.beginPath(); path(ctx,run.points); ctx.globalAlpha = alpha * opacity; ctx.stroke(); hit(run.points); } ctx.globalAlpha = alpha; };
     const polygon = (ps: Vec3[], opacity: number) => { const projected = C.polygon(ps); ctx.beginPath(); path(ctx,projected, true); ctx.globalAlpha = alpha * opacity; ctx.fill(); hit(projected, true); ctx.globalAlpha = alpha; };
     const volume = (a: AgentAnchor, fill: boolean) => {
@@ -154,7 +128,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       stroke(bottom, fill ? 0.7 : 0.2, true); stroke(top, 0.12, true);
     };
     const arrow = (a: XY, b: XY) => { const angle = Math.atan2(b[1] - a[1], b[0] - a[0]); ctx.beginPath(); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle - 0.45), b[1] - 7 * Math.sin(angle - 0.45)); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle + 0.45), b[1] - 7 * Math.sin(angle + 0.45)); ctx.stroke(); };
-    const addLabel = (value: string, at: XY, caption = false) => { if (value && !retired) candidates.push({ key: item.key, text: value, x: at[0], y: at[1], priority: caption ? 1.5 : item.key === hovered ? -2 : item.key === selected ? -1 : labelPriority(item, important), colour: caption ? palette.muted ?? colour : colour, alpha: caption ? 0.85 : alpha, caption,selected:!caption&&item.key===selected }); };
+    const addLabel = (value: string, at: XY, caption = false) => { if (value) candidates.push({ key: item.key, text: value, x: at[0], y: at[1], priority: caption ? 1.5 : item.key === hovered ? -2 : item.key === selected ? -1 : labelPriority(item, important), colour: caption ? palette.muted ?? colour : colour, alpha: caption ? 0.85 : alpha, caption,selected:!caption&&item.key===selected }); };
     let label = rule.label.replace("{label}", item.label ?? "").replace("{name}", item.value?.name ?? "actor").replace("{type}", item.value?.type ?? "");
     const a = item.resolvedAnchor ?? item.anchor;
     if (item.region && selected === item.key && !["actor", "zone"].includes(item.kind)) volume(a, false);
@@ -165,10 +139,9 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     else if (rule.draw === "grid" && "grid" in a) {
       const g = a.grid; if (Math.max(C.scale(g.origin), C.scale(C.target)) * g.cell < 2) return "skip";
       const scalars = item.value?.scalars, vectors = item.value?.vectors;
-      const max = retired?.fieldMax ?? (scalars ? Math.max(1e-9, ...scalars.map(Math.abs)) : 1);
-      if (visual && !retired) visual.fieldMax = max;
+      const max = scalars ? Math.max(1e-9, ...scalars.map(Math.abs)) : 1;
       for (; cell < g.rows * g.cols; cell++) {
-        if (cell % 16 === 0 && performance.now() > deadline) { if(!retired)fieldCell=cell; return "pending"; }
+        if (cell % 16 === 0 && performance.now() > deadline) { fieldCell=cell; return "pending"; }
         const row = Math.floor(cell / g.cols), col = cell % g.cols, n = cell;
         const x = g.origin[0] + col * g.cell, y = g.origin[1] + row * g.cell, z = g.origin[2];
         if (scalars) polygon([[x, y, z], [x + g.cell, y, z], [x + g.cell, y + g.cell, z], [x, y + g.cell, z]], 0.05 + Math.abs(scalars[n]) / max * 0.4);
@@ -176,7 +149,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       }
       cell = 0;
     } else if ((rule.draw === "curve" || rule.draw === "arrow") && item.to) {
-      const to = (retired ? offsetPoint(C.point(item.to),retired.toOffset) : positions.get(item.links?.to ?? item.key + ":to")) ?? C.point(item.to) ?? clipped.at(-1)?.points.at(-1); if (!to) return "skip";
+      const to = positions.get(item.links?.to ?? item.key + ":to") ?? C.point(item.to) ?? clipped.at(-1)?.points.at(-1); if (!to) return "skip";
       if (rule.draw === "curve") {
         ctx.lineWidth = 1 + (item.value?.strength ?? weight) * 3;
         const dx = to[0] - xy[0], dy = to[1] - xy[1], len = Math.hypot(dx, dy) || 1;
@@ -197,14 +170,14 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       hit([[xy[0]-size-3,xy[1]-size-3], [xy[0]+Math.max(size+3, rule.draw === "text" ? label.length*7 : size+3),xy[1]-size-3], [xy[0]+size+3,xy[1]+size+3], [xy[0]-size-3,xy[1]+size+3]], true, 3);
     }
     const plated = markerXY ? plate(ctx,item,rule.draw,xy,selected === item.key,colour,alpha) : false;
-    if (plated && !retired) { hit([[xy[0]-12,xy[1]-12],[xy[0]+12,xy[1]-12],[xy[0]+12,xy[1]+12],[xy[0]-12,xy[1]+12]],true,3);
+    if (plated) { hit([[xy[0]-12,xy[1]-12],[xy[0]+12,xy[1]-12],[xy[0]+12,xy[1]+12],[xy[0]-12,xy[1]+12]],true,3);
       // Index construction belongs to this marker's existing budgeted slice, including resumed frames.
       if(xy[0]>=-16&&xy[0]<=C.width+16&&xy[1]>=-16&&xy[1]<=C.height+16) plates.add({key:item.key,x:xy[0],y:xy[1],radius:selected===item.key?15:10}); }
     if (label && xy[0] >= -32 && xy[0] <= C.width+32 && xy[1] >= -32 && xy[1] <= C.height+32) addLabel(label, [xy[0]+(plated ? 11 : size)+4, xy[1]-4]);
     const facet = Object.entries(item.facets ?? item.value?.facets ?? {})[0];
     if (facet && rule.draw === "diamond") addLabel(actorCaption(facet[1]), [xy[0]+(plated ? 11 : size)+4, xy[1]+13], true);
     if (selected === item.key) { ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(...xy, plated ? 14 : size+5, 0, Math.PI*2); ctx.stroke(); }
-    if(!retired)fieldCell=0;
+    fieldCell=0;
     return "drawn";
   }
   return {
@@ -224,16 +197,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       const fresh = previousPlaying !== playback.playing || motionKey !== key || observed !== answer || previous !== answer || previousEnabled !== enabled || previousCamera !== cameraKey || previousSelection !== selected || previousHover !== hovered || previousOverlay !== overlayKey;
       if (fresh) {
         if (previousPlaying !== playback.playing || observed !== answer || motionKey !== key || previousEnabled !== enabled) {
-          function* snapshot() {
-            const next=new Map<string,Visual>();
-            if(playback.playing&&!reduced.matches)for(const layer of answer.layers)if(enabled[layer.id]!==false)for(const item of layer.items){
-              const visual=visuals.get(item.key)??{item,layer:layer.id};
-              next.set(item.key,visual);visuals.set(item.key,visual);
-              yield {key:item.key,version:item.version??item.t??0,visual};
-            }
-            visuals=next;
-          }
-          effects.observe(snapshot(), playback.playing, key, reduced.matches);
+          effects.observe(observed?.revisions === answer.revisions ? [] : answer.revisions?.changes ?? [], playback.playing, key, reduced.matches);
           observed = answer; motionKey = key; previousPlaying = playback.playing;
         }
         clear(C.width, C.height); previous = answer; previousEnabled = enabled; previousCamera = cameraKey; previousSelection = selected; previousHover = hovered; previousOverlay = overlayKey; }
@@ -241,8 +205,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       const dpr = window.devicePixelRatio || 1;
       if (motionCanvas.width !== Math.round(C.width*dpr) || motionCanvas.height !== Math.round(C.height*dpr)) { motionCanvas.width = Math.round(C.width*dpr); motionCanvas.height = Math.round(C.height*dpr); }
       stageColour = palette.stage;
-      const preparation=effects.prepare(()=>performance.now()<=deadline);
-      if(performance.now()>deadline)return {pending:true,drawn:0,total:0,prepared:preparation.visited};
+      if(performance.now()>deadline)return {pending:true,drawn:0,total:0};
       ctx.font = "11px " + getComputedStyle(canvas).getPropertyValue("--font-mono"); ctx.lineJoin = "round";
       const items = answer.layers.filter(l => enabled[l.id] !== false).flatMap(l => l.items.filter(i => i.place && !l.notPlaced.includes(i.id)));
       const important = labelContext(items, selected, hovered);
@@ -269,7 +232,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
         if (performance.now() > deadline) break;
         if (collapsed.has(item.key)) continue;
         const result=paintItem(item,C,selected,hovered,positions,important,radius,deadline,ctx);
-        if(result==="pending")return {pending:true,drawn,total:items.length,prepared:preparation.visited};
+        if(result==="pending")return {pending:true,drawn,total:items.length};
         if(result==="drawn")drawn++;
       }
       if (cursor >= items.length && !labelsPainted) {
@@ -281,12 +244,11 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
           text.globalAlpha = label.alpha; text.fillStyle = label.colour;
           text.strokeText(label.text, label.x, label.y);
           text.fillText(label.text, label.x, label.y);
-          const visual=visuals.get(label.key), raw=visual?.item.place&&C.point(visual.item.place);
-          if(visual&&raw)(visual.labels??=[]).push({text:label.text,x:label.x-raw[0],y:label.y-raw[1],font:text.font,colour:label.colour,alpha:label.alpha});
+
         }
         labelsPainted = true;
       }
-      ctx.globalAlpha = 1; return { pending: cursor < items.length || preparation.pending, drawn, total: items.length, prepared:preparation.visited };
+      ctx.globalAlpha = 1; return { pending: cursor < items.length, drawn, total: items.length };
     },
     pick(x: number, y: number): string | null {
       for (const priority of [3, 2, 1]) for (let n = hits.length - 1; n >= 0; n--) {

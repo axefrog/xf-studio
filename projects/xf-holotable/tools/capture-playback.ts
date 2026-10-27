@@ -7,8 +7,20 @@ const built=await Bun.build({entrypoints:[join(import.meta.dir,"playback-preview
 const script=await built.outputs[0].text(),authoring=resolve(import.meta.dir,"../../xf-studio/authoring");
 const server=Bun.serve({hostname:"127.0.0.1",port:0,fetch(request){const url=new URL(request.url);if(url.pathname==="/studio.css")return new Response(Bun.file(join(authoring,"public/studio.css")),{headers:{"content-type":"text/css"}});if(url.pathname==="/client.js")return new Response(script,{headers:{"content-type":"text/javascript"}});if(url.searchParams.get("verify")!=="1")return new Response("Verification workspace required",{status:400});return new Response('<!doctype html><html><meta charset="utf-8"><title>Playback verification</title><link rel="stylesheet" href="/studio.css"><body><script type="module" src="/client.js"></script></body></html>',{headers:{"content-type":"text/html"}});}});
 let page:Session|undefined;const measurements:unknown[]=[];
+const retractionOnly=Bun.argv.includes("--retraction-only");
 try{
  page=await launch(`http://127.0.0.1:${server.port}/?verify=1`,{width:1550,height:760,motion:"no-preference",args:["--disable-gpu","--no-sandbox"]});
+ if(retractionOnly){
+  await page.viewport(1520,760);
+  await page.send("Page.navigate",{url:`http://127.0.0.1:${server.port}/?verify=1&theme=dark&width=850&clock=game`});
+  await page.waitFor('document.body.dataset.ready==="true"',15000);
+  await page.evaluate('globalThis.holoVerification.pulse()');
+  await page.send("Animation.setPlaybackRate",{playbackRate:0});
+  await page.evaluate('globalThis.holoVerification.fade()');
+  await page.screenshot(join(output,"retraction-mid-fade-dark-wide.png"));
+  if(page.console.some(e=>e.type==="exception"||e.type==="error"))throw Error(JSON.stringify(page.console));
+  console.log(`Saved retraction-mid-fade-dark-wide.png to ${output}`);
+ }else{
  for(const theme of ["light","dark"])for(const width of [300,460,850])for(const clock of ["recording","game"]){
   await page.viewport(width+670,760);
   await page.send("Page.navigate",{url:`http://127.0.0.1:${server.port}/?verify=1&theme=${theme}&width=${width}&clock=${clock}`});
@@ -107,4 +119,5 @@ try{
  await page!.screenshot(join(output,"retraction-mid-fade-dark-wide.png"));
  if(page.console.some(e=>e.type==="exception"||e.type==="error"))throw Error(JSON.stringify(page.console));
  writeFileSync(join(output,"measurements.json"),JSON.stringify(measurements,null,2));console.log(`Saved ${26} captures to ${output}`);
+ }
 }finally{await page?.close();server.stop(true);}
