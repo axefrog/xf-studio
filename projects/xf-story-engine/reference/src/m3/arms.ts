@@ -72,7 +72,7 @@ export type SlotRule = 'declared' | 'rated-v1';
 /** One A3 job for the draw `n` of the run `key`, around V at `cellName`. Returns undefined if no template can be filled. */
 export function radiantJob(world: M3World, nameOf: (id: Id) => string, key: string, n: number, cellName = 'g1', rule: SlotRule = 'declared'): Radiant | undefined {
   const sim = world.sim;
-  const cell = sim.w.index.names![cellName]!;
+  const cell = sim.w.index.names?.[cellName] ?? cellName;
   const rings = nearCells(sim, cell);
   const draw = (tag: string, ...rest: number[]): number => rand(hs('m3-a3'), hs(key), hi(n), hs(tag), ...rest.map(hi));
   type Person = { id: Id; role: string };
@@ -142,7 +142,7 @@ export function radiantJob(world: M3World, nameOf: (id: Id) => string, key: stri
   if (t.needs.includes('place')) slots.place = place!;
   if (t.needs.includes('place2')) slots.place2 = place2!;
   if (t.needs.includes('item')) slots.item = ITEMS[Math.floor(draw('item') * ITEMS.length)]!;
-  const price = sim.reads.eval('priceLevel', ['wat_kab']);
+  const price = sim.reads.eval('priceLevel', [sim.w.index.districts[sim.w.index.cells[cell]!.district]!.key]);
   slots.reward = String(Math.round(REWARD[t.tier] * (price === 'dear' ? 1.2 : price === 'cheap' ? 0.8 : 1)));
   const text = t.text.replace(/\{([A-Za-z0-9]+)\}/g, (_m, k: string) => slots[k] ?? `[${k}]`);
   return { template: t.id, text, names };

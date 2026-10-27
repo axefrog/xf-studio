@@ -6,13 +6,14 @@ import { stateById } from './states.ts';
 import { ThreadArchive } from './threads3.ts';
 import { controls } from './controls3.ts';
 import type { Tempo } from '../procedural/types.ts';
+import type { WorldIndex } from '../sim/index-types.ts';
 
 export interface Week3Config { id: string; world: string; arm: 'E' | 'A1'; tempo: Tempo; policy: string; windows: number }
-export function createWeek3(c: Week3Config): Run {
+export function createWeek3(c: Week3Config, index?: WorldIndex): Run {
   const engage: Policy = { id: 'engage', answer: o => ({ kind: 'action', id: o.actions[0]! }) };
   const policy = c.policy === 'engage' ? engage : policies[c.policy];
   if (!policy) throw Error('Unknown run-3 policy');
-  return new Run(run3World(c.world, c.arm, c.tempo).opts, stateById('S-mid-squeezed'), policy, { walk: true });
+  return new Run({ ...run3World(c.world, c.arm, c.tempo).opts, ...(index ? { index } : {}) }, stateById('S-mid-squeezed'), policy, { walk: true });
 }
 
 /** The reviewed-v5 week harness, shared by the matrix worker and offline publishers.

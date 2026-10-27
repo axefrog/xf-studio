@@ -107,6 +107,36 @@ regressions include conservation throughout the full fixture week, and the audit
 regression checks manifest and record byte limits before trimming or parsing.
 The full suite is left to the coordinator.
 
+### Real streets
+
+Pass `--index <imported-index.json>` to the same publisher to create **Kabuki week
+(real streets)**, set `e-m3c-w2-restless-engage-realstreets`. This is a new run with
+the engine arm, seed name, restless tempo, engage policy, pattern library and
+director configuration of `E-m3c-w2-restless-engage`; it does not compare against
+that stand-in archive. The harness takes walking cells from the index's grid
+order, places the scripted player history and daily controls in its first grid
+cell, and reads each walking cell's district from the index. Imported polygons
+and venue volumes replace the schematic layout. These are clipped 200 m blocks
+over the real district; geometric neighbours still do not establish walkable
+routes. The publisher first executes observer-off, then publishes observer-on
+and requires identical canonical run records, excluding only
+`diagnostics.seconds`. Both passes share a 75-minute deadline. The bare record is
+saved as `.bare.run.json.gz`; the observed record, actual timeline bounds,
+per-layer counts, index hash, final developed/possible census by pattern and
+phase timings accompany the spool. `--index` and archived `--run` are mutually
+exclusive. The [synthetic import regression](test/holotable/realstreets.test.ts)
+checks both records, real geometry, exact story census and the independent
+complete-spool validator in a short span.
+
+On the imported Kabuki index (28 cells), the full week runs observer-off and
+observer-on to identical records. Its 4,354-record spool passes the complete-spool
+check with no refusals. Against the stand-in week it develops 38 stories, not 19,
+while possible (entry-only) stories fall from 183 to 173. Almost all the gain is
+in two patterns. Reckoning ("It comes back") doubles from 15 to 30, which tracks
+the larger number of walking cells. The squeeze rises from 2 to 7, which tracks
+the real vendor services: markets in 8 cells. Publishing adds 6 % to the engine's
+run time.
+
 ### Default hooks and compatibility option
 
 Holotable's playback round accepts the content hooks and multiline detail.

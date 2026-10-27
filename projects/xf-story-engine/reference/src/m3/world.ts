@@ -2,7 +2,7 @@
 // name (the world seed) and the options, and nothing here reads a clock or a random source of its own.
 //
 // The district is S1's Kabuki slice: the game's real figures for the district (entry quantity 2,964, the gang counts) over
-// a generated stand-in graph, until the real world index is built (SPEC-NOTES, S1 3.2).
+// a generated stand-in graph by default. An optional imported index supplies real geometry and W1 place data.
 
 import { H, s } from '../id.ts';
 import { Layer3 } from '../procedural/layer3.ts';
@@ -34,7 +34,7 @@ export interface WorldOpts {
   /** Changes to S1's tunables for the run (recorded by name in the transcript). */
   s1?: (d: S1Data) => void;
   l3Data?: Layer3Data;
-  /** Optional fixture index; the evaluation harness defaults to the Kabuki slice. */
+  /** Optional fixture or imported index; the evaluation harness defaults to the Kabuki slice. */
   index?: WorldIndex;
 }
 

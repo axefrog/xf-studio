@@ -12,13 +12,13 @@ import type { StoryState } from './driver.ts';
 const none = (): ReplayLine[] => [];
 
 /** The stalls' view of V formed by acts: rescues in a public place make friends, harm to bystanders makes wary stalls. */
-function acts(kind: 'rescue' | 'harm', count: number): (v: string) => ReplayLine[] {
-  return (v) => {
+function acts(kind: 'rescue' | 'harm', count: number): StoryState['history'] {
+  return (v, cell = 'g1') => {
     const out: ReplayLine[] = [{ t: 1, op: 'person', key: 'bystander', slots: { affiliation: 'civilian', alive: 'yes' } }];
     for (let i = 0; i < count; i++) {
       out.push(kind === 'rescue'
-        ? { t: 700 + i * 600, op: 'event', kind: 'accident', place: 'g1', participants: [{ who: v, role: 'actor' }, { who: 'bystander', role: 'victim' }], effects: [{ on: 'bystander', effect: 'rescue' }], witnesses: 8 }
-        : { t: 700 + i * 600, op: 'event', kind: 'assault', place: 'g1', participants: [{ who: v, role: 'aggressor' }, { who: 'bystander', role: 'victim' }], effects: [{ on: 'bystander', effect: 'harm' }], witnesses: 8 });
+        ? { t: 700 + i * 600, op: 'event', kind: 'accident', place: cell, participants: [{ who: v, role: 'actor' }, { who: 'bystander', role: 'victim' }], effects: [{ on: 'bystander', effect: 'rescue' }], witnesses: 8 }
+        : { t: 700 + i * 600, op: 'event', kind: 'assault', place: cell, participants: [{ who: v, role: 'aggressor' }, { who: 'bystander', role: 'victim' }], effects: [{ on: 'bystander', effect: 'harm' }], witnesses: 8 });
     }
     return out;
   };

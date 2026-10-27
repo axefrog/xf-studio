@@ -113,4 +113,4 @@ test('developed plus possible conserves every live instance throughout the compl
     samples++;
   } });
   expect(samples).toBeGreaterThan(1000);
-}, 30000);
+}, 120000); // a full simulated week; the limit guards against hangs, not speed

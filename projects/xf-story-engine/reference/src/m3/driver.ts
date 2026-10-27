@@ -15,6 +15,7 @@ import type { ReplayLine } from '../sim/port.ts';
 import { clockOf } from '../sim/week.ts';
 import { MAIN_STORY_FACTS } from './facts.ts';
 import { type M3World, type WorldOpts, buildWorld } from './world.ts';
+import { importedWorld } from '../world/types.ts';
 
 export const WINDOW = 600;
 export const PLAY_PER_WINDOW = 100;
@@ -29,7 +30,7 @@ export interface StoryState {
   /** Changes to S1's tunables: a name for each, applied in order. */
   street: Array<{ name: string; apply: (d: import('../sim/data.ts').S1Data) => void }>;
   /** What V did before the run, as replay lines (times are game seconds from the start). */
-  history: (key: string) => ReplayLine[];
+  history: (key: string, cell?: string) => ReplayLine[];
 }
 
 export interface DeliveryRecord {
@@ -103,13 +104,18 @@ export const density = (k: number): { name: string; apply: (d: import('../sim/da
 const WALK = ['g1', 'g2', 'g3', 'g4', 'g6', 'g7', 'g8', 'g9', 'g11'];
 
 /** The block V stands in during window `w`: the keyed draw of `Run.step`, recomputed (a pure function of the run's name and the window). */
-export const walkCellAt = (name: string, w: number): string => WALK[Math.floor(rand(hs('m3-walk'), hs(name), hi(Math.floor(w / 6))) * WALK.length)]!;
+export const walkCellAt = (name: string, w: number, cells: readonly string[] = WALK): string => {
+  if (!cells.length) throw Error('M3 walking needs at least one grid cell');
+  return cells[Math.floor(rand(hs('m3-walk'), hs(name), hi(Math.floor(w / 6))) * cells.length)]!;
+};
 
 export class Run {
   readonly w: M3World;
   windowNo = 0;
   play = 0;
   readonly deliveries: DeliveryRecord[] = [];
+  /** Imported indexes use their grid order; fixtures retain their original route. */
+  readonly walkCells: readonly string[];
   private seen = new Set<Id>();
   private told = new Set<Id>();
   /** How many incidents V was told of (the `witness` option). */
@@ -118,11 +124,14 @@ export class Run {
 
   constructor(readonly opts: WorldOpts, readonly state: StoryState, readonly policy: Policy = policies.decline!, readonly extra: RunExtra = {}) {
     this.w = buildWorld({ ...opts, s1: (d) => { opts.s1?.(d); for (const s of state.street) s.apply(d); } });
+    const imported = !!importedWorld(this.w.sim.w.index);
+    this.walkCells = imported ? this.w.sim.w.districts.flatMap(d => d.cellIds).filter(id => this.w.sim.w.index.cells[id]?.kind === 'grid') : WALK;
+    if (!this.walkCells.length) throw Error('M3 walking needs at least one grid cell');
     this.settle();
     // the game's facts at the start: every fact of the table has a reading (a fact with none is `maybe`)
     const lines: ReplayLine[] = MAIN_STORY_FACTS.map((f) => ({ t: 1, op: 'fact' as const, name: f.name, value: state.facts[f.name] ?? 0 }));
     for (const name of Object.keys(state.facts)) if (!MAIN_STORY_FACTS.some((f) => f.name === name)) throw new Error(`the story state names a fact that is not in the table: ${name}`);
-    this.w.replay.submit([...lines, ...state.history('v')]);
+    this.w.replay.submit([...lines, ...state.history('v', imported ? this.walkCells[0] : undefined)]);
     this.w.l2.arbiter.session = 'normal';
   }
 
@@ -135,9 +144,10 @@ export class Run {
   step(): void {
     // V walks the district: a new block every game hour, chosen by a keyed draw, so that the fine tier opens around V
     if (this.extra.walk && this.windowNo % 6 === 0) {
-      const cell = walkCellAt(this.opts.name, this.windowNo);
+      const cell = walkCellAt(this.opts.name, this.windowNo, this.walkCells);
+      const district = this.w.sim.w.index.cells[this.w.replay.place(cell)]!.district;
       const t = this.windowNo * WINDOW;
-      this.w.replay.submit([{ t: t + 1, op: 'reading', node: 'v', slot: 'district', value: 'wat_kab' }, { t: t + 2, op: 'reading', node: 'v', slot: 'cell', value: cell }]);
+      this.w.replay.submit([{ t: t + 1, op: 'reading', node: 'v', slot: 'district', value: district }, { t: t + 2, op: 'reading', node: 'v', slot: 'cell', value: cell }]);
     }
     this.windowNo++;
     this.w.sim.k.settle({ to: this.windowNo * WINDOW });
@@ -161,7 +171,8 @@ export class Run {
       if (e.complete || e.stages.length !== 1 || !e.pattern.startsWith('xf.m3b:') || this.told.has(e.id)) continue;
       const ev = l3.kv.event(e.stages[0]!.event);
       if (!ev || ev.place === undefined) continue;
-      const here = names[walkCellAt(this.opts.name, Math.floor(ev.time / WINDOW))]!;
+      const name = walkCellAt(this.opts.name, Math.floor(ev.time / WINDOW), this.walkCells);
+      const here = names[name] ?? name;
       if (here !== ev.place && !this.w.sim.w.index.cells[here]!.adj1.includes(ev.place)) continue;
       const teller = ev.participants.find((p) => p.role === 'victim') ?? ev.participants.find((p) => p.role === 'participant');
       if (!teller) continue;

@@ -104,7 +104,10 @@ It publishes existing simulation, seeding and procedural state as full-content
 diagnostic layers on one standalone game-time timeline. The SF3-60-style Kabuki
 week stays as a test fixture; the [real-week CLI](reference/HOLOTABLE.md#real-week)
 publishes an M3 run-3 week after proving its record matches the archive, with bounds
-from the actual simulation clock. Observation never opens detail or evaluates
+from the actual simulation clock. Its `--index` option starts a new **Kabuki week
+(real streets)** on the
+imported index, using the same engine configuration and requiring identical
+observer-on/off run records before promoting the spool. Observation never opens detail or evaluates
 a draw; tests compare records, digests, draw transcripts and saves with and without
 it. Real district ids come from Holotable's world pack; synthetic cells use an
 explicitly labelled schematic grid within the real bounds. This is an offline
