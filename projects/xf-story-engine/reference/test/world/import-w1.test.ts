@@ -1,15 +1,15 @@
 import { expect, test } from 'bun:test';
 import { readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import packFixture from './fixtures/world-pack.json';
 import contentFixture from './fixtures/content.json';
 import { importW1, stableJson } from '../../src/world/import-w1.ts';
-import { area, cellAt, clip, contains, footprint } from '../../src/world/geometry.ts';
+import { area, cellAt, clip, contains, footprint, overlapsXY, squaredDistance } from '../../src/world/geometry.ts';
 import type { W1Pack, W1Content } from '../../src/world/types.ts';
 import { makeKabukiSlice } from '../../src/sim/slices.ts';
 import { memberId } from '../../src/id.ts';
-import { SERVICE_KINDS, COVERAGE_KINDS } from '../../src/world/poi-kinds.ts';
+import { SERVICE_KINDS, COVERAGE_KINDS, VENDOR_SERVICE_TYPES } from '../../src/world/poi-kinds.ts';
 import { importedLayout } from '../../src/holotable/layout.ts';
 import { HolotableObserver } from '../../src/holotable/observe.ts';
 import { Sim } from '../../src/sim/sim.ts';
@@ -18,6 +18,16 @@ import { runImportCli } from '../../tools/world/import-w1.ts';
 
 const fixture = () => ({ pack: structuredClone(packFixture) as W1Pack, content: structuredClone(contentFixture) as unknown as W1Content });
 const build = () => { const { pack, content } = fixture(); return importW1(pack, content); };
+const clippedArea = (...args: Parameters<typeof clip>) => clip(...args).reduce((n,p)=>n+area(p),0);
+
+test('synthetic import bytes and SHA-256 match the cross-platform golden', () => {
+  const bytes = Buffer.from(stableJson(build()));
+  const golden = readFileSync(resolve(import.meta.dir,'fixtures/import.golden.json'));
+  const sha = readFileSync(resolve(import.meta.dir,'fixtures/import.golden.sha256'),'utf8').trim();
+  expect(bytes.equals(golden)).toBe(true);
+  expect(createHash('sha256').update(bytes).digest('hex')).toBe(sha);
+  expect(createHash('sha256').update(golden).digest('hex')).toBe(sha);
+});
 
 test('deterministic bytes, hashes, ordering, input immutability and JSON round trip', () => {
   const { pack, content } = fixture(), before = stableJson({ pack, content }), baseline = stableJson(makeKabukiSlice());
@@ -58,7 +68,7 @@ test('origin anchoring, canonical venue-first order and ordinal member identitie
   const b = importW1(pack, content);
   for (const id of d.cellIds) expect(b.index.worldImport.geometry[id]).toEqual(a.index.worldImport.geometry[id]);
   // Negative coordinates are floor-divided from origin, independent of bounds.
-  expect(area(clip([[-210,-210],[10,-210],[10,10],[-210,10]], -200,-200,0,0))).toBe(40000);
+  expect(clippedArea([[-210,-210],[10,-210],[10,10],[-210,10]], -200,-200,0,0)).toBe(40000);
 });
 
 test('venue beats block with closed Z endpoints; every volume survives layout', () => {
@@ -89,12 +99,84 @@ test('venue footprint unions overlapping and crossing polygons without double co
 test('clipping conserves a concave outline and retains a tiny positive bin', () => {
   const p: [number,number][] = [[0,0],[400,0],[400,50],[50,50],[50,400],[0,400]];
   let sum = 0;
-  for (let x = 0; x < 2; x++) for (let y = 0; y < 2; y++) sum += area(clip(p, x*200,y*200,(x+1)*200,(y+1)*200));
+  for (let x = 0; x < 2; x++) for (let y = 0; y < 2; y++) sum += clippedArea(p, x*200,y*200,(x+1)*200,(y+1)*200);
   expect(sum).toBe(area(p));
   const clipped = clip(p,0,0,200,200);
-  expect(contains({poly: clipped,zlo:0,zhi:10},[150,150,5])).toBe(false);
+  expect(clipped.some((poly)=>contains({poly,zlo:0,zhi:10},[150,150,5]))).toBe(false);
   const { pack, content } = fixture(); pack.areas[0].poly = [[0,0],[400.001,0],[400.001,400],[0,400]];
   expect(importW1(pack, content).report.cells.filter((c) => c.key.startsWith('grid:2,')).length).toBe(2);
+});
+
+test('disconnected clipped components never bridge exterior gaps on any cut direction', () => {
+  const shape: [number,number][] = [[0,0],[200,0],[200,200],[150,200],[150,50],[50,50],[50,200],[0,200]];
+  for (let rotation=0;rotation<4;rotation++) for (const reverse of [false,true]) {
+    const rotate = (p:[number,number]):[number,number] => {
+      let [x,y]=p;
+      for(let r=0;r<rotation;r++) [x,y]=[y,200-x];
+      return [x,y];
+    };
+    const corners=([[0,100],[200,100],[200,200],[0,200]] as [number,number][]).map(rotate);
+    const polygon=shape.map(rotate); if(reverse) polygon.reverse();
+    const pieces=clip(polygon,Math.min(...corners.map((p)=>p[0])),Math.min(...corners.map((p)=>p[1])),Math.max(...corners.map((p)=>p[0])),Math.max(...corners.map((p)=>p[1])));
+    expect(pieces).toHaveLength(2);
+    expect(pieces.reduce((n,p)=>n+area(p),0)).toBe(10000);
+    for(const x of [51,75,100,125,149]) for(const y of [100,125,199]) {
+      const [px,py]=rotate([x,y]);
+      expect(pieces.some((poly)=>contains({poly,zlo:0,zhi:10},[px,py,5]))).toBe(false);
+    }
+    for(const x of [0,25,50,150,175,200]) {
+      const [px,py]=rotate([x,100]);
+      expect(pieces.some((poly)=>contains({poly,zlo:0,zhi:10},[px,py,5]))).toBe(true);
+    }
+  }
+  const {pack,content}=fixture();
+  pack.areas[0].poly=[[0,-100],[200,-100],[200,200],[150,200],[150,-50],[50,-50],[50,200],[0,200]];
+  const {index}=importW1(pack,content), geometry=index.worldImport.geometry;
+  const id=Object.keys(geometry).find((id)=>geometry[id].key==='grid:0,0')!;
+  expect(geometry[id].volumes).toHaveLength(2);
+  expect(importedLayout(index)!.extraVolumes!.get(id)).toHaveLength(1);
+  for (const x of [51,100,149]) expect(cellAt(geometry,[x,0,0])).toBeUndefined();
+});
+
+test('L-shaped district venues intersect clipped geometry; phantom overlap cannot select a host', () => {
+  const {pack,content}=fixture();
+  pack.areas[0].poly=[[0,0],[400,0],[400,50],[50,50],[50,400],[0,400]];
+  for(const venue of pack.areas.slice(1)) venue.poly=[[40,100],[390,100],[390,110],[40,110]];
+  const {index}=importW1(pack,content), geometry=index.worldImport.geometry;
+  const ids=Object.fromEntries(Object.entries(geometry).map(([id,g])=>[g.key,id]));
+  const venue=index.cells[ids['venue:Districts.JudysApartment']];
+  expect(venue.adj1).toEqual([ids['grid:0,0']]);
+  expect(venue.host).toBe(ids['grid:0,0']);
+  expect(index.cells[ids['grid:1,0']].adj1).not.toContain(venue.id);
+  expect(overlapsXY(geometry[venue.id].volumes[0],geometry[ids['grid:1,0']].volumes[0])).toBe(false);
+});
+
+test('one declared template per kind, POI vendor markets and zero uncalibrated coverage', () => {
+  const {index,report}=build(), base=makeKabukiSlice();
+  expect(report.templates.block.name).toBe('g4'); expect(report.templates.venue.name).toBe('v5');
+  const ordinary=Object.values(base.cells).filter((c)=>c.kind==='grid' && c.public==='public' && !c.services.length && !c.marketCell && Object.values(c.gameCoverage).every((v)=>v===0)).sort((a,b)=>a.headShare-b.headShare);
+  expect(ordinary[Math.floor(ordinary.length/2)].id).toBe(report.templates.block.id);
+  expect(base.cells[report.templates.venue.id].marketCell).toBe(false);
+  for(const c of Object.values(index.cells)) {
+    const t=base.cells[c.kind==='grid'?report.templates.block.id:report.templates.venue.id];
+    expect({public:c.public,A:c.A,F:c.F,pairs:c.pairs}).toEqual({public:t.public,A:t.A,F:t.F,pairs:t.pairs});
+    expect(Object.values(c.gameCoverage).every((v)=>v===0)).toBe(true);
+    expect(c.marketCell).toBe(c.services.some((s)=>VENDOR_SERVICE_TYPES.has(s.type)));
+  }
+  expect(Object.values(index.cells).filter((c)=>c.marketCell)).toHaveLength(1);
+  expect(squaredDistance([1,2,3],[4,6,15])).toBe(169);
+});
+
+test('squared-distance selection breaks equal service and host distances by id', () => {
+  const {pack,content}=fixture();
+  content.pois=[{id:'z',kind:'Food vendor',at:[100,100,0]},{id:'a',kind:'Food vendor',at:[100,100,0]}];
+  const {index}=importW1(pack,content), geometry=index.worldImport.geometry;
+  const block=cellAt(geometry,[100,100,0])!;
+  expect(index.cells[block].services.map((s)=>s.poi)).toEqual(['a','z']);
+  const venue=Object.values(index.cells).find((c)=>c.kind==='venue')!;
+  const distances=venue.adj1.map((id)=>squaredDistance(geometry[id].centre,geometry[venue.id].centre));
+  expect(distances[0]).toBe(distances[1]);
+  expect(venue.host).toBe([...venue.adj1].sort()[0]);
 });
 
 test('population census, zero venue residents, affiliation normalization, floor and vehicle exclusion', () => {

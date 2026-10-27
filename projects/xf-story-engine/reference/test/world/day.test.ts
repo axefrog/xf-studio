@@ -12,7 +12,7 @@ import { H, s } from '../../src/id.ts';
 import { HolotableObserver } from '../../src/holotable/observe.ts';
 import { RunPublisher } from '../../tools/holotable/publish-run.ts';
 import { validateManifest, validateRecord } from '../../src/holotable/schema.ts';
-import { readable } from '../holotable/readability.test.ts';
+import { readable } from '../holotable/readability-oracle.ts';
 
 setDefaultTimeout(300_000);
 const scratch = resolve(import.meta.dir, '../../../../../.scratch-w1');

@@ -495,7 +495,13 @@ and [shadow host notes](../projects/xf-story-engine/reference/SHADOW.md).
 [world importer](../projects/xf-story-engine/reference/WORLD-IMPORT.md) clips an
 origin-anchored 200 m grid to Kabuki's actual outline/Z band: **25 blocks**, plus
 **three venue cells**, retaining all seven venue volumes. Their XY footprint
-unions total **4,228.52 m²**; stacked volumes are not counted twice. Venue
+unions total **4,228.52 m²**; stacked volumes are not counted twice. Clipping
+uses binary64 arithmetic for simple input rings without holes. Disconnected
+components remain separate polygons; artificial cut-line bridges are not used
+as membership boundaries. Gap regressions cover all four clipping directions,
+and a private real-input check rejects 14 exterior samples accepted by the prior
+implementation. These finite checks do not establish robustness for arbitrary
+self-intersecting outlines, holes or numerically degenerate inputs. Venue
 membership takes precedence and includes height. Geometric neighbours do not
 establish traversability. The observer emits the polygons, with extra zone items
 for additional volumes, rather than replacing them with bounding boxes. Existing

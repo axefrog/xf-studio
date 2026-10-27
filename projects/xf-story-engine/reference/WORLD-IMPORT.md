@@ -34,36 +34,36 @@ venue XY footprint unions total **4,228.52 m²**. The
 reported union counts stacked/overlapping venue footprints once. Population
 floor applies in six blocks. All 7,534 spots and 268 pins have a cell.
 
-| Cell | Area m² | Residents¹ | Spots | Services | Presence top three |
-|---|---:|---:|---:|---:|---|
-| Judy's Apartment | 269.3 | 0 | 45 | 1 | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
-| Lizzie's Bar | 1701.6 | 0 | 433 | 1 | civilian 74.1%, TheMox 22.2%, Arasaka 1.2% |
-| No-Tell Motel | 2257.6 | 0 | 28 | 0 | civilian 100.0% |
-| 4 (-7,4) | 2192.9 | 13 | 16 | 0 | civilian 100.0% |
-| 5 (-7,5) | 14362.8 | 88 | 230 | 0 | civilian 94.4%, Scavengers 3.4%, ncpd 2.2% |
-| 6 (-7,6) | 12082.2 | 74 | 136 | 0 | civilian 92.0%, TygerClaws 6.0%, Scavengers 2.0% |
-| 7 (-7,7) | 9801.6 | 60 | 157 | 0 | civilian 77.2%, TheMox 22.8% |
-| 8 (-7,8) | 7521.0 | 46 | 59 | 0 | civilian 83.0%, Militech 10.6%, TygerClaws 6.4% |
-| 9 (-7,9) | 14980.8 | 91 | 351 | 2 | civilian 87.6%, TygerClaws 8.7%, TraumaTeam 2.1% |
-| 10 (-7,10) | 16549.1 | 101 | 305 | 2 | civilian 89.5%, Animals 4.7%, ncpd 3.5% |
-| 11 (-6,4) | 7935.2 | 48 | 0 | 0 | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
-| 12 (-6,5) | 38464.6 | 235 | 318 | 0 | civilian 84.4%, Militech 5.4%, TygerClaws 4.8% |
-| 13 (-6,6) | 40000.0 | 244 | 748 | 1 | civilian 68.8%, TygerClaws 23.2%, ncpd 5.9% |
-| 14 (-6,7) | 40000.0 | 244 | 1195 | 4 | civilian 78.9%, TygerClaws 11.0%, Scavengers 3.7% |
-| 15 (-6,8) | 40000.0 | 244 | 1319 | 1 | civilian 91.5%, TygerClaws 4.4%, Militech 1.9% |
-| 16 (-6,9) | 40000.0 | 244 | 647 | 0 | civilian 71.8%, TygerClaws 23.8%, Scavengers 2.3% |
-| 17 (-6,10) | 37112.0 | 227 | 694 | 3 | civilian 72.9%, Scavengers 14.6%, TygerClaws 5.8% |
-| 18 (-6,11) | 235.7 | 1 | 0 | 0 | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
-| 19 (-5,5) | 1751.2 | 11 | 0 | 0 | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
-| 20 (-5,6) | 8701.3 | 53 | 12 | 0 | TygerClaws 100.0% |
-| 21 (-5,7) | 20921.8 | 128 | 33 | 0 | civilian 53.8%, TygerClaws 38.5%, Militech 7.7% |
-| 22 (-5,8) | 39997.3 | 244 | 481 | 2 | civilian 69.0%, TygerClaws 19.5%, Animals 7.3% |
-| 23 (-5,9) | 39682.8 | 242 | 185 | 0 | civilian 60.2%, TygerClaws 25.4%, Animals 5.9% |
-| 24 (-5,10) | 35911.6 | 219 | 104 | 0 | civilian 66.7%, Scavengers 26.7%, Maelstrom 6.7% |
-| 25 (-5,11) | 4655.8 | 28 | 3 | 0 | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
-| 26 (-4,8) | 8473.9 | 52 | 2 | 0 | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
-| 27 (-4,9) | 3979.0 | 24 | 33 | 0 | Maelstrom 64.0%, civilian 20.0%, ncpd 12.0% |
-| 28 (-4,10) | 304.0 | 2 | 0 | 0 | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
+| Cell | Area m² | Residents¹ | Spots | Services | Market | Host | Presence top three |
+|---|---:|---:|---:|---:|---|---|---|
+| Judy's Apartment | 269.3 | 0 | 45 | 1 | no | 23 | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
+| Lizzie's Bar | 1701.6 | 0 | 433 | 1 | yes | 7 | civilian 74.1%, TheMox 22.2%, Arasaka 1.2% |
+| No-Tell Motel | 2257.6 | 0 | 28 | 0 | no | 6 | civilian 100.0% |
+| 4 (-7,4) | 2192.9 | 13 | 16 | 0 | no | — | civilian 100.0% |
+| 5 (-7,5) | 14362.8 | 88 | 230 | 0 | no | — | civilian 94.4%, Scavengers 3.4%, ncpd 2.2% |
+| 6 (-7,6) | 12082.2 | 74 | 136 | 0 | no | — | civilian 92.0%, TygerClaws 6.0%, Scavengers 2.0% |
+| 7 (-7,7) | 9801.6 | 60 | 157 | 0 | no | — | civilian 77.2%, TheMox 22.8% |
+| 8 (-7,8) | 7521.0 | 46 | 59 | 0 | no | — | civilian 83.0%, Militech 10.6%, TygerClaws 6.4% |
+| 9 (-7,9) | 14980.8 | 91 | 351 | 2 | yes | — | civilian 87.6%, TygerClaws 8.7%, TraumaTeam 2.1% |
+| 10 (-7,10) | 16549.1 | 101 | 305 | 2 | yes | — | civilian 89.5%, Animals 4.7%, ncpd 3.5% |
+| 11 (-6,4) | 7935.2 | 48 | 0 | 0 | no | — | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
+| 12 (-6,5) | 38464.6 | 235 | 318 | 0 | no | — | civilian 84.4%, Militech 5.4%, TygerClaws 4.8% |
+| 13 (-6,6) | 40000.0 | 244 | 748 | 1 | yes | — | civilian 68.8%, TygerClaws 23.2%, ncpd 5.9% |
+| 14 (-6,7) | 40000.0 | 244 | 1195 | 4 | yes | — | civilian 78.9%, TygerClaws 11.0%, Scavengers 3.7% |
+| 15 (-6,8) | 40000.0 | 244 | 1319 | 1 | yes | — | civilian 91.5%, TygerClaws 4.4%, Militech 1.9% |
+| 16 (-6,9) | 40000.0 | 244 | 647 | 0 | no | — | civilian 71.8%, TygerClaws 23.8%, Scavengers 2.3% |
+| 17 (-6,10) | 37112.0 | 227 | 694 | 3 | yes | — | civilian 72.9%, Scavengers 14.6%, TygerClaws 5.8% |
+| 18 (-6,11) | 235.7 | 1 | 0 | 0 | no | — | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
+| 19 (-5,5) | 1751.2 | 11 | 0 | 0 | no | — | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
+| 20 (-5,6) | 8701.3 | 53 | 12 | 0 | no | — | TygerClaws 100.0% |
+| 21 (-5,7) | 20921.8 | 128 | 33 | 0 | no | — | civilian 53.8%, TygerClaws 38.5%, Militech 7.7% |
+| 22 (-5,8) | 39997.3 | 244 | 481 | 2 | yes | — | civilian 69.0%, TygerClaws 19.5%, Animals 7.3% |
+| 23 (-5,9) | 39682.8 | 242 | 185 | 0 | no | — | civilian 60.2%, TygerClaws 25.4%, Animals 5.9% |
+| 24 (-5,10) | 35911.6 | 219 | 104 | 0 | no | — | civilian 66.7%, Scavengers 26.7%, Maelstrom 6.7% |
+| 25 (-5,11) | 4655.8 | 28 | 3 | 0 | no | — | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
+| 26 (-4,8) | 8473.9 | 52 | 2 | 0 | no | — | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
+| 27 (-4,9) | 3979.0 | 24 | 33 | 0 | no | — | Maelstrom 64.0%, civilian 20.0%, ncpd 12.0% |
+| 28 (-4,10) | 304.0 | 2 | 0 | 0 | no | — | civilian 79.0%, TygerClaws 6.9%, Others 4.7% |
 
 ¹ Residents here means S1's rounded cell headcount, not a measured live count or
 an enumeration of generated household members. Area allocation targets 2,964;
@@ -117,19 +117,19 @@ person, 99 vehicle, ten unsupported/unresolved. Entries total 1,958: 1,843 perso
 
 ## Assumptions and implementation choices
 
-- **derived — geometry:** Origin-anchored 200 m clipped blocks; venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.
-- **derived — neighbours:** Grid edge neighbours, diagonal second neighbours, venue/retained-grid-bin XY overlap. Geometry only; traversability unknown. Venue host is the nearest overlapping block centre.
+- **derived — geometry:** Origin-anchored 200 m clipped blocks with disconnected components stored separately; binary64 coordinates, simple rings without holes. Venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.
+- **derived — neighbours:** Grid edge neighbours, diagonal second neighbours; venues intersect actual clipped block polygons in XY. Geometry only; traversability unknown. Venue host is the nearest genuinely overlapping block centre by fixed-order squared distance, then cell id.
 - **derived — headShare:** Clipped block area / district area; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.
 - **derived — presence/pop:** One vote per distinct person-entry/spot link across phases, retaining cross-community tuples. Affiliation from records, civilian/Unaffiliated merged, NCPD normalized. Exclude vehicle/other/unresolved affiliation. Flat periods (06:00, 12:00, 18:00, 00:00): schedule unknown. Pop distributes the census scale over all cells by votes; empty blocks get 1% of mean block votes (mean 1 if all empty). Empty cells use census affiliation shares. No simultaneous occupancy claim.
-- **derived — services:** One plain-kind table; nearest 15 in 3D to footprint-weighted cell centre, ties by POI id. Unknown kinds counted, never guessed. Evidence pins never become services.
+- **derived — services:** One plain-kind table; nearest 15 by fixed-order squared 3D distance to footprint-weighted cell centre, ties by POI id. Market only when a retained POI service has a declared retail vendor type. Unknown kinds counted, never guessed. Evidence pins never become services.
 - **derived — binding:** All linked entry types retained; exact (community id, entry name, spot id), deduplicated only across phases of the same entry. Registry ids and ordinals unavailable; no runtime binding. Fallback ids counted by colon format.
 - **derived — coverage evidence:** Static counts by original POI kind only, separate from S1 fractional coverage. Calibration remains open.
 - **stand-in — census/recipe:** 2964, rho, age, role, income, affiliation, household, tenure and wealth marginals, trust and price anchor unchanged. W1 entry counts compare authored types, not quantities.
-- **stand-in — opportunity/security:** Copy public, marketCell, A, F, pairs and calibrated gameCoverage unchanged from existing grid/venue templates cyclically in each kindâ€™s cell order. Re-sum district staticTotalA; stub and rest totals unchanged. No claim of measured police/security, propensity, pair hostility or opportunity. S1Data defaults unchanged.
+- **stand-in — opportunity/security:** One named template per kind: block g4, venue v5 (see templates selection rules). Public, A, F and pairs are identical within each kind. Coverage reductions are zero until calibrated; markets come only from POI vendor services. Re-sum district staticTotalA; stub and rest totals unchanged. No claim of measured police/security, propensity, pair hostility or opportunity. S1Data defaults unchanged.
 - **derived — future W1:** Quantities and period names await a versioned W1 revision. No census flag or schedule interpretation until that contract exists; records/spawners do not supply a census.
 
 The POI-kind table is the only service classifier. Nearest-service distance is
-3D to the area-weighted centre of a cell's volumes, with POI-ID ties. Overlapping
+fixed-order squared XYZ distance to the area-weighted centre of a cell's volumes, with POI-ID ties. Overlapping
 venues choose ascending place ID; closed grid-boundary ties use cell order.
 Additional venue volumes are separate zone items linked by their cell citation;
 each cell's primary item retains its ordinal ID. Venue names use explicit display
@@ -137,32 +137,51 @@ labels for the three known place IDs (the pack stores unresolved localization
 keys); this does not alter geometric membership.
 
 `gameCoverageEvidence` is a static count by raw POI kind. It never becomes S1's
-fractional `gameCoverage`; calibration remains open in [SPEC-NOTES](SPEC-NOTES.md#s1-world-import-v0-28-october-2026).
+fractional `gameCoverage`, which is zero until calibrated; calibration remains open in [SPEC-NOTES](SPEC-NOTES.md#s1-world-import-v0-28-october-2026).
 Quantity/period-name handling and the optional W1 census await a versioned export
 contract. There is no runtime body binding.
 
 ## Verification and responsiveness evidence
 
-- `bun run check`: pass. Targeted importer, day, Holotable, shadow, public API,
-  digests and S1/S3 transcript tests: **79 pass, four expected skips, zero fail**.
-- The real imported world runs **86,400 seconds / 144 windows**, with **145
-  observer samples**; every sample preserves a complete captured mutable-engine
-  image. Its 12-layer spool has **35 place items** (28 cells, three districts,
-  four additional venue volumes), **134 item records** across layers, zero text
-  truncations, and passes the independent internals checker and Holotable
-  consumer validator with no refusals. No fixtures or golden files were edited.
-- Existing frozen digests: v3 `746601727380a3fdff647f873c91c971`, v4
-  `8fce55b19462a1e02f03ca5336bd8c16`; both unchanged. The full suite is deferred
-  to the coordinator as requested.
-- One guarded CLI import took **213 ms** inside the CLI (file reads, validation,
-  geometry/joins, hashing and writes; startup excluded). The final real day took
-  **18.74 s**, including observation and spool validation,
-  with a **1.5 GB** peak for the whole targeted test job. Earlier real-day sample:
-  22.76 s. Shared-machine samples establish no speed trend. These are offline
-  authoring/simulation measurements, not live rendering or game latency budgets.
-- Private index, report and spools remain uncommitted under `local/` and ignored
-  `.scratch-w1/`. The coordinator owns scratch cleanup. No retained output for
-  this task exceeds 5 GB.
+- Post-review targeted importer, day, Holotable/readability, public API, frozen
+  digest and S1/S3 transcript tests: **56 pass, four expected skips, zero fail**.
+  `bun run check`, link/privacy scans and whitespace checks pass. The coordinator
+  reported the preceding full suite passed 1,853 tests; the post-fix full suite
+  remains the coordinator's check.
+- The imported real world runs **86,400 seconds / 144 windows**, with **145
+  observer samples** preserving the captured mutable engine image. Its 13-layer
+  spool contains **35 place items** (28 cells, three districts, four additional
+  venue volumes), **133 item records**, zero text truncations,
+  and passes the independent internals oracle and Holotable consumer validator.
+  The oracle is shared through a helper that registers no tests.
+- Disconnected-component gap tests exercise all four clipping directions and
+  both ring windings, including multiple components owned by one imported cell.
+  The L-shaped-district regression excludes a false venue neighbour/host.
+  A private real-input check rejects **14 exterior gap samples** previously
+  accepted on artificial boundary edges. Polygon calculations use binary64
+  coordinates and simple rings without holes; these are finite regression
+  checks, not a proof for arbitrary degenerate or self-intersecting geometry.
+- Stand-in priors now use **g4** for every block and **v5** for every venue,
+  with their IDs and selection rules in the report. There are **eight POI-derived
+  market cells**; only Lizzie's Bar among the venues is a market. All fractional
+  coverage reductions are zero, with 247 evidence pins retained separately.
+- The complete synthetic import has a byte golden and SHA-256 at
+  [import.golden.json](test/world/fixtures/import.golden.json) and
+  [import.golden.sha256](test/world/fixtures/import.golden.sha256). The JSON is
+  53,449 UTF-8 bytes, SHA-256
+  `82c20534ff2ed3ac1485b15fafac7e7a059ffc4f297d986f3cfd7635cf713296`.
+  Local fixture attributes preserve those bytes on Windows/Linux checkouts;
+  Linux CI will exercise the same byte/hash test. Golden generation ran on Windows.
+- Frozen digests remain v3 `746601727380a3fdff647f873c91c971`, v4
+  `8fce55b19462a1e02f03ca5336bd8c16`. Existing fixtures and archived runs remain
+  unchanged. Only the newly requested synthetic golden is added.
+- The corrected guarded CLI import took **162 ms** inside the CLI (startup
+  excluded). The real day took **18.74 s**, including
+  observation/spool validation; the whole targeted job peaked at **1.4 GB**.
+  Shared-machine samples do not establish a speed trend or live game latency.
+- The private index/report remain under `local/`. `.scratch-w1/` is deliberately
+  untracked, not ignored: **never stage it**. The coordinator owns scratch
+  cleanup. This task retains no output over 5 GB.
 
 Knowledge used: [Places](../../../knowledge/places.md),
 [Population and affiliations](../../../knowledge/population-and-affiliations.md),

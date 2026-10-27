@@ -2451,8 +2451,8 @@ only supplied data; no kernel recovery or identity materialisation is involved.
 
 **Open calibration:** `worldImport.gameCoverageEvidence` counts POIs by their
 original kind. It is not a fraction and never replaces `CellIndex.gameCoverage`.
-S1 retains the selected stand-in template's existing coverage multiplier until
-an evidence-to-rate calibration is decided.
+S1 applies no coverage reduction (all factors zero) until an evidence-to-rate
+calibration is decided.
 
 Origin anchoring preserves a block's `(gx, gy)` key and geometry. The brief also
 requires venue-first, then `(gx, gy)` ordered **ordinal** member IDs. Adding an
@@ -2461,12 +2461,16 @@ not promise otherwise. The report declares a new lineage for changed inputs,
 and stable keys support later mapping. The anchoring test adds higher-sorting
 bins and checks unchanged keys, geometry and IDs of earlier bins.
 
-Unsupported fields copy grid/venue stand-in templates cyclically within each
-kind, unchanged, with every source template ID in the private report. This
-includes opportunity, propensity, gang pairs, public/market flags and coverage;
-district totals are re-summed from those opportunities. Stub/rest totals and
-S1Data defaults remain unchanged. Measured presence does not recalibrate these
-priors. The residential scale is 2,964; S1's unchanged per-cell rounding yields
+Unsupported fields use one declared template per kind, identified by name and
+ID with its selection rule in the private report: block `g4`, the median
+headShare among public, service-free, non-market, uncovered residential cells;
+venue `v5`, the first non-market venue. Opportunity, propensity, gang pairs and
+public flags are identical within each kind. Markets require a retained POI
+service in the declared retail vendor set; they are never inherited from a
+template. Coverage reductions are zero. District totals are re-summed from the
+shared opportunities. Stub/rest totals and S1Data defaults remain unchanged.
+Measured presence does not recalibrate these priors. The residential scale is
+2,964; S1's unchanged per-cell rounding yields
 2,963 headcount units on real Kabuki. Household draws remain estimates, not an
 exact population enumeration.
 
@@ -2477,6 +2481,15 @@ census affiliation shares as the explicit fallback. Population distributes the
 census scale over these links and floors, including venue presence. Quantities,
 period names, registry IDs and binding ordinals await a versioned W1 contract;
 runtime body binding and an opt-in W1 census remain deferred.
+
+Clipping retains disconnected components as separate simple polygons using
+binary64 arithmetic, rather than connecting them along an exterior cut line.
+Venue neighbours and hosts require positive-area intersection with actual
+clipped block polygons. Distance selection uses fixed-order squared XYZ
+distances and ID ties, without sqrt/hypot. A synthetic complete import golden
+is stored as exact bytes and SHA-256, with byte-preserving Git attributes for
+Windows/Linux CI. The readability oracle lives in a helper with no test
+registration side effects.
 
 The observer uses polygon `zone` anchors already supported by Holotable, one
 place item per retained volume (the first keeps the cell ID). Venue display names

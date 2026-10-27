@@ -2,8 +2,8 @@ import { hrec } from '../canon.ts';
 import { H, memberId, s } from '../id.ts';
 import { makeKabukiSlice, districtIdOf } from '../sim/slices.ts';
 import type { CellIndex } from '../sim/index-types.ts';
-import { area, cellAt, centre, clip, footprint } from './geometry.ts';
-import { COVERAGE_KINDS, OTHER_KINDS, PLACE_NAMES, SERVICE_KINDS } from './poi-kinds.ts';
+import { area, cellAt, centre, clip, footprint, overlapsXY, squaredDistance } from './geometry.ts';
+import { COVERAGE_KINDS, OTHER_KINDS, PLACE_NAMES, SERVICE_KINDS, VENDOR_SERVICE_TYPES } from './poi-kinds.ts';
 import type { CellGeometry, ImportedWorldIndex, W1Content, W1Pack, Volume } from './types.ts';
 
 const cmp = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
@@ -22,7 +22,9 @@ const affiliation = (r: W1Content['records'][string]): string | undefined => {
 export interface ImportReport {
   schema: 'xf.s1-world-import-report@1'; indexHash: string; lineage: string;
   cells: Array<{ id: string; key: string; name: string; area: number; residents: number; spots: number; personLinks: number;
-    presenceFloor: boolean; presenceTop3: Array<[string, number]>; services: number; droppedServices: number; coverage: Record<string, number>; standInTemplate: string }>;
+    presenceFloor: boolean; presenceTop3: Array<[string, number]>; services: number; market: boolean; host?: string; components: number;
+    droppedServices: number; coverage: Record<string, number>; standInTemplate: string }>;
+  templates: { block: { name: string; id: string; rule: string }; venue: { name: string; id: string; rule: string } };
   population: { census: number; roundedHeadcount: number; roundingDelta: number };
   affiliations: { census: Array<{ aff: string; q: number }>; personEntries: Record<string, number>; personSpotLinks: Record<string, number> };
   counts: Record<string, number>; unknownPoiKinds: Record<string, number>; assumptions: Array<{ source: 'stand-in' | 'derived'; field: string; rule: string }>;
@@ -93,9 +95,9 @@ export function importW1(pack: W1Pack, content: W1Content): { index: ImportedWor
   const gylo = Math.floor(Math.min(...ys) / 200), gyhi = Math.ceil(Math.max(...ys) / 200);
   if ((gxhi - gxlo) * (gyhi - gylo) > 10000) throw Error('Grid candidate cap exceeded');
   for (let gx = gxlo; gx < gxhi; gx++) for (let gy = gylo; gy < gyhi; gy++) {
-    const poly = clip(outline.poly, gx * 200, gy * 200, (gx + 1) * 200, (gy + 1) * 200), a = area(poly);
+    const polygons = clip(outline.poly, gx * 200, gy * 200, (gx + 1) * 200, (gy + 1) * 200), a = polygons.reduce((n,p)=>n+area(p),0);
     if (a <= 0) continue;
-    const volumes = [{ poly, zlo: outline.zlo, zhi: outline.zhi }];
+    const volumes = polygons.map((poly)=>({ poly, zlo: outline.zlo, zhi: outline.zhi }));
     shapes.push({ key: `grid:${gx},${gy}`, grid: [gx, gy], name: `Kabuki, block ${shapes.length + 1}`, volumes, area: a, centre: centre(volumes) });
   }
   if (shapes.length > 255) throw Error('S1 cell cap exceeded (255)');
@@ -169,18 +171,19 @@ export function importW1(pack: W1Pack, content: W1Content): { index: ImportedWor
     const cell = cellAt(geometry, poi.at);
     if (!cell) { counts.poisOutsideCells++; continue; }
     if (Object.hasOwn(SERVICE_KINDS, poi.kind)) {
-      candidates[cell].push({ id: poi.id, type: SERVICE_KINDS[poi.kind], distance: Math.hypot(...poi.at.map((x, i) => x - geometry[cell].centre[i])) });
+      candidates[cell].push({ id: poi.id, type: SERVICE_KINDS[poi.kind], distance: squaredDistance(poi.at,geometry[cell].centre) });
     } else if (COVERAGE_KINDS.has(poi.kind)) { count(coverage[cell], poi.kind); counts.coveragePois++; }
     else if (OTHER_KINDS.has(poi.kind)) counts.otherPois++;
     else { count(unknownPoiKinds, poi.kind); counts.unknownPois++; }
   }
-  const gridTemplates = district.cellIds.map((id) => base.cells[id]).filter((c) => c.kind === 'grid');
-  const venueTemplates = district.cellIds.map((id) => base.cells[id]).filter((c) => c.kind === 'venue');
+  // Declared shared priors, not a projection of the stand-in's arbitrary map.
+  const templates: ImportReport['templates'] = {
+    block: { name: 'g4', id: base.names!.g4, rule: 'Median headShare among public, service-free, non-market residential cells without coverage reductions.' },
+    venue: { name: 'v5', id: base.names!.v5, rule: 'First non-market stand-in venue in fixture order.' },
+  };
   const cells: ImportedWorldIndex['cells'] = {}, rows: ImportReport['cells'] = [];
-  let gridOrdinal = 0, venueOrdinal = 0;
   for (const id of cellIds) {
-    const g = geometry[id], templates = g.grid ? gridTemplates : venueTemplates;
-    const template = templates[(g.grid ? gridOrdinal++ : venueOrdinal++) % templates.length];
+    const g = geometry[id], template = base.cells[g.grid ? templates.block.id : templates.venue.id];
     const c: CellIndex = structuredClone(template);
     c.id = id; c.district = district.id; c.kind = g.grid ? 'grid' : 'venue'; delete c.host;
     c.headShare = g.grid ? g.area / districtArea : 0;
@@ -197,27 +200,30 @@ export function importW1(pack: W1Pack, content: W1Content): { index: ImportedWor
         if (dx + dy === 1) c.adj1.push(other);
         else if (dx === 1 && dy === 1) c.adj2.push(other);
       } else if (!!g.grid !== !!h.grid) {
-        const grid = (g.grid ?? h.grid)!, venue = g.place ? g : h;
-        if (venue.volumes.some((v) => area(clip(v.poly, grid[0] * 200, grid[1] * 200, (grid[0] + 1) * 200, (grid[1] + 1) * 200)) > 0)) c.adj1.push(other);
+        const block = g.grid ? g : h, venue = g.place ? g : h;
+        if (venue.volumes.some((v) => block.volumes.some((b)=>overlapsXY(v,b)))) c.adj1.push(other);
       }
     }
     c.adj1.sort(cmp); c.adj2.sort(cmp);
     if (g.place) {
       c.host = c.adj1.filter((other) => geometry[other].grid).sort((a, b) => {
-        const distance = (key: string) => Math.hypot(...geometry[key].centre.map((x, i) => x - g.centre[i]));
+        const distance = (key: string) => squaredDistance(geometry[key].centre,g.centre);
         return distance(a) - distance(b) || cmp(a, b);
       })[0];
       if (!c.host) throw Error(`Venue ${g.place} overlaps no retained block`);
     }
     const services = candidates[id].sort((a, b) => a.distance - b.distance || cmp(a.id, b.id));
     c.services = services.slice(0, 15).map((p, i) => ({ id: memberId(id, 'services', i), type: p.type, poi: p.id }));
+    c.marketCell = c.services.some((service)=>VENDOR_SERVICE_TYPES.has(service.type));
+    c.gameCoverage = Object.fromEntries(Object.keys(c.gameCoverage).map((kind)=>[kind,0]));
     const droppedServices = Math.max(0, services.length - 15);
     counts.servicesKept += c.services.length; counts.servicesDroppedCap += droppedServices;
     cells[id] = c;
     rows.push({ id, key: g.key, name: g.name, area: g.area, residents: Math.round(district.rho * district.entry.total * c.headShare),
       spots: spotCounts[id] ?? 0, personLinks: n, presenceFloor: !n && !!g.grid,
       presenceTop3: Object.entries(c.presence).sort(([a, x], [b, y]) => y - x || cmp(a, b)).slice(0, 3),
-      services: c.services.length, droppedServices, coverage: coverage[id], standInTemplate: template.id });
+      services: c.services.length, market: c.marketCell, ...(c.host ? {host:geometry[c.host].key}:{}), components:g.volumes.length,
+      droppedServices, coverage: coverage[id], standInTemplate: template.id });
   }
   district.cellIds = cellIds; district.polygon = structuredClone(outline.poly); district.zBand = [outline.zlo, outline.zhi];
   district.staticTotalA = Object.fromEntries(Object.keys(district.staticTotalA).map((kind) => [kind,
@@ -234,18 +240,18 @@ export function importW1(pack: W1Pack, content: W1Content): { index: ImportedWor
   const report: ImportReport = {
     schema: 'xf.s1-world-import-report@1', indexHash: index.hash,
     lineage: 'Different input content or geometry creates a new lineage. Origin-anchored grid keys are stable; ordinal member ids can shift when earlier cells are inserted.',
-    cells: rows, population: { census: district.entry.total, roundedHeadcount, roundingDelta: roundedHeadcount - district.entry.total },
+    cells: rows, templates, population: { census: district.entry.total, roundedHeadcount, roundingDelta: roundedHeadcount - district.entry.total },
     affiliations: { census: district.entry.byAff.map(({ aff, q }) => ({ aff, q })), personEntries, personSpotLinks }, counts, unknownPoiKinds,
     assumptions: [
-      { source: 'derived', field: 'geometry', rule: 'Origin-anchored 200 m clipped blocks; venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.' },
-      { source: 'derived', field: 'neighbours', rule: 'Grid edge neighbours, diagonal second neighbours, venue/retained-grid-bin XY overlap. Geometry only; traversability unknown. Venue host is the nearest overlapping block centre.' },
+      { source: 'derived', field: 'geometry', rule: 'Origin-anchored 200 m clipped blocks with disconnected components stored separately; binary64 coordinates, simple rings without holes. Venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.' },
+      { source: 'derived', field: 'neighbours', rule: 'Grid edge neighbours, diagonal second neighbours; venues intersect actual clipped block polygons in XY. Geometry only; traversability unknown. Venue host is the nearest genuinely overlapping block centre by fixed-order squared distance, then cell id.' },
       { source: 'derived', field: 'headShare', rule: 'Clipped block area / district area; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.' },
       { source: 'derived', field: 'presence/pop', rule: 'One vote per distinct person-entry/spot link across phases, retaining cross-community tuples. Affiliation from records, civilian/Unaffiliated merged, NCPD normalized. Exclude vehicle/other/unresolved affiliation. Flat periods (06:00, 12:00, 18:00, 00:00): schedule unknown. Pop distributes the census scale over all cells by votes; empty blocks get 1% of mean block votes (mean 1 if all empty). Empty cells use census affiliation shares. No simultaneous occupancy claim.' },
-      { source: 'derived', field: 'services', rule: 'One plain-kind table; nearest 15 in 3D to footprint-weighted cell centre, ties by POI id. Unknown kinds counted, never guessed. Evidence pins never become services.' },
+      { source: 'derived', field: 'services', rule: 'One plain-kind table; nearest 15 by fixed-order squared 3D distance to footprint-weighted cell centre, ties by POI id. Market only when a retained POI service has a declared retail vendor type. Unknown kinds counted, never guessed. Evidence pins never become services.' },
       { source: 'derived', field: 'binding', rule: 'All linked entry types retained; exact (community id, entry name, spot id), deduplicated only across phases of the same entry. Registry ids and ordinals unavailable; no runtime binding. Fallback ids counted by colon format.' },
       { source: 'derived', field: 'coverage evidence', rule: 'Static counts by original POI kind only, separate from S1 fractional coverage. Calibration remains open.' },
       { source: 'stand-in', field: 'census/recipe', rule: '2964, rho, age, role, income, affiliation, household, tenure and wealth marginals, trust and price anchor unchanged. W1 entry counts compare authored types, not quantities.' },
-      { source: 'stand-in', field: 'opportunity/security', rule: 'Copy public, marketCell, A, F, pairs and calibrated gameCoverage unchanged from existing grid/venue templates cyclically in each kind’s cell order. Re-sum district staticTotalA; stub and rest totals unchanged. No claim of measured police/security, propensity, pair hostility or opportunity. S1Data defaults unchanged.' },
+      { source: 'stand-in', field: 'opportunity/security', rule: 'One named template per kind: block g4, venue v5 (see templates selection rules). Public, A, F and pairs are identical within each kind. Coverage reductions are zero until calibrated; markets come only from POI vendor services. Re-sum district staticTotalA; stub and rest totals unchanged. No claim of measured police/security, propensity, pair hostility or opportunity. S1Data defaults unchanged.' },
       { source: 'derived', field: 'future W1', rule: 'Quantities and period names await a versioned W1 revision. No census flag or schedule interpretation until that contract exists; records/spawners do not supply a census.' },
     ],
   };

@@ -6,6 +6,8 @@ export const SERVICE_KINDS: Readonly<Record<string, string>> = Object.freeze({
   'Melee trainer': 'melee-trainer', 'Sex worker': 'sex-worker', 'Tech vendor': 'tech-vendor', Cyberware: 'cyberware',
   'Black market': 'black-market', Metro: 'metro',
 });
+/** Retail vendor services establish a market; clinics, transport and lodging do not. */
+export const VENDOR_SERVICE_TYPES = new Set(['vendor', 'gun-shop', 'clothing', 'bar', 'junk-shop', 'medicine', 'tech-vendor', 'cyberware', 'black-market']);
 export const COVERAGE_KINDS = new Set([
   'Quest', 'Quest marker', 'Quest giver', 'Gig', 'NCPD gig', 'Gang activity', 'Cyberpsycho', 'Bounty hunt', 'Bounty',
   'Theft', 'Retrieval', 'Sabotage', 'Client in distress', 'Courier activity', 'Activity', 'Race', 'Outpost',
