@@ -49,6 +49,10 @@ const until = <T>(p: Promise<T>, signal: AbortSignal) => new Promise<T>((resolve
 /** Holds sessions by folder (loaded once, shared by every requester) and the world pack. */
 export function createService(options: ServiceOptions) {
   const content = worldContentFiles(options.worldContentDir ?? join(dirname(options.worldPackPath), "world"), options.liveClock);
+  const renewContent=(p:Record<string,unknown>,signal:AbortSignal)=>{
+    signal.throwIfAborted();
+    if(typeof p.contentConsumer==="string"&&p.contentConsumer.length>0&&p.contentConsumer.length<=128)content.demand(p.contentConsumer,true);
+  };
   const layers = createLayerSpool(options.layersRoot ?? defaultOptions().layersRoot!);
   const solids = options.solidSource ?? createSolidWorkerPort(options.solidCacheDir ?? join(import.meta.dir, "..", "..", "..", "local", "holotable", "cache"));
   const sessions = new Map<string, Session>();
@@ -172,7 +176,7 @@ export function createService(options: ServiceOptions) {
     "layers.stop": p => { layers.stop(String(p.watch)); return { stopped: true }; },
     "layers.poll": (p, signal) => layerAnswer(p, signal, true),
     "layers.at": (p, signal) => layerAnswer(p, signal),
-    "live.status": (_p, signal) => live.status(signal),
+    "live.status": (p, signal) => { renewContent(p,signal);return live.status(signal); },
     "live.watch": () => live.watch(),
     "live.stop": p => { stopWorldWant(String(p.watch)); live.stop(String(p.watch)); return { stopped: true }; },
     "live.poll": p => live.poll(String(p.watch), p.since as LiveCursor | undefined, level(p.level)),
@@ -202,7 +206,7 @@ export function createService(options: ServiceOptions) {
       const path = pathFor(s, p.center), geometry = await solids.around(path, margin, signal);
       signal.throwIfAborted();
       // A child may have restarted since the explicit acquire; a region read restores its demand.
-      if(p.content===true&&typeof p.contentConsumer==="string"&&p.contentConsumer.length>0&&p.contentConsumer.length<=128)content.demand(p.contentConsumer,true);
+      if(p.content===true)renewContent(p,signal);
       return { ...(w ? region(w, boxOf(path), margin) : { schema: "xfh/world-pack-1", provenance: null, areas: [], cells: [] }), ...geometry, content: content.around(w ?? undefined, path, margin, p.content === true, signal) };
     },
     "session.report": async (p, signal) => {

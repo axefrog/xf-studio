@@ -95,6 +95,7 @@ export function worldContexts(options: {
       return {want:(position,moved)=>want(row,position,moved),contentAvailable:()=>row.world?.content?.available};
     },
     reset,
+    wantsContent:()=>contentWanted,
     /** Live observations refresh only regions still wanted; a pan already pending keeps its own debounce. */
     refresh(force=false) { demand();for (const row of rows) if (row.position && (force || !row.ctl)) want(row, row.position, false, true); },
     active:()=>rows.size>0,

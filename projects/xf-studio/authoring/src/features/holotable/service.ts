@@ -205,7 +205,8 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     if (!visible || !device.transport || signal.aborted) return;
     statusCtl?.abort(); const cancel = new AbortController(); statusCtl = cancel;
     try {
-      const live = await call<Omit<HoloLiveState, "following">>("live.status", {}, cancel.signal);
+      // The existing five-second status poll renews content only while a view still wants it.
+      const live = await call<Omit<HoloLiveState, "following">>("live.status", contexts.wantsContent()?{contentConsumer}:{}, cancel.signal);
       if (!cancel.signal.aborted && visible) set({ live: { ...state.live, available: live.available === true, recording: live.recording === true } });
     } catch { if (!cancel.signal.aborted && visible) set({ live: { ...state.live, available: false, recording: false } }); }
     finally { if (visible && !signal.aborted && !cancel.signal.aborted) stopStatusTimer = later(5000, () => { void liveStatus(); }); }

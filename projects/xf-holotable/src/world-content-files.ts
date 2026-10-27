@@ -7,15 +7,26 @@ import { CONTENT_FILE_CAP, WORLD_CONTENT_SLICES, type WorldContent } from "./wor
 import { validateContent } from "./world-content-validation.ts";
 
 export const CONTENT_IDLE_MS = 30_000;
-export function worldContentFiles(directory: string, clock = { later(ms:number, run:()=>void) { const timer=setTimeout(run,ms);timer.unref?.();return()=>clearTimeout(timer); } }) {
+export const CONTENT_RENEW_MS = 5_000;
+export const CONTENT_LEASE_MS = 2 * CONTENT_RENEW_MS;
+export function worldContentFiles(directory: string, clock = { now:()=>performance.now(),later(ms:number, run:()=>void) { const timer=setTimeout(run,ms);timer.unref?.();return()=>clearTimeout(timer); } }) {
   const cache = new Map<string, { stamp: string; content: WorldContent }>();
-  const consumers = new Set<string>();
-  let stopIdle:(()=>void)|undefined;
+  const consumers = new Map<string,number>();
+  let stopIdle:(()=>void)|undefined,stopExpiry:(()=>void)|undefined;
   const idle = () => { if (!consumers.size && cache.size && !stopIdle) stopIdle=clock.later(CONTENT_IDLE_MS,()=>{stopIdle=undefined;cache.clear();}); };
+  // One expiry timer for this owner, independent of the number of views/consumers.
+  function expire(){
+    stopExpiry?.();stopExpiry=undefined;
+    const now=clock.now();let next=Infinity;
+    for(const [id,until]of consumers){if(until<=now)consumers.delete(id);else next=Math.min(next,until);}
+    if(next!==Infinity)stopExpiry=clock.later(next-now,expire);
+    idle();
+  }
   return {
     demand(consumer:string, wanted:boolean) {
-      if(wanted){consumers.add(consumer);stopIdle?.();stopIdle=undefined;}
-      else {consumers.delete(consumer);idle();}
+      if(wanted){consumers.set(consumer,clock.now()+CONTENT_LEASE_MS);stopIdle?.();stopIdle=undefined;}
+      else consumers.delete(consumer);
+      expire();
     },
     around(pack: WorldPack | undefined, path: Vec3[], margin: number, wanted: boolean, signal: AbortSignal) {
       signal.throwIfAborted();
@@ -44,6 +55,6 @@ export function worldContentFiles(directory: string, clock = { later(ms:number, 
       }
       return output;
     },
-    close() { stopIdle?.();stopIdle=undefined;consumers.clear();cache.clear(); },
+    close() { stopIdle?.();stopExpiry?.();stopIdle=stopExpiry=undefined;consumers.clear();cache.clear(); },
   };
 }

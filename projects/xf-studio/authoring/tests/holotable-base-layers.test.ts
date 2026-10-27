@@ -92,6 +92,31 @@ test("separate view leases retain only their own nearby content and file availab
  }finally{a.abort();b.abort();ctl.abort();}
 });
 
+test("existing shared status traffic renews only active content demand, even if the final release is lost",async()=>{
+ const ctl=new AbortController(),a=new AbortController(),b=new AbortController(),c=new AbortController(),timers=new Map<()=>void,number>(),statuses:Record<string,unknown>[]=[],demands:Record<string,unknown>[]=[];
+ const session={meta:{session:"test",run:1,start:0,end:1,from:0,to:1,channels:[],complete:true,dropped:0,missedDeadlines:0,largestGapS:0,coverage:"",problems:[],standalone:{set:"test",title:"Test",clock:"game",branches:[]}},v:[],camera:[],events:[],gaps:[]};
+ const service=createHolotable({later:(ms,fn)=>{timers.set(fn,ms);return()=>{timers.delete(fn);};},transport:async(method,p)=>{
+  if(method==="live.status")statuses.push(p);
+  if(method==="world.content.demand"){demands.push(p);if(!p.wanted)throw Error("Dropped final release");}
+  const result=method==="runs.list"?[{dir:"r",session:"test",run:1}]:method==="session.open"?session:method==="layers.watch"?{watch:"synthetic"}:{};
+  return {ok:true,status:200,data:{ok:true,result}};
+ }},ctl.signal);
+ const settle=()=>new Promise(r=>setTimeout(r,0)),poll=async()=>{
+  const status=[...timers].filter(([,ms])=>ms===5000);expect(status).toHaveLength(1);timers.delete(status[0][0]);status[0][0]();await settle();
+ };
+ try{
+  service.shown();await settle();await service.dispatch({kind:"holo.open",dir:"r"});expect(statuses.at(-1)).toEqual({});
+  await service.dispatch({kind:"holo.layer",id:"pois",on:true});service.context(a.signal).want([0,0,0]);service.context(b.signal).want([1000,0,0]);await settle();
+  const consumer=demands[0].consumer;await poll();expect(statuses.at(-1)).toEqual({contentConsumer:consumer});
+  a.abort();await poll();expect(statuses.at(-1)).toEqual({contentConsumer:consumer});
+  b.abort();await settle();expect(demands.at(-1)?.wanted).toBe(false);await poll();expect(statuses.at(-1)).toEqual({});
+  service.context(c.signal).want([0,0,0]);await poll();expect(statuses.at(-1)).toEqual({contentConsumer:consumer});
+  await service.dispatch({kind:"holo.layer",id:"pois",on:false});await poll();expect(statuses.at(-1)).toEqual({});
+  expect([...timers.values()].every(ms=>[250,1000,5000].includes(ms))).toBe(true);
+  service.withdraw();expect([...timers.values()].filter(ms=>ms===5000)).toEqual([]);
+ }finally{a.abort();b.abort();c.abort();ctl.abort();}expect(timers.size).toBe(0);
+});
+
 
 test("short or coded phases use a count and raw Technical names; words retain their wording",()=>{
  const make=(names:string[])=>({...content,communities:[{...content.communities[0],entries:[{name:"resident",phases:names.map(name=>({name,spots:["s1"]}))}]}]});
