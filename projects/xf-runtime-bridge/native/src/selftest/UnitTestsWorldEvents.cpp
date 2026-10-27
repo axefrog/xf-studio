@@ -11,6 +11,45 @@ int WorldEventsUnitTests() {
         const auto epoch = target.CaptureEpoch(kind, data, [world] { return world; });
         return target.Push(kind, std::move(data), source, epoch, admitted);
     };
+    {
+        worldevents::Feed families(100, 1);
+        for (const auto& kind : worldevents::Kinds) {
+            const auto kept = push(families, kind, {{"fixture", true}}, 1, 7);
+            check(kept && (*kept)["kind"] == kind && (*kept)["world_generation"] == 7, "each family is admitted and stamped");
+            check(!push(families, kind, json::object(), 1, 7), "each family has an independent rate cap");
+            const auto refill = push(families, kind, json::object(), 2, 7);
+            check(refill && (*refill)["dropped"] == 1, "each family carries its own rate loss on refill");
+        }
+        check(families.Read({{"kinds", {"district", "vehicle", "vehicle.acquired", "time"}}})["events"].size() == 8, "second-cut filter retains all four families");
+    }
+    {
+        worldevents::ClockJumps clock;
+        const auto sample = [&](double s, double game, worldevents::Epoch epoch = {7, 2}, uint64_t run = 1) {
+            return clock.Observe({{"valid", true}, {"game_time_s", game}}, s, epoch, run);
+        };
+        check(!sample(1, 1000), "first recorder sample only establishes a clock baseline");
+        check(!sample(2, 1008) && !sample(3, 1008), "normal accelerated time and pause are not skips");
+        auto jump = sample(4, 22608);
+        check(jump && (*jump)["what"] == "jump" && (*jump)["delta_game_s"] == 21600 && (*jump)["elapsed_real_s"] == 1 &&
+              (*jump)["inferred"] == true && (*jump)["cause"] == "unknown", "large forward jump retains explicit inference and sample deltas");
+        jump = sample(5, 19008);
+        check(jump && (*jump)["delta_game_s"] == -3600, "backward game-time skip is signed");
+        check(!sample(6, 19308), "small or threshold-equal changes do not assert a skip");
+        check(!sample(16, 19908), "threshold scales with real elapsed time");
+        check(!sample(47, 40000), "long sampling gaps rebaseline rather than invent coverage");
+        check(!sample(48, 100, {8, 2}) && !sample(49, 30000, {8, 3}) && !sample(50, 100, {8, 3}, 2), "world, session and recorder restart each reset the baseline");
+        check(!sample(50, 30000, {8, 3}, 2) && !sample(49, 100, {8, 3}, 2), "equal or backward source clocks rebaseline");
+        for (const auto& bad : {json(), json{{"valid", false}, {"game_time_s", 30000}}, json{{"valid", true}, {"game_time_s", nullptr}},
+                                json{{"valid", true}, {"game_time_s", "30000"}}, json{{"valid", true}, {"game_time_s", -1}}}) {
+            check(!clock.Observe(bad, 51, {8, 3}, 2) && !sample(52, 1000, {8, 3}, 2), "missing or invalid samples break clock continuity");
+        }
+        check(!sample(53, 1000, {8, 3}, 0) && !sample(54, 1000, {8, 3}, 2), "inactive recorder identity breaks continuity");
+        jump = sample(55, 5000, {8, 3}, 2);
+        worldevents::Feed sink;
+        const auto row = jump ? sink.Push("time", *jump, 55, {8, 3}) : std::nullopt;
+        check(row && (*row)["game_time_s"] == 5000 && (*row)["world_generation"] == 8 && (*row)["session_counter"] == 3 &&
+              (*row)["data"]["previous_game_time_s"] == 1000, "inferred jumps use the same bounded feed envelope and immutable epoch");
+    }
     // Hold an old ingress after its epoch capture, and insert a new-world Start before releasing it.
     // No sleeps or probabilistic races: both scheduling edges are controlled, with finite deadlines.
     {

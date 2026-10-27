@@ -625,14 +625,6 @@ protected cb func OnReprimandUpdate(evt: ref<ReprimandUpdate>) -> Bool {
   return result;
 }
 
-@wrapMethod(VehicleObject)
-private final func StealVehicle(thief: wref<GameObject>) -> Void {
-  wrappedMethod(thief);
-  if XFIncidentTap.On() {
-    XFIncidentTap.Theft(this, thief as GameObject);
-  }
-}
-
 @wrapMethod(GameObject)
 public final static func PlayVoiceOver(self: ref<GameObject>, voName: CName, debugInitialContext: CName, opt delay: Float, opt answeringEntityID: EntityID, opt canPlayInVehicle: Bool) -> DelayID {
   let id = wrappedMethod(self, voName, debugInitialContext, delay, answeringEntityID, canPlayInVehicle);

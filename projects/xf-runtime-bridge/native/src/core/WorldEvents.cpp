@@ -5,6 +5,24 @@
 #include <cmath>
 namespace xfb::worldevents {
 using json = nlohmann::json;
+std::optional<json> ClockJumps::Observe(const json& sample, double source, Epoch epoch, uint64_t run) {
+    const auto time = sample.is_object() ? sample.find("game_time_s") : sample.end();
+    if (!sample.is_object() || !sample.value("valid", false) || time == sample.end() || !time->is_number() ||
+        !std::isfinite(time->get<double>()) || time->get<double>() < 0 || !std::isfinite(source) || source < 0 || run == 0) {
+        m_valid = false; return {};
+    }
+    const double game = time->get<double>(), elapsed = source - m_source, delta = game - m_game;
+    // Deliberately generous relative to the game's accelerated clock. Long gaps have unknown coverage.
+    const double threshold = std::max(300.0, elapsed * 60.0);
+    const bool jump = m_valid && run == m_run && epoch.world == m_epoch.world && epoch.session == m_epoch.session &&
+                      elapsed > 0 && elapsed <= 30 && std::abs(delta) > threshold;
+    json data;
+    if (jump) data = {{"what", "jump"}, {"source", "recorder.v"}, {"inferred", true}, {"cause", "unknown"},
+                      {"previous_game_time_s", m_game}, {"game_time_s", game}, {"delta_game_s", delta},
+                      {"elapsed_real_s", elapsed}, {"threshold_game_s", threshold}};
+    m_valid = true; m_source = source; m_game = game; m_epoch = epoch; m_run = run;
+    return jump ? std::optional<json>(std::move(data)) : std::nullopt;
+}
 Feed::Feed(size_t capacity, unsigned rate) : m_capacity(std::clamp<size_t>(capacity, 1, 2048)), m_rate(std::clamp(rate, 1u, 20u)) {}
 Epoch Feed::CaptureEpoch(const std::string& kind, const json& data, const std::function<uint64_t()>& world) {
     std::scoped_lock lock(m_epochMutex);

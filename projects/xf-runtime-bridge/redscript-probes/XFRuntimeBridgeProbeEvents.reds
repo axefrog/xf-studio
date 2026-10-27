@@ -68,12 +68,9 @@ public class XFEventProbe extends ScriptableSystem {
   private let m_wanted: Uint32;
   private let m_chase: Uint32;
   private let m_zone: Uint32;
-  private let m_district: ref<CallbackHandle>;
   private let m_hubs: ref<CallbackHandle>;
   private let m_index: ref<CallbackHandle>;
   private let m_call: ref<CallbackHandle>;
-  private let m_purchase: ref<CallbackHandle>;
-  private let m_lastDistrict: String;
   // 0.8.9 (session 15: dialogue.index took 346 of the ring's 500 records, and a call's phase 1 came twice): only a change
   // is recorded.
   private let m_lastIndex: String;
@@ -98,11 +95,9 @@ public class XFEventProbe extends ScriptableSystem {
     this.m_zone = quests.RegisterListener(n"CityAreaType", this, n"OnXFZone");
     let boards = GameInstance.GetBlackboardSystem(game);
     let defs = GetAllBlackboardDefs();
-    this.m_district = boards.Get(defs.UI_Map).RegisterListenerString(defs.UI_Map.currentLocationEnumName, this, n"OnXFDistrict");
     this.m_hubs = boards.Get(defs.UIInteractions).RegisterDelayedListenerVariant(defs.UIInteractions.DialogChoiceHubs, this, n"OnXFHubs");
     this.m_index = boards.Get(defs.UIInteractions).RegisterListenerInt(defs.UIInteractions.SelectedIndex, this, n"OnXFIndex");
     this.m_call = boards.Get(defs.UI_ComDevice).RegisterListenerVariant(defs.UI_ComDevice.PhoneCallInformation, this, n"OnXFCall");
-    this.m_purchase = boards.Get(defs.VehiclePurchaseData).RegisterListenerVariant(defs.VehiclePurchaseData.PurchasedVehicleRecordID, this, n"OnXFPurchase");
     let journal = GameInstance.GetJournalManager(game);
     journal.RegisterScriptCallback(this, n"OnXFJournal", gameJournalListenerType.State);
     journal.RegisterScriptCallback(this, n"OnXFJournalTracked", gameJournalListenerType.Tracked);
@@ -136,11 +131,9 @@ public class XFEventProbe extends ScriptableSystem {
     let boards = GameInstance.GetBlackboardSystem(game);
     let defs = GetAllBlackboardDefs();
     if IsDefined(boards) {
-      boards.Get(defs.UI_Map).UnregisterListenerString(defs.UI_Map.currentLocationEnumName, this.m_district);
       boards.Get(defs.UIInteractions).UnregisterDelayedListener(defs.UIInteractions.DialogChoiceHubs, this.m_hubs);
       boards.Get(defs.UIInteractions).UnregisterListenerInt(defs.UIInteractions.SelectedIndex, this.m_index);
       boards.Get(defs.UI_ComDevice).UnregisterListenerVariant(defs.UI_ComDevice.PhoneCallInformation, this.m_call);
-      boards.Get(defs.VehiclePurchaseData).UnregisterListenerVariant(defs.VehiclePurchaseData.PurchasedVehicleRecordID, this.m_purchase);
     }
     let journal = GameInstance.GetJournalManager(game);
     if IsDefined(journal) {
@@ -177,15 +170,6 @@ public class XFEventProbe extends ScriptableSystem {
   }
 
   // ---- blackboards ---------------------------------------------------------------------------------------------------------
-
-  protected cb func OnXFDistrict(value: String) -> Bool {
-    let defs = GetAllBlackboardDefs();
-    let board = GameInstance.GetBlackboardSystem(this.GetGameInstance()).Get(defs.UI_Map);
-    let discovered = board.GetBool(defs.UI_Map.newLocationDiscovered);
-    XFProbeOut.Emit("district", "\"name\":" + XFJson.Str(value) + ",\"previous\":" + XFJson.Str(this.m_lastDistrict) + ",\"new_location_discovered\":" + XFJson.Flag(discovered));
-    this.m_lastDistrict = value;
-    return false;
-  }
 
   // Hub ids, activity states and choice counts only: the choices' text is the game's writing.
   protected cb func OnXFHubs(value: Variant) -> Bool {
@@ -245,12 +229,6 @@ public class XFEventProbe extends ScriptableSystem {
     }
     this.m_lastCall = text;
     XFProbeOut.Emit("call", text);
-    return false;
-  }
-
-  protected cb func OnXFPurchase(value: Variant) -> Bool {
-    let record = FromVariant<TweakDBID>(value);
-    XFProbeOut.Emit("vehicle.acquired", "\"record\":" + XFJson.Str(TDBID.ToStringDEBUG(record)));
     return false;
   }
 
@@ -383,49 +361,7 @@ public class XFEventProbePoll extends DelayCallback {
   }
 }
 
-// ---- deaths, defeats, knockdowns ---------------------------------------------------------------------------------------------
-
-// ---- V: combat, vehicles ----------------------------------------------------------------------------------------------------
-
-
-
-@wrapMethod(PlayerPuppet)
-protected cb func OnMountingEvent(evt: ref<MountingEvent>) -> Bool {
-  let result = wrappedMethod(evt);
-  if XFProbeOut.On() && IsDefined(evt) && IsDefined(evt.request) {
-    let info = evt.request.lowLevelMountingInfo;
-    XFProbeOut.Emit("vehicle", "\"what\":\"mount\",\"parent\":" + XFJson.Str(XFProbeOut.Id(info.parentId)) + ",\"child\":" + XFJson.Str(XFProbeOut.Id(info.childId))
-      + ",\"slot\":" + XFJson.Str(NameToString(info.slotId.id)));
-  }
-  return result;
-}
-
-@wrapMethod(PlayerPuppet)
-protected cb func OnUnmountingEvent(evt: ref<UnmountingEvent>) -> Bool {
-  let result = wrappedMethod(evt);
-  if XFProbeOut.On() && IsDefined(evt) && IsDefined(evt.request) {
-    let info = evt.request.lowLevelMountingInfo;
-    XFProbeOut.Emit("vehicle", "\"what\":\"unmount\",\"parent\":" + XFJson.Str(XFProbeOut.Id(info.parentId)) + ",\"slot\":" + XFJson.Str(NameToString(info.slotId.id)));
-  }
-  return result;
-}
-
-@wrapMethod(VehicleObject)
-private final func StealVehicle(thief: wref<GameObject>) -> Void {
-  wrappedMethod(thief);
-  if XFProbeOut.On() {
-    XFProbeOut.Emit("vehicle.stolen", "\"vehicle\":" + XFJson.Str(XFProbeOut.Id(this.GetEntityID())) + ",\"record\":" + XFJson.Str(TDBID.ToStringDEBUG(this.GetRecordID()))
-      + ",\"by_v\":" + XFJson.Flag(IsDefined(thief) && IsDefined(thief as PlayerPuppet)));
-  }
-}
-
-// ---- time: the menu's skip ----------------------------------------------------------------------------------------------------
-
-@wrapMethod(GameTimeUtils)
-public final static func FastForwardPlayerState(player: ref<GameObject>) -> Void {
-  wrappedMethod(player);
-  XFProbeOut.Emit("time", "\"what\":\"menu_skip\"");
-}
+// Death/combat/vehicle/menu-skip hooks and district/purchase listeners now fan out from XFWorldHooks/XFWorldFeed.
 
 // ---- the stim tap (row 16): only while test.events {stims: true} switched it on; allow-listed types counted -----------------
 

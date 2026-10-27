@@ -90,7 +90,21 @@ void TickRecording(bool ready)
         std::string joined;
         for (const auto& a : actors) joined += (joined.empty() ? "" : ",") + a;
         RED4ext::CString whos(joined.c_str());
-        return ScriptCall("XFRecording", "Sample", {"String", "String"}, {&name, &whos}, "source-recorder");
+        auto& feed = Get().worldEvents;
+        const auto epoch = channel == "v" ? feed.CaptureEpoch("time", nlohmann::json::object(), World) : worldevents::Epoch{};
+        auto sample = ScriptCall("XFRecording", "Sample", {"String", "String"}, {&name, &whos}, "source-recorder");
+        if (channel == "v") {
+            static worldevents::ClockJumps clock;
+            const auto after = feed.CaptureEpoch("time", nlohmann::json::object(), World);
+            const auto source = recording::Now();
+            if (auto data = clock.Observe(epoch.world == after.world && epoch.session == after.session ? sample : nlohmann::json(), source, epoch, Recorder().SamplingRun())) {
+                if (auto event = feed.Push("time", std::move(*data), source, epoch)) {
+                    (*event)["event"] = "world.time";
+                    RecordingIngress("events", SerializeJson(*event));
+                }
+            }
+        }
+        return sample;
     };
     Recorder().Tick(recording::Now(), World(), Connection(), live, s.runningTicks.load(), ops);
 #else

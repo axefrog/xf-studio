@@ -6,7 +6,7 @@ import { packageScripts } from "../redscript-natives.ts";
 import { CommandApi } from "../api/command-api.ts";
 import { recordingClock, replayRecording } from "../testing/recording-replay.ts";
 import { requireAutonomousSelftest, startSelftestHost, sleep } from "./helpers.ts";
-const kinds = ["session", "death", "combat", "heat", "dialogue", "journal", "fact", "call"];
+const kinds = ["session", "death", "combat", "heat", "dialogue", "journal", "fact", "call", "district", "vehicle", "vehicle.acquired", "time"];
 const bodies: Record<string, any> = {
   session: { phase: "start", codeware: true, restored: true, pre_game: false },
   death: { what: "death", victim: "18446744073709551615", record: "Character.fixture", crowd: false, civilian: false, by_v: true, instigator: "42", pos: [1, 2, 3], incident_id: "inc-7" },
@@ -15,7 +15,45 @@ const bodies: Record<string, any> = {
   journal: { what: "counter", hash: 17, path: "xf/quest/objective", path_complete: true, state: 1, counter: 2 },
   fact: { fact: "q000_street_kid_background", value: 1 },
   call: { phase: "IncomingCall", contact: "judy", mode: 1, player_calling: false, player_triggered: true },
+  district: { name: "Kabuki", previous: "LittleChina", new_location_discovered: false, truncated: false },
+  vehicle: { what: "mount", parent: "18446744073709551615", child: "42", slot: "seat_front_left" },
+  "vehicle.acquired": { record: "Vehicle.v_standard2_archer_quartz_player" },
+  time: { what: "menu_skip", source: "FastForwardPlayerState", inferred: false },
 };
+test("second-cut packages share each wrap once and keep listener ownership in the live feed", () => {
+  const root = resolve(import.meta.dir, "../..");
+  for (const [variant, hooks] of [["default", false], ["diagnostic", false], ["writes", false], ["writes", true]] as const) {
+    const source = packageScripts(root, variant, hooks).map(f => f.text).join("\n");
+    for (const [target, method] of [["PlayerPuppet", "OnMountingEvent"], ["PlayerPuppet", "OnUnmountingEvent"], ["VehicleObject", "StealVehicle"], ["GameTimeUtils", "FastForwardPlayerState"]]) {
+      const pattern = new RegExp(`@wrapMethod\\(${target}\\)\\s+[^{}]+\\b${method}\\([^{}]+\\{`, "g");
+      const matches = [...source.matchAll(pattern)];
+      expect(matches, `${variant}/${hooks}: ${method}`).toHaveLength(1);
+      const start = matches[0]!.index! + matches[0]![0].length;
+      let depth = 1, end = start;
+      while (end < source.length && depth) {
+        if (source[end] === "{") depth++;
+        if (source[end] === "}") depth--;
+        end++;
+      }
+      const body = source.slice(start, end - 1);
+      expect(body.match(/\bwrappedMethod\(/g), method).toHaveLength(1);
+      expect(body.trimStart()).toMatch(/^(?:let result = )?wrappedMethod\(/);
+      if (method.startsWith("On")) expect(body.trimEnd().endsWith("return result;")).toBe(true);
+    }
+    expect(source.match(/RegisterListenerString\(defs.UI_Map.currentLocationEnumName/g)).toHaveLength(1);
+    expect(source.match(/UnregisterListenerString\(defs.UI_Map.currentLocationEnumName/g)).toHaveLength(1);
+    expect(source.match(/RegisterListenerVariant\(defs.VehiclePurchaseData.PurchasedVehicleRecordID/g)).toHaveLength(1);
+    expect(source.match(/UnregisterListenerVariant\(defs.VehiclePurchaseData.PurchasedVehicleRecordID/g)).toHaveLength(1);
+    expect(source).toContain("this.m_map.GetBool(GetAllBlackboardDefs().UI_Map.newLocationDiscovered)");
+    expect(source).toContain("this.m_map = null; this.m_purchase = null");
+    if (hooks) expect(source).toContain("XFIncidentTap.Theft(vehicle, thief)");
+  }
+  const adapter = readFileSync(join(root, "native/src/plugin/HandlersRecording.cpp"), "utf8");
+  expect(adapter).toContain('if (channel == "v")');
+  expect(adapter).toContain("clock.Observe(");
+  expect(adapter).toContain("Recorder().SamplingRun()");
+  expect(adapter).not.toContain("GetGameTime");
+});
 test("passive event families reach a read-only client, catchup and native replay", async () => {
   requireAutonomousSelftest();
   const host = await startSelftestHost(["--allow-test-hooks", "--allow-writes"]);
@@ -36,10 +74,13 @@ test("passive event families reach a read-only client, catchup and native replay
     expect(rows.map((r: any) => r.kind)).toEqual(kinds);
     expect(rows.every((r: any) => Number.isFinite(r.s) && r.world_generation >= 0 && r.session_counter === 1)).toBe(true);
     expect(rows[0].game_time_s).toBeNull();
+    const all = await api.run("world.events", { kinds });
+    expect(all.ok, JSON.stringify(all)).toBe(true);
+    if (all.ok) expect((all.result as any).events.map((r: any) => r.kind)).toEqual(kinds);
     const filtered = await api.run("world.events", { kinds: ["call"], since: 1 });
     expect(filtered.ok).toBe(true); if (!filtered.ok) throw new Error(filtered.error.message);
     expect((filtered.result as any).events.map((r: any) => r.kind)).toEqual(["call"]);
-    expect((await reader.call("selftest.world.event", { kind: "death" })).ok).toBe(false);
+  expect((await reader.call("selftest.world.event", { kind: "death" })).ok).toBe(false);
     const caught = await api.run("game.catchup", { run, detail: true });
     expect(caught.ok).toBe(true); if (!caught.ok) throw new Error(caught.error.message);
     expect((caught.result as any).channels.events.filter((r: any) => r.event !== "world.coverage").map((r: any) => r.kind)).toEqual(kinds);

@@ -1,6 +1,6 @@
 module XFRuntimeBridge
 
-// Passive first-cut feed. No timer: every producer is a game notification. Listener lifetime belongs to XFBridgeSystem.
+// Passive feed. No timer: script producers are game notifications. Listener lifetime belongs to XFBridgeSystem.
 public abstract class XFWorldOut {
   public static func On() -> Bool { return (XFBridge_ProbeFlags() & 32) != 0; }
   public static func GameTimeSeconds() -> String {
@@ -60,6 +60,11 @@ public class XFWorldFeed extends ScriptableSystem {
   private let m_journal: ref<JournalManager>;
   private let m_interactions: ref<IBlackboard>;
   private let m_phone: ref<IBlackboard>;
+  private let m_map: ref<IBlackboard>;
+  private let m_purchase: ref<IBlackboard>;
+  private let m_district: ref<CallbackHandle>;
+  private let m_acquired: ref<CallbackHandle>;
+  private let m_lastDistrict: String;
   private let m_index: ref<CallbackHandle>;
   private let m_call: ref<CallbackHandle>;
   private let m_wanted: Uint32;
@@ -87,11 +92,15 @@ public class XFWorldFeed extends ScriptableSystem {
     let defs = GetAllBlackboardDefs();
     this.m_interactions = boards.Get(defs.UIInteractions);
     this.m_phone = boards.Get(defs.UI_ComDevice);
+    this.m_map = boards.Get(defs.UI_Map);
+    this.m_purchase = boards.Get(defs.VehiclePurchaseData);
     this.m_on = true;
     this.m_wanted = this.m_quests.RegisterListener(n"wanted_level", this, n"Wanted");
     this.m_chase = this.m_quests.RegisterListener(n"wanted_chase_active", this, n"Chase");
     if IsDefined(this.m_interactions) { this.m_index = this.m_interactions.RegisterListenerInt(defs.UIInteractions.SelectedIndex, this, n"Index"); }
     if IsDefined(this.m_phone) { this.m_call = this.m_phone.RegisterListenerVariant(defs.UI_ComDevice.PhoneCallInformation, this, n"Call"); }
+    if IsDefined(this.m_map) { this.m_district = this.m_map.RegisterListenerString(defs.UI_Map.currentLocationEnumName, this, n"District"); }
+    if IsDefined(this.m_purchase) { this.m_acquired = this.m_purchase.RegisterListenerVariant(defs.VehiclePurchaseData.PurchasedVehicleRecordID, this, n"Acquired"); }
     this.m_journal.RegisterScriptCallback(this, n"State", gameJournalListenerType.State);
     this.m_journal.RegisterScriptCallback(this, n"Tracked", gameJournalListenerType.Tracked);
     this.m_journal.RegisterScriptCallback(this, n"Counter", gameJournalListenerType.Counter);
@@ -103,6 +112,8 @@ public class XFWorldFeed extends ScriptableSystem {
     let defs = GetAllBlackboardDefs();
     if IsDefined(this.m_interactions) { this.m_interactions.UnregisterListenerInt(defs.UIInteractions.SelectedIndex, this.m_index); }
     if IsDefined(this.m_phone) { this.m_phone.UnregisterListenerVariant(defs.UI_ComDevice.PhoneCallInformation, this.m_call); }
+    if IsDefined(this.m_map) { this.m_map.UnregisterListenerString(defs.UI_Map.currentLocationEnumName, this.m_district); }
+    if IsDefined(this.m_purchase) { this.m_purchase.UnregisterListenerVariant(defs.VehiclePurchaseData.PurchasedVehicleRecordID, this.m_acquired); }
     if IsDefined(this.m_quests) {
       this.m_quests.UnregisterListener(n"wanted_level", this.m_wanted);
       this.m_quests.UnregisterListener(n"wanted_chase_active", this.m_chase);
@@ -115,6 +126,25 @@ public class XFWorldFeed extends ScriptableSystem {
     }
     this.m_interactions = null; this.m_phone = null; this.m_quests = null; this.m_journal = null;
     this.m_lastIndex = ""; this.m_lastHubs = ""; this.m_lastCall = "";
+    this.m_map = null; this.m_purchase = null; this.m_district = null; this.m_acquired = null; this.m_lastDistrict = "";
+  }
+  protected cb func District(value: String) -> Bool {
+    if !this.m_on || !XFWorldOut.On() || !XFBridge_Live() { return false; }
+    let discovered = this.m_map.GetBool(GetAllBlackboardDefs().UI_Map.newLocationDiscovered);
+    let fields = "\"name\":" + XFJson.Str(StrLeft(value, 128)) + ",\"previous\":" + XFJson.Str(this.m_lastDistrict)
+      + ",\"new_location_discovered\":" + XFJson.Flag(discovered) + ",\"truncated\":" + XFJson.Flag(StrLen(value) > 128);
+    this.m_lastDistrict = StrLeft(value, 128);
+    XFWorldOut.Emit("district", fields);
+    XFWorldHooks.Probe("district", fields);
+    return false;
+  }
+  protected cb func Acquired(value: Variant) -> Bool {
+    if !this.m_on || !XFWorldOut.On() || !XFBridge_Live() { return false; }
+    let record = FromVariant<TweakDBID>(value);
+    let fields = "\"record\":" + XFJson.Str(TDBID.ToStringDEBUG(record));
+    XFWorldOut.Emit("vehicle.acquired", fields);
+    XFWorldHooks.Probe("vehicle.acquired", fields);
+    return false;
   }
   private func Heat(fact: String, value: Int32) -> Void {
     if !this.m_on || !XFBridge_Live() { return; }
