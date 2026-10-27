@@ -1,0 +1,4792 @@
+{
+ "H-001": {
+  "arm": "A3",
+  "thread": "E-m3c-w1-restless-accept-middle-A3-3-delivery",
+  "run": "m3c-w1-restless-accept-middle-A3",
+  "configuration": "m3c-w1|restless|accept-middle",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-001",
+    "arm": "A3",
+    "thread": "E-m3c-w1-restless-accept-middle-A3-3-delivery",
+    "run": "m3c-w1-restless-accept-middle-A3",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 43300,
+    "times": [
+     {
+      "id": "E-m3c-w1-restless-accept-middle-A3-3-delivery-ask",
+      "at": 259800,
+      "play": 43300
+     },
+     {
+      "id": "E-m3c-w1-restless-accept-middle-A3-3-delivery-answer",
+      "at": 260400,
+      "play": 43400
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w1-restless-accept-middle-A3-3-delivery-ask",
+   "E-m3c-w1-restless-accept-middle-A3-3-delivery-answer"
+  ]
+ },
+ "H-002": {
+  "arm": "A5",
+  "thread": "m3c-w0-calm-engage-A5-3",
+  "run": "m3c-w0-calm-engage-A5",
+  "configuration": "m3c-w0|calm|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-002",
+    "arm": "A5",
+    "thread": "m3c-w0-calm-engage-A5-3",
+    "run": "m3c-w0-calm-engage-A5",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 43300,
+    "times": [
+     {
+      "id": "m3c-w0-calm-engage-A5-3xf.composite:reckoning/acted/offer",
+      "at": 259800,
+      "play": 43300
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-3xf.composite:reckoning/acted/accept",
+      "at": 260400,
+      "play": 43400
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-3xf.composite:reckoning/acted",
+      "at": 261000,
+      "play": 43500
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-3xf.composite:reckoning/cued",
+      "at": 261600,
+      "play": 43600
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-3xf.composite:reckoning/billed",
+      "at": 262200,
+      "play": 43700
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w0-calm-engage-A5-3xf.composite:reckoning/acted/offer",
+   "m3c-w0-calm-engage-A5-3xf.composite:reckoning/acted/accept",
+   "m3c-w0-calm-engage-A5-3xf.composite:reckoning/acted",
+   "m3c-w0-calm-engage-A5-3xf.composite:reckoning/cued",
+   "m3c-w0-calm-engage-A5-3xf.composite:reckoning/billed"
+  ]
+ },
+ "H-003": {
+  "arm": "E",
+  "thread": "b391991a8ae970f74ca136d24fcbdd74",
+  "run": "E-m3c-w2-restless-engage",
+  "configuration": "m3c-w2|restless|engage",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-003",
+    "arm": "E",
+    "thread": "b391991a8ae970f74ca136d24fcbdd74",
+    "run": "E-m3c-w2-restless-engage",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 55439,
+    "times": [
+     {
+      "id": "d8ab4b688e8d4c0078ddeea39a1cbb06",
+      "at": 333000,
+      "play": 55439
+     }
+    ]
+   },
+   {
+    "sample": "H-027",
+    "arm": "A1",
+    "thread": "b391991a8ae970f74ca136d24fcbdd74",
+    "run": "A1-m3c-w2-steady-accept-first",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 55439,
+    "times": [
+     {
+      "id": "d8ab4b688e8d4c0078ddeea39a1cbb06",
+      "at": 333000,
+      "play": 55439
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 1,
+   "A1": 1
+  },
+  "sequence": [
+   "d8ab4b688e8d4c0078ddeea39a1cbb06"
+  ]
+ },
+ "H-004": {
+  "arm": "A3",
+  "thread": "E-m3c-w0-steady-accept-last-A3-5-delivery",
+  "run": "m3c-w0-steady-accept-last-A3",
+  "configuration": "m3c-w0|steady|accept-last",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-004",
+    "arm": "A3",
+    "thread": "E-m3c-w0-steady-accept-last-A3-5-delivery",
+    "run": "m3c-w0-steady-accept-last-A3",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 72100,
+    "times": [
+     {
+      "id": "E-m3c-w0-steady-accept-last-A3-5-delivery-ask",
+      "at": 432600,
+      "play": 72100
+     },
+     {
+      "id": "E-m3c-w0-steady-accept-last-A3-5-delivery-answer",
+      "at": 433200,
+      "play": 72200
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w0-steady-accept-last-A3-5-delivery-ask",
+   "E-m3c-w0-steady-accept-last-A3-5-delivery-answer"
+  ]
+ },
+ "H-005": {
+  "arm": "A3",
+  "thread": "E-m3c-w2-steady-accept-first-A3-6-recovery",
+  "run": "m3c-w2-steady-accept-first-A3",
+  "configuration": "m3c-w2|steady|accept-first",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-005",
+    "arm": "A3",
+    "thread": "E-m3c-w2-steady-accept-first-A3-6-recovery",
+    "run": "m3c-w2-steady-accept-first-A3",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 86500,
+    "times": [
+     {
+      "id": "E-m3c-w2-steady-accept-first-A3-6-recovery-ask",
+      "at": 519000,
+      "play": 86500
+     },
+     {
+      "id": "E-m3c-w2-steady-accept-first-A3-6-recovery-answer",
+      "at": 519600,
+      "play": 86600
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w2-steady-accept-first-A3-6-recovery-ask",
+   "E-m3c-w2-steady-accept-first-A3-6-recovery-answer"
+  ]
+ },
+ "H-006": {
+  "arm": "A5",
+  "thread": "m3c-w1-calm-ignore-A5-1",
+  "run": "m3c-w1-calm-ignore-A5",
+  "configuration": "m3c-w1|calm|ignore",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 2,
+    "target": 2,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 2,
+    "target": 2,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-006",
+    "arm": "A5",
+    "thread": "m3c-w1-calm-ignore-A5-1",
+    "run": "m3c-w1-calm-ignore-A5",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 14500,
+    "times": [
+     {
+      "id": "m3c-w1-calm-ignore-A5-1xf.composite:protection/approach",
+      "at": 87000,
+      "play": 14500
+     },
+     {
+      "id": "m3c-w1-calm-ignore-A5-1xf.composite:protection/struck",
+      "at": 87600,
+      "play": 14600
+     },
+     {
+      "id": "m3c-w1-calm-ignore-A5-1xf.composite:protection/counter/offer",
+      "at": 88200,
+      "play": 14700
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w1-calm-ignore-A5-1xf.composite:protection/approach",
+   "m3c-w1-calm-ignore-A5-1xf.composite:protection/struck",
+   "m3c-w1-calm-ignore-A5-1xf.composite:protection/counter/offer"
+  ]
+ },
+ "H-007": {
+  "arm": "A3",
+  "thread": "E-m3c-w1-steady-engage-A3-5-debt",
+  "run": "m3c-w1-steady-engage-A3",
+  "configuration": "m3c-w1|steady|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-007",
+    "arm": "A3",
+    "thread": "E-m3c-w1-steady-engage-A3-5-debt",
+    "run": "m3c-w1-steady-engage-A3",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 72100,
+    "times": [
+     {
+      "id": "E-m3c-w1-steady-engage-A3-5-debt-ask",
+      "at": 432600,
+      "play": 72100
+     },
+     {
+      "id": "E-m3c-w1-steady-engage-A3-5-debt-answer",
+      "at": 433200,
+      "play": 72200
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w1-steady-engage-A3-5-debt-ask",
+   "E-m3c-w1-steady-engage-A3-5-debt-answer"
+  ]
+ },
+ "H-008": {
+  "arm": "A3",
+  "thread": "E-m3c-w1-restless-accept-middle-A3-1-missing",
+  "run": "m3c-w1-restless-accept-middle-A3",
+  "configuration": "m3c-w1|restless|accept-middle",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-008",
+    "arm": "A3",
+    "thread": "E-m3c-w1-restless-accept-middle-A3-1-missing",
+    "run": "m3c-w1-restless-accept-middle-A3",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 14500,
+    "times": [
+     {
+      "id": "E-m3c-w1-restless-accept-middle-A3-1-missing-ask",
+      "at": 87000,
+      "play": 14500
+     },
+     {
+      "id": "E-m3c-w1-restless-accept-middle-A3-1-missing-answer",
+      "at": 87600,
+      "play": 14600
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w1-restless-accept-middle-A3-1-missing-ask",
+   "E-m3c-w1-restless-accept-middle-A3-1-missing-answer"
+  ]
+ },
+ "H-009": {
+  "arm": "E",
+  "thread": "43bca088354785f5d00b561fa1e96100",
+  "run": "E-m3c-w1-restless-accept-middle",
+  "configuration": "m3c-w1|restless|accept-middle",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-009",
+    "arm": "E",
+    "thread": "43bca088354785f5d00b561fa1e96100",
+    "run": "E-m3c-w1-restless-accept-middle",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 4308,
+    "times": [
+     {
+      "id": "bbb56925fb182069d15aad1a2a26712a",
+      "at": 26400,
+      "play": 4308
+     },
+     {
+      "id": "e485db08de1c04d17a106f31ab15c81c",
+      "at": 597600,
+      "play": 99568
+     },
+     {
+      "id": "62a3a6b0e4e6a8c7276abc184d55c416",
+      "at": 597600,
+      "play": 99568
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 1
+  },
+  "sequence": [
+   "bbb56925fb182069d15aad1a2a26712a",
+   "e485db08de1c04d17a106f31ab15c81c",
+   "62a3a6b0e4e6a8c7276abc184d55c416"
+  ]
+ },
+ "H-010": {
+  "arm": "E",
+  "thread": "e72bec817f20e55da24eca7a50d4a087",
+  "run": "E-m3c-w0-steady-accept-last",
+  "configuration": "m3c-w0|steady|accept-last",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-010",
+    "arm": "E",
+    "thread": "e72bec817f20e55da24eca7a50d4a087",
+    "run": "E-m3c-w0-steady-accept-last",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 14324,
+    "times": [
+     {
+      "id": "cff44be96c2d740e3334588ff4745f50",
+      "at": 86400,
+      "play": 14324
+     }
+    ]
+   },
+   {
+    "sample": "H-072",
+    "arm": "E",
+    "thread": "e72bec817f20e55da24eca7a50d4a087",
+    "run": "E-m3c-w0-restless-decline",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 14324,
+    "times": [
+     {
+      "id": "cff44be96c2d740e3334588ff4745f50",
+      "at": 86400,
+      "play": 14324
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 2
+  },
+  "sequence": [
+   "cff44be96c2d740e3334588ff4745f50"
+  ]
+ },
+ "H-011": {
+  "arm": "A5",
+  "thread": "m3c-w2-steady-accept-first-A5-6",
+  "run": "m3c-w2-steady-accept-first-A5",
+  "configuration": "m3c-w2|steady|accept-first",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-011",
+    "arm": "A5",
+    "thread": "m3c-w2-steady-accept-first-A5-6",
+    "run": "m3c-w2-steady-accept-first-A5",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 86500,
+    "times": [
+     {
+      "id": "m3c-w2-steady-accept-first-A5-6xf.composite:betrayal/bond",
+      "at": 519000,
+      "play": 86500
+     },
+     {
+      "id": "m3c-w2-steady-accept-first-A5-6xf.composite:betrayal/offered",
+      "at": 519600,
+      "play": 86600
+     },
+     {
+      "id": "m3c-w2-steady-accept-first-A5-6xf.composite:betrayal/act",
+      "at": 520200,
+      "play": 86700
+     },
+     {
+      "id": "m3c-w2-steady-accept-first-A5-6xf.composite:betrayal/found",
+      "at": 520800,
+      "play": 86800
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w2-steady-accept-first-A5-6xf.composite:betrayal/bond",
+   "m3c-w2-steady-accept-first-A5-6xf.composite:betrayal/offered",
+   "m3c-w2-steady-accept-first-A5-6xf.composite:betrayal/act",
+   "m3c-w2-steady-accept-first-A5-6xf.composite:betrayal/found"
+  ]
+ },
+ "H-012": {
+  "arm": "A3",
+  "thread": "E-m3c-w1-restless-accept-middle-A3-2-recovery",
+  "run": "m3c-w1-restless-accept-middle-A3",
+  "configuration": "m3c-w1|restless|accept-middle",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-012",
+    "arm": "A3",
+    "thread": "E-m3c-w1-restless-accept-middle-A3-2-recovery",
+    "run": "m3c-w1-restless-accept-middle-A3",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 28900,
+    "times": [
+     {
+      "id": "E-m3c-w1-restless-accept-middle-A3-2-recovery-ask",
+      "at": 173400,
+      "play": 28900
+     },
+     {
+      "id": "E-m3c-w1-restless-accept-middle-A3-2-recovery-answer",
+      "at": 174000,
+      "play": 29000
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w1-restless-accept-middle-A3-2-recovery-ask",
+   "E-m3c-w1-restless-accept-middle-A3-2-recovery-answer"
+  ]
+ },
+ "H-013": {
+  "arm": "A5",
+  "thread": "m3c-w1-steady-engage-A5-4",
+  "run": "m3c-w1-steady-engage-A5",
+  "configuration": "m3c-w1|steady|engage",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-013",
+    "arm": "A5",
+    "thread": "m3c-w1-steady-engage-A5-4",
+    "run": "m3c-w1-steady-engage-A5",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 57700,
+    "times": [
+     {
+      "id": "m3c-w1-steady-engage-A5-4xf.composite:protection/approach",
+      "at": 346200,
+      "play": 57700
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-4xf.composite:protection/struck",
+      "at": 346800,
+      "play": 57800
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-4xf.composite:protection/counter/offer",
+      "at": 347400,
+      "play": 57900
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-4xf.composite:protection/counter/accept",
+      "at": 348000,
+      "play": 58000
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-4xf.composite:protection/counter",
+      "at": 348600,
+      "play": 58100
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w1-steady-engage-A5-4xf.composite:protection/approach",
+   "m3c-w1-steady-engage-A5-4xf.composite:protection/struck",
+   "m3c-w1-steady-engage-A5-4xf.composite:protection/counter/offer",
+   "m3c-w1-steady-engage-A5-4xf.composite:protection/counter/accept",
+   "m3c-w1-steady-engage-A5-4xf.composite:protection/counter"
+  ]
+ },
+ "H-014": {
+  "arm": "A3",
+  "thread": "E-m3c-w2-restless-engage-A3-5-debt",
+  "run": "m3c-w2-restless-engage-A3",
+  "configuration": "m3c-w2|restless|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-014",
+    "arm": "A3",
+    "thread": "E-m3c-w2-restless-engage-A3-5-debt",
+    "run": "m3c-w2-restless-engage-A3",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 72100,
+    "times": [
+     {
+      "id": "E-m3c-w2-restless-engage-A3-5-debt-ask",
+      "at": 432600,
+      "play": 72100
+     },
+     {
+      "id": "E-m3c-w2-restless-engage-A3-5-debt-answer",
+      "at": 433200,
+      "play": 72200
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w2-restless-engage-A3-5-debt-ask",
+   "E-m3c-w2-restless-engage-A3-5-debt-answer"
+  ]
+ },
+ "H-015": {
+  "arm": "A1",
+  "thread": "cf5755d378e7019b6c98d8bef4688a06",
+  "run": "A1-m3c-w2-restless-engage",
+  "configuration": "m3c-w2|restless|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-015",
+    "arm": "A1",
+    "thread": "cf5755d378e7019b6c98d8bef4688a06",
+    "run": "A1-m3c-w2-restless-engage",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 46477,
+    "times": [
+     {
+      "id": "23bcdc5ce9046252d033a73d4f6057a3",
+      "at": 279000,
+      "play": 46477
+     }
+    ]
+   },
+   {
+    "sample": "H-054",
+    "arm": "A1",
+    "thread": "cf5755d378e7019b6c98d8bef4688a06",
+    "run": "A1-m3c-w2-steady-accept-first",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 46477,
+    "times": [
+     {
+      "id": "23bcdc5ce9046252d033a73d4f6057a3",
+      "at": 279000,
+      "play": 46477
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 2
+  },
+  "sequence": [
+   "23bcdc5ce9046252d033a73d4f6057a3"
+  ]
+ },
+ "H-016": {
+  "arm": "A3",
+  "thread": "E-m3c-w0-steady-accept-last-A3-4-removal",
+  "run": "m3c-w0-steady-accept-last-A3",
+  "configuration": "m3c-w0|steady|accept-last",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-016",
+    "arm": "A3",
+    "thread": "E-m3c-w0-steady-accept-last-A3-4-removal",
+    "run": "m3c-w0-steady-accept-last-A3",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 57700,
+    "times": [
+     {
+      "id": "E-m3c-w0-steady-accept-last-A3-4-removal-ask",
+      "at": 346200,
+      "play": 57700
+     },
+     {
+      "id": "E-m3c-w0-steady-accept-last-A3-4-removal-answer",
+      "at": 346800,
+      "play": 57800
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w0-steady-accept-last-A3-4-removal-ask",
+   "E-m3c-w0-steady-accept-last-A3-4-removal-answer"
+  ]
+ },
+ "H-017": {
+  "arm": "E",
+  "thread": "c95984b7c3544dc2c5861fc13eb42a88",
+  "run": "E-m3c-w2-steady-accept-first",
+  "configuration": "m3c-w2|steady|accept-first",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-017",
+    "arm": "E",
+    "thread": "c95984b7c3544dc2c5861fc13eb42a88",
+    "run": "E-m3c-w2-steady-accept-first",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 36619,
+    "times": [
+     {
+      "id": "a5fb769218d95c0ede17a5c208cd97a0",
+      "at": 220200,
+      "play": 36619
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 1
+  },
+  "sequence": [
+   "a5fb769218d95c0ede17a5c208cd97a0"
+  ]
+ },
+ "H-018": {
+  "arm": "A5",
+  "thread": "m3c-w1-restless-accept-middle-A5-2",
+  "run": "m3c-w1-restless-accept-middle-A5",
+  "configuration": "m3c-w1|restless|accept-middle",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-018",
+    "arm": "A5",
+    "thread": "m3c-w1-restless-accept-middle-A5-2",
+    "run": "m3c-w1-restless-accept-middle-A5",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 28900,
+    "times": [
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-2xf.composite:reckoning/acted/offer",
+      "at": 173400,
+      "play": 28900
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-2xf.composite:reckoning/acted/accept",
+      "at": 174000,
+      "play": 29000
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-2xf.composite:reckoning/acted",
+      "at": 174600,
+      "play": 29100
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-2xf.composite:reckoning/cued",
+      "at": 175200,
+      "play": 29200
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-2xf.composite:reckoning/billed",
+      "at": 175800,
+      "play": 29300
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w1-restless-accept-middle-A5-2xf.composite:reckoning/acted/offer",
+   "m3c-w1-restless-accept-middle-A5-2xf.composite:reckoning/acted/accept",
+   "m3c-w1-restless-accept-middle-A5-2xf.composite:reckoning/acted",
+   "m3c-w1-restless-accept-middle-A5-2xf.composite:reckoning/cued",
+   "m3c-w1-restless-accept-middle-A5-2xf.composite:reckoning/billed"
+  ]
+ },
+ "H-019": {
+  "arm": "E",
+  "thread": "2d7e50b645f4295ce36c2a56a8c5bf44",
+  "run": "E-m3c-w1-steady-engage",
+  "configuration": "m3c-w1|steady|engage",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-019",
+    "arm": "E",
+    "thread": "2d7e50b645f4295ce36c2a56a8c5bf44",
+    "run": "E-m3c-w1-steady-engage",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 4308,
+    "times": [
+     {
+      "id": "bbb56925fb182069d15aad1a2a26712a",
+      "at": 26400,
+      "play": 4308
+     },
+     {
+      "id": "178e82fcd7adf1cb80107b7bca74de40",
+      "at": 51000,
+      "play": 8459
+     },
+     {
+      "id": "a386f2f9193defd682548d99333053e3",
+      "at": 51000,
+      "play": 8459
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 1
+  },
+  "sequence": [
+   "bbb56925fb182069d15aad1a2a26712a",
+   "178e82fcd7adf1cb80107b7bca74de40",
+   "a386f2f9193defd682548d99333053e3"
+  ]
+ },
+ "H-020": {
+  "arm": "A5",
+  "thread": "m3c-w1-steady-engage-A5-5",
+  "run": "m3c-w1-steady-engage-A5",
+  "configuration": "m3c-w1|steady|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-020",
+    "arm": "A5",
+    "thread": "m3c-w1-steady-engage-A5-5",
+    "run": "m3c-w1-steady-engage-A5",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 72100,
+    "times": [
+     {
+      "id": "m3c-w1-steady-engage-A5-5xf.composite:reckoning/acted/offer",
+      "at": 432600,
+      "play": 72100
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-5xf.composite:reckoning/acted/accept",
+      "at": 433200,
+      "play": 72200
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-5xf.composite:reckoning/acted",
+      "at": 433800,
+      "play": 72300
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-5xf.composite:reckoning/cued",
+      "at": 434400,
+      "play": 72400
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-5xf.composite:reckoning/billed",
+      "at": 435000,
+      "play": 72500
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w1-steady-engage-A5-5xf.composite:reckoning/acted/offer",
+   "m3c-w1-steady-engage-A5-5xf.composite:reckoning/acted/accept",
+   "m3c-w1-steady-engage-A5-5xf.composite:reckoning/acted",
+   "m3c-w1-steady-engage-A5-5xf.composite:reckoning/cued",
+   "m3c-w1-steady-engage-A5-5xf.composite:reckoning/billed"
+  ]
+ },
+ "H-021": {
+  "arm": "A1",
+  "thread": "4809b9a7907aad55f1ac81ec49443085",
+  "run": "A1-m3c-w0-steady-accept-last",
+  "configuration": "m3c-w0|steady|accept-last",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-021",
+    "arm": "A1",
+    "thread": "4809b9a7907aad55f1ac81ec49443085",
+    "run": "A1-m3c-w0-steady-accept-last",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 8152,
+    "times": [
+     {
+      "id": "75211eae54135a20b015dc5061b1ec18",
+      "at": 49200,
+      "play": 8152
+     }
+    ]
+   },
+   {
+    "sample": "H-077",
+    "arm": "A1",
+    "thread": "4809b9a7907aad55f1ac81ec49443085",
+    "run": "A1-m3c-w0-calm-engage",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 41599,
+    "times": [
+     {
+      "id": "75211eae54135a20b015dc5061b1ec18",
+      "at": 249600,
+      "play": 41599
+     }
+    ]
+   },
+   {
+    "sample": "H-094",
+    "arm": "E",
+    "thread": "4809b9a7907aad55f1ac81ec49443085",
+    "run": "E-m3c-w0-calm-engage",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 41599,
+    "times": [
+     {
+      "id": "75211eae54135a20b015dc5061b1ec18",
+      "at": 249600,
+      "play": 41599
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 2,
+   "E": 1
+  },
+  "sequence": [
+   "75211eae54135a20b015dc5061b1ec18"
+  ]
+ },
+ "H-022": {
+  "arm": "A1",
+  "thread": "a6d04bd61ed787ee7140a41bdb6582ec",
+  "run": "A1-m3c-w1-steady-engage",
+  "configuration": "m3c-w1|steady|engage",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-022",
+    "arm": "A1",
+    "thread": "a6d04bd61ed787ee7140a41bdb6582ec",
+    "run": "A1-m3c-w1-steady-engage",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 24790,
+    "times": [
+     {
+      "id": "3f04613aa3befaca53f4d02799dc6de7",
+      "at": 148800,
+      "play": 24790
+     },
+     {
+      "id": "7120d25321e3f129e0842382b435b6e7",
+      "at": 174000,
+      "play": 28976
+     },
+     {
+      "id": "3a9b5224aba1633a74f2397b0880ef4d",
+      "at": 174000,
+      "play": 28976
+     }
+    ]
+   },
+   {
+    "sample": "H-092",
+    "arm": "A1",
+    "thread": "a6d04bd61ed787ee7140a41bdb6582ec",
+    "run": "A1-m3c-w1-restless-accept-middle",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 24790,
+    "times": [
+     {
+      "id": "3f04613aa3befaca53f4d02799dc6de7",
+      "at": 148800,
+      "play": 24790
+     },
+     {
+      "id": "7120d25321e3f129e0842382b435b6e7",
+      "at": 174000,
+      "play": 28976
+     },
+     {
+      "id": "3a9b5224aba1633a74f2397b0880ef4d",
+      "at": 174000,
+      "play": 28976
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 2
+  },
+  "sequence": [
+   "3f04613aa3befaca53f4d02799dc6de7",
+   "7120d25321e3f129e0842382b435b6e7",
+   "3a9b5224aba1633a74f2397b0880ef4d"
+  ]
+ },
+ "H-023": {
+  "arm": "E",
+  "thread": "a7ebe61d14f35d2adee8865725d380ac",
+  "run": "E-m3c-w2-restless-engage",
+  "configuration": "m3c-w2|restless|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-023",
+    "arm": "E",
+    "thread": "a7ebe61d14f35d2adee8865725d380ac",
+    "run": "E-m3c-w2-restless-engage",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 7472,
+    "times": [
+     {
+      "id": "b02a1a002f4fa674cc7ef525dbcdcb0c",
+      "at": 45000,
+      "play": 7472
+     },
+     {
+      "id": "fe3797d27d29d7d363621120984f23f7",
+      "at": 220200,
+      "play": 36618
+     },
+     {
+      "id": "e8a3112a79579709af0b2c4c72e4f023",
+      "at": 220200,
+      "play": 36618
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 1
+  },
+  "sequence": [
+   "b02a1a002f4fa674cc7ef525dbcdcb0c",
+   "fe3797d27d29d7d363621120984f23f7",
+   "e8a3112a79579709af0b2c4c72e4f023"
+  ]
+ },
+ "H-024": {
+  "arm": "A5",
+  "thread": "m3c-w2-restless-engage-A5-5",
+  "run": "m3c-w2-restless-engage-A5",
+  "configuration": "m3c-w2|restless|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-024",
+    "arm": "A5",
+    "thread": "m3c-w2-restless-engage-A5-5",
+    "run": "m3c-w2-restless-engage-A5",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 72100,
+    "times": [
+     {
+      "id": "m3c-w2-restless-engage-A5-5xf.composite:reckoning/acted/offer",
+      "at": 432600,
+      "play": 72100
+     },
+     {
+      "id": "m3c-w2-restless-engage-A5-5xf.composite:reckoning/acted/accept",
+      "at": 433200,
+      "play": 72200
+     },
+     {
+      "id": "m3c-w2-restless-engage-A5-5xf.composite:reckoning/acted",
+      "at": 433800,
+      "play": 72300
+     },
+     {
+      "id": "m3c-w2-restless-engage-A5-5xf.composite:reckoning/cued",
+      "at": 434400,
+      "play": 72400
+     },
+     {
+      "id": "m3c-w2-restless-engage-A5-5xf.composite:reckoning/billed",
+      "at": 435000,
+      "play": 72500
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w2-restless-engage-A5-5xf.composite:reckoning/acted/offer",
+   "m3c-w2-restless-engage-A5-5xf.composite:reckoning/acted/accept",
+   "m3c-w2-restless-engage-A5-5xf.composite:reckoning/acted",
+   "m3c-w2-restless-engage-A5-5xf.composite:reckoning/cued",
+   "m3c-w2-restless-engage-A5-5xf.composite:reckoning/billed"
+  ]
+ },
+ "H-025": {
+  "arm": "E",
+  "thread": "886760c6365339e439a47310f174fcb5",
+  "run": "E-m3c-w0-restless-decline",
+  "configuration": "m3c-w0|restless|decline",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-025",
+    "arm": "E",
+    "thread": "886760c6365339e439a47310f174fcb5",
+    "run": "E-m3c-w0-restless-decline",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 22000,
+    "times": [
+     {
+      "id": "8ab21754ae7e925bb5d2ac37186b7ed5",
+      "at": 132000,
+      "play": 22000
+     },
+     {
+      "id": "d29cbc8325c0d9d3b7a1fbb3426c1be3",
+      "at": 132000,
+      "play": 22000
+     },
+     {
+      "id": "045aab203f45d7a741ecf47c31954963",
+      "at": 174000,
+      "play": 28917
+     },
+     {
+      "id": "de6d7bd817c8c8b770cd0a9512152f0b",
+      "at": 174000,
+      "play": 28917
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 1
+  },
+  "sequence": [
+   "8ab21754ae7e925bb5d2ac37186b7ed5",
+   "d29cbc8325c0d9d3b7a1fbb3426c1be3",
+   "045aab203f45d7a741ecf47c31954963",
+   "de6d7bd817c8c8b770cd0a9512152f0b"
+  ]
+ },
+ "H-026": {
+  "arm": "A5",
+  "thread": "m3c-w0-steady-accept-last-A5-1",
+  "run": "m3c-w0-steady-accept-last-A5",
+  "configuration": "m3c-w0|steady|accept-last",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-026",
+    "arm": "A5",
+    "thread": "m3c-w0-steady-accept-last-A5-1",
+    "run": "m3c-w0-steady-accept-last-A5",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 14500,
+    "times": [
+     {
+      "id": "m3c-w0-steady-accept-last-A5-1xf.composite:betrayal/bond",
+      "at": 87000,
+      "play": 14500
+     },
+     {
+      "id": "m3c-w0-steady-accept-last-A5-1xf.composite:betrayal/offered",
+      "at": 87600,
+      "play": 14600
+     },
+     {
+      "id": "m3c-w0-steady-accept-last-A5-1xf.composite:betrayal/act",
+      "at": 88200,
+      "play": 14700
+     },
+     {
+      "id": "m3c-w0-steady-accept-last-A5-1xf.composite:betrayal/found",
+      "at": 88800,
+      "play": 14800
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w0-steady-accept-last-A5-1xf.composite:betrayal/bond",
+   "m3c-w0-steady-accept-last-A5-1xf.composite:betrayal/offered",
+   "m3c-w0-steady-accept-last-A5-1xf.composite:betrayal/act",
+   "m3c-w0-steady-accept-last-A5-1xf.composite:betrayal/found"
+  ]
+ },
+ "H-028": {
+  "arm": "A3",
+  "thread": "E-m3c-w2-restless-engage-A3-0-tail",
+  "run": "m3c-w2-restless-engage-A3",
+  "configuration": "m3c-w2|restless|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-028",
+    "arm": "A3",
+    "thread": "E-m3c-w2-restless-engage-A3-0-tail",
+    "run": "m3c-w2-restless-engage-A3",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 100,
+    "times": [
+     {
+      "id": "E-m3c-w2-restless-engage-A3-0-tail-ask",
+      "at": 600,
+      "play": 100
+     },
+     {
+      "id": "E-m3c-w2-restless-engage-A3-0-tail-answer",
+      "at": 1200,
+      "play": 200
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w2-restless-engage-A3-0-tail-ask",
+   "E-m3c-w2-restless-engage-A3-0-tail-answer"
+  ]
+ },
+ "H-029": {
+  "arm": "A3",
+  "thread": "E-m3c-w2-restless-engage-A3-2-repair",
+  "run": "m3c-w2-restless-engage-A3",
+  "configuration": "m3c-w2|restless|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-029",
+    "arm": "A3",
+    "thread": "E-m3c-w2-restless-engage-A3-2-repair",
+    "run": "m3c-w2-restless-engage-A3",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 28900,
+    "times": [
+     {
+      "id": "E-m3c-w2-restless-engage-A3-2-repair-ask",
+      "at": 173400,
+      "play": 28900
+     },
+     {
+      "id": "E-m3c-w2-restless-engage-A3-2-repair-answer",
+      "at": 174000,
+      "play": 29000
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w2-restless-engage-A3-2-repair-ask",
+   "E-m3c-w2-restless-engage-A3-2-repair-answer"
+  ]
+ },
+ "H-030": {
+  "arm": "A3",
+  "thread": "E-m3c-w1-calm-ignore-A3-5-debt",
+  "run": "m3c-w1-calm-ignore-A3",
+  "configuration": "m3c-w1|calm|ignore",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-030",
+    "arm": "A3",
+    "thread": "E-m3c-w1-calm-ignore-A3-5-debt",
+    "run": "m3c-w1-calm-ignore-A3",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 72100,
+    "times": [
+     {
+      "id": "E-m3c-w1-calm-ignore-A3-5-debt-ask",
+      "at": 432600,
+      "play": 72100
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w1-calm-ignore-A3-5-debt-ask"
+  ]
+ },
+ "H-031": {
+  "arm": "E",
+  "thread": "d066ec78cce58742d8987a0063c23f37",
+  "run": "E-m3c-w1-calm-ignore",
+  "configuration": "m3c-w1|calm|ignore",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-031",
+    "arm": "E",
+    "thread": "d066ec78cce58742d8987a0063c23f37",
+    "run": "E-m3c-w1-calm-ignore",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 4308,
+    "times": [
+     {
+      "id": "bbb56925fb182069d15aad1a2a26712a",
+      "at": 26400,
+      "play": 4308
+     }
+    ]
+   },
+   {
+    "sample": "H-038",
+    "arm": "A1",
+    "thread": "d066ec78cce58742d8987a0063c23f37",
+    "run": "A1-m3c-w1-steady-engage",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 4308,
+    "times": [
+     {
+      "id": "bbb56925fb182069d15aad1a2a26712a",
+      "at": 26400,
+      "play": 4308
+     }
+    ]
+   },
+   {
+    "sample": "H-061",
+    "arm": "A1",
+    "thread": "d066ec78cce58742d8987a0063c23f37",
+    "run": "A1-m3c-w1-calm-ignore",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 4308,
+    "times": [
+     {
+      "id": "bbb56925fb182069d15aad1a2a26712a",
+      "at": 26400,
+      "play": 4308
+     }
+    ]
+   },
+   {
+    "sample": "H-076",
+    "arm": "A1",
+    "thread": "43bca088354785f5d00b561fa1e96100",
+    "run": "A1-m3c-w1-calm-ignore",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 4308,
+    "times": [
+     {
+      "id": "bbb56925fb182069d15aad1a2a26712a",
+      "at": 26400,
+      "play": 4308
+     }
+    ]
+   },
+   {
+    "sample": "H-089",
+    "arm": "E",
+    "thread": "43bca088354785f5d00b561fa1e96100",
+    "run": "E-m3c-w1-calm-ignore",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 4308,
+    "times": [
+     {
+      "id": "bbb56925fb182069d15aad1a2a26712a",
+      "at": 26400,
+      "play": 4308
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 2,
+   "A1": 3
+  },
+  "sequence": [
+   "bbb56925fb182069d15aad1a2a26712a"
+  ]
+ },
+ "H-032": {
+  "arm": "A1",
+  "thread": "760cd7c249a7f0d6ffbc6baba5e869e4",
+  "run": "A1-m3c-w0-steady-accept-last",
+  "configuration": "m3c-w0|steady|accept-last",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-032",
+    "arm": "A1",
+    "thread": "760cd7c249a7f0d6ffbc6baba5e869e4",
+    "run": "A1-m3c-w0-steady-accept-last",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 28918,
+    "times": [
+     {
+      "id": "e64f391705744510eba7d401216c4d8e",
+      "at": 174000,
+      "play": 28918
+     }
+    ]
+   },
+   {
+    "sample": "H-091",
+    "arm": "E",
+    "thread": "760cd7c249a7f0d6ffbc6baba5e869e4",
+    "run": "E-m3c-w0-steady-accept-last",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 28918,
+    "times": [
+     {
+      "id": "e64f391705744510eba7d401216c4d8e",
+      "at": 174000,
+      "play": 28918
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 1,
+   "E": 1
+  },
+  "sequence": [
+   "e64f391705744510eba7d401216c4d8e"
+  ]
+ },
+ "H-033": {
+  "arm": "A5",
+  "thread": "m3c-w1-restless-accept-middle-A5-5",
+  "run": "m3c-w1-restless-accept-middle-A5",
+  "configuration": "m3c-w1|restless|accept-middle",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-033",
+    "arm": "A5",
+    "thread": "m3c-w1-restless-accept-middle-A5-5",
+    "run": "m3c-w1-restless-accept-middle-A5",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 72100,
+    "times": [
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-5xf.composite:reckoning/acted/offer",
+      "at": 432600,
+      "play": 72100
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-5xf.composite:reckoning/acted/accept",
+      "at": 433200,
+      "play": 72200
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-5xf.composite:reckoning/acted",
+      "at": 433800,
+      "play": 72300
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-5xf.composite:reckoning/cued",
+      "at": 434400,
+      "play": 72400
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-5xf.composite:reckoning/billed",
+      "at": 435000,
+      "play": 72500
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w1-restless-accept-middle-A5-5xf.composite:reckoning/acted/offer",
+   "m3c-w1-restless-accept-middle-A5-5xf.composite:reckoning/acted/accept",
+   "m3c-w1-restless-accept-middle-A5-5xf.composite:reckoning/acted",
+   "m3c-w1-restless-accept-middle-A5-5xf.composite:reckoning/cued",
+   "m3c-w1-restless-accept-middle-A5-5xf.composite:reckoning/billed"
+  ]
+ },
+ "H-034": {
+  "arm": "A5",
+  "thread": "m3c-w0-restless-decline-A5-2",
+  "run": "m3c-w0-restless-decline-A5",
+  "configuration": "m3c-w0|restless|decline",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-034",
+    "arm": "A5",
+    "thread": "m3c-w0-restless-decline-A5-2",
+    "run": "m3c-w0-restless-decline-A5",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 28900,
+    "times": [
+     {
+      "id": "m3c-w0-restless-decline-A5-2xf.composite:reckoning/acted/offer",
+      "at": 173400,
+      "play": 28900
+     },
+     {
+      "id": "m3c-w0-restless-decline-A5-2xf.composite:reckoning/acted/refuse",
+      "at": 174000,
+      "play": 29000
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w0-restless-decline-A5-2xf.composite:reckoning/acted/offer",
+   "m3c-w0-restless-decline-A5-2xf.composite:reckoning/acted/refuse"
+  ]
+ },
+ "H-035": {
+  "arm": "E",
+  "thread": "c38fb2b1c51ed901519bb1e06fcb4dee",
+  "run": "E-m3c-w1-steady-engage",
+  "configuration": "m3c-w1|steady|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-035",
+    "arm": "E",
+    "thread": "c38fb2b1c51ed901519bb1e06fcb4dee",
+    "run": "E-m3c-w1-steady-engage",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 34766,
+    "times": [
+     {
+      "id": "73b6eec215f0b107afc31c268591332a",
+      "at": 208800,
+      "play": 34766
+     }
+    ]
+   },
+   {
+    "sample": "H-050",
+    "arm": "E",
+    "thread": "c38fb2b1c51ed901519bb1e06fcb4dee",
+    "run": "E-m3c-w1-restless-accept-middle",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 34766,
+    "times": [
+     {
+      "id": "73b6eec215f0b107afc31c268591332a",
+      "at": 208800,
+      "play": 34766
+     }
+    ]
+   },
+   {
+    "sample": "H-087",
+    "arm": "A1",
+    "thread": "c38fb2b1c51ed901519bb1e06fcb4dee",
+    "run": "A1-m3c-w1-restless-accept-middle",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 92045,
+    "times": [
+     {
+      "id": "73b6eec215f0b107afc31c268591332a",
+      "at": 552600,
+      "play": 92045
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 2,
+   "A1": 1
+  },
+  "sequence": [
+   "73b6eec215f0b107afc31c268591332a"
+  ]
+ },
+ "H-036": {
+  "arm": "A3",
+  "thread": "E-m3c-w0-restless-decline-A3-4-removal",
+  "run": "m3c-w0-restless-decline-A3",
+  "configuration": "m3c-w0|restless|decline",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-036",
+    "arm": "A3",
+    "thread": "E-m3c-w0-restless-decline-A3-4-removal",
+    "run": "m3c-w0-restless-decline-A3",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 57700,
+    "times": [
+     {
+      "id": "E-m3c-w0-restless-decline-A3-4-removal-ask",
+      "at": 346200,
+      "play": 57700
+     },
+     {
+      "id": "E-m3c-w0-restless-decline-A3-4-removal-answer",
+      "at": 346800,
+      "play": 57800
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w0-restless-decline-A3-4-removal-ask",
+   "E-m3c-w0-restless-decline-A3-4-removal-answer"
+  ]
+ },
+ "H-037": {
+  "arm": "A5",
+  "thread": "m3c-w2-steady-accept-first-A5-1",
+  "run": "m3c-w2-steady-accept-first-A5",
+  "configuration": "m3c-w2|steady|accept-first",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-037",
+    "arm": "A5",
+    "thread": "m3c-w2-steady-accept-first-A5-1",
+    "run": "m3c-w2-steady-accept-first-A5",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 14500,
+    "times": [
+     {
+      "id": "m3c-w2-steady-accept-first-A5-1xf.composite:reckoning/acted/offer",
+      "at": 87000,
+      "play": 14500
+     },
+     {
+      "id": "m3c-w2-steady-accept-first-A5-1xf.composite:reckoning/acted/accept",
+      "at": 87600,
+      "play": 14600
+     },
+     {
+      "id": "m3c-w2-steady-accept-first-A5-1xf.composite:reckoning/acted",
+      "at": 88200,
+      "play": 14700
+     },
+     {
+      "id": "m3c-w2-steady-accept-first-A5-1xf.composite:reckoning/cued",
+      "at": 88800,
+      "play": 14800
+     },
+     {
+      "id": "m3c-w2-steady-accept-first-A5-1xf.composite:reckoning/billed",
+      "at": 89400,
+      "play": 14900
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w2-steady-accept-first-A5-1xf.composite:reckoning/acted/offer",
+   "m3c-w2-steady-accept-first-A5-1xf.composite:reckoning/acted/accept",
+   "m3c-w2-steady-accept-first-A5-1xf.composite:reckoning/acted",
+   "m3c-w2-steady-accept-first-A5-1xf.composite:reckoning/cued",
+   "m3c-w2-steady-accept-first-A5-1xf.composite:reckoning/billed"
+  ]
+ },
+ "H-039": {
+  "arm": "A3",
+  "thread": "E-m3c-w2-steady-accept-first-A3-2-repair",
+  "run": "m3c-w2-steady-accept-first-A3",
+  "configuration": "m3c-w2|steady|accept-first",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-039",
+    "arm": "A3",
+    "thread": "E-m3c-w2-steady-accept-first-A3-2-repair",
+    "run": "m3c-w2-steady-accept-first-A3",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 28900,
+    "times": [
+     {
+      "id": "E-m3c-w2-steady-accept-first-A3-2-repair-ask",
+      "at": 173400,
+      "play": 28900
+     },
+     {
+      "id": "E-m3c-w2-steady-accept-first-A3-2-repair-answer",
+      "at": 174000,
+      "play": 29000
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w2-steady-accept-first-A3-2-repair-ask",
+   "E-m3c-w2-steady-accept-first-A3-2-repair-answer"
+  ]
+ },
+ "H-040": {
+  "arm": "A3",
+  "thread": "E-m3c-w1-calm-ignore-A3-2-recovery",
+  "run": "m3c-w1-calm-ignore-A3",
+  "configuration": "m3c-w1|calm|ignore",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-040",
+    "arm": "A3",
+    "thread": "E-m3c-w1-calm-ignore-A3-2-recovery",
+    "run": "m3c-w1-calm-ignore-A3",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 28900,
+    "times": [
+     {
+      "id": "E-m3c-w1-calm-ignore-A3-2-recovery-ask",
+      "at": 173400,
+      "play": 28900
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w1-calm-ignore-A3-2-recovery-ask"
+  ]
+ },
+ "H-041": {
+  "arm": "A3",
+  "thread": "E-m3c-w0-restless-decline-A3-2-delivery",
+  "run": "m3c-w0-restless-decline-A3",
+  "configuration": "m3c-w0|restless|decline",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-041",
+    "arm": "A3",
+    "thread": "E-m3c-w0-restless-decline-A3-2-delivery",
+    "run": "m3c-w0-restless-decline-A3",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 28900,
+    "times": [
+     {
+      "id": "E-m3c-w0-restless-decline-A3-2-delivery-ask",
+      "at": 173400,
+      "play": 28900
+     },
+     {
+      "id": "E-m3c-w0-restless-decline-A3-2-delivery-answer",
+      "at": 174000,
+      "play": 29000
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w0-restless-decline-A3-2-delivery-ask",
+   "E-m3c-w0-restless-decline-A3-2-delivery-answer"
+  ]
+ },
+ "H-042": {
+  "arm": "A1",
+  "thread": "ea34713672364f85f47c08754a3577e2",
+  "run": "A1-m3c-w0-calm-engage",
+  "configuration": "m3c-w0|calm|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-042",
+    "arm": "A1",
+    "thread": "ea34713672364f85f47c08754a3577e2",
+    "run": "A1-m3c-w0-calm-engage",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 4478,
+    "times": [
+     {
+      "id": "aba6f075af98335de26ce025a3aa6be2",
+      "at": 27000,
+      "play": 4478
+     }
+    ]
+   },
+   {
+    "sample": "H-051",
+    "arm": "E",
+    "thread": "ea34713672364f85f47c08754a3577e2",
+    "run": "E-m3c-w0-calm-engage",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 4478,
+    "times": [
+     {
+      "id": "aba6f075af98335de26ce025a3aa6be2",
+      "at": 27000,
+      "play": 4478
+     }
+    ]
+   },
+   {
+    "sample": "H-056",
+    "arm": "E",
+    "thread": "ea34713672364f85f47c08754a3577e2",
+    "run": "E-m3c-w0-steady-accept-last",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 4478,
+    "times": [
+     {
+      "id": "aba6f075af98335de26ce025a3aa6be2",
+      "at": 27000,
+      "play": 4478
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 1,
+   "E": 2
+  },
+  "sequence": [
+   "aba6f075af98335de26ce025a3aa6be2"
+  ]
+ },
+ "H-043": {
+  "arm": "A3",
+  "thread": "E-m3c-w0-calm-engage-A3-6-escort",
+  "run": "m3c-w0-calm-engage-A3",
+  "configuration": "m3c-w0|calm|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-043",
+    "arm": "A3",
+    "thread": "E-m3c-w0-calm-engage-A3-6-escort",
+    "run": "m3c-w0-calm-engage-A3",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 86500,
+    "times": [
+     {
+      "id": "E-m3c-w0-calm-engage-A3-6-escort-ask",
+      "at": 519000,
+      "play": 86500
+     },
+     {
+      "id": "E-m3c-w0-calm-engage-A3-6-escort-answer",
+      "at": 519600,
+      "play": 86600
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w0-calm-engage-A3-6-escort-ask",
+   "E-m3c-w0-calm-engage-A3-6-escort-answer"
+  ]
+ },
+ "H-044": {
+  "arm": "A3",
+  "thread": "E-m3c-w1-steady-engage-A3-3-delivery",
+  "run": "m3c-w1-steady-engage-A3",
+  "configuration": "m3c-w1|steady|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-044",
+    "arm": "A3",
+    "thread": "E-m3c-w1-steady-engage-A3-3-delivery",
+    "run": "m3c-w1-steady-engage-A3",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 43300,
+    "times": [
+     {
+      "id": "E-m3c-w1-steady-engage-A3-3-delivery-ask",
+      "at": 259800,
+      "play": 43300
+     },
+     {
+      "id": "E-m3c-w1-steady-engage-A3-3-delivery-answer",
+      "at": 260400,
+      "play": 43400
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w1-steady-engage-A3-3-delivery-ask",
+   "E-m3c-w1-steady-engage-A3-3-delivery-answer"
+  ]
+ },
+ "H-045": {
+  "arm": "A3",
+  "thread": "E-m3c-w0-calm-engage-A3-3-debt",
+  "run": "m3c-w0-calm-engage-A3",
+  "configuration": "m3c-w0|calm|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-045",
+    "arm": "A3",
+    "thread": "E-m3c-w0-calm-engage-A3-3-debt",
+    "run": "m3c-w0-calm-engage-A3",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 43300,
+    "times": [
+     {
+      "id": "E-m3c-w0-calm-engage-A3-3-debt-ask",
+      "at": 259800,
+      "play": 43300
+     },
+     {
+      "id": "E-m3c-w0-calm-engage-A3-3-debt-answer",
+      "at": 260400,
+      "play": 43400
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w0-calm-engage-A3-3-debt-ask",
+   "E-m3c-w0-calm-engage-A3-3-debt-answer"
+  ]
+ },
+ "H-046": {
+  "arm": "A5",
+  "thread": "m3c-w0-restless-decline-A5-5",
+  "run": "m3c-w0-restless-decline-A5",
+  "configuration": "m3c-w0|restless|decline",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 4,
+    "target": 4,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 4,
+    "target": 4,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-046",
+    "arm": "A5",
+    "thread": "m3c-w0-restless-decline-A5-5",
+    "run": "m3c-w0-restless-decline-A5",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 72100,
+    "times": [
+     {
+      "id": "m3c-w0-restless-decline-A5-5xf.composite:betrayal/bond",
+      "at": 432600,
+      "play": 72100
+     },
+     {
+      "id": "m3c-w0-restless-decline-A5-5xf.composite:betrayal/offered",
+      "at": 433200,
+      "play": 72200
+     },
+     {
+      "id": "m3c-w0-restless-decline-A5-5xf.composite:betrayal/act",
+      "at": 433800,
+      "play": 72300
+     },
+     {
+      "id": "m3c-w0-restless-decline-A5-5xf.composite:betrayal/found",
+      "at": 434400,
+      "play": 72400
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w0-restless-decline-A5-5xf.composite:betrayal/bond",
+   "m3c-w0-restless-decline-A5-5xf.composite:betrayal/offered",
+   "m3c-w0-restless-decline-A5-5xf.composite:betrayal/act",
+   "m3c-w0-restless-decline-A5-5xf.composite:betrayal/found"
+  ]
+ },
+ "H-047": {
+  "arm": "A1",
+  "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
+  "run": "A1-m3c-w0-restless-decline",
+  "configuration": "m3c-w0|restless|decline",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-047",
+    "arm": "A1",
+    "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
+    "run": "A1-m3c-w0-restless-decline",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 56248,
+    "times": [
+     {
+      "id": "1369dc7da675a77468e883069b585698",
+      "at": 337800,
+      "play": 56248
+     }
+    ]
+   },
+   {
+    "sample": "H-059",
+    "arm": "E",
+    "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
+    "run": "E-m3c-w0-calm-engage",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 66000,
+    "times": [
+     {
+      "id": "1369dc7da675a77468e883069b585698",
+      "at": 396000,
+      "play": 66000
+     }
+    ]
+   },
+   {
+    "sample": "H-062",
+    "arm": "A1",
+    "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
+    "run": "A1-m3c-w0-steady-accept-last",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 66000,
+    "times": [
+     {
+      "id": "1369dc7da675a77468e883069b585698",
+      "at": 396000,
+      "play": 66000
+     }
+    ]
+   },
+   {
+    "sample": "H-080",
+    "arm": "A1",
+    "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
+    "run": "A1-m3c-w0-calm-engage",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 66000,
+    "times": [
+     {
+      "id": "1369dc7da675a77468e883069b585698",
+      "at": 396000,
+      "play": 66000
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 3,
+   "E": 1
+  },
+  "sequence": [
+   "1369dc7da675a77468e883069b585698"
+  ]
+ },
+ "H-048": {
+  "arm": "A3",
+  "thread": "E-m3c-w0-steady-accept-last-A3-6-escort",
+  "run": "m3c-w0-steady-accept-last-A3",
+  "configuration": "m3c-w0|steady|accept-last",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-048",
+    "arm": "A3",
+    "thread": "E-m3c-w0-steady-accept-last-A3-6-escort",
+    "run": "m3c-w0-steady-accept-last-A3",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 86500,
+    "times": [
+     {
+      "id": "E-m3c-w0-steady-accept-last-A3-6-escort-ask",
+      "at": 519000,
+      "play": 86500
+     },
+     {
+      "id": "E-m3c-w0-steady-accept-last-A3-6-escort-answer",
+      "at": 519600,
+      "play": 86600
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w0-steady-accept-last-A3-6-escort-ask",
+   "E-m3c-w0-steady-accept-last-A3-6-escort-answer"
+  ]
+ },
+ "H-049": {
+  "arm": "A5",
+  "thread": "m3c-w2-restless-engage-A5-1",
+  "run": "m3c-w2-restless-engage-A5",
+  "configuration": "m3c-w2|restless|engage",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-049",
+    "arm": "A5",
+    "thread": "m3c-w2-restless-engage-A5-1",
+    "run": "m3c-w2-restless-engage-A5",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 14500,
+    "times": [
+     {
+      "id": "m3c-w2-restless-engage-A5-1xf.composite:betrayal/bond",
+      "at": 87000,
+      "play": 14500
+     },
+     {
+      "id": "m3c-w2-restless-engage-A5-1xf.composite:betrayal/offered",
+      "at": 87600,
+      "play": 14600
+     },
+     {
+      "id": "m3c-w2-restless-engage-A5-1xf.composite:betrayal/act",
+      "at": 88200,
+      "play": 14700
+     },
+     {
+      "id": "m3c-w2-restless-engage-A5-1xf.composite:betrayal/found",
+      "at": 88800,
+      "play": 14800
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w2-restless-engage-A5-1xf.composite:betrayal/bond",
+   "m3c-w2-restless-engage-A5-1xf.composite:betrayal/offered",
+   "m3c-w2-restless-engage-A5-1xf.composite:betrayal/act",
+   "m3c-w2-restless-engage-A5-1xf.composite:betrayal/found"
+  ]
+ },
+ "H-052": {
+  "arm": "A3",
+  "thread": "E-m3c-w1-calm-ignore-A3-0-debt",
+  "run": "m3c-w1-calm-ignore-A3",
+  "configuration": "m3c-w1|calm|ignore",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-052",
+    "arm": "A3",
+    "thread": "E-m3c-w1-calm-ignore-A3-0-debt",
+    "run": "m3c-w1-calm-ignore-A3",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 100,
+    "times": [
+     {
+      "id": "E-m3c-w1-calm-ignore-A3-0-debt-ask",
+      "at": 600,
+      "play": 100
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w1-calm-ignore-A3-0-debt-ask"
+  ]
+ },
+ "H-053": {
+  "arm": "A5",
+  "thread": "m3c-w2-restless-engage-A5-6",
+  "run": "m3c-w2-restless-engage-A5",
+  "configuration": "m3c-w2|restless|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-053",
+    "arm": "A5",
+    "thread": "m3c-w2-restless-engage-A5-6",
+    "run": "m3c-w2-restless-engage-A5",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 86500,
+    "times": [
+     {
+      "id": "m3c-w2-restless-engage-A5-6xf.composite:betrayal/bond",
+      "at": 519000,
+      "play": 86500
+     },
+     {
+      "id": "m3c-w2-restless-engage-A5-6xf.composite:betrayal/offered",
+      "at": 519600,
+      "play": 86600
+     },
+     {
+      "id": "m3c-w2-restless-engage-A5-6xf.composite:betrayal/act",
+      "at": 520200,
+      "play": 86700
+     },
+     {
+      "id": "m3c-w2-restless-engage-A5-6xf.composite:betrayal/found",
+      "at": 520800,
+      "play": 86800
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w2-restless-engage-A5-6xf.composite:betrayal/bond",
+   "m3c-w2-restless-engage-A5-6xf.composite:betrayal/offered",
+   "m3c-w2-restless-engage-A5-6xf.composite:betrayal/act",
+   "m3c-w2-restless-engage-A5-6xf.composite:betrayal/found"
+  ]
+ },
+ "H-055": {
+  "arm": "E",
+  "thread": "92fe4edce15d65073e7a2f6cf515ab04",
+  "run": "E-m3c-w2-restless-engage",
+  "configuration": "m3c-w2|restless|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-055",
+    "arm": "E",
+    "thread": "92fe4edce15d65073e7a2f6cf515ab04",
+    "run": "E-m3c-w2-restless-engage",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 4135,
+    "times": [
+     {
+      "id": "7b5a351d9340f50ef75a1473368e9284",
+      "at": 25200,
+      "play": 4135
+     },
+     {
+      "id": "96519e466fd58dcc384df6bf67631fee",
+      "at": 105600,
+      "play": 17559
+     },
+     {
+      "id": "51e5cb0548b1c61347204883da817961",
+      "at": 105600,
+      "play": 17559
+     }
+    ]
+   },
+   {
+    "sample": "H-058",
+    "arm": "E",
+    "thread": "92fe4edce15d65073e7a2f6cf515ab04",
+    "run": "E-m3c-w2-steady-accept-first",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 4135,
+    "times": [
+     {
+      "id": "7b5a351d9340f50ef75a1473368e9284",
+      "at": 25200,
+      "play": 4135
+     },
+     {
+      "id": "96519e466fd58dcc384df6bf67631fee",
+      "at": 105600,
+      "play": 17559
+     },
+     {
+      "id": "51e5cb0548b1c61347204883da817961",
+      "at": 105600,
+      "play": 17559
+     }
+    ]
+   },
+   {
+    "sample": "H-068",
+    "arm": "A1",
+    "thread": "92fe4edce15d65073e7a2f6cf515ab04",
+    "run": "A1-m3c-w2-restless-engage",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 4135,
+    "times": [
+     {
+      "id": "7b5a351d9340f50ef75a1473368e9284",
+      "at": 25200,
+      "play": 4135
+     },
+     {
+      "id": "96519e466fd58dcc384df6bf67631fee",
+      "at": 105600,
+      "play": 17559
+     },
+     {
+      "id": "51e5cb0548b1c61347204883da817961",
+      "at": 105600,
+      "play": 17559
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 2,
+   "A1": 1
+  },
+  "sequence": [
+   "7b5a351d9340f50ef75a1473368e9284",
+   "96519e466fd58dcc384df6bf67631fee",
+   "51e5cb0548b1c61347204883da817961"
+  ]
+ },
+ "H-057": {
+  "arm": "A5",
+  "thread": "m3c-w1-steady-engage-A5-3",
+  "run": "m3c-w1-steady-engage-A5",
+  "configuration": "m3c-w1|steady|engage",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-057",
+    "arm": "A5",
+    "thread": "m3c-w1-steady-engage-A5-3",
+    "run": "m3c-w1-steady-engage-A5",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 43300,
+    "times": [
+     {
+      "id": "m3c-w1-steady-engage-A5-3xf.composite:reckoning/acted/offer",
+      "at": 259800,
+      "play": 43300
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-3xf.composite:reckoning/acted/accept",
+      "at": 260400,
+      "play": 43400
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-3xf.composite:reckoning/acted",
+      "at": 261000,
+      "play": 43500
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-3xf.composite:reckoning/cued",
+      "at": 261600,
+      "play": 43600
+     },
+     {
+      "id": "m3c-w1-steady-engage-A5-3xf.composite:reckoning/billed",
+      "at": 262200,
+      "play": 43700
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w1-steady-engage-A5-3xf.composite:reckoning/acted/offer",
+   "m3c-w1-steady-engage-A5-3xf.composite:reckoning/acted/accept",
+   "m3c-w1-steady-engage-A5-3xf.composite:reckoning/acted",
+   "m3c-w1-steady-engage-A5-3xf.composite:reckoning/cued",
+   "m3c-w1-steady-engage-A5-3xf.composite:reckoning/billed"
+  ]
+ },
+ "H-060": {
+  "arm": "A1",
+  "thread": "2d7e50b645f4295ce36c2a56a8c5bf44",
+  "run": "A1-m3c-w1-calm-ignore",
+  "configuration": "m3c-w1|calm|ignore",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-060",
+    "arm": "A1",
+    "thread": "2d7e50b645f4295ce36c2a56a8c5bf44",
+    "run": "A1-m3c-w1-calm-ignore",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 4308,
+    "times": [
+     {
+      "id": "bbb56925fb182069d15aad1a2a26712a",
+      "at": 26400,
+      "play": 4308
+     },
+     {
+      "id": "178e82fcd7adf1cb80107b7bca74de40",
+      "at": 51000,
+      "play": 8459
+     }
+    ]
+   },
+   {
+    "sample": "H-095",
+    "arm": "E",
+    "thread": "2d7e50b645f4295ce36c2a56a8c5bf44",
+    "run": "E-m3c-w1-calm-ignore",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 4308,
+    "times": [
+     {
+      "id": "bbb56925fb182069d15aad1a2a26712a",
+      "at": 26400,
+      "play": 4308
+     },
+     {
+      "id": "178e82fcd7adf1cb80107b7bca74de40",
+      "at": 51000,
+      "play": 8459
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 1,
+   "E": 1
+  },
+  "sequence": [
+   "bbb56925fb182069d15aad1a2a26712a",
+   "178e82fcd7adf1cb80107b7bca74de40"
+  ]
+ },
+ "H-063": {
+  "arm": "A5",
+  "thread": "m3c-w0-steady-accept-last-A5-5",
+  "run": "m3c-w0-steady-accept-last-A5",
+  "configuration": "m3c-w0|steady|accept-last",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-063",
+    "arm": "A5",
+    "thread": "m3c-w0-steady-accept-last-A5-5",
+    "run": "m3c-w0-steady-accept-last-A5",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 72100,
+    "times": [
+     {
+      "id": "m3c-w0-steady-accept-last-A5-5xf.composite:reckoning/acted/offer",
+      "at": 432600,
+      "play": 72100
+     },
+     {
+      "id": "m3c-w0-steady-accept-last-A5-5xf.composite:reckoning/acted/accept",
+      "at": 433200,
+      "play": 72200
+     },
+     {
+      "id": "m3c-w0-steady-accept-last-A5-5xf.composite:reckoning/acted",
+      "at": 433800,
+      "play": 72300
+     },
+     {
+      "id": "m3c-w0-steady-accept-last-A5-5xf.composite:reckoning/cued",
+      "at": 434400,
+      "play": 72400
+     },
+     {
+      "id": "m3c-w0-steady-accept-last-A5-5xf.composite:reckoning/billed",
+      "at": 435000,
+      "play": 72500
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w0-steady-accept-last-A5-5xf.composite:reckoning/acted/offer",
+   "m3c-w0-steady-accept-last-A5-5xf.composite:reckoning/acted/accept",
+   "m3c-w0-steady-accept-last-A5-5xf.composite:reckoning/acted",
+   "m3c-w0-steady-accept-last-A5-5xf.composite:reckoning/cued",
+   "m3c-w0-steady-accept-last-A5-5xf.composite:reckoning/billed"
+  ]
+ },
+ "H-064": {
+  "arm": "A3",
+  "thread": "E-m3c-w1-steady-engage-A3-4-tail",
+  "run": "m3c-w1-steady-engage-A3",
+  "configuration": "m3c-w1|steady|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-064",
+    "arm": "A3",
+    "thread": "E-m3c-w1-steady-engage-A3-4-tail",
+    "run": "m3c-w1-steady-engage-A3",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 57700,
+    "times": [
+     {
+      "id": "E-m3c-w1-steady-engage-A3-4-tail-ask",
+      "at": 346200,
+      "play": 57700
+     },
+     {
+      "id": "E-m3c-w1-steady-engage-A3-4-tail-answer",
+      "at": 346800,
+      "play": 57800
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w1-steady-engage-A3-4-tail-ask",
+   "E-m3c-w1-steady-engage-A3-4-tail-answer"
+  ]
+ },
+ "H-065": {
+  "arm": "A1",
+  "thread": "1a12d0642671ddde3d0271a270f51401",
+  "run": "A1-m3c-w2-restless-engage",
+  "configuration": "m3c-w2|restless|engage",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-065",
+    "arm": "A1",
+    "thread": "1a12d0642671ddde3d0271a270f51401",
+    "run": "A1-m3c-w2-restless-engage",
+    "configuration": "m3c-w2|restless|engage",
+    "start": 35774,
+    "times": [
+     {
+      "id": "f2c41f5c48e10d506c9b5a631d9fb6f0",
+      "at": 214800,
+      "play": 35774
+     },
+     {
+      "id": "8f6015438567428bb4baea69ea51bb2d",
+      "at": 214800,
+      "play": 35774
+     },
+     {
+      "id": "b311e8e7ec6eeb32730134a28d872041",
+      "at": 214800,
+      "play": 35775
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 1
+  },
+  "sequence": [
+   "f2c41f5c48e10d506c9b5a631d9fb6f0",
+   "8f6015438567428bb4baea69ea51bb2d",
+   "b311e8e7ec6eeb32730134a28d872041"
+  ]
+ },
+ "H-066": {
+  "arm": "E",
+  "thread": "a6d04bd61ed787ee7140a41bdb6582ec",
+  "run": "E-m3c-w1-steady-engage",
+  "configuration": "m3c-w1|steady|engage",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-066",
+    "arm": "E",
+    "thread": "a6d04bd61ed787ee7140a41bdb6582ec",
+    "run": "E-m3c-w1-steady-engage",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 28976,
+    "times": [
+     {
+      "id": "7120d25321e3f129e0842382b435b6e7",
+      "at": 174000,
+      "play": 28976
+     },
+     {
+      "id": "3a9b5224aba1633a74f2397b0880ef4d",
+      "at": 174000,
+      "play": 28976
+     },
+     {
+      "id": "3f04613aa3befaca53f4d02799dc6de7",
+      "at": 174000,
+      "play": 28977
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 1
+  },
+  "sequence": [
+   "7120d25321e3f129e0842382b435b6e7",
+   "3a9b5224aba1633a74f2397b0880ef4d",
+   "3f04613aa3befaca53f4d02799dc6de7"
+  ]
+ },
+ "H-067": {
+  "arm": "E",
+  "thread": "fc163eaf00cd421283a94208f41ad1cf",
+  "run": "E-m3c-w0-restless-decline",
+  "configuration": "m3c-w0|restless|decline",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-067",
+    "arm": "E",
+    "thread": "fc163eaf00cd421283a94208f41ad1cf",
+    "run": "E-m3c-w0-restless-decline",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 10464,
+    "times": [
+     {
+      "id": "75211eae54135a20b015dc5061b1ec18",
+      "at": 63000,
+      "play": 10464
+     },
+     {
+      "id": "d29cbc8325c0d9d3b7a1fbb3426c1be3",
+      "at": 132000,
+      "play": 21980
+     },
+     {
+      "id": "8ab21754ae7e925bb5d2ac37186b7ed5",
+      "at": 132000,
+      "play": 21980
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 1
+  },
+  "sequence": [
+   "75211eae54135a20b015dc5061b1ec18",
+   "d29cbc8325c0d9d3b7a1fbb3426c1be3",
+   "8ab21754ae7e925bb5d2ac37186b7ed5"
+  ]
+ },
+ "H-069": {
+  "arm": "A1",
+  "thread": "a1a91a000cad9f8a90adf114550dccd1",
+  "run": "A1-m3c-w2-steady-accept-first",
+  "configuration": "m3c-w2|steady|accept-first",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-069",
+    "arm": "A1",
+    "thread": "a1a91a000cad9f8a90adf114550dccd1",
+    "run": "A1-m3c-w2-steady-accept-first",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 36619,
+    "times": [
+     {
+      "id": "cb4b5c4c944c930841852b82c661c8af",
+      "at": 220200,
+      "play": 36619
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 1
+  },
+  "sequence": [
+   "cb4b5c4c944c930841852b82c661c8af"
+  ]
+ },
+ "H-070": {
+  "arm": "A5",
+  "thread": "m3c-w0-restless-decline-A5-4",
+  "run": "m3c-w0-restless-decline-A5",
+  "configuration": "m3c-w0|restless|decline",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-070",
+    "arm": "A5",
+    "thread": "m3c-w0-restless-decline-A5-4",
+    "run": "m3c-w0-restless-decline-A5",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 57700,
+    "times": [
+     {
+      "id": "m3c-w0-restless-decline-A5-4xf.composite:protection/approach",
+      "at": 346200,
+      "play": 57700
+     },
+     {
+      "id": "m3c-w0-restless-decline-A5-4xf.composite:protection/struck",
+      "at": 346800,
+      "play": 57800
+     },
+     {
+      "id": "m3c-w0-restless-decline-A5-4xf.composite:protection/counter/offer",
+      "at": 347400,
+      "play": 57900
+     },
+     {
+      "id": "m3c-w0-restless-decline-A5-4xf.composite:protection/counter/refuse",
+      "at": 348000,
+      "play": 58000
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w0-restless-decline-A5-4xf.composite:protection/approach",
+   "m3c-w0-restless-decline-A5-4xf.composite:protection/struck",
+   "m3c-w0-restless-decline-A5-4xf.composite:protection/counter/offer",
+   "m3c-w0-restless-decline-A5-4xf.composite:protection/counter/refuse"
+  ]
+ },
+ "H-071": {
+  "arm": "A5",
+  "thread": "m3c-w1-restless-accept-middle-A5-4",
+  "run": "m3c-w1-restless-accept-middle-A5",
+  "configuration": "m3c-w1|restless|accept-middle",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 3,
+    "target": 3,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-071",
+    "arm": "A5",
+    "thread": "m3c-w1-restless-accept-middle-A5-4",
+    "run": "m3c-w1-restless-accept-middle-A5",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 57700,
+    "times": [
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-4xf.composite:reckoning/acted/offer",
+      "at": 346200,
+      "play": 57700
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-4xf.composite:reckoning/acted/accept",
+      "at": 346800,
+      "play": 57800
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-4xf.composite:reckoning/acted",
+      "at": 347400,
+      "play": 57900
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-4xf.composite:reckoning/cued",
+      "at": 348000,
+      "play": 58000
+     },
+     {
+      "id": "m3c-w1-restless-accept-middle-A5-4xf.composite:reckoning/billed",
+      "at": 348600,
+      "play": 58100
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w1-restless-accept-middle-A5-4xf.composite:reckoning/acted/offer",
+   "m3c-w1-restless-accept-middle-A5-4xf.composite:reckoning/acted/accept",
+   "m3c-w1-restless-accept-middle-A5-4xf.composite:reckoning/acted",
+   "m3c-w1-restless-accept-middle-A5-4xf.composite:reckoning/cued",
+   "m3c-w1-restless-accept-middle-A5-4xf.composite:reckoning/billed"
+  ]
+ },
+ "H-073": {
+  "arm": "A1",
+  "thread": "30b061bc8c713c20639745bf7e1048ad",
+  "run": "A1-m3c-w1-steady-engage",
+  "configuration": "m3c-w1|steady|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-073",
+    "arm": "A1",
+    "thread": "30b061bc8c713c20639745bf7e1048ad",
+    "run": "A1-m3c-w1-steady-engage",
+    "configuration": "m3c-w1|steady|engage",
+    "start": 37807,
+    "times": [
+     {
+      "id": "1eb1f877a9182e5d165b3dbf0942adc1",
+      "at": 227400,
+      "play": 37807
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 1
+  },
+  "sequence": [
+   "1eb1f877a9182e5d165b3dbf0942adc1"
+  ]
+ },
+ "H-074": {
+  "arm": "A5",
+  "thread": "m3c-w0-calm-engage-A5-4",
+  "run": "m3c-w0-calm-engage-A5",
+  "configuration": "m3c-w0|calm|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-074",
+    "arm": "A5",
+    "thread": "m3c-w0-calm-engage-A5-4",
+    "run": "m3c-w0-calm-engage-A5",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 57700,
+    "times": [
+     {
+      "id": "m3c-w0-calm-engage-A5-4xf.composite:reckoning/acted/offer",
+      "at": 346200,
+      "play": 57700
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-4xf.composite:reckoning/acted/accept",
+      "at": 346800,
+      "play": 57800
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-4xf.composite:reckoning/acted",
+      "at": 347400,
+      "play": 57900
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-4xf.composite:reckoning/cued",
+      "at": 348000,
+      "play": 58000
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-4xf.composite:reckoning/billed",
+      "at": 348600,
+      "play": 58100
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w0-calm-engage-A5-4xf.composite:reckoning/acted/offer",
+   "m3c-w0-calm-engage-A5-4xf.composite:reckoning/acted/accept",
+   "m3c-w0-calm-engage-A5-4xf.composite:reckoning/acted",
+   "m3c-w0-calm-engage-A5-4xf.composite:reckoning/cued",
+   "m3c-w0-calm-engage-A5-4xf.composite:reckoning/billed"
+  ]
+ },
+ "H-075": {
+  "arm": "A3",
+  "thread": "E-m3c-w0-calm-engage-A3-4-removal",
+  "run": "m3c-w0-calm-engage-A3",
+  "configuration": "m3c-w0|calm|engage",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-075",
+    "arm": "A3",
+    "thread": "E-m3c-w0-calm-engage-A3-4-removal",
+    "run": "m3c-w0-calm-engage-A3",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 57700,
+    "times": [
+     {
+      "id": "E-m3c-w0-calm-engage-A3-4-removal-ask",
+      "at": 346200,
+      "play": 57700
+     },
+     {
+      "id": "E-m3c-w0-calm-engage-A3-4-removal-answer",
+      "at": 346800,
+      "play": 57800
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w0-calm-engage-A3-4-removal-ask",
+   "E-m3c-w0-calm-engage-A3-4-removal-answer"
+  ]
+ },
+ "H-078": {
+  "arm": "A5",
+  "thread": "m3c-w0-calm-engage-A5-5",
+  "run": "m3c-w0-calm-engage-A5",
+  "configuration": "m3c-w0|calm|engage",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-078",
+    "arm": "A5",
+    "thread": "m3c-w0-calm-engage-A5-5",
+    "run": "m3c-w0-calm-engage-A5",
+    "configuration": "m3c-w0|calm|engage",
+    "start": 72100,
+    "times": [
+     {
+      "id": "m3c-w0-calm-engage-A5-5xf.composite:reckoning/acted/offer",
+      "at": 432600,
+      "play": 72100
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-5xf.composite:reckoning/acted/accept",
+      "at": 433200,
+      "play": 72200
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-5xf.composite:reckoning/acted",
+      "at": 433800,
+      "play": 72300
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-5xf.composite:reckoning/cued",
+      "at": 434400,
+      "play": 72400
+     },
+     {
+      "id": "m3c-w0-calm-engage-A5-5xf.composite:reckoning/billed",
+      "at": 435000,
+      "play": 72500
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w0-calm-engage-A5-5xf.composite:reckoning/acted/offer",
+   "m3c-w0-calm-engage-A5-5xf.composite:reckoning/acted/accept",
+   "m3c-w0-calm-engage-A5-5xf.composite:reckoning/acted",
+   "m3c-w0-calm-engage-A5-5xf.composite:reckoning/cued",
+   "m3c-w0-calm-engage-A5-5xf.composite:reckoning/billed"
+  ]
+ },
+ "H-079": {
+  "arm": "A3",
+  "thread": "E-m3c-w0-restless-decline-A3-3-debt",
+  "run": "m3c-w0-restless-decline-A3",
+  "configuration": "m3c-w0|restless|decline",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-079",
+    "arm": "A3",
+    "thread": "E-m3c-w0-restless-decline-A3-3-debt",
+    "run": "m3c-w0-restless-decline-A3",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 43300,
+    "times": [
+     {
+      "id": "E-m3c-w0-restless-decline-A3-3-debt-ask",
+      "at": 259800,
+      "play": 43300
+     },
+     {
+      "id": "E-m3c-w0-restless-decline-A3-3-debt-answer",
+      "at": 260400,
+      "play": 43400
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w0-restless-decline-A3-3-debt-ask",
+   "E-m3c-w0-restless-decline-A3-3-debt-answer"
+  ]
+ },
+ "H-081": {
+  "arm": "A5",
+  "thread": "m3c-w0-steady-accept-last-A5-3",
+  "run": "m3c-w0-steady-accept-last-A5",
+  "configuration": "m3c-w0|steady|accept-last",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-081",
+    "arm": "A5",
+    "thread": "m3c-w0-steady-accept-last-A5-3",
+    "run": "m3c-w0-steady-accept-last-A5",
+    "configuration": "m3c-w0|steady|accept-last",
+    "start": 43300,
+    "times": [
+     {
+      "id": "m3c-w0-steady-accept-last-A5-3xf.composite:reckoning/acted/offer",
+      "at": 259800,
+      "play": 43300
+     },
+     {
+      "id": "m3c-w0-steady-accept-last-A5-3xf.composite:reckoning/acted/accept",
+      "at": 260400,
+      "play": 43400
+     },
+     {
+      "id": "m3c-w0-steady-accept-last-A5-3xf.composite:reckoning/acted",
+      "at": 261000,
+      "play": 43500
+     },
+     {
+      "id": "m3c-w0-steady-accept-last-A5-3xf.composite:reckoning/cued",
+      "at": 261600,
+      "play": 43600
+     },
+     {
+      "id": "m3c-w0-steady-accept-last-A5-3xf.composite:reckoning/billed",
+      "at": 262200,
+      "play": 43700
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w0-steady-accept-last-A5-3xf.composite:reckoning/acted/offer",
+   "m3c-w0-steady-accept-last-A5-3xf.composite:reckoning/acted/accept",
+   "m3c-w0-steady-accept-last-A5-3xf.composite:reckoning/acted",
+   "m3c-w0-steady-accept-last-A5-3xf.composite:reckoning/cued",
+   "m3c-w0-steady-accept-last-A5-3xf.composite:reckoning/billed"
+  ]
+ },
+ "H-082": {
+  "arm": "A5",
+  "thread": "m3c-w1-calm-ignore-A5-3",
+  "run": "m3c-w1-calm-ignore-A5",
+  "configuration": "m3c-w1|calm|ignore",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-082",
+    "arm": "A5",
+    "thread": "m3c-w1-calm-ignore-A5-3",
+    "run": "m3c-w1-calm-ignore-A5",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 43300,
+    "times": [
+     {
+      "id": "m3c-w1-calm-ignore-A5-3xf.composite:betrayal/bond",
+      "at": 259800,
+      "play": 43300
+     },
+     {
+      "id": "m3c-w1-calm-ignore-A5-3xf.composite:betrayal/offered",
+      "at": 260400,
+      "play": 43400
+     },
+     {
+      "id": "m3c-w1-calm-ignore-A5-3xf.composite:betrayal/act",
+      "at": 261000,
+      "play": 43500
+     },
+     {
+      "id": "m3c-w1-calm-ignore-A5-3xf.composite:betrayal/found",
+      "at": 261600,
+      "play": 43600
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w1-calm-ignore-A5-3xf.composite:betrayal/bond",
+   "m3c-w1-calm-ignore-A5-3xf.composite:betrayal/offered",
+   "m3c-w1-calm-ignore-A5-3xf.composite:betrayal/act",
+   "m3c-w1-calm-ignore-A5-3xf.composite:betrayal/found"
+  ]
+ },
+ "H-083": {
+  "arm": "A5",
+  "thread": "m3c-w1-calm-ignore-A5-6",
+  "run": "m3c-w1-calm-ignore-A5",
+  "configuration": "m3c-w1|calm|ignore",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-083",
+    "arm": "A5",
+    "thread": "m3c-w1-calm-ignore-A5-6",
+    "run": "m3c-w1-calm-ignore-A5",
+    "configuration": "m3c-w1|calm|ignore",
+    "start": 86500,
+    "times": [
+     {
+      "id": "m3c-w1-calm-ignore-A5-6xf.composite:betrayal/bond",
+      "at": 519000,
+      "play": 86500
+     },
+     {
+      "id": "m3c-w1-calm-ignore-A5-6xf.composite:betrayal/offered",
+      "at": 519600,
+      "play": 86600
+     },
+     {
+      "id": "m3c-w1-calm-ignore-A5-6xf.composite:betrayal/act",
+      "at": 520200,
+      "play": 86700
+     },
+     {
+      "id": "m3c-w1-calm-ignore-A5-6xf.composite:betrayal/found",
+      "at": 520800,
+      "play": 86800
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w1-calm-ignore-A5-6xf.composite:betrayal/bond",
+   "m3c-w1-calm-ignore-A5-6xf.composite:betrayal/offered",
+   "m3c-w1-calm-ignore-A5-6xf.composite:betrayal/act",
+   "m3c-w1-calm-ignore-A5-6xf.composite:betrayal/found"
+  ]
+ },
+ "H-084": {
+  "arm": "E",
+  "thread": "30c8b785466440b4c0df3c10e84834f0",
+  "run": "E-m3c-w1-restless-accept-middle",
+  "configuration": "m3c-w1|restless|accept-middle",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-084",
+    "arm": "E",
+    "thread": "30c8b785466440b4c0df3c10e84834f0",
+    "run": "E-m3c-w1-restless-accept-middle",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 94781,
+    "times": [
+     {
+      "id": "47cd5043717cc9dd52e156b87eb69b5c",
+      "at": 568800,
+      "play": 94781
+     },
+     {
+      "id": "b5a8a8bd3c25b694139aaf6b7046414d",
+      "at": 568800,
+      "play": 94781
+     },
+     {
+      "id": "45f430d08a25b38ed6142318ac644327",
+      "at": 568800,
+      "play": 94782
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 1
+  },
+  "sequence": [
+   "47cd5043717cc9dd52e156b87eb69b5c",
+   "b5a8a8bd3c25b694139aaf6b7046414d",
+   "45f430d08a25b38ed6142318ac644327"
+  ]
+ },
+ "H-085": {
+  "arm": "A3",
+  "thread": "E-m3c-w2-steady-accept-first-A3-1-removal",
+  "run": "m3c-w2-steady-accept-first-A3",
+  "configuration": "m3c-w2|steady|accept-first",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-085",
+    "arm": "A3",
+    "thread": "E-m3c-w2-steady-accept-first-A3-1-removal",
+    "run": "m3c-w2-steady-accept-first-A3",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 14500,
+    "times": [
+     {
+      "id": "E-m3c-w2-steady-accept-first-A3-1-removal-ask",
+      "at": 87000,
+      "play": 14500
+     },
+     {
+      "id": "E-m3c-w2-steady-accept-first-A3-1-removal-answer",
+      "at": 87600,
+      "play": 14600
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A3": 1
+  },
+  "sequence": [
+   "E-m3c-w2-steady-accept-first-A3-1-removal-ask",
+   "E-m3c-w2-steady-accept-first-A3-1-removal-answer"
+  ]
+ },
+ "H-086": {
+  "arm": "A5",
+  "thread": "m3c-w2-steady-accept-first-A5-2",
+  "run": "m3c-w2-steady-accept-first-A5",
+  "configuration": "m3c-w2|steady|accept-first",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "matched",
+    "limit": 1,
+    "target": 1,
+    "exact": true
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-086",
+    "arm": "A5",
+    "thread": "m3c-w2-steady-accept-first-A5-2",
+    "run": "m3c-w2-steady-accept-first-A5",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 28900,
+    "times": [
+     {
+      "id": "m3c-w2-steady-accept-first-A5-2xf.composite:reckoning/acted/offer",
+      "at": 173400,
+      "play": 28900
+     },
+     {
+      "id": "m3c-w2-steady-accept-first-A5-2xf.composite:reckoning/acted/accept",
+      "at": 174000,
+      "play": 29000
+     },
+     {
+      "id": "m3c-w2-steady-accept-first-A5-2xf.composite:reckoning/acted",
+      "at": 174600,
+      "play": 29100
+     },
+     {
+      "id": "m3c-w2-steady-accept-first-A5-2xf.composite:reckoning/cued",
+      "at": 175200,
+      "play": 29200
+     },
+     {
+      "id": "m3c-w2-steady-accept-first-A5-2xf.composite:reckoning/billed",
+      "at": 175800,
+      "play": 29300
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A5": 1
+  },
+  "sequence": [
+   "m3c-w2-steady-accept-first-A5-2xf.composite:reckoning/acted/offer",
+   "m3c-w2-steady-accept-first-A5-2xf.composite:reckoning/acted/accept",
+   "m3c-w2-steady-accept-first-A5-2xf.composite:reckoning/acted",
+   "m3c-w2-steady-accept-first-A5-2xf.composite:reckoning/cued",
+   "m3c-w2-steady-accept-first-A5-2xf.composite:reckoning/billed"
+  ]
+ },
+ "H-088": {
+  "arm": "A1",
+  "thread": "304e82298c1efd461954a909a9e1724b",
+  "run": "A1-m3c-w0-restless-decline",
+  "configuration": "m3c-w0|restless|decline",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-088",
+    "arm": "A1",
+    "thread": "304e82298c1efd461954a909a9e1724b",
+    "run": "A1-m3c-w0-restless-decline",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 66000,
+    "times": [
+     {
+      "id": "76175bf2c7d883a43a7b5e7f5ae3a124",
+      "at": 396000,
+      "play": 66000
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 1
+  },
+  "sequence": [
+   "76175bf2c7d883a43a7b5e7f5ae3a124"
+  ]
+ },
+ "H-090": {
+  "arm": "E",
+  "thread": "a7ebe61d14f35d2adee8865725d380ac",
+  "run": "E-m3c-w2-steady-accept-first",
+  "configuration": "m3c-w2|steady|accept-first",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-090",
+    "arm": "E",
+    "thread": "a7ebe61d14f35d2adee8865725d380ac",
+    "run": "E-m3c-w2-steady-accept-first",
+    "configuration": "m3c-w2|steady|accept-first",
+    "start": 64469,
+    "times": [
+     {
+      "id": "b02a1a002f4fa674cc7ef525dbcdcb0c",
+      "at": 387000,
+      "play": 64469
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "E": 1
+  },
+  "sequence": [
+   "b02a1a002f4fa674cc7ef525dbcdcb0c"
+  ]
+ },
+ "H-093": {
+  "arm": "A1",
+  "thread": "cc4929462d19eee80cd45db86fd03d77",
+  "run": "A1-m3c-w1-restless-accept-middle",
+  "configuration": "m3c-w1|restless|accept-middle",
+  "variants": [
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-093",
+    "arm": "A1",
+    "thread": "cc4929462d19eee80cd45db86fd03d77",
+    "run": "A1-m3c-w1-restless-accept-middle",
+    "configuration": "m3c-w1|restless|accept-middle",
+    "start": 81857,
+    "times": [
+     {
+      "id": "ef5106fe3e9120cac73e200e166754aa",
+      "at": 491400,
+      "play": 81857
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 1
+  },
+  "sequence": [
+   "ef5106fe3e9120cac73e200e166754aa"
+  ]
+ },
+ "H-096": {
+  "arm": "A1",
+  "thread": "886760c6365339e439a47310f174fcb5",
+  "run": "A1-m3c-w0-restless-decline",
+  "configuration": "m3c-w0|restless|decline",
+  "variants": [
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   },
+   {
+    "renderer": "evidence",
+    "length": "full"
+   },
+   {
+    "renderer": "current",
+    "length": "full"
+   }
+  ],
+  "memberships": [
+   {
+    "sample": "H-096",
+    "arm": "A1",
+    "thread": "886760c6365339e439a47310f174fcb5",
+    "run": "A1-m3c-w0-restless-decline",
+    "configuration": "m3c-w0|restless|decline",
+    "start": 10500,
+    "times": [
+     {
+      "id": "8ab21754ae7e925bb5d2ac37186b7ed5",
+      "at": 63000,
+      "play": 10500
+     },
+     {
+      "id": "d29cbc8325c0d9d3b7a1fbb3426c1be3",
+      "at": 63000,
+      "play": 10500
+     }
+    ]
+   }
+  ],
+  "multiplicity": {
+   "A1": 1
+  },
+  "sequence": [
+   "8ab21754ae7e925bb5d2ac37186b7ed5",
+   "d29cbc8325c0d9d3b7a1fbb3426c1be3"
+  ]
+ }
+}

@@ -1,0 +1,3422 @@
+[
+ {
+  "run": "A1-m3c-w0-calm-engage",
+  "arm": "A1",
+  "seeds": [
+   {
+    "id": "0521c9f932a1775c644cf5293a1f9ea0",
+    "decision": "6a30b749f54972de42c68c0ba837dc78",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "unattended",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "17f08ea2b0eb9b2319cc19f1373a27f6",
+    "decision": "b054e1008f212cda3f252cdc63f2c001",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "4005141074052eda79a46824f3c7b6b9",
+    "decision": "6ba6a178643e422af5664695d4b87e4d",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "54c155c79f36736a2f9a7cfa811b2378",
+    "decision": "09960b78eb06ac372612e02f7d1392da",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "5cca8268d46acd7993fb7a7e7a5dde7c",
+    "decision": "47fbb9a737bd9af8890da56677b06e1b",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "8b3d9e13e3cf343d5e8cc38e5fe82370",
+    "decision": "e131134bcdcf8f3fd2027064f25ac25f",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "d9deb35d4cdbc258c4bcdd3a2f6754ab",
+    "decision": "cd4dda58be60417c777b44699b63f8bc",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "run": "A1-m3c-w0-restless-decline",
+  "arm": "A1",
+  "seeds": [
+   {
+    "id": "00a7826736a314db1da38110eb92dbd5",
+    "decision": "99a29659245907af47f732fe807332cc",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "07ab606ef426fc095707bde3e540c55a",
+    "decision": "b97aa8e3ed5526d82f522322c238aa7d",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "17f08ea2b0eb9b2319cc19f1373a27f6",
+    "decision": "b054e1008f212cda3f252cdc63f2c001",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "244046a5a0970b167ca06687596e85ef",
+    "decision": "8171ddda3a1d34b21a1294f176d0b178",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "2eebcc5895e3b61a4dfcaa818904fcfc",
+    "decision": "02644a939ed94106f133d2bd3996dc00",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "33e008d499df5f8139d25325c410d619",
+    "decision": "28374f4ca03e8b1dd7ee18e5fb0a861c",
+    "template": "xf.m3c.atoms:coveted-asked-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "3e6032bb69e0be748a3ce30cd668acb4",
+    "decision": "daa1d65f2eb654c030c629f2069482bf",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "3f5e389d78c50fb78b0d303e7065b4fb",
+    "decision": "9d931a6e4cc39189a1d59882035171de",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "4005141074052eda79a46824f3c7b6b9",
+    "decision": "6ba6a178643e422af5664695d4b87e4d",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "4ea40d81249e4f15693ffd10b5983871",
+    "decision": "505154a2a7bcdad28a077fa304270724",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "5a16344f0247ef4e0efc64f644d3d2e1",
+    "decision": "2b425a14b7206b51f1cacd71bd9d4d86",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "5cca8268d46acd7993fb7a7e7a5dde7c",
+    "decision": "47fbb9a737bd9af8890da56677b06e1b",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "7dde0a75e383d14f3b3a98877170e47e",
+    "decision": "58f322b8f5cf182bfe70c6feb8f9c898",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "8810b317e64fb35ba28130644d30425e",
+    "decision": "bd63537e95c669c30e87910fb1eec0f8",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "8b3d9e13e3cf343d5e8cc38e5fe82370",
+    "decision": "e131134bcdcf8f3fd2027064f25ac25f",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "8eb1847c2d6bf8744f36c2eb7553308a",
+    "decision": "b732dad727be38e5eabc9b79617c09a2",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "b4a04ad4b34c7b149ec8549d9a1d0566",
+    "decision": "6aa8c470db5a0b6e8bff21564f4fb24a",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "b5535beff8dffe382f304a2aeb5bed1a",
+    "decision": "2f33447a4628a465f759f111db2bb43d",
+    "template": "xf.m3c.atoms:coveted-asked-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "ba6c7426a963832b8bd258fb22b4b041",
+    "decision": "ef4d691d763f4dadc5b8295d38843f84",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "c5a3fbaecf8d1fe225fbfc4955ae6e2e",
+    "decision": "985e38deac518a37bba16d291ae527e9",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "d251d5e745ee0356a750f38206d32e39",
+    "decision": "14c381b3041b7dccb00c3256df3123f8",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "f432e1f1eea7fe4743c81ee59ec88d92",
+    "decision": "a7bb9f57ba7f9f1d4d900d098cb13ff9",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   }
+  ]
+ },
+ {
+  "run": "A1-m3c-w0-steady-accept-last",
+  "arm": "A1",
+  "seeds": [
+   {
+    "id": "00a7826736a314db1da38110eb92dbd5",
+    "decision": "99a29659245907af47f732fe807332cc",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "17f08ea2b0eb9b2319cc19f1373a27f6",
+    "decision": "b054e1008f212cda3f252cdc63f2c001",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "244046a5a0970b167ca06687596e85ef",
+    "decision": "8171ddda3a1d34b21a1294f176d0b178",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "2eebcc5895e3b61a4dfcaa818904fcfc",
+    "decision": "02644a939ed94106f133d2bd3996dc00",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "3f5e389d78c50fb78b0d303e7065b4fb",
+    "decision": "9d931a6e4cc39189a1d59882035171de",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "4005141074052eda79a46824f3c7b6b9",
+    "decision": "6ba6a178643e422af5664695d4b87e4d",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "5cca8268d46acd7993fb7a7e7a5dde7c",
+    "decision": "47fbb9a737bd9af8890da56677b06e1b",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "7dde0a75e383d14f3b3a98877170e47e",
+    "decision": "58f322b8f5cf182bfe70c6feb8f9c898",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "8810b317e64fb35ba28130644d30425e",
+    "decision": "bd63537e95c669c30e87910fb1eec0f8",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "8b3d9e13e3cf343d5e8cc38e5fe82370",
+    "decision": "e131134bcdcf8f3fd2027064f25ac25f",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "b4a04ad4b34c7b149ec8549d9a1d0566",
+    "decision": "6aa8c470db5a0b6e8bff21564f4fb24a",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "ba6c7426a963832b8bd258fb22b4b041",
+    "decision": "ef4d691d763f4dadc5b8295d38843f84",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "f432e1f1eea7fe4743c81ee59ec88d92",
+    "decision": "a7bb9f57ba7f9f1d4d900d098cb13ff9",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   }
+  ]
+ },
+ {
+  "run": "A1-m3c-w1-calm-ignore",
+  "arm": "A1",
+  "seeds": [
+   {
+    "id": "295bf91620483e44c3803e1dbdbe18cb",
+    "decision": "f3c446cd22c906fec92ca8148c30e08a",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "3fb654dde0d859d11c0ece942b2a079d",
+    "decision": "11d77981d5f520e19006ce1949e14c0c",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "56d33579fd16a9be09525ca2af39ccac",
+    "decision": "0e58f6215decaeb96fee5fbdc1135b36",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "754a1c3f52445c7da433327eac2c7376",
+    "decision": "d56cfd0234448ee7fe9ce066b734bb64",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "86857ac0c3bcae231435038c0e5b7c7b",
+    "decision": "dcef8a42d07c8bedb9ec32ef9b6e5ad5",
+    "template": "xf.m3c.atoms:debt-paid-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "dc3db96688264c8eec23a86889c10078",
+    "decision": "a915eca5eafe56c1962e1b0e8eefef54",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "run": "A1-m3c-w1-restless-accept-middle",
+  "arm": "A1",
+  "seeds": [
+   {
+    "id": "01298e28379f41ea8eeaff8d4ece6a6d",
+    "decision": "3547ed8e49d89cbbca3d3f860ced5708",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "0fe80ed50342f7dfba48039d06aa3431",
+    "decision": "e4d2ebefe499339ef854b85052310555",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     },
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "1b458a7234e400e08dc529e02fd63d4d",
+    "decision": "a29943ce26ed71fc032820696a9a46f5",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "295bf91620483e44c3803e1dbdbe18cb",
+    "decision": "f3c446cd22c906fec92ca8148c30e08a",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "351ef92e1c1a1c2c864d4976ec0984bd",
+    "decision": "528ee4aa5ab73640661c3fc226eb3f21",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "35ff1cf2b5451ebfccac75035554100a",
+    "decision": "a6149c570c7fb7d85b77a4378043ccaf",
+    "template": "xf.m3c.atoms:coveted-asked-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "3fb654dde0d859d11c0ece942b2a079d",
+    "decision": "11d77981d5f520e19006ce1949e14c0c",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "558f370dea7d6127e0e829c0c7395eb7",
+    "decision": "22316653405e8129c8734da2945032a2",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "56053186cc8f52822ad208dbbbadfbd5",
+    "decision": "e80a2d5de2bcd23fc93ad5a1b3f129e7",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "56d33579fd16a9be09525ca2af39ccac",
+    "decision": "0e58f6215decaeb96fee5fbdc1135b36",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "62afd35a2f779c696b787779fee5c6ff",
+    "decision": "1b1f029c4414f724d05483179a94ceeb",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "65d4902bd12a874832eb1b58c4983a75",
+    "decision": "5753d227bd0ef02f93505411bb8d8ae4",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "69d5d9184198e3570d0e8f4d80b6670e",
+    "decision": "49bbe7f20fd3751ff69d5b23ab548c32",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "754a1c3f52445c7da433327eac2c7376",
+    "decision": "d56cfd0234448ee7fe9ce066b734bb64",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "7cc445cd9eabc1b8dc7a65e9d1dfe1b9",
+    "decision": "a1cf7c55e72a29b0d23089f63571d34e",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "85d020fc1ef2dc995d977719155dd459",
+    "decision": "7882a40028d7cd991f8531b37809ceb4",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "86857ac0c3bcae231435038c0e5b7c7b",
+    "decision": "dcef8a42d07c8bedb9ec32ef9b6e5ad5",
+    "template": "xf.m3c.atoms:debt-paid-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "a31f84b730e30a108b8063eb4b6d4150",
+    "decision": "eb19bb2aaef9c41bf252cf6c8115b0a5",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "d8a9c0cd866010e3b9a50feefa95ded5",
+    "decision": "6bd78f57131b1ac3776504e6bc233b92",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "dc3db96688264c8eec23a86889c10078",
+    "decision": "a915eca5eafe56c1962e1b0e8eefef54",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "e5724766bb0b51d6647af763373a6bd6",
+    "decision": "bb904488a28d8d409bff16962a776443",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "fc7976719a0535ddd8074eb083128e73",
+    "decision": "83c6e3f50e8669b3f21fa3169d0edab5",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "ff5031d523fa9dfb8a6d3e787a8c237b",
+    "decision": "d3ba57b5d42c98abe9236bdd6b78c1bc",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "run": "A1-m3c-w1-steady-engage",
+  "arm": "A1",
+  "seeds": [
+   {
+    "id": "01298e28379f41ea8eeaff8d4ece6a6d",
+    "decision": "3547ed8e49d89cbbca3d3f860ced5708",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "1b458a7234e400e08dc529e02fd63d4d",
+    "decision": "a29943ce26ed71fc032820696a9a46f5",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "295bf91620483e44c3803e1dbdbe18cb",
+    "decision": "f3c446cd22c906fec92ca8148c30e08a",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "35ff1cf2b5451ebfccac75035554100a",
+    "decision": "a6149c570c7fb7d85b77a4378043ccaf",
+    "template": "xf.m3c.atoms:coveted-asked-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "3fb654dde0d859d11c0ece942b2a079d",
+    "decision": "11d77981d5f520e19006ce1949e14c0c",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "56d33579fd16a9be09525ca2af39ccac",
+    "decision": "0e58f6215decaeb96fee5fbdc1135b36",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "65d4902bd12a874832eb1b58c4983a75",
+    "decision": "5753d227bd0ef02f93505411bb8d8ae4",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "754a1c3f52445c7da433327eac2c7376",
+    "decision": "d56cfd0234448ee7fe9ce066b734bb64",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "85d020fc1ef2dc995d977719155dd459",
+    "decision": "7882a40028d7cd991f8531b37809ceb4",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "86857ac0c3bcae231435038c0e5b7c7b",
+    "decision": "dcef8a42d07c8bedb9ec32ef9b6e5ad5",
+    "template": "xf.m3c.atoms:debt-paid-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "dc3db96688264c8eec23a86889c10078",
+    "decision": "a915eca5eafe56c1962e1b0e8eefef54",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "e5724766bb0b51d6647af763373a6bd6",
+    "decision": "bb904488a28d8d409bff16962a776443",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "fc7976719a0535ddd8074eb083128e73",
+    "decision": "83c6e3f50e8669b3f21fa3169d0edab5",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "ff5031d523fa9dfb8a6d3e787a8c237b",
+    "decision": "d3ba57b5d42c98abe9236bdd6b78c1bc",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "run": "A1-m3c-w2-restless-engage",
+  "arm": "A1",
+  "seeds": [
+   {
+    "id": "06d8b0082ed11e683824abcb31dd7742",
+    "decision": "3d5c6c678fe9d0e460b794d1496994fa",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "0ae30a4f9ab80f777117aab579d6d250",
+    "decision": "aeb2386689064fb107a15287cc930346",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "2b2b88ba7b9a0ecb2a16cc73a05674a1",
+    "decision": "c9967ecac00dd14270b872b908c11ece",
+    "template": "xf.m3c.atoms:ambition-vs-obligation-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "39ebc8fa7862dde0ae195e375ce7b2a1",
+    "decision": "aa1c41a688fa9a8cecde620c71450b55",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "3cdbf45e1199d31d4433967bd66e14d5",
+    "decision": "c3109980d19c84cf101a2fe1c619bc30",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "43383a81e632f5bbdc41e9f1f8daebbb",
+    "decision": "bc1e65497dc6a55dc0c4a765525e2228",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "4c6925b2fab966056795b5279de9c0bc",
+    "decision": "7082200f042576e896cebf6f736d59d2",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "6a559f36df362f9b3c43c23d0c054cea",
+    "decision": "831ee5a771f54a9f8cb7a219543958c1",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "6b4e1f1509b4a08cb7709677d378a734",
+    "decision": "9a5e591c8736a6ba22d0e0c2d0d3998d",
+    "template": "xf.m3c.atoms:ambition-vs-obligation-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "6e7fe9d7a8bd661dfdc0f012ae69cccf",
+    "decision": "5c419a611530cbcab2fb52219a2cd32a",
+    "template": "xf.m3c.atoms:debt-paid-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "79d95cac6f51678c5723031dd7913812",
+    "decision": "ca4f434b97d5068d62742265229926b3",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "829f392a3f1546d217f1e2f23d94061e",
+    "decision": "73df59d85fa4e51fa7bbcffe2e2b94f4",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "835cb972d45fc553be0e2f673632f578",
+    "decision": "4b28ee221ff83242e6583d6095c9a020",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "84e739e696fbc8291e36c5c630d304b8",
+    "decision": "97348bdfb20363a4c00bc524d8d2a484",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "899aba0c968068dab62e8c8e0058b22b",
+    "decision": "59ab98c3e4fb11c0c20938128e034001",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "9809f289808c6289d8474f39c4d71e65",
+    "decision": "af0d3d5bf37b68e88d97a19b50a27d9a",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "c4d39401d1e6a4adb47050239decc032",
+    "decision": "6414e06047293a078ee12cd909a444a9",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "de79c156b202054c6c76d6dc9e4ed248",
+    "decision": "02d6c87c85a2a8ccb286354affa3057b",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "e97b0288e4fa02c68522ea6b5973f0d5",
+    "decision": "68dca65c8cdbb6111e269d32b8e46214",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "eb36b374f478dd33fb00b83c8a42f141",
+    "decision": "76af4fbc42cf599974674f7c985d8116",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "f6bfe93524fd9be494481e988565969d",
+    "decision": "5bd9e3438f06144708cc3809da27c80f",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "fa22f441fec0faee3524e1167e933e18",
+    "decision": "a0e550828fa75c15f764dbb1432d9b07",
+    "template": "xf.m3c.atoms:coveted-asked-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "unattended",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "run": "A1-m3c-w2-steady-accept-first",
+  "arm": "A1",
+  "seeds": [
+   {
+    "id": "06d8b0082ed11e683824abcb31dd7742",
+    "decision": "3d5c6c678fe9d0e460b794d1496994fa",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "202736f1575d81dc64741bc69628453a",
+    "decision": "40763228643f719b8765a98606e872e9",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "39ebc8fa7862dde0ae195e375ce7b2a1",
+    "decision": "aa1c41a688fa9a8cecde620c71450b55",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "3cdbf45e1199d31d4433967bd66e14d5",
+    "decision": "c3109980d19c84cf101a2fe1c619bc30",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "43383a81e632f5bbdc41e9f1f8daebbb",
+    "decision": "bc1e65497dc6a55dc0c4a765525e2228",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "605bedf422cec5df17d1d2827ad97e5e",
+    "decision": "869cffa9e8acb1a40a1084841cc76f41",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "6a559f36df362f9b3c43c23d0c054cea",
+    "decision": "831ee5a771f54a9f8cb7a219543958c1",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "6e7fe9d7a8bd661dfdc0f012ae69cccf",
+    "decision": "5c419a611530cbcab2fb52219a2cd32a",
+    "template": "xf.m3c.atoms:debt-paid-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "829f392a3f1546d217f1e2f23d94061e",
+    "decision": "73df59d85fa4e51fa7bbcffe2e2b94f4",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "835cb972d45fc553be0e2f673632f578",
+    "decision": "4b28ee221ff83242e6583d6095c9a020",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "84e739e696fbc8291e36c5c630d304b8",
+    "decision": "97348bdfb20363a4c00bc524d8d2a484",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "9809f289808c6289d8474f39c4d71e65",
+    "decision": "af0d3d5bf37b68e88d97a19b50a27d9a",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "9f0e963cbb0a80cc3db7c51df3b7aa38",
+    "decision": "9d3336158e128e22287c913759ed568a",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "c4d39401d1e6a4adb47050239decc032",
+    "decision": "6414e06047293a078ee12cd909a444a9",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "e97b0288e4fa02c68522ea6b5973f0d5",
+    "decision": "68dca65c8cdbb6111e269d32b8e46214",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "fa22f441fec0faee3524e1167e933e18",
+    "decision": "a0e550828fa75c15f764dbb1432d9b07",
+    "template": "xf.m3c.atoms:coveted-asked-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "unattended",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "run": "E-m3c-w0-calm-engage",
+  "arm": "E",
+  "seeds": [
+   {
+    "id": "17f08ea2b0eb9b2319cc19f1373a27f6",
+    "decision": "b054e1008f212cda3f252cdc63f2c001",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "3f5e389d78c50fb78b0d303e7065b4fb",
+    "decision": "9d931a6e4cc39189a1d59882035171de",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "unattended",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "4005141074052eda79a46824f3c7b6b9",
+    "decision": "6ba6a178643e422af5664695d4b87e4d",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "54c155c79f36736a2f9a7cfa811b2378",
+    "decision": "09960b78eb06ac372612e02f7d1392da",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "5cca8268d46acd7993fb7a7e7a5dde7c",
+    "decision": "47fbb9a737bd9af8890da56677b06e1b",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "8b3d9e13e3cf343d5e8cc38e5fe82370",
+    "decision": "e131134bcdcf8f3fd2027064f25ac25f",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "d9deb35d4cdbc258c4bcdd3a2f6754ab",
+    "decision": "cd4dda58be60417c777b44699b63f8bc",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "run": "E-m3c-w0-restless-decline",
+  "arm": "E",
+  "seeds": [
+   {
+    "id": "0405e987941fe45293ae23f1ca5c8930",
+    "decision": "2adcaa71f43b442e120cf67fa2a5d4dc",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "07ab606ef426fc095707bde3e540c55a",
+    "decision": "b97aa8e3ed5526d82f522322c238aa7d",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "163849b85b1381e65ecc55c8949ec8bf",
+    "decision": "88c3ec4289337bc6a1be0b55c79a2325",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "17f08ea2b0eb9b2319cc19f1373a27f6",
+    "decision": "b054e1008f212cda3f252cdc63f2c001",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "244046a5a0970b167ca06687596e85ef",
+    "decision": "8171ddda3a1d34b21a1294f176d0b178",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "2eebcc5895e3b61a4dfcaa818904fcfc",
+    "decision": "02644a939ed94106f133d2bd3996dc00",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "3e6032bb69e0be748a3ce30cd668acb4",
+    "decision": "daa1d65f2eb654c030c629f2069482bf",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "3f5e389d78c50fb78b0d303e7065b4fb",
+    "decision": "9d931a6e4cc39189a1d59882035171de",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "4005141074052eda79a46824f3c7b6b9",
+    "decision": "6ba6a178643e422af5664695d4b87e4d",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "4481cd1b41b75c9100421314b47e6437",
+    "decision": "6961f66d201b60bb2a3b150ac7481070",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "50d3755f9595e5259ecba810b91eeba8",
+    "decision": "7e161b83e7e6bbda5b191aca8149f543",
+    "template": "xf.m3c.atoms:protection-answer-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "5cca8268d46acd7993fb7a7e7a5dde7c",
+    "decision": "47fbb9a737bd9af8890da56677b06e1b",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "7dde0a75e383d14f3b3a98877170e47e",
+    "decision": "58f322b8f5cf182bfe70c6feb8f9c898",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "8810b317e64fb35ba28130644d30425e",
+    "decision": "bd63537e95c669c30e87910fb1eec0f8",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "8b3d9e13e3cf343d5e8cc38e5fe82370",
+    "decision": "e131134bcdcf8f3fd2027064f25ac25f",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "8eb1847c2d6bf8744f36c2eb7553308a",
+    "decision": "b732dad727be38e5eabc9b79617c09a2",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "99f0e610725cd2b26d6ec34a96032c2a",
+    "decision": "b323a0329ebe80fce502ef3c7f557f22",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "bad663d773171060e665a5d12c5cd69b",
+    "decision": "be128109ed01951a9bee4c65cd34078c",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "d251d5e745ee0356a750f38206d32e39",
+    "decision": "14c381b3041b7dccb00c3256df3123f8",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "def2c18dc654f0aec9426f244494f975",
+    "decision": "b86140e2d65c22bbcb20e85f7b7eb9bf",
+    "template": "xf.m3c.atoms:protection-answer-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "ecd030e089f70b45a4e6e9580113852c",
+    "decision": "6732c75cc0f889d4db68b29ef868663b",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "f432e1f1eea7fe4743c81ee59ec88d92",
+    "decision": "a7bb9f57ba7f9f1d4d900d098cb13ff9",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   }
+  ]
+ },
+ {
+  "run": "E-m3c-w0-steady-accept-last",
+  "arm": "E",
+  "seeds": [
+   {
+    "id": "00a7826736a314db1da38110eb92dbd5",
+    "decision": "99a29659245907af47f732fe807332cc",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "0405e987941fe45293ae23f1ca5c8930",
+    "decision": "2adcaa71f43b442e120cf67fa2a5d4dc",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "0521c9f932a1775c644cf5293a1f9ea0",
+    "decision": "6a30b749f54972de42c68c0ba837dc78",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "unattended",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "17f08ea2b0eb9b2319cc19f1373a27f6",
+    "decision": "b054e1008f212cda3f252cdc63f2c001",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "244046a5a0970b167ca06687596e85ef",
+    "decision": "8171ddda3a1d34b21a1294f176d0b178",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "2eebcc5895e3b61a4dfcaa818904fcfc",
+    "decision": "02644a939ed94106f133d2bd3996dc00",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "39ac34a8ff4d716abebf28442af35eab",
+    "decision": "11afb4a87d94a84b99dd5bc984fe59f7",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "4005141074052eda79a46824f3c7b6b9",
+    "decision": "6ba6a178643e422af5664695d4b87e4d",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "7dde0a75e383d14f3b3a98877170e47e",
+    "decision": "58f322b8f5cf182bfe70c6feb8f9c898",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "8b3d9e13e3cf343d5e8cc38e5fe82370",
+    "decision": "e131134bcdcf8f3fd2027064f25ac25f",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "ac6453d1b058daf0bbcef92caf809a36",
+    "decision": "ac6f9407682a79b13aa7965282adba21",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "b092aae0464841ba264cb3c6d1458a19",
+    "decision": "36a81f3faba8dd08045e67e1945ef548",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "f432e1f1eea7fe4743c81ee59ec88d92",
+    "decision": "a7bb9f57ba7f9f1d4d900d098cb13ff9",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   }
+  ]
+ },
+ {
+  "run": "E-m3c-w1-calm-ignore",
+  "arm": "E",
+  "seeds": [
+   {
+    "id": "1b458a7234e400e08dc529e02fd63d4d",
+    "decision": "a29943ce26ed71fc032820696a9a46f5",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "295bf91620483e44c3803e1dbdbe18cb",
+    "decision": "f3c446cd22c906fec92ca8148c30e08a",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "3fb654dde0d859d11c0ece942b2a079d",
+    "decision": "11d77981d5f520e19006ce1949e14c0c",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "56d33579fd16a9be09525ca2af39ccac",
+    "decision": "0e58f6215decaeb96fee5fbdc1135b36",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "86857ac0c3bcae231435038c0e5b7c7b",
+    "decision": "dcef8a42d07c8bedb9ec32ef9b6e5ad5",
+    "template": "xf.m3c.atoms:debt-paid-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "dc3db96688264c8eec23a86889c10078",
+    "decision": "a915eca5eafe56c1962e1b0e8eefef54",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "run": "E-m3c-w1-restless-accept-middle",
+  "arm": "E",
+  "seeds": [
+   {
+    "id": "01298e28379f41ea8eeaff8d4ece6a6d",
+    "decision": "3547ed8e49d89cbbca3d3f860ced5708",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "0cd3c818e00d6315fd096c9794704595",
+    "decision": "d329efefaf5936c31c7388e955c64cae",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "1010479427d1e47103f363ff3a1a0422",
+    "decision": "648581bcb31a70aa2cdee8e8e2256db7",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "1b458a7234e400e08dc529e02fd63d4d",
+    "decision": "a29943ce26ed71fc032820696a9a46f5",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "2367b5f6b404d8c74358e9af6a24ed30",
+    "decision": "570dc78dc35e30cde7e764096a461d43",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "35ff1cf2b5451ebfccac75035554100a",
+    "decision": "a6149c570c7fb7d85b77a4378043ccaf",
+    "template": "xf.m3c.atoms:coveted-asked-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "3fb654dde0d859d11c0ece942b2a079d",
+    "decision": "11d77981d5f520e19006ce1949e14c0c",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "4a93c4c88deb9df2363ac313f513cad6",
+    "decision": "fc3a7c591479d873e3e307f5de5e5668",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "4b180d4b75dbb43c19b92d91677e5820",
+    "decision": "fdb6b998c0420edf3bc40b61823e70fe",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "558f370dea7d6127e0e829c0c7395eb7",
+    "decision": "22316653405e8129c8734da2945032a2",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "56053186cc8f52822ad208dbbbadfbd5",
+    "decision": "e80a2d5de2bcd23fc93ad5a1b3f129e7",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "56d33579fd16a9be09525ca2af39ccac",
+    "decision": "0e58f6215decaeb96fee5fbdc1135b36",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "7d7ff80ebf9b1b643417fddf944963e9",
+    "decision": "c64e17c294a49b260f01eda9c0e53321",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "86857ac0c3bcae231435038c0e5b7c7b",
+    "decision": "dcef8a42d07c8bedb9ec32ef9b6e5ad5",
+    "template": "xf.m3c.atoms:debt-paid-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "88cd1c61d4d1e2b2a2d69919340b731f",
+    "decision": "191f6c713285b1e08c27bbf903daff60",
+    "template": "xf.m3c.atoms:protection-answer-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "a31f84b730e30a108b8063eb4b6d4150",
+    "decision": "eb19bb2aaef9c41bf252cf6c8115b0a5",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "bc8158ccb2e66c08bb46aaabe6a0fc24",
+    "decision": "e5f1d357ebff885552c3ac5cf952627f",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "c3485dff90f6aaef25f56d4452cea5bd",
+    "decision": "0a4338ee18a2e4ba4c8a61c5acbe46f6",
+    "template": "xf.m3c.atoms:debt-paid-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "c35a38727e92ddf13d3b28b4c29632ec",
+    "decision": "23cfcf93cd71b207244736b0360ff5f8",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "d8a9c0cd866010e3b9a50feefa95ded5",
+    "decision": "6bd78f57131b1ac3776504e6bc233b92",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "dc3db96688264c8eec23a86889c10078",
+    "decision": "a915eca5eafe56c1962e1b0e8eefef54",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "e5724766bb0b51d6647af763373a6bd6",
+    "decision": "bb904488a28d8d409bff16962a776443",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "ff5031d523fa9dfb8a6d3e787a8c237b",
+    "decision": "d3ba57b5d42c98abe9236bdd6b78c1bc",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "run": "E-m3c-w1-steady-engage",
+  "arm": "E",
+  "seeds": [
+   {
+    "id": "01298e28379f41ea8eeaff8d4ece6a6d",
+    "decision": "3547ed8e49d89cbbca3d3f860ced5708",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "2270a54eb6649d35f7e96afb13edb303",
+    "decision": "1828e97a47dfaa44886454f432082f0c",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "295bf91620483e44c3803e1dbdbe18cb",
+    "decision": "f3c446cd22c906fec92ca8148c30e08a",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "35ff1cf2b5451ebfccac75035554100a",
+    "decision": "a6149c570c7fb7d85b77a4378043ccaf",
+    "template": "xf.m3c.atoms:coveted-asked-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "3fb654dde0d859d11c0ece942b2a079d",
+    "decision": "11d77981d5f520e19006ce1949e14c0c",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "558f370dea7d6127e0e829c0c7395eb7",
+    "decision": "22316653405e8129c8734da2945032a2",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "56d33579fd16a9be09525ca2af39ccac",
+    "decision": "0e58f6215decaeb96fee5fbdc1135b36",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "65d4902bd12a874832eb1b58c4983a75",
+    "decision": "5753d227bd0ef02f93505411bb8d8ae4",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "85d020fc1ef2dc995d977719155dd459",
+    "decision": "7882a40028d7cd991f8531b37809ceb4",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "86857ac0c3bcae231435038c0e5b7c7b",
+    "decision": "dcef8a42d07c8bedb9ec32ef9b6e5ad5",
+    "template": "xf.m3c.atoms:debt-paid-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "c16ead42d49a2a2372d3e43f914d109e",
+    "decision": "0de89f4fcac65e3c4302c1abf9b41da8",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "d8a9c0cd866010e3b9a50feefa95ded5",
+    "decision": "6bd78f57131b1ac3776504e6bc233b92",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "e5724766bb0b51d6647af763373a6bd6",
+    "decision": "bb904488a28d8d409bff16962a776443",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "ff5031d523fa9dfb8a6d3e787a8c237b",
+    "decision": "d3ba57b5d42c98abe9236bdd6b78c1bc",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "run": "E-m3c-w2-restless-engage",
+  "arm": "E",
+  "seeds": [
+   {
+    "id": "06d8b0082ed11e683824abcb31dd7742",
+    "decision": "3d5c6c678fe9d0e460b794d1496994fa",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "0ae30a4f9ab80f777117aab579d6d250",
+    "decision": "aeb2386689064fb107a15287cc930346",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "1da044a873d733e910d724a13b7d9735",
+    "decision": "169915ce0f8ca5f687d74c7ca5db200e",
+    "template": "xf.m3c.atoms:ambition-vs-obligation-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "unattended",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "287a5656817c6b74d176725cbf62ba70",
+    "decision": "1684352b02e1e162860978ecda337731",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "3500b50b5a6f81aa9962e833e71cc024",
+    "decision": "7d5a786e6f39a249d9fe19c4e3fe02a4",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "39ebc8fa7862dde0ae195e375ce7b2a1",
+    "decision": "aa1c41a688fa9a8cecde620c71450b55",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "3cdbf45e1199d31d4433967bd66e14d5",
+    "decision": "c3109980d19c84cf101a2fe1c619bc30",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "43383a81e632f5bbdc41e9f1f8daebbb",
+    "decision": "bc1e65497dc6a55dc0c4a765525e2228",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "46707a9f5b64db541775a4a83c17d787",
+    "decision": "50c6d830938a268fba9c3e90ffce6344",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "55bfe6bdd8c8a3b9b5410517f0efd3fc",
+    "decision": "1bd6bf74148ae67794dd0bfee397ef5a",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "683f36d2e7ecfb5df18b858a1442fc88",
+    "decision": "1540d016d6c2469ccd25de79b340a514",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "68c81ce238d49d1067352d7005376cdc",
+    "decision": "f6a1423345c4b7bcba83cf96a7f14ba7",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "6a559f36df362f9b3c43c23d0c054cea",
+    "decision": "831ee5a771f54a9f8cb7a219543958c1",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "6b4e1f1509b4a08cb7709677d378a734",
+    "decision": "9a5e591c8736a6ba22d0e0c2d0d3998d",
+    "template": "xf.m3c.atoms:ambition-vs-obligation-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "79d95cac6f51678c5723031dd7913812",
+    "decision": "ca4f434b97d5068d62742265229926b3",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "7aa4f946cdf0facc1bffecd699a30fea",
+    "decision": "09bb5038df79d4c38171f51d75e8e079",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "829f392a3f1546d217f1e2f23d94061e",
+    "decision": "73df59d85fa4e51fa7bbcffe2e2b94f4",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "83914908944a1c6dea6956ac723d77eb",
+    "decision": "e5ca1cbb245b0e9c2c13f3b108d2964f",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "84e739e696fbc8291e36c5c630d304b8",
+    "decision": "97348bdfb20363a4c00bc524d8d2a484",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "a2615c134353f256711a32815acf305b",
+    "decision": "22d618f8a1ed3180b7bc94514caddf13",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     },
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "a87d6ad453016a2807cf98ff8cb84f80",
+    "decision": "671122a5c0d92aaf5c27a65565cbbfcc",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "c1cd5ba4517c2259a76ef2ba830e0b0a",
+    "decision": "6d0902d44e2a58b9cce67231312b281e",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ },
+ {
+  "run": "E-m3c-w2-steady-accept-first",
+  "arm": "E",
+  "seeds": [
+   {
+    "id": "0096b9374e323296aa66eeca817442f8",
+    "decision": "5d43a207cfc39a0984e6c4b30c6fd5b3",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "0ae30a4f9ab80f777117aab579d6d250",
+    "decision": "aeb2386689064fb107a15287cc930346",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "1073195e3eafd91accf2662ed190dc4b",
+    "decision": "cd87fb8c5c03e3d77b791fa2258a337d",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "1da044a873d733e910d724a13b7d9735",
+    "decision": "169915ce0f8ca5f687d74c7ca5db200e",
+    "template": "xf.m3c.atoms:ambition-vs-obligation-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "unattended",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "287a5656817c6b74d176725cbf62ba70",
+    "decision": "1684352b02e1e162860978ecda337731",
+    "template": "xf.m3c.atoms:divided-loyalty-drawn-v0",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "evidence",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "39ebc8fa7862dde0ae195e375ce7b2a1",
+    "decision": "aa1c41a688fa9a8cecde620c71450b55",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "3cdbf45e1199d31d4433967bd66e14d5",
+    "decision": "c3109980d19c84cf101a2fe1c619bc30",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "43383a81e632f5bbdc41e9f1f8daebbb",
+    "decision": "bc1e65497dc6a55dc0c4a765525e2228",
+    "template": "xf.m3c.atoms:reckoning-billed-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "55bfe6bdd8c8a3b9b5410517f0efd3fc",
+    "decision": "1bd6bf74148ae67794dd0bfee397ef5a",
+    "template": "xf.m3c.atoms:betrayal-found-v0",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "6a559f36df362f9b3c43c23d0c054cea",
+    "decision": "831ee5a771f54a9f8cb7a219543958c1",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "79d95cac6f51678c5723031dd7913812",
+    "decision": "ca4f434b97d5068d62742265229926b3",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "829f392a3f1546d217f1e2f23d94061e",
+    "decision": "73df59d85fa4e51fa7bbcffe2e2b94f4",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": true,
+    "perceived": true,
+    "state": "resolved",
+    "unfilled": []
+   },
+   {
+    "id": "83914908944a1c6dea6956ac723d77eb",
+    "decision": "e5ca1cbb245b0e9c2c13f3b108d2964f",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "a87d6ad453016a2807cf98ff8cb84f80",
+    "decision": "671122a5c0d92aaf5c27a65565cbbfcc",
+    "template": "xf.m3c.atoms:revelation-told-v0",
+    "closing": false,
+    "cast": false,
+    "released": false,
+    "perceived": false,
+    "state": "withdrawn",
+    "unfilled": [
+     {
+      "role": "r_f",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "d91f2e0188648a843ec336fa9c6aece5",
+    "decision": "f8ebd99948e53703b283258ab2b4e8cb",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   },
+   {
+    "id": "f2546a4e90de136793b72311a3966613",
+    "decision": "19e6e2c0df50f5a4af29a13c33a01545",
+    "template": "xf.m3c:trace",
+    "closing": false,
+    "cast": true,
+    "released": false,
+    "perceived": false,
+    "state": "resolved",
+    "unfilled": [
+     {
+      "role": "source",
+      "reason": "no candidate meets the role's requirements"
+     }
+    ]
+   }
+  ]
+ }
+]

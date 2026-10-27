@@ -1,0 +1,30 @@
+{
+ "packetSha256": "d7d34d65589ef506dfa760c28a0c2c65293dbe55cf4c925102f9b632436459db",
+ "model": "gpt-6.1-sol",
+ "reasoningEffort": "high",
+ "route": "Coordinator-run sequential Codex CLI fresh ephemeral sessions; read-only sandbox; project AGENTS bytes disabled; no tools requested; memory guard limit 4 GB.",
+ "schema": 2,
+ "ratings": [
+  {
+   "rater": "codex-gpt-6.1-sol-a",
+   "sheet": 1,
+   "answer": "answers/codex-gpt-6.1-sol-a.json",
+   "answerSha256": "7e7538182873f508b9a08fbbd724ec674cacebad371c20e0f18d701c636fd0c2",
+   "cards": 75,
+   "pairs": 42,
+   "validationLog": "answers/rate-pass1.txt",
+   "originalPrivateRouteLogSha256": "fde2abbd4ec12a2d520f3c1204d778cd4d8a72522daa13c1b3dd811c8f29d9c2"
+  },
+  {
+   "rater": "codex-gpt-6.1-sol-b",
+   "sheet": 2,
+   "answer": "answers/codex-gpt-6.1-sol-b.json",
+   "answerSha256": "793639f4dba03dfb7822e9e5bd4afb22820f586fc1f19d952c1ecb2e9902ab78",
+   "cards": 75,
+   "pairs": 42,
+   "validationLog": "answers/rate-pass2.txt",
+   "originalPrivateRouteLogSha256": "64befaf42d7df805915a680ed2f3369e1ccb2d2e9ef5e6aa7a22cc9d34f17c82"
+  }
+ ],
+ "retention": "Validated answer JSON and path-free wrapper completion logs are retained. Raw CLI logs include duplicated output and execution context; their original hashes are recorded, and private scratch copies are removed at wrap-up. No rating is regenerated during scoring."
+}

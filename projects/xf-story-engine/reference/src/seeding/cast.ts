@@ -268,6 +268,7 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
   const { must, relaxedAsPrefer } = effective(role, rs);
   const ident = identityNode(l2, role);
   let candidates: Id[] = [];
+  let nominalPool = false;
   let maybeSeen = false;
   const fail = (reason: string, extra: Partial<CastAttempt> = {}): CastAttempt => {
     rs.cast = undefined;
@@ -293,16 +294,28 @@ export function castRole(l2: Layer2, inst: Instance, key: string): CastAttempt {
       if (s.missing) return fail(`waiting for the role "${s.missing}"`, { maybe: true });
       subs.push(s.p!);
     }
-    const q: Query = { find: role.kind, scope, at: t, must: subs, limit: 'all' };
-    const out = l2.k.query(q);
-    if (out.status === 'failed') return fail(`the search was too broad (${out.reason})`, { tooBroad: true });
-    candidates = out.items.map((x) => x.id);
+    // A nominal category has no discoverable structural members anywhere, not merely no matches
+    // in this scope or under these predicates. Include saved headers when making that distinction.
+    // Concrete person/group searches therefore retain their structural membership rules.
+    const structural = l2.k.schema.kindsOf(role.kind);
+    const hasMembers = structural.some(kind => !l2.k.persistence.discoveryIdsOfKind(kind)[Symbol.iterator]().next().done);
+    nominalPool = !hasMembers;
+    const finds = hasMembers ? [role.kind] : l2.k.schema.kindIds().filter(kind => l2.k.schema.isCompatibleKind(kind, role.kind));
+    // S2 5.2: retain kind-id order and each query's own order for a nominal pool.
+    // Deduplication below preserves first occurrence; concrete casts keep their old node-id sort.
+    for (const find of finds) {
+      const q: Query = { find, scope, at: t, must: subs, limit: 'all' };
+      const out = l2.k.query(q);
+      if (out.status === 'failed') return fail(`the search was too broad (${out.reason})`, { tooBroad: true });
+      candidates.push(...out.items.map((x) => x.id));
+    }
     if (ident.status === 'prefer' && ident.node && !candidates.includes(ident.node)) {
       const hdr = l2.k.persistence.restoreReferencedHeader(ident.node);
       if (hdr && l2.k.schema.isCompatibleKind(hdr.kind, role.kind) && allMust(l2, inst, ident.node, must, t).v === 'yes') candidates.push(ident.node);
     }
   }
-  candidates = [...new Set(candidates)].sort();
+  candidates = [...new Set(candidates)];
+  if (!nominalPool) candidates.sort();
 
   // Root actors are never cast: V is observed, never owned (D-09).
   candidates = candidates.filter((c) => !ROOT_ACTORS.some((r) => rootId(l2.worldSeed, r) === c));

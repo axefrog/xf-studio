@@ -1,0 +1,10 @@
+// Run 2's fresh CLI route, with AGENTS.md bytes disabled because scratch is inside this worktree.
+import {spawnSync} from 'node:child_process';import {mkdirSync,readFileSync,writeFileSync} from 'node:fs';import {resolve} from 'node:path';import {validate3,type Packet3,type Answer3} from '../../src/m3/blind3.ts';
+const [rootArg,scratchArg,sheetArg]=process.argv.slice(2);if(!rootArg||!scratchArg||!sheetArg)throw Error('rate3 <run3 root> <scratch> <1|2>');const root=resolve(rootArg),scratch=resolve(scratchArg),sheet=Number(sheetArg);if(![1,2].includes(sheet))throw Error('only the two approved Sol passes may run');
+const cwd=resolve(scratch,'empty-rater-'+sheet),rater='codex-gpt-6.1-sol-'+(sheet===1?'a':'b');mkdirSync(cwd,{recursive:true});
+const prompt=readFileSync(resolve(root,'blind',`rater-${sheet}.md`),'utf8')+`\nUse only this sheet. Do not inspect files or invoke tools. Reply with the JSON object only, with "rater" set to "${rater}".\n`;
+const args=['exec','-m','gpt-6.1-sol','-c','model_reasoning_effort="high"','-c','project_doc_max_bytes=0','-c','project_doc_fallback_filenames=[]','-s','read-only','--skip-git-repo-check','--ephemeral','--ignore-user-config','--ignore-rules','-C',cwd,'-'];
+const result=spawnSync('codex',args,{cwd,input:prompt,encoding:'utf8',timeout:45*60000,maxBuffer:64*1024*1024,windowsHide:true});
+const raw=result.stdout??'';writeFileSync(resolve(scratch,'rate-'+sheet+'.raw.txt'),raw+'\n'+(result.stderr??''));if(result.error)throw result.error;if(result.status!==0)throw Error(`rating route failed with ${result.status}; inspect private scratch log`);
+const start=raw.indexOf('{'),end=raw.lastIndexOf('}');if(start<0||end<start)throw Error('no answer JSON');const a=JSON.parse(raw.slice(start,end+1)) as Answer3;a.rater=rater;a.sheet=sheet;
+const p=JSON.parse(readFileSync(resolve(root,'blind/packet.json'),'utf8')) as Packet3;validate3(p,a);mkdirSync(resolve(root,'blind/answers'),{recursive:true});writeFileSync(resolve(root,'blind/answers',rater+'.json'),JSON.stringify(a,null,1));console.log(`${rater}: ${Object.keys(a.cards).length} cards and ${Object.keys(a.pairs).length} pairs validated`);

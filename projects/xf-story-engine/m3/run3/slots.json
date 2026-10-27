@@ -1,0 +1,683 @@
+[
+ {
+  "arm": "A1",
+  "run": "A1-m3c-w0-calm-engage",
+  "scheduled": 22,
+  "eligible": 7,
+  "filledSlots": 7,
+  "refusedAttempts": 0,
+  "refusedSlots": 0,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A1",
+  "run": "A1-m3c-w0-restless-decline",
+  "scheduled": 22,
+  "eligible": 22,
+  "filledSlots": 22,
+  "refusedAttempts": 6,
+  "refusedSlots": 5,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A1",
+  "run": "A1-m3c-w0-steady-accept-last",
+  "scheduled": 22,
+  "eligible": 13,
+  "filledSlots": 13,
+  "refusedAttempts": 2,
+  "refusedSlots": 2,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A1",
+  "run": "A1-m3c-w1-calm-ignore",
+  "scheduled": 23,
+  "eligible": 6,
+  "filledSlots": 6,
+  "refusedAttempts": 0,
+  "refusedSlots": 0,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A1",
+  "run": "A1-m3c-w1-restless-accept-middle",
+  "scheduled": 23,
+  "eligible": 23,
+  "filledSlots": 23,
+  "refusedAttempts": 5,
+  "refusedSlots": 5,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A1",
+  "run": "A1-m3c-w1-steady-engage",
+  "scheduled": 23,
+  "eligible": 14,
+  "filledSlots": 14,
+  "refusedAttempts": 1,
+  "refusedSlots": 1,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A1",
+  "run": "A1-m3c-w2-restless-engage",
+  "scheduled": 22,
+  "eligible": 22,
+  "filledSlots": 22,
+  "refusedAttempts": 5,
+  "refusedSlots": 4,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A1",
+  "run": "A1-m3c-w2-steady-accept-first",
+  "scheduled": 22,
+  "eligible": 16,
+  "filledSlots": 16,
+  "refusedAttempts": 4,
+  "refusedSlots": 3,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "E",
+  "run": "E-m3c-w0-calm-engage",
+  "scheduled": 22,
+  "eligible": 7,
+  "filledSlots": 7,
+  "refusedAttempts": 2,
+  "refusedSlots": 2,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A5",
+  "run": "A5-m3c-w0-calm-engage",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0,
+  "rootWeights": {
+   "xf.composite:reckoning": 5,
+   "xf.composite:squeeze": 1,
+   "xf.composite:betrayal": 1
+  },
+  "patternSlots": [
+   {
+    "slot": 0,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 1,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 2,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 3,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 4,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 5,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 6,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   }
+  ],
+  "refusals": []
+ },
+ {
+  "arm": "A3",
+  "run": "A3-m3c-w0-calm-engage",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0
+ },
+ {
+  "arm": "E",
+  "run": "E-m3c-w0-restless-decline",
+  "scheduled": 22,
+  "eligible": 22,
+  "filledSlots": 22,
+  "refusedAttempts": 4,
+  "refusedSlots": 4,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A5",
+  "run": "A5-m3c-w0-restless-decline",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0,
+  "rootWeights": {
+   "xf.composite:reckoning": 10,
+   "xf.composite:betrayal": 4,
+   "xf.composite:settled-without-you": 2,
+   "xf.composite:rivalry": 1,
+   "xf.composite:squeeze": 1,
+   "xf.composite:protection": 2,
+   "xf.composite:escalation": 1,
+   "xf.composite:test-of-creed": 1
+  },
+  "patternSlots": [
+   {
+    "slot": 0,
+    "pattern": "xf.composite:betrayal",
+    "filled": true
+   },
+   {
+    "slot": 1,
+    "pattern": "xf.composite:squeeze",
+    "filled": true
+   },
+   {
+    "slot": 2,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 3,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 4,
+    "pattern": "xf.composite:protection",
+    "filled": true
+   },
+   {
+    "slot": 5,
+    "pattern": "xf.composite:betrayal",
+    "filled": true
+   },
+   {
+    "slot": 6,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   }
+  ],
+  "refusals": []
+ },
+ {
+  "arm": "A3",
+  "run": "A3-m3c-w0-restless-decline",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0
+ },
+ {
+  "arm": "E",
+  "run": "E-m3c-w0-steady-accept-last",
+  "scheduled": 22,
+  "eligible": 13,
+  "filledSlots": 13,
+  "refusedAttempts": 3,
+  "refusedSlots": 3,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A5",
+  "run": "A5-m3c-w0-steady-accept-last",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0,
+  "rootWeights": {
+   "xf.composite:reckoning": 7,
+   "xf.composite:betrayal": 3,
+   "xf.composite:escalation": 2,
+   "xf.composite:squeeze": 1
+  },
+  "patternSlots": [
+   {
+    "slot": 0,
+    "pattern": "xf.composite:squeeze",
+    "filled": true
+   },
+   {
+    "slot": 1,
+    "pattern": "xf.composite:betrayal",
+    "filled": true
+   },
+   {
+    "slot": 2,
+    "pattern": "xf.composite:squeeze",
+    "filled": true
+   },
+   {
+    "slot": 3,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 4,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 5,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 6,
+    "pattern": "xf.composite:betrayal",
+    "filled": true
+   }
+  ],
+  "refusals": []
+ },
+ {
+  "arm": "A3",
+  "run": "A3-m3c-w0-steady-accept-last",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0
+ },
+ {
+  "arm": "E",
+  "run": "E-m3c-w1-calm-ignore",
+  "scheduled": 23,
+  "eligible": 6,
+  "filledSlots": 6,
+  "refusedAttempts": 0,
+  "refusedSlots": 0,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A5",
+  "run": "A5-m3c-w1-calm-ignore",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0,
+  "rootWeights": {
+   "xf.composite:reckoning": 3,
+   "xf.composite:debt": 1,
+   "xf.composite:protection": 1,
+   "xf.composite:betrayal": 1
+  },
+  "patternSlots": [
+   {
+    "slot": 0,
+    "pattern": "xf.composite:betrayal",
+    "filled": true
+   },
+   {
+    "slot": 1,
+    "pattern": "xf.composite:protection",
+    "filled": true
+   },
+   {
+    "slot": 2,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 3,
+    "pattern": "xf.composite:betrayal",
+    "filled": true
+   },
+   {
+    "slot": 4,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 5,
+    "pattern": "xf.composite:debt",
+    "filled": true
+   },
+   {
+    "slot": 6,
+    "pattern": "xf.composite:betrayal",
+    "filled": true
+   }
+  ],
+  "refusals": []
+ },
+ {
+  "arm": "A3",
+  "run": "A3-m3c-w1-calm-ignore",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0
+ },
+ {
+  "arm": "E",
+  "run": "E-m3c-w1-restless-accept-middle",
+  "scheduled": 23,
+  "eligible": 23,
+  "filledSlots": 23,
+  "refusedAttempts": 4,
+  "refusedSlots": 4,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A5",
+  "run": "A5-m3c-w1-restless-accept-middle",
+  "scheduled": 7,
+  "filledSlots": 5,
+  "refusedSlots": 2,
+  "rootWeights": {
+   "xf.composite:reckoning": 9,
+   "xf.composite:debt": 2,
+   "xf.composite:betrayal": 6,
+   "xf.composite:protection": 3,
+   "xf.composite:interception": 1,
+   "xf.composite:escalation": 1,
+   "xf.composite:revelation": 1
+  },
+  "patternSlots": [
+   {
+    "slot": 0,
+    "pattern": "xf.composite:revelation",
+    "filled": false
+   },
+   {
+    "slot": 1,
+    "pattern": "xf.composite:revelation",
+    "filled": false
+   },
+   {
+    "slot": 2,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 3,
+    "pattern": "xf.composite:escalation",
+    "filled": true
+   },
+   {
+    "slot": 4,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 5,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 6,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   }
+  ],
+  "refusals": [
+   {
+    "slot": 0,
+    "pattern": "xf.composite:revelation",
+    "reason": "uncastable role xf.composite:revelation/?old (event)"
+   },
+   {
+    "slot": 1,
+    "pattern": "xf.composite:revelation",
+    "reason": "uncastable role xf.composite:revelation/?old (event)"
+   }
+  ]
+ },
+ {
+  "arm": "A3",
+  "run": "A3-m3c-w1-restless-accept-middle",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0
+ },
+ {
+  "arm": "E",
+  "run": "E-m3c-w1-steady-engage",
+  "scheduled": 23,
+  "eligible": 14,
+  "filledSlots": 14,
+  "refusedAttempts": 1,
+  "refusedSlots": 1,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A5",
+  "run": "A5-m3c-w1-steady-engage",
+  "scheduled": 7,
+  "filledSlots": 6,
+  "refusedSlots": 1,
+  "rootWeights": {
+   "xf.composite:reckoning": 6,
+   "xf.composite:debt": 1,
+   "xf.composite:protection": 2,
+   "xf.composite:interception": 2,
+   "xf.composite:betrayal": 2,
+   "xf.composite:rivalry": 1
+  },
+  "patternSlots": [
+   {
+    "slot": 0,
+    "pattern": "xf.composite:betrayal",
+    "filled": true
+   },
+   {
+    "slot": 1,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 2,
+    "pattern": "xf.composite:interception",
+    "filled": false
+   },
+   {
+    "slot": 3,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 4,
+    "pattern": "xf.composite:protection",
+    "filled": true
+   },
+   {
+    "slot": 5,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 6,
+    "pattern": "xf.composite:protection",
+    "filled": true
+   }
+  ],
+  "refusals": [
+   {
+    "slot": 2,
+    "pattern": "xf.composite:interception",
+    "reason": "uncastable role xf.composite:interception/?x (item)"
+   }
+  ]
+ },
+ {
+  "arm": "A3",
+  "run": "A3-m3c-w1-steady-engage",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0
+ },
+ {
+  "arm": "E",
+  "run": "E-m3c-w2-restless-engage",
+  "scheduled": 22,
+  "eligible": 22,
+  "filledSlots": 22,
+  "refusedAttempts": 8,
+  "refusedSlots": 7,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A5",
+  "run": "A5-m3c-w2-restless-engage",
+  "scheduled": 7,
+  "filledSlots": 5,
+  "refusedSlots": 2,
+  "rootWeights": {
+   "xf.composite:reckoning": 9,
+   "xf.composite:betrayal": 6,
+   "xf.composite:interception": 1,
+   "xf.composite:revelation": 2,
+   "xf.composite:protection": 1,
+   "xf.composite:grievance": 1,
+   "xf.composite:escalation": 2
+  },
+  "patternSlots": [
+   {
+    "slot": 0,
+    "pattern": "xf.composite:escalation",
+    "filled": true
+   },
+   {
+    "slot": 1,
+    "pattern": "xf.composite:betrayal",
+    "filled": true
+   },
+   {
+    "slot": 2,
+    "pattern": "xf.composite:protection",
+    "filled": true
+   },
+   {
+    "slot": 3,
+    "pattern": "xf.composite:revelation",
+    "filled": false
+   },
+   {
+    "slot": 4,
+    "pattern": "xf.composite:revelation",
+    "filled": false
+   },
+   {
+    "slot": 5,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 6,
+    "pattern": "xf.composite:betrayal",
+    "filled": true
+   }
+  ],
+  "refusals": [
+   {
+    "slot": 3,
+    "pattern": "xf.composite:revelation",
+    "reason": "uncastable role xf.composite:revelation/?old (event)"
+   },
+   {
+    "slot": 4,
+    "pattern": "xf.composite:revelation",
+    "reason": "uncastable role xf.composite:revelation/?old (event)"
+   }
+  ]
+ },
+ {
+  "arm": "A3",
+  "run": "A3-m3c-w2-restless-engage",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0
+ },
+ {
+  "arm": "E",
+  "run": "E-m3c-w2-steady-accept-first",
+  "scheduled": 22,
+  "eligible": 16,
+  "filledSlots": 16,
+  "refusedAttempts": 2,
+  "refusedSlots": 1,
+  "unfilledEligible": 0,
+  "reason": "Unfilled eligible slots combine gates, locks and empty candidate pools; casting refusals are counted separately."
+ },
+ {
+  "arm": "A5",
+  "run": "A5-m3c-w2-steady-accept-first",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0,
+  "rootWeights": {
+   "xf.composite:reckoning": 7,
+   "xf.composite:betrayal": 4,
+   "xf.composite:revelation": 1,
+   "xf.composite:interception": 1,
+   "xf.composite:protection": 1,
+   "xf.composite:escalation": 2
+  },
+  "patternSlots": [
+   {
+    "slot": 0,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 1,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 2,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 3,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 4,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 5,
+    "pattern": "xf.composite:reckoning",
+    "filled": true
+   },
+   {
+    "slot": 6,
+    "pattern": "xf.composite:betrayal",
+    "filled": true
+   }
+  ],
+  "refusals": []
+ },
+ {
+  "arm": "A3",
+  "run": "A3-m3c-w2-steady-accept-first",
+  "scheduled": 7,
+  "filledSlots": 7,
+  "refusedSlots": 0
+ }
+]

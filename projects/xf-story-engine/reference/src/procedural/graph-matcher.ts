@@ -23,7 +23,7 @@ export class GraphMatcher {
     const fixed = bound(role.identity);
     if (fixed.status === 'fixed' && fixed.value && this.owner.k.expandId(fixed.value === 'v' ? 'root:v' : fixed.value) !== value) return false;
     const kind = this.owner.view.kind(value), ks = Array.isArray(role.kind) ? role.kind : [role.kind];
-    if (!kind || !ks.some((k) => k === 'actor' ? ['core:person', 'core:group'].some((x) => this.owner.view.isKind(kind, x))
+    if (!kind || !ks.some((k) => k === 'actor' ? this.owner.view.isKind(kind, 'core:actor')
       : k === 'fact' ? true : this.owner.view.isKind(kind, k === 'item' ? 'xf:item' : `core:${k}`))) return false;
     binds[variable] = value;
     return this.requirements(p, role.must ?? [], binds, at);

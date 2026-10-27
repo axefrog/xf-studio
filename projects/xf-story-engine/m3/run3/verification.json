@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-27",
+  "method": "reviewed-v5",
+  "packetSchema": 2,
+  "packetSha256": "d7d34d65589ef506dfa760c28a0c2c65293dbe55cf4c925102f9b632436459db",
+  "ratings": {
+    "raters": 2,
+    "cardsEach": 75,
+    "pairsEach": 42,
+    "omittedTiesEach": 6,
+    "sampledMemberships": 96
+  },
+  "defaultSuite": {
+    "passed": 1717,
+    "skipped": 45,
+    "failed": 0,
+    "expectations": 184015,
+    "files": 131,
+    "seconds": 330.67,
+    "guardLimitGB": 4,
+    "guardPeakGB": 1.4
+  },
+  "typechecks": {
+    "reference": "pass",
+    "harnessTools": "pass"
+  },
+  "frozenDigests": {
+    "v3": "746601727380a3fdff647f873c91c971",
+    "v4": "8fce55b19462a1e02f03ca5336bd8c16",
+    "changed": false
+  },
+  "audits": {
+    "independentActualRatingChecks": 1836,
+    "packetSourceAndAnswerHashes": "pass",
+    "canonicalMembershipAndOrdering": "pass",
+    "sharedConfigurationQuotas": "pass",
+    "pairOmissionsAndMirroredSides": "pass",
+    "exactPrefixesPerSheet": 12,
+    "linksBroken": 0,
+    "privacyFindingsTracked": 0,
+    "privacyFindingsUntrackedPublic": 0,
+    "privacySelfTestVectors": 82,
+    "privacySelfTestFailures": 0,
+    "diffWhitespace": "pass",
+    "priorRunsAndDesignLibrary": "unchanged"
+  },
+  "disk": {
+    "freeCGB": 285.4,
+    "taskOwnedPayloadOver5GB": false
+  },
+  "limitations": [
+    "Passing recorded-link chronology checks does not validate missing links: four E and two A1 population threads are flagged by the post-rating actor/time audit, including sampled memberships H-025 and H-096.",
+    "Independent arithmetic checks verify scoring, not validity of the simulation or model judgements."
+  ],
+  "cleanup": {
+    "ownedProcessesRunning": 0,
+    "scratchBytes": 1779914,
+    "scratchReparsePoints": 0,
+    "scratchDeletion": "Rejected by automatic approval review: blocked by policy. Coordinator cleanup required."
+  }
+}

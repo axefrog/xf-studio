@@ -7,6 +7,7 @@
 import { H, s } from '../id.ts';
 import { Layer3 } from '../procedural/layer3.ts';
 import type { Layer3Data, SiftPattern, Tempo } from '../procedural/types.ts';
+import type { Pattern, Vocabulary } from '../seeding/pattern-types.ts';
 import { ScriptPort } from '../seeding/port.ts';
 import type { Layer2 } from '../seeding/layer2.ts';
 import type { Pack, Finding } from '../seeding/types.ts';
@@ -27,7 +28,9 @@ export interface WorldOpts {
   layer3: boolean;
   tempo?: Tempo;
   packs: Pack[];
-  patterns?: SiftPattern[];
+  patterns?: Array<SiftPattern | Pattern>;
+  vocabulary?: Vocabulary;
+  eventKinds?: import('../event-kinds.ts').EventKindEntry[];
   /** Changes to S1's tunables for the run (recorded by name in the transcript). */
   s1?: (d: S1Data) => void;
   l3Data?: Layer3Data;
@@ -54,9 +57,19 @@ export function buildWorld(o: WorldOpts): M3World {
   for (const d of sim.w.districts) for (const cell of d.cellIds) sim.people.residentsOfBlock(cell);
   const port = new ScriptPort();
   const l2 = attachLayer2(sim, { port, facts: factsTable() });
+  for (const kind of o.eventKinds ?? []) sim.k.eventKinds.register(kind);
+  for (const [dimName, values] of [
+    ['core:event-kind', (o.eventKinds ?? []).map(k => k.name)],
+    ['core:participant-role', (o.eventKinds ?? []).flatMap(k => k.roles ?? [])],
+  ] as Array<[string,string[]]>) {
+    const dim = sim.k.schema.dims.get(dimName);
+    if (dim?.value.t === 'enum') dim.value.values = [...new Set([...dim.value.values, ...values])];
+  }
+  if (o.vocabulary) l2.reg.vocabulary = structuredClone(o.vocabulary);
+  for (const pattern of o.patterns ?? []) if ('junctures' in pattern) l2.reg.patterns.set(pattern.id, structuredClone(pattern));
   const findings: Finding[] = [];
   for (const pack of o.packs) findings.push(...l2.installPack(pack));
-  const l3 = o.layer3 ? new Layer3(l2, { registry: sim.w.kinds, patterns: o.patterns ?? [], ...(o.l3Data ? { data: o.l3Data } : {}) }) : undefined;
+  const l3 = o.layer3 ? new Layer3(l2, { registry: sim.w.kinds, patterns: o.patterns ?? [], ...(o.vocabulary ? { vocabulary: o.vocabulary } : {}), ...(o.l3Data ? { data: o.l3Data } : {}) }) : undefined;
   if (l3) findings.push(...l3.findings);
   sim.k.settings.set({ tempo: o.layer3 ? (o.tempo ?? 'steady') : 'off' });
   sim.k.settle();

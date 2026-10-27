@@ -1,0 +1,159 @@
+{
+ "version": 3,
+ "packetSchema": 2,
+ "packetSeed": "m3c-reviewed-v5",
+ "method": "reviewed-v5",
+ "quotas": [
+  {
+   "configuration": "m3c-w0|steady|accept-last",
+   "n": 3,
+   "available": {
+    "E": 6,
+    "A1": 8,
+    "A3": 7,
+    "A5": 7
+   }
+  },
+  {
+   "configuration": "m3c-w1|calm|ignore",
+   "n": 3,
+   "available": {
+    "E": 3,
+    "A1": 3,
+    "A3": 7,
+    "A5": 7
+   }
+  },
+  {
+   "configuration": "m3c-w0|restless|decline",
+   "n": 3,
+   "available": {
+    "E": 14,
+    "A1": 13,
+    "A3": 7,
+    "A5": 7
+   }
+  },
+  {
+   "configuration": "m3c-w1|steady|engage",
+   "n": 3,
+   "available": {
+    "E": 8,
+    "A1": 7,
+    "A3": 7,
+    "A5": 6
+   }
+  },
+  {
+   "configuration": "m3c-w2|steady|accept-first",
+   "n": 3,
+   "available": {
+    "E": 4,
+    "A1": 9,
+    "A3": 7,
+    "A5": 7
+   }
+  },
+  {
+   "configuration": "m3c-w0|calm|engage",
+   "n": 3,
+   "available": {
+    "E": 3,
+    "A1": 3,
+    "A3": 7,
+    "A5": 7
+   }
+  },
+  {
+   "configuration": "m3c-w2|restless|engage",
+   "n": 3,
+   "available": {
+    "E": 3,
+    "A1": 9,
+    "A3": 7,
+    "A5": 5
+   }
+  },
+  {
+   "configuration": "m3c-w1|restless|accept-middle",
+   "n": 3,
+   "available": {
+    "E": 8,
+    "A1": 9,
+    "A3": 7,
+    "A5": 5
+   }
+  }
+ ],
+ "requestedPerArm": 24,
+ "actualPerArm": 24,
+ "sampledAccounts": 96,
+ "canonicalAccounts": 75,
+ "records": [
+  {
+   "file": "A1-m3c-w0-calm-engage.json.gz",
+   "sha256": "10ea3d7bc1d3d980a767f12f0798261c0f00614952c3b3a4901466ebe8b604ee"
+  },
+  {
+   "file": "A1-m3c-w0-restless-decline.json.gz",
+   "sha256": "d10985eb6bfe59b81bd48ec340be8165b7a63fc1023d0c189ef3ab37f301d5ea"
+  },
+  {
+   "file": "A1-m3c-w0-steady-accept-last.json.gz",
+   "sha256": "e9d194ac4c4bd1320e5c7196860c046539b9c3d33d7e5a729572299204320ae5"
+  },
+  {
+   "file": "A1-m3c-w1-calm-ignore.json.gz",
+   "sha256": "7b3c157eaeb7f81958ad8c57c7b565e805dabad6240da855bdd244169fd125ba"
+  },
+  {
+   "file": "A1-m3c-w1-restless-accept-middle.json.gz",
+   "sha256": "96d197f5a20f31cf897ac3a33412bed414ae060a6d8f2eae9533f221ac469fa3"
+  },
+  {
+   "file": "A1-m3c-w1-steady-engage.json.gz",
+   "sha256": "34cbf31df47d5248c47f8feb23e0f00f21885b25fdf7c1da26c4d8596ba04f48"
+  },
+  {
+   "file": "A1-m3c-w2-restless-engage.json.gz",
+   "sha256": "7ae2f5032bb55c17d5bebc07e8fc7aef91348ca42b2703d0fd4c566ff4344856"
+  },
+  {
+   "file": "A1-m3c-w2-steady-accept-first.json.gz",
+   "sha256": "71de1c97a743dafa4c169cd53a9bb64b426620ce616194efabec57eee7285545"
+  },
+  {
+   "file": "E-m3c-w0-calm-engage.json.gz",
+   "sha256": "1253db530c4d421c81bfe2155b1849c7c3a17bb689aa2db81813edb201a4b485"
+  },
+  {
+   "file": "E-m3c-w0-restless-decline.json.gz",
+   "sha256": "88172f671bc89ebcb6adcfca31a0a3945dc81b9cdd9c27225373b9bd39d33519"
+  },
+  {
+   "file": "E-m3c-w0-steady-accept-last.json.gz",
+   "sha256": "fe0edf7a5d5cc1ffd62f3d57832b65cf6d3f673e5c0daba68d50e36ca3faa0ec"
+  },
+  {
+   "file": "E-m3c-w1-calm-ignore.json.gz",
+   "sha256": "8c371a8795441090584e2f873212e4019f411965a2b00e898d518d7a604e3ea8"
+  },
+  {
+   "file": "E-m3c-w1-restless-accept-middle.json.gz",
+   "sha256": "f75852fb7ea4551e5d32f122b6c3bf54ebddfce647bf11cd50e0cbef115165c3"
+  },
+  {
+   "file": "E-m3c-w1-steady-engage.json.gz",
+   "sha256": "62d946f28dd0c46306db465ad4d3cf19cd24062bed486c9d6eaf5a6feae3a9ca"
+  },
+  {
+   "file": "E-m3c-w2-restless-engage.json.gz",
+   "sha256": "acdd59aec65bf807ec34f4012d6186c0200b429f382a7a4f3fff31458c865906"
+  },
+  {
+   "file": "E-m3c-w2-steady-accept-first.json.gz",
+   "sha256": "6c9e059a14cb405c07d84454289c33134782fc3c7e43bf5b0cc7fa4350a8ec1b"
+  }
+ ],
+ "packetSha256": "d7d34d65589ef506dfa760c28a0c2c65293dbe55cf4c925102f9b632436459db"
+}

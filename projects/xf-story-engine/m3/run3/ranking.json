@@ -1,0 +1,257 @@
+{
+ "scope": "Logged successful sow pools; no counterfactual replay. Chronology flags match actor masks and equal observation times, not reconstructed response links.",
+ "ranking": [
+  {
+   "run": "A1-m3c-w0-calm-engage",
+   "arm": "A1",
+   "sows": 7,
+   "minCandidates": 2,
+   "maxCandidates": 77,
+   "equalBaseScores": 7,
+   "belowHighestBase": 0,
+   "oneKit": 7,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "A1-m3c-w0-restless-decline",
+   "arm": "A1",
+   "sows": 22,
+   "minCandidates": 2,
+   "maxCandidates": 161,
+   "equalBaseScores": 22,
+   "belowHighestBase": 0,
+   "oneKit": 17,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "A1-m3c-w0-steady-accept-last",
+   "arm": "A1",
+   "sows": 13,
+   "minCandidates": 2,
+   "maxCandidates": 147,
+   "equalBaseScores": 13,
+   "belowHighestBase": 0,
+   "oneKit": 10,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "A1-m3c-w1-calm-ignore",
+   "arm": "A1",
+   "sows": 6,
+   "minCandidates": 6,
+   "maxCandidates": 45,
+   "equalBaseScores": 6,
+   "belowHighestBase": 0,
+   "oneKit": 6,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "A1-m3c-w1-restless-accept-middle",
+   "arm": "A1",
+   "sows": 23,
+   "minCandidates": 6,
+   "maxCandidates": 81,
+   "equalBaseScores": 23,
+   "belowHighestBase": 0,
+   "oneKit": 18,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "A1-m3c-w1-steady-engage",
+   "arm": "A1",
+   "sows": 14,
+   "minCandidates": 6,
+   "maxCandidates": 43,
+   "equalBaseScores": 14,
+   "belowHighestBase": 0,
+   "oneKit": 11,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "A1-m3c-w2-restless-engage",
+   "arm": "A1",
+   "sows": 22,
+   "minCandidates": 2,
+   "maxCandidates": 90,
+   "equalBaseScores": 22,
+   "belowHighestBase": 0,
+   "oneKit": 12,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "A1-m3c-w2-steady-accept-first",
+   "arm": "A1",
+   "sows": 16,
+   "minCandidates": 2,
+   "maxCandidates": 83,
+   "equalBaseScores": 16,
+   "belowHighestBase": 0,
+   "oneKit": 12,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "E-m3c-w0-calm-engage",
+   "arm": "E",
+   "sows": 7,
+   "minCandidates": 2,
+   "maxCandidates": 77,
+   "equalBaseScores": 1,
+   "belowHighestBase": 4,
+   "oneKit": 6,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "E-m3c-w0-restless-decline",
+   "arm": "E",
+   "sows": 22,
+   "minCandidates": 2,
+   "maxCandidates": 121,
+   "equalBaseScores": 1,
+   "belowHighestBase": 21,
+   "oneKit": 18,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "E-m3c-w0-steady-accept-last",
+   "arm": "E",
+   "sows": 13,
+   "minCandidates": 2,
+   "maxCandidates": 148,
+   "equalBaseScores": 1,
+   "belowHighestBase": 12,
+   "oneKit": 10,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "E-m3c-w1-calm-ignore",
+   "arm": "E",
+   "sows": 6,
+   "minCandidates": 6,
+   "maxCandidates": 45,
+   "equalBaseScores": 0,
+   "belowHighestBase": 5,
+   "oneKit": 6,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "E-m3c-w1-restless-accept-middle",
+   "arm": "E",
+   "sows": 23,
+   "minCandidates": 6,
+   "maxCandidates": 84,
+   "equalBaseScores": 0,
+   "belowHighestBase": 22,
+   "oneKit": 17,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "E-m3c-w1-steady-engage",
+   "arm": "E",
+   "sows": 14,
+   "minCandidates": 6,
+   "maxCandidates": 45,
+   "equalBaseScores": 0,
+   "belowHighestBase": 12,
+   "oneKit": 10,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "E-m3c-w2-restless-engage",
+   "arm": "E",
+   "sows": 22,
+   "minCandidates": 2,
+   "maxCandidates": 85,
+   "equalBaseScores": 1,
+   "belowHighestBase": 20,
+   "oneKit": 12,
+   "F6Available": 0,
+   "F13Available": 0
+  },
+  {
+   "run": "E-m3c-w2-steady-accept-first",
+   "arm": "E",
+   "sows": 16,
+   "minCandidates": 2,
+   "maxCandidates": 67,
+   "equalBaseScores": 1,
+   "belowHighestBase": 13,
+   "oneKit": 11,
+   "F6Available": 0,
+   "F13Available": 0
+  }
+ ],
+ "chronology": [
+  {
+   "arm": "A1",
+   "run": "A1-m3c-w0-restless-decline",
+   "thread": "886760c6365339e439a47310f174fcb5",
+   "response": "8ab21754ae7e925bb5d2ac37186b7ed5",
+   "request": "d29cbc8325c0d9d3b7a1fbb3426c1be3",
+   "recordedOffer": null,
+   "cards": [
+    "H-096"
+   ]
+  },
+  {
+   "arm": "A1",
+   "run": "A1-m3c-w0-restless-decline",
+   "thread": "29b4913cd70156bd5e66510ac2892932",
+   "response": "1bd333f3fa30290b99d6d11b5d3a5908",
+   "request": "2cdff607b91828fee76bd874b6615e1b",
+   "recordedOffer": null,
+   "cards": []
+  },
+  {
+   "arm": "E",
+   "run": "E-m3c-w0-restless-decline",
+   "thread": "886760c6365339e439a47310f174fcb5",
+   "response": "8ab21754ae7e925bb5d2ac37186b7ed5",
+   "request": "d29cbc8325c0d9d3b7a1fbb3426c1be3",
+   "recordedOffer": null,
+   "cards": [
+    "H-025"
+   ]
+  },
+  {
+   "arm": "E",
+   "run": "E-m3c-w0-restless-decline",
+   "thread": "b5abe92e7ee4d4599e4aa32b4ef54c10",
+   "response": "9155ac66353abc7b822f14ee664d5c22",
+   "request": "b1e61d86e39b6ccc0b27cca24d50c56b",
+   "recordedOffer": null,
+   "cards": []
+  },
+  {
+   "arm": "E",
+   "run": "E-m3c-w0-restless-decline",
+   "thread": "45f470be93c79aa21881ac5a8ff6cdac",
+   "response": "436178d2dc507f4baf4276e47da4c66f",
+   "request": "b5bb53bd21c3874573bff9b13fea5c1b",
+   "recordedOffer": null,
+   "cards": []
+  },
+  {
+   "arm": "E",
+   "run": "E-m3c-w0-restless-decline",
+   "thread": "3d5261e359a719ce3ceabd4b838a9218",
+   "response": "15c9bffa676e86287a87a86364ae99ca",
+   "request": "ff2b119a9aece590dc9413ed9266d4b2",
+   "recordedOffer": null,
+   "cards": []
+  }
+ ]
+}

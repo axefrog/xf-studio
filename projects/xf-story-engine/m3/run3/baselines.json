@@ -1,0 +1,1748 @@
+{
+ "run2OneJuncture": {
+  "E": {
+   "n": 59,
+   "recastRate": 0.8983050847457628,
+   "delta": 0.25,
+   "packageSize": 1,
+   "packageCurve": [
+    {
+     "run": "E-w1.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 3,
+       "clusters80": 1
+      },
+      {
+       "hours": 10,
+       "threads": 4,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 9,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 10,
+       "clusters80": 1
+      }
+     ]
+    },
+    {
+     "run": "E-w2.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 1,
+       "clusters80": 1
+      },
+      {
+       "hours": 10,
+       "threads": 4,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 8,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 10,
+       "clusters80": 1
+      }
+     ]
+    },
+    {
+     "run": "E-w3.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 1,
+       "clusters80": 1
+      },
+      {
+       "hours": 10,
+       "threads": 3,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 6,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 9,
+       "clusters80": 1
+      }
+     ]
+    },
+    {
+     "run": "E-w4.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 0,
+       "clusters80": 0
+      },
+      {
+       "hours": 10,
+       "threads": 2,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 6,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 8,
+       "clusters80": 1
+      }
+     ]
+    },
+    {
+     "run": "E-w5.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 2,
+       "clusters80": 1
+      },
+      {
+       "hours": 10,
+       "threads": 4,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 9,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 12,
+       "clusters80": 1
+      }
+     ]
+    },
+    {
+     "run": "E-w6.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 2,
+       "clusters80": 1
+      },
+      {
+       "hours": 10,
+       "threads": 4,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 8,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 10,
+       "clusters80": 1
+      }
+     ]
+    }
+   ],
+   "hill": [
+    {
+     "run": "E-w1.json",
+     "from": 0,
+     "to": 10,
+     "n": 4,
+     "l1": 2.6666666666666665,
+     "l2": 1
+    },
+    {
+     "run": "E-w1.json",
+     "from": 10,
+     "to": 20,
+     "n": 5,
+     "l1": 5,
+     "l2": 1
+    },
+    {
+     "run": "E-w1.json",
+     "from": 20,
+     "to": 28,
+     "n": 1,
+     "l1": 1,
+     "l2": 1
+    },
+    {
+     "run": "E-w2.json",
+     "from": 0,
+     "to": 10,
+     "n": 4,
+     "l1": 2.6666666666666665,
+     "l2": 1
+    },
+    {
+     "run": "E-w2.json",
+     "from": 10,
+     "to": 20,
+     "n": 4,
+     "l1": 4,
+     "l2": 1
+    },
+    {
+     "run": "E-w2.json",
+     "from": 20,
+     "to": 28,
+     "n": 2,
+     "l1": 1,
+     "l2": 1
+    },
+    {
+     "run": "E-w3.json",
+     "from": 0,
+     "to": 10,
+     "n": 3,
+     "l1": 3,
+     "l2": 1
+    },
+    {
+     "run": "E-w3.json",
+     "from": 10,
+     "to": 20,
+     "n": 3,
+     "l1": 1.8,
+     "l2": 1
+    },
+    {
+     "run": "E-w3.json",
+     "from": 20,
+     "to": 28,
+     "n": 3,
+     "l1": 3,
+     "l2": 1
+    },
+    {
+     "run": "E-w4.json",
+     "from": 0,
+     "to": 10,
+     "n": 2,
+     "l1": 2,
+     "l2": 1
+    },
+    {
+     "run": "E-w4.json",
+     "from": 10,
+     "to": 20,
+     "n": 4,
+     "l1": 1.6,
+     "l2": 1
+    },
+    {
+     "run": "E-w4.json",
+     "from": 20,
+     "to": 28,
+     "n": 2,
+     "l1": 2,
+     "l2": 1
+    },
+    {
+     "run": "E-w5.json",
+     "from": 0,
+     "to": 10,
+     "n": 4,
+     "l1": 4,
+     "l2": 1
+    },
+    {
+     "run": "E-w5.json",
+     "from": 10,
+     "to": 20,
+     "n": 5,
+     "l1": 3.5714285714285716,
+     "l2": 1
+    },
+    {
+     "run": "E-w5.json",
+     "from": 20,
+     "to": 28,
+     "n": 3,
+     "l1": 3,
+     "l2": 1
+    },
+    {
+     "run": "E-w6.json",
+     "from": 0,
+     "to": 10,
+     "n": 4,
+     "l1": 2.6666666666666665,
+     "l2": 1
+    },
+    {
+     "run": "E-w6.json",
+     "from": 10,
+     "to": 20,
+     "n": 4,
+     "l1": 4,
+     "l2": 1
+    },
+    {
+     "run": "E-w6.json",
+     "from": 20,
+     "to": 28,
+     "n": 2,
+     "l1": 2,
+     "l2": 1
+    }
+   ],
+   "templateRate": 0,
+   "tau": 4,
+   "templates": [],
+   "predictability": [
+    {
+     "run": "E-w1.json",
+     "exposure": 5,
+     "available": true,
+     "testThreads": 5,
+     "orders": [
+      {
+       "order": 1,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9625934281777463
+      },
+      {
+       "order": 2,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9625934281777463
+      },
+      {
+       "order": 3,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9625934281777463
+      }
+     ]
+    },
+    {
+     "run": "E-w1.json",
+     "exposure": 10,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w1.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w1.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w2.json",
+     "exposure": 5,
+     "available": true,
+     "testThreads": 5,
+     "orders": [
+      {
+       "order": 1,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9625934281777463
+      },
+      {
+       "order": 2,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9625934281777463
+      },
+      {
+       "order": 3,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9625934281777463
+      }
+     ]
+    },
+    {
+     "run": "E-w2.json",
+     "exposure": 10,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w2.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w2.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w3.json",
+     "exposure": 5,
+     "available": true,
+     "testThreads": 4,
+     "orders": [
+      {
+       "order": 1,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9342413985415516
+      },
+      {
+       "order": 2,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9342413985415516
+      },
+      {
+       "order": 3,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9342413985415516
+      }
+     ]
+    },
+    {
+     "run": "E-w3.json",
+     "exposure": 10,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w3.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w3.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w4.json",
+     "exposure": 5,
+     "available": true,
+     "testThreads": 3,
+     "orders": [
+      {
+       "order": 1,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9814947812685428
+      },
+      {
+       "order": 2,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9814947812685428
+      },
+      {
+       "order": 3,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9814947812685428
+      }
+     ]
+    },
+    {
+     "run": "E-w4.json",
+     "exposure": 10,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w4.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w4.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w5.json",
+     "exposure": 5,
+     "available": true,
+     "testThreads": 7,
+     "orders": [
+      {
+       "order": 1,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9544928482816906
+      },
+      {
+       "order": 2,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9544928482816906
+      },
+      {
+       "order": 3,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9544928482816906
+      }
+     ]
+    },
+    {
+     "run": "E-w5.json",
+     "exposure": 10,
+     "available": true,
+     "testThreads": 2,
+     "orders": [
+      {
+       "order": 1,
+       "bits": 0.24100809950379493,
+       "shuffled": 0.7652573583493898
+      },
+      {
+       "order": 2,
+       "bits": 0.24100809950379493,
+       "shuffled": 0.7652573583493898
+      },
+      {
+       "order": 3,
+       "bits": 0.24100809950379493,
+       "shuffled": 0.7652573583493898
+      }
+     ]
+    },
+    {
+     "run": "E-w5.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w5.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w6.json",
+     "exposure": 5,
+     "available": true,
+     "testThreads": 5,
+     "orders": [
+      {
+       "order": 1,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9625934281777463
+      },
+      {
+       "order": 2,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9625934281777463
+      },
+      {
+       "order": 3,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9625934281777463
+      }
+     ]
+    },
+    {
+     "run": "E-w6.json",
+     "exposure": 10,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w6.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "E-w6.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    }
+   ],
+   "errandShare": null,
+   "beganErrandShare": null,
+   "grewShareOfBegan": null,
+   "threePlus": 0,
+   "deliveryShareThreePlus": 0,
+   "knownShare": 0,
+   "legibleEdgeRatio": null,
+   "nudgeShare": 0,
+   "projectionLimit": "One ask per hook plus an open end marker; the supplied run-2 records do not declare the requested verb needed for R7. No word-based reclassification was invented."
+  },
+  "A1": {
+   "n": 39,
+   "recastRate": 0.8461538461538461,
+   "delta": 0.25,
+   "packageSize": 1,
+   "packageCurve": [
+    {
+     "run": "A1-w1.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 2,
+       "clusters80": 1
+      },
+      {
+       "hours": 10,
+       "threads": 3,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 8,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 8,
+       "clusters80": 1
+      }
+     ]
+    },
+    {
+     "run": "A1-w2.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 1,
+       "clusters80": 1
+      },
+      {
+       "hours": 10,
+       "threads": 4,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 7,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 9,
+       "clusters80": 1
+      }
+     ]
+    },
+    {
+     "run": "A1-w3.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 0,
+       "clusters80": 0
+      },
+      {
+       "hours": 10,
+       "threads": 1,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 3,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 5,
+       "clusters80": 1
+      }
+     ]
+    },
+    {
+     "run": "A1-w4.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 0,
+       "clusters80": 0
+      },
+      {
+       "hours": 10,
+       "threads": 1,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 3,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 3,
+       "clusters80": 1
+      }
+     ]
+    },
+    {
+     "run": "A1-w5.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 0,
+       "clusters80": 0
+      },
+      {
+       "hours": 10,
+       "threads": 1,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 5,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 7,
+       "clusters80": 1
+      }
+     ]
+    },
+    {
+     "run": "A1-w6.json",
+     "points": [
+      {
+       "hours": 5,
+       "threads": 1,
+       "clusters80": 1
+      },
+      {
+       "hours": 10,
+       "threads": 3,
+       "clusters80": 1
+      },
+      {
+       "hours": 20,
+       "threads": 5,
+       "clusters80": 1
+      },
+      {
+       "hours": 28,
+       "threads": 7,
+       "clusters80": 1
+      }
+     ]
+    }
+   ],
+   "hill": [
+    {
+     "run": "A1-w1.json",
+     "from": 0,
+     "to": 10,
+     "n": 3,
+     "l1": 1.8,
+     "l2": 1
+    },
+    {
+     "run": "A1-w1.json",
+     "from": 10,
+     "to": 20,
+     "n": 5,
+     "l1": 3.5714285714285716,
+     "l2": 1
+    },
+    {
+     "run": "A1-w1.json",
+     "from": 20,
+     "to": 28,
+     "n": 0,
+     "l1": null,
+     "l2": null
+    },
+    {
+     "run": "A1-w2.json",
+     "from": 0,
+     "to": 10,
+     "n": 4,
+     "l1": 2.6666666666666665,
+     "l2": 1
+    },
+    {
+     "run": "A1-w2.json",
+     "from": 10,
+     "to": 20,
+     "n": 3,
+     "l1": 3,
+     "l2": 1
+    },
+    {
+     "run": "A1-w2.json",
+     "from": 20,
+     "to": 28,
+     "n": 2,
+     "l1": 2,
+     "l2": 1
+    },
+    {
+     "run": "A1-w3.json",
+     "from": 0,
+     "to": 10,
+     "n": 1,
+     "l1": 1,
+     "l2": 1
+    },
+    {
+     "run": "A1-w3.json",
+     "from": 10,
+     "to": 20,
+     "n": 2,
+     "l1": 2,
+     "l2": 1
+    },
+    {
+     "run": "A1-w3.json",
+     "from": 20,
+     "to": 28,
+     "n": 2,
+     "l1": 2,
+     "l2": 1
+    },
+    {
+     "run": "A1-w4.json",
+     "from": 0,
+     "to": 10,
+     "n": 1,
+     "l1": 1,
+     "l2": 1
+    },
+    {
+     "run": "A1-w4.json",
+     "from": 10,
+     "to": 20,
+     "n": 2,
+     "l1": 1,
+     "l2": 1
+    },
+    {
+     "run": "A1-w4.json",
+     "from": 20,
+     "to": 28,
+     "n": 0,
+     "l1": null,
+     "l2": null
+    },
+    {
+     "run": "A1-w5.json",
+     "from": 0,
+     "to": 10,
+     "n": 1,
+     "l1": 1,
+     "l2": 1
+    },
+    {
+     "run": "A1-w5.json",
+     "from": 10,
+     "to": 20,
+     "n": 4,
+     "l1": 4,
+     "l2": 1
+    },
+    {
+     "run": "A1-w5.json",
+     "from": 20,
+     "to": 28,
+     "n": 2,
+     "l1": 2,
+     "l2": 1
+    },
+    {
+     "run": "A1-w6.json",
+     "from": 0,
+     "to": 10,
+     "n": 3,
+     "l1": 1.8,
+     "l2": 1
+    },
+    {
+     "run": "A1-w6.json",
+     "from": 10,
+     "to": 20,
+     "n": 2,
+     "l1": 2,
+     "l2": 1
+    },
+    {
+     "run": "A1-w6.json",
+     "from": 20,
+     "to": 28,
+     "n": 2,
+     "l1": 2,
+     "l2": 1
+    }
+   ],
+   "templateRate": 0,
+   "tau": 4,
+   "templates": [],
+   "predictability": [
+    {
+     "run": "A1-w1.json",
+     "exposure": 5,
+     "available": true,
+     "testThreads": 3,
+     "orders": [
+      {
+       "order": 1,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9814947812685428
+      },
+      {
+       "order": 2,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9814947812685428
+      },
+      {
+       "order": 3,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9814947812685428
+      }
+     ]
+    },
+    {
+     "run": "A1-w1.json",
+     "exposure": 10,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w1.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w1.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w2.json",
+     "exposure": 5,
+     "available": true,
+     "testThreads": 4,
+     "orders": [
+      {
+       "order": 1,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9342413985415516
+      },
+      {
+       "order": 2,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9342413985415516
+      },
+      {
+       "order": 3,
+       "bits": 0.41503749927884387,
+       "shuffled": 0.9342413985415516
+      }
+     ]
+    },
+    {
+     "run": "A1-w2.json",
+     "exposure": 10,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w2.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w2.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w3.json",
+     "exposure": 5,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w3.json",
+     "exposure": 10,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w3.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w3.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w4.json",
+     "exposure": 5,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w4.json",
+     "exposure": 10,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w4.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w4.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w5.json",
+     "exposure": 5,
+     "available": true,
+     "testThreads": 2,
+     "orders": [
+      {
+       "order": 1,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9342413985415516
+      },
+      {
+       "order": 2,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9342413985415516
+      },
+      {
+       "order": 3,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9342413985415516
+      }
+     ]
+    },
+    {
+     "run": "A1-w5.json",
+     "exposure": 10,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w5.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w5.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w6.json",
+     "exposure": 5,
+     "available": true,
+     "testThreads": 2,
+     "orders": [
+      {
+       "order": 1,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9342413985415516
+      },
+      {
+       "order": 2,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9342413985415516
+      },
+      {
+       "order": 3,
+       "bits": 0.4150374992788438,
+       "shuffled": 0.9342413985415516
+      }
+     ]
+    },
+    {
+     "run": "A1-w6.json",
+     "exposure": 10,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w6.json",
+     "exposure": 20,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    },
+    {
+     "run": "A1-w6.json",
+     "exposure": 50,
+     "available": false,
+     "testThreads": 0,
+     "orders": [
+      {
+       "order": 1,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 2,
+       "bits": null,
+       "shuffled": null
+      },
+      {
+       "order": 3,
+       "bits": null,
+       "shuffled": null
+      }
+     ]
+    }
+   ],
+   "errandShare": null,
+   "beganErrandShare": null,
+   "grewShareOfBegan": null,
+   "threePlus": 0,
+   "deliveryShareThreePlus": 0,
+   "knownShare": 0,
+   "legibleEdgeRatio": null,
+   "nudgeShare": 0,
+   "projectionLimit": "One ask per hook plus an open end marker; the supplied run-2 records do not declare the requested verb needed for R7. No word-based reclassification was invented."
+  }
+ },
+ "authoredSideQuests": {
+  "status": "unavailable",
+  "reason": "Dossier 5 section 5.5 reports aggregate quest-node trigram statistics, not perceived occurrence timelines with canonical L2 functions. No compatible authored L2 baseline or authored-margin claim can be derived without a new decomposition."
+ }
+}

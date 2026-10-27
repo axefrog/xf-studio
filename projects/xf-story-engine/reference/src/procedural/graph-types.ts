@@ -34,7 +34,8 @@ export interface MatcherOccurrence { id: Id; at: number; change: Change }
 export function patternDocument(p: Pattern): SiftPattern {
   const kind = (r: Pattern['roles'][string]): string => {
     const ks = Array.isArray(r.kind) ? r.kind : [r.kind];
-    if (ks.length > 1 || ks[0] === 'actor') return 'core:thing';
+    if (ks[0] === 'actor' || ks.every(k=>k==='person'||k==='group')) return ks.length===1&&ks[0]!=='actor'?`core:${ks[0]}`:'core:actor';
+    if (ks.length > 1) return 'core:thing';
     return ks[0] === 'item' ? 'xf:item' : ks[0] === 'fact' ? 'core:thing' : `core:${ks[0]}`;
   };
   return { id: p.id, version: p.version, graph: structuredClone(p),

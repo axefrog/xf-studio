@@ -130,6 +130,8 @@ export function coreDefs(wSim = 600, opts: CoreDefsOptions = {}): SchemaDefs {
   const kinds: KindDef[] = [
     // The abstract base of every thing a ref can name.
     { id: 'core:thing', slots: [] },
+    // Nominal actor category: compatibility only, never structural query membership.
+    { id: 'core:actor', extends: ['core:thing'], facets: ['actor'], slots: [] },
     {
       id: 'core:name',
       extends: ['core:thing'],
@@ -167,6 +169,7 @@ export function coreDefs(wSim = 600, opts: CoreDefsOptions = {}): SchemaDefs {
     {
       id: 'core:person',
       extends: ['core:thing'],
+      classifiesAs: ['core:actor'],
       facets: ['actor'],
       slots: [
         { key: 'name', dim: 'core:name-node', card: 'one', mode: 'sampled', tier: 3 },
@@ -209,6 +212,7 @@ export function coreDefs(wSim = 600, opts: CoreDefsOptions = {}): SchemaDefs {
     {
       id: 'core:group',
       extends: ['core:thing'],
+      classifiesAs: ['core:actor'],
       facets: ['actor', 'group'],
       slots: [
         { key: 'name', dim: 'core:name-node', card: 'one', mode: 'sampled', tier: 1 },

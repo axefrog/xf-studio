@@ -1,0 +1,55 @@
+{
+ "version": 3,
+ "method": "reviewed-v5",
+ "windows": 1008,
+ "playPerWindow": 100,
+ "configurations": [
+  [
+   "m3c-w0",
+   "calm",
+   "engage"
+  ],
+  [
+   "m3c-w1",
+   "steady",
+   "engage"
+  ],
+  [
+   "m3c-w2",
+   "restless",
+   "engage"
+  ],
+  [
+   "m3c-w0",
+   "restless",
+   "decline"
+  ],
+  [
+   "m3c-w1",
+   "calm",
+   "ignore"
+  ],
+  [
+   "m3c-w2",
+   "steady",
+   "accept-first"
+  ],
+  [
+   "m3c-w0",
+   "steady",
+   "accept-last"
+  ],
+  [
+   "m3c-w1",
+   "restless",
+   "accept-middle"
+  ]
+ ],
+ "arms": [
+  "E",
+  "A1",
+  "A3",
+  "A5"
+ ],
+ "bun": "1.4.4"
+}
