@@ -10,7 +10,7 @@
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 6 | 15 | 21 | 2 | 0 | 128 | 0 | 0 |
+| items | 6 | 14 | 22 | 2 | 0 | 128 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
@@ -150,7 +150,7 @@ Per consumer, blocking first.
 | needs | V9 | M5 | [`story.rewards`](#story.rewards) | requested | none | Money, items, street cred and fixer standing. |
 | needs | S6 | M4 | [`character.cyberware`](#character.cyberware) | merged | partial | V's cyberware. |
 | needs | S1 | M4 | [`recorder.session-events`](#recorder.session-events) | merged | partial | The bridge's own event ring and npc.* events are part of the world event feed. |
-| needs | S1 | M4 | [`recorder.world-event-feed`](#recorder.world-event-feed) | proposed | none | A world event feed; the graded hooks and a minimal set of twelve event kinds are designed. Gaps: interior entry is polled, no 'any fact changed' hook, dialogue picks inferred. |
+| needs | S1 | M4 | [`recorder.world-event-feed`](#recorder.world-event-feed) | planned | none | A world event feed; the graded hooks and a minimal set of twelve event kinds are designed. Gaps: interior entry is polled, no 'any fact changed' hook, dialogue picks inferred. |
 | needs | D-34; S1, S3 | shadow-mode | [`recorder.actor-identity`](#recorder.actor-identity) | planned | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
 | needs | D-34; S1, S3 | shadow-mode | [`recorder.deaths`](#recorder.deaths) | proposed | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
 | needs | D-34; S1, S3 | shadow-mode | [`recorder.combat`](#recorder.combat) | proposed | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
@@ -2398,7 +2398,7 @@ Continuous channels, taps, session events and catching up on what happened betwe
 | ↳ [`recorder.taps-ui`](#recorder.taps-ui) UI channel | sense | merged | partial | caveats | P3 |
 | [`recorder.catchup`](#recorder.catchup) Catch-up | service | merged | partial | works | P2 |
 | [`recorder.game-events-probe`](#recorder.game-events-probe) Game-events probe | research | merged | partial | caveats | P3 |
-| [`recorder.world-event-feed`](#recorder.world-event-feed) World event feed | sense | proposed | none | unknown | P2 |
+| [`recorder.world-event-feed`](#recorder.world-event-feed) World event feed | sense | planned | none | unknown | P2 |
 | [`recorder.status`](#recorder.status) Read-only recorder status | sense | merged | none | unknown | P1 |
 | [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | planned | none | unknown | P3 |
 | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | service | planned | none | unknown | P2 |
@@ -2544,14 +2544,14 @@ test.events records the hooks the game-events research recommends (deaths, comba
 
 ### World event feed
 
-`recorder.world-event-feed` · sense · stage **proposed** · evidence **none** · health **unknown** · P2
+`recorder.world-event-feed` · sense · stage **planned** · evidence **none** · health **unknown** · P2
 
 A subscribable feed of what happens in the world: V's district and interior changes, combat, kills and knockdowns, crimes and heat, vehicle use and purchases, calls and dialogue choices, fact changes, time, weather and loads.
 
 - **Depends on:** [`recorder.game-events-probe`](#recorder.game-events-probe)
 - **Demand (story-engine, needs, S1, M4):** A world event feed; the graded hooks and a minimal set of twelve event kinds are designed. Gaps: interior entry is polled, no 'any fact changed' hook, dialogue picks inferred.
 - **Docs:** [knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed](../../../knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed), [knowledge/game-events.md#11-what-the-bridge-has-and-what-it-should-add](../../../knowledge/game-events.md#11-what-the-bridge-has-and-what-it-should-add)
-- **Updated:** 2026-10-26
+- **Updated:** 2026-10-27
 
 <a id="recorder.status"></a>
 
@@ -2620,9 +2620,10 @@ The actors channel carries each actor's character record id, affiliation and cro
 
 A recorder channel (or incident kind) for deaths and knockdowns with victim, instigator and cause, with positions.
 
+- **Depends on:** [`recorder.world-event-feed`](#recorder.world-event-feed)
 - **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Story Engine shadow mode reacts to deaths; Holotable draws them as events.
 - **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
-- **Unknown:** Which game event or listener reports this without new game-thread polling (an event the engine already raises, read where the recorder already samples)? Needs the game.
+- **Docs:** [knowledge/game-events.md#3-deaths-knockdowns-and-combat](../../../knowledge/game-events.md#3-deaths-knockdowns-and-combat), [knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed](../../../knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed)
 - **Updated:** 2026-10-27
 
 <a id="recorder.combat"></a>
@@ -2633,9 +2634,10 @@ A recorder channel (or incident kind) for deaths and knockdowns with victim, ins
 
 Combat start and end events with participants.
 
+- **Depends on:** [`recorder.world-event-feed`](#recorder.world-event-feed)
 - **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Shadow mode and Holotable timelines.
 - **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
-- **Unknown:** Which game event or listener reports this without new game-thread polling (an event the engine already raises, read where the recorder already samples)? Needs the game.
+- **Docs:** [knowledge/game-events.md#3-deaths-knockdowns-and-combat](../../../knowledge/game-events.md#3-deaths-knockdowns-and-combat), [knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed](../../../knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed)
 - **Updated:** 2026-10-27
 
 <a id="recorder.crime"></a>
@@ -2646,9 +2648,10 @@ Combat start and end events with participants.
 
 Crime events with offender and the police heat level over time.
 
+- **Depends on:** [`recorder.world-event-feed`](#recorder.world-event-feed)
 - **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Shadow mode and Holotable timelines.
 - **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
-- **Unknown:** Which game event or listener reports this without new game-thread polling (an event the engine already raises, read where the recorder already samples)? Needs the game.
+- **Docs:** [knowledge/game-events.md#4-crimes-and-police-heat](../../../knowledge/game-events.md#4-crimes-and-police-heat), [knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed](../../../knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed)
 - **Updated:** 2026-10-27
 
 ## Supervisor and plans
