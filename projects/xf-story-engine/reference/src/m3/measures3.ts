@@ -58,6 +58,13 @@ export function bits(train:string[][],test:string[][],order:number):number|null 
  let total=0,n=0;for(const row of test)row.forEach((tok,i)=>{const context=row.map(x=>vocab.has(x)?x:'@UNK'),m=counts.get(keyOf(context,i));const den=[...(m?.values()??[])].reduce((a,b)=>a+b,0)+V;total-=Math.log2(((m?.get(vocab.has(tok)?tok:'@UNK')??0)+1)/den);n++;});return n?total/n:null;
 }
 function shuffled(row:string[],seed:number){const a=row.slice();let x=seed;for(let i=a.length-1;i>0;i--){x=(Math.imul(x,1664525)+1013904223)>>>0;const j=x%(i+1);[a[i],a[j]]=[a[j]!,a[i]!];}return a;}
+/** Only observed occurrences and actually observed endings may train a prediction. */
+function training3(t:Thread3,before:number):{tokens:string[];times:number[]} {
+ const os=t.occurrences.filter(o=>o.play<before),tokens=os.map(o=>o.token),times=os.map(o=>o.play);
+ const ending=t.closingPlay??t.occurrences.at(-1)?.play??Infinity;
+ if(t.closingPresented&&ending<before){tokens.push(`end:${t.outcome}/${t.closingPattern}`);times.push(ending);}
+ return {tokens,times};
+}
 export function measures(ts:Thread3[],snapshots:Snapshot3[]=[]) {
  const runs=[...new Set(ts.map(t=>t.run))];let near=0;for(const run of runs){const rows=ts.filter(t=>t.run===run).sort((a,b)=>a.start-b.start||a.id.localeCompare(b.id));rows.forEach((t,i)=>{if(rows.slice(0,i).some(p=>distance(p.l2,t.l2)<=DELTA))near++;});}
  const templates=mine(ts),covered=new Set(templates.flatMap(t=>t.threads)),seeds=new Set(ts.map(t=>t.world));
@@ -65,7 +72,15 @@ export function measures(ts:Thread3[],snapshots:Snapshot3[]=[]) {
  const at=(run:string,to:number)=>snapshots.find(s=>s.run===run&&s.play===to)?.threads??ts.filter(t=>t.run===run).flatMap(t=>{const p=observed3(t,to);return p?[p]:[];});
  const curve=runs.map(run=>({run,points:[5,10,20,28].map(h=>{const prefix=at(run,h*3600);return {hours:h,threads:prefix.length,clusters80:packageSize(prefix)};})}));
  const windows=runs.flatMap(run=>[0,10,20].map(from=>{const to=Math.min(28,from+10),cutoff=to*3600-(to===28?0:0.000001),rows=at(run,to*3600).flatMap(t=>{const p=observed3(t,cutoff,from*3600);return p?[p]:[];});const l1=new Map<string,number>();rows.forEach(t=>{const k=JSON.stringify(t.l1);l1.set(k,(l1.get(k)??0)+1);});return {run,from,to,n:rows.length,l1:hill([...l1.values()]),l2:hill(clusters(rows).map(c=>c.length))};}));
- const predictability=runs.flatMap(run=>{const rows=ts.filter(t=>t.run===run).sort((a,b)=>a.start-b.start).map(t=>t.l2);const copy=rows.map((r,i)=>shuffled(r,77+i));return [5,10,20,50].map(exposure=>({run,exposure,available:rows.length>=exposure+1,testThreads:Math.max(0,Math.min(10,rows.length-exposure)),orders:[1,2,3].map(order=>({order,bits:rows.length>exposure?bits(rows.slice(0,exposure),rows.slice(exposure,exposure+10),order):null,shuffled:rows.length>exposure?bits(copy.slice(0,exposure),copy.slice(exposure,exposure+10),order):null}))}));});
+ const predictability=runs.flatMap(run=>{const rows=ts.filter(t=>t.run===run).sort((a,b)=>a.start-b.start||a.id.localeCompare(b.id));return [5,10,20,50].map(exposure=>{
+  // Freeze the prior-thread set at the exposure, but re-cut it at each evaluated thread's start.
+  const tests=rows.slice(exposure,exposure+10).map((t,i)=>({t,index:exposure+i,train:rows.slice(0,exposure).map(p=>training3(p,t.start))}));
+  const evaluations=tests.map(({t,train})=>({thread:t.id,before:t.start,trainingTokens:train.reduce((n,p)=>n+p.tokens.length,0),latestTrainingPlay:Math.max(-Infinity,...train.flatMap(p=>p.times))}));
+  return {run,exposure,available:tests.length>0,testThreads:tests.length,evaluations:evaluations.map(e=>({...e,latestTrainingPlay:Number.isFinite(e.latestTrainingPlay)?e.latestTrainingPlay:null})),orders:[1,2,3].map(order=>{
+   let total=0,control=0,n=0;for(const {t,index,train} of tests){const tokens=train.map(p=>p.tokens),a=bits(tokens,[t.l2],order),b=bits(tokens.map((p,i)=>shuffled(p,77+i)),[shuffled(t.l2,77+index)],order);if(a!==null&&b!==null){total+=a*t.l2.length;control+=b*t.l2.length;n+=t.l2.length;}}
+   return {order,bits:n?total/n:null,shuffled:n?control/n:null};
+  })};
+ });});
  const deliveries=new Set(ts.flatMap(t=>t.deliveryIds)),longDeliveries=new Set(ts.filter(t=>t.occurrences.length>=3).flatMap(t=>t.deliveryIds));
  return {n,recastRate:n?near/n:null,delta:DELTA,packageSize:packageSize(ts),packageCurve:curve,hill:windows,templateRate:n?covered.size/n:null,tau:TAU,templates:templates.map(t=>({...t,seedShare:seeds.size?t.seeds.length/seeds.size:0})),predictability,errandShare:n?errands.filter(e=>e.errand).length/n:null,beganErrandShare:n?errands.filter(e=>e.began).length/n:null,grewShareOfBegan:errands.some(e=>e.began)?errands.filter(e=>e.grew).length/errands.filter(e=>e.began).length:null,threePlus:n?ts.filter(t=>t.occurrences.length>=3).length/n:null,deliveryShareThreePlus:deliveries.size?longDeliveries.size/deliveries.size:null,knownShare:n?ts.filter(t=>t.known).length/n:null,legibleEdgeRatio:ts.reduce((a,t)=>a+t.edges,0)?ts.reduce((a,t)=>a+t.shownEdges,0)/ts.reduce((a,t)=>a+t.edges,0):null,nudgeShare:occ.length?occ.filter(o=>o.source==='nudged').length/occ.length:null};
 }

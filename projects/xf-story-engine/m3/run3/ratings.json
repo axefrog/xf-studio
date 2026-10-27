@@ -8,34 +8,34 @@
      "arm": "E",
      "n": 24,
      "mean": {
-      "lives": 2,
-      "caused": 1.625,
-      "legible": 1.5,
-      "pull": 1.9583333333333333,
-      "setting": 1.9166666666666667,
-      "scale": 1.7916666666666667,
-      "fair": 2.125
+      "lives": 2.0416666666666665,
+      "caused": 1.9583333333333333,
+      "legible": 2,
+      "pull": 1.875,
+      "setting": 2.75,
+      "scale": 1.8333333333333333,
+      "fair": 1.25
      },
      "seen": {
-      "new": 5,
-      "reminds": 8,
-      "same": 11
+      "new": 3,
+      "reminds": 9,
+      "same": 12
      },
      "unweighted": {
       "n": 19,
       "mean": {
-       "lives": 2.1052631578947367,
-       "caused": 1.736842105263158,
-       "legible": 1.631578947368421,
-       "pull": 2.0526315789473686,
-       "setting": 1.9473684210526316,
-       "scale": 1.894736842105263,
-       "fair": 2.1578947368421053
+       "lives": 2.1578947368421053,
+       "caused": 2.1052631578947367,
+       "legible": 2.210526315789474,
+       "pull": 2,
+       "setting": 2.8421052631578947,
+       "scale": 1.9473684210526316,
+       "fair": 1.3157894736842106
       },
       "seen": {
-       "new": 4,
-       "reminds": 7,
-       "same": 8
+       "new": 2,
+       "reminds": 8,
+       "same": 9
       }
      }
     },
@@ -43,34 +43,34 @@
      "arm": "A1",
      "n": 24,
      "mean": {
-      "lives": 1.75,
-      "caused": 1.5,
-      "legible": 1.375,
-      "pull": 1.7916666666666667,
-      "setting": 1.8333333333333333,
-      "scale": 1.5833333333333333,
-      "fair": 2.0416666666666665
+      "lives": 1.9583333333333333,
+      "caused": 1.7083333333333333,
+      "legible": 1.5,
+      "pull": 1.625,
+      "setting": 2.6666666666666665,
+      "scale": 1.6666666666666667,
+      "fair": 1.1666666666666667
      },
      "seen": {
-      "new": 6,
-      "reminds": 10,
-      "same": 8
+      "new": 2,
+      "reminds": 12,
+      "same": 10
      },
      "unweighted": {
-      "n": 17,
+      "n": 20,
       "mean": {
-       "lives": 1.7058823529411764,
-       "caused": 1.411764705882353,
-       "legible": 1.3529411764705883,
-       "pull": 1.7058823529411764,
-       "setting": 1.7058823529411764,
-       "scale": 1.5294117647058822,
-       "fair": 2.0588235294117645
+       "lives": 1.9,
+       "caused": 1.75,
+       "legible": 1.6,
+       "pull": 1.65,
+       "setting": 2.6,
+       "scale": 1.7,
+       "fair": 1.2
       },
       "seen": {
-       "new": 4,
-       "reminds": 6,
-       "same": 7
+       "new": 2,
+       "reminds": 9,
+       "same": 9
       }
      }
     },
@@ -78,13 +78,13 @@
      "arm": "A3",
      "n": 24,
      "mean": {
-      "lives": 3.8333333333333335,
-      "caused": 4.041666666666667,
-      "legible": 5.791666666666667,
-      "pull": 3.0416666666666665,
-      "setting": 4.916666666666667,
-      "scale": 5.041666666666667,
-      "fair": 4.166666666666667
+      "lives": 3.0833333333333335,
+      "caused": 4.875,
+      "legible": 5.75,
+      "pull": 3,
+      "setting": 5,
+      "scale": 4.875,
+      "fair": 3.7916666666666665
      },
      "seen": {
       "new": 8,
@@ -94,13 +94,13 @@
      "unweighted": {
       "n": 24,
       "mean": {
-       "lives": 3.8333333333333335,
-       "caused": 4.041666666666667,
-       "legible": 5.791666666666667,
-       "pull": 3.0416666666666665,
-       "setting": 4.916666666666667,
-       "scale": 5.041666666666667,
-       "fair": 4.166666666666667
+       "lives": 3.0833333333333335,
+       "caused": 4.875,
+       "legible": 5.75,
+       "pull": 3,
+       "setting": 5,
+       "scale": 4.875,
+       "fair": 3.7916666666666665
       },
       "seen": {
        "new": 8,
@@ -113,34 +113,34 @@
      "arm": "A5",
      "n": 24,
      "mean": {
-      "lives": 1.9166666666666667,
-      "caused": 1.9583333333333333,
-      "legible": 1.5833333333333333,
-      "pull": 2.0833333333333335,
-      "setting": 1.625,
-      "scale": 2.4583333333333335,
-      "fair": 2.25
+      "lives": 2.0833333333333335,
+      "caused": 2,
+      "legible": 1.9583333333333333,
+      "pull": 1.9166666666666667,
+      "setting": 2.2083333333333335,
+      "scale": 1.9583333333333333,
+      "fair": 1.25
      },
      "seen": {
-      "new": 3,
+      "new": 2,
       "reminds": 8,
-      "same": 13
+      "same": 14
      },
      "unweighted": {
       "n": 24,
       "mean": {
-       "lives": 1.9166666666666667,
-       "caused": 1.9583333333333333,
-       "legible": 1.5833333333333333,
-       "pull": 2.0833333333333335,
-       "setting": 1.625,
-       "scale": 2.4583333333333335,
-       "fair": 2.25
+       "lives": 2.0833333333333335,
+       "caused": 2,
+       "legible": 1.9583333333333333,
+       "pull": 1.9166666666666667,
+       "setting": 2.2083333333333335,
+       "scale": 1.9583333333333333,
+       "fair": 1.25
       },
       "seen": {
-       "new": 3,
+       "new": 2,
        "reminds": 8,
-       "same": 13
+       "same": 14
       }
      }
     }
@@ -152,34 +152,34 @@
      "length": "full",
      "n": 12,
      "mean": {
-      "lives": 1.4166666666666667,
+      "lives": 1.3333333333333333,
       "caused": 1.1666666666666667,
-      "legible": 1,
-      "pull": 1.4166666666666667,
-      "setting": 1.3333333333333333,
-      "scale": 1.0833333333333333,
-      "fair": 2
+      "legible": 1.1666666666666667,
+      "pull": 1.1666666666666667,
+      "setting": 2,
+      "scale": 1.1666666666666667,
+      "fair": 1
      },
      "seen": {
-      "new": 4,
-      "reminds": 3,
-      "same": 5
+      "new": 1,
+      "reminds": 4,
+      "same": 7
      },
      "unweighted": {
-      "n": 9,
+      "n": 10,
       "mean": {
-       "lives": 1.4444444444444444,
-       "caused": 1.2222222222222223,
-       "legible": 1,
-       "pull": 1.4444444444444444,
-       "setting": 1.3333333333333333,
-       "scale": 1.1111111111111112,
-       "fair": 2
+       "lives": 1.3,
+       "caused": 1.2,
+       "legible": 1.2,
+       "pull": 1.2,
+       "setting": 2,
+       "scale": 1.2,
+       "fair": 1
       },
       "seen": {
-       "new": 2,
-       "reminds": 2,
-       "same": 5
+       "new": 1,
+       "reminds": 3,
+       "same": 6
       }
      }
     },
@@ -189,34 +189,34 @@
      "length": "full",
      "n": 12,
      "mean": {
-      "lives": 2.0833333333333335,
-      "caused": 1.8333333333333333,
-      "legible": 1.75,
-      "pull": 2.1666666666666665,
-      "setting": 2.3333333333333335,
-      "scale": 2.0833333333333335,
-      "fair": 2.0833333333333335
+      "lives": 2.5833333333333335,
+      "caused": 2.25,
+      "legible": 1.8333333333333333,
+      "pull": 2.0833333333333335,
+      "setting": 3.3333333333333335,
+      "scale": 2.1666666666666665,
+      "fair": 1.3333333333333333
      },
      "seen": {
-      "new": 2,
-      "reminds": 7,
+      "new": 1,
+      "reminds": 8,
       "same": 3
      },
      "unweighted": {
-      "n": 8,
+      "n": 10,
       "mean": {
-       "lives": 2,
-       "caused": 1.625,
-       "legible": 1.75,
-       "pull": 2,
-       "setting": 2.125,
-       "scale": 2,
-       "fair": 2.125
+       "lives": 2.5,
+       "caused": 2.3,
+       "legible": 2,
+       "pull": 2.1,
+       "setting": 3.2,
+       "scale": 2.2,
+       "fair": 1.4
       },
       "seen": {
-       "new": 2,
-       "reminds": 4,
-       "same": 2
+       "new": 1,
+       "reminds": 6,
+       "same": 3
       }
      }
     },
@@ -226,13 +226,13 @@
      "length": "full",
      "n": 24,
      "mean": {
-      "lives": 3.8333333333333335,
-      "caused": 4.041666666666667,
-      "legible": 5.791666666666667,
-      "pull": 3.0416666666666665,
-      "setting": 4.916666666666667,
-      "scale": 5.041666666666667,
-      "fair": 4.166666666666667
+      "lives": 3.0833333333333335,
+      "caused": 4.875,
+      "legible": 5.75,
+      "pull": 3,
+      "setting": 5,
+      "scale": 4.875,
+      "fair": 3.7916666666666665
      },
      "seen": {
       "new": 8,
@@ -242,13 +242,13 @@
      "unweighted": {
       "n": 24,
       "mean": {
-       "lives": 3.8333333333333335,
-       "caused": 4.041666666666667,
-       "legible": 5.791666666666667,
-       "pull": 3.0416666666666665,
-       "setting": 4.916666666666667,
-       "scale": 5.041666666666667,
-       "fair": 4.166666666666667
+       "lives": 3.0833333333333335,
+       "caused": 4.875,
+       "legible": 5.75,
+       "pull": 3,
+       "setting": 5,
+       "scale": 4.875,
+       "fair": 3.7916666666666665
       },
       "seen": {
        "new": 8,
@@ -265,32 +265,32 @@
      "mean": {
       "lives": 2,
       "caused": 2,
-      "legible": 1,
-      "pull": 3,
+      "legible": 2,
+      "pull": 1.8333333333333333,
       "setting": 2,
-      "scale": 3,
-      "fair": 2
+      "scale": 2,
+      "fair": 1.3333333333333333
      },
      "seen": {
-      "new": 1,
+      "new": 0,
       "reminds": 0,
-      "same": 5
+      "same": 6
      },
      "unweighted": {
       "n": 6,
       "mean": {
        "lives": 2,
        "caused": 2,
-       "legible": 1,
-       "pull": 3,
+       "legible": 2,
+       "pull": 1.8333333333333333,
        "setting": 2,
-       "scale": 3,
-       "fair": 2
+       "scale": 2,
+       "fair": 1.3333333333333333
       },
       "seen": {
-       "new": 1,
+       "new": 0,
        "reminds": 0,
-       "same": 5
+       "same": 6
       }
      }
     },
@@ -300,50 +300,13 @@
      "length": "matched",
      "n": 6,
      "mean": {
-      "lives": 2,
-      "caused": 1.8333333333333333,
-      "legible": 1,
-      "pull": 1.6666666666666667,
-      "setting": 1.6666666666666667,
-      "scale": 1.6666666666666667,
-      "fair": 2
-     },
-     "seen": {
-      "new": 1,
-      "reminds": 3,
-      "same": 2
-     },
-     "unweighted": {
-      "n": 6,
-      "mean": {
-       "lives": 2,
-       "caused": 1.8333333333333333,
-       "legible": 1,
-       "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
-       "scale": 1.6666666666666667,
-       "fair": 2
-      },
-      "seen": {
-       "new": 1,
-       "reminds": 3,
-       "same": 2
-      }
-     }
-    },
-    {
-     "arm": "A5",
-     "renderer": "evidence",
-     "length": "full",
-     "n": 6,
-     "mean": {
-      "lives": 2.5,
-      "caused": 2.6666666666666665,
-      "legible": 1.6666666666666667,
-      "pull": 2.5,
-      "setting": 1.8333333333333333,
-      "scale": 3.8333333333333335,
-      "fair": 3
+      "lives": 1.8333333333333333,
+      "caused": 1.6666666666666667,
+      "legible": 1.5,
+      "pull": 1.5,
+      "setting": 2.1666666666666665,
+      "scale": 1.5,
+      "fair": 1
      },
      "seen": {
       "new": 0,
@@ -353,13 +316,13 @@
      "unweighted": {
       "n": 6,
       "mean": {
-       "lives": 2.5,
-       "caused": 2.6666666666666665,
-       "legible": 1.6666666666666667,
-       "pull": 2.5,
-       "setting": 1.8333333333333333,
-       "scale": 3.8333333333333335,
-       "fair": 3
+       "lives": 1.8333333333333333,
+       "caused": 1.6666666666666667,
+       "legible": 1.5,
+       "pull": 1.5,
+       "setting": 2.1666666666666665,
+       "scale": 1.5,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -371,16 +334,16 @@
     {
      "arm": "A5",
      "renderer": "evidence",
-     "length": "matched",
+     "length": "full",
      "n": 6,
      "mean": {
-      "lives": 1.1666666666666667,
-      "caused": 1.3333333333333333,
-      "legible": 2.6666666666666665,
-      "pull": 1.1666666666666667,
-      "setting": 1,
-      "scale": 1.3333333333333333,
-      "fair": 2
+      "lives": 2.6666666666666665,
+      "caused": 2.6666666666666665,
+      "legible": 1.6666666666666667,
+      "pull": 2.6666666666666665,
+      "setting": 2.6666666666666665,
+      "scale": 2.6666666666666665,
+      "fair": 1.6666666666666667
      },
      "seen": {
       "new": 1,
@@ -390,13 +353,13 @@
      "unweighted": {
       "n": 6,
       "mean": {
-       "lives": 1.1666666666666667,
-       "caused": 1.3333333333333333,
-       "legible": 2.6666666666666665,
-       "pull": 1.1666666666666667,
-       "setting": 1,
-       "scale": 1.3333333333333333,
-       "fair": 2
+       "lives": 2.6666666666666665,
+       "caused": 2.6666666666666665,
+       "legible": 1.6666666666666667,
+       "pull": 2.6666666666666665,
+       "setting": 2.6666666666666665,
+       "scale": 2.6666666666666665,
+       "fair": 1.6666666666666667
       },
       "seen": {
        "new": 1,
@@ -406,39 +369,76 @@
      }
     },
     {
+     "arm": "A5",
+     "renderer": "evidence",
+     "length": "matched",
+     "n": 6,
+     "mean": {
+      "lives": 1.8333333333333333,
+      "caused": 1.6666666666666667,
+      "legible": 2.6666666666666665,
+      "pull": 1.6666666666666667,
+      "setting": 2,
+      "scale": 1.6666666666666667,
+      "fair": 1
+     },
+     "seen": {
+      "new": 1,
+      "reminds": 3,
+      "same": 2
+     },
+     "unweighted": {
+      "n": 6,
+      "mean": {
+       "lives": 1.8333333333333333,
+       "caused": 1.6666666666666667,
+       "legible": 2.6666666666666665,
+       "pull": 1.6666666666666667,
+       "setting": 2,
+       "scale": 1.6666666666666667,
+       "fair": 1
+      },
+      "seen": {
+       "new": 1,
+       "reminds": 3,
+       "same": 2
+      }
+     }
+    },
+    {
      "arm": "E",
      "renderer": "current",
      "length": "full",
      "n": 12,
      "mean": {
-      "lives": 1.6666666666666667,
+      "lives": 1.3333333333333333,
       "caused": 1.3333333333333333,
-      "legible": 1.0833333333333333,
-      "pull": 1.5833333333333333,
-      "setting": 1.5,
-      "scale": 1.25,
-      "fair": 2.0833333333333335
+      "legible": 1.3333333333333333,
+      "pull": 1.3333333333333333,
+      "setting": 2,
+      "scale": 1.3333333333333333,
+      "fair": 1
      },
      "seen": {
-      "new": 3,
-      "reminds": 3,
-      "same": 6
+      "new": 2,
+      "reminds": 1,
+      "same": 9
      },
      "unweighted": {
-      "n": 9,
+      "n": 8,
       "mean": {
-       "lives": 1.7777777777777777,
-       "caused": 1.4444444444444444,
-       "legible": 1.1111111111111112,
-       "pull": 1.6666666666666667,
-       "setting": 1.5555555555555556,
-       "scale": 1.3333333333333333,
-       "fair": 2.111111111111111
+       "lives": 1.375,
+       "caused": 1.375,
+       "legible": 1.375,
+       "pull": 1.375,
+       "setting": 2,
+       "scale": 1.375,
+       "fair": 1
       },
       "seen": {
-       "new": 2,
-       "reminds": 3,
-       "same": 4
+       "new": 1,
+       "reminds": 1,
+       "same": 6
       }
      }
     },
@@ -448,34 +448,34 @@
      "length": "full",
      "n": 12,
      "mean": {
-      "lives": 2.3333333333333335,
-      "caused": 1.9166666666666667,
-      "legible": 1.9166666666666667,
-      "pull": 2.3333333333333335,
-      "setting": 2.3333333333333335,
+      "lives": 2.75,
+      "caused": 2.5833333333333335,
+      "legible": 2.6666666666666665,
+      "pull": 2.4166666666666665,
+      "setting": 3.5,
       "scale": 2.3333333333333335,
-      "fair": 2.1666666666666665
+      "fair": 1.5
      },
      "seen": {
-      "new": 2,
-      "reminds": 5,
-      "same": 5
+      "new": 1,
+      "reminds": 8,
+      "same": 3
      },
      "unweighted": {
-      "n": 10,
+      "n": 11,
       "mean": {
-       "lives": 2.4,
-       "caused": 2,
-       "legible": 2.1,
-       "pull": 2.4,
-       "setting": 2.3,
-       "scale": 2.4,
-       "fair": 2.2
+       "lives": 2.727272727272727,
+       "caused": 2.6363636363636362,
+       "legible": 2.8181818181818183,
+       "pull": 2.4545454545454546,
+       "setting": 3.4545454545454546,
+       "scale": 2.3636363636363638,
+       "fair": 1.5454545454545454
       },
       "seen": {
-       "new": 2,
-       "reminds": 4,
-       "same": 4
+       "new": 1,
+       "reminds": 7,
+       "same": 3
       }
      }
     }
@@ -492,85 +492,85 @@
      "adjustedPlusN": 12,
      "adjustedMinusN": 12,
      "adjustedDifference": {
-      "lives": 0.5625,
-      "caused": 0.3125,
-      "legible": 0.75,
-      "pull": 0.625,
-      "setting": 0.8125,
+      "lives": 1.25,
+      "caused": 1.125,
+      "legible": 0.9375,
+      "pull": 1,
+      "setting": 1.375,
       "scale": 0.9375,
-      "fair": 0
+      "fair": 0.375
      },
      "difference": {
-      "lives": 0.6666666666666667,
-      "caused": 0.5833333333333335,
-      "legible": 0.8333333333333335,
-      "pull": 0.7500000000000002,
-      "setting": 0.8333333333333335,
-      "scale": 1.0833333333333335,
-      "fair": 0.08333333333333304
+      "lives": 1.4166666666666667,
+      "caused": 1.2500000000000002,
+      "legible": 1.3333333333333333,
+      "pull": 1.0833333333333333,
+      "setting": 1.5,
+      "scale": 1.0000000000000002,
+      "fair": 0.5
      },
      "plusSeen": {
-      "new": 2,
-      "reminds": 5,
-      "same": 5
+      "new": 1,
+      "reminds": 8,
+      "same": 3
      },
      "minusSeen": {
-      "new": 3,
-      "reminds": 3,
-      "same": 6
+      "new": 2,
+      "reminds": 1,
+      "same": 9
      },
      "unweightedPlus": {
-      "n": 10,
+      "n": 11,
       "mean": {
-       "lives": 2.4,
-       "caused": 2,
-       "legible": 2.1,
-       "pull": 2.4,
-       "setting": 2.3,
-       "scale": 2.4,
-       "fair": 2.2
+       "lives": 2.727272727272727,
+       "caused": 2.6363636363636362,
+       "legible": 2.8181818181818183,
+       "pull": 2.4545454545454546,
+       "setting": 3.4545454545454546,
+       "scale": 2.3636363636363638,
+       "fair": 1.5454545454545454
       },
       "seen": {
-       "new": 2,
-       "reminds": 4,
-       "same": 4
+       "new": 1,
+       "reminds": 7,
+       "same": 3
       }
      },
      "unweightedMinus": {
-      "n": 9,
+      "n": 8,
       "mean": {
-       "lives": 1.7777777777777777,
-       "caused": 1.4444444444444444,
-       "legible": 1.1111111111111112,
-       "pull": 1.6666666666666667,
-       "setting": 1.5555555555555556,
-       "scale": 1.3333333333333333,
-       "fair": 2.111111111111111
+       "lives": 1.375,
+       "caused": 1.375,
+       "legible": 1.375,
+       "pull": 1.375,
+       "setting": 2,
+       "scale": 1.375,
+       "fair": 1
       },
       "seen": {
-       "new": 2,
-       "reminds": 3,
-       "same": 4
+       "new": 1,
+       "reminds": 1,
+       "same": 6
       }
      },
      "unweightedDifference": {
-      "lives": 0.6222222222222222,
-      "caused": 0.5555555555555556,
-      "legible": 0.9888888888888889,
-      "pull": 0.7333333333333332,
-      "setting": 0.7444444444444442,
-      "scale": 1.0666666666666667,
-      "fair": 0.08888888888888902
+      "lives": 1.352272727272727,
+      "caused": 1.2613636363636362,
+      "legible": 1.4431818181818183,
+      "pull": 1.0795454545454546,
+      "setting": 1.4545454545454546,
+      "scale": 0.9886363636363638,
+      "fair": 0.5454545454545454
      },
      "unweightedStrata": 8,
      "unweightedAdjustedDifference": {
-      "lives": 0.5625,
-      "caused": 0.3125,
-      "legible": 0.75,
-      "pull": 0.625,
-      "setting": 0.8125,
+      "lives": 1.25,
+      "caused": 1.125,
+      "legible": 0.9375,
+      "pull": 1,
+      "setting": 1.375,
       "scale": 0.9375,
-      "fair": 0
+      "fair": 0.375
      }
     },
     {
@@ -584,85 +584,85 @@
      "adjustedPlusN": 12,
      "adjustedMinusN": 12,
      "adjustedDifference": {
-      "lives": 0.6875,
-      "caused": 0.5625,
-      "legible": 0.875,
-      "pull": 0.75,
-      "setting": 1,
+      "lives": 1.125,
+      "caused": 0.9375,
+      "legible": 0.625,
+      "pull": 0.875,
+      "setting": 1.25,
       "scale": 0.9375,
-      "fair": 0.0625
+      "fair": 0.25
      },
      "difference": {
-      "lives": 0.6666666666666667,
-      "caused": 0.6666666666666665,
-      "legible": 0.75,
-      "pull": 0.7499999999999998,
-      "setting": 1.0000000000000002,
-      "scale": 1.0000000000000002,
-      "fair": 0.08333333333333348
+      "lives": 1.2500000000000002,
+      "caused": 1.0833333333333333,
+      "legible": 0.6666666666666665,
+      "pull": 0.9166666666666667,
+      "setting": 1.3333333333333335,
+      "scale": 0.9999999999999998,
+      "fair": 0.33333333333333326
      },
      "plusSeen": {
-      "new": 2,
-      "reminds": 7,
+      "new": 1,
+      "reminds": 8,
       "same": 3
      },
      "minusSeen": {
-      "new": 4,
-      "reminds": 3,
-      "same": 5
+      "new": 1,
+      "reminds": 4,
+      "same": 7
      },
      "unweightedPlus": {
-      "n": 8,
+      "n": 10,
       "mean": {
-       "lives": 2,
-       "caused": 1.625,
-       "legible": 1.75,
-       "pull": 2,
-       "setting": 2.125,
-       "scale": 2,
-       "fair": 2.125
+       "lives": 2.5,
+       "caused": 2.3,
+       "legible": 2,
+       "pull": 2.1,
+       "setting": 3.2,
+       "scale": 2.2,
+       "fair": 1.4
       },
       "seen": {
-       "new": 2,
-       "reminds": 4,
-       "same": 2
+       "new": 1,
+       "reminds": 6,
+       "same": 3
       }
      },
      "unweightedMinus": {
-      "n": 9,
+      "n": 10,
       "mean": {
-       "lives": 1.4444444444444444,
-       "caused": 1.2222222222222223,
-       "legible": 1,
-       "pull": 1.4444444444444444,
-       "setting": 1.3333333333333333,
-       "scale": 1.1111111111111112,
-       "fair": 2
+       "lives": 1.3,
+       "caused": 1.2,
+       "legible": 1.2,
+       "pull": 1.2,
+       "setting": 2,
+       "scale": 1.2,
+       "fair": 1
       },
       "seen": {
-       "new": 2,
-       "reminds": 2,
-       "same": 5
+       "new": 1,
+       "reminds": 3,
+       "same": 6
       }
      },
      "unweightedDifference": {
-      "lives": 0.5555555555555556,
-      "caused": 0.4027777777777777,
-      "legible": 0.75,
-      "pull": 0.5555555555555556,
-      "setting": 0.7916666666666667,
-      "scale": 0.8888888888888888,
-      "fair": 0.125
+      "lives": 1.2,
+      "caused": 1.0999999999999999,
+      "legible": 0.8,
+      "pull": 0.9000000000000001,
+      "setting": 1.2000000000000002,
+      "scale": 1.0000000000000002,
+      "fair": 0.3999999999999999
      },
      "unweightedStrata": 8,
      "unweightedAdjustedDifference": {
-      "lives": 0.6875,
-      "caused": 0.5625,
-      "legible": 0.875,
-      "pull": 0.75,
-      "setting": 1,
+      "lives": 1.125,
+      "caused": 0.9375,
+      "legible": 0.625,
+      "pull": 0.875,
+      "setting": 1.25,
       "scale": 0.9375,
-      "fair": 0.0625
+      "fair": 0.25
      }
     },
     {
@@ -676,84 +676,84 @@
      "adjustedPlusN": 6,
      "adjustedMinusN": 6,
      "adjustedDifference": {
-      "lives": -0.16666666666666666,
-      "caused": -0.3333333333333333,
-      "legible": 1.3333333333333333,
-      "pull": -0.3333333333333333,
-      "setting": -0.3333333333333333,
-      "scale": -0.16666666666666666,
+      "lives": 0.16666666666666666,
+      "caused": 0,
+      "legible": 0,
+      "pull": 0.3333333333333333,
+      "setting": 0.3333333333333333,
+      "scale": 0.16666666666666666,
       "fair": 0.16666666666666666
      },
      "difference": {
-      "lives": -0.16666666666666674,
-      "caused": 0.08333333333333326,
-      "legible": 1.1666666666666665,
-      "pull": -0.5000000000000002,
-      "setting": -0.4166666666666665,
-      "scale": 0.25,
-      "fair": 0.5
+      "lives": 0.33333333333333326,
+      "caused": 0.33333333333333326,
+      "legible": 0.4166666666666665,
+      "pull": 0.4999999999999998,
+      "setting": 0.25,
+      "scale": 0.4166666666666665,
+      "fair": 0.16666666666666652
      },
      "plusSeen": {
-      "new": 1,
+      "new": 2,
       "reminds": 5,
-      "same": 6
+      "same": 5
      },
      "minusSeen": {
-      "new": 2,
+      "new": 0,
       "reminds": 3,
-      "same": 7
+      "same": 9
      },
      "unweightedPlus": {
       "n": 12,
       "mean": {
-       "lives": 1.8333333333333333,
-       "caused": 2,
+       "lives": 2.25,
+       "caused": 2.1666666666666665,
        "legible": 2.1666666666666665,
-       "pull": 1.8333333333333333,
-       "setting": 1.4166666666666667,
-       "scale": 2.5833333333333335,
-       "fair": 2.5
+       "pull": 2.1666666666666665,
+       "setting": 2.3333333333333335,
+       "scale": 2.1666666666666665,
+       "fair": 1.3333333333333333
       },
       "seen": {
-       "new": 1,
+       "new": 2,
        "reminds": 5,
-       "same": 6
+       "same": 5
       }
      },
      "unweightedMinus": {
       "n": 12,
       "mean": {
-       "lives": 2,
-       "caused": 1.9166666666666667,
-       "legible": 1,
-       "pull": 2.3333333333333335,
-       "setting": 1.8333333333333333,
-       "scale": 2.3333333333333335,
-       "fair": 2
+       "lives": 1.9166666666666667,
+       "caused": 1.8333333333333333,
+       "legible": 1.75,
+       "pull": 1.6666666666666667,
+       "setting": 2.0833333333333335,
+       "scale": 1.75,
+       "fair": 1.1666666666666667
       },
       "seen": {
-       "new": 2,
+       "new": 0,
        "reminds": 3,
-       "same": 7
+       "same": 9
       }
      },
      "unweightedDifference": {
-      "lives": -0.16666666666666674,
-      "caused": 0.08333333333333326,
-      "legible": 1.1666666666666665,
-      "pull": -0.5000000000000002,
-      "setting": -0.4166666666666665,
-      "scale": 0.25,
-      "fair": 0.5
+      "lives": 0.33333333333333326,
+      "caused": 0.33333333333333326,
+      "legible": 0.4166666666666665,
+      "pull": 0.4999999999999998,
+      "setting": 0.25,
+      "scale": 0.4166666666666665,
+      "fair": 0.16666666666666652
      },
      "unweightedStrata": 6,
      "unweightedAdjustedDifference": {
-      "lives": -0.16666666666666666,
-      "caused": -0.3333333333333333,
-      "legible": 1.3333333333333333,
-      "pull": -0.3333333333333333,
-      "setting": -0.3333333333333333,
-      "scale": -0.16666666666666666,
+      "lives": 0.16666666666666666,
+      "caused": 0,
+      "legible": 0,
+      "pull": 0.3333333333333333,
+      "setting": 0.3333333333333333,
+      "scale": 0.16666666666666666,
       "fair": 0.16666666666666666
      }
     },
@@ -768,84 +768,84 @@
      "adjustedPlusN": 6,
      "adjustedMinusN": 6,
      "adjustedDifference": {
-      "lives": -0.5,
-      "caused": -0.8333333333333334,
-      "legible": 0.3333333333333333,
-      "pull": -1.3333333333333333,
-      "setting": -0.6666666666666666,
-      "scale": -1.8333333333333333,
+      "lives": -0.16666666666666666,
+      "caused": -0.6666666666666666,
+      "legible": 0,
+      "pull": -0.6666666666666666,
+      "setting": -0.3333333333333333,
+      "scale": -0.6666666666666666,
       "fair": -0.3333333333333333
      },
      "difference": {
-      "lives": -0.6666666666666667,
-      "caused": -0.7500000000000002,
-      "legible": 0.5,
-      "pull": -1.3333333333333333,
-      "setting": -0.5833333333333335,
-      "scale": -1.9166666666666665,
+      "lives": -0.5000000000000002,
+      "caused": -0.6666666666666667,
+      "legible": 0.2500000000000002,
+      "pull": -0.6666666666666667,
+      "setting": -0.25,
+      "scale": -0.7500000000000002,
       "fair": -0.5
      },
      "plusSeen": {
-      "new": 2,
-      "reminds": 5,
+      "new": 1,
+      "reminds": 6,
       "same": 5
      },
      "minusSeen": {
       "new": 1,
-      "reminds": 3,
-      "same": 8
+      "reminds": 2,
+      "same": 9
      },
      "unweightedPlus": {
       "n": 12,
       "mean": {
-       "lives": 1.5833333333333333,
-       "caused": 1.5833333333333333,
-       "legible": 1.8333333333333333,
-       "pull": 1.4166666666666667,
-       "setting": 1.3333333333333333,
-       "scale": 1.5,
-       "fair": 2
+       "lives": 1.8333333333333333,
+       "caused": 1.6666666666666667,
+       "legible": 2.0833333333333335,
+       "pull": 1.5833333333333333,
+       "setting": 2.0833333333333335,
+       "scale": 1.5833333333333333,
+       "fair": 1
       },
       "seen": {
-       "new": 2,
-       "reminds": 5,
+       "new": 1,
+       "reminds": 6,
        "same": 5
       }
      },
      "unweightedMinus": {
       "n": 12,
       "mean": {
-       "lives": 2.25,
+       "lives": 2.3333333333333335,
        "caused": 2.3333333333333335,
-       "legible": 1.3333333333333333,
-       "pull": 2.75,
-       "setting": 1.9166666666666667,
-       "scale": 3.4166666666666665,
-       "fair": 2.5
+       "legible": 1.8333333333333333,
+       "pull": 2.25,
+       "setting": 2.3333333333333335,
+       "scale": 2.3333333333333335,
+       "fair": 1.5
       },
       "seen": {
        "new": 1,
-       "reminds": 3,
-       "same": 8
+       "reminds": 2,
+       "same": 9
       }
      },
      "unweightedDifference": {
-      "lives": -0.6666666666666667,
-      "caused": -0.7500000000000002,
-      "legible": 0.5,
-      "pull": -1.3333333333333333,
-      "setting": -0.5833333333333335,
-      "scale": -1.9166666666666665,
+      "lives": -0.5000000000000002,
+      "caused": -0.6666666666666667,
+      "legible": 0.2500000000000002,
+      "pull": -0.6666666666666667,
+      "setting": -0.25,
+      "scale": -0.7500000000000002,
       "fair": -0.5
      },
      "unweightedStrata": 6,
      "unweightedAdjustedDifference": {
-      "lives": -0.5,
-      "caused": -0.8333333333333334,
-      "legible": 0.3333333333333333,
-      "pull": -1.3333333333333333,
-      "setting": -0.6666666666666666,
-      "scale": -1.8333333333333333,
+      "lives": -0.16666666666666666,
+      "caused": -0.6666666666666666,
+      "legible": 0,
+      "pull": -0.6666666666666666,
+      "setting": -0.3333333333333333,
+      "scale": -0.6666666666666666,
       "fair": -0.3333333333333333
      }
     }
@@ -855,34 +855,34 @@
      "against": "A1",
      "renderer": "all",
      "n": 18,
-     "follow": 10,
-     "caused": 8,
+     "follow": 11,
+     "caused": 12,
      "ties": 6,
      "total": 24,
-     "followLosses": 8,
-     "causedLosses": 10
+     "followLosses": 7,
+     "causedLosses": 6
     },
     {
      "against": "A1",
      "renderer": "current",
      "n": 10,
-     "follow": 7,
+     "follow": 6,
      "caused": 6,
      "ties": 2,
      "total": 12,
-     "followLosses": 3,
+     "followLosses": 4,
      "causedLosses": 4
     },
     {
      "against": "A1",
      "renderer": "evidence",
      "n": 8,
-     "follow": 3,
-     "caused": 2,
+     "follow": 5,
+     "caused": 6,
      "ties": 4,
      "total": 12,
-     "followLosses": 5,
-     "causedLosses": 6
+     "followLosses": 3,
+     "causedLosses": 2
     },
     {
      "against": "A5-full",
@@ -921,23 +921,23 @@
      "against": "A5-matched",
      "renderer": "all",
      "n": 12,
-     "follow": 8,
-     "caused": 8,
+     "follow": 7,
+     "caused": 9,
      "ties": 0,
      "total": 12,
-     "followLosses": 4,
-     "causedLosses": 4
+     "followLosses": 5,
+     "causedLosses": 3
     },
     {
      "against": "A5-matched",
      "renderer": "current",
      "n": 6,
-     "follow": 2,
-     "caused": 2,
+     "follow": 1,
+     "caused": 3,
      "ties": 0,
      "total": 6,
-     "followLosses": 4,
-     "causedLosses": 4
+     "followLosses": 5,
+     "causedLosses": 3
     },
     {
      "against": "A5-matched",
@@ -951,7 +951,7 @@
      "causedLosses": 0
     }
    ],
-   "critic": "Most fragments omit the actual act, subject, motive or requested help, so named participants rarely become distinct people. Explicit causal pointers sometimes assert connections without explaining them. Requests to act against the asker remain unexplained. Closing labels such as protection or resolved do not show what changed. Concrete paid jobs provide clear actions and practical motives, but instant completion hides decisions and consequences. Repeated plots with changed names dominate. Night City detail is concentrated in currency, gangs and a few props. The refusal prompting someone else to help offers the strongest glimpse of lives continuing beyond the protagonist.",
+   "critic": "Families are escort, isolated theft, isolated violence or unspecified wrongdoing, duty and betrayal, terminal repair, demands and shakedown, bare help requests, unconnected incidents and accepted requests, self-targeting request and reckoning, delivery, collection, gang-member removal, and refusal with social follow-up. Most fragments omit motives, concrete acts or usable subjects; naming a causal link rarely explains it. Requests to wrong the requester remain incoherent without further context. Resolved, protection and betrayal labels do not supply the missing outcomes. Paid jobs make actions clear but jump directly to completion, often withholding the discovery or consequence that would make following them rewarding. Timed repairs, escort needs and linked social responses offer the strongest everyday grounding. Repeated names, generic crimes and Kabuki labels alone provide little distinctive Night City texture.",
    "configurations": [
     {
      "arm": "E",
@@ -959,13 +959,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
-       "caused": 1,
+       "lives": 1.3333333333333333,
+       "caused": 1.3333333333333333,
        "legible": 1,
-       "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
-       "scale": 1.6666666666666667,
-       "fair": 2
+       "pull": 1.3333333333333333,
+       "setting": 2.3333333333333335,
+       "scale": 1.3333333333333333,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -976,13 +976,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
-       "caused": 1,
+       "lives": 1.3333333333333333,
+       "caused": 1.3333333333333333,
        "legible": 1,
-       "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
-       "scale": 1.6666666666666667,
-       "fair": 2
+       "pull": 1.3333333333333333,
+       "setting": 2.3333333333333335,
+       "scale": 1.3333333333333333,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -997,35 +997,35 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
-       "caused": 1,
+       "lives": 1.3333333333333333,
+       "caused": 1.3333333333333333,
        "legible": 1,
-       "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
-       "scale": 1.6666666666666667,
-       "fair": 2
+       "pull": 1.3333333333333333,
+       "setting": 2.3333333333333335,
+       "scale": 1.3333333333333333,
+       "fair": 1
       },
       "seen": {
-       "new": 1,
+       "new": 0,
        "reminds": 0,
-       "same": 2
+       "same": 3
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
-       "caused": 1,
+       "lives": 1.3333333333333333,
+       "caused": 1.3333333333333333,
        "legible": 1,
-       "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
-       "scale": 1.6666666666666667,
-       "fair": 2
+       "pull": 1.3333333333333333,
+       "setting": 2.3333333333333335,
+       "scale": 1.3333333333333333,
+       "fair": 1
       },
       "seen": {
-       "new": 1,
+       "new": 0,
        "reminds": 0,
-       "same": 2
+       "same": 3
       }
      }
     },
@@ -1035,12 +1035,12 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 3.6666666666666665,
-       "caused": 3.6666666666666665,
+       "lives": 3.3333333333333335,
+       "caused": 4.666666666666667,
        "legible": 5.666666666666667,
        "pull": 3,
        "setting": 5,
-       "scale": 5.333333333333333,
+       "scale": 5,
        "fair": 4
       },
       "seen": {
@@ -1052,12 +1052,12 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 3.6666666666666665,
-       "caused": 3.6666666666666665,
+       "lives": 3.3333333333333335,
+       "caused": 4.666666666666667,
        "legible": 5.666666666666667,
        "pull": 3,
        "setting": 5,
-       "scale": 5.333333333333333,
+       "scale": 5,
        "fair": 4
       },
       "seen": {
@@ -1073,13 +1073,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
-       "caused": 1.6666666666666667,
+       "lives": 2,
+       "caused": 2,
        "legible": 1.6666666666666667,
-       "pull": 1.6666666666666667,
-       "setting": 1.3333333333333333,
+       "pull": 2,
+       "setting": 2.3333333333333335,
        "scale": 2,
-       "fair": 2.3333333333333335
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 0,
@@ -1090,13 +1090,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
-       "caused": 1.6666666666666667,
+       "lives": 2,
+       "caused": 2,
        "legible": 1.6666666666666667,
-       "pull": 1.6666666666666667,
-       "setting": 1.3333333333333333,
+       "pull": 2,
+       "setting": 2.3333333333333335,
        "scale": 2,
-       "fair": 2.3333333333333335
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 0,
@@ -1111,13 +1111,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 2.3333333333333335,
-       "caused": 2.3333333333333335,
-       "legible": 1,
-       "pull": 2.3333333333333335,
-       "setting": 2.6666666666666665,
+       "lives": 2.6666666666666665,
+       "caused": 2,
+       "legible": 1.3333333333333333,
+       "pull": 2,
+       "setting": 3.3333333333333335,
        "scale": 2,
-       "fair": 2
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -1129,12 +1129,12 @@
       "n": 2,
       "mean": {
        "lives": 2.5,
-       "caused": 2.5,
-       "legible": 1,
-       "pull": 2.5,
-       "setting": 2.5,
+       "caused": 2,
+       "legible": 1.5,
+       "pull": 2,
+       "setting": 3,
        "scale": 2,
-       "fair": 2
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -1149,13 +1149,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 2.3333333333333335,
-       "caused": 2.3333333333333335,
-       "legible": 1,
-       "pull": 2.3333333333333335,
-       "setting": 2.6666666666666665,
+       "lives": 2.6666666666666665,
+       "caused": 2,
+       "legible": 1.3333333333333333,
+       "pull": 2,
+       "setting": 3.3333333333333335,
        "scale": 2,
-       "fair": 2
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -1167,12 +1167,12 @@
       "n": 2,
       "mean": {
        "lives": 2.5,
-       "caused": 2.5,
-       "legible": 1,
-       "pull": 2.5,
-       "setting": 2.5,
+       "caused": 2,
+       "legible": 1.5,
+       "pull": 2,
+       "setting": 3,
        "scale": 2,
-       "fair": 2
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -1187,13 +1187,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 4,
+       "lives": 3,
        "caused": 5,
        "legible": 5.666666666666667,
        "pull": 3,
        "setting": 5,
        "scale": 3,
-       "fair": 3
+       "fair": 1
       },
       "seen": {
        "new": 2,
@@ -1204,13 +1204,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 4,
+       "lives": 3,
        "caused": 5,
        "legible": 5.666666666666667,
        "pull": 3,
        "setting": 5,
        "scale": 3,
-       "fair": 3
+       "fair": 1
       },
       "seen": {
        "new": 2,
@@ -1228,10 +1228,10 @@
        "lives": 2.3333333333333335,
        "caused": 2.3333333333333335,
        "legible": 1,
-       "pull": 2.3333333333333335,
-       "setting": 1.6666666666666667,
-       "scale": 2.3333333333333335,
-       "fair": 2.3333333333333335
+       "pull": 2,
+       "setting": 2.6666666666666665,
+       "scale": 2,
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 1,
@@ -1245,10 +1245,10 @@
        "lives": 2.3333333333333335,
        "caused": 2.3333333333333335,
        "legible": 1,
-       "pull": 2.3333333333333335,
-       "setting": 1.6666666666666667,
-       "scale": 2.3333333333333335,
-       "fair": 2.3333333333333335
+       "pull": 2,
+       "setting": 2.6666666666666665,
+       "scale": 2,
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 1,
@@ -1263,13 +1263,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 3,
+       "lives": 2.3333333333333335,
        "caused": 2.6666666666666665,
-       "legible": 2.3333333333333335,
-       "pull": 3,
-       "setting": 2,
-       "scale": 3,
-       "fair": 3
+       "legible": 3,
+       "pull": 2.3333333333333335,
+       "setting": 3,
+       "scale": 2.3333333333333335,
+       "fair": 2.3333333333333335
       },
       "seen": {
        "new": 0,
@@ -1280,13 +1280,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 3,
+       "lives": 2.3333333333333335,
        "caused": 2.6666666666666665,
-       "legible": 2.3333333333333335,
-       "pull": 3,
-       "setting": 2,
-       "scale": 3,
-       "fair": 3
+       "legible": 3,
+       "pull": 2.3333333333333335,
+       "setting": 3,
+       "scale": 2.3333333333333335,
+       "fair": 2.3333333333333335
       },
       "seen": {
        "new": 0,
@@ -1301,34 +1301,34 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.3333333333333333,
-       "caused": 1.3333333333333333,
+       "lives": 1.6666666666666667,
+       "caused": 1.6666666666666667,
        "legible": 1.3333333333333333,
        "pull": 1.3333333333333333,
-       "setting": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.6666666666666667,
-       "fair": 2.3333333333333335
+       "fair": 1.6666666666666667
       },
       "seen": {
-       "new": 2,
-       "reminds": 1,
+       "new": 1,
+       "reminds": 2,
        "same": 0
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.3333333333333333,
-       "caused": 1.3333333333333333,
+       "lives": 1.6666666666666667,
+       "caused": 1.6666666666666667,
        "legible": 1.3333333333333333,
        "pull": 1.3333333333333333,
-       "setting": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.6666666666666667,
-       "fair": 2.3333333333333335
+       "fair": 1.6666666666666667
       },
       "seen": {
-       "new": 2,
-       "reminds": 1,
+       "new": 1,
+       "reminds": 2,
        "same": 0
       }
      }
@@ -1339,9 +1339,9 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 3.6666666666666665,
-       "caused": 4.333333333333333,
-       "legible": 5.666666666666667,
+       "lives": 3,
+       "caused": 5,
+       "legible": 6,
        "pull": 3,
        "setting": 5,
        "scale": 6,
@@ -1356,9 +1356,9 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 3.6666666666666665,
-       "caused": 4.333333333333333,
-       "legible": 5.666666666666667,
+       "lives": 3,
+       "caused": 5,
+       "legible": 6,
        "pull": 3,
        "setting": 5,
        "scale": 6,
@@ -1377,35 +1377,35 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
+       "lives": 2.3333333333333335,
        "caused": 2.3333333333333335,
-       "legible": 1.6666666666666667,
+       "legible": 2,
        "pull": 2,
-       "setting": 1.6666666666666667,
-       "scale": 3.3333333333333335,
-       "fair": 3
+       "setting": 2.3333333333333335,
+       "scale": 2.3333333333333335,
+       "fair": 2
       },
       "seen": {
        "new": 0,
-       "reminds": 2,
-       "same": 1
+       "reminds": 1,
+       "same": 2
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
+       "lives": 2.3333333333333335,
        "caused": 2.3333333333333335,
-       "legible": 1.6666666666666667,
+       "legible": 2,
        "pull": 2,
-       "setting": 1.6666666666666667,
-       "scale": 3.3333333333333335,
-       "fair": 3
+       "setting": 2.3333333333333335,
+       "scale": 2.3333333333333335,
+       "fair": 2
       },
       "seen": {
        "new": 0,
-       "reminds": 2,
-       "same": 1
+       "reminds": 1,
+       "same": 2
       }
      }
     },
@@ -1415,13 +1415,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
+       "lives": 2.3333333333333335,
        "caused": 2.3333333333333335,
-       "legible": 2.6666666666666665,
+       "legible": 3.3333333333333335,
        "pull": 2,
-       "setting": 2,
+       "setting": 3,
        "scale": 2,
-       "fair": 2
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 1,
@@ -1432,13 +1432,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
+       "lives": 2.3333333333333335,
        "caused": 2.3333333333333335,
-       "legible": 2.6666666666666665,
+       "legible": 3.3333333333333335,
        "pull": 2,
-       "setting": 2,
+       "setting": 3,
        "scale": 2,
-       "fair": 2
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 1,
@@ -1453,13 +1453,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
+       "lives": 2.6666666666666665,
        "caused": 2.3333333333333335,
        "legible": 2,
-       "pull": 2.3333333333333335,
-       "setting": 2.3333333333333335,
+       "pull": 2,
+       "setting": 3.3333333333333335,
        "scale": 2,
-       "fair": 2
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 0,
@@ -1470,13 +1470,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
+       "lives": 2.6666666666666665,
        "caused": 2.3333333333333335,
        "legible": 2,
-       "pull": 2.3333333333333335,
-       "setting": 2.3333333333333335,
+       "pull": 2,
+       "setting": 3.3333333333333335,
        "scale": 2,
-       "fair": 2
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 0,
@@ -1491,13 +1491,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 4,
-       "caused": 4,
+       "lives": 3,
+       "caused": 4.666666666666667,
        "legible": 6,
        "pull": 3,
        "setting": 5,
        "scale": 5,
-       "fair": 4
+       "fair": 3.6666666666666665
       },
       "seen": {
        "new": 1,
@@ -1508,13 +1508,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 4,
-       "caused": 4,
+       "lives": 3,
+       "caused": 4.666666666666667,
        "legible": 6,
        "pull": 3,
        "setting": 5,
        "scale": 5,
-       "fair": 4
+       "fair": 3.6666666666666665
       },
       "seen": {
        "new": 1,
@@ -1529,13 +1529,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 2,
-       "legible": 2.3333333333333335,
+       "legible": 2.6666666666666665,
        "pull": 2,
-       "setting": 1.6666666666666667,
-       "scale": 2.6666666666666665,
-       "fair": 2
+       "setting": 2,
+       "scale": 2,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -1546,13 +1546,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 2,
-       "legible": 2.3333333333333335,
+       "legible": 2.6666666666666665,
        "pull": 2,
-       "setting": 1.6666666666666667,
-       "scale": 2.6666666666666665,
-       "fair": 2
+       "setting": 2,
+       "scale": 2,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -1568,12 +1568,12 @@
       "n": 3,
       "mean": {
        "lives": 1.6666666666666667,
-       "caused": 1,
-       "legible": 1,
+       "caused": 1.6666666666666667,
+       "legible": 1.3333333333333333,
        "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
-       "scale": 1.3333333333333333,
-       "fair": 2
+       "setting": 2.3333333333333335,
+       "scale": 1.6666666666666667,
+       "fair": 1
       },
       "seen": {
        "new": 1,
@@ -1585,12 +1585,12 @@
       "n": 3,
       "mean": {
        "lives": 1.6666666666666667,
-       "caused": 1,
-       "legible": 1,
+       "caused": 1.6666666666666667,
+       "legible": 1.3333333333333333,
        "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
-       "scale": 1.3333333333333333,
-       "fair": 2
+       "setting": 2.3333333333333335,
+       "scale": 1.6666666666666667,
+       "fair": 1
       },
       "seen": {
        "new": 1,
@@ -1606,16 +1606,16 @@
       "n": 3,
       "mean": {
        "lives": 1.6666666666666667,
-       "caused": 1,
+       "caused": 1.3333333333333333,
        "legible": 1,
-       "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
+       "pull": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.3333333333333333,
-       "fair": 2
+       "fair": 1
       },
       "seen": {
-       "new": 1,
-       "reminds": 1,
+       "new": 0,
+       "reminds": 2,
        "same": 1
       }
      },
@@ -1623,16 +1623,16 @@
       "n": 3,
       "mean": {
        "lives": 1.6666666666666667,
-       "caused": 1,
+       "caused": 1.3333333333333333,
        "legible": 1,
-       "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
+       "pull": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.3333333333333333,
-       "fair": 2
+       "fair": 1
       },
       "seen": {
-       "new": 1,
-       "reminds": 1,
+       "new": 0,
+       "reminds": 2,
        "same": 1
       }
      }
@@ -1643,12 +1643,12 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 3.6666666666666665,
-       "caused": 3.6666666666666665,
-       "legible": 5.666666666666667,
+       "lives": 3,
+       "caused": 5,
+       "legible": 5.333333333333333,
        "pull": 3,
-       "setting": 4.666666666666667,
-       "scale": 5.333333333333333,
+       "setting": 5,
+       "scale": 5,
        "fair": 4
       },
       "seen": {
@@ -1660,12 +1660,12 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 3.6666666666666665,
-       "caused": 3.6666666666666665,
-       "legible": 5.666666666666667,
+       "lives": 3,
+       "caused": 5,
+       "legible": 5.333333333333333,
        "pull": 3,
-       "setting": 4.666666666666667,
-       "scale": 5.333333333333333,
+       "setting": 5,
+       "scale": 5,
        "fair": 4
       },
       "seen": {
@@ -1683,16 +1683,16 @@
       "mean": {
        "lives": 2,
        "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
-       "pull": 2,
-       "setting": 1.6666666666666667,
-       "scale": 2,
-       "fair": 2
+       "legible": 2,
+       "pull": 1.6666666666666667,
+       "setting": 2,
+       "scale": 1.6666666666666667,
+       "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 0,
-       "same": 3
+       "reminds": 1,
+       "same": 2
       }
      },
      "unweighted": {
@@ -1700,16 +1700,16 @@
       "mean": {
        "lives": 2,
        "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
-       "pull": 2,
-       "setting": 1.6666666666666667,
-       "scale": 2,
-       "fair": 2
+       "legible": 2,
+       "pull": 1.6666666666666667,
+       "setting": 2,
+       "scale": 1.6666666666666667,
+       "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 0,
-       "same": 3
+       "reminds": 1,
+       "same": 2
       }
      }
     },
@@ -1720,34 +1720,34 @@
       "n": 3,
       "mean": {
        "lives": 1.3333333333333333,
-       "caused": 1,
+       "caused": 1.3333333333333333,
        "legible": 1,
        "pull": 1.3333333333333333,
-       "setting": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.3333333333333333,
-       "fair": 2
+       "fair": 1
       },
       "seen": {
-       "new": 1,
+       "new": 0,
        "reminds": 0,
-       "same": 2
+       "same": 3
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
        "lives": 1.3333333333333333,
-       "caused": 1,
+       "caused": 1.3333333333333333,
        "legible": 1,
        "pull": 1.3333333333333333,
-       "setting": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.3333333333333333,
-       "fair": 2
+       "fair": 1
       },
       "seen": {
-       "new": 1,
+       "new": 0,
        "reminds": 0,
-       "same": 2
+       "same": 3
       }
      }
     },
@@ -1758,34 +1758,34 @@
       "n": 3,
       "mean": {
        "lives": 1.3333333333333333,
-       "caused": 1,
+       "caused": 1.3333333333333333,
        "legible": 1,
        "pull": 1.3333333333333333,
-       "setting": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.3333333333333333,
-       "fair": 2
+       "fair": 1
       },
       "seen": {
-       "new": 1,
+       "new": 0,
        "reminds": 0,
-       "same": 2
+       "same": 3
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
        "lives": 1.3333333333333333,
-       "caused": 1,
+       "caused": 1.3333333333333333,
        "legible": 1,
        "pull": 1.3333333333333333,
-       "setting": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.3333333333333333,
-       "fair": 2
+       "fair": 1
       },
       "seen": {
-       "new": 1,
+       "new": 0,
        "reminds": 0,
-       "same": 2
+       "same": 3
       }
      }
     },
@@ -1795,12 +1795,12 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 3.6666666666666665,
-       "caused": 3.6666666666666665,
+       "lives": 3.3333333333333335,
+       "caused": 4.666666666666667,
        "legible": 5.666666666666667,
        "pull": 3,
        "setting": 5,
-       "scale": 5.333333333333333,
+       "scale": 5,
        "fair": 4
       },
       "seen": {
@@ -1812,12 +1812,12 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 3.6666666666666665,
-       "caused": 3.6666666666666665,
+       "lives": 3.3333333333333335,
+       "caused": 4.666666666666667,
        "legible": 5.666666666666667,
        "pull": 3,
        "setting": 5,
-       "scale": 5.333333333333333,
+       "scale": 5,
        "fair": 4
       },
       "seen": {
@@ -1835,16 +1835,16 @@
       "mean": {
        "lives": 1.3333333333333333,
        "caused": 1.3333333333333333,
-       "legible": 1.6666666666666667,
-       "pull": 1.6666666666666667,
-       "setting": 1.3333333333333333,
-       "scale": 1.6666666666666667,
-       "fair": 2
+       "legible": 2.3333333333333335,
+       "pull": 1.3333333333333333,
+       "setting": 2,
+       "scale": 1.3333333333333333,
+       "fair": 1
       },
       "seen": {
-       "new": 2,
+       "new": 1,
        "reminds": 1,
-       "same": 0
+       "same": 1
       }
      },
      "unweighted": {
@@ -1852,16 +1852,16 @@
       "mean": {
        "lives": 1.3333333333333333,
        "caused": 1.3333333333333333,
-       "legible": 1.6666666666666667,
-       "pull": 1.6666666666666667,
-       "setting": 1.3333333333333333,
-       "scale": 1.6666666666666667,
-       "fair": 2
+       "legible": 2.3333333333333335,
+       "pull": 1.3333333333333333,
+       "setting": 2,
+       "scale": 1.3333333333333333,
+       "fair": 1
       },
       "seen": {
-       "new": 2,
+       "new": 1,
        "reminds": 1,
-       "same": 0
+       "same": 1
       }
      }
     },
@@ -1872,16 +1872,16 @@
       "n": 3,
       "mean": {
        "lives": 2,
-       "caused": 1,
-       "legible": 1,
+       "caused": 2,
+       "legible": 1.6666666666666667,
        "pull": 2,
-       "setting": 2,
-       "scale": 1.3333333333333333,
-       "fair": 2
+       "setting": 2.3333333333333335,
+       "scale": 2,
+       "fair": 1
       },
       "seen": {
-       "new": 2,
-       "reminds": 0,
+       "new": 1,
+       "reminds": 1,
        "same": 1
       }
      },
@@ -1889,16 +1889,16 @@
       "n": 3,
       "mean": {
        "lives": 2,
-       "caused": 1,
-       "legible": 1,
+       "caused": 2,
+       "legible": 1.6666666666666667,
        "pull": 2,
-       "setting": 2,
-       "scale": 1.3333333333333333,
-       "fair": 2
+       "setting": 2.3333333333333335,
+       "scale": 2,
+       "fair": 1
       },
       "seen": {
-       "new": 2,
-       "reminds": 0,
+       "new": 1,
+       "reminds": 1,
        "same": 1
       }
      }
@@ -1910,12 +1910,12 @@
       "n": 3,
       "mean": {
        "lives": 2,
-       "caused": 1,
-       "legible": 1.6666666666666667,
+       "caused": 1.3333333333333333,
+       "legible": 2.3333333333333335,
        "pull": 1.6666666666666667,
-       "setting": 2,
-       "scale": 1,
-       "fair": 2
+       "setting": 2.3333333333333335,
+       "scale": 1.6666666666666667,
+       "fair": 1
       },
       "seen": {
        "new": 1,
@@ -1927,12 +1927,12 @@
       "n": 3,
       "mean": {
        "lives": 2,
-       "caused": 1,
-       "legible": 1.6666666666666667,
+       "caused": 1.3333333333333333,
+       "legible": 2.3333333333333335,
        "pull": 1.6666666666666667,
-       "setting": 2,
-       "scale": 1,
-       "fair": 2
+       "setting": 2.3333333333333335,
+       "scale": 1.6666666666666667,
+       "fair": 1
       },
       "seen": {
        "new": 1,
@@ -1947,13 +1947,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 4,
-       "caused": 4,
+       "lives": 3,
+       "caused": 5,
        "legible": 6,
        "pull": 3,
        "setting": 5,
        "scale": 5.333333333333333,
-       "fair": 4.333333333333333
+       "fair": 4
       },
       "seen": {
        "new": 0,
@@ -1964,13 +1964,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 4,
-       "caused": 4,
+       "lives": 3,
+       "caused": 5,
        "legible": 6,
        "pull": 3,
        "setting": 5,
        "scale": 5.333333333333333,
-       "fair": 4.333333333333333
+       "fair": 4
       },
       "seen": {
        "new": 0,
@@ -1987,11 +1987,11 @@
       "mean": {
        "lives": 2.6666666666666665,
        "caused": 2.3333333333333335,
-       "legible": 1,
-       "pull": 2.6666666666666665,
-       "setting": 2,
-       "scale": 3,
-       "fair": 2.3333333333333335
+       "legible": 1.3333333333333333,
+       "pull": 2.3333333333333335,
+       "setting": 2.3333333333333335,
+       "scale": 2.3333333333333335,
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 0,
@@ -2004,11 +2004,11 @@
       "mean": {
        "lives": 2.6666666666666665,
        "caused": 2.3333333333333335,
-       "legible": 1,
-       "pull": 2.6666666666666665,
-       "setting": 2,
-       "scale": 3,
-       "fair": 2.3333333333333335
+       "legible": 1.3333333333333333,
+       "pull": 2.3333333333333335,
+       "setting": 2.3333333333333335,
+       "scale": 2.3333333333333335,
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 0,
@@ -2023,13 +2023,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
-       "caused": 1.6666666666666667,
-       "legible": 2,
-       "pull": 1.6666666666666667,
-       "setting": 2,
-       "scale": 1.6666666666666667,
-       "fair": 2
+       "lives": 2.6666666666666665,
+       "caused": 2.3333333333333335,
+       "legible": 3.3333333333333335,
+       "pull": 2.3333333333333335,
+       "setting": 3.3333333333333335,
+       "scale": 2,
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 0,
@@ -2040,13 +2040,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
-       "caused": 1.6666666666666667,
-       "legible": 2,
-       "pull": 1.6666666666666667,
-       "setting": 2,
-       "scale": 1.6666666666666667,
-       "fair": 2
+       "lives": 2.6666666666666665,
+       "caused": 2.3333333333333335,
+       "legible": 3.3333333333333335,
+       "pull": 2.3333333333333335,
+       "setting": 3.3333333333333335,
+       "scale": 2,
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 0,
@@ -2061,13 +2061,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
-       "caused": 2,
+       "lives": 2.3333333333333335,
+       "caused": 2.3333333333333335,
        "legible": 2,
        "pull": 2,
-       "setting": 1.6666666666666667,
-       "scale": 1.6666666666666667,
-       "fair": 2
+       "setting": 3,
+       "scale": 2,
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 0,
@@ -2078,13 +2078,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
-       "caused": 2,
+       "lives": 2.3333333333333335,
+       "caused": 2.3333333333333335,
        "legible": 2,
        "pull": 2,
-       "setting": 1.6666666666666667,
-       "scale": 1.6666666666666667,
-       "fair": 2
+       "setting": 3,
+       "scale": 2,
+       "fair": 1.3333333333333333
       },
       "seen": {
        "new": 0,
@@ -2099,13 +2099,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 4,
-       "caused": 4,
-       "legible": 6,
-       "pull": 3.3333333333333335,
-       "setting": 4.666666666666667,
-       "scale": 5,
-       "fair": 4
+       "lives": 3,
+       "caused": 5,
+       "legible": 5.666666666666667,
+       "pull": 3,
+       "setting": 5,
+       "scale": 4.666666666666667,
+       "fair": 3.6666666666666665
       },
       "seen": {
        "new": 1,
@@ -2116,13 +2116,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 4,
-       "caused": 4,
-       "legible": 6,
-       "pull": 3.3333333333333335,
-       "setting": 4.666666666666667,
-       "scale": 5,
-       "fair": 4
+       "lives": 3,
+       "caused": 5,
+       "legible": 5.666666666666667,
+       "pull": 3,
+       "setting": 5,
+       "scale": 4.666666666666667,
+       "fair": 3.6666666666666665
       },
       "seen": {
        "new": 1,
@@ -2137,13 +2137,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 2,
-       "legible": 1.6666666666666667,
-       "pull": 2.3333333333333335,
-       "setting": 1.6666666666666667,
-       "scale": 2.6666666666666665,
-       "fair": 2
+       "legible": 2.6666666666666665,
+       "pull": 2,
+       "setting": 2,
+       "scale": 2,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -2154,13 +2154,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 2,
-       "legible": 1.6666666666666667,
-       "pull": 2.3333333333333335,
-       "setting": 1.6666666666666667,
-       "scale": 2.6666666666666665,
-       "fair": 2
+       "legible": 2.6666666666666665,
+       "pull": 2,
+       "setting": 2,
+       "scale": 2,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -2179,34 +2179,34 @@
      "arm": "E",
      "n": 24,
      "mean": {
-      "lives": 1.9583333333333333,
-      "caused": 1.9166666666666667,
-      "legible": 1.75,
-      "pull": 1.75,
-      "setting": 1.8333333333333333,
-      "scale": 1.8333333333333333,
-      "fair": 1.2916666666666667
+      "lives": 2.125,
+      "caused": 1.875,
+      "legible": 1.4583333333333333,
+      "pull": 1.875,
+      "setting": 2.75,
+      "scale": 1.9166666666666667,
+      "fair": 1.25
      },
      "seen": {
       "new": 2,
-      "reminds": 12,
-      "same": 10
+      "reminds": 11,
+      "same": 11
      },
      "unweighted": {
       "n": 19,
       "mean": {
-       "lives": 1.9473684210526316,
-       "caused": 1.894736842105263,
-       "legible": 1.7894736842105263,
-       "pull": 1.736842105263158,
-       "setting": 1.7894736842105263,
-       "scale": 1.8421052631578947,
-       "fair": 1.3157894736842106
+       "lives": 2.1052631578947367,
+       "caused": 1.7894736842105263,
+       "legible": 1.4210526315789473,
+       "pull": 1.7894736842105263,
+       "setting": 2.6842105263157894,
+       "scale": 1.894736842105263,
+       "fair": 1.263157894736842
       },
       "seen": {
        "new": 1,
-       "reminds": 10,
-       "same": 8
+       "reminds": 9,
+       "same": 9
       }
      }
     },
@@ -2214,34 +2214,34 @@
      "arm": "A1",
      "n": 24,
      "mean": {
-      "lives": 1.8333333333333333,
+      "lives": 2.0416666666666665,
       "caused": 1.7083333333333333,
-      "legible": 1.25,
-      "pull": 1.5,
-      "setting": 1.7916666666666667,
+      "legible": 1.2083333333333333,
+      "pull": 1.7916666666666667,
+      "setting": 2.8333333333333335,
       "scale": 1.75,
       "fair": 1.125
      },
      "seen": {
-      "new": 4,
-      "reminds": 11,
-      "same": 9
+      "new": 3,
+      "reminds": 10,
+      "same": 11
      },
      "unweighted": {
-      "n": 17,
+      "n": 20,
       "mean": {
-       "lives": 1.8235294117647058,
-       "caused": 1.7647058823529411,
-       "legible": 1.3529411764705883,
-       "pull": 1.4705882352941178,
-       "setting": 1.7647058823529411,
-       "scale": 1.8235294117647058,
-       "fair": 1.1764705882352942
+       "lives": 2.05,
+       "caused": 1.75,
+       "legible": 1.25,
+       "pull": 1.75,
+       "setting": 2.75,
+       "scale": 1.8,
+       "fair": 1.15
       },
       "seen": {
-       "new": 3,
-       "reminds": 7,
-       "same": 7
+       "new": 2,
+       "reminds": 8,
+       "same": 10
       }
      }
     },
@@ -2249,33 +2249,33 @@
      "arm": "A3",
      "n": 24,
      "mean": {
-      "lives": 3.2083333333333335,
-      "caused": 3.9166666666666665,
-      "legible": 5.416666666666667,
-      "pull": 2.9166666666666665,
-      "setting": 4.333333333333333,
-      "scale": 4.458333333333333,
-      "fair": 3.6666666666666665
+      "lives": 3.4583333333333335,
+      "caused": 4.333333333333333,
+      "legible": 5.666666666666667,
+      "pull": 3.0416666666666665,
+      "setting": 4.958333333333333,
+      "scale": 4.291666666666667,
+      "fair": 3.4166666666666665
      },
      "seen": {
-      "new": 7,
-      "reminds": 4,
+      "new": 8,
+      "reminds": 3,
       "same": 13
      },
      "unweighted": {
       "n": 24,
       "mean": {
-       "lives": 3.2083333333333335,
-       "caused": 3.9166666666666665,
-       "legible": 5.416666666666667,
-       "pull": 2.9166666666666665,
-       "setting": 4.333333333333333,
-       "scale": 4.458333333333333,
-       "fair": 3.6666666666666665
+       "lives": 3.4583333333333335,
+       "caused": 4.333333333333333,
+       "legible": 5.666666666666667,
+       "pull": 3.0416666666666665,
+       "setting": 4.958333333333333,
+       "scale": 4.291666666666667,
+       "fair": 3.4166666666666665
       },
       "seen": {
-       "new": 7,
-       "reminds": 4,
+       "new": 8,
+       "reminds": 3,
        "same": 13
       }
      }
@@ -2284,34 +2284,34 @@
      "arm": "A5",
      "n": 24,
      "mean": {
-      "lives": 1.7083333333333333,
+      "lives": 1.75,
       "caused": 1.6666666666666667,
-      "legible": 1.8333333333333333,
-      "pull": 1.8333333333333333,
-      "setting": 1.125,
-      "scale": 1.9166666666666667,
-      "fair": 1.5416666666666667
+      "legible": 1.4166666666666667,
+      "pull": 1.5833333333333333,
+      "setting": 2.125,
+      "scale": 2.125,
+      "fair": 1.0416666666666667
      },
      "seen": {
-      "new": 3,
-      "reminds": 5,
-      "same": 16
+      "new": 2,
+      "reminds": 7,
+      "same": 15
      },
      "unweighted": {
       "n": 24,
       "mean": {
-       "lives": 1.7083333333333333,
+       "lives": 1.75,
        "caused": 1.6666666666666667,
-       "legible": 1.8333333333333333,
-       "pull": 1.8333333333333333,
-       "setting": 1.125,
-       "scale": 1.9166666666666667,
-       "fair": 1.5416666666666667
+       "legible": 1.4166666666666667,
+       "pull": 1.5833333333333333,
+       "setting": 2.125,
+       "scale": 2.125,
+       "fair": 1.0416666666666667
       },
       "seen": {
-       "new": 3,
-       "reminds": 5,
-       "same": 16
+       "new": 2,
+       "reminds": 7,
+       "same": 15
       }
      }
     }
@@ -2323,34 +2323,34 @@
      "length": "full",
      "n": 12,
      "mean": {
-      "lives": 1.5,
+      "lives": 1.9166666666666667,
       "caused": 1.1666666666666667,
       "legible": 1,
       "pull": 1.4166666666666667,
-      "setting": 1.25,
+      "setting": 2.4166666666666665,
       "scale": 1.3333333333333333,
       "fair": 1.0833333333333333
      },
      "seen": {
       "new": 0,
-      "reminds": 9,
-      "same": 3
+      "reminds": 7,
+      "same": 5
      },
      "unweighted": {
-      "n": 8,
+      "n": 10,
       "mean": {
-       "lives": 1.375,
-       "caused": 1.125,
+       "lives": 1.9,
+       "caused": 1.2,
        "legible": 1,
-       "pull": 1.25,
-       "setting": 1.125,
-       "scale": 1.375,
-       "fair": 1.125
+       "pull": 1.3,
+       "setting": 2.3,
+       "scale": 1.4,
+       "fair": 1.1
       },
       "seen": {
        "new": 0,
        "reminds": 5,
-       "same": 3
+       "same": 5
       }
      }
     },
@@ -2362,32 +2362,32 @@
      "mean": {
       "lives": 2.1666666666666665,
       "caused": 2.25,
-      "legible": 1.5,
-      "pull": 1.5833333333333333,
-      "setting": 2.3333333333333335,
+      "legible": 1.4166666666666667,
+      "pull": 2.1666666666666665,
+      "setting": 3.25,
       "scale": 2.1666666666666665,
       "fair": 1.1666666666666667
      },
      "seen": {
-      "new": 4,
-      "reminds": 2,
+      "new": 3,
+      "reminds": 3,
       "same": 6
      },
      "unweighted": {
-      "n": 9,
+      "n": 10,
       "mean": {
-       "lives": 2.2222222222222223,
-       "caused": 2.3333333333333335,
-       "legible": 1.6666666666666667,
-       "pull": 1.6666666666666667,
-       "setting": 2.3333333333333335,
-       "scale": 2.2222222222222223,
-       "fair": 1.2222222222222223
+       "lives": 2.2,
+       "caused": 2.3,
+       "legible": 1.5,
+       "pull": 2.2,
+       "setting": 3.2,
+       "scale": 2.2,
+       "fair": 1.2
       },
       "seen": {
-       "new": 3,
-       "reminds": 2,
-       "same": 4
+       "new": 2,
+       "reminds": 3,
+       "same": 5
       }
      }
     },
@@ -2397,33 +2397,33 @@
      "length": "full",
      "n": 24,
      "mean": {
-      "lives": 3.2083333333333335,
-      "caused": 3.9166666666666665,
-      "legible": 5.416666666666667,
-      "pull": 2.9166666666666665,
-      "setting": 4.333333333333333,
-      "scale": 4.458333333333333,
-      "fair": 3.6666666666666665
+      "lives": 3.4583333333333335,
+      "caused": 4.333333333333333,
+      "legible": 5.666666666666667,
+      "pull": 3.0416666666666665,
+      "setting": 4.958333333333333,
+      "scale": 4.291666666666667,
+      "fair": 3.4166666666666665
      },
      "seen": {
-      "new": 7,
-      "reminds": 4,
+      "new": 8,
+      "reminds": 3,
       "same": 13
      },
      "unweighted": {
       "n": 24,
       "mean": {
-       "lives": 3.2083333333333335,
-       "caused": 3.9166666666666665,
-       "legible": 5.416666666666667,
-       "pull": 2.9166666666666665,
-       "setting": 4.333333333333333,
-       "scale": 4.458333333333333,
-       "fair": 3.6666666666666665
+       "lives": 3.4583333333333335,
+       "caused": 4.333333333333333,
+       "legible": 5.666666666666667,
+       "pull": 3.0416666666666665,
+       "setting": 4.958333333333333,
+       "scale": 4.291666666666667,
+       "fair": 3.4166666666666665
       },
       "seen": {
-       "new": 7,
-       "reminds": 4,
+       "new": 8,
+       "reminds": 3,
        "same": 13
       }
      }
@@ -2438,13 +2438,13 @@
       "caused": 2,
       "legible": 1,
       "pull": 2,
-      "setting": 1,
-      "scale": 2,
-      "fair": 1
+      "setting": 2.1666666666666665,
+      "scale": 3,
+      "fair": 1.1666666666666667
      },
      "seen": {
-      "new": 1,
-      "reminds": 0,
+      "new": 0,
+      "reminds": 1,
       "same": 5
      },
      "unweighted": {
@@ -2454,13 +2454,13 @@
        "caused": 2,
        "legible": 1,
        "pull": 2,
-       "setting": 1,
-       "scale": 2,
-       "fair": 1
+       "setting": 2.1666666666666665,
+       "scale": 3,
+       "fair": 1.1666666666666667
       },
       "seen": {
-       "new": 1,
-       "reminds": 0,
+       "new": 0,
+       "reminds": 1,
        "same": 5
       }
      }
@@ -2471,34 +2471,34 @@
      "length": "matched",
      "n": 6,
      "mean": {
-      "lives": 1.8333333333333333,
+      "lives": 2,
       "caused": 1.3333333333333333,
       "legible": 1,
       "pull": 1.3333333333333333,
-      "setting": 1.1666666666666667,
+      "setting": 2.1666666666666665,
       "scale": 1.5,
-      "fair": 1.3333333333333333
+      "fair": 1
      },
      "seen": {
-      "new": 2,
-      "reminds": 1,
-      "same": 3
+      "new": 1,
+      "reminds": 3,
+      "same": 2
      },
      "unweighted": {
       "n": 6,
       "mean": {
-       "lives": 1.8333333333333333,
+       "lives": 2,
        "caused": 1.3333333333333333,
        "legible": 1,
        "pull": 1.3333333333333333,
-       "setting": 1.1666666666666667,
+       "setting": 2.1666666666666665,
        "scale": 1.5,
-       "fair": 1.3333333333333333
+       "fair": 1
       },
       "seen": {
-       "new": 2,
-       "reminds": 1,
-       "same": 3
+       "new": 1,
+       "reminds": 3,
+       "same": 2
       }
      }
     },
@@ -2509,12 +2509,12 @@
      "n": 6,
      "mean": {
       "lives": 2,
-      "caused": 2,
-      "legible": 2.3333333333333335,
+      "caused": 2.3333333333333335,
+      "legible": 1.6666666666666667,
       "pull": 2,
-      "setting": 1.3333333333333333,
-      "scale": 2.1666666666666665,
-      "fair": 2.1666666666666665
+      "setting": 2.1666666666666665,
+      "scale": 2.8333333333333335,
+      "fair": 1
      },
      "seen": {
       "new": 0,
@@ -2525,12 +2525,12 @@
       "n": 6,
       "mean": {
        "lives": 2,
-       "caused": 2,
-       "legible": 2.3333333333333335,
+       "caused": 2.3333333333333335,
+       "legible": 1.6666666666666667,
        "pull": 2,
-       "setting": 1.3333333333333333,
-       "scale": 2.1666666666666665,
-       "fair": 2.1666666666666665
+       "setting": 2.1666666666666665,
+       "scale": 2.8333333333333335,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -2546,32 +2546,32 @@
      "n": 6,
      "mean": {
       "lives": 1,
-      "caused": 1.3333333333333333,
-      "legible": 3,
-      "pull": 2,
-      "setting": 1,
-      "scale": 2,
-      "fair": 1.6666666666666667
+      "caused": 1,
+      "legible": 2,
+      "pull": 1,
+      "setting": 2,
+      "scale": 1.1666666666666667,
+      "fair": 1
      },
      "seen": {
-      "new": 0,
-      "reminds": 2,
+      "new": 1,
+      "reminds": 1,
       "same": 4
      },
      "unweighted": {
       "n": 6,
       "mean": {
        "lives": 1,
-       "caused": 1.3333333333333333,
-       "legible": 3,
-       "pull": 2,
-       "setting": 1,
-       "scale": 2,
-       "fair": 1.6666666666666667
+       "caused": 1,
+       "legible": 2,
+       "pull": 1,
+       "setting": 2,
+       "scale": 1.1666666666666667,
+       "fair": 1
       },
       "seen": {
-       "new": 0,
-       "reminds": 2,
+       "new": 1,
+       "reminds": 1,
        "same": 4
       }
      }
@@ -2582,33 +2582,33 @@
      "length": "full",
      "n": 12,
      "mean": {
-      "lives": 1.4166666666666667,
+      "lives": 1.9166666666666667,
       "caused": 1.1666666666666667,
       "legible": 1,
-      "pull": 1.3333333333333333,
-      "setting": 1.1666666666666667,
-      "scale": 1.25,
-      "fair": 1.0833333333333333
+      "pull": 1.4166666666666667,
+      "setting": 2.4166666666666665,
+      "scale": 1.5,
+      "fair": 1.1666666666666667
      },
      "seen": {
       "new": 0,
-      "reminds": 7,
-      "same": 5
+      "reminds": 8,
+      "same": 4
      },
      "unweighted": {
-      "n": 10,
+      "n": 11,
       "mean": {
-       "lives": 1.4,
-       "caused": 1.2,
+       "lives": 1.9090909090909092,
+       "caused": 1.1818181818181819,
        "legible": 1,
-       "pull": 1.3,
-       "setting": 1.1,
-       "scale": 1.3,
-       "fair": 1.1
+       "pull": 1.3636363636363635,
+       "setting": 2.3636363636363638,
+       "scale": 1.5454545454545454,
+       "fair": 1.1818181818181819
       },
       "seen": {
        "new": 0,
-       "reminds": 6,
+       "reminds": 7,
        "same": 4
       }
      }
@@ -2619,34 +2619,34 @@
      "length": "full",
      "n": 12,
      "mean": {
-      "lives": 2.5,
-      "caused": 2.6666666666666665,
-      "legible": 2.5,
-      "pull": 2.1666666666666665,
-      "setting": 2.5,
-      "scale": 2.4166666666666665,
-      "fair": 1.5
+      "lives": 2.3333333333333335,
+      "caused": 2.5833333333333335,
+      "legible": 1.9166666666666667,
+      "pull": 2.3333333333333335,
+      "setting": 3.0833333333333335,
+      "scale": 2.3333333333333335,
+      "fair": 1.3333333333333333
      },
      "seen": {
       "new": 2,
-      "reminds": 5,
-      "same": 5
+      "reminds": 3,
+      "same": 7
      },
      "unweighted": {
-      "n": 9,
+      "n": 8,
       "mean": {
-       "lives": 2.5555555555555554,
-       "caused": 2.6666666666666665,
-       "legible": 2.6666666666666665,
-       "pull": 2.2222222222222223,
-       "setting": 2.5555555555555554,
-       "scale": 2.4444444444444446,
-       "fair": 1.5555555555555556
+       "lives": 2.375,
+       "caused": 2.625,
+       "legible": 2,
+       "pull": 2.375,
+       "setting": 3.125,
+       "scale": 2.375,
+       "fair": 1.375
       },
       "seen": {
        "new": 1,
-       "reminds": 4,
-       "same": 4
+       "reminds": 2,
+       "same": 5
       }
      }
     }
@@ -2663,85 +2663,85 @@
      "adjustedPlusN": 12,
      "adjustedMinusN": 12,
      "adjustedDifference": {
-      "lives": 1.125,
-      "caused": 1.5,
-      "legible": 1.5,
-      "pull": 0.9375,
-      "setting": 1.375,
-      "scale": 1.25,
-      "fair": 0.5
+      "lives": 0.375,
+      "caused": 1.375,
+      "legible": 0.8125,
+      "pull": 1,
+      "setting": 0.8125,
+      "scale": 0.9375,
+      "fair": 0.1875
      },
      "difference": {
-      "lives": 1.0833333333333333,
-      "caused": 1.4999999999999998,
-      "legible": 1.5,
-      "pull": 0.8333333333333333,
-      "setting": 1.3333333333333333,
-      "scale": 1.1666666666666665,
-      "fair": 0.41666666666666674
+      "lives": 0.41666666666666674,
+      "caused": 1.4166666666666667,
+      "legible": 0.9166666666666667,
+      "pull": 0.9166666666666667,
+      "setting": 0.666666666666667,
+      "scale": 0.8333333333333335,
+      "fair": 0.16666666666666652
      },
      "plusSeen": {
       "new": 2,
-      "reminds": 5,
-      "same": 5
+      "reminds": 3,
+      "same": 7
      },
      "minusSeen": {
       "new": 0,
-      "reminds": 7,
-      "same": 5
+      "reminds": 8,
+      "same": 4
      },
      "unweightedPlus": {
-      "n": 9,
+      "n": 8,
       "mean": {
-       "lives": 2.5555555555555554,
-       "caused": 2.6666666666666665,
-       "legible": 2.6666666666666665,
-       "pull": 2.2222222222222223,
-       "setting": 2.5555555555555554,
-       "scale": 2.4444444444444446,
-       "fair": 1.5555555555555556
+       "lives": 2.375,
+       "caused": 2.625,
+       "legible": 2,
+       "pull": 2.375,
+       "setting": 3.125,
+       "scale": 2.375,
+       "fair": 1.375
       },
       "seen": {
        "new": 1,
-       "reminds": 4,
-       "same": 4
+       "reminds": 2,
+       "same": 5
       }
      },
      "unweightedMinus": {
-      "n": 10,
+      "n": 11,
       "mean": {
-       "lives": 1.4,
-       "caused": 1.2,
+       "lives": 1.9090909090909092,
+       "caused": 1.1818181818181819,
        "legible": 1,
-       "pull": 1.3,
-       "setting": 1.1,
-       "scale": 1.3,
-       "fair": 1.1
+       "pull": 1.3636363636363635,
+       "setting": 2.3636363636363638,
+       "scale": 1.5454545454545454,
+       "fair": 1.1818181818181819
       },
       "seen": {
        "new": 0,
-       "reminds": 6,
+       "reminds": 7,
        "same": 4
       }
      },
      "unweightedDifference": {
-      "lives": 1.1555555555555554,
-      "caused": 1.4666666666666666,
-      "legible": 1.6666666666666665,
-      "pull": 0.9222222222222223,
-      "setting": 1.4555555555555553,
-      "scale": 1.1444444444444446,
-      "fair": 0.4555555555555555
+      "lives": 0.46590909090909083,
+      "caused": 1.4431818181818181,
+      "legible": 1,
+      "pull": 1.0113636363636365,
+      "setting": 0.7613636363636362,
+      "scale": 0.8295454545454546,
+      "fair": 0.19318181818181812
      },
      "unweightedStrata": 8,
      "unweightedAdjustedDifference": {
-      "lives": 1.125,
-      "caused": 1.5,
-      "legible": 1.5,
-      "pull": 0.9375,
-      "setting": 1.375,
-      "scale": 1.25,
-      "fair": 0.5
+      "lives": 0.375,
+      "caused": 1.375,
+      "legible": 0.8125,
+      "pull": 1,
+      "setting": 0.8125,
+      "scale": 0.9375,
+      "fair": 0.1875
      }
     },
     {
@@ -2755,84 +2755,84 @@
      "adjustedPlusN": 12,
      "adjustedMinusN": 12,
      "adjustedDifference": {
-      "lives": 0.6875,
-      "caused": 1.0625,
-      "legible": 0.5625,
-      "pull": 0.1875,
-      "setting": 1.125,
-      "scale": 0.8125,
+      "lives": 0.25,
+      "caused": 1.125,
+      "legible": 0.4375,
+      "pull": 0.875,
+      "setting": 0.9375,
+      "scale": 0.875,
       "fair": 0.125
      },
      "difference": {
-      "lives": 0.6666666666666665,
+      "lives": 0.24999999999999978,
       "caused": 1.0833333333333333,
-      "legible": 0.5,
-      "pull": 0.16666666666666652,
-      "setting": 1.0833333333333335,
+      "legible": 0.41666666666666674,
+      "pull": 0.7499999999999998,
+      "setting": 0.8333333333333335,
       "scale": 0.8333333333333333,
       "fair": 0.08333333333333348
      },
      "plusSeen": {
-      "new": 4,
-      "reminds": 2,
+      "new": 3,
+      "reminds": 3,
       "same": 6
      },
      "minusSeen": {
       "new": 0,
-      "reminds": 9,
-      "same": 3
+      "reminds": 7,
+      "same": 5
      },
      "unweightedPlus": {
-      "n": 9,
+      "n": 10,
       "mean": {
-       "lives": 2.2222222222222223,
-       "caused": 2.3333333333333335,
-       "legible": 1.6666666666666667,
-       "pull": 1.6666666666666667,
-       "setting": 2.3333333333333335,
-       "scale": 2.2222222222222223,
-       "fair": 1.2222222222222223
+       "lives": 2.2,
+       "caused": 2.3,
+       "legible": 1.5,
+       "pull": 2.2,
+       "setting": 3.2,
+       "scale": 2.2,
+       "fair": 1.2
       },
       "seen": {
-       "new": 3,
-       "reminds": 2,
-       "same": 4
+       "new": 2,
+       "reminds": 3,
+       "same": 5
       }
      },
      "unweightedMinus": {
-      "n": 8,
+      "n": 10,
       "mean": {
-       "lives": 1.375,
-       "caused": 1.125,
+       "lives": 1.9,
+       "caused": 1.2,
        "legible": 1,
-       "pull": 1.25,
-       "setting": 1.125,
-       "scale": 1.375,
-       "fair": 1.125
+       "pull": 1.3,
+       "setting": 2.3,
+       "scale": 1.4,
+       "fair": 1.1
       },
       "seen": {
        "new": 0,
        "reminds": 5,
-       "same": 3
+       "same": 5
       }
      },
      "unweightedDifference": {
-      "lives": 0.8472222222222223,
-      "caused": 1.2083333333333335,
-      "legible": 0.6666666666666667,
-      "pull": 0.41666666666666674,
-      "setting": 1.2083333333333335,
-      "scale": 0.8472222222222223,
-      "fair": 0.09722222222222232
+      "lives": 0.30000000000000027,
+      "caused": 1.0999999999999999,
+      "legible": 0.5,
+      "pull": 0.9000000000000001,
+      "setting": 0.9000000000000004,
+      "scale": 0.8000000000000003,
+      "fair": 0.09999999999999987
      },
      "unweightedStrata": 8,
      "unweightedAdjustedDifference": {
-      "lives": 0.6875,
-      "caused": 1.0625,
-      "legible": 0.5625,
-      "pull": 0.1875,
-      "setting": 1.125,
-      "scale": 0.8125,
+      "lives": 0.25,
+      "caused": 1.125,
+      "legible": 0.4375,
+      "pull": 0.875,
+      "setting": 0.9375,
+      "scale": 0.875,
       "fair": 0.125
      }
     },
@@ -2847,85 +2847,85 @@
      "adjustedPlusN": 6,
      "adjustedMinusN": 6,
      "adjustedDifference": {
-      "lives": -0.3333333333333333,
-      "caused": 0,
-      "legible": 1.6666666666666667,
-      "pull": 0.16666666666666666,
+      "lives": -0.6666666666666666,
+      "caused": -0.16666666666666666,
+      "legible": 0.8333333333333334,
+      "pull": -0.3333333333333333,
       "setting": 0,
-      "scale": 0.16666666666666666,
-      "fair": 0.6666666666666666
+      "scale": -0.5,
+      "fair": 0
      },
      "difference": {
-      "lives": -0.41666666666666674,
+      "lives": -0.5,
       "caused": 0,
-      "legible": 1.6666666666666665,
-      "pull": 0.33333333333333326,
-      "setting": 0.08333333333333348,
-      "scale": 0.3333333333333335,
-      "fair": 0.75
+      "legible": 0.8333333333333333,
+      "pull": -0.16666666666666674,
+      "setting": -0.08333333333333304,
+      "scale": -0.25,
+      "fair": -0.08333333333333326
      },
      "plusSeen": {
-      "new": 0,
-      "reminds": 4,
+      "new": 1,
+      "reminds": 3,
       "same": 8
      },
      "minusSeen": {
-      "new": 3,
-      "reminds": 1,
-      "same": 8
+      "new": 1,
+      "reminds": 4,
+      "same": 7
      },
      "unweightedPlus": {
       "n": 12,
       "mean": {
        "lives": 1.5,
        "caused": 1.6666666666666667,
-       "legible": 2.6666666666666665,
-       "pull": 2,
-       "setting": 1.1666666666666667,
-       "scale": 2.0833333333333335,
-       "fair": 1.9166666666666667
+       "legible": 1.8333333333333333,
+       "pull": 1.5,
+       "setting": 2.0833333333333335,
+       "scale": 2,
+       "fair": 1
       },
       "seen": {
-       "new": 0,
-       "reminds": 4,
+       "new": 1,
+       "reminds": 3,
        "same": 8
       }
      },
      "unweightedMinus": {
       "n": 12,
       "mean": {
-       "lives": 1.9166666666666667,
+       "lives": 2,
        "caused": 1.6666666666666667,
        "legible": 1,
        "pull": 1.6666666666666667,
-       "setting": 1.0833333333333333,
-       "scale": 1.75,
-       "fair": 1.1666666666666667
+       "setting": 2.1666666666666665,
+       "scale": 2.25,
+       "fair": 1.0833333333333333
       },
       "seen": {
-       "new": 3,
-       "reminds": 1,
-       "same": 8
+       "new": 1,
+       "reminds": 4,
+       "same": 7
       }
      },
      "unweightedDifference": {
-      "lives": -0.41666666666666674,
+      "lives": -0.5,
       "caused": 0,
-      "legible": 1.6666666666666665,
-      "pull": 0.33333333333333326,
-      "setting": 0.08333333333333348,
-      "scale": 0.3333333333333335,
-      "fair": 0.75
+      "legible": 0.8333333333333333,
+      "pull": -0.16666666666666674,
+      "setting": -0.08333333333333304,
+      "scale": -0.25,
+      "fair": -0.08333333333333326
      },
      "unweightedStrata": 6,
      "unweightedAdjustedDifference": {
-      "lives": -0.3333333333333333,
-      "caused": 0,
-      "legible": 1.6666666666666667,
-      "pull": 0.16666666666666666,
+      "lives": -0.6666666666666666,
+      "caused": -0.16666666666666666,
+      "legible": 0.8333333333333334,
+      "pull": -0.3333333333333333,
       "setting": 0,
-      "scale": 0.16666666666666666,
-      "fair": 0.6666666666666666
+      "scale": -0.5,
+      "fair": 0
      }
     },
     {
@@ -2940,84 +2940,84 @@
      "adjustedMinusN": 6,
      "adjustedDifference": {
       "lives": -0.5,
-      "caused": -0.6666666666666666,
-      "legible": 0.6666666666666666,
-      "pull": -0.3333333333333333,
-      "setting": 0.16666666666666666,
-      "scale": -0.3333333333333333,
-      "fair": 0
+      "caused": -1,
+      "legible": 0.3333333333333333,
+      "pull": -0.6666666666666666,
+      "setting": 0,
+      "scale": -1.3333333333333333,
+      "fair": -0.16666666666666666
      },
      "difference": {
-      "lives": -0.5833333333333333,
-      "caused": -0.6666666666666667,
-      "legible": 0.33333333333333326,
-      "pull": -0.33333333333333326,
-      "setting": -0.08333333333333348,
-      "scale": -0.3333333333333335,
+      "lives": -0.5,
+      "caused": -0.9999999999999998,
+      "legible": 0.16666666666666674,
+      "pull": -0.8333333333333333,
+      "setting": -0.08333333333333304,
+      "scale": -1.5833333333333333,
       "fair": -0.08333333333333326
      },
      "plusSeen": {
       "new": 2,
-      "reminds": 3,
-      "same": 7
+      "reminds": 4,
+      "same": 6
      },
      "minusSeen": {
-      "new": 1,
-      "reminds": 2,
+      "new": 0,
+      "reminds": 3,
       "same": 9
      },
      "unweightedPlus": {
       "n": 12,
       "mean": {
-       "lives": 1.4166666666666667,
-       "caused": 1.3333333333333333,
-       "legible": 2,
-       "pull": 1.6666666666666667,
-       "setting": 1.0833333333333333,
-       "scale": 1.75,
-       "fair": 1.5
+       "lives": 1.5,
+       "caused": 1.1666666666666667,
+       "legible": 1.5,
+       "pull": 1.1666666666666667,
+       "setting": 2.0833333333333335,
+       "scale": 1.3333333333333333,
+       "fair": 1
       },
       "seen": {
        "new": 2,
-       "reminds": 3,
-       "same": 7
+       "reminds": 4,
+       "same": 6
       }
      },
      "unweightedMinus": {
       "n": 12,
       "mean": {
        "lives": 2,
-       "caused": 2,
-       "legible": 1.6666666666666667,
+       "caused": 2.1666666666666665,
+       "legible": 1.3333333333333333,
        "pull": 2,
-       "setting": 1.1666666666666667,
-       "scale": 2.0833333333333335,
-       "fair": 1.5833333333333333
+       "setting": 2.1666666666666665,
+       "scale": 2.9166666666666665,
+       "fair": 1.0833333333333333
       },
       "seen": {
-       "new": 1,
-       "reminds": 2,
+       "new": 0,
+       "reminds": 3,
        "same": 9
       }
      },
      "unweightedDifference": {
-      "lives": -0.5833333333333333,
-      "caused": -0.6666666666666667,
-      "legible": 0.33333333333333326,
-      "pull": -0.33333333333333326,
-      "setting": -0.08333333333333348,
-      "scale": -0.3333333333333335,
+      "lives": -0.5,
+      "caused": -0.9999999999999998,
+      "legible": 0.16666666666666674,
+      "pull": -0.8333333333333333,
+      "setting": -0.08333333333333304,
+      "scale": -1.5833333333333333,
       "fair": -0.08333333333333326
      },
      "unweightedStrata": 6,
      "unweightedAdjustedDifference": {
       "lives": -0.5,
-      "caused": -0.6666666666666666,
-      "legible": 0.6666666666666666,
-      "pull": -0.3333333333333333,
-      "setting": 0.16666666666666666,
-      "scale": -0.3333333333333333,
-      "fair": 0
+      "caused": -1,
+      "legible": 0.3333333333333333,
+      "pull": -0.6666666666666666,
+      "setting": 0,
+      "scale": -1.3333333333333333,
+      "fair": -0.16666666666666666
      }
     }
    ],
@@ -3026,34 +3026,34 @@
      "against": "A1",
      "renderer": "all",
      "n": 18,
-     "follow": 10,
-     "caused": 10,
+     "follow": 12,
+     "caused": 12,
      "ties": 6,
      "total": 24,
-     "followLosses": 8,
-     "causedLosses": 8
+     "followLosses": 6,
+     "causedLosses": 6
     },
     {
      "against": "A1",
      "renderer": "current",
      "n": 8,
-     "follow": 4,
-     "caused": 4,
+     "follow": 5,
+     "caused": 5,
      "ties": 4,
      "total": 12,
-     "followLosses": 4,
-     "causedLosses": 4
+     "followLosses": 3,
+     "causedLosses": 3
     },
     {
      "against": "A1",
      "renderer": "evidence",
      "n": 10,
-     "follow": 6,
-     "caused": 6,
+     "follow": 7,
+     "caused": 7,
      "ties": 2,
      "total": 12,
-     "followLosses": 4,
-     "causedLosses": 4
+     "followLosses": 3,
+     "causedLosses": 3
     },
     {
      "against": "A5-full",
@@ -3070,39 +3070,6 @@
      "against": "A5-full",
      "renderer": "current",
      "n": 6,
-     "follow": 1,
-     "caused": 1,
-     "ties": 0,
-     "total": 6,
-     "followLosses": 5,
-     "causedLosses": 5
-    },
-    {
-     "against": "A5-full",
-     "renderer": "evidence",
-     "n": 6,
-     "follow": 4,
-     "caused": 4,
-     "ties": 0,
-     "total": 6,
-     "followLosses": 2,
-     "causedLosses": 2
-    },
-    {
-     "against": "A5-matched",
-     "renderer": "all",
-     "n": 12,
-     "follow": 4,
-     "caused": 8,
-     "ties": 0,
-     "total": 12,
-     "followLosses": 8,
-     "causedLosses": 4
-    },
-    {
-     "against": "A5-matched",
-     "renderer": "current",
-     "n": 6,
      "follow": 2,
      "caused": 2,
      "ties": 0,
@@ -3111,18 +3078,51 @@
      "causedLosses": 4
     },
     {
+     "against": "A5-full",
+     "renderer": "evidence",
+     "n": 6,
+     "follow": 3,
+     "caused": 3,
+     "ties": 0,
+     "total": 6,
+     "followLosses": 3,
+     "causedLosses": 3
+    },
+    {
+     "against": "A5-matched",
+     "renderer": "all",
+     "n": 12,
+     "follow": 7,
+     "caused": 7,
+     "ties": 0,
+     "total": 12,
+     "followLosses": 5,
+     "causedLosses": 5
+    },
+    {
+     "against": "A5-matched",
+     "renderer": "current",
+     "n": 6,
+     "follow": 1,
+     "caused": 1,
+     "ties": 0,
+     "total": 6,
+     "followLosses": 5,
+     "causedLosses": 5
+    },
+    {
      "against": "A5-matched",
      "renderer": "evidence",
      "n": 6,
-     "follow": 2,
+     "follow": 6,
      "caused": 6,
      "ties": 0,
      "total": 6,
-     "followLosses": 4,
+     "followLosses": 0,
      "causedLosses": 0
     }
    ],
-   "critic": "Most traces supply event categories without concrete motives, objects, demands, or usable next steps. Requests to act against the asker remain especially difficult to understand. Causal pointers establish asserted connections but often do not explain them; simultaneous or reversed reporting further obscures some chains. A closing label such as resolved, betrayal, or reckoning supplies little payoff without the actual consequence. Completed contracts also conceal methods and findings, particularly surveillance and missing-person inquiries. Repeated structures make participants interchangeable. Eddies, shards, gangs, and local routes support Night City, but many traces could occur anywhere. The modest repair and escort jobs have the clearest practical reasons and proportionate endings. Explicit refusals provide fair stopping points even when little story develops.",
+   "critic": "The clearest families are paid errands, isolated wrongs, assault-driven help, duty-breaking discovery, and help that turns into a reckoning. Most traces omit concrete motives, requested acts and consequences; naming participants or declaring an outcome resolved does not supply those links. Requests to act against the asker are especially hard to interpret. The paid jobs offer useful objectives and plausible local concerns, but instant completion hides both the action and its payoff. Repeated structures with substituted names weaken individuality, while Night City often comes through only in gang references, eddies and a few locations. Explicit declines provide clearer resting points than unexplained closing labels.",
    "configurations": [
     {
      "arm": "E",
@@ -3130,12 +3130,12 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.3333333333333333,
-       "caused": 1.3333333333333333,
+       "lives": 2,
+       "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.3333333333333333,
-       "setting": 1.3333333333333333,
-       "scale": 1.3333333333333333,
+       "pull": 1.6666666666666667,
+       "setting": 2.6666666666666665,
+       "scale": 1.6666666666666667,
        "fair": 1
       },
       "seen": {
@@ -3147,12 +3147,12 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.3333333333333333,
-       "caused": 1.3333333333333333,
+       "lives": 2,
+       "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.3333333333333333,
-       "setting": 1.3333333333333333,
-       "scale": 1.3333333333333333,
+       "pull": 1.6666666666666667,
+       "setting": 2.6666666666666665,
+       "scale": 1.6666666666666667,
        "fair": 1
       },
       "seen": {
@@ -3168,35 +3168,35 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.3333333333333333,
-       "caused": 1.3333333333333333,
+       "lives": 2,
+       "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1,
-       "setting": 1.3333333333333333,
-       "scale": 1.3333333333333333,
+       "pull": 1.6666666666666667,
+       "setting": 2.6666666666666665,
+       "scale": 1.6666666666666667,
        "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 1,
-       "same": 2
+       "reminds": 0,
+       "same": 3
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.3333333333333333,
-       "caused": 1.3333333333333333,
+       "lives": 2,
+       "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1,
-       "setting": 1.3333333333333333,
-       "scale": 1.3333333333333333,
+       "pull": 1.6666666666666667,
+       "setting": 2.6666666666666665,
+       "scale": 1.6666666666666667,
        "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 1,
-       "same": 2
+       "reminds": 0,
+       "same": 3
       }
      }
     },
@@ -3207,12 +3207,12 @@
       "n": 3,
       "mean": {
        "lives": 3.3333333333333335,
-       "caused": 4,
+       "caused": 4.333333333333333,
        "legible": 5.666666666666667,
        "pull": 3,
-       "setting": 4.666666666666667,
-       "scale": 5,
-       "fair": 4
+       "setting": 5,
+       "scale": 4.666666666666667,
+       "fair": 3.6666666666666665
       },
       "seen": {
        "new": 2,
@@ -3224,12 +3224,12 @@
       "n": 3,
       "mean": {
        "lives": 3.3333333333333335,
-       "caused": 4,
+       "caused": 4.333333333333333,
        "legible": 5.666666666666667,
        "pull": 3,
-       "setting": 4.666666666666667,
-       "scale": 5,
-       "fair": 4
+       "setting": 5,
+       "scale": 4.666666666666667,
+       "fair": 3.6666666666666665
       },
       "seen": {
        "new": 2,
@@ -3244,35 +3244,35 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
-       "caused": 1.6666666666666667,
+       "lives": 1.6666666666666667,
+       "caused": 1.3333333333333333,
        "legible": 1.6666666666666667,
-       "pull": 1.6666666666666667,
-       "setting": 1,
+       "pull": 1.3333333333333333,
+       "setting": 2,
        "scale": 1.6666666666666667,
-       "fair": 1.3333333333333333
+       "fair": 1
       },
       "seen": {
        "new": 2,
-       "reminds": 0,
-       "same": 1
+       "reminds": 1,
+       "same": 0
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
-       "caused": 1.6666666666666667,
+       "lives": 1.6666666666666667,
+       "caused": 1.3333333333333333,
        "legible": 1.6666666666666667,
-       "pull": 1.6666666666666667,
-       "setting": 1,
+       "pull": 1.3333333333333333,
+       "setting": 2,
        "scale": 1.6666666666666667,
-       "fair": 1.3333333333333333
+       "fair": 1
       },
       "seen": {
        "new": 2,
-       "reminds": 0,
-       "same": 1
+       "reminds": 1,
+       "same": 0
       }
      }
     },
@@ -3284,9 +3284,9 @@
       "mean": {
        "lives": 2.3333333333333335,
        "caused": 1.6666666666666667,
-       "legible": 2,
+       "legible": 1.6666666666666667,
        "pull": 2.3333333333333335,
-       "setting": 2.3333333333333335,
+       "setting": 3.3333333333333335,
        "scale": 1.6666666666666667,
        "fair": 1.3333333333333333
       },
@@ -3301,9 +3301,9 @@
       "mean": {
        "lives": 2.5,
        "caused": 2,
-       "legible": 2.5,
+       "legible": 2,
        "pull": 2.5,
-       "setting": 2.5,
+       "setting": 3.5,
        "scale": 2,
        "fair": 1.5
       },
@@ -3322,9 +3322,9 @@
       "mean": {
        "lives": 2.3333333333333335,
        "caused": 1.6666666666666667,
-       "legible": 2,
+       "legible": 1.6666666666666667,
        "pull": 2.3333333333333335,
-       "setting": 2.3333333333333335,
+       "setting": 3.3333333333333335,
        "scale": 1.6666666666666667,
        "fair": 1.3333333333333333
       },
@@ -3339,9 +3339,9 @@
       "mean": {
        "lives": 2.5,
        "caused": 2,
-       "legible": 2.5,
+       "legible": 2,
        "pull": 2.5,
-       "setting": 2.5,
+       "setting": 3.5,
        "scale": 2,
        "fair": 1.5
       },
@@ -3358,34 +3358,34 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 3,
-       "caused": 4,
-       "legible": 5.333333333333333,
-       "pull": 3,
-       "setting": 4.333333333333333,
-       "scale": 2.3333333333333335,
+       "lives": 3.6666666666666665,
+       "caused": 5,
+       "legible": 5.666666666666667,
+       "pull": 4,
+       "setting": 5,
+       "scale": 3,
        "fair": 2
       },
       "seen": {
-       "new": 1,
-       "reminds": 1,
+       "new": 2,
+       "reminds": 0,
        "same": 1
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 3,
-       "caused": 4,
-       "legible": 5.333333333333333,
-       "pull": 3,
-       "setting": 4.333333333333333,
-       "scale": 2.3333333333333335,
+       "lives": 3.6666666666666665,
+       "caused": 5,
+       "legible": 5.666666666666667,
+       "pull": 4,
+       "setting": 5,
+       "scale": 3,
        "fair": 2
       },
       "seen": {
-       "new": 1,
-       "reminds": 1,
+       "new": 2,
+       "reminds": 0,
        "same": 1
       }
      }
@@ -3398,11 +3398,11 @@
       "mean": {
        "lives": 2,
        "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
+       "legible": 1.3333333333333333,
        "pull": 1.6666666666666667,
-       "setting": 1.3333333333333333,
-       "scale": 1.6666666666666667,
-       "fair": 1.3333333333333333
+       "setting": 2.3333333333333335,
+       "scale": 2,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -3415,11 +3415,11 @@
       "mean": {
        "lives": 2,
        "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
+       "legible": 1.3333333333333333,
        "pull": 1.6666666666666667,
-       "setting": 1.3333333333333333,
-       "scale": 1.6666666666666667,
-       "fair": 1.3333333333333333
+       "setting": 2.3333333333333335,
+       "scale": 2,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -3436,11 +3436,11 @@
       "mean": {
        "lives": 1.6666666666666667,
        "caused": 1.6666666666666667,
-       "legible": 2,
+       "legible": 1,
        "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
-       "scale": 2,
-       "fair": 2
+       "setting": 2.6666666666666665,
+       "scale": 2.3333333333333335,
+       "fair": 1.6666666666666667
       },
       "seen": {
        "new": 0,
@@ -3453,11 +3453,11 @@
       "mean": {
        "lives": 1.6666666666666667,
        "caused": 1.6666666666666667,
-       "legible": 2,
+       "legible": 1,
        "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
-       "scale": 2,
-       "fair": 2
+       "setting": 2.6666666666666665,
+       "scale": 2.3333333333333335,
+       "fair": 1.6666666666666667
       },
       "seen": {
        "new": 0,
@@ -3472,11 +3472,11 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.3333333333333333,
+       "lives": 1.6666666666666667,
        "caused": 1.3333333333333333,
        "legible": 1,
-       "pull": 1,
-       "setting": 1.3333333333333333,
+       "pull": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.6666666666666667,
        "fair": 1.3333333333333333
       },
@@ -3489,11 +3489,11 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.3333333333333333,
+       "lives": 1.6666666666666667,
        "caused": 1.3333333333333333,
        "legible": 1,
-       "pull": 1,
-       "setting": 1.3333333333333333,
+       "pull": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.6666666666666667,
        "fair": 1.3333333333333333
       },
@@ -3510,11 +3510,11 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 3,
-       "caused": 3.6666666666666665,
+       "lives": 3.3333333333333335,
+       "caused": 4.333333333333333,
        "legible": 5.666666666666667,
        "pull": 2,
-       "setting": 4.333333333333333,
+       "setting": 5,
        "scale": 5,
        "fair": 5
       },
@@ -3527,11 +3527,11 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 3,
-       "caused": 3.6666666666666665,
+       "lives": 3.3333333333333335,
+       "caused": 4.333333333333333,
        "legible": 5.666666666666667,
        "pull": 2,
-       "setting": 4.333333333333333,
+       "setting": 5,
        "scale": 5,
        "fair": 5
       },
@@ -3550,16 +3550,16 @@
       "mean": {
        "lives": 1.6666666666666667,
        "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
+       "legible": 1.3333333333333333,
        "pull": 1.6666666666666667,
-       "setting": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 2.3333333333333335,
-       "fair": 2
+       "fair": 1.3333333333333333
       },
       "seen": {
-       "new": 1,
+       "new": 0,
        "reminds": 2,
-       "same": 0
+       "same": 1
       }
      },
      "unweighted": {
@@ -3567,16 +3567,16 @@
       "mean": {
        "lives": 1.6666666666666667,
        "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
+       "legible": 1.3333333333333333,
        "pull": 1.6666666666666667,
-       "setting": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 2.3333333333333335,
-       "fair": 2
+       "fair": 1.3333333333333333
       },
       "seen": {
-       "new": 1,
+       "new": 0,
        "reminds": 2,
-       "same": 0
+       "same": 1
       }
      }
     },
@@ -3587,10 +3587,10 @@
       "n": 3,
       "mean": {
        "lives": 2,
-       "caused": 2,
+       "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.6666666666666667,
-       "setting": 1.3333333333333333,
+       "pull": 2,
+       "setting": 3,
        "scale": 2,
        "fair": 1
       },
@@ -3604,10 +3604,10 @@
       "n": 3,
       "mean": {
        "lives": 2,
-       "caused": 2,
+       "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.6666666666666667,
-       "setting": 1.3333333333333333,
+       "pull": 2,
+       "setting": 3,
        "scale": 2,
        "fair": 1
       },
@@ -3627,8 +3627,8 @@
        "lives": 2,
        "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
+       "pull": 2,
+       "setting": 3,
        "scale": 1.6666666666666667,
        "fair": 1
       },
@@ -3644,8 +3644,8 @@
        "lives": 2,
        "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.6666666666666667,
-       "setting": 1.6666666666666667,
+       "pull": 2,
+       "setting": 3,
        "scale": 1.6666666666666667,
        "fair": 1
       },
@@ -3662,11 +3662,11 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 3,
-       "caused": 3.6666666666666665,
-       "legible": 5.666666666666667,
+       "lives": 3.3333333333333335,
+       "caused": 4,
+       "legible": 6,
        "pull": 3,
-       "setting": 4,
+       "setting": 5,
        "scale": 4.333333333333333,
        "fair": 3.3333333333333335
       },
@@ -3679,11 +3679,11 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 3,
-       "caused": 3.6666666666666665,
-       "legible": 5.666666666666667,
+       "lives": 3.3333333333333335,
+       "caused": 4,
+       "legible": 6,
        "pull": 3,
-       "setting": 4,
+       "setting": 5,
        "scale": 4.333333333333333,
        "fair": 3.3333333333333335
       },
@@ -3702,16 +3702,16 @@
       "mean": {
        "lives": 1.6666666666666667,
        "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
-       "pull": 2,
-       "setting": 1.3333333333333333,
+       "legible": 1.3333333333333333,
+       "pull": 1.6666666666666667,
+       "setting": 2.3333333333333335,
        "scale": 2,
-       "fair": 1.6666666666666667
+       "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 0,
-       "same": 3
+       "reminds": 1,
+       "same": 2
       }
      },
      "unweighted": {
@@ -3719,16 +3719,16 @@
       "mean": {
        "lives": 1.6666666666666667,
        "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
-       "pull": 2,
-       "setting": 1.3333333333333333,
+       "legible": 1.3333333333333333,
+       "pull": 1.6666666666666667,
+       "setting": 2.3333333333333335,
        "scale": 2,
-       "fair": 1.6666666666666667
+       "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 0,
-       "same": 3
+       "reminds": 1,
+       "same": 2
       }
      }
     },
@@ -3738,11 +3738,11 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
+       "lives": 2.3333333333333335,
        "caused": 2.3333333333333335,
        "legible": 2,
-       "pull": 1.6666666666666667,
-       "setting": 2,
+       "pull": 2,
+       "setting": 2.6666666666666665,
        "scale": 2,
        "fair": 1.3333333333333333
       },
@@ -3755,11 +3755,11 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 2,
+       "lives": 2.3333333333333335,
        "caused": 2.3333333333333335,
        "legible": 2,
-       "pull": 1.6666666666666667,
-       "setting": 2,
+       "pull": 2,
+       "setting": 2.6666666666666665,
        "scale": 2,
        "fair": 1.3333333333333333
       },
@@ -3776,34 +3776,34 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.3333333333333333,
-       "setting": 2,
+       "pull": 1.6666666666666667,
+       "setting": 3,
        "scale": 1.6666666666666667,
        "fair": 1
       },
       "seen": {
-       "new": 2,
-       "reminds": 0,
+       "new": 1,
+       "reminds": 1,
        "same": 1
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.3333333333333333,
-       "setting": 2,
+       "pull": 1.6666666666666667,
+       "setting": 3,
        "scale": 1.6666666666666667,
        "fair": 1
       },
       "seen": {
-       "new": 2,
-       "reminds": 0,
+       "new": 1,
+       "reminds": 1,
        "same": 1
       }
      }
@@ -3815,12 +3815,12 @@
       "n": 3,
       "mean": {
        "lives": 3.3333333333333335,
-       "caused": 4,
-       "legible": 5,
+       "caused": 4.333333333333333,
+       "legible": 5.333333333333333,
        "pull": 3,
-       "setting": 4.333333333333333,
-       "scale": 5,
-       "fair": 4
+       "setting": 4.666666666666667,
+       "scale": 4.333333333333333,
+       "fair": 3.3333333333333335
       },
       "seen": {
        "new": 2,
@@ -3832,12 +3832,12 @@
       "n": 3,
       "mean": {
        "lives": 3.3333333333333335,
-       "caused": 4,
-       "legible": 5,
+       "caused": 4.333333333333333,
+       "legible": 5.333333333333333,
        "pull": 3,
-       "setting": 4.333333333333333,
-       "scale": 5,
-       "fair": 4
+       "setting": 4.666666666666667,
+       "scale": 4.333333333333333,
+       "fair": 3.3333333333333335
       },
       "seen": {
        "new": 2,
@@ -3853,12 +3853,12 @@
       "n": 3,
       "mean": {
        "lives": 1.6666666666666667,
-       "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
-       "pull": 2,
-       "setting": 1,
-       "scale": 2,
-       "fair": 1.6666666666666667
+       "caused": 2,
+       "legible": 1.3333333333333333,
+       "pull": 1.6666666666666667,
+       "setting": 2,
+       "scale": 2.3333333333333335,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -3870,12 +3870,12 @@
       "n": 3,
       "mean": {
        "lives": 1.6666666666666667,
-       "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
-       "pull": 2,
-       "setting": 1,
-       "scale": 2,
-       "fair": 1.6666666666666667
+       "caused": 2,
+       "legible": 1.3333333333333333,
+       "pull": 1.6666666666666667,
+       "setting": 2,
+       "scale": 2.3333333333333335,
+       "fair": 1
       },
       "seen": {
        "new": 0,
@@ -3890,11 +3890,11 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.3333333333333333,
-       "setting": 1.6666666666666667,
+       "pull": 1.6666666666666667,
+       "setting": 2.6666666666666665,
        "scale": 1.6666666666666667,
        "fair": 1
       },
@@ -3907,11 +3907,11 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.3333333333333333,
-       "setting": 1.6666666666666667,
+       "pull": 1.6666666666666667,
+       "setting": 2.6666666666666665,
        "scale": 1.6666666666666667,
        "fair": 1
       },
@@ -3928,11 +3928,11 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.3333333333333333,
-       "setting": 1.6666666666666667,
+       "pull": 1.6666666666666667,
+       "setting": 2.6666666666666665,
        "scale": 1.6666666666666667,
        "fair": 1
       },
@@ -3945,11 +3945,11 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.3333333333333333,
-       "setting": 1.6666666666666667,
+       "pull": 1.6666666666666667,
+       "setting": 2.6666666666666665,
        "scale": 1.6666666666666667,
        "fair": 1
       },
@@ -3966,13 +3966,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 3.3333333333333335,
-       "caused": 4,
+       "lives": 3.6666666666666665,
+       "caused": 4.333333333333333,
        "legible": 5.666666666666667,
        "pull": 3,
-       "setting": 4.666666666666667,
-       "scale": 4.666666666666667,
-       "fair": 3.6666666666666665
+       "setting": 5,
+       "scale": 4.333333333333333,
+       "fair": 3.3333333333333335
       },
       "seen": {
        "new": 0,
@@ -3983,13 +3983,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 3.3333333333333335,
-       "caused": 4,
+       "lives": 3.6666666666666665,
+       "caused": 4.333333333333333,
        "legible": 5.666666666666667,
        "pull": 3,
-       "setting": 4.666666666666667,
-       "scale": 4.666666666666667,
-       "fair": 3.6666666666666665
+       "setting": 5,
+       "scale": 4.333333333333333,
+       "fair": 3.3333333333333335
       },
       "seen": {
        "new": 0,
@@ -4004,35 +4004,35 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 1.6666666666666667,
-       "legible": 2.3333333333333335,
-       "pull": 2,
-       "setting": 1,
-       "scale": 2,
-       "fair": 1.6666666666666667
+       "legible": 1.6666666666666667,
+       "pull": 1.6666666666666667,
+       "setting": 2,
+       "scale": 2.3333333333333335,
+       "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 0,
-       "same": 3
+       "reminds": 1,
+       "same": 2
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.6666666666666667,
+       "lives": 2,
        "caused": 1.6666666666666667,
-       "legible": 2.3333333333333335,
-       "pull": 2,
-       "setting": 1,
-       "scale": 2,
-       "fair": 1.6666666666666667
+       "legible": 1.6666666666666667,
+       "pull": 1.6666666666666667,
+       "setting": 2,
+       "scale": 2.3333333333333335,
+       "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 0,
-       "same": 3
+       "reminds": 1,
+       "same": 2
       }
      }
     },
@@ -4042,11 +4042,11 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 2.3333333333333335,
+       "lives": 2.6666666666666665,
        "caused": 3,
        "legible": 3,
        "pull": 2.3333333333333335,
-       "setting": 2.3333333333333335,
+       "setting": 2.6666666666666665,
        "scale": 2.3333333333333335,
        "fair": 1.6666666666666667
       },
@@ -4059,11 +4059,11 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 2.3333333333333335,
+       "lives": 2.6666666666666665,
        "caused": 3,
        "legible": 3,
        "pull": 2.3333333333333335,
-       "setting": 2.3333333333333335,
+       "setting": 2.6666666666666665,
        "scale": 2.3333333333333335,
        "fair": 1.6666666666666667
       },
@@ -4084,7 +4084,7 @@
        "caused": 2.3333333333333335,
        "legible": 2,
        "pull": 2,
-       "setting": 2.3333333333333335,
+       "setting": 3,
        "scale": 2.3333333333333335,
        "fair": 1.3333333333333333
       },
@@ -4101,7 +4101,7 @@
        "caused": 2.3333333333333335,
        "legible": 2,
        "pull": 2,
-       "setting": 2.3333333333333335,
+       "setting": 3,
        "scale": 2.3333333333333335,
        "fair": 1.3333333333333333
       },
@@ -4118,13 +4118,13 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 3.3333333333333335,
-       "caused": 4,
-       "legible": 5.666666666666667,
+       "lives": 3.6666666666666665,
+       "caused": 4.333333333333333,
+       "legible": 6,
        "pull": 3,
-       "setting": 4,
-       "scale": 4.666666666666667,
-       "fair": 3.6666666666666665
+       "setting": 5,
+       "scale": 4.333333333333333,
+       "fair": 3.3333333333333335
       },
       "seen": {
        "new": 1,
@@ -4135,13 +4135,13 @@
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 3.3333333333333335,
-       "caused": 4,
-       "legible": 5.666666666666667,
+       "lives": 3.6666666666666665,
+       "caused": 4.333333333333333,
+       "legible": 6,
        "pull": 3,
-       "setting": 4,
-       "scale": 4.666666666666667,
-       "fair": 3.6666666666666665
+       "setting": 5,
+       "scale": 4.333333333333333,
+       "fair": 3.3333333333333335
       },
       "seen": {
        "new": 1,
@@ -4158,16 +4158,16 @@
       "mean": {
        "lives": 1.6666666666666667,
        "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
-       "pull": 1.6666666666666667,
-       "setting": 1,
-       "scale": 1.6666666666666667,
-       "fair": 1.3333333333333333
+       "legible": 1.3333333333333333,
+       "pull": 1.3333333333333333,
+       "setting": 2,
+       "scale": 2,
+       "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 0,
-       "same": 3
+       "reminds": 1,
+       "same": 2
       }
      },
      "unweighted": {
@@ -4175,16 +4175,16 @@
       "mean": {
        "lives": 1.6666666666666667,
        "caused": 1.6666666666666667,
-       "legible": 1.6666666666666667,
-       "pull": 1.6666666666666667,
-       "setting": 1,
-       "scale": 1.6666666666666667,
-       "fair": 1.3333333333333333
+       "legible": 1.3333333333333333,
+       "pull": 1.3333333333333333,
+       "setting": 2,
+       "scale": 2,
+       "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 0,
-       "same": 3
+       "reminds": 1,
+       "same": 2
       }
      }
     },
@@ -4194,35 +4194,35 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 2.3333333333333335,
-       "caused": 1.6666666666666667,
-       "legible": 2,
-       "pull": 1.6666666666666667,
-       "setting": 2,
+       "lives": 2,
+       "caused": 1.3333333333333333,
+       "legible": 1,
+       "pull": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.6666666666666667,
        "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 2,
-       "same": 1
+       "reminds": 1,
+       "same": 2
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 2.3333333333333335,
-       "caused": 1.6666666666666667,
-       "legible": 2,
-       "pull": 1.6666666666666667,
-       "setting": 2,
+       "lives": 2,
+       "caused": 1.3333333333333333,
+       "legible": 1,
+       "pull": 1.3333333333333333,
+       "setting": 2.3333333333333335,
        "scale": 1.6666666666666667,
        "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 2,
-       "same": 1
+       "reminds": 1,
+       "same": 2
       }
      }
     },
@@ -4233,34 +4233,34 @@
       "n": 3,
       "mean": {
        "lives": 2,
-       "caused": 2,
+       "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.3333333333333333,
-       "setting": 1.6666666666666667,
-       "scale": 2,
+       "pull": 1.6666666666666667,
+       "setting": 2.6666666666666665,
+       "scale": 1.6666666666666667,
        "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 1,
-       "same": 2
+       "reminds": 0,
+       "same": 3
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
        "lives": 2,
-       "caused": 2,
+       "caused": 1.6666666666666667,
        "legible": 1,
-       "pull": 1.3333333333333333,
-       "setting": 1.6666666666666667,
-       "scale": 2,
+       "pull": 1.6666666666666667,
+       "setting": 2.6666666666666665,
+       "scale": 1.6666666666666667,
        "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 1,
-       "same": 2
+       "reminds": 0,
+       "same": 3
       }
      }
     },
@@ -4272,11 +4272,11 @@
       "mean": {
        "lives": 3.3333333333333335,
        "caused": 4,
-       "legible": 4.666666666666667,
+       "legible": 5.333333333333333,
        "pull": 3.3333333333333335,
-       "setting": 4.333333333333333,
-       "scale": 4.666666666666667,
-       "fair": 3.6666666666666665
+       "setting": 5,
+       "scale": 4.333333333333333,
+       "fair": 3.3333333333333335
       },
       "seen": {
        "new": 1,
@@ -4289,11 +4289,11 @@
       "mean": {
        "lives": 3.3333333333333335,
        "caused": 4,
-       "legible": 4.666666666666667,
+       "legible": 5.333333333333333,
        "pull": 3.3333333333333335,
-       "setting": 4.333333333333333,
-       "scale": 4.666666666666667,
-       "fair": 3.6666666666666665
+       "setting": 5,
+       "scale": 4.333333333333333,
+       "fair": 3.3333333333333335
       },
       "seen": {
        "new": 1,
@@ -4308,35 +4308,35 @@
      "weighted": {
       "n": 3,
       "mean": {
-       "lives": 1.3333333333333333,
+       "lives": 1.6666666666666667,
        "caused": 1.6666666666666667,
-       "legible": 2.3333333333333335,
-       "pull": 2,
-       "setting": 1,
-       "scale": 2,
-       "fair": 1.3333333333333333
+       "legible": 1.3333333333333333,
+       "pull": 1.6666666666666667,
+       "setting": 2,
+       "scale": 2.3333333333333335,
+       "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 2,
-       "same": 1
+       "reminds": 0,
+       "same": 3
       }
      },
      "unweighted": {
       "n": 3,
       "mean": {
-       "lives": 1.3333333333333333,
+       "lives": 1.6666666666666667,
        "caused": 1.6666666666666667,
-       "legible": 2.3333333333333335,
-       "pull": 2,
-       "setting": 1,
-       "scale": 2,
-       "fair": 1.3333333333333333
+       "legible": 1.3333333333333333,
+       "pull": 1.6666666666666667,
+       "setting": 2,
+       "scale": 2.3333333333333335,
+       "fair": 1
       },
       "seen": {
        "new": 0,
-       "reminds": 2,
-       "same": 1
+       "reminds": 0,
+       "same": 3
       }
      }
     }
@@ -4368,8 +4368,9 @@
     },
     {
      "id": "H-002",
-     "seen": "new",
-     "distanceToReference": null,
+     "seen": "reminds",
+     "reference": "H-096",
+     "distanceToReference": 0.5,
      "predictedRecast": true
     },
     {
@@ -4387,15 +4388,17 @@
     },
     {
      "id": "H-047",
-     "seen": "new",
-     "distanceToReference": null,
+     "seen": "reminds",
+     "reference": "H-055",
+     "distanceToReference": 0.5,
      "predictedRecast": false
     },
     {
      "id": "H-074",
-     "seen": "new",
-     "distanceToReference": null,
-     "predictedRecast": false
+     "seen": "same",
+     "reference": "H-002",
+     "distanceToReference": 0,
+     "predictedRecast": true
     },
     {
      "id": "H-030",
@@ -4413,16 +4416,16 @@
     },
     {
      "id": "H-003",
-     "seen": "new",
-     "distanceToReference": null,
+     "seen": "reminds",
+     "reference": "H-047",
+     "distanceToReference": 0,
      "predictedRecast": true
     },
     {
      "id": "H-078",
-     "seen": "reminds",
-     "reference": "H-002",
-     "distanceToReference": 0,
-     "predictedRecast": true
+     "seen": "new",
+     "distanceToReference": null,
+     "predictedRecast": false
     },
     {
      "id": "H-041",
@@ -4487,7 +4490,7 @@
     {
      "id": "H-020",
      "seen": "same",
-     "reference": "H-074",
+     "reference": "H-078",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -4501,7 +4504,7 @@
     {
      "id": "H-021",
      "seen": "same",
-     "reference": "H-003",
+     "reference": "H-047",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -4567,6 +4570,13 @@
      "predictedRecast": true
     },
     {
+     "id": "H-059",
+     "seen": "same",
+     "reference": "H-047",
+     "distanceToReference": 0,
+     "predictedRecast": true
+    },
+    {
      "id": "H-042",
      "seen": "same",
      "reference": "H-047",
@@ -4588,6 +4598,13 @@
      "predictedRecast": true
     },
     {
+     "id": "H-077",
+     "seen": "same",
+     "reference": "H-003",
+     "distanceToReference": 0,
+     "predictedRecast": true
+    },
+    {
      "id": "H-039",
      "seen": "new",
      "distanceToReference": null,
@@ -4596,7 +4613,7 @@
     {
      "id": "H-024",
      "seen": "same",
-     "reference": "H-074",
+     "reference": "H-020",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -4631,7 +4648,7 @@
     {
      "id": "H-081",
      "seen": "same",
-     "reference": "H-078",
+     "reference": "H-020",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -4671,9 +4688,9 @@
     },
     {
      "id": "H-034",
-     "seen": "reminds",
-     "reference": "H-057",
-     "distanceToReference": 0.75,
+     "seen": "same",
+     "reference": "H-096",
+     "distanceToReference": 1,
      "predictedRecast": false
     },
     {
@@ -4727,8 +4744,8 @@
     {
      "id": "H-084",
      "seen": "reminds",
-     "reference": "H-055",
-     "distanceToReference": 0.75,
+     "reference": "H-065",
+     "distanceToReference": 0.375,
      "predictedRecast": false
     },
     {
@@ -4739,9 +4756,16 @@
      "predictedRecast": true
     },
     {
+     "id": "H-092",
+     "seen": "reminds",
+     "reference": "H-022",
+     "distanceToReference": 0.125,
+     "predictedRecast": true
+    },
+    {
      "id": "H-018",
      "seen": "same",
-     "reference": "H-074",
+     "reference": "H-020",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -4755,14 +4779,14 @@
     {
      "id": "H-010",
      "seen": "same",
-     "reference": "H-088",
+     "reference": "H-047",
      "distanceToReference": 0,
      "predictedRecast": true
     },
     {
      "id": "H-071",
      "seen": "same",
-     "reference": "H-074",
+     "reference": "H-057",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -4776,7 +4800,7 @@
     {
      "id": "H-093",
      "seen": "same",
-     "reference": "H-047",
+     "reference": "H-003",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -4795,6 +4819,13 @@
      "predictedRecast": true
     },
     {
+     "id": "H-087",
+     "seen": "same",
+     "reference": "H-035",
+     "distanceToReference": 0,
+     "predictedRecast": true
+    },
+    {
      "id": "H-045",
      "seen": "same",
      "reference": "H-007",
@@ -4804,7 +4835,7 @@
     {
      "id": "H-067",
      "seen": "reminds",
-     "reference": "H-019",
+     "reference": "H-077",
      "distanceToReference": 0.5,
      "predictedRecast": false
     },
@@ -4818,7 +4849,7 @@
     {
      "id": "H-037",
      "seen": "same",
-     "reference": "H-074",
+     "reference": "H-020",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -4831,9 +4862,9 @@
     },
     {
      "id": "H-086",
-     "seen": "same",
-     "reference": "H-078",
-     "distanceToReference": 0,
+     "seen": "reminds",
+     "reference": "H-057",
+     "distanceToReference": 0.5,
      "predictedRecast": true
     },
     {
@@ -4883,12 +4914,13 @@
     },
     {
      "id": "H-069",
-     "seen": "new",
-     "distanceToReference": null,
+     "seen": "reminds",
+     "reference": "H-042",
+     "distanceToReference": 0,
      "predictedRecast": true
     },
     {
-     "id": "H-021",
+     "id": "H-077",
      "seen": "reminds",
      "reference": "H-042",
      "distanceToReference": 0,
@@ -4898,7 +4930,7 @@
      "id": "H-081",
      "seen": "new",
      "distanceToReference": null,
-     "predictedRecast": false
+     "predictedRecast": true
     },
     {
      "id": "H-015",
@@ -4908,27 +4940,26 @@
     },
     {
      "id": "H-040",
-     "seen": "reminds",
-     "reference": "H-069",
-     "distanceToReference": 0.5,
+     "seen": "new",
+     "distanceToReference": null,
      "predictedRecast": true
     },
     {
      "id": "H-003",
      "seen": "same",
-     "reference": "H-021",
+     "reference": "H-077",
      "distanceToReference": 0,
      "predictedRecast": true
     },
     {
      "id": "H-063",
-     "seen": "same",
+     "seen": "reminds",
      "reference": "H-081",
-     "distanceToReference": 0,
-     "predictedRecast": true
+     "distanceToReference": 0.8333333333333334,
+     "predictedRecast": false
     },
     {
-     "id": "H-047",
+     "id": "H-059",
      "seen": "same",
      "reference": "H-069",
      "distanceToReference": 0,
@@ -4950,9 +4981,9 @@
     },
     {
      "id": "H-034",
-     "seen": "reminds",
+     "seen": "same",
      "reference": "H-081",
-     "distanceToReference": 0.8333333333333334,
+     "distanceToReference": 0,
      "predictedRecast": true
     },
     {
@@ -4978,8 +5009,8 @@
     {
      "id": "H-070",
      "seen": "reminds",
-     "reference": "H-081",
-     "distanceToReference": 1,
+     "reference": "H-022",
+     "distanceToReference": 0.8,
      "predictedRecast": false
     },
     {
@@ -5004,8 +5035,9 @@
     },
     {
      "id": "H-046",
-     "seen": "new",
-     "distanceToReference": null,
+     "seen": "reminds",
+     "reference": "H-026",
+     "distanceToReference": 0.8,
      "predictedRecast": false
     },
     {
@@ -5024,17 +5056,17 @@
     },
     {
      "id": "H-018",
-     "seen": "reminds",
-     "reference": "H-063",
-     "distanceToReference": 0.8333333333333334,
+     "seen": "same",
+     "reference": "H-081",
+     "distanceToReference": 0,
      "predictedRecast": true
     },
     {
      "id": "H-071",
-     "seen": "reminds",
+     "seen": "same",
      "reference": "H-063",
-     "distanceToReference": 0.5,
-     "predictedRecast": false
+     "distanceToReference": 0,
+     "predictedRecast": true
     },
     {
      "id": "H-004",
@@ -5045,7 +5077,7 @@
     {
      "id": "H-033",
      "seen": "same",
-     "reference": "H-081",
+     "reference": "H-063",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -5076,9 +5108,16 @@
      "predictedRecast": true
     },
     {
+     "id": "H-092",
+     "seen": "same",
+     "reference": "H-022",
+     "distanceToReference": 0.125,
+     "predictedRecast": true
+    },
+    {
      "id": "H-093",
      "seen": "same",
-     "reference": "H-069",
+     "reference": "H-077",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -5092,7 +5131,7 @@
     {
      "id": "H-010",
      "seen": "same",
-     "reference": "H-021",
+     "reference": "H-042",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -5104,7 +5143,7 @@
      "predictedRecast": true
     },
     {
-     "id": "H-035",
+     "id": "H-087",
      "seen": "same",
      "reference": "H-069",
      "distanceToReference": 0,
@@ -5120,7 +5159,7 @@
     {
      "id": "H-032",
      "seen": "same",
-     "reference": "H-021",
+     "reference": "H-077",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -5134,7 +5173,7 @@
     {
      "id": "H-057",
      "seen": "same",
-     "reference": "H-081",
+     "reference": "H-063",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -5157,6 +5196,13 @@
      "seen": "reminds",
      "reference": "H-022",
      "distanceToReference": 0.5,
+     "predictedRecast": false
+    },
+    {
+     "id": "H-035",
+     "seen": "same",
+     "reference": "H-087",
+     "distanceToReference": 0,
      "predictedRecast": true
     },
     {
@@ -5168,28 +5214,28 @@
     },
     {
      "id": "H-013",
-     "seen": "same",
-     "reference": "H-006",
-     "distanceToReference": 0.5,
+     "seen": "reminds",
+     "reference": "H-070",
+     "distanceToReference": 0.6,
      "predictedRecast": false
     },
     {
      "id": "H-007",
      "seen": "same",
-     "reference": "H-014",
-     "distanceToReference": 0,
+     "reference": "H-052",
+     "distanceToReference": 0.8333333333333334,
      "predictedRecast": true
     },
     {
      "id": "H-020",
      "seen": "same",
-     "reference": "H-018",
+     "reference": "H-081",
      "distanceToReference": 0,
      "predictedRecast": true
     },
     {
      "id": "H-084",
-     "seen": "reminds",
+     "seen": "same",
      "reference": "H-065",
      "distanceToReference": 0.375,
      "predictedRecast": false
@@ -5197,8 +5243,8 @@
     {
      "id": "H-096",
      "seen": "reminds",
-     "reference": "H-034",
-     "distanceToReference": 0.5,
+     "reference": "H-070",
+     "distanceToReference": 0.9,
      "predictedRecast": false
     },
     {
@@ -5211,15 +5257,15 @@
     {
      "id": "H-037",
      "seen": "same",
-     "reference": "H-018",
+     "reference": "H-081",
      "distanceToReference": 0,
      "predictedRecast": true
     },
     {
      "id": "H-079",
      "seen": "reminds",
-     "reference": "H-014",
-     "distanceToReference": 0.6666666666666666,
+     "reference": "H-052",
+     "distanceToReference": 0.8333333333333334,
      "predictedRecast": true
     },
     {
@@ -5232,7 +5278,14 @@
     {
      "id": "H-086",
      "seen": "same",
-     "reference": "H-081",
+     "reference": "H-063",
+     "distanceToReference": 0,
+     "predictedRecast": true
+    },
+    {
+     "id": "H-047",
+     "seen": "same",
+     "reference": "H-059",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -5253,7 +5306,7 @@
     {
      "id": "H-088",
      "seen": "same",
-     "reference": "H-021",
+     "reference": "H-077",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -5274,8 +5327,8 @@
     {
      "id": "H-067",
      "seen": "reminds",
-     "reference": "H-096",
-     "distanceToReference": 0.625,
+     "reference": "H-022",
+     "distanceToReference": 0.5,
      "predictedRecast": false
     },
     {
@@ -5286,9 +5339,9 @@
     },
     {
      "id": "H-024",
-     "seen": "same",
-     "reference": "H-071",
-     "distanceToReference": 0,
+     "seen": "reminds",
+     "reference": "H-063",
+     "distanceToReference": 0.5,
      "predictedRecast": true
     },
     {
@@ -5320,6 +5373,13 @@
      "predictedRecast": true
     },
     {
+     "id": "H-021",
+     "seen": "same",
+     "reference": "H-069",
+     "distanceToReference": 0,
+     "predictedRecast": true
+    },
+    {
      "id": "H-019",
      "seen": "reminds",
      "reference": "H-060",
@@ -5329,7 +5389,7 @@
     {
      "id": "H-002",
      "seen": "same",
-     "reference": "H-081",
+     "reference": "H-063",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -5350,7 +5410,7 @@
     {
      "id": "H-074",
      "seen": "same",
-     "reference": "H-018",
+     "reference": "H-063",
      "distanceToReference": 0,
      "predictedRecast": true
     },
@@ -5370,8 +5430,8 @@
     },
     {
      "id": "H-078",
-     "seen": "same",
-     "reference": "H-063",
+     "seen": "reminds",
+     "reference": "H-081",
      "distanceToReference": 0,
      "predictedRecast": true
     }

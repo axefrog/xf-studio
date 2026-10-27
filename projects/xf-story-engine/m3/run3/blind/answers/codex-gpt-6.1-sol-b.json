@@ -7,69 +7,24 @@
    "caused": 1,
    "legible": 1,
    "pull": 1,
-   "setting": 1,
+   "setting": 2,
    "scale": 1,
    "fair": 1,
    "seen": "new",
-   "cue": "An unspecified duty, without an event or decision."
+   "cue": "A duty is asserted without its nature or consequences."
   },
   "H-052": {
-   "lives": 3,
-   "caused": 4,
+   "lives": 4,
+   "caused": 5,
    "legible": 6,
-   "pull": 3,
-   "setting": 4,
-   "scale": 2,
+   "pull": 4,
+   "setting": 5,
+   "scale": 3,
    "fair": 2,
    "seen": "new",
-   "cue": "An unpaid debt becomes a clearly located collection job."
+   "cue": "Debt, avoidance, location and payment establish a clear collection job."
   },
   "H-042": {
-   "lives": 2,
-   "caused": 2,
-   "legible": 1,
-   "pull": 2,
-   "setting": 2,
-   "scale": 2,
-   "fair": 1,
-   "seen": "new",
-   "cue": "An assault is recorded without motive or response."
-  },
-  "H-069": {
-   "lives": 2,
-   "caused": 2,
-   "legible": 1,
-   "pull": 1,
-   "setting": 2,
-   "scale": 2,
-   "fair": 1,
-   "seen": "new",
-   "cue": "A theft is recorded without an object or aftermath."
-  },
-  "H-021": {
-   "lives": 1,
-   "caused": 1,
-   "legible": 1,
-   "pull": 1,
-   "setting": 1,
-   "scale": 1,
-   "fair": 1,
-   "seen": "reminds",
-   "reference": "H-042",
-   "cue": "Another adverse act, with even its nature omitted."
-  },
-  "H-081": {
-   "lives": 2,
-   "caused": 2,
-   "legible": 1,
-   "pull": 2,
-   "setting": 1,
-   "scale": 2,
-   "fair": 1,
-   "seen": "new",
-   "cue": "Accepted help becomes wrongdoing, discovery, and a demand."
-  },
-  "H-015": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
@@ -78,91 +33,136 @@
    "scale": 2,
    "fair": 1,
    "seen": "new",
-   "cue": "A shakedown occurs, but its demand remains unspecified."
+   "cue": "An assault is recorded, but its reason and any response are absent."
   },
-  "H-040": {
-   "lives": 3,
-   "caused": 4,
-   "legible": 4,
-   "pull": 3,
-   "setting": 5,
-   "scale": 3,
-   "fair": 2,
+  "H-069": {
+   "lives": 2,
+   "caused": 2,
+   "legible": 1,
+   "pull": 2,
+   "setting": 3,
+   "scale": 2,
+   "fair": 1,
    "seen": "reminds",
-   "reference": "H-069",
-   "cue": "A theft now supplies a recovery job and payment."
+   "reference": "H-042",
+   "cue": "Another isolated wrong, this time theft."
   },
-  "H-003": {
-   "lives": 1,
+  "H-077": {
+   "lives": 2,
    "caused": 1,
    "legible": 1,
    "pull": 1,
-   "setting": 1,
+   "setting": 2,
+   "scale": 1,
+   "fair": 1,
+   "seen": "reminds",
+   "reference": "H-042",
+   "cue": "A wrong is asserted with even its nature omitted."
+  },
+  "H-081": {
+   "lives": 1,
+   "caused": 1,
+   "legible": 2,
+   "pull": 1,
+   "setting": 2,
+   "scale": 1,
+   "fair": 1,
+   "seen": "new",
+   "cue": "Explicit response buttons accompany an unexplained request to act against the asker."
+  },
+  "H-015": {
+   "lives": 2,
+   "caused": 2,
+   "legible": 1,
+   "pull": 2,
+   "setting": 4,
+   "scale": 2,
+   "fair": 1,
+   "seen": "new",
+   "cue": "A shakedown supplies a recognizable conflict but omits the demand."
+  },
+  "H-040": {
+   "lives": 3,
+   "caused": 5,
+   "legible": 5,
+   "pull": 4,
+   "setting": 5,
+   "scale": 3,
+   "fair": 2,
+   "seen": "new",
+   "cue": "A stolen shard motivates a paid recovery request."
+  },
+  "H-003": {
+   "lives": 2,
+   "caused": 1,
+   "legible": 1,
+   "pull": 1,
+   "setting": 2,
    "scale": 1,
    "fair": 1,
    "seen": "same",
-   "reference": "H-021",
+   "reference": "H-077",
    "cue": "Another isolated, unspecified act against someone."
   },
   "H-063": {
    "lives": 2,
    "caused": 2,
-   "legible": 3,
+   "legible": 2,
    "pull": 2,
-   "setting": 1,
-   "scale": 2,
-   "fair": 2,
-   "seen": "same",
+   "setting": 2,
+   "scale": 3,
+   "fair": 1,
+   "seen": "reminds",
    "reference": "H-081",
-   "cue": "The same help, wrongdoing, discovery, and demand sequence."
+   "cue": "The self-directed request develops into discovery and a demand, without explaining either."
   },
-  "H-047": {
+  "H-059": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
-   "pull": 1,
-   "setting": 2,
+   "pull": 2,
+   "setting": 3,
    "scale": 2,
    "fair": 1,
    "seen": "same",
    "reference": "H-069",
-   "cue": "Another theft report without motive, object, or aftermath."
+   "cue": "Another completed theft with no motive or follow-up."
   },
   "H-030": {
-   "lives": 3,
-   "caused": 4,
+   "lives": 4,
+   "caused": 5,
    "legible": 6,
-   "pull": 3,
-   "setting": 4,
-   "scale": 2,
+   "pull": 4,
+   "setting": 5,
+   "scale": 3,
    "fair": 2,
    "seen": "same",
    "reference": "H-052",
-   "cue": "The identical collection job appears on another day."
+   "cue": "The identical Mila debt-collection offer appears later in the week."
   },
   "H-031": {
    "lives": 2,
    "caused": 1,
    "legible": 1,
    "pull": 2,
-   "setting": 2,
+   "setting": 3,
    "scale": 1,
    "fair": 1,
    "seen": "reminds",
    "reference": "H-015",
-   "cue": "An unspecified demand, without the shakedown details."
+   "cue": "Another demand, with its content and effects unspecified."
   },
   "H-034": {
    "lives": 1,
    "caused": 1,
-   "legible": 1,
+   "legible": 2,
    "pull": 1,
-   "setting": 1,
-   "scale": 2,
-   "fair": 2,
-   "seen": "reminds",
+   "setting": 2,
+   "scale": 1,
+   "fair": 1,
+   "seen": "same",
    "reference": "H-081",
-   "cue": "Only the opening appeal for help is supplied."
+   "cue": "The same unexplained request to act against the asker."
   },
   "H-055": {
    "lives": 3,
@@ -174,42 +174,42 @@
    "fair": 2,
    "seen": "reminds",
    "reference": "H-042",
-   "cue": "An assault now prompts a linked request for intervention."
+   "cue": "An assault now explicitly causes a third party's request for help."
   },
   "H-085": {
    "lives": 3,
-   "caused": 3,
+   "caused": 4,
    "legible": 5,
    "pull": 3,
    "setting": 5,
    "scale": 4,
    "fair": 3,
    "seen": "new",
-   "cue": "A paid request to remove a neighbourhood gang member."
+   "cue": "A paid request to remove a gang member jumps directly to completion."
   },
   "H-022": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
    "pull": 2,
-   "setting": 1,
+   "setting": 3,
    "scale": 2,
    "fair": 1,
    "seen": "reminds",
    "reference": "H-055",
-   "cue": "A wrong precedes an accepted appeal, with details removed."
+   "cue": "A victim asks for help after a wrong, but the help is unspecified."
   },
   "H-070": {
    "lives": 2,
    "caused": 2,
-   "legible": 3,
+   "legible": 1,
    "pull": 2,
-   "setting": 2,
+   "setting": 3,
    "scale": 3,
-   "fair": 3,
+   "fair": 2,
    "seen": "reminds",
-   "reference": "H-081",
-   "cue": "A wrongdoer requests action against herself; you refuse."
+   "reference": "H-022",
+   "cue": "Here the threatening wrongdoer asks for help and receives a refusal."
   },
   "H-023": {
    "lives": 3,
@@ -221,57 +221,58 @@
    "fair": 2,
    "seen": "same",
    "reference": "H-055",
-   "cue": "Assault prompts another person's accepted request for intervention."
+   "cue": "The same assault-triggered third-party help offer and acceptance."
   },
   "H-039": {
    "lives": 4,
    "caused": 5,
    "legible": 6,
    "pull": 3,
-   "setting": 4,
-   "scale": 6,
-   "fair": 5,
+   "setting": 5,
+   "scale": 5,
+   "fair": 4,
    "seen": "new",
-   "cue": "A trader needs a terminal repaired before customers arrive."
+   "cue": "A stall's broken terminal and evening trade give a small repair job purpose."
   },
   "H-005": {
    "lives": 3,
    "caused": 4,
-   "legible": 4,
+   "legible": 5,
    "pull": 3,
    "setting": 4,
-   "scale": 5,
-   "fair": 4,
+   "scale": 4,
+   "fair": 3,
    "seen": "same",
    "reference": "H-040",
-   "cue": "The stolen-item recovery job, now completed for a jacket."
+   "cue": "The stolen-property recovery job uses a jacket and asserts completion."
   },
   "H-046": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
    "pull": 2,
-   "setting": 1,
-   "scale": 2,
+   "setting": 2,
+   "scale": 3,
    "fair": 1,
-   "seen": "new",
-   "cue": "Duty, another person's request, wrongdoing, and discovery."
+   "seen": "reminds",
+   "reference": "H-026",
+   "cue": "A duty develops into a wrong and discovery, but the connecting reasons remain absent."
   },
   "H-073": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
-   "pull": 1,
-   "setting": 2,
+   "pull": 2,
+   "setting": 3,
    "scale": 2,
    "fair": 1,
    "seen": "same",
    "reference": "H-069",
-   "cue": "Another isolated theft with no object or consequences shown."
+   "cue": "Another isolated completed theft."
   },
   "H-016": {
    "lives": 3,
-   "caused": 3,
+   "caused": 4,
    "legible": 5,
    "pull": 3,
    "setting": 5,
@@ -279,54 +280,54 @@
    "fair": 3,
    "seen": "same",
    "reference": "H-085",
-   "cue": "The same completed gang-member removal contract."
+   "cue": "The same gang-removal contract with different people."
   },
   "H-018": {
    "lives": 1,
    "caused": 1,
-   "legible": 3,
-   "pull": 2,
-   "setting": 1,
-   "scale": 2,
-   "fair": 2,
-   "seen": "reminds",
-   "reference": "H-063",
-   "cue": "The unexplained request for action against the asker alone."
+   "legible": 2,
+   "pull": 1,
+   "setting": 2,
+   "scale": 1,
+   "fair": 1,
+   "seen": "same",
+   "reference": "H-081",
+   "cue": "Another unexplained self-directed help request."
   },
   "H-071": {
-   "lives": 1,
+   "lives": 2,
    "caused": 2,
-   "legible": 3,
+   "legible": 1,
    "pull": 2,
-   "setting": 1,
-   "scale": 2,
+   "setting": 2,
+   "scale": 3,
    "fair": 1,
-   "seen": "reminds",
+   "seen": "same",
    "reference": "H-063",
-   "cue": "Accepted self-directed wrongdoing stops before discovery or reckoning."
+   "cue": "Agreement, a wrong against the asker, discovery and a demand recur."
   },
   "H-004": {
    "lives": 3,
    "caused": 4,
    "legible": 6,
    "pull": 3,
-   "setting": 4,
+   "setting": 5,
    "scale": 5,
    "fair": 4,
    "seen": "new",
-   "cue": "A sealed-case delivery with a destination, deadline, and fee."
+   "cue": "A sealed-case delivery has a recipient, deadline and fee."
   },
   "H-033": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
    "pull": 2,
-   "setting": 1,
-   "scale": 2,
+   "setting": 2,
+   "scale": 3,
    "fair": 1,
    "seen": "same",
-   "reference": "H-081",
-   "cue": "The same accepted appeal, wrongdoing, discovery, and demand."
+   "reference": "H-063",
+   "cue": "The same opaque agreement-to-wrong-to-demand sequence."
   },
   "H-048": {
    "lives": 4,
@@ -334,361 +335,397 @@
    "legible": 6,
    "pull": 3,
    "setting": 5,
-   "scale": 6,
-   "fair": 5,
+   "scale": 5,
+   "fair": 4,
    "seen": "new",
-   "cue": "Fear of crossing Kabuki creates a small escort job."
+   "cue": "Fear of crossing Kabuki after dark motivates a modest escort job."
   },
   "H-060": {
    "lives": 3,
    "caused": 3,
-   "legible": 4,
+   "legible": 3,
    "pull": 3,
-   "setting": 3,
+   "setting": 4,
    "scale": 3,
    "fair": 2,
    "seen": "reminds",
    "reference": "H-015",
-   "cue": "A shakedown leads to help with repayment, still unexplained."
+   "cue": "A shakedown now leads to help with repayment, whose terms remain unclear."
   },
   "H-028": {
    "lives": 3,
-   "caused": 3,
-   "legible": 5,
+   "caused": 4,
+   "legible": 6,
    "pull": 3,
-   "setting": 4,
+   "setting": 5,
    "scale": 4,
    "fair": 3,
    "seen": "new",
-   "cue": "Follow a suspected meeting and report the other person."
+   "cue": "A surveillance job supplies a target and objective but withholds the discovered contact."
   },
   "H-006": {
    "lives": 2,
    "caused": 2,
-   "legible": 3,
+   "legible": 2,
    "pull": 2,
-   "setting": 2,
+   "setting": 3,
    "scale": 2,
-   "fair": 2,
+   "fair": 1,
    "seen": "reminds",
    "reference": "H-070",
-   "cue": "Threat and wrongdoing precede the same appeal, left unanswered."
+   "cue": "Threat and wrongdoing again precede the wrongdoer's opaque request; this version stops there."
   },
-  "H-093": {
+  "H-092": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
-   "pull": 1,
-   "setting": 2,
+   "pull": 2,
+   "setting": 3,
    "scale": 2,
    "fair": 1,
    "seen": "same",
-   "reference": "H-069",
-   "cue": "Another bare theft report with no follow-through."
+   "reference": "H-022",
+   "cue": "The identical Holt request and acceptance after Watanabe's wrong."
+  },
+  "H-093": {
+   "lives": 2,
+   "caused": 1,
+   "legible": 1,
+   "pull": 1,
+   "setting": 2,
+   "scale": 1,
+   "fair": 1,
+   "seen": "same",
+   "reference": "H-077",
+   "cue": "Another unspecified act against someone, without development."
   },
   "H-082": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
    "pull": 2,
-   "setting": 1,
-   "scale": 2,
+   "setting": 2,
+   "scale": 3,
    "fair": 1,
    "seen": "same",
    "reference": "H-046",
-   "cue": "The same duty, third-party request, wrongdoing, and discovery."
+   "cue": "The same duty, outside request, wrong and discovery sequence."
   },
   "H-010": {
-   "lives": 1,
-   "caused": 1,
+   "lives": 2,
+   "caused": 2,
    "legible": 1,
-   "pull": 1,
-   "setting": 1,
-   "scale": 1,
+   "pull": 2,
+   "setting": 3,
+   "scale": 2,
    "fair": 1,
    "seen": "same",
-   "reference": "H-021",
-   "cue": "Another unspecified adverse act and nothing further."
+   "reference": "H-042",
+   "cue": "Another assault recorded without motive or aftermath."
   },
   "H-029": {
    "lives": 4,
    "caused": 5,
    "legible": 6,
    "pull": 3,
-   "setting": 4,
-   "scale": 6,
-   "fair": 5,
+   "setting": 5,
+   "scale": 5,
+   "fair": 4,
    "seen": "same",
    "reference": "H-039",
-   "cue": "The identical terminal repair and completion."
+   "cue": "The identical stall-terminal repair job."
   },
-  "H-035": {
+  "H-087": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
-   "pull": 1,
-   "setting": 2,
+   "pull": 2,
+   "setting": 3,
    "scale": 2,
    "fair": 1,
    "seen": "same",
    "reference": "H-069",
-   "cue": "Another theft without its object, motive, or aftermath."
+   "cue": "Another isolated theft with no reason or response."
   },
   "H-014": {
-   "lives": 3,
+   "lives": 4,
    "caused": 4,
    "legible": 6,
    "pull": 3,
-   "setting": 4,
+   "setting": 5,
    "scale": 4,
    "fair": 3,
    "seen": "same",
    "reference": "H-052",
-   "cue": "The collection contract now receives a summary completion."
+   "cue": "The same avoided-debt collection job, now completed with different people."
   },
   "H-032": {
-   "lives": 1,
+   "lives": 2,
    "caused": 1,
    "legible": 1,
    "pull": 1,
-   "setting": 1,
+   "setting": 2,
    "scale": 1,
    "fair": 1,
    "seen": "same",
-   "reference": "H-021",
-   "cue": "Another isolated, unspecified wrong."
+   "reference": "H-077",
+   "cue": "Another bare assertion of wrongdoing."
   },
   "H-083": {
    "lives": 2,
    "caused": 1,
    "legible": 1,
    "pull": 1,
-   "setting": 1,
+   "setting": 2,
    "scale": 1,
    "fair": 1,
    "seen": "same",
    "reference": "H-026",
-   "cue": "Another unspecified duty with no development."
+   "cue": "Another duty asserted without content or consequences."
   },
   "H-057": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
    "pull": 2,
-   "setting": 1,
-   "scale": 2,
+   "setting": 2,
+   "scale": 3,
    "fair": 1,
    "seen": "same",
-   "reference": "H-081",
-   "cue": "Accepted help again becomes wrongdoing and an informed demand."
+   "reference": "H-063",
+   "cue": "The same agreement, wrong, discovery and demand progression."
   },
   "H-009": {
    "lives": 2,
    "caused": 1,
    "legible": 1,
    "pull": 1,
-   "setting": 1,
+   "setting": 2,
    "scale": 1,
    "fair": 1,
    "seen": "reminds",
    "reference": "H-060",
-   "cue": "The same demand precedes a different, unconnected person's appeal."
+   "cue": "The same initial demand is followed by a different person's unconnected help request."
   },
   "H-044": {
    "lives": 3,
    "caused": 4,
    "legible": 6,
    "pull": 3,
-   "setting": 4,
+   "setting": 5,
    "scale": 5,
    "fair": 4,
    "seen": "same",
    "reference": "H-004",
-   "cue": "The same sealed-case delivery with different participants."
+   "cue": "The same sealed-case delivery with different sender and recipient."
   },
   "H-065": {
    "lives": 2,
    "caused": 1,
    "legible": 1,
    "pull": 1,
-   "setting": 1,
+   "setting": 2,
    "scale": 2,
    "fair": 1,
    "seen": "reminds",
    "reference": "H-022",
-   "cue": "An accepted appeal and reported wrong lack a connecting relationship."
+   "cue": "Help is accepted, but the accompanying wrong involves two other people."
+  },
+  "H-035": {
+   "lives": 2,
+   "caused": 2,
+   "legible": 1,
+   "pull": 2,
+   "setting": 3,
+   "scale": 2,
+   "fair": 1,
+   "seen": "same",
+   "reference": "H-087",
+   "cue": "The same Guerrero theft against Qureshi at a different time."
   },
   "H-064": {
    "lives": 3,
-   "caused": 3,
-   "legible": 5,
+   "caused": 4,
+   "legible": 6,
    "pull": 3,
-   "setting": 4,
+   "setting": 5,
    "scale": 4,
    "fair": 3,
    "seen": "same",
    "reference": "H-028",
-   "cue": "The same completed surveillance-and-report contract."
+   "cue": "The same follow-and-identify-contact job with different people."
   },
   "H-013": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
    "pull": 2,
-   "setting": 2,
-   "scale": 2,
-   "fair": 2,
-   "seen": "same",
-   "reference": "H-006",
-   "cue": "Threat, wrongdoing, then the aggressor's unexplained appeal."
-  },
-  "H-007": {
-   "lives": 3,
-   "caused": 4,
-   "legible": 6,
-   "pull": 3,
-   "setting": 4,
-   "scale": 4,
-   "fair": 3,
-   "seen": "same",
-   "reference": "H-014",
-   "cue": "The same completed collection contract with different debtors."
-  },
-  "H-020": {
-   "lives": 1,
-   "caused": 1,
-   "legible": 3,
-   "pull": 2,
-   "setting": 1,
-   "scale": 2,
-   "fair": 2,
-   "seen": "same",
-   "reference": "H-018",
-   "cue": "Another unexplained request for action against the asker."
-  },
-  "H-084": {
-   "lives": 3,
-   "caused": 2,
-   "legible": 4,
-   "pull": 3,
    "setting": 3,
    "scale": 2,
    "fair": 1,
    "seen": "reminds",
+   "reference": "H-070",
+   "cue": "The same threat and wrong precede a help request, without a response."
+  },
+  "H-007": {
+   "lives": 4,
+   "caused": 4,
+   "legible": 6,
+   "pull": 3,
+   "setting": 5,
+   "scale": 4,
+   "fair": 3,
+   "seen": "same",
+   "reference": "H-052",
+   "cue": "The identical Mila collection offer now jumps to completion."
+  },
+  "H-020": {
+   "lives": 1,
+   "caused": 1,
+   "legible": 2,
+   "pull": 1,
+   "setting": 2,
+   "scale": 1,
+   "fair": 1,
+   "seen": "same",
+   "reference": "H-081",
+   "cue": "Another unexplained request to act against the asker."
+  },
+  "H-084": {
+   "lives": 2,
+   "caused": 1,
+   "legible": 1,
+   "pull": 1,
+   "setting": 2,
+   "scale": 2,
+   "fair": 1,
+   "seen": "same",
    "reference": "H-065",
-   "cue": "Accepted help precedes reported harm; the causal bridge remains missing."
+   "cue": "Another accepted help request beside an apparently unconnected wrong."
   },
   "H-096": {
    "lives": 1,
    "caused": 1,
    "legible": 1,
    "pull": 1,
-   "setting": 1,
+   "setting": 2,
    "scale": 2,
    "fair": 2,
    "seen": "reminds",
-   "reference": "H-034",
-   "cue": "A vague appeal is refused, with refusal listed first."
+   "reference": "H-070",
+   "cue": "A request and refusal remain, with no stated task and the refusal reported first."
   },
   "H-041": {
    "lives": 3,
    "caused": 4,
    "legible": 6,
    "pull": 2,
-   "setting": 4,
+   "setting": 5,
    "scale": 5,
    "fair": 5,
    "seen": "reminds",
    "reference": "H-004",
-   "cue": "The same courier offer ends with a refusal."
+   "cue": "The same delivery offer reaches a clear refusal instead of completion."
   },
   "H-037": {
    "lives": 1,
    "caused": 1,
-   "legible": 3,
-   "pull": 2,
-   "setting": 1,
-   "scale": 2,
-   "fair": 2,
+   "legible": 2,
+   "pull": 1,
+   "setting": 2,
+   "scale": 1,
+   "fair": 1,
    "seen": "same",
-   "reference": "H-018",
-   "cue": "Another self-directed adverse request awaiting a response."
+   "reference": "H-081",
+   "cue": "The same unexplained self-directed help proposal."
   },
   "H-079": {
-   "lives": 3,
-   "caused": 4,
+   "lives": 4,
+   "caused": 5,
    "legible": 6,
    "pull": 2,
-   "setting": 4,
+   "setting": 5,
    "scale": 5,
    "fair": 5,
    "seen": "reminds",
-   "reference": "H-014",
-   "cue": "The familiar collection contract is declined instead."
+   "reference": "H-052",
+   "cue": "The debt-collection offer ends with an explicit decline."
   },
   "H-017": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
-   "pull": 1,
-   "setting": 2,
+   "pull": 2,
+   "setting": 3,
    "scale": 2,
    "fair": 1,
    "seen": "same",
    "reference": "H-069",
-   "cue": "Another isolated theft with no concrete object or aftermath."
+   "cue": "Another completed theft without a developed thread."
   },
   "H-086": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
    "pull": 2,
-   "setting": 1,
-   "scale": 2,
+   "setting": 2,
+   "scale": 3,
    "fair": 1,
    "seen": "same",
-   "reference": "H-081",
-   "cue": "The same help-to-wrongdoing sequence ends at another person's demand."
+   "reference": "H-063",
+   "cue": "The same opaque help, wrong, discovery and demand chain."
   },
-  "H-011": {
+  "H-047": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
    "pull": 2,
-   "setting": 1,
+   "setting": 3,
    "scale": 2,
-   "fair": 2,
+   "fair": 1,
+   "seen": "same",
+   "reference": "H-059",
+   "cue": "The identical Hayashi theft against Zielinski at a different time."
+  },
+  "H-011": {
+   "lives": 2,
+   "caused": 3,
+   "legible": 1,
+   "pull": 2,
+   "setting": 2,
+   "scale": 3,
+   "fair": 1,
    "seen": "same",
    "reference": "H-046",
-   "cue": "The duty-and-wrongdoing sequence now receives a betrayal label."
+   "cue": "The duty-breaking sequence gains argument details and a betrayal label."
   },
   "H-090": {
-   "lives": 1,
+   "lives": 2,
    "caused": 1,
    "legible": 1,
    "pull": 1,
-   "setting": 1,
+   "setting": 2,
    "scale": 1,
    "fair": 1,
    "seen": "reminds",
    "reference": "H-023",
-   "cue": "The same named antagonists, but only an unspecified act."
+   "cue": "The same Jang/Magsaysay conflict appears without its assault detail or help follow-up."
   },
   "H-088": {
-   "lives": 1,
+   "lives": 2,
    "caused": 1,
    "legible": 1,
    "pull": 1,
-   "setting": 1,
+   "setting": 2,
    "scale": 1,
    "fair": 1,
    "seen": "same",
-   "reference": "H-021",
-   "cue": "Another isolated adverse act without particulars."
+   "reference": "H-077",
+   "cue": "Another isolated unspecified wrong."
   },
   "H-036": {
    "lives": 3,
-   "caused": 3,
+   "caused": 4,
    "legible": 5,
    "pull": 2,
    "setting": 5,
@@ -696,166 +733,178 @@
    "fair": 5,
    "seen": "reminds",
    "reference": "H-016",
-   "cue": "The same gang-removal offer ends in refusal."
+   "cue": "The identical gang-removal offer ends in refusal."
   },
   "H-049": {
    "lives": 2,
    "caused": 1,
    "legible": 1,
    "pull": 1,
-   "setting": 1,
+   "setting": 2,
    "scale": 1,
    "fair": 1,
    "seen": "same",
    "reference": "H-026",
-   "cue": "Another duty stated without content or consequences."
+   "cue": "Another unexplained duty between two people."
   },
   "H-067": {
-   "lives": 3,
-   "caused": 3,
-   "legible": 4,
-   "pull": 3,
+   "lives": 2,
+   "caused": 2,
+   "legible": 1,
+   "pull": 2,
    "setting": 3,
    "scale": 3,
-   "fair": 3,
+   "fair": 2,
    "seen": "reminds",
-   "reference": "H-096",
-   "cue": "Kaori's refused appeal now follows theft; the police connection stays unclear."
+   "reference": "H-022",
+   "cue": "A wronged person seeks help, but this request is refused."
   },
   "H-008": {
    "lives": 4,
    "caused": 4,
-   "legible": 4,
+   "legible": 5,
    "pull": 4,
-   "setting": 4,
+   "setting": 5,
    "scale": 4,
    "fair": 3,
    "seen": "new",
-   "cue": "Three days without contact prompt a missing-person inquiry."
+   "cue": "Three days without contact motivate a search, but the person's whereabouts are never supplied."
   },
   "H-024": {
    "lives": 1,
-   "caused": 2,
-   "legible": 3,
-   "pull": 2,
-   "setting": 1,
+   "caused": 1,
+   "legible": 2,
+   "pull": 1,
+   "setting": 2,
    "scale": 2,
    "fair": 1,
-   "seen": "same",
-   "reference": "H-071",
-   "cue": "The same accepted request to act against its asker."
+   "seen": "reminds",
+   "reference": "H-063",
+   "cue": "The same self-directed request reaches agreement and wrongdoing but no later reckoning."
   },
   "H-012": {
    "lives": 3,
    "caused": 4,
-   "legible": 4,
+   "legible": 5,
    "pull": 3,
    "setting": 5,
-   "scale": 5,
-   "fair": 4,
+   "scale": 4,
+   "fair": 3,
    "seen": "same",
    "reference": "H-040",
-   "cue": "The same data-shard recovery job now receives completion."
+   "cue": "The identical stolen-shard job now asserts completion."
   },
   "H-025": {
    "lives": 1,
    "caused": 1,
    "legible": 1,
    "pull": 1,
-   "setting": 1,
+   "setting": 2,
    "scale": 2,
    "fair": 2,
    "seen": "reminds",
    "reference": "H-096",
-   "cue": "The reversed appeal-and-refusal listing gains a second refused appeal."
+   "cue": "The same refusal-before-request reporting is followed by another unexplained refusal."
   },
   "H-001": {
    "lives": 3,
    "caused": 4,
    "legible": 6,
    "pull": 3,
-   "setting": 4,
+   "setting": 5,
    "scale": 5,
    "fair": 4,
    "seen": "same",
    "reference": "H-044",
-   "cue": "The identical shopkeeper's sealed-case delivery."
+   "cue": "The identical Tao-to-Mila sealed-case delivery."
   },
   "H-053": {
+   "lives": 2,
+   "caused": 3,
+   "legible": 1,
+   "pull": 2,
+   "setting": 2,
+   "scale": 3,
+   "fair": 1,
+   "seen": "same",
+   "reference": "H-011",
+   "cue": "The identical duty, request, wrong and discovery account."
+  },
+  "H-021": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
    "pull": 2,
-   "setting": 1,
+   "setting": 3,
    "scale": 2,
-   "fair": 2,
+   "fair": 1,
    "seen": "same",
-   "reference": "H-011",
-   "cue": "The identical duty, wrongdoing, discovery, and betrayal label."
+   "reference": "H-069",
+   "cue": "Another isolated completed theft."
   },
   "H-019": {
    "lives": 2,
    "caused": 2,
    "legible": 1,
    "pull": 2,
-   "setting": 1,
+   "setting": 3,
    "scale": 2,
    "fair": 1,
    "seen": "reminds",
    "reference": "H-060",
-   "cue": "The demand and victim's appeal now include acceptance, without substance."
+   "cue": "The same demand and victim's help request omit the task but add acceptance."
   },
   "H-002": {
    "lives": 2,
    "caused": 2,
-   "legible": 3,
+   "legible": 2,
    "pull": 2,
-   "setting": 1,
-   "scale": 2,
-   "fair": 2,
+   "setting": 2,
+   "scale": 3,
+   "fair": 1,
    "seen": "same",
-   "reference": "H-081",
-   "cue": "The same Noriko sequence gains options and a reckoning label."
+   "reference": "H-063",
+   "cue": "The same self-directed request and unexplained reckoning with different people."
   },
   "H-045": {
-   "lives": 3,
+   "lives": 4,
    "caused": 4,
    "legible": 6,
    "pull": 3,
-   "setting": 4,
+   "setting": 5,
    "scale": 4,
    "fair": 3,
    "seen": "same",
    "reference": "H-014",
-   "cue": "Another completed debt collection with the same terms."
+   "cue": "The same completed debt-collection job with different people."
   },
   "H-066": {
    "lives": 2,
-   "caused": 2,
+   "caused": 1,
    "legible": 1,
    "pull": 2,
-   "setting": 1,
+   "setting": 3,
    "scale": 2,
    "fair": 1,
    "seen": "same",
    "reference": "H-022",
-   "cue": "The same attack and accepted appeal, with attack reported afterward."
+   "cue": "The same Holt help and Watanabe wrong are reported with the wrong last."
   },
   "H-074": {
-   "lives": 1,
-   "caused": 1,
-   "legible": 3,
+   "lives": 2,
+   "caused": 2,
+   "legible": 2,
    "pull": 2,
-   "setting": 1,
-   "scale": 2,
-   "fair": 2,
+   "setting": 2,
+   "scale": 3,
+   "fair": 1,
    "seen": "same",
-   "reference": "H-018",
-   "cue": "Another unexplained self-directed request and three response options."
+   "reference": "H-063",
+   "cue": "Another identical self-directed request followed by discovery and a demand."
   },
   "H-075": {
    "lives": 3,
-   "caused": 3,
+   "caused": 4,
    "legible": 5,
    "pull": 3,
    "setting": 5,
@@ -863,7 +912,7 @@
    "fair": 3,
    "seen": "same",
    "reference": "H-016",
-   "cue": "The identical completed gang-removal contract."
+   "cue": "The identical completed Fujita gang-removal job."
   },
   "H-043": {
    "lives": 4,
@@ -871,23 +920,23 @@
    "legible": 6,
    "pull": 3,
    "setting": 5,
-   "scale": 6,
-   "fair": 5,
+   "scale": 5,
+   "fair": 4,
    "seen": "same",
    "reference": "H-048",
-   "cue": "The identical completed escort across Kabuki."
+   "cue": "The identical after-dark escort to the market stalls."
   },
   "H-078": {
    "lives": 2,
-   "caused": 2,
+   "caused": 1,
    "legible": 1,
-   "pull": 2,
-   "setting": 1,
-   "scale": 2,
+   "pull": 1,
+   "setting": 2,
+   "scale": 1,
    "fair": 1,
-   "seen": "same",
-   "reference": "H-063",
-   "cue": "The same Daichi reckoning sequence with explanatory metadata removed."
+   "seen": "reminds",
+   "reference": "H-081",
+   "cue": "Only a help request remains; even the proposed act is absent."
   }
  },
  "pairs": {
@@ -904,32 +953,32 @@
    "caused": "left"
   },
   "P-041": {
-   "follow": "left",
-   "caused": "left"
-  },
-  "P-002": {
-   "follow": "left",
-   "caused": "left"
-  },
-  "P-013": {
    "follow": "right",
    "caused": "right"
   },
-  "P-034": {
+  "P-002": {
+   "follow": "right",
+   "caused": "right"
+  },
+  "P-013": {
    "follow": "left",
+   "caused": "left"
+  },
+  "P-034": {
+   "follow": "right",
    "caused": "right"
   },
   "P-029": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-011": {
    "follow": "left",
    "caused": "left"
   },
   "P-045": {
-   "follow": "right",
-   "caused": "right"
+   "follow": "left",
+   "caused": "left"
   },
   "P-027": {
    "follow": "right",
@@ -984,8 +1033,8 @@
    "caused": "left"
   },
   "P-025": {
-   "follow": "right",
-   "caused": "right"
+   "follow": "left",
+   "caused": "left"
   },
   "P-021": {
    "follow": "right",
@@ -996,11 +1045,11 @@
    "caused": "left"
   },
   "P-046": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-044": {
-   "follow": "left",
+   "follow": "right",
    "caused": "right"
   },
   "P-026": {
@@ -1016,15 +1065,15 @@
    "caused": "right"
   },
   "P-047": {
-   "follow": "left",
-   "caused": "left"
+   "follow": "right",
+   "caused": "right"
   },
   "P-037": {
    "follow": "right",
    "caused": "right"
   },
   "P-048": {
-   "follow": "right",
+   "follow": "left",
    "caused": "left"
   },
   "P-014": {
@@ -1045,7 +1094,7 @@
   },
   "P-028": {
    "follow": "left",
-   "caused": "right"
+   "caused": "left"
   },
   "P-035": {
    "follow": "left",
@@ -1066,24 +1115,19 @@
   ],
   [
    "H-003",
-   "H-032"
-  ],
-  [
-   "H-070",
-   "H-006"
+   "H-090",
+   "H-088",
+   "H-032",
+   "H-093"
   ],
   [
    "H-046",
-   "H-026"
+   "H-082"
   ],
   [
-   "H-074",
-   "H-002",
-   "H-081",
-   "H-063"
-  ],
-  [
-   "H-084"
+   "H-073",
+   "H-059",
+   "H-087"
   ],
   [
    "H-039",
@@ -1095,36 +1139,43 @@
    "H-060"
   ],
   [
-   "H-075",
-   "H-016"
+   "H-074",
+   "H-002",
+   "H-063"
   ],
   [
-   "H-067"
+   "H-066"
   ],
   [
-   "H-096",
-   "H-025",
-   "H-034"
-  ],
-  [
-   "H-064"
+   "H-078"
   ],
   [
    "H-041"
   ],
   [
-   "H-042"
-  ],
-  [
    "H-030"
   ],
   [
-   "H-066",
-   "H-023"
+   "H-016"
   ],
   [
-   "H-093"
+   "H-034"
+  ],
+  [
+   "H-065"
+  ],
+  [
+   "H-025"
+  ],
+  [
+   "H-026"
+  ],
+  [
+   "H-042"
+  ],
+  [
+   "H-023"
   ]
  ],
- "critic": "Most traces supply event categories without concrete motives, objects, demands, or usable next steps. Requests to act against the asker remain especially difficult to understand. Causal pointers establish asserted connections but often do not explain them; simultaneous or reversed reporting further obscures some chains. A closing label such as resolved, betrayal, or reckoning supplies little payoff without the actual consequence. Completed contracts also conceal methods and findings, particularly surveillance and missing-person inquiries. Repeated structures make participants interchangeable. Eddies, shards, gangs, and local routes support Night City, but many traces could occur anywhere. The modest repair and escort jobs have the clearest practical reasons and proportionate endings. Explicit refusals provide fair stopping points even when little story develops."
+ "critic": "The clearest families are paid errands, isolated wrongs, assault-driven help, duty-breaking discovery, and help that turns into a reckoning. Most traces omit concrete motives, requested acts and consequences; naming participants or declaring an outcome resolved does not supply those links. Requests to act against the asker are especially hard to interpret. The paid jobs offer useful objectives and plausible local concerns, but instant completion hides both the action and its payoff. Repeated structures with substituted names weaken individuality, while Night City often comes through only in gang references, eddies and a few locations. Explicit declines provide clearer resting points than unexplained closing labels."
 }

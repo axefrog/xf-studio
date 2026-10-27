@@ -3445,38 +3445,6 @@
        "count": 1
       }
      ]
-    },
-    "E": {
-     "n": 24,
-     "repeatedSkeleton": 0.75,
-     "maxSkeleton": 11,
-     "bigramDiversity": 0.23,
-     "causeMarker": 0,
-     "meanWords": 31.5,
-     "priced": 0,
-     "twoPeople": 1,
-     "skeletons": [
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> acted against <P>. No closing account is included at this observation cutoff.",
-       "count": 11
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> acted against <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
-       "count": 3
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
-       "count": 2
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. Day <N>, <N>:<N> (message): <P> acted against <P>. No closing account is included at this observation cutoff.",
-       "count": 2
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> made a demand of <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
-       "count": 1
-      }
-     ]
     }
    }
   },
@@ -5504,38 +5472,6 @@
        "count": 1
       }
      ]
-    },
-    "A1": {
-     "n": 24,
-     "repeatedSkeleton": 0.88,
-     "maxSkeleton": 13,
-     "bigramDiversity": 0.25,
-     "causeMarker": 0,
-     "meanWords": 27.58,
-     "priced": 0,
-     "twoPeople": 0.96,
-     "skeletons": [
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> acted against <P>. No closing account is included at this observation cutoff.",
-       "count": 13
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> acted against <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
-       "count": 3
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
-       "count": 3
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
-       "count": 2
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. No closing account is included at this observation cutoff.",
-       "count": 1
-      }
-     ]
     }
    }
   },
@@ -7229,38 +7165,6 @@
        "count": 1
       }
      ]
-    },
-    "E": {
-     "n": 24,
-     "repeatedSkeleton": 0.75,
-     "maxSkeleton": 11,
-     "bigramDiversity": 0.23,
-     "causeMarker": 0,
-     "meanWords": 31.5,
-     "priced": 0,
-     "twoPeople": 1,
-     "skeletons": [
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> acted against <P>. No closing account is included at this observation cutoff.",
-       "count": 11
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> acted against <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
-       "count": 3
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
-       "count": 2
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. Day <N>, <N>:<N> (message): <P> acted against <P>. No closing account is included at this observation cutoff.",
-       "count": 2
-      },
-      {
-       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> made a demand of <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
-       "count": 1
-      }
-     ]
     }
    }
   },
@@ -8196,6 +8100,189 @@
       },
       {
        "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> asked you for help. Day <N>, <N>:<N> (message): you refused <P>. No closing account is included at this observation cutoff.",
+       "count": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "H-059",
+   "run2Baseline": {
+    "A3": {
+     "n": 24,
+     "repeatedSkeleton": 0.83,
+     "maxSkeleton": 4,
+     "bigramDiversity": 0.44,
+     "causeMarker": 0.38,
+     "meanWords": 23.46,
+     "priced": 1,
+     "twoPeople": 0.75,
+     "skeletons": [
+      {
+       "skeleton": "<P>, a labourer, has a sealed case that has to get from the metro entrance to <P> before closing. <N> eddies on delivery, no questions.",
+       "count": 4
+      },
+      {
+       "skeleton": "<P> wants <P>, a gang member, out of the neighbourhood. Convince them. <N> eddies.",
+       "count": 4
+      },
+      {
+       "skeleton": "<P> has not heard from <P> in three days. Find out where <P> went. <N> eddies.",
+       "count": 3
+      },
+      {
+       "skeleton": "<P> owes <P> money and has stopped answering. Collect it from <P>, who drinks near the metro entrance. You keep a cut: <N> eddies.",
+       "count": 3
+      },
+      {
+       "skeleton": "Someone took <P>'s credstick near the metro entrance. <P> wants it back and does not care how. <N> eddies when it is returned.",
+       "count": 2
+      }
+     ]
+    },
+    "E": {
+     "n": 24,
+     "repeatedSkeleton": 0,
+     "maxSkeleton": 1,
+     "bigramDiversity": 0.52,
+     "causeMarker": 0.54,
+     "meanWords": 67.88,
+     "priced": 0,
+     "twoPeople": 0.71,
+     "skeletons": [
+      {
+       "skeleton": "<P> messages you: someone saw <P> slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. You have a name for getting things done around here, and I am hoping that is true.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes that the crews clashed on the street and <P> picked them out of it. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I do not know them at all, so I cannot guess what they think I did.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes that <P> beat them bloody near the market, and nobody will say what it was about. I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself. You helped people around here before, and word has gotten round.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: <P> put me on the pavement outside the market without a word of warning. Find out why they did it, or make sure they keep away from me, or just see me through the clinic. I had never seen them before today, and that is what frightens me.",
+       "count": 1
+      }
+     ]
+    },
+    "A1": {
+     "n": 24,
+     "repeatedSkeleton": 0,
+     "maxSkeleton": 1,
+     "bigramDiversity": 0.48,
+     "causeMarker": 0.54,
+     "meanWords": 68.29,
+     "priced": 0,
+     "twoPeople": 0.58,
+     "skeletons": [
+      {
+       "skeleton": "<P> writes that the crews met on the street, <P> went for them, and they have not slept since. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You will not know me, and I know it is a lot to ask a stranger.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes from a clinic cot that <P> jumped them in the street, took nothing, and left. I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself. I had never seen them before today, and that is what frightens me.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you: <P> and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. The stalls say you are not afraid of crews, and that is what I need.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you: <P> swung at me in a fight between two crews near the market, and now I am a target. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. People say the stalls look to you when there is trouble, which is why I am writing to you and not to the police.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. You will not know me from anyone, but there is nobody else I can send.",
+       "count": 1
+      }
+     ]
+    },
+    "A4": {
+     "n": 24,
+     "repeatedSkeleton": 1,
+     "maxSkeleton": 24,
+     "bigramDiversity": 0.19,
+     "causeMarker": 0,
+     "meanWords": 28,
+     "priced": 0,
+     "twoPeople": 1,
+     "skeletons": [
+      {
+       "skeleton": "<P> messages you: <P> was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?",
+       "count": 24
+      }
+     ]
+    }
+   },
+   "run3ArmMeasures": {
+    "E": {
+     "n": 24,
+     "repeatedSkeleton": 0.75,
+     "maxSkeleton": 11,
+     "bigramDiversity": 0.23,
+     "causeMarker": 0,
+     "meanWords": 31.5,
+     "priced": 0,
+     "twoPeople": 1,
+     "skeletons": [
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> acted against <P>. No closing account is included at this observation cutoff.",
+       "count": 11
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> acted against <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
+       "count": 3
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
+       "count": 2
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. Day <N>, <N>:<N> (message): <P> acted against <P>. No closing account is included at this observation cutoff.",
+       "count": 2
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> made a demand of <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
+       "count": 1
+      }
+     ]
+    },
+    "A1": {
+     "n": 24,
+     "repeatedSkeleton": 0.88,
+     "maxSkeleton": 13,
+     "bigramDiversity": 0.25,
+     "causeMarker": 0,
+     "meanWords": 27.58,
+     "priced": 0,
+     "twoPeople": 0.96,
+     "skeletons": [
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> acted against <P>. No closing account is included at this observation cutoff.",
+       "count": 13
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> acted against <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
+       "count": 3
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
+       "count": 3
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
+       "count": 2
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. No closing account is included at this observation cutoff.",
        "count": 1
       }
      ]
@@ -10047,6 +10134,189 @@
    }
   },
   {
+   "id": "H-077",
+   "run2Baseline": {
+    "A3": {
+     "n": 24,
+     "repeatedSkeleton": 0.83,
+     "maxSkeleton": 4,
+     "bigramDiversity": 0.44,
+     "causeMarker": 0.38,
+     "meanWords": 23.46,
+     "priced": 1,
+     "twoPeople": 0.75,
+     "skeletons": [
+      {
+       "skeleton": "<P>, a labourer, has a sealed case that has to get from the metro entrance to <P> before closing. <N> eddies on delivery, no questions.",
+       "count": 4
+      },
+      {
+       "skeleton": "<P> wants <P>, a gang member, out of the neighbourhood. Convince them. <N> eddies.",
+       "count": 4
+      },
+      {
+       "skeleton": "<P> has not heard from <P> in three days. Find out where <P> went. <N> eddies.",
+       "count": 3
+      },
+      {
+       "skeleton": "<P> owes <P> money and has stopped answering. Collect it from <P>, who drinks near the metro entrance. You keep a cut: <N> eddies.",
+       "count": 3
+      },
+      {
+       "skeleton": "Someone took <P>'s credstick near the metro entrance. <P> wants it back and does not care how. <N> eddies when it is returned.",
+       "count": 2
+      }
+     ]
+    },
+    "E": {
+     "n": 24,
+     "repeatedSkeleton": 0,
+     "maxSkeleton": 1,
+     "bigramDiversity": 0.52,
+     "causeMarker": 0.54,
+     "meanWords": 67.88,
+     "priced": 0,
+     "twoPeople": 0.71,
+     "skeletons": [
+      {
+       "skeleton": "<P> messages you: someone saw <P> slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. You have a name for getting things done around here, and I am hoping that is true.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes that the crews clashed on the street and <P> picked them out of it. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I do not know them at all, so I cannot guess what they think I did.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes that <P> beat them bloody near the market, and nobody will say what it was about. I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself. You helped people around here before, and word has gotten round.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: <P> put me on the pavement outside the market without a word of warning. Find out why they did it, or make sure they keep away from me, or just see me through the clinic. I had never seen them before today, and that is what frightens me.",
+       "count": 1
+      }
+     ]
+    },
+    "A1": {
+     "n": 24,
+     "repeatedSkeleton": 0,
+     "maxSkeleton": 1,
+     "bigramDiversity": 0.48,
+     "causeMarker": 0.54,
+     "meanWords": 68.29,
+     "priced": 0,
+     "twoPeople": 0.58,
+     "skeletons": [
+      {
+       "skeleton": "<P> writes that the crews met on the street, <P> went for them, and they have not slept since. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You will not know me, and I know it is a lot to ask a stranger.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes from a clinic cot that <P> jumped them in the street, took nothing, and left. I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself. I had never seen them before today, and that is what frightens me.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you: <P> and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. The stalls say you are not afraid of crews, and that is what I need.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you: <P> swung at me in a fight between two crews near the market, and now I am a target. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. People say the stalls look to you when there is trouble, which is why I am writing to you and not to the police.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. You will not know me from anyone, but there is nobody else I can send.",
+       "count": 1
+      }
+     ]
+    },
+    "A4": {
+     "n": 24,
+     "repeatedSkeleton": 1,
+     "maxSkeleton": 24,
+     "bigramDiversity": 0.19,
+     "causeMarker": 0,
+     "meanWords": 28,
+     "priced": 0,
+     "twoPeople": 1,
+     "skeletons": [
+      {
+       "skeleton": "<P> messages you: <P> was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?",
+       "count": 24
+      }
+     ]
+    }
+   },
+   "run3ArmMeasures": {
+    "A1": {
+     "n": 24,
+     "repeatedSkeleton": 0.88,
+     "maxSkeleton": 13,
+     "bigramDiversity": 0.25,
+     "causeMarker": 0,
+     "meanWords": 27.58,
+     "priced": 0,
+     "twoPeople": 0.96,
+     "skeletons": [
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> acted against <P>. No closing account is included at this observation cutoff.",
+       "count": 13
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> acted against <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
+       "count": 3
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
+       "count": 3
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
+       "count": 2
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. No closing account is included at this observation cutoff.",
+       "count": 1
+      }
+     ]
+    },
+    "E": {
+     "n": 24,
+     "repeatedSkeleton": 0.75,
+     "maxSkeleton": 11,
+     "bigramDiversity": 0.23,
+     "causeMarker": 0,
+     "meanWords": 31.5,
+     "priced": 0,
+     "twoPeople": 1,
+     "skeletons": [
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> acted against <P>. No closing account is included at this observation cutoff.",
+       "count": 11
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> acted against <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
+       "count": 3
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
+       "count": 2
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. Day <N>, <N>:<N> (message): <P> acted against <P>. No closing account is included at this observation cutoff.",
+       "count": 2
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> made a demand of <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
+       "count": 1
+      }
+     ]
+    }
+   }
+  },
+  {
    "id": "H-078",
    "run2Baseline": {
     "A3": {
@@ -11255,6 +11525,157 @@
    }
   },
   {
+   "id": "H-087",
+   "run2Baseline": {
+    "A3": {
+     "n": 24,
+     "repeatedSkeleton": 0.83,
+     "maxSkeleton": 4,
+     "bigramDiversity": 0.44,
+     "causeMarker": 0.38,
+     "meanWords": 23.46,
+     "priced": 1,
+     "twoPeople": 0.75,
+     "skeletons": [
+      {
+       "skeleton": "<P>, a labourer, has a sealed case that has to get from the metro entrance to <P> before closing. <N> eddies on delivery, no questions.",
+       "count": 4
+      },
+      {
+       "skeleton": "<P> wants <P>, a gang member, out of the neighbourhood. Convince them. <N> eddies.",
+       "count": 4
+      },
+      {
+       "skeleton": "<P> has not heard from <P> in three days. Find out where <P> went. <N> eddies.",
+       "count": 3
+      },
+      {
+       "skeleton": "<P> owes <P> money and has stopped answering. Collect it from <P>, who drinks near the metro entrance. You keep a cut: <N> eddies.",
+       "count": 3
+      },
+      {
+       "skeleton": "Someone took <P>'s credstick near the metro entrance. <P> wants it back and does not care how. <N> eddies when it is returned.",
+       "count": 2
+      }
+     ]
+    },
+    "E": {
+     "n": 24,
+     "repeatedSkeleton": 0,
+     "maxSkeleton": 1,
+     "bigramDiversity": 0.52,
+     "causeMarker": 0.54,
+     "meanWords": 67.88,
+     "priced": 0,
+     "twoPeople": 0.71,
+     "skeletons": [
+      {
+       "skeleton": "<P> messages you: someone saw <P> slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. You have a name for getting things done around here, and I am hoping that is true.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes that the crews clashed on the street and <P> picked them out of it. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I do not know them at all, so I cannot guess what they think I did.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes that <P> beat them bloody near the market, and nobody will say what it was about. I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself. You helped people around here before, and word has gotten round.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: <P> put me on the pavement outside the market without a word of warning. Find out why they did it, or make sure they keep away from me, or just see me through the clinic. I had never seen them before today, and that is what frightens me.",
+       "count": 1
+      }
+     ]
+    },
+    "A1": {
+     "n": 24,
+     "repeatedSkeleton": 0,
+     "maxSkeleton": 1,
+     "bigramDiversity": 0.48,
+     "causeMarker": 0.54,
+     "meanWords": 68.29,
+     "priced": 0,
+     "twoPeople": 0.58,
+     "skeletons": [
+      {
+       "skeleton": "<P> writes that the crews met on the street, <P> went for them, and they have not slept since. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You will not know me, and I know it is a lot to ask a stranger.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes from a clinic cot that <P> jumped them in the street, took nothing, and left. I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself. I had never seen them before today, and that is what frightens me.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you: <P> and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. The stalls say you are not afraid of crews, and that is what I need.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you: <P> swung at me in a fight between two crews near the market, and now I am a target. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. People say the stalls look to you when there is trouble, which is why I am writing to you and not to the police.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. You will not know me from anyone, but there is nobody else I can send.",
+       "count": 1
+      }
+     ]
+    },
+    "A4": {
+     "n": 24,
+     "repeatedSkeleton": 1,
+     "maxSkeleton": 24,
+     "bigramDiversity": 0.19,
+     "causeMarker": 0,
+     "meanWords": 28,
+     "priced": 0,
+     "twoPeople": 1,
+     "skeletons": [
+      {
+       "skeleton": "<P> messages you: <P> was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?",
+       "count": 24
+      }
+     ]
+    }
+   },
+   "run3ArmMeasures": {
+    "A1": {
+     "n": 24,
+     "repeatedSkeleton": 0.88,
+     "maxSkeleton": 13,
+     "bigramDiversity": 0.25,
+     "causeMarker": 0,
+     "meanWords": 27.58,
+     "priced": 0,
+     "twoPeople": 0.96,
+     "skeletons": [
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> acted against <P>. No closing account is included at this observation cutoff.",
+       "count": 13
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> acted against <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
+       "count": 3
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
+       "count": 3
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
+       "count": 2
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. No closing account is included at this observation cutoff.",
+       "count": 1
+      }
+     ]
+    }
+   }
+  },
+  {
    "id": "H-088",
    "run2Baseline": {
     "A3": {
@@ -11550,6 +11971,157 @@
       },
       {
        "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> made a demand of <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
+       "count": 1
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "H-092",
+   "run2Baseline": {
+    "A3": {
+     "n": 24,
+     "repeatedSkeleton": 0.83,
+     "maxSkeleton": 4,
+     "bigramDiversity": 0.44,
+     "causeMarker": 0.38,
+     "meanWords": 23.46,
+     "priced": 1,
+     "twoPeople": 0.75,
+     "skeletons": [
+      {
+       "skeleton": "<P>, a labourer, has a sealed case that has to get from the metro entrance to <P> before closing. <N> eddies on delivery, no questions.",
+       "count": 4
+      },
+      {
+       "skeleton": "<P> wants <P>, a gang member, out of the neighbourhood. Convince them. <N> eddies.",
+       "count": 4
+      },
+      {
+       "skeleton": "<P> has not heard from <P> in three days. Find out where <P> went. <N> eddies.",
+       "count": 3
+      },
+      {
+       "skeleton": "<P> owes <P> money and has stopped answering. Collect it from <P>, who drinks near the metro entrance. You keep a cut: <N> eddies.",
+       "count": 3
+      },
+      {
+       "skeleton": "Someone took <P>'s credstick near the metro entrance. <P> wants it back and does not care how. <N> eddies when it is returned.",
+       "count": 2
+      }
+     ]
+    },
+    "E": {
+     "n": 24,
+     "repeatedSkeleton": 0,
+     "maxSkeleton": 1,
+     "bigramDiversity": 0.52,
+     "causeMarker": 0.54,
+     "meanWords": 67.88,
+     "priced": 0,
+     "twoPeople": 0.71,
+     "skeletons": [
+      {
+       "skeleton": "<P> messages you: someone saw <P> slip a hand into my bag at the market and walk off with it. I want what was in it back. Find out who has it, lean on the thief's people until they hand it over, or cover the loss and I will square it with you later. Nobody on the row had seen the thief before, so somebody must have given the nod.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I have a package that must reach a client across Kabuki by tomorrow night and I cannot walk it. Carry it for me, ask the client to wait, or cover my shift so I keep the work. You have a name for getting things done around here, and I am hoping that is true.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes that the crews clashed on the street and <P> picked them out of it. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. I do not know them at all, so I cannot guess what they think I did.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes that <P> beat them bloody near the market, and nobody will say what it was about. I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself. You helped people around here before, and word has gotten round.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: <P> put me on the pavement outside the market without a word of warning. Find out why they did it, or make sure they keep away from me, or just see me through the clinic. I had never seen them before today, and that is what frightens me.",
+       "count": 1
+      }
+     ]
+    },
+    "A1": {
+     "n": 24,
+     "repeatedSkeleton": 0,
+     "maxSkeleton": 1,
+     "bigramDiversity": 0.48,
+     "causeMarker": 0.54,
+     "meanWords": 68.29,
+     "priced": 0,
+     "twoPeople": 0.58,
+     "skeletons": [
+      {
+       "skeleton": "<P> writes that the crews met on the street, <P> went for them, and they have not slept since. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. You will not know me, and I know it is a lot to ask a stranger.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> writes from a clinic cot that <P> jumped them in the street, took nothing, and left. I need to know why they did it before it happens again. Ask the people who saw, speak to them if you can, or pay my clinic bill while I find out for myself. I had never seen them before today, and that is what frightens me.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you: <P> and I ended up on opposite sides of a street fight in Kabuki, and I came off worse. Whoever they run with will come for me next. Carry word to the other crew that it is finished, find me a safe way home, or stand with me when they do. The stalls say you are not afraid of crews, and that is what I need.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you: <P> swung at me in a fight between two crews near the market, and now I am a target. I cannot fix this myself. Speak to the other crew for me, walk me past their corner, or be there when they come looking. People say the stalls look to you when there is trouble, which is why I am writing to you and not to the police.",
+       "count": 1
+      },
+      {
+       "skeleton": "<P> messages you from the clinic: an accident in the street put me on a bed for days, and I have work waiting that will not wait. I need someone to take over for me for a day or two. Deliver the parcel, speak to the client, or cover my place on the rota. You will not know me from anyone, but there is nobody else I can send.",
+       "count": 1
+      }
+     ]
+    },
+    "A4": {
+     "n": 24,
+     "repeatedSkeleton": 1,
+     "maxSkeleton": 24,
+     "bigramDiversity": 0.19,
+     "causeMarker": 0,
+     "meanWords": 28,
+     "priced": 0,
+     "twoPeople": 1,
+     "skeletons": [
+      {
+       "skeleton": "<P> messages you: <P> was at the stall again for the Friday fee the Claws collect, and I am short. Can you do something about it?",
+       "count": 24
+      }
+     ]
+    }
+   },
+   "run3ArmMeasures": {
+    "A1": {
+     "n": 24,
+     "repeatedSkeleton": 0.88,
+     "maxSkeleton": 13,
+     "bigramDiversity": 0.25,
+     "causeMarker": 0,
+     "meanWords": 27.58,
+     "priced": 0,
+     "twoPeople": 0.96,
+     "skeletons": [
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> acted against <P>. No closing account is included at this observation cutoff.",
+       "count": 13
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> acted against <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. Day <N>, <N>:<N> (sight): you agreed to <P>'s request. No closing account is included at this observation cutoff.",
+       "count": 3
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
+       "count": 3
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (message): <P> made a demand of <P>. No closing account is included at this observation cutoff.",
+       "count": 2
+      },
+      {
+       "skeleton": "Kabuki, within one week. Day <N>, <N>:<N> (trace): <P> made a demand of <P>. Day <N>, <N>:<N> (sight): <P> asked you for help. No closing account is included at this observation cutoff.",
        "count": 1
       }
      ]

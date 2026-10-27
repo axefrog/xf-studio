@@ -1,7 +1,12 @@
 // Detached packet data only. Canonical accounts retain every sampled arm/configuration membership.
 import type {Answer3,Criterion3,Member3,Packet3,Pair3,Renderer3} from './blind3.ts';
 import type {Arm3,Thread3} from './measures3.ts';
-const signature=(t:Thread3)=>JSON.stringify(t.occurrences.map(o=>o.id));
+const sequence=(t:Thread3)=>JSON.stringify(t.occurrences.map(o=>o.id));
+/** Identity alone is insufficient: responses and the evidence visible to a rater can differ. */
+const accountSignature3=(t:Thread3,render:(t:Thread3,renderer?:Renderer3)=>string)=>JSON.stringify({
+ sequence:sequence(t),current:render(t,'current'),evidence:render(t,'evidence'),l2:t.l2,
+ responses:t.occurrences.map(o=>[o.token,o.stance??null,o.askVerb??null,o.protagonist??false,o.completion??false,o.respondsTo??null]),
+});
 type Constraint={coeff:number[];lo:number;hi:number};
 /** Bounded deterministic binary feasibility, used only to balance the frozen packet assignments. */
 function balanced(n:number,constraints:Constraint[],preferred:number[]):number[]{
@@ -15,7 +20,7 @@ function balanced(n:number,constraints:Constraint[],preferred:number[]):number[]
 export function canonical3(base:Packet3,threads:Thread3[],seed:string,shuffle:<T>(xs:T[],seed:string,key:string)=>T[],render:(t:Thread3,renderer?:Renderer3,limit?:number)=>string):Packet3{
  const sources=new Map(base.cards.map(c=>{const k=base.key[c.id]!,t=threads.find(t=>t.arm===k.arm&&t.run===k.run&&t.id===k.thread);if(!t)throw Error('missing canonical source');return [c.id,t];}));
  const groupBy=new Map<string,string>(),alias=new Map<string,string>(),groups=new Map<string,Member3[]>();
- for(const c of base.cards){const t=sources.get(c.id)!,sig=signature(t),id=groupBy.get(sig)??c.id;groupBy.set(sig,id);alias.set(c.id,id);const members=groups.get(id)??[];members.push({sample:c.id,arm:t.arm,thread:t.id,run:t.run,configuration:base.key[c.id]!.configuration,start:t.start,times:t.occurrences.map(o=>({id:o.id,at:o.at,play:o.play}))});groups.set(id,members);}
+ for(const c of base.cards){const t=sources.get(c.id)!,sig=accountSignature3(t,render),id=groupBy.get(sig)??c.id;groupBy.set(sig,id);alias.set(c.id,id);const members=groups.get(id)??[];members.push({sample:c.id,arm:t.arm,thread:t.id,run:t.run,configuration:base.key[c.id]!.configuration,start:t.start,times:t.occurrences.map(o=>({id:o.id,at:o.at,play:o.play}))});groups.set(id,members);}
  const vars=[...groups.keys()].filter(id=>groups.get(id)!.some(m=>m.arm==='E'||m.arm==='A1'));
  const weight=(id:string,arm:Arm3,configuration?:string)=>groups.get(id)!.filter(m=>m.arm===arm&&(configuration===undefined||m.configuration===configuration)).length;
  const constraints:Constraint[]=[];for(const q of base.quotas){for(const arm of ['E','A1'] as const)constraints.push({coeff:vars.map(id=>weight(id,arm,q.configuration)),lo:Math.floor(q.n/2),hi:Math.ceil(q.n/2)});constraints.push({coeff:vars.map(id=>weight(id,'E',q.configuration)-weight(id,'A1',q.configuration)),lo:0,hi:0});}
@@ -42,9 +47,9 @@ export function canonical3(base:Packet3,threads:Thread3[],seed:string,shuffle:<T
  const sides=balanced(pairsBase.length,sidesConstraints,pairsBase.map((_,i)=>i%2)),pairs:Pair3[][]=[],omitted:Pair3[][]=[];
  for(let sheet=0;sheet<4;sheet++){const rows=shuffle(decorated[sheet]!,seed,'pairs-'+sheet).map(p=>{const i=pairsBase.findIndex(x=>x.id===p.id),eLeft=!!(sides[i]!^(sheet%2));return {...p,left:eLeft?p.e!:p.other!,right:eLeft?p.other!:p.e!};});pairs.push(rows.filter(p=>!p.reason));omitted.push(rows.filter(p=>p.reason));}
  const orders=base.orders.map(order=>{const seen=new Set<string>();return order.map(id=>alias.get(id)!).filter(id=>{if(seen.has(id))return false;seen.add(id);return true;});});
- const overlap=base.quotas.map(q=>{const population=(arm:Arm3)=>threads.filter(t=>t.arm===arm&&[t.world,t.tempo,t.policy].join('|')===q.configuration),sample=(arm:Arm3)=>base.cards.filter(c=>base.key[c.id]!.arm===arm&&base.key[c.id]!.configuration===q.configuration).map(c=>sources.get(c.id)!);const e=population('E'),eSample=sample('E'),a1=population('A1'),a5=population('A5'),match=(xs:Thread3[],ys:Thread3[])=>{const set=new Set(ys.map(signature));return xs.filter(t=>set.has(signature(t))).length;};return {configuration:q.configuration,populationE:e.length,populationA1:a1.length,populationA5:a5.length,populationMatchA1:match(e,a1),populationMatchA5:match(e,a5),sampleE:eSample.length,sampleMatchA1:match(eSample,sample('A1')),sampleMatchA5:match(eSample,sample('A5'))};});
+ const overlap=base.quotas.map(q=>{const population=(arm:Arm3)=>threads.filter(t=>t.arm===arm&&[t.world,t.tempo,t.policy].join('|')===q.configuration),sample=(arm:Arm3)=>base.cards.filter(c=>base.key[c.id]!.arm===arm&&base.key[c.id]!.configuration===q.configuration).map(c=>sources.get(c.id)!);const e=population('E'),eSample=sample('E'),a1=population('A1'),a5=population('A5'),match=(xs:Thread3[],ys:Thread3[])=>{const set=new Set(ys.map(sequence));return xs.filter(t=>set.has(sequence(t))).length;};return {configuration:q.configuration,populationE:e.length,populationA1:a1.length,populationA5:a5.length,populationMatchA1:match(e,a1),populationMatchA5:match(e,a5),sampleE:eSample.length,sampleMatchA1:match(eSample,sample('A1')),sampleMatchA5:match(eSample,sample('A5'))};});
  const shared=[...groups].filter(([,ms])=>ms.length>1).map(([id,ms])=>({id,members:ms.length,configurations:[...new Set(ms.map(m=>m.configuration))],arms:[...new Set(ms.map(m=>m.arm))]}));
- return {...base,schema:2,sampleSize:base.cards.length,cards,key,pairs,omitted,orders,sourceOrders:base.orders,overlap,shared,sort:shuffle(cards.map(c=>c.id),seed,'sorting').slice(0,30)};
+ return {...base,schema:3,sampleSize:base.cards.length,cards,key,pairs,omitted,orders,sourceOrders:base.orders,overlap,shared,sort:shuffle(cards.map(c=>c.id),seed,'sorting').slice(0,30)};
 }
 
 /** Expand memberships for arithmetic only; no duplicate is shown to the rater or revalidated. */

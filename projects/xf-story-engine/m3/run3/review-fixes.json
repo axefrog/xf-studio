@@ -1,0 +1,640 @@
+{
+  "packetSchema": 3,
+  "canonicalAccounts": 79,
+  "sampledMemberships": 96,
+  "sharedGroups": 11,
+  "crossConfigurationGroups": 8,
+  "uniquePerArm": {
+    "E": 19,
+    "A1": 20,
+    "A3": 24,
+    "A5": 24
+  },
+  "shownPairs": [
+    42,
+    42,
+    42,
+    42
+  ],
+  "omittedPairs": [
+    6,
+    6,
+    6,
+    6
+  ],
+  "packetSha256": "4e4d9f8b7149cfdd2a24bd65de8c9802e219bbf6763cded134d7409daf0f83b7",
+  "checks": 1598,
+  "splits": [
+    {
+      "old": "H-021",
+      "oldMembers": [
+        "H-021",
+        "H-077",
+        "H-094"
+      ],
+      "groups": [
+        {
+          "id": "H-021",
+          "samples": [
+            "H-021"
+          ]
+        },
+        {
+          "id": "H-077",
+          "samples": [
+            "H-077",
+            "H-094"
+          ]
+        }
+      ]
+    },
+    {
+      "old": "H-022",
+      "oldMembers": [
+        "H-022",
+        "H-092"
+      ],
+      "groups": [
+        {
+          "id": "H-022",
+          "samples": [
+            "H-022"
+          ]
+        },
+        {
+          "id": "H-092",
+          "samples": [
+            "H-092"
+          ]
+        }
+      ]
+    },
+    {
+      "old": "H-035",
+      "oldMembers": [
+        "H-035",
+        "H-050",
+        "H-087"
+      ],
+      "groups": [
+        {
+          "id": "H-035",
+          "samples": [
+            "H-035",
+            "H-050"
+          ]
+        },
+        {
+          "id": "H-087",
+          "samples": [
+            "H-087"
+          ]
+        }
+      ]
+    },
+    {
+      "old": "H-047",
+      "oldMembers": [
+        "H-047",
+        "H-059",
+        "H-062",
+        "H-080"
+      ],
+      "groups": [
+        {
+          "id": "H-047",
+          "samples": [
+            "H-047"
+          ]
+        },
+        {
+          "id": "H-059",
+          "samples": [
+            "H-059",
+            "H-062",
+            "H-080"
+          ]
+        }
+      ]
+    }
+  ],
+  "r5": [
+    {
+      "arm": "E",
+      "exposure": 5,
+      "before": {
+        "runs": 4,
+        "bits": [
+          2.7391873730859824,
+          2.771746697313987,
+          2.771746697313987
+        ],
+        "shuffled": [
+          2.8648824973205516,
+          2.79660266234249,
+          2.8058200200224355
+        ]
+      },
+      "after": {
+        "runs": 4,
+        "bits": [
+          2.539931514145894,
+          2.5306964597196813,
+          2.5306964597196813
+        ],
+        "shuffled": [
+          2.6013587888694363,
+          2.6013587888694363,
+          2.6013587888694363
+        ]
+      }
+    },
+    {
+      "arm": "E",
+      "exposure": 10,
+      "before": {
+        "runs": 1,
+        "bits": [
+          3.2556288649228007,
+          3.4077446591600573,
+          3.4077446591600573
+        ],
+        "shuffled": [
+          3.111509340905275,
+          3.1966602868975698,
+          3.1966602868975698
+        ]
+      },
+      "after": {
+        "runs": 1,
+        "bits": [
+          3.3208477284528013,
+          3.274504546241261,
+          3.274504546241261
+        ],
+        "shuffled": [
+          3.4254272732517497,
+          3.4254272732517497,
+          3.4254272732517497
+        ]
+      }
+    },
+    {
+      "arm": "E",
+      "exposure": 20,
+      "before": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      },
+      "after": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "arm": "E",
+      "exposure": 50,
+      "before": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      },
+      "after": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "arm": "A1",
+      "exposure": 5,
+      "before": {
+        "runs": 6,
+        "bits": [
+          2.669969223618995,
+          2.711743272406468,
+          2.74907533910695
+        ],
+        "shuffled": [
+          2.9131944195304,
+          2.8756792389720602,
+          2.8756792389720602
+        ]
+      },
+      "after": {
+        "runs": 6,
+        "bits": [
+          2.5698972117443755,
+          2.5971218745913975,
+          2.5971218745913975
+        ],
+        "shuffled": [
+          2.7819356478669164,
+          2.765583872884078,
+          2.765583872884078
+        ]
+      }
+    },
+    {
+      "arm": "A1",
+      "exposure": 10,
+      "before": {
+        "runs": 1,
+        "bits": [
+          2.822149409963637,
+          2.7727288718888707,
+          2.7727288718888707
+        ],
+        "shuffled": [
+          2.916007384910535,
+          2.866586846835769,
+          2.866586846835769
+        ]
+      },
+      "after": {
+        "runs": 1,
+        "bits": [
+          2.6864787964241463,
+          2.657252751331503,
+          2.657252751331503
+        ],
+        "shuffled": [
+          2.7975899075352575,
+          2.7683638624426137,
+          2.7683638624426137
+        ]
+      }
+    },
+    {
+      "arm": "A1",
+      "exposure": 20,
+      "before": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      },
+      "after": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "arm": "A1",
+      "exposure": 50,
+      "before": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      },
+      "after": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "arm": "A3",
+      "exposure": 5,
+      "before": {
+        "runs": 8,
+        "bits": [
+          1.0104844951562886,
+          1.0104844951562886,
+          1.0104844951562886
+        ],
+        "shuffled": [
+          2.3807690117992584,
+          2.4456334680223897,
+          2.4456334680223897
+        ]
+      },
+      "after": {
+        "runs": 8,
+        "bits": [
+          1.0565448447916763,
+          1.0565448447916763,
+          1.0565448447916763
+        ],
+        "shuffled": [
+          2.439228917519728,
+          2.504093373742859,
+          2.504093373742859
+        ]
+      }
+    },
+    {
+      "arm": "A3",
+      "exposure": 10,
+      "before": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      },
+      "after": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "arm": "A3",
+      "exposure": 20,
+      "before": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      },
+      "after": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "arm": "A3",
+      "exposure": 50,
+      "before": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      },
+      "after": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "arm": "A5",
+      "exposure": 5,
+      "before": {
+        "runs": 6,
+        "bits": [
+          2.5210176566702667,
+          2.568016350711194,
+          2.58485443644026
+        ],
+        "shuffled": [
+          3.559811883281648,
+          3.581680273239822,
+          3.558396754154064
+        ]
+      },
+      "after": {
+        "runs": 6,
+        "bits": [
+          2.483034886030407,
+          2.529874972069045,
+          2.5481795021291824
+        ],
+        "shuffled": [
+          3.4276168968722125,
+          3.45054747090566,
+          3.426184454581841
+        ]
+      }
+    },
+    {
+      "arm": "A5",
+      "exposure": 10,
+      "before": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      },
+      "after": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "arm": "A5",
+      "exposure": 20,
+      "before": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      },
+      "after": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      }
+    },
+    {
+      "arm": "A5",
+      "exposure": 50,
+      "before": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      },
+      "after": {
+        "runs": 0,
+        "bits": [
+          null,
+          null,
+          null
+        ],
+        "shuffled": [
+          null,
+          null,
+          null
+        ]
+      }
+    }
+  ],
+  "r5IndependentArithmeticChecks": 768,
+  "legacyFutureTrainingCells": [
+    {
+      "run": "E-m3c-w1-restless-accept-middle",
+      "exposure": 5,
+      "firstEvaluationPlay": 37807,
+      "legacyLatestTrainingPlay": 99568
+    },
+    {
+      "run": "A1-m3c-w1-restless-accept-middle",
+      "exposure": 5,
+      "firstEvaluationPlay": 68964,
+      "legacyLatestTrainingPlay": 99568
+    },
+    {
+      "run": "A1-m3c-w2-restless-engage",
+      "exposure": 5,
+      "firstEvaluationPlay": 41178,
+      "legacyLatestTrainingPlay": 50092
+    },
+    {
+      "run": "A1-m3c-w2-steady-accept-first",
+      "exposure": 5,
+      "firstEvaluationPlay": 46477,
+      "legacyLatestTrainingPlay": 79740
+    }
+  ],
+  "ratingValidation": {
+    "independentChecks": 5801,
+    "raters": 2,
+    "cardsEach": 79,
+    "pairsEach": 42,
+    "packetAndAnswerHashes": "pass",
+    "weightedAndUnweightedMeansSeenCellsConfigurationsContrasts": "pass",
+    "forcedChoicesAndOmittedTies": "pass",
+    "repetitionCalibration": "pass"
+  }
+}

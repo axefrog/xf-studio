@@ -1,6 +1,6 @@
 {
  "version": 3,
- "packetSchema": 2,
+ "packetSchema": 3,
  "packetSeed": "m3c-reviewed-v5",
  "method": "reviewed-v5",
  "quotas": [
@@ -88,7 +88,7 @@
  "requestedPerArm": 24,
  "actualPerArm": 24,
  "sampledAccounts": 96,
- "canonicalAccounts": 75,
+ "canonicalAccounts": 79,
  "records": [
   {
    "file": "A1-m3c-w0-calm-engage.json.gz",
@@ -155,5 +155,5 @@
    "sha256": "6c9e059a14cb405c07d84454289c33134782fc3c7e43bf5b0cc7fa4350a8ec1b"
   }
  ],
- "packetSha256": "d7d34d65589ef506dfa760c28a0c2c65293dbe55cf4c925102f9b632436459db"
+ "packetSha256": "4e4d9f8b7149cfdd2a24bd65de8c9802e219bbf6763cded134d7409daf0f83b7"
 }

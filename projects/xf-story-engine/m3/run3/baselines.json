@@ -312,21 +312,53 @@
      "exposure": 5,
      "available": true,
      "testThreads": 5,
+     "evaluations": [
+      {
+       "thread": "E-w1.json-6a914776ba576b5f430464ebc5519293",
+       "before": 43465,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 38348
+      },
+      {
+       "thread": "E-w1.json-49eb4ae9a6b8e171961fa366e82ad78b",
+       "before": 53474,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 38348
+      },
+      {
+       "thread": "E-w1.json-3a592206e00f4c95fde0648a4f674587",
+       "before": 61222,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 38348
+      },
+      {
+       "thread": "E-w1.json-cb855781ab365eddc160cf9a5108054c",
+       "before": 66073,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 38348
+      },
+      {
+       "thread": "E-w1.json-b0c2ddb52923f4a656a649fa38da3565",
+       "before": 72792,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 38348
+      }
+     ],
      "orders": [
       {
        "order": 1,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9625934281777463
+       "bits": 0.611196210668224,
+       "shuffled": 1.1281887108124553
       },
       {
        "order": 2,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9625934281777463
+       "bits": 0.611196210668224,
+       "shuffled": 1.1281887108124553
       },
       {
        "order": 3,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9625934281777463
+       "bits": 0.611196210668224,
+       "shuffled": 1.1281887108124553
       }
      ]
     },
@@ -335,6 +367,7 @@
      "exposure": 10,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -358,6 +391,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -381,6 +415,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -404,21 +439,53 @@
      "exposure": 5,
      "available": true,
      "testThreads": 5,
+     "evaluations": [
+      {
+       "thread": "E-w2.json-1fc8d22545539dc08283e5d8034b25cc",
+       "before": 40655,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 38850
+      },
+      {
+       "thread": "E-w2.json-5aaf0f1b690c8d9a0f8c2a4da6006d1d",
+       "before": 53378,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 38850
+      },
+      {
+       "thread": "E-w2.json-f2522025c19681ca4e99cbe3a054cb24",
+       "before": 55366,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 38850
+      },
+      {
+       "thread": "E-w2.json-69c80447092fcab37c0e123fb169d705",
+       "before": 75904,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 38850
+      },
+      {
+       "thread": "E-w2.json-8a136f2603340f3dc75ffc06ee7e6893",
+       "before": 84063,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 38850
+      }
+     ],
      "orders": [
       {
        "order": 1,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9625934281777463
+       "bits": 0.611196210668224,
+       "shuffled": 1.1281887108124553
       },
       {
        "order": 2,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9625934281777463
+       "bits": 0.611196210668224,
+       "shuffled": 1.1281887108124553
       },
       {
        "order": 3,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9625934281777463
+       "bits": 0.611196210668224,
+       "shuffled": 1.1281887108124553
       }
      ]
     },
@@ -427,6 +494,7 @@
      "exposure": 10,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -450,6 +518,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -473,6 +542,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -496,21 +566,47 @@
      "exposure": 5,
      "available": true,
      "testThreads": 4,
+     "evaluations": [
+      {
+       "thread": "E-w3.json-45272bbcfc0fd697e49cf70b20a92f3f",
+       "before": 70659,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 54204
+      },
+      {
+       "thread": "E-w3.json-5c34b1e3fbe6cc181fc94ca589121636",
+       "before": 75201,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 54204
+      },
+      {
+       "thread": "E-w3.json-eba9c972c0874c21fe0ac46d8567e8ea",
+       "before": 80245,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 54204
+      },
+      {
+       "thread": "E-w3.json-292ed0bdca76187c18b9d4b787a6b342",
+       "before": 81697,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 54204
+      }
+     ],
      "orders": [
       {
        "order": 1,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       },
       {
        "order": 2,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       },
       {
        "order": 3,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       }
      ]
     },
@@ -519,6 +615,7 @@
      "exposure": 10,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -542,6 +639,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -565,6 +663,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -588,21 +687,41 @@
      "exposure": 5,
      "available": true,
      "testThreads": 3,
+     "evaluations": [
+      {
+       "thread": "E-w4.json-eecf348af56c49f858305be9f5d6ab22",
+       "before": 63014,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 59662
+      },
+      {
+       "thread": "E-w4.json-ebeb916c4f09903600ffa4b03aea8c20",
+       "before": 72570,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 59662
+      },
+      {
+       "thread": "E-w4.json-a82de0f6c55fba5e36606ec119e9da8b",
+       "before": 85240,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 59662
+      }
+     ],
      "orders": [
       {
        "order": 1,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9814947812685428
+       "bits": 0.611196210668224,
+       "shuffled": 1.0420232941217502
       },
       {
        "order": 2,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9814947812685428
+       "bits": 0.611196210668224,
+       "shuffled": 1.0420232941217502
       },
       {
        "order": 3,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9814947812685428
+       "bits": 0.611196210668224,
+       "shuffled": 1.0420232941217502
       }
      ]
     },
@@ -611,6 +730,7 @@
      "exposure": 10,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -634,6 +754,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -657,6 +778,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -680,21 +802,65 @@
      "exposure": 5,
      "available": true,
      "testThreads": 7,
+     "evaluations": [
+      {
+       "thread": "E-w5.json-a41057a7db7cbbcb2b7f665e83d3e0e7",
+       "before": 42011,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 37495
+      },
+      {
+       "thread": "E-w5.json-d43f13fddd532710d68ff5b086d0156e",
+       "before": 45465,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 37495
+      },
+      {
+       "thread": "E-w5.json-b22dbd6e8fb4886a11bcf79d974e6338",
+       "before": 50155,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 37495
+      },
+      {
+       "thread": "E-w5.json-a4b528d69046ab848fa16f7505d75cda",
+       "before": 71347,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 37495
+      },
+      {
+       "thread": "E-w5.json-289caa86aec7d9a16a943983073f46c3",
+       "before": 73067,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 37495
+      },
+      {
+       "thread": "E-w5.json-e37b30be1d14b0191b4da0c594cd9dd3",
+       "before": 78100,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 37495
+      },
+      {
+       "thread": "E-w5.json-92353f1df9999238471c6bd75fbe90da",
+       "before": 81946,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 37495
+      }
+     ],
      "orders": [
       {
        "order": 1,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9544928482816906
+       "bits": 0.6111962106682239,
+       "shuffled": 1.1651167465370431
       },
       {
        "order": 2,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9544928482816906
+       "bits": 0.6111962106682239,
+       "shuffled": 1.1651167465370431
       },
       {
        "order": 3,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9544928482816906
+       "bits": 0.6111962106682239,
+       "shuffled": 1.1651167465370431
       }
      ]
     },
@@ -703,21 +869,35 @@
      "exposure": 10,
      "available": true,
      "testThreads": 2,
+     "evaluations": [
+      {
+       "thread": "E-w5.json-e37b30be1d14b0191b4da0c594cd9dd3",
+       "before": 78100,
+       "trainingTokens": 10,
+       "latestTrainingPlay": 73067
+      },
+      {
+       "thread": "E-w5.json-92353f1df9999238471c6bd75fbe90da",
+       "before": 81946,
+       "trainingTokens": 10,
+       "latestTrainingPlay": 73067
+      }
+     ],
      "orders": [
       {
        "order": 1,
-       "bits": 0.24100809950379493,
-       "shuffled": 0.7652573583493898
+       "bits": 0.5627654410419295,
+       "shuffled": 1.4276233457012537
       },
       {
        "order": 2,
-       "bits": 0.24100809950379493,
-       "shuffled": 0.7652573583493898
+       "bits": 0.5627654410419295,
+       "shuffled": 1.4276233457012537
       },
       {
        "order": 3,
-       "bits": 0.24100809950379493,
-       "shuffled": 0.7652573583493898
+       "bits": 0.5627654410419295,
+       "shuffled": 1.4276233457012537
       }
      ]
     },
@@ -726,6 +906,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -749,6 +930,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -772,21 +954,53 @@
      "exposure": 5,
      "available": true,
      "testThreads": 5,
+     "evaluations": [
+      {
+       "thread": "E-w6.json-fd7a43616a843ecd3a53e60f171a921f",
+       "before": 52226,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 39267
+      },
+      {
+       "thread": "E-w6.json-0f27ceccdb573cc622b9e8287cd88750",
+       "before": 58227,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 39267
+      },
+      {
+       "thread": "E-w6.json-4ff5928953f37b279a274abaed317315",
+       "before": 69601,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 39267
+      },
+      {
+       "thread": "E-w6.json-13f21e940be2f44419e627b329fff048",
+       "before": 72255,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 39267
+      },
+      {
+       "thread": "E-w6.json-1445339df0e3c4ab3f1e528689ec2747",
+       "before": 82116,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 39267
+      }
+     ],
      "orders": [
       {
        "order": 1,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9625934281777463
+       "bits": 0.611196210668224,
+       "shuffled": 1.1281887108124553
       },
       {
        "order": 2,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9625934281777463
+       "bits": 0.611196210668224,
+       "shuffled": 1.1281887108124553
       },
       {
        "order": 3,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9625934281777463
+       "bits": 0.611196210668224,
+       "shuffled": 1.1281887108124553
       }
      ]
     },
@@ -795,6 +1009,7 @@
      "exposure": 10,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -818,6 +1033,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -841,6 +1057,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1182,21 +1399,41 @@
      "exposure": 5,
      "available": true,
      "testThreads": 3,
+     "evaluations": [
+      {
+       "thread": "A1-w1.json-49eb4ae9a6b8e171961fa366e82ad78b",
+       "before": 53474,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 46326
+      },
+      {
+       "thread": "A1-w1.json-cf905836001edffdcf7de60c4dc89339",
+       "before": 55884,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 46326
+      },
+      {
+       "thread": "A1-w1.json-3a592206e00f4c95fde0648a4f674587",
+       "before": 61222,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 46326
+      }
+     ],
      "orders": [
       {
        "order": 1,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9814947812685428
+       "bits": 0.611196210668224,
+       "shuffled": 1.0420232941217502
       },
       {
        "order": 2,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9814947812685428
+       "bits": 0.611196210668224,
+       "shuffled": 1.0420232941217502
       },
       {
        "order": 3,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9814947812685428
+       "bits": 0.611196210668224,
+       "shuffled": 1.0420232941217502
       }
      ]
     },
@@ -1205,6 +1442,7 @@
      "exposure": 10,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1228,6 +1466,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1251,6 +1490,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1274,21 +1514,47 @@
      "exposure": 5,
      "available": true,
      "testThreads": 4,
+     "evaluations": [
+      {
+       "thread": "A1-w2.json-5aaf0f1b690c8d9a0f8c2a4da6006d1d",
+       "before": 53378,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 40655
+      },
+      {
+       "thread": "A1-w2.json-f2522025c19681ca4e99cbe3a054cb24",
+       "before": 55366,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 40655
+      },
+      {
+       "thread": "A1-w2.json-15d843dfa34115cd3e4d0cae0f031366",
+       "before": 75904,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 40655
+      },
+      {
+       "thread": "A1-w2.json-8a136f2603340f3dc75ffc06ee7e6893",
+       "before": 84063,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 40655
+      }
+     ],
      "orders": [
       {
        "order": 1,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       },
       {
        "order": 2,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       },
       {
        "order": 3,
-       "bits": 0.41503749927884387,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       }
      ]
     },
@@ -1297,6 +1563,7 @@
      "exposure": 10,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1320,6 +1587,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1343,6 +1611,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1366,6 +1635,7 @@
      "exposure": 5,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1389,6 +1659,7 @@
      "exposure": 10,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1412,6 +1683,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1435,6 +1707,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1458,6 +1731,7 @@
      "exposure": 5,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1481,6 +1755,7 @@
      "exposure": 10,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1504,6 +1779,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1527,6 +1803,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1550,21 +1827,35 @@
      "exposure": 5,
      "available": true,
      "testThreads": 2,
+     "evaluations": [
+      {
+       "thread": "A1-w5.json-86fbbc743ae3990598fd018a2ae8c218",
+       "before": 73067,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 50155
+      },
+      {
+       "thread": "A1-w5.json-e37b30be1d14b0191b4da0c594cd9dd3",
+       "before": 78100,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 50155
+      }
+     ],
      "orders": [
       {
        "order": 1,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       },
       {
        "order": 2,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       },
       {
        "order": 3,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       }
      ]
     },
@@ -1573,6 +1864,7 @@
      "exposure": 10,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1596,6 +1888,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1619,6 +1912,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1642,21 +1936,35 @@
      "exposure": 5,
      "available": true,
      "testThreads": 2,
+     "evaluations": [
+      {
+       "thread": "A1-w6.json-13f21e940be2f44419e627b329fff048",
+       "before": 72255,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 58227
+      },
+      {
+       "thread": "A1-w6.json-1445339df0e3c4ab3f1e528689ec2747",
+       "before": 82116,
+       "trainingTokens": 5,
+       "latestTrainingPlay": 58227
+      }
+     ],
      "orders": [
       {
        "order": 1,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       },
       {
        "order": 2,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       },
       {
        "order": 3,
-       "bits": 0.4150374992788438,
-       "shuffled": 0.9342413985415516
+       "bits": 0.611196210668224,
+       "shuffled": 1.257436835848513
       }
      ]
     },
@@ -1665,6 +1973,7 @@
      "exposure": 10,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1688,6 +1997,7 @@
      "exposure": 20,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,
@@ -1711,6 +2021,7 @@
      "exposure": 50,
      "available": false,
      "testThreads": 0,
+     "evaluations": [],
      "orders": [
       {
        "order": 1,

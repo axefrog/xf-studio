@@ -4,30 +4,32 @@ The replacement packet has two completed Sol passes. Results below are per rater
 
 The first packet at 2b565787 was invalidated by method review. Closing-kit losses, casting, response order, configuration balance, A5 root sampling and observation-time measures have been corrected. E/A1 and E/A5 comparisons are split by renderer and A5 length. A3 retains different wording. Creative wording revisions, Claude and human ratings remain deferred.
 
-Sixteen complete engine weeks, 224 play hours per engine arm; 24 sampled memberships per arm. The 96 sampled accounts become 75 canonical accounts, each shown once per rater (packet schema 2). Hidden membership records retain arm multiplicities and all original run/start/occurrence times.
+Both Sol passes were redone on packet schema 3. Matching occurrence IDs alone no longer share a rating: ordered IDs, full text in both renderers, response semantics and L2 tokens must all agree. Four former groups split: H-021 into H-021 and H-077 (H-077/H-094); H-022 into H-022 and H-092; H-035 into H-035 (H-035/H-050) and H-087; H-047 into H-047 and H-059 (H-059/H-062/H-080). Sampling, quotas, counterbalancing and first-appearance ordering rules are unchanged. The 75-account answers are superseded and are not used. [Provenance](blind/rating-provenance.json) binds the new answers and completion logs to the unchanged schema-3 packet hash; [review-fix evidence](review-fixes.json) retains every split and R5 before/after cell. No simulations were rerun.
+
+Sixteen complete engine weeks, 224 play hours per engine arm; 24 sampled memberships per arm. The 96 sampled accounts become 79 canonical accounts, each shown once per rater (packet schema 3). Hidden membership records retain arm multiplicities and all original run/start/occurrence times.
 
 ## Decisive forced choices, per rater
 
 | Rater | Comparison | Renderer | Shown pairs | Omitted ties | Total | E follow wins | E follow losses | E caused wins | E caused losses |
 |---|---|---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | A1 | all | 18.000 | 6.000 | 24.000 | 10.000 | 8.000 | 8.000 | 10.000 |
-| codex-gpt-6.1-sol-a | A1 | current | 10.000 | 2.000 | 12.000 | 7.000 | 3.000 | 6.000 | 4.000 |
-| codex-gpt-6.1-sol-a | A1 | evidence | 8.000 | 4.000 | 12.000 | 3.000 | 5.000 | 2.000 | 6.000 |
+| codex-gpt-6.1-sol-a | A1 | all | 18.000 | 6.000 | 24.000 | 11.000 | 7.000 | 12.000 | 6.000 |
+| codex-gpt-6.1-sol-a | A1 | current | 10.000 | 2.000 | 12.000 | 6.000 | 4.000 | 6.000 | 4.000 |
+| codex-gpt-6.1-sol-a | A1 | evidence | 8.000 | 4.000 | 12.000 | 5.000 | 3.000 | 6.000 | 2.000 |
 | codex-gpt-6.1-sol-a | A5-full | all | 12.000 | 0.000 | 12.000 | 2.000 | 10.000 | 2.000 | 10.000 |
 | codex-gpt-6.1-sol-a | A5-full | current | 6.000 | 0.000 | 6.000 | 0.000 | 6.000 | 0.000 | 6.000 |
 | codex-gpt-6.1-sol-a | A5-full | evidence | 6.000 | 0.000 | 6.000 | 2.000 | 4.000 | 2.000 | 4.000 |
-| codex-gpt-6.1-sol-a | A5-matched | all | 12.000 | 0.000 | 12.000 | 8.000 | 4.000 | 8.000 | 4.000 |
-| codex-gpt-6.1-sol-a | A5-matched | current | 6.000 | 0.000 | 6.000 | 2.000 | 4.000 | 2.000 | 4.000 |
+| codex-gpt-6.1-sol-a | A5-matched | all | 12.000 | 0.000 | 12.000 | 7.000 | 5.000 | 9.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A5-matched | current | 6.000 | 0.000 | 6.000 | 1.000 | 5.000 | 3.000 | 3.000 |
 | codex-gpt-6.1-sol-a | A5-matched | evidence | 6.000 | 0.000 | 6.000 | 6.000 | 0.000 | 6.000 | 0.000 |
-| codex-gpt-6.1-sol-b | A1 | all | 18.000 | 6.000 | 24.000 | 10.000 | 8.000 | 10.000 | 8.000 |
-| codex-gpt-6.1-sol-b | A1 | current | 8.000 | 4.000 | 12.000 | 4.000 | 4.000 | 4.000 | 4.000 |
-| codex-gpt-6.1-sol-b | A1 | evidence | 10.000 | 2.000 | 12.000 | 6.000 | 4.000 | 6.000 | 4.000 |
+| codex-gpt-6.1-sol-b | A1 | all | 18.000 | 6.000 | 24.000 | 12.000 | 6.000 | 12.000 | 6.000 |
+| codex-gpt-6.1-sol-b | A1 | current | 8.000 | 4.000 | 12.000 | 5.000 | 3.000 | 5.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A1 | evidence | 10.000 | 2.000 | 12.000 | 7.000 | 3.000 | 7.000 | 3.000 |
 | codex-gpt-6.1-sol-b | A5-full | all | 12.000 | 0.000 | 12.000 | 5.000 | 7.000 | 5.000 | 7.000 |
-| codex-gpt-6.1-sol-b | A5-full | current | 6.000 | 0.000 | 6.000 | 1.000 | 5.000 | 1.000 | 5.000 |
-| codex-gpt-6.1-sol-b | A5-full | evidence | 6.000 | 0.000 | 6.000 | 4.000 | 2.000 | 4.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A5-matched | all | 12.000 | 0.000 | 12.000 | 4.000 | 8.000 | 8.000 | 4.000 |
-| codex-gpt-6.1-sol-b | A5-matched | current | 6.000 | 0.000 | 6.000 | 2.000 | 4.000 | 2.000 | 4.000 |
-| codex-gpt-6.1-sol-b | A5-matched | evidence | 6.000 | 0.000 | 6.000 | 2.000 | 4.000 | 6.000 | 0.000 |
+| codex-gpt-6.1-sol-b | A5-full | current | 6.000 | 0.000 | 6.000 | 2.000 | 4.000 | 2.000 | 4.000 |
+| codex-gpt-6.1-sol-b | A5-full | evidence | 6.000 | 0.000 | 6.000 | 3.000 | 3.000 | 3.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A5-matched | all | 12.000 | 0.000 | 12.000 | 7.000 | 5.000 | 7.000 | 5.000 |
+| codex-gpt-6.1-sol-b | A5-matched | current | 6.000 | 0.000 | 6.000 | 1.000 | 5.000 | 1.000 | 5.000 |
+| codex-gpt-6.1-sol-b | A5-matched | evidence | 6.000 | 0.000 | 6.000 | 6.000 | 0.000 | 6.000 | 0.000 |
 
 ## Omitted forced pairs
 
@@ -61,26 +63,25 @@ Self and identical-text pairs are omitted before rating and counted as ties in t
 | m3c-w2 / restless / engage | 3.000 | 3.000 | 1.000 | 0.000 | 0.000 | 3.000 | 1.000 | 0.333 | 0.000 |
 | m3c-w1 / restless / accept-middle | 8.000 | 4.000 | 0.500 | 0.000 | 0.000 | 3.000 | 1.000 | 0.333 | 0.000 |
 
-## Shared canonical sequences
+## Shared identical canonical accounts
 
 | Canonical ID | Sampled memberships | Arms | Configurations |
 |---|---|---|---|
 | H-003 | 2.000 | E, A1 | m3c-w2 / restless / engage; m3c-w2 / steady / accept-first |
 | H-010 | 2.000 | E | m3c-w0 / steady / accept-last; m3c-w0 / restless / decline |
 | H-015 | 2.000 | A1 | m3c-w2 / restless / engage; m3c-w2 / steady / accept-first |
-| H-021 | 3.000 | A1, E | m3c-w0 / steady / accept-last; m3c-w0 / calm / engage |
-| H-022 | 2.000 | A1 | m3c-w1 / steady / engage; m3c-w1 / restless / accept-middle |
 | H-031 | 5.000 | E, A1 | m3c-w1 / calm / ignore; m3c-w1 / steady / engage |
 | H-032 | 2.000 | A1, E | m3c-w0 / steady / accept-last |
-| H-035 | 3.000 | E, A1 | m3c-w1 / steady / engage; m3c-w1 / restless / accept-middle |
+| H-035 | 2.000 | E | m3c-w1 / steady / engage; m3c-w1 / restless / accept-middle |
 | H-042 | 3.000 | A1, E | m3c-w0 / calm / engage; m3c-w0 / steady / accept-last |
-| H-047 | 4.000 | A1, E | m3c-w0 / restless / decline; m3c-w0 / calm / engage; m3c-w0 / steady / accept-last |
 | H-055 | 3.000 | E, A1 | m3c-w2 / restless / engage; m3c-w2 / steady / accept-first |
+| H-059 | 3.000 | E, A1 | m3c-w0 / calm / engage; m3c-w0 / steady / accept-last |
 | H-060 | 2.000 | A1, E | m3c-w1 / calm / ignore |
+| H-077 | 2.000 | A1, E | m3c-w0 / calm / engage |
 
-12 sequence groups have multiple memberships; 10 span configurations. 75 of 96 sampled accounts are distinct, so 21 repeat exposures are avoided. Overlap is exact ordered occurrence identity, including same-arm duplicates, not role-masked recast similarity. Population and sampled overlap are separate: common traces across settings show unchanged recorded occurrence sequences, not equivalence of all hidden state or all unobserved behaviour. A5 uses separate synthetic occurrence identities, so zero exact E/A5 identity overlap cannot establish story novelty; R1 measures role-masked recast separately.
+11 identical-account groups have multiple memberships; 8 span configurations. 79 of 96 sampled accounts are distinct, so 17 repeat exposures are avoided. Overlap is exact ordered occurrence identity, including same-arm duplicates, not role-masked recast similarity. Population and sampled overlap are separate: common traces across settings show unchanged recorded occurrence sequences, not equivalence of all hidden state or all unobserved behaviour. A5 uses separate synthetic occurrence identities, so zero exact E/A5 identity overlap cannot establish story novelty; R1 measures role-masked recast separately.
 
-Each sheet follows the original counterbalanced sampled-account order and keeps only a canonical sequence's first appearance. Internal account chronology is preserved. Shared sequences across configurations create cyclic across-run order constraints, so not every original run's across-account chronology can be preserved; all original times remain in the hidden membership.
+Each sheet follows the original counterbalanced sampled-account order and keeps only an identical canonical account's first appearance. Internal account chronology is preserved. Shared sequences across configurations create cyclic across-run order constraints, so not every original run's across-account chronology can be preserved; all original times remain in the hidden membership.
 
 Read E/A1 and E/A5-full separately from E/A5-matched, within each renderer. Renderer and length contrasts below are descriptive differences between configuration-balanced halves, not isolated causal percentages. A3 is a wording-confounded baseline.
 
@@ -121,22 +122,24 @@ R3 uses occurrences inside non-overlapping observation-time bins [0,10), [10,20)
 
 | Arm | Prior threads | Available runs | Observed bits: orders 1 / 2 / 3 | Shuffled bits |
 |---|---|---|---|---|
-| E | 5.000 | 4.000 | 2.739 / 2.772 / 2.772 | 2.865 / 2.797 / 2.806 |
-| E | 10.000 | 1.000 | 3.256 / 3.408 / 3.408 | 3.112 / 3.197 / 3.197 |
+| E | 5.000 | 4.000 | 2.540 / 2.531 / 2.531 | 2.601 / 2.601 / 2.601 |
+| E | 10.000 | 1.000 | 3.321 / 3.275 / 3.275 | 3.425 / 3.425 / 3.425 |
 | E | 20.000 | 0.000 | n/a / n/a / n/a | n/a / n/a / n/a |
 | E | 50.000 | 0.000 | n/a / n/a / n/a | n/a / n/a / n/a |
-| A1 | 5.000 | 6.000 | 2.670 / 2.712 / 2.749 | 2.913 / 2.876 / 2.876 |
-| A1 | 10.000 | 1.000 | 2.822 / 2.773 / 2.773 | 2.916 / 2.867 / 2.867 |
+| A1 | 5.000 | 6.000 | 2.570 / 2.597 / 2.597 | 2.782 / 2.766 / 2.766 |
+| A1 | 10.000 | 1.000 | 2.686 / 2.657 / 2.657 | 2.798 / 2.768 / 2.768 |
 | A1 | 20.000 | 0.000 | n/a / n/a / n/a | n/a / n/a / n/a |
 | A1 | 50.000 | 0.000 | n/a / n/a / n/a | n/a / n/a / n/a |
-| A3 | 5.000 | 8.000 | 1.010 / 1.010 / 1.010 | 2.381 / 2.446 / 2.446 |
+| A3 | 5.000 | 8.000 | 1.057 / 1.057 / 1.057 | 2.439 / 2.504 / 2.504 |
 | A3 | 10.000 | 0.000 | n/a / n/a / n/a | n/a / n/a / n/a |
 | A3 | 20.000 | 0.000 | n/a / n/a / n/a | n/a / n/a / n/a |
 | A3 | 50.000 | 0.000 | n/a / n/a / n/a | n/a / n/a / n/a |
-| A5 | 5.000 | 6.000 | 2.521 / 2.568 / 2.585 | 3.560 / 3.582 / 3.558 |
+| A5 | 5.000 | 6.000 | 2.483 / 2.530 / 2.548 | 3.428 / 3.451 / 3.426 |
 | A5 | 10.000 | 0.000 | n/a / n/a / n/a | n/a / n/a / n/a |
 | A5 | 20.000 | 0.000 | n/a / n/a / n/a | n/a / n/a / n/a |
 | A5 | 50.000 | 0.000 | n/a / n/a / n/a | n/a / n/a / n/a |
+
+R5 freezes the prior-thread set at each exposure and cuts its training tokens strictly before each evaluated thread starts. Only observed occurrences and actually observed endings enter training; an unfinished prefix contributes no synthetic end marker. The shuffled control permutes only those cut prefixes. Scores are token-weighted across the next up to ten threads, then the table averages available runs. [Review-fix evidence](review-fixes.json) retains before/after cells.
 
 ## Weeks
 
@@ -261,267 +264,267 @@ Targets are the occurrence lengths of the selected E traces in the same configur
 
 | Rater | Arm | Weighted N | Canonical N | lives | caused | legible | pull | setting | scale | fair | New | Reminds | Same |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | E | 24.000 | 19.000 | 2.000 | 1.625 | 1.500 | 1.958 | 1.917 | 1.792 | 2.125 | 5.000 | 8.000 | 11.000 |
-| codex-gpt-6.1-sol-a | A1 | 24.000 | 17.000 | 1.750 | 1.500 | 1.375 | 1.792 | 1.833 | 1.583 | 2.042 | 6.000 | 10.000 | 8.000 |
-| codex-gpt-6.1-sol-a | A3 | 24.000 | 24.000 | 3.833 | 4.042 | 5.792 | 3.042 | 4.917 | 5.042 | 4.167 | 8.000 | 5.000 | 11.000 |
-| codex-gpt-6.1-sol-a | A5 | 24.000 | 24.000 | 1.917 | 1.958 | 1.583 | 2.083 | 1.625 | 2.458 | 2.250 | 3.000 | 8.000 | 13.000 |
-| codex-gpt-6.1-sol-b | E | 24.000 | 19.000 | 1.958 | 1.917 | 1.750 | 1.750 | 1.833 | 1.833 | 1.292 | 2.000 | 12.000 | 10.000 |
-| codex-gpt-6.1-sol-b | A1 | 24.000 | 17.000 | 1.833 | 1.708 | 1.250 | 1.500 | 1.792 | 1.750 | 1.125 | 4.000 | 11.000 | 9.000 |
-| codex-gpt-6.1-sol-b | A3 | 24.000 | 24.000 | 3.208 | 3.917 | 5.417 | 2.917 | 4.333 | 4.458 | 3.667 | 7.000 | 4.000 | 13.000 |
-| codex-gpt-6.1-sol-b | A5 | 24.000 | 24.000 | 1.708 | 1.667 | 1.833 | 1.833 | 1.125 | 1.917 | 1.542 | 3.000 | 5.000 | 16.000 |
+| codex-gpt-6.1-sol-a | E | 24.000 | 19.000 | 2.042 | 1.958 | 2.000 | 1.875 | 2.750 | 1.833 | 1.250 | 3.000 | 9.000 | 12.000 |
+| codex-gpt-6.1-sol-a | A1 | 24.000 | 20.000 | 1.958 | 1.708 | 1.500 | 1.625 | 2.667 | 1.667 | 1.167 | 2.000 | 12.000 | 10.000 |
+| codex-gpt-6.1-sol-a | A3 | 24.000 | 24.000 | 3.083 | 4.875 | 5.750 | 3.000 | 5.000 | 4.875 | 3.792 | 8.000 | 5.000 | 11.000 |
+| codex-gpt-6.1-sol-a | A5 | 24.000 | 24.000 | 2.083 | 2.000 | 1.958 | 1.917 | 2.208 | 1.958 | 1.250 | 2.000 | 8.000 | 14.000 |
+| codex-gpt-6.1-sol-b | E | 24.000 | 19.000 | 2.125 | 1.875 | 1.458 | 1.875 | 2.750 | 1.917 | 1.250 | 2.000 | 11.000 | 11.000 |
+| codex-gpt-6.1-sol-b | A1 | 24.000 | 20.000 | 2.042 | 1.708 | 1.208 | 1.792 | 2.833 | 1.750 | 1.125 | 3.000 | 10.000 | 11.000 |
+| codex-gpt-6.1-sol-b | A3 | 24.000 | 24.000 | 3.458 | 4.333 | 5.667 | 3.042 | 4.958 | 4.292 | 3.417 | 8.000 | 3.000 | 13.000 |
+| codex-gpt-6.1-sol-b | A5 | 24.000 | 24.000 | 1.750 | 1.667 | 1.417 | 1.583 | 2.125 | 2.125 | 1.042 | 2.000 | 7.000 | 15.000 |
 
 ## Blind criteria, per rater: unweighted
 
 | Rater | Arm | Canonical N | lives | caused | legible | pull | setting | scale | fair | New | Reminds | Same |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | E | 19.000 | 2.105 | 1.737 | 1.632 | 2.053 | 1.947 | 1.895 | 2.158 | 4.000 | 7.000 | 8.000 |
-| codex-gpt-6.1-sol-a | A1 | 17.000 | 1.706 | 1.412 | 1.353 | 1.706 | 1.706 | 1.529 | 2.059 | 4.000 | 6.000 | 7.000 |
-| codex-gpt-6.1-sol-a | A3 | 24.000 | 3.833 | 4.042 | 5.792 | 3.042 | 4.917 | 5.042 | 4.167 | 8.000 | 5.000 | 11.000 |
-| codex-gpt-6.1-sol-a | A5 | 24.000 | 1.917 | 1.958 | 1.583 | 2.083 | 1.625 | 2.458 | 2.250 | 3.000 | 8.000 | 13.000 |
-| codex-gpt-6.1-sol-b | E | 19.000 | 1.947 | 1.895 | 1.789 | 1.737 | 1.789 | 1.842 | 1.316 | 1.000 | 10.000 | 8.000 |
-| codex-gpt-6.1-sol-b | A1 | 17.000 | 1.824 | 1.765 | 1.353 | 1.471 | 1.765 | 1.824 | 1.176 | 3.000 | 7.000 | 7.000 |
-| codex-gpt-6.1-sol-b | A3 | 24.000 | 3.208 | 3.917 | 5.417 | 2.917 | 4.333 | 4.458 | 3.667 | 7.000 | 4.000 | 13.000 |
-| codex-gpt-6.1-sol-b | A5 | 24.000 | 1.708 | 1.667 | 1.833 | 1.833 | 1.125 | 1.917 | 1.542 | 3.000 | 5.000 | 16.000 |
+| codex-gpt-6.1-sol-a | E | 19.000 | 2.158 | 2.105 | 2.211 | 2.000 | 2.842 | 1.947 | 1.316 | 2.000 | 8.000 | 9.000 |
+| codex-gpt-6.1-sol-a | A1 | 20.000 | 1.900 | 1.750 | 1.600 | 1.650 | 2.600 | 1.700 | 1.200 | 2.000 | 9.000 | 9.000 |
+| codex-gpt-6.1-sol-a | A3 | 24.000 | 3.083 | 4.875 | 5.750 | 3.000 | 5.000 | 4.875 | 3.792 | 8.000 | 5.000 | 11.000 |
+| codex-gpt-6.1-sol-a | A5 | 24.000 | 2.083 | 2.000 | 1.958 | 1.917 | 2.208 | 1.958 | 1.250 | 2.000 | 8.000 | 14.000 |
+| codex-gpt-6.1-sol-b | E | 19.000 | 2.105 | 1.789 | 1.421 | 1.789 | 2.684 | 1.895 | 1.263 | 1.000 | 9.000 | 9.000 |
+| codex-gpt-6.1-sol-b | A1 | 20.000 | 2.050 | 1.750 | 1.250 | 1.750 | 2.750 | 1.800 | 1.150 | 2.000 | 8.000 | 10.000 |
+| codex-gpt-6.1-sol-b | A3 | 24.000 | 3.458 | 4.333 | 5.667 | 3.042 | 4.958 | 4.292 | 3.417 | 8.000 | 3.000 | 13.000 |
+| codex-gpt-6.1-sol-b | A5 | 24.000 | 1.750 | 1.667 | 1.417 | 1.583 | 2.125 | 2.125 | 1.042 | 2.000 | 7.000 | 15.000 |
 
 ## Per-configuration blind criteria: multiplicity weighted
 
 | Rater | Arm | Configuration | Weighted N | lives | caused | legible | pull | setting | scale | fair | New | Reminds | Same |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | E | m3c-w0 / steady / accept-last | 3.000 | 1.667 | 1.000 | 1.000 | 1.667 | 1.667 | 1.667 | 2.000 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w0 / steady / accept-last | 3.000 | 1.667 | 1.000 | 1.000 | 1.667 | 1.667 | 1.667 | 2.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w0 / steady / accept-last | 3.000 | 3.667 | 3.667 | 5.667 | 3.000 | 5.000 | 5.333 | 4.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w0 / steady / accept-last | 3.000 | 1.667 | 1.667 | 1.667 | 1.667 | 1.333 | 2.000 | 2.333 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w1 / calm / ignore | 3.000 | 2.333 | 2.333 | 1.000 | 2.333 | 2.667 | 2.000 | 2.000 | 0.000 | 3.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w1 / calm / ignore | 3.000 | 2.333 | 2.333 | 1.000 | 2.333 | 2.667 | 2.000 | 2.000 | 0.000 | 3.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w1 / calm / ignore | 3.000 | 4.000 | 5.000 | 5.667 | 3.000 | 5.000 | 3.000 | 3.000 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w1 / calm / ignore | 3.000 | 2.333 | 2.333 | 1.000 | 2.333 | 1.667 | 2.333 | 2.333 | 1.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w0 / restless / decline | 3.000 | 3.000 | 2.667 | 2.333 | 3.000 | 2.000 | 3.000 | 3.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w0 / restless / decline | 3.000 | 1.333 | 1.333 | 1.333 | 1.333 | 1.333 | 1.667 | 2.333 | 2.000 | 1.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w0 / restless / decline | 3.000 | 3.667 | 4.333 | 5.667 | 3.000 | 5.000 | 6.000 | 6.000 | 2.000 | 1.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w0 / restless / decline | 3.000 | 2.000 | 2.333 | 1.667 | 2.000 | 1.667 | 3.333 | 3.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w1 / steady / engage | 3.000 | 2.000 | 2.333 | 2.667 | 2.000 | 2.000 | 2.000 | 2.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w1 / steady / engage | 3.000 | 2.000 | 2.333 | 2.000 | 2.333 | 2.333 | 2.000 | 2.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w1 / steady / engage | 3.000 | 4.000 | 4.000 | 6.000 | 3.000 | 5.000 | 5.000 | 4.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w1 / steady / engage | 3.000 | 1.667 | 2.000 | 2.333 | 2.000 | 1.667 | 2.667 | 2.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.000 | 1.000 | 1.667 | 1.667 | 1.333 | 2.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.000 | 1.000 | 1.667 | 1.667 | 1.333 | 2.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w2 / steady / accept-first | 3.000 | 3.667 | 3.667 | 5.667 | 3.000 | 4.667 | 5.333 | 4.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w2 / steady / accept-first | 3.000 | 2.000 | 1.667 | 1.667 | 2.000 | 1.667 | 2.000 | 2.000 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.000 | 1.000 | 1.333 | 1.333 | 1.333 | 2.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.000 | 1.000 | 1.333 | 1.333 | 1.333 | 2.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w0 / calm / engage | 3.000 | 3.667 | 3.667 | 5.667 | 3.000 | 5.000 | 5.333 | 4.000 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.333 | 1.667 | 1.667 | 1.333 | 1.667 | 2.000 | 2.000 | 1.000 | 0.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w2 / restless / engage | 3.000 | 2.000 | 1.000 | 1.000 | 2.000 | 2.000 | 1.333 | 2.000 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w2 / restless / engage | 3.000 | 2.000 | 1.000 | 1.667 | 1.667 | 2.000 | 1.000 | 2.000 | 1.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w2 / restless / engage | 3.000 | 4.000 | 4.000 | 6.000 | 3.000 | 5.000 | 5.333 | 4.333 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w2 / restless / engage | 3.000 | 2.667 | 2.333 | 1.000 | 2.667 | 2.000 | 3.000 | 2.333 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w1 / restless / accept-middle | 3.000 | 2.000 | 1.667 | 2.000 | 1.667 | 2.000 | 1.667 | 2.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w1 / restless / accept-middle | 3.000 | 1.667 | 2.000 | 2.000 | 2.000 | 1.667 | 1.667 | 2.000 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w1 / restless / accept-middle | 3.000 | 4.000 | 4.000 | 6.000 | 3.333 | 4.667 | 5.000 | 4.000 | 1.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w1 / restless / accept-middle | 3.000 | 1.667 | 2.000 | 1.667 | 2.333 | 1.667 | 2.667 | 2.000 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w0 / steady / accept-last | 3.000 | 1.333 | 1.333 | 1.000 | 1.333 | 1.333 | 1.333 | 1.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w0 / steady / accept-last | 3.000 | 1.333 | 1.333 | 1.000 | 1.000 | 1.333 | 1.333 | 1.000 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w0 / steady / accept-last | 3.000 | 3.333 | 4.000 | 5.667 | 3.000 | 4.667 | 5.000 | 4.000 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w0 / steady / accept-last | 3.000 | 2.000 | 1.667 | 1.667 | 1.667 | 1.000 | 1.667 | 1.333 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w1 / calm / ignore | 3.000 | 2.333 | 1.667 | 2.000 | 2.333 | 2.333 | 1.667 | 1.333 | 0.000 | 3.000 | 0.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w1 / calm / ignore | 3.000 | 2.333 | 1.667 | 2.000 | 2.333 | 2.333 | 1.667 | 1.333 | 0.000 | 3.000 | 0.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w1 / calm / ignore | 3.000 | 3.000 | 4.000 | 5.333 | 3.000 | 4.333 | 2.333 | 2.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w1 / calm / ignore | 3.000 | 2.000 | 1.667 | 1.667 | 1.667 | 1.333 | 1.667 | 1.333 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.667 | 2.000 | 1.667 | 1.667 | 2.000 | 2.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w0 / restless / decline | 3.000 | 1.333 | 1.333 | 1.000 | 1.000 | 1.333 | 1.667 | 1.333 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w0 / restless / decline | 3.000 | 3.000 | 3.667 | 5.667 | 2.000 | 4.333 | 5.000 | 5.000 | 0.000 | 3.000 | 0.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.667 | 1.667 | 1.667 | 1.333 | 2.333 | 2.000 | 1.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w1 / steady / engage | 3.000 | 2.000 | 2.000 | 1.000 | 1.667 | 1.333 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w1 / steady / engage | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 1.667 | 1.667 | 1.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w1 / steady / engage | 3.000 | 3.000 | 3.667 | 5.667 | 3.000 | 4.000 | 4.333 | 3.333 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w1 / steady / engage | 3.000 | 1.667 | 1.667 | 1.667 | 2.000 | 1.333 | 2.000 | 1.667 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w2 / steady / accept-first | 3.000 | 2.000 | 2.333 | 2.000 | 1.667 | 2.000 | 2.000 | 1.333 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.667 | 1.000 | 1.333 | 2.000 | 1.667 | 1.000 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w2 / steady / accept-first | 3.000 | 3.333 | 4.000 | 5.000 | 3.000 | 4.333 | 5.000 | 4.000 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.667 | 1.667 | 2.000 | 1.000 | 2.000 | 1.667 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w0 / calm / engage | 3.000 | 1.667 | 1.667 | 1.000 | 1.333 | 1.667 | 1.667 | 1.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w0 / calm / engage | 3.000 | 1.667 | 1.667 | 1.000 | 1.333 | 1.667 | 1.667 | 1.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w0 / calm / engage | 3.000 | 3.333 | 4.000 | 5.667 | 3.000 | 4.667 | 4.667 | 3.667 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w0 / calm / engage | 3.000 | 1.667 | 1.667 | 2.333 | 2.000 | 1.000 | 2.000 | 1.667 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w2 / restless / engage | 3.000 | 2.333 | 3.000 | 3.000 | 2.333 | 2.333 | 2.333 | 1.667 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w2 / restless / engage | 3.000 | 2.333 | 2.333 | 2.000 | 2.000 | 2.333 | 2.333 | 1.333 | 1.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w2 / restless / engage | 3.000 | 3.333 | 4.000 | 5.667 | 3.000 | 4.000 | 4.667 | 3.667 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w2 / restless / engage | 3.000 | 1.667 | 1.667 | 1.667 | 1.667 | 1.000 | 1.667 | 1.333 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w1 / restless / accept-middle | 3.000 | 2.333 | 1.667 | 2.000 | 1.667 | 2.000 | 1.667 | 1.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w1 / restless / accept-middle | 3.000 | 2.000 | 2.000 | 1.000 | 1.333 | 1.667 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w1 / restless / accept-middle | 3.000 | 3.333 | 4.000 | 4.667 | 3.333 | 4.333 | 4.667 | 3.667 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w1 / restless / accept-middle | 3.000 | 1.333 | 1.667 | 2.333 | 2.000 | 1.000 | 2.000 | 1.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w0 / steady / accept-last | 3.000 | 1.333 | 1.333 | 1.000 | 1.333 | 2.333 | 1.333 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w0 / steady / accept-last | 3.000 | 1.333 | 1.333 | 1.000 | 1.333 | 2.333 | 1.333 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w0 / steady / accept-last | 3.000 | 3.333 | 4.667 | 5.667 | 3.000 | 5.000 | 5.000 | 4.000 | 1.000 | 0.000 | 2.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w0 / steady / accept-last | 3.000 | 2.000 | 2.000 | 1.667 | 2.000 | 2.333 | 2.000 | 1.333 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w1 / calm / ignore | 3.000 | 2.667 | 2.000 | 1.333 | 2.000 | 3.333 | 2.000 | 1.000 | 0.000 | 3.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w1 / calm / ignore | 3.000 | 2.667 | 2.000 | 1.333 | 2.000 | 3.333 | 2.000 | 1.000 | 0.000 | 3.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w1 / calm / ignore | 3.000 | 3.000 | 5.000 | 5.667 | 3.000 | 5.000 | 3.000 | 1.000 | 2.000 | 0.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w1 / calm / ignore | 3.000 | 2.333 | 2.333 | 1.000 | 2.000 | 2.667 | 2.000 | 1.333 | 1.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w0 / restless / decline | 3.000 | 2.333 | 2.667 | 3.000 | 2.333 | 3.000 | 2.333 | 2.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.667 | 1.333 | 1.333 | 2.333 | 1.667 | 1.667 | 1.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w0 / restless / decline | 3.000 | 3.000 | 5.000 | 6.000 | 3.000 | 5.000 | 6.000 | 6.000 | 2.000 | 1.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w0 / restless / decline | 3.000 | 2.333 | 2.333 | 2.000 | 2.000 | 2.333 | 2.333 | 2.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w1 / steady / engage | 3.000 | 2.333 | 2.333 | 3.333 | 2.000 | 3.000 | 2.000 | 1.333 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w1 / steady / engage | 3.000 | 2.667 | 2.333 | 2.000 | 2.000 | 3.333 | 2.000 | 1.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w1 / steady / engage | 3.000 | 3.000 | 4.667 | 6.000 | 3.000 | 5.000 | 5.000 | 3.667 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w1 / steady / engage | 3.000 | 2.000 | 2.000 | 2.667 | 2.000 | 2.000 | 2.000 | 1.000 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.667 | 1.333 | 1.667 | 2.333 | 1.667 | 1.000 | 1.000 | 0.000 | 2.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.333 | 1.000 | 1.333 | 2.333 | 1.333 | 1.000 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w2 / steady / accept-first | 3.000 | 3.000 | 5.000 | 5.333 | 3.000 | 5.000 | 5.000 | 4.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w2 / steady / accept-first | 3.000 | 2.000 | 1.667 | 2.000 | 1.667 | 2.000 | 1.667 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.333 | 1.000 | 1.333 | 2.333 | 1.333 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.333 | 1.000 | 1.333 | 2.333 | 1.333 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w0 / calm / engage | 3.000 | 3.333 | 4.667 | 5.667 | 3.000 | 5.000 | 5.000 | 4.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.333 | 2.333 | 1.333 | 2.000 | 1.333 | 1.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w2 / restless / engage | 3.000 | 2.000 | 2.000 | 1.667 | 2.000 | 2.333 | 2.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w2 / restless / engage | 3.000 | 2.000 | 1.333 | 2.333 | 1.667 | 2.333 | 1.667 | 1.000 | 1.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w2 / restless / engage | 3.000 | 3.000 | 5.000 | 6.000 | 3.000 | 5.000 | 5.333 | 4.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w2 / restless / engage | 3.000 | 2.667 | 2.333 | 1.333 | 2.333 | 2.333 | 2.333 | 1.333 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w1 / restless / accept-middle | 3.000 | 2.667 | 2.333 | 3.333 | 2.333 | 3.333 | 2.000 | 1.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w1 / restless / accept-middle | 3.000 | 2.333 | 2.333 | 2.000 | 2.000 | 3.000 | 2.000 | 1.333 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w1 / restless / accept-middle | 3.000 | 3.000 | 5.000 | 5.667 | 3.000 | 5.000 | 4.667 | 3.667 | 1.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w1 / restless / accept-middle | 3.000 | 2.000 | 2.000 | 2.667 | 2.000 | 2.000 | 2.000 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w0 / steady / accept-last | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 2.667 | 1.667 | 1.000 | 1.000 | 0.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w0 / steady / accept-last | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 2.667 | 1.667 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w0 / steady / accept-last | 3.000 | 3.333 | 4.333 | 5.667 | 3.000 | 5.000 | 4.667 | 3.667 | 2.000 | 0.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w0 / steady / accept-last | 3.000 | 1.667 | 1.333 | 1.667 | 1.333 | 2.000 | 1.667 | 1.000 | 2.000 | 1.000 | 0.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w1 / calm / ignore | 3.000 | 2.333 | 1.667 | 1.667 | 2.333 | 3.333 | 1.667 | 1.333 | 0.000 | 3.000 | 0.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w1 / calm / ignore | 3.000 | 2.333 | 1.667 | 1.667 | 2.333 | 3.333 | 1.667 | 1.333 | 0.000 | 3.000 | 0.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w1 / calm / ignore | 3.000 | 3.667 | 5.000 | 5.667 | 4.000 | 5.000 | 3.000 | 2.000 | 2.000 | 0.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w1 / calm / ignore | 3.000 | 2.000 | 1.667 | 1.333 | 1.667 | 2.333 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.667 | 1.000 | 1.667 | 2.667 | 2.333 | 1.667 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.333 | 1.000 | 1.333 | 2.333 | 1.667 | 1.333 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w0 / restless / decline | 3.000 | 3.333 | 4.333 | 5.667 | 2.000 | 5.000 | 5.000 | 5.000 | 0.000 | 3.000 | 0.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.667 | 1.333 | 1.667 | 2.333 | 2.333 | 1.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w1 / steady / engage | 3.000 | 2.000 | 1.667 | 1.000 | 2.000 | 3.000 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w1 / steady / engage | 3.000 | 2.000 | 1.667 | 1.000 | 2.000 | 3.000 | 1.667 | 1.000 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w1 / steady / engage | 3.000 | 3.333 | 4.000 | 6.000 | 3.000 | 5.000 | 4.333 | 3.333 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w1 / steady / engage | 3.000 | 1.667 | 1.667 | 1.333 | 1.667 | 2.333 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w2 / steady / accept-first | 3.000 | 2.333 | 2.333 | 2.000 | 2.000 | 2.667 | 2.000 | 1.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w2 / steady / accept-first | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 3.000 | 1.667 | 1.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w2 / steady / accept-first | 3.000 | 3.333 | 4.333 | 5.333 | 3.000 | 4.667 | 4.333 | 3.333 | 2.000 | 0.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 2.000 | 1.333 | 1.667 | 2.000 | 2.333 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w0 / calm / engage | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 2.667 | 1.667 | 1.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w0 / calm / engage | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 2.667 | 1.667 | 1.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w0 / calm / engage | 3.000 | 3.667 | 4.333 | 5.667 | 3.000 | 5.000 | 4.333 | 3.333 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w0 / calm / engage | 3.000 | 2.000 | 1.667 | 1.667 | 1.667 | 2.000 | 2.333 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w2 / restless / engage | 3.000 | 2.667 | 3.000 | 3.000 | 2.333 | 2.667 | 2.333 | 1.667 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w2 / restless / engage | 3.000 | 2.333 | 2.333 | 2.000 | 2.000 | 3.000 | 2.333 | 1.333 | 1.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w2 / restless / engage | 3.000 | 3.667 | 4.333 | 6.000 | 3.000 | 5.000 | 4.333 | 3.333 | 1.000 | 0.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w2 / restless / engage | 3.000 | 1.667 | 1.667 | 1.333 | 1.333 | 2.000 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w1 / restless / accept-middle | 3.000 | 2.000 | 1.333 | 1.000 | 1.333 | 2.333 | 1.667 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w1 / restless / accept-middle | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 2.667 | 1.667 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w1 / restless / accept-middle | 3.000 | 3.333 | 4.000 | 5.333 | 3.333 | 5.000 | 4.333 | 3.333 | 1.000 | 0.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w1 / restless / accept-middle | 3.000 | 1.667 | 1.667 | 1.333 | 1.667 | 2.000 | 2.333 | 1.000 | 0.000 | 0.000 | 3.000 |
 
 ## Per-configuration blind criteria: unweighted
 
 | Rater | Arm | Configuration | Canonical N | lives | caused | legible | pull | setting | scale | fair | New | Reminds | Same |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | E | m3c-w0 / steady / accept-last | 3.000 | 1.667 | 1.000 | 1.000 | 1.667 | 1.667 | 1.667 | 2.000 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w0 / steady / accept-last | 3.000 | 1.667 | 1.000 | 1.000 | 1.667 | 1.667 | 1.667 | 2.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w0 / steady / accept-last | 3.000 | 3.667 | 3.667 | 5.667 | 3.000 | 5.000 | 5.333 | 4.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w0 / steady / accept-last | 3.000 | 1.667 | 1.667 | 1.667 | 1.667 | 1.333 | 2.000 | 2.333 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w1 / calm / ignore | 2.000 | 2.500 | 2.500 | 1.000 | 2.500 | 2.500 | 2.000 | 2.000 | 0.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w1 / calm / ignore | 2.000 | 2.500 | 2.500 | 1.000 | 2.500 | 2.500 | 2.000 | 2.000 | 0.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w1 / calm / ignore | 3.000 | 4.000 | 5.000 | 5.667 | 3.000 | 5.000 | 3.000 | 3.000 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w1 / calm / ignore | 3.000 | 2.333 | 2.333 | 1.000 | 2.333 | 1.667 | 2.333 | 2.333 | 1.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w0 / restless / decline | 3.000 | 3.000 | 2.667 | 2.333 | 3.000 | 2.000 | 3.000 | 3.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w0 / restless / decline | 3.000 | 1.333 | 1.333 | 1.333 | 1.333 | 1.333 | 1.667 | 2.333 | 2.000 | 1.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w0 / restless / decline | 3.000 | 3.667 | 4.333 | 5.667 | 3.000 | 5.000 | 6.000 | 6.000 | 2.000 | 1.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w0 / restless / decline | 3.000 | 2.000 | 2.333 | 1.667 | 2.000 | 1.667 | 3.333 | 3.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w1 / steady / engage | 3.000 | 2.000 | 2.333 | 2.667 | 2.000 | 2.000 | 2.000 | 2.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w1 / steady / engage | 3.000 | 2.000 | 2.333 | 2.000 | 2.333 | 2.333 | 2.000 | 2.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w1 / steady / engage | 3.000 | 4.000 | 4.000 | 6.000 | 3.000 | 5.000 | 5.000 | 4.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w1 / steady / engage | 3.000 | 1.667 | 2.000 | 2.333 | 2.000 | 1.667 | 2.667 | 2.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.000 | 1.000 | 1.667 | 1.667 | 1.333 | 2.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.000 | 1.000 | 1.667 | 1.667 | 1.333 | 2.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w2 / steady / accept-first | 3.000 | 3.667 | 3.667 | 5.667 | 3.000 | 4.667 | 5.333 | 4.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w2 / steady / accept-first | 3.000 | 2.000 | 1.667 | 1.667 | 2.000 | 1.667 | 2.000 | 2.000 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.000 | 1.000 | 1.333 | 1.333 | 1.333 | 2.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.000 | 1.000 | 1.333 | 1.333 | 1.333 | 2.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w0 / calm / engage | 3.000 | 3.667 | 3.667 | 5.667 | 3.000 | 5.000 | 5.333 | 4.000 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.333 | 1.667 | 1.667 | 1.333 | 1.667 | 2.000 | 2.000 | 1.000 | 0.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w2 / restless / engage | 3.000 | 2.000 | 1.000 | 1.000 | 2.000 | 2.000 | 1.333 | 2.000 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w2 / restless / engage | 3.000 | 2.000 | 1.000 | 1.667 | 1.667 | 2.000 | 1.000 | 2.000 | 1.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w2 / restless / engage | 3.000 | 4.000 | 4.000 | 6.000 | 3.000 | 5.000 | 5.333 | 4.333 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w2 / restless / engage | 3.000 | 2.667 | 2.333 | 1.000 | 2.667 | 2.000 | 3.000 | 2.333 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-a | E | m3c-w1 / restless / accept-middle | 3.000 | 2.000 | 1.667 | 2.000 | 1.667 | 2.000 | 1.667 | 2.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-a | A1 | m3c-w1 / restless / accept-middle | 3.000 | 1.667 | 2.000 | 2.000 | 2.000 | 1.667 | 1.667 | 2.000 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A3 | m3c-w1 / restless / accept-middle | 3.000 | 4.000 | 4.000 | 6.000 | 3.333 | 4.667 | 5.000 | 4.000 | 1.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-a | A5 | m3c-w1 / restless / accept-middle | 3.000 | 1.667 | 2.000 | 1.667 | 2.333 | 1.667 | 2.667 | 2.000 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w0 / steady / accept-last | 3.000 | 1.333 | 1.333 | 1.000 | 1.333 | 1.333 | 1.333 | 1.000 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w0 / steady / accept-last | 3.000 | 1.333 | 1.333 | 1.000 | 1.000 | 1.333 | 1.333 | 1.000 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w0 / steady / accept-last | 3.000 | 3.333 | 4.000 | 5.667 | 3.000 | 4.667 | 5.000 | 4.000 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w0 / steady / accept-last | 3.000 | 2.000 | 1.667 | 1.667 | 1.667 | 1.000 | 1.667 | 1.333 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w1 / calm / ignore | 2.000 | 2.500 | 2.000 | 2.500 | 2.500 | 2.500 | 2.000 | 1.500 | 0.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w1 / calm / ignore | 2.000 | 2.500 | 2.000 | 2.500 | 2.500 | 2.500 | 2.000 | 1.500 | 0.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w1 / calm / ignore | 3.000 | 3.000 | 4.000 | 5.333 | 3.000 | 4.333 | 2.333 | 2.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w1 / calm / ignore | 3.000 | 2.000 | 1.667 | 1.667 | 1.667 | 1.333 | 1.667 | 1.333 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.667 | 2.000 | 1.667 | 1.667 | 2.000 | 2.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w0 / restless / decline | 3.000 | 1.333 | 1.333 | 1.000 | 1.000 | 1.333 | 1.667 | 1.333 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w0 / restless / decline | 3.000 | 3.000 | 3.667 | 5.667 | 2.000 | 4.333 | 5.000 | 5.000 | 0.000 | 3.000 | 0.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.667 | 1.667 | 1.667 | 1.333 | 2.333 | 2.000 | 1.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w1 / steady / engage | 3.000 | 2.000 | 2.000 | 1.000 | 1.667 | 1.333 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w1 / steady / engage | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 1.667 | 1.667 | 1.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w1 / steady / engage | 3.000 | 3.000 | 3.667 | 5.667 | 3.000 | 4.000 | 4.333 | 3.333 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w1 / steady / engage | 3.000 | 1.667 | 1.667 | 1.667 | 2.000 | 1.333 | 2.000 | 1.667 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w2 / steady / accept-first | 3.000 | 2.000 | 2.333 | 2.000 | 1.667 | 2.000 | 2.000 | 1.333 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.667 | 1.000 | 1.333 | 2.000 | 1.667 | 1.000 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w2 / steady / accept-first | 3.000 | 3.333 | 4.000 | 5.000 | 3.000 | 4.333 | 5.000 | 4.000 | 2.000 | 0.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.667 | 1.667 | 2.000 | 1.000 | 2.000 | 1.667 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w0 / calm / engage | 3.000 | 1.667 | 1.667 | 1.000 | 1.333 | 1.667 | 1.667 | 1.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w0 / calm / engage | 3.000 | 1.667 | 1.667 | 1.000 | 1.333 | 1.667 | 1.667 | 1.000 | 1.000 | 1.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w0 / calm / engage | 3.000 | 3.333 | 4.000 | 5.667 | 3.000 | 4.667 | 4.667 | 3.667 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w0 / calm / engage | 3.000 | 1.667 | 1.667 | 2.333 | 2.000 | 1.000 | 2.000 | 1.667 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w2 / restless / engage | 3.000 | 2.333 | 3.000 | 3.000 | 2.333 | 2.333 | 2.333 | 1.667 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w2 / restless / engage | 3.000 | 2.333 | 2.333 | 2.000 | 2.000 | 2.333 | 2.333 | 1.333 | 1.000 | 2.000 | 0.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w2 / restless / engage | 3.000 | 3.333 | 4.000 | 5.667 | 3.000 | 4.000 | 4.667 | 3.667 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w2 / restless / engage | 3.000 | 1.667 | 1.667 | 1.667 | 1.667 | 1.000 | 1.667 | 1.333 | 0.000 | 0.000 | 3.000 |
-| codex-gpt-6.1-sol-b | E | m3c-w1 / restless / accept-middle | 3.000 | 2.333 | 1.667 | 2.000 | 1.667 | 2.000 | 1.667 | 1.000 | 0.000 | 2.000 | 1.000 |
-| codex-gpt-6.1-sol-b | A1 | m3c-w1 / restless / accept-middle | 3.000 | 2.000 | 2.000 | 1.000 | 1.333 | 1.667 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A3 | m3c-w1 / restless / accept-middle | 3.000 | 3.333 | 4.000 | 4.667 | 3.333 | 4.333 | 4.667 | 3.667 | 1.000 | 0.000 | 2.000 |
-| codex-gpt-6.1-sol-b | A5 | m3c-w1 / restless / accept-middle | 3.000 | 1.333 | 1.667 | 2.333 | 2.000 | 1.000 | 2.000 | 1.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w0 / steady / accept-last | 3.000 | 1.333 | 1.333 | 1.000 | 1.333 | 2.333 | 1.333 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w0 / steady / accept-last | 3.000 | 1.333 | 1.333 | 1.000 | 1.333 | 2.333 | 1.333 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w0 / steady / accept-last | 3.000 | 3.333 | 4.667 | 5.667 | 3.000 | 5.000 | 5.000 | 4.000 | 1.000 | 0.000 | 2.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w0 / steady / accept-last | 3.000 | 2.000 | 2.000 | 1.667 | 2.000 | 2.333 | 2.000 | 1.333 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w1 / calm / ignore | 2.000 | 2.500 | 2.000 | 1.500 | 2.000 | 3.000 | 2.000 | 1.000 | 0.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w1 / calm / ignore | 2.000 | 2.500 | 2.000 | 1.500 | 2.000 | 3.000 | 2.000 | 1.000 | 0.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w1 / calm / ignore | 3.000 | 3.000 | 5.000 | 5.667 | 3.000 | 5.000 | 3.000 | 1.000 | 2.000 | 0.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w1 / calm / ignore | 3.000 | 2.333 | 2.333 | 1.000 | 2.000 | 2.667 | 2.000 | 1.333 | 1.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w0 / restless / decline | 3.000 | 2.333 | 2.667 | 3.000 | 2.333 | 3.000 | 2.333 | 2.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.667 | 1.333 | 1.333 | 2.333 | 1.667 | 1.667 | 1.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w0 / restless / decline | 3.000 | 3.000 | 5.000 | 6.000 | 3.000 | 5.000 | 6.000 | 6.000 | 2.000 | 1.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w0 / restless / decline | 3.000 | 2.333 | 2.333 | 2.000 | 2.000 | 2.333 | 2.333 | 2.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w1 / steady / engage | 3.000 | 2.333 | 2.333 | 3.333 | 2.000 | 3.000 | 2.000 | 1.333 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w1 / steady / engage | 3.000 | 2.667 | 2.333 | 2.000 | 2.000 | 3.333 | 2.000 | 1.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w1 / steady / engage | 3.000 | 3.000 | 4.667 | 6.000 | 3.000 | 5.000 | 5.000 | 3.667 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w1 / steady / engage | 3.000 | 2.000 | 2.000 | 2.667 | 2.000 | 2.000 | 2.000 | 1.000 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.667 | 1.333 | 1.667 | 2.333 | 1.667 | 1.000 | 1.000 | 0.000 | 2.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 1.333 | 1.000 | 1.333 | 2.333 | 1.333 | 1.000 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w2 / steady / accept-first | 3.000 | 3.000 | 5.000 | 5.333 | 3.000 | 5.000 | 5.000 | 4.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w2 / steady / accept-first | 3.000 | 2.000 | 1.667 | 2.000 | 1.667 | 2.000 | 1.667 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.333 | 1.000 | 1.333 | 2.333 | 1.333 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.333 | 1.000 | 1.333 | 2.333 | 1.333 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w0 / calm / engage | 3.000 | 3.333 | 4.667 | 5.667 | 3.000 | 5.000 | 5.000 | 4.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w0 / calm / engage | 3.000 | 1.333 | 1.333 | 2.333 | 1.333 | 2.000 | 1.333 | 1.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w2 / restless / engage | 3.000 | 2.000 | 2.000 | 1.667 | 2.000 | 2.333 | 2.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w2 / restless / engage | 3.000 | 2.000 | 1.333 | 2.333 | 1.667 | 2.333 | 1.667 | 1.000 | 1.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w2 / restless / engage | 3.000 | 3.000 | 5.000 | 6.000 | 3.000 | 5.000 | 5.333 | 4.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w2 / restless / engage | 3.000 | 2.667 | 2.333 | 1.333 | 2.333 | 2.333 | 2.333 | 1.333 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-a | E | m3c-w1 / restless / accept-middle | 3.000 | 2.667 | 2.333 | 3.333 | 2.333 | 3.333 | 2.000 | 1.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-a | A1 | m3c-w1 / restless / accept-middle | 3.000 | 2.333 | 2.333 | 2.000 | 2.000 | 3.000 | 2.000 | 1.333 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-a | A3 | m3c-w1 / restless / accept-middle | 3.000 | 3.000 | 5.000 | 5.667 | 3.000 | 5.000 | 4.667 | 3.667 | 1.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-a | A5 | m3c-w1 / restless / accept-middle | 3.000 | 2.000 | 2.000 | 2.667 | 2.000 | 2.000 | 2.000 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w0 / steady / accept-last | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 2.667 | 1.667 | 1.000 | 1.000 | 0.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w0 / steady / accept-last | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 2.667 | 1.667 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w0 / steady / accept-last | 3.000 | 3.333 | 4.333 | 5.667 | 3.000 | 5.000 | 4.667 | 3.667 | 2.000 | 0.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w0 / steady / accept-last | 3.000 | 1.667 | 1.333 | 1.667 | 1.333 | 2.000 | 1.667 | 1.000 | 2.000 | 1.000 | 0.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w1 / calm / ignore | 2.000 | 2.500 | 2.000 | 2.000 | 2.500 | 3.500 | 2.000 | 1.500 | 0.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w1 / calm / ignore | 2.000 | 2.500 | 2.000 | 2.000 | 2.500 | 3.500 | 2.000 | 1.500 | 0.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w1 / calm / ignore | 3.000 | 3.667 | 5.000 | 5.667 | 4.000 | 5.000 | 3.000 | 2.000 | 2.000 | 0.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w1 / calm / ignore | 3.000 | 2.000 | 1.667 | 1.333 | 1.667 | 2.333 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.667 | 1.000 | 1.667 | 2.667 | 2.333 | 1.667 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.333 | 1.000 | 1.333 | 2.333 | 1.667 | 1.333 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w0 / restless / decline | 3.000 | 3.333 | 4.333 | 5.667 | 2.000 | 5.000 | 5.000 | 5.000 | 0.000 | 3.000 | 0.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w0 / restless / decline | 3.000 | 1.667 | 1.667 | 1.333 | 1.667 | 2.333 | 2.333 | 1.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w1 / steady / engage | 3.000 | 2.000 | 1.667 | 1.000 | 2.000 | 3.000 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w1 / steady / engage | 3.000 | 2.000 | 1.667 | 1.000 | 2.000 | 3.000 | 1.667 | 1.000 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w1 / steady / engage | 3.000 | 3.333 | 4.000 | 6.000 | 3.000 | 5.000 | 4.333 | 3.333 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w1 / steady / engage | 3.000 | 1.667 | 1.667 | 1.333 | 1.667 | 2.333 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w2 / steady / accept-first | 3.000 | 2.333 | 2.333 | 2.000 | 2.000 | 2.667 | 2.000 | 1.333 | 0.000 | 2.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w2 / steady / accept-first | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 3.000 | 1.667 | 1.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w2 / steady / accept-first | 3.000 | 3.333 | 4.333 | 5.333 | 3.000 | 4.667 | 4.333 | 3.333 | 2.000 | 0.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w2 / steady / accept-first | 3.000 | 1.667 | 2.000 | 1.333 | 1.667 | 2.000 | 2.333 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w0 / calm / engage | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 2.667 | 1.667 | 1.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w0 / calm / engage | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 2.667 | 1.667 | 1.000 | 1.000 | 1.000 | 1.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w0 / calm / engage | 3.000 | 3.667 | 4.333 | 5.667 | 3.000 | 5.000 | 4.333 | 3.333 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w0 / calm / engage | 3.000 | 2.000 | 1.667 | 1.667 | 1.667 | 2.000 | 2.333 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w2 / restless / engage | 3.000 | 2.667 | 3.000 | 3.000 | 2.333 | 2.667 | 2.333 | 1.667 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w2 / restless / engage | 3.000 | 2.333 | 2.333 | 2.000 | 2.000 | 3.000 | 2.333 | 1.333 | 1.000 | 2.000 | 0.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w2 / restless / engage | 3.000 | 3.667 | 4.333 | 6.000 | 3.000 | 5.000 | 4.333 | 3.333 | 1.000 | 0.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w2 / restless / engage | 3.000 | 1.667 | 1.667 | 1.333 | 1.333 | 2.000 | 2.000 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | E | m3c-w1 / restless / accept-middle | 3.000 | 2.000 | 1.333 | 1.000 | 1.333 | 2.333 | 1.667 | 1.000 | 0.000 | 1.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A1 | m3c-w1 / restless / accept-middle | 3.000 | 2.000 | 1.667 | 1.000 | 1.667 | 2.667 | 1.667 | 1.000 | 0.000 | 0.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A3 | m3c-w1 / restless / accept-middle | 3.000 | 3.333 | 4.000 | 5.333 | 3.333 | 5.000 | 4.333 | 3.333 | 1.000 | 0.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A5 | m3c-w1 / restless / accept-middle | 3.000 | 1.667 | 1.667 | 1.333 | 1.667 | 2.000 | 2.333 | 1.000 | 0.000 | 0.000 | 3.000 |
 
 ## Renderer and length cells, per rater: multiplicity weighted
 
 | Rater | Arm | Renderer | Length | Weighted N | Canonical N | lives | caused | legible | pull | setting | scale | fair | New | Reminds | Same |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | A1 | current | full | 12.000 | 9.000 | 1.417 | 1.167 | 1.000 | 1.417 | 1.333 | 1.083 | 2.000 | 4.000 | 3.000 | 5.000 |
-| codex-gpt-6.1-sol-a | A1 | evidence | full | 12.000 | 8.000 | 2.083 | 1.833 | 1.750 | 2.167 | 2.333 | 2.083 | 2.083 | 2.000 | 7.000 | 3.000 |
-| codex-gpt-6.1-sol-a | A3 | current | full | 24.000 | 24.000 | 3.833 | 4.042 | 5.792 | 3.042 | 4.917 | 5.042 | 4.167 | 8.000 | 5.000 | 11.000 |
-| codex-gpt-6.1-sol-a | A5 | current | full | 6.000 | 6.000 | 2.000 | 2.000 | 1.000 | 3.000 | 2.000 | 3.000 | 2.000 | 1.000 | 0.000 | 5.000 |
-| codex-gpt-6.1-sol-a | A5 | current | matched | 6.000 | 6.000 | 2.000 | 1.833 | 1.000 | 1.667 | 1.667 | 1.667 | 2.000 | 1.000 | 3.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A5 | evidence | full | 6.000 | 6.000 | 2.500 | 2.667 | 1.667 | 2.500 | 1.833 | 3.833 | 3.000 | 0.000 | 3.000 | 3.000 |
-| codex-gpt-6.1-sol-a | A5 | evidence | matched | 6.000 | 6.000 | 1.167 | 1.333 | 2.667 | 1.167 | 1.000 | 1.333 | 2.000 | 1.000 | 2.000 | 3.000 |
-| codex-gpt-6.1-sol-a | E | current | full | 12.000 | 9.000 | 1.667 | 1.333 | 1.083 | 1.583 | 1.500 | 1.250 | 2.083 | 3.000 | 3.000 | 6.000 |
-| codex-gpt-6.1-sol-a | E | evidence | full | 12.000 | 10.000 | 2.333 | 1.917 | 1.917 | 2.333 | 2.333 | 2.333 | 2.167 | 2.000 | 5.000 | 5.000 |
-| codex-gpt-6.1-sol-b | A1 | current | full | 12.000 | 8.000 | 1.500 | 1.167 | 1.000 | 1.417 | 1.250 | 1.333 | 1.083 | 0.000 | 9.000 | 3.000 |
-| codex-gpt-6.1-sol-b | A1 | evidence | full | 12.000 | 9.000 | 2.167 | 2.250 | 1.500 | 1.583 | 2.333 | 2.167 | 1.167 | 4.000 | 2.000 | 6.000 |
-| codex-gpt-6.1-sol-b | A3 | current | full | 24.000 | 24.000 | 3.208 | 3.917 | 5.417 | 2.917 | 4.333 | 4.458 | 3.667 | 7.000 | 4.000 | 13.000 |
-| codex-gpt-6.1-sol-b | A5 | current | full | 6.000 | 6.000 | 2.000 | 2.000 | 1.000 | 2.000 | 1.000 | 2.000 | 1.000 | 1.000 | 0.000 | 5.000 |
-| codex-gpt-6.1-sol-b | A5 | current | matched | 6.000 | 6.000 | 1.833 | 1.333 | 1.000 | 1.333 | 1.167 | 1.500 | 1.333 | 2.000 | 1.000 | 3.000 |
-| codex-gpt-6.1-sol-b | A5 | evidence | full | 6.000 | 6.000 | 2.000 | 2.000 | 2.333 | 2.000 | 1.333 | 2.167 | 2.167 | 0.000 | 2.000 | 4.000 |
-| codex-gpt-6.1-sol-b | A5 | evidence | matched | 6.000 | 6.000 | 1.000 | 1.333 | 3.000 | 2.000 | 1.000 | 2.000 | 1.667 | 0.000 | 2.000 | 4.000 |
-| codex-gpt-6.1-sol-b | E | current | full | 12.000 | 10.000 | 1.417 | 1.167 | 1.000 | 1.333 | 1.167 | 1.250 | 1.083 | 0.000 | 7.000 | 5.000 |
-| codex-gpt-6.1-sol-b | E | evidence | full | 12.000 | 9.000 | 2.500 | 2.667 | 2.500 | 2.167 | 2.500 | 2.417 | 1.500 | 2.000 | 5.000 | 5.000 |
+| codex-gpt-6.1-sol-a | A1 | current | full | 12.000 | 10.000 | 1.333 | 1.167 | 1.167 | 1.167 | 2.000 | 1.167 | 1.000 | 1.000 | 4.000 | 7.000 |
+| codex-gpt-6.1-sol-a | A1 | evidence | full | 12.000 | 10.000 | 2.583 | 2.250 | 1.833 | 2.083 | 3.333 | 2.167 | 1.333 | 1.000 | 8.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A3 | current | full | 24.000 | 24.000 | 3.083 | 4.875 | 5.750 | 3.000 | 5.000 | 4.875 | 3.792 | 8.000 | 5.000 | 11.000 |
+| codex-gpt-6.1-sol-a | A5 | current | full | 6.000 | 6.000 | 2.000 | 2.000 | 2.000 | 1.833 | 2.000 | 2.000 | 1.333 | 0.000 | 0.000 | 6.000 |
+| codex-gpt-6.1-sol-a | A5 | current | matched | 6.000 | 6.000 | 1.833 | 1.667 | 1.500 | 1.500 | 2.167 | 1.500 | 1.000 | 0.000 | 3.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A5 | evidence | full | 6.000 | 6.000 | 2.667 | 2.667 | 1.667 | 2.667 | 2.667 | 2.667 | 1.667 | 1.000 | 2.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A5 | evidence | matched | 6.000 | 6.000 | 1.833 | 1.667 | 2.667 | 1.667 | 2.000 | 1.667 | 1.000 | 1.000 | 3.000 | 2.000 |
+| codex-gpt-6.1-sol-a | E | current | full | 12.000 | 8.000 | 1.333 | 1.333 | 1.333 | 1.333 | 2.000 | 1.333 | 1.000 | 2.000 | 1.000 | 9.000 |
+| codex-gpt-6.1-sol-a | E | evidence | full | 12.000 | 11.000 | 2.750 | 2.583 | 2.667 | 2.417 | 3.500 | 2.333 | 1.500 | 1.000 | 8.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A1 | current | full | 12.000 | 10.000 | 1.917 | 1.167 | 1.000 | 1.417 | 2.417 | 1.333 | 1.083 | 0.000 | 7.000 | 5.000 |
+| codex-gpt-6.1-sol-b | A1 | evidence | full | 12.000 | 10.000 | 2.167 | 2.250 | 1.417 | 2.167 | 3.250 | 2.167 | 1.167 | 3.000 | 3.000 | 6.000 |
+| codex-gpt-6.1-sol-b | A3 | current | full | 24.000 | 24.000 | 3.458 | 4.333 | 5.667 | 3.042 | 4.958 | 4.292 | 3.417 | 8.000 | 3.000 | 13.000 |
+| codex-gpt-6.1-sol-b | A5 | current | full | 6.000 | 6.000 | 2.000 | 2.000 | 1.000 | 2.000 | 2.167 | 3.000 | 1.167 | 0.000 | 1.000 | 5.000 |
+| codex-gpt-6.1-sol-b | A5 | current | matched | 6.000 | 6.000 | 2.000 | 1.333 | 1.000 | 1.333 | 2.167 | 1.500 | 1.000 | 1.000 | 3.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A5 | evidence | full | 6.000 | 6.000 | 2.000 | 2.333 | 1.667 | 2.000 | 2.167 | 2.833 | 1.000 | 0.000 | 2.000 | 4.000 |
+| codex-gpt-6.1-sol-b | A5 | evidence | matched | 6.000 | 6.000 | 1.000 | 1.000 | 2.000 | 1.000 | 2.000 | 1.167 | 1.000 | 1.000 | 1.000 | 4.000 |
+| codex-gpt-6.1-sol-b | E | current | full | 12.000 | 11.000 | 1.917 | 1.167 | 1.000 | 1.417 | 2.417 | 1.500 | 1.167 | 0.000 | 8.000 | 4.000 |
+| codex-gpt-6.1-sol-b | E | evidence | full | 12.000 | 8.000 | 2.333 | 2.583 | 1.917 | 2.333 | 3.083 | 2.333 | 1.333 | 2.000 | 3.000 | 7.000 |
 
 ## Renderer and length cells, per rater: unweighted
 
 | Rater | Arm | Renderer | Length | Canonical N | lives | caused | legible | pull | setting | scale | fair | New | Reminds | Same |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | A1 | current | full | 9.000 | 1.444 | 1.222 | 1.000 | 1.444 | 1.333 | 1.111 | 2.000 | 2.000 | 2.000 | 5.000 |
-| codex-gpt-6.1-sol-a | A1 | evidence | full | 8.000 | 2.000 | 1.625 | 1.750 | 2.000 | 2.125 | 2.000 | 2.125 | 2.000 | 4.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A3 | current | full | 24.000 | 3.833 | 4.042 | 5.792 | 3.042 | 4.917 | 5.042 | 4.167 | 8.000 | 5.000 | 11.000 |
-| codex-gpt-6.1-sol-a | A5 | current | full | 6.000 | 2.000 | 2.000 | 1.000 | 3.000 | 2.000 | 3.000 | 2.000 | 1.000 | 0.000 | 5.000 |
-| codex-gpt-6.1-sol-a | A5 | current | matched | 6.000 | 2.000 | 1.833 | 1.000 | 1.667 | 1.667 | 1.667 | 2.000 | 1.000 | 3.000 | 2.000 |
-| codex-gpt-6.1-sol-a | A5 | evidence | full | 6.000 | 2.500 | 2.667 | 1.667 | 2.500 | 1.833 | 3.833 | 3.000 | 0.000 | 3.000 | 3.000 |
-| codex-gpt-6.1-sol-a | A5 | evidence | matched | 6.000 | 1.167 | 1.333 | 2.667 | 1.167 | 1.000 | 1.333 | 2.000 | 1.000 | 2.000 | 3.000 |
-| codex-gpt-6.1-sol-a | E | current | full | 9.000 | 1.778 | 1.444 | 1.111 | 1.667 | 1.556 | 1.333 | 2.111 | 2.000 | 3.000 | 4.000 |
-| codex-gpt-6.1-sol-a | E | evidence | full | 10.000 | 2.400 | 2.000 | 2.100 | 2.400 | 2.300 | 2.400 | 2.200 | 2.000 | 4.000 | 4.000 |
-| codex-gpt-6.1-sol-b | A1 | current | full | 8.000 | 1.375 | 1.125 | 1.000 | 1.250 | 1.125 | 1.375 | 1.125 | 0.000 | 5.000 | 3.000 |
-| codex-gpt-6.1-sol-b | A1 | evidence | full | 9.000 | 2.222 | 2.333 | 1.667 | 1.667 | 2.333 | 2.222 | 1.222 | 3.000 | 2.000 | 4.000 |
-| codex-gpt-6.1-sol-b | A3 | current | full | 24.000 | 3.208 | 3.917 | 5.417 | 2.917 | 4.333 | 4.458 | 3.667 | 7.000 | 4.000 | 13.000 |
-| codex-gpt-6.1-sol-b | A5 | current | full | 6.000 | 2.000 | 2.000 | 1.000 | 2.000 | 1.000 | 2.000 | 1.000 | 1.000 | 0.000 | 5.000 |
-| codex-gpt-6.1-sol-b | A5 | current | matched | 6.000 | 1.833 | 1.333 | 1.000 | 1.333 | 1.167 | 1.500 | 1.333 | 2.000 | 1.000 | 3.000 |
-| codex-gpt-6.1-sol-b | A5 | evidence | full | 6.000 | 2.000 | 2.000 | 2.333 | 2.000 | 1.333 | 2.167 | 2.167 | 0.000 | 2.000 | 4.000 |
-| codex-gpt-6.1-sol-b | A5 | evidence | matched | 6.000 | 1.000 | 1.333 | 3.000 | 2.000 | 1.000 | 2.000 | 1.667 | 0.000 | 2.000 | 4.000 |
-| codex-gpt-6.1-sol-b | E | current | full | 10.000 | 1.400 | 1.200 | 1.000 | 1.300 | 1.100 | 1.300 | 1.100 | 0.000 | 6.000 | 4.000 |
-| codex-gpt-6.1-sol-b | E | evidence | full | 9.000 | 2.556 | 2.667 | 2.667 | 2.222 | 2.556 | 2.444 | 1.556 | 1.000 | 4.000 | 4.000 |
+| codex-gpt-6.1-sol-a | A1 | current | full | 10.000 | 1.300 | 1.200 | 1.200 | 1.200 | 2.000 | 1.200 | 1.000 | 1.000 | 3.000 | 6.000 |
+| codex-gpt-6.1-sol-a | A1 | evidence | full | 10.000 | 2.500 | 2.300 | 2.000 | 2.100 | 3.200 | 2.200 | 1.400 | 1.000 | 6.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A3 | current | full | 24.000 | 3.083 | 4.875 | 5.750 | 3.000 | 5.000 | 4.875 | 3.792 | 8.000 | 5.000 | 11.000 |
+| codex-gpt-6.1-sol-a | A5 | current | full | 6.000 | 2.000 | 2.000 | 2.000 | 1.833 | 2.000 | 2.000 | 1.333 | 0.000 | 0.000 | 6.000 |
+| codex-gpt-6.1-sol-a | A5 | current | matched | 6.000 | 1.833 | 1.667 | 1.500 | 1.500 | 2.167 | 1.500 | 1.000 | 0.000 | 3.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A5 | evidence | full | 6.000 | 2.667 | 2.667 | 1.667 | 2.667 | 2.667 | 2.667 | 1.667 | 1.000 | 2.000 | 3.000 |
+| codex-gpt-6.1-sol-a | A5 | evidence | matched | 6.000 | 1.833 | 1.667 | 2.667 | 1.667 | 2.000 | 1.667 | 1.000 | 1.000 | 3.000 | 2.000 |
+| codex-gpt-6.1-sol-a | E | current | full | 8.000 | 1.375 | 1.375 | 1.375 | 1.375 | 2.000 | 1.375 | 1.000 | 1.000 | 1.000 | 6.000 |
+| codex-gpt-6.1-sol-a | E | evidence | full | 11.000 | 2.727 | 2.636 | 2.818 | 2.455 | 3.455 | 2.364 | 1.545 | 1.000 | 7.000 | 3.000 |
+| codex-gpt-6.1-sol-b | A1 | current | full | 10.000 | 1.900 | 1.200 | 1.000 | 1.300 | 2.300 | 1.400 | 1.100 | 0.000 | 5.000 | 5.000 |
+| codex-gpt-6.1-sol-b | A1 | evidence | full | 10.000 | 2.200 | 2.300 | 1.500 | 2.200 | 3.200 | 2.200 | 1.200 | 2.000 | 3.000 | 5.000 |
+| codex-gpt-6.1-sol-b | A3 | current | full | 24.000 | 3.458 | 4.333 | 5.667 | 3.042 | 4.958 | 4.292 | 3.417 | 8.000 | 3.000 | 13.000 |
+| codex-gpt-6.1-sol-b | A5 | current | full | 6.000 | 2.000 | 2.000 | 1.000 | 2.000 | 2.167 | 3.000 | 1.167 | 0.000 | 1.000 | 5.000 |
+| codex-gpt-6.1-sol-b | A5 | current | matched | 6.000 | 2.000 | 1.333 | 1.000 | 1.333 | 2.167 | 1.500 | 1.000 | 1.000 | 3.000 | 2.000 |
+| codex-gpt-6.1-sol-b | A5 | evidence | full | 6.000 | 2.000 | 2.333 | 1.667 | 2.000 | 2.167 | 2.833 | 1.000 | 0.000 | 2.000 | 4.000 |
+| codex-gpt-6.1-sol-b | A5 | evidence | matched | 6.000 | 1.000 | 1.000 | 2.000 | 1.000 | 2.000 | 1.167 | 1.000 | 1.000 | 1.000 | 4.000 |
+| codex-gpt-6.1-sol-b | E | current | full | 11.000 | 1.909 | 1.182 | 1.000 | 1.364 | 2.364 | 1.545 | 1.182 | 0.000 | 7.000 | 4.000 |
+| codex-gpt-6.1-sol-b | E | evidence | full | 8.000 | 2.375 | 2.625 | 2.000 | 2.375 | 3.125 | 2.375 | 1.375 | 1.000 | 2.000 | 5.000 |
 
 ## Within-rater contrasts
 
 | Rater | Arm | Factor: plus minus | Plus N | Minus N | lives | caused | legible | pull | setting | scale | fair |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | E | renderer: evidence minus current | 12.000 | 12.000 | 0.667 | 0.583 | 0.833 | 0.750 | 0.833 | 1.083 | 0.083 |
-| codex-gpt-6.1-sol-a | A1 | renderer: evidence minus current | 12.000 | 12.000 | 0.667 | 0.667 | 0.750 | 0.750 | 1.000 | 1.000 | 0.083 |
-| codex-gpt-6.1-sol-a | A5 | renderer: evidence minus current | 12.000 | 12.000 | -0.167 | 0.083 | 1.167 | -0.500 | -0.417 | 0.250 | 0.500 |
-| codex-gpt-6.1-sol-a | A5 | length: matched minus full | 12.000 | 12.000 | -0.667 | -0.750 | 0.500 | -1.333 | -0.583 | -1.917 | -0.500 |
-| codex-gpt-6.1-sol-b | E | renderer: evidence minus current | 12.000 | 12.000 | 1.083 | 1.500 | 1.500 | 0.833 | 1.333 | 1.167 | 0.417 |
-| codex-gpt-6.1-sol-b | A1 | renderer: evidence minus current | 12.000 | 12.000 | 0.667 | 1.083 | 0.500 | 0.167 | 1.083 | 0.833 | 0.083 |
-| codex-gpt-6.1-sol-b | A5 | renderer: evidence minus current | 12.000 | 12.000 | -0.417 | 0.000 | 1.667 | 0.333 | 0.083 | 0.333 | 0.750 |
-| codex-gpt-6.1-sol-b | A5 | length: matched minus full | 12.000 | 12.000 | -0.583 | -0.667 | 0.333 | -0.333 | -0.083 | -0.333 | -0.083 |
+| codex-gpt-6.1-sol-a | E | renderer: evidence minus current | 12.000 | 12.000 | 1.417 | 1.250 | 1.333 | 1.083 | 1.500 | 1.000 | 0.500 |
+| codex-gpt-6.1-sol-a | A1 | renderer: evidence minus current | 12.000 | 12.000 | 1.250 | 1.083 | 0.667 | 0.917 | 1.333 | 1.000 | 0.333 |
+| codex-gpt-6.1-sol-a | A5 | renderer: evidence minus current | 12.000 | 12.000 | 0.333 | 0.333 | 0.417 | 0.500 | 0.250 | 0.417 | 0.167 |
+| codex-gpt-6.1-sol-a | A5 | length: matched minus full | 12.000 | 12.000 | -0.500 | -0.667 | 0.250 | -0.667 | -0.250 | -0.750 | -0.500 |
+| codex-gpt-6.1-sol-b | E | renderer: evidence minus current | 12.000 | 12.000 | 0.417 | 1.417 | 0.917 | 0.917 | 0.667 | 0.833 | 0.167 |
+| codex-gpt-6.1-sol-b | A1 | renderer: evidence minus current | 12.000 | 12.000 | 0.250 | 1.083 | 0.417 | 0.750 | 0.833 | 0.833 | 0.083 |
+| codex-gpt-6.1-sol-b | A5 | renderer: evidence minus current | 12.000 | 12.000 | -0.500 | 0.000 | 0.833 | -0.167 | -0.083 | -0.250 | -0.083 |
+| codex-gpt-6.1-sol-b | A5 | length: matched minus full | 12.000 | 12.000 | -0.500 | -1.000 | 0.167 | -0.833 | -0.083 | -1.583 | -0.083 |
 
 ## Within-configuration crossed contrasts
 
 | Rater | Arm | Factor | Comparable strata | Plus N | Minus N | lives | caused | legible | pull | setting | scale | fair |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | E | renderer | 8.000 | 12.000 | 12.000 | 0.563 | 0.313 | 0.750 | 0.625 | 0.813 | 0.938 | 0.000 |
-| codex-gpt-6.1-sol-a | A1 | renderer | 8.000 | 12.000 | 12.000 | 0.688 | 0.563 | 0.875 | 0.750 | 1.000 | 0.938 | 0.063 |
-| codex-gpt-6.1-sol-a | A5 | renderer | 6.000 | 6.000 | 6.000 | -0.167 | -0.333 | 1.333 | -0.333 | -0.333 | -0.167 | 0.167 |
-| codex-gpt-6.1-sol-a | A5 | length | 6.000 | 6.000 | 6.000 | -0.500 | -0.833 | 0.333 | -1.333 | -0.667 | -1.833 | -0.333 |
-| codex-gpt-6.1-sol-b | E | renderer | 8.000 | 12.000 | 12.000 | 1.125 | 1.500 | 1.500 | 0.938 | 1.375 | 1.250 | 0.500 |
-| codex-gpt-6.1-sol-b | A1 | renderer | 8.000 | 12.000 | 12.000 | 0.688 | 1.063 | 0.563 | 0.188 | 1.125 | 0.813 | 0.125 |
-| codex-gpt-6.1-sol-b | A5 | renderer | 6.000 | 6.000 | 6.000 | -0.333 | 0.000 | 1.667 | 0.167 | 0.000 | 0.167 | 0.667 |
-| codex-gpt-6.1-sol-b | A5 | length | 6.000 | 6.000 | 6.000 | -0.500 | -0.667 | 0.667 | -0.333 | 0.167 | -0.333 | 0.000 |
+| codex-gpt-6.1-sol-a | E | renderer | 8.000 | 12.000 | 12.000 | 1.250 | 1.125 | 0.938 | 1.000 | 1.375 | 0.938 | 0.375 |
+| codex-gpt-6.1-sol-a | A1 | renderer | 8.000 | 12.000 | 12.000 | 1.125 | 0.938 | 0.625 | 0.875 | 1.250 | 0.938 | 0.250 |
+| codex-gpt-6.1-sol-a | A5 | renderer | 6.000 | 6.000 | 6.000 | 0.167 | 0.000 | 0.000 | 0.333 | 0.333 | 0.167 | 0.167 |
+| codex-gpt-6.1-sol-a | A5 | length | 6.000 | 6.000 | 6.000 | -0.167 | -0.667 | 0.000 | -0.667 | -0.333 | -0.667 | -0.333 |
+| codex-gpt-6.1-sol-b | E | renderer | 8.000 | 12.000 | 12.000 | 0.375 | 1.375 | 0.813 | 1.000 | 0.813 | 0.938 | 0.188 |
+| codex-gpt-6.1-sol-b | A1 | renderer | 8.000 | 12.000 | 12.000 | 0.250 | 1.125 | 0.438 | 0.875 | 0.938 | 0.875 | 0.125 |
+| codex-gpt-6.1-sol-b | A5 | renderer | 6.000 | 6.000 | 6.000 | -0.667 | -0.167 | 0.833 | -0.333 | 0.000 | -0.500 | 0.000 |
+| codex-gpt-6.1-sol-b | A5 | length | 6.000 | 6.000 | 6.000 | -0.500 | -1.000 | 0.333 | -0.667 | 0.000 | -1.333 | -0.167 |
 
 ## Unweighted within-rater contrasts
 
 | Rater | Arm | Factor | Plus canonical N | Minus canonical N | lives | caused | legible | pull | setting | scale | fair |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | E | renderer | 10.000 | 9.000 | 0.622 | 0.556 | 0.989 | 0.733 | 0.744 | 1.067 | 0.089 |
-| codex-gpt-6.1-sol-a | A1 | renderer | 8.000 | 9.000 | 0.556 | 0.403 | 0.750 | 0.556 | 0.792 | 0.889 | 0.125 |
-| codex-gpt-6.1-sol-a | A5 | renderer | 12.000 | 12.000 | -0.167 | 0.083 | 1.167 | -0.500 | -0.417 | 0.250 | 0.500 |
-| codex-gpt-6.1-sol-a | A5 | length | 12.000 | 12.000 | -0.667 | -0.750 | 0.500 | -1.333 | -0.583 | -1.917 | -0.500 |
-| codex-gpt-6.1-sol-b | E | renderer | 9.000 | 10.000 | 1.156 | 1.467 | 1.667 | 0.922 | 1.456 | 1.144 | 0.456 |
-| codex-gpt-6.1-sol-b | A1 | renderer | 9.000 | 8.000 | 0.847 | 1.208 | 0.667 | 0.417 | 1.208 | 0.847 | 0.097 |
-| codex-gpt-6.1-sol-b | A5 | renderer | 12.000 | 12.000 | -0.417 | 0.000 | 1.667 | 0.333 | 0.083 | 0.333 | 0.750 |
-| codex-gpt-6.1-sol-b | A5 | length | 12.000 | 12.000 | -0.583 | -0.667 | 0.333 | -0.333 | -0.083 | -0.333 | -0.083 |
+| codex-gpt-6.1-sol-a | E | renderer | 11.000 | 8.000 | 1.352 | 1.261 | 1.443 | 1.080 | 1.455 | 0.989 | 0.545 |
+| codex-gpt-6.1-sol-a | A1 | renderer | 10.000 | 10.000 | 1.200 | 1.100 | 0.800 | 0.900 | 1.200 | 1.000 | 0.400 |
+| codex-gpt-6.1-sol-a | A5 | renderer | 12.000 | 12.000 | 0.333 | 0.333 | 0.417 | 0.500 | 0.250 | 0.417 | 0.167 |
+| codex-gpt-6.1-sol-a | A5 | length | 12.000 | 12.000 | -0.500 | -0.667 | 0.250 | -0.667 | -0.250 | -0.750 | -0.500 |
+| codex-gpt-6.1-sol-b | E | renderer | 8.000 | 11.000 | 0.466 | 1.443 | 1.000 | 1.011 | 0.761 | 0.830 | 0.193 |
+| codex-gpt-6.1-sol-b | A1 | renderer | 10.000 | 10.000 | 0.300 | 1.100 | 0.500 | 0.900 | 0.900 | 0.800 | 0.100 |
+| codex-gpt-6.1-sol-b | A5 | renderer | 12.000 | 12.000 | -0.500 | 0.000 | 0.833 | -0.167 | -0.083 | -0.250 | -0.083 |
+| codex-gpt-6.1-sol-b | A5 | length | 12.000 | 12.000 | -0.500 | -1.000 | 0.167 | -0.833 | -0.083 | -1.583 | -0.083 |
 
 ## Unweighted within-configuration crossed contrasts
 
 | Rater | Arm | Factor | Comparable strata | lives | caused | legible | pull | setting | scale | fair |
 |---|---|---|---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | E | renderer | 8.000 | 0.563 | 0.313 | 0.750 | 0.625 | 0.813 | 0.938 | 0.000 |
-| codex-gpt-6.1-sol-a | A1 | renderer | 8.000 | 0.688 | 0.563 | 0.875 | 0.750 | 1.000 | 0.938 | 0.063 |
-| codex-gpt-6.1-sol-a | A5 | renderer | 6.000 | -0.167 | -0.333 | 1.333 | -0.333 | -0.333 | -0.167 | 0.167 |
-| codex-gpt-6.1-sol-a | A5 | length | 6.000 | -0.500 | -0.833 | 0.333 | -1.333 | -0.667 | -1.833 | -0.333 |
-| codex-gpt-6.1-sol-b | E | renderer | 8.000 | 1.125 | 1.500 | 1.500 | 0.938 | 1.375 | 1.250 | 0.500 |
-| codex-gpt-6.1-sol-b | A1 | renderer | 8.000 | 0.688 | 1.063 | 0.563 | 0.188 | 1.125 | 0.813 | 0.125 |
-| codex-gpt-6.1-sol-b | A5 | renderer | 6.000 | -0.333 | 0.000 | 1.667 | 0.167 | 0.000 | 0.167 | 0.667 |
-| codex-gpt-6.1-sol-b | A5 | length | 6.000 | -0.500 | -0.667 | 0.667 | -0.333 | 0.167 | -0.333 | 0.000 |
+| codex-gpt-6.1-sol-a | E | renderer | 8.000 | 1.250 | 1.125 | 0.938 | 1.000 | 1.375 | 0.938 | 0.375 |
+| codex-gpt-6.1-sol-a | A1 | renderer | 8.000 | 1.125 | 0.938 | 0.625 | 0.875 | 1.250 | 0.938 | 0.250 |
+| codex-gpt-6.1-sol-a | A5 | renderer | 6.000 | 0.167 | 0.000 | 0.000 | 0.333 | 0.333 | 0.167 | 0.167 |
+| codex-gpt-6.1-sol-a | A5 | length | 6.000 | -0.167 | -0.667 | 0.000 | -0.667 | -0.333 | -0.667 | -0.333 |
+| codex-gpt-6.1-sol-b | E | renderer | 8.000 | 0.375 | 1.375 | 0.813 | 1.000 | 0.813 | 0.938 | 0.188 |
+| codex-gpt-6.1-sol-b | A1 | renderer | 8.000 | 0.250 | 1.125 | 0.438 | 0.875 | 0.938 | 0.875 | 0.125 |
+| codex-gpt-6.1-sol-b | A5 | renderer | 6.000 | -0.667 | -0.167 | 0.833 | -0.333 | 0.000 | -0.500 | 0.000 |
+| codex-gpt-6.1-sol-b | A5 | length | 6.000 | -0.500 | -1.000 | 0.333 | -0.667 | 0.000 | -1.333 | -0.167 |
 
 Adjusted contrasts are unweighted means of within-configuration half differences, additionally holding A5 length constant for renderer contrasts and renderer constant for length contrasts. Only strata with both halves count; absent cells are unavailable. Raw half differences remain visible above.
 
-Each contrast is a difference between halves inside one rater, with weighted membership and unweighted canonical counts visible. Weighted scores preserve each arm/configuration sample mean without a second reading. Unweighted scores count a canonical account once per arm (and once per arm/configuration within adjusted strata). For A5, inspect the crossed cells to distinguish renderer and length effects; small or uneven cells limit the inference. Seen-before counts use the same weighting and assignments. No canonical sequence is repeated to one rater, including in paired-choice text.
+Each contrast is a difference between halves inside one rater, with weighted membership and unweighted canonical counts visible. Weighted scores preserve each arm/configuration sample mean without a second reading. Unweighted scores count a canonical account once per arm (and once per arm/configuration within adjusted strata). For A5, inspect the crossed cells to distinguish renderer and length effects; small or uneven cells limit the inference. Seen-before counts use the same weighting and assignments. No canonical account is repeated to one rater, including in paired-choice text.
 
 ## Known-person and legibility evidence
 
@@ -574,23 +577,25 @@ Gate 2 means no compatible kit, gate 10 includes already-sown/refusal backoff, a
 
 ## Critics and interpretation
 
-**codex-gpt-6.1-sol-a:** Most fragments omit the actual act, subject, motive or requested help, so named participants rarely become distinct people. Explicit causal pointers sometimes assert connections without explaining them. Requests to act against the asker remain unexplained. Closing labels such as protection or resolved do not show what changed. Concrete paid jobs provide clear actions and practical motives, but instant completion hides decisions and consequences. Repeated plots with changed names dominate. Night City detail is concentrated in currency, gangs and a few props. The refusal prompting someone else to help offers the strongest glimpse of lives continuing beyond the protagonist.
+**codex-gpt-6.1-sol-a:** Families are escort, isolated theft, isolated violence or unspecified wrongdoing, duty and betrayal, terminal repair, demands and shakedown, bare help requests, unconnected incidents and accepted requests, self-targeting request and reckoning, delivery, collection, gang-member removal, and refusal with social follow-up. Most fragments omit motives, concrete acts or usable subjects; naming a causal link rarely explains it. Requests to wrong the requester remain incoherent without further context. Resolved, protection and betrayal labels do not supply the missing outcomes. Paid jobs make actions clear but jump directly to completion, often withholding the discovery or consequence that would make following them rewarding. Timed repairs, escort needs and linked social responses offer the strongest everyday grounding. Repeated names, generic crimes and Kabuki labels alone provide little distinctive Night City texture.
 
-**codex-gpt-6.1-sol-b:** Most traces supply event categories without concrete motives, objects, demands, or usable next steps. Requests to act against the asker remain especially difficult to understand. Causal pointers establish asserted connections but often do not explain them; simultaneous or reversed reporting further obscures some chains. A closing label such as resolved, betrayal, or reckoning supplies little payoff without the actual consequence. Completed contracts also conceal methods and findings, particularly surveillance and missing-person inquiries. Repeated structures make participants interchangeable. Eddies, shards, gangs, and local routes support Night City, but many traces could occur anywhere. The modest repair and escort jobs have the clearest practical reasons and proportionate endings. Explicit refusals provide fair stopping points even when little story develops.
+**codex-gpt-6.1-sol-b:** The clearest families are paid errands, isolated wrongs, assault-driven help, duty-breaking discovery, and help that turns into a reckoning. Most traces omit concrete motives, requested acts and consequences; naming participants or declaring an outcome resolved does not supply those links. Requests to act against the asker are especially hard to interpret. The paid jobs offer useful objectives and plausible local concerns, but instant completion hides both the action and its payoff. Repeated structures with substituted names weaken individuality, while Night City often comes through only in gang references, eddies and a few locations. Explicit declines provide clearer resting points than unexplained closing labels.
 
-**E against A1.** E has higher multiplicity-weighted means on every criterion in each pass; the unweighted comparisons have the same direction. The differences are small: lives +0.250 / +0.125, caused +0.125 / +0.208, legibility +0.125 / +0.500 and pull +0.167 / +0.250 (a / b). Forced follow choices are 10 wins, eight losses and six omitted ties in each pass; caused choices are 8 / 10 / 6 in a and 10 / 8 / 6 in b. Thus there is a descriptive mean advantage, but no consistent decisive causal preference over random selection within the gates. In a's evidence-rendered pairs E loses both follow (3–5, four ties) and caused (2–6, four ties); b's current-rendered pairs split 4–4 with four ties. These are separate rater results, not a pooled test.
+**E against A1.** Multiplicity-weighted E-minus-A1 lives / caused / legibility / pull differences are 0.083 / 0.250 / 0.500 / 0.250 in a and 0.083 / 0.167 / 0.250 / 0.083 in b. E is higher on all seven means in a; in b its setting score is lower, while the other six are higher. Unweighted core-criterion differences have the same direction. E follow wins/losses/omitted ties are 11 / 7 / 6 in a and 12 / 6 / 6 in b; caused is 12 / 6 / 6 in a and 12 / 6 / 6 in b. Both renderers separately favor E on both questions in each pass. This is a more consistent descriptive preference than the superseded ratings, which split on forced causality, but small correlated samples and a residual chronology limitation prevent an architecture verdict or pooled significance claim.
 
-**Why ranking does not reliably separate the arms.** The exact-sequence population overlap is 32/49 E accounts (65.3%); nine of 24 sampled E memberships overlap sampled A1. Both arms use the same gates and keyed candidate draws; ranking changes the base scores before stochastic noise, rather than selecting the highest feature score deterministically. E has 2–148 eligible candidates at successful sows, with equal base scores in only five of 123 pools; its noisy winner is below the highest base score in 109 of 123. This shows active competition, not that ranking is bypassed or that the lower-base candidate caused a bad rating. Ninety of 123 E decisions have only one compatible kit (A1: 93), limiting how much candidate diversity can become different perceived actions. No logged rival pool offers a positive F6 irreversible-stake or F13 cross-layer feature; those ranking dimensions cannot discriminate here. Selected F5 is higher in E (0.959 versus 0.789), but F14 is nearly unchanged (0.496 versus 0.488). Ranking therefore nudges involvement without supplying missing factual specificity or broadening the implemented action repertoire.
+**Why the advantage is limited.** The exact occurrence-ID population overlap remains 32/49 E threads (65.3%); nine of 24 sampled E memberships overlap sampled A1 by IDs. These counts do not guarantee equal rendered evidence or response semantics; schema 3 checks those separately. Both arms share the gates and keyed candidate draws. E has 2–148 eligible candidates at successful sows, with equal base scores in five of 123 pools; its noisy winner is below the highest base score in 109 of 123. That is the declared stochastic policy, not proof that ranking is bypassed. Ninety of 123 E decisions have only one compatible kit (A1: 93); no logged rival pool has positive F6 or F13. Selected F5 is higher (0.959 versus 0.789), while F14 barely changes (0.496 versus 0.488). Ranking operates within a narrow implemented action repertoire. The logs do not identify which choice caused an individual rating.
 
-Gate 2 dominates rejection (E 8,427 evaluations across 352 run/entry pairs; A1 10,282 across 412), meaning no compatible kit. Gate 12 blocks escalation for missing pull/want/portent: E 448/108/7 and A1 565/111/7 repeated evaluations. Gate 10 records reuse/refusal backoff (809 / 631). These counts are repeated checks, not independent losses or alternative stories. After identical 123 sows, E loses ten casts and 57 cast-to-release seeds, against four and 51 in A1. All cast-stage losses use revelation-told-v0 with unavailable mixed fact/event evidence. Ambition, divided-loyalty and coveted atoms can cast yet never release in these weeks. E consequently yields fewer perceived seeds (56 versus 68), fewer aware threads (49 versus 61), and a smaller three-plus share (0.286 versus 0.328). These adapter and gate constraints remain plausible limits on the ranking comparison; the logs do not identify a causal effect for each lost choice.
+Gate 2 dominates rejection (E 8,427 evaluations across 352 run/entry pairs; A1 10,282 across 412), meaning no compatible kit. Gate 12 blocks escalation for missing pull/want/portent: E 448/108/7 and A1 565/111/7 repeated evaluations. Gate 10 records reuse/refusal backoff (809 / 631). After identical 123 sows, E loses ten casts and 57 cast-to-release seeds, against four and 51 in A1. All cast-stage losses use revelation-told-v0 with unavailable mixed fact/event evidence. Ambition, divided-loyalty and coveted atoms can cast yet never release. E yields fewer perceived seeds (56 versus 68), fewer aware threads (49 versus 61), and a smaller three-plus share (0.286 versus 0.328). These are opportunity constraints, not counterfactual explanations of ratings.
 
-**E against A5 and length.** Full fixed paths win forced follow and caused comparisons in both passes: E gets 2/12 in a and 5/12 in b on each question. After prefix matching, E gets 8/12 follow and 8/12 caused in a, but 4/12 follow and 8/12 caused in b. The length contrast is substantial: matching reduces A5's weighted lives score by 0.667 / 0.583, caused by 0.750 / 0.667 and pull by 1.333 / 0.333. Within comparable configuration/renderer strata the lives effect is −0.500 in both passes, with caused −0.833 / −0.667. Full A5 has three or more occurrences in 86.3% of its population, versus E's 28.6%. Longer complete paths clearly contribute to A5's advantage here; they do not explain every follow preference, and prefix truncation also removes later consequences. Six comparable strata and different accounts in the halves cannot support a causal percentage attribution.
+**E against A5 and length.** Full fixed paths still win both forced questions: E follow and caused wins/losses/ties are 2 / 10 / 0 in a and 5 / 7 / 0 in b. After length matching, E follow is 7 / 5 / 0 in a and 7 / 5 / 0 in b, and caused is 9 / 3 / 0 in a and 7 / 5 / 0 in b. Unlike the superseded ratings, both passes now favor E on matched follow. That advantage is concentrated in evidence-rendered pairs: E wins all six matched follow and caused choices in each pass. In current-rendered matched pairs, E follow is 1 / 5 / 0 in a and 1 / 5 / 0 in b, and caused is 3 / 3 / 0 in a and 1 / 5 / 0 in b. A renderer-independent superiority claim would therefore overstate these results.
 
-**Absolute quality and rendering.** E's weighted means range from 1.500–2.125 in a and 1.292–1.958 in b, on a seven-point scale. Evidence-preserving rendering raises E's raw lives / caused / legibility / pull scores by +0.667 / +0.583 / +0.833 / +0.750 in a and +1.083 / +1.500 / +1.500 / +0.833 in b. The within-configuration equivalents are +0.563 / +0.313 / +0.750 / +0.625 and +1.125 / +1.500 / +1.500 / +0.938. This is evidence that the current factual renderer hides useful information. It is not the whole explanation: even E's evidence half scores only 2.333 / 1.917 / 1.917 / 2.333 in a and 2.500 / 2.667 / 2.500 / 2.167 in b on those criteria. Much of the underlying record still names event categories, not the object of a theft, the demand's terms, the revealed fact, or an outcome's practical consequences. No factual renderer can invent that evidence. Short, open fragments, narrow atoms, no perceived dedicated closings, absent loose-end growth and the residual chronology limitation below compound this. A3's substantially higher scores show the value of concrete jobs and reasons in this packet, but its different wording remains confounded.
+A5 matched-minus-full lives / caused / legibility / pull differences are -0.500 / -0.667 / 0.250 / -0.667 in a and -0.500 / -1.000 / 0.167 / -0.833 in b; within comparable configuration/renderer strata they are -0.167 / -0.667 / 0.000 / -0.667 in a and -0.500 / -1.000 / 0.333 / -0.667 in b. Full A5 has three or more occurrences in 86.3% of its population, versus E's 28.6%. Complete paths supply more development, but prefixes also remove later consequences. Six comparable strata and different accounts in the halves do not support an isolated causal percentage.
 
-**Seen before.** Weighted new / reminds / same counts are E 5/8/11 and A1 6/10/8 in a, E 2/12/10 and A1 4/11/9 in b; E is not perceived as more novel. A5 is 3/8/13 and 3/5/16. In E's evidence versus current halves, “same” is 5 versus 6 in a and 5 versus 5 in b. A5's full versus matched halves are 8 versus 5 and 9 versus 7. Its evidence versus current halves are 6 versus 7 and 8 versus 8. Better evidence and longer paths do not consistently remove recognition of repetition. Full weighted/unweighted counts, including every criterion, renderer/length cell and configuration, are above.
+**Absolute quality and rendering.** E evidence-minus-current lives / caused / legibility / pull differences are 1.417 / 1.250 / 1.333 / 1.083 in a and 0.417 / 1.417 / 0.917 / 0.917 in b; within-configuration differences are 1.250 / 1.125 / 0.938 / 1.000 in a and 0.375 / 1.375 / 0.813 / 1.000 in b. The evidence-rendered E means themselves are 2.750 / 2.583 / 2.667 / 2.417 in a and 2.333 / 2.583 / 1.917 / 2.333 in b on the seven-point scales. Extra supplied evidence helps but does not turn the fragments into strong stories. Underlying records still omit concrete acts, objects, demands, motives and practical outcomes. Missing adapters, short open threads, no perceived dedicated closing and absent loose-end growth remain limitations. A3's concrete jobs score higher on every arm-level mean in both passes, but retain their wording confound.
 
-**Residual chronology limitation.** The raters correctly identified simultaneous reversed reporting in H-096. A post-rating token audit flags four E and two A1 population threads in restless/decline where a comply/refuse precedes an actor-matched ask at the same observation time; the implicated sampled memberships are H-025 (E) and H-096 (A1). Neither response has a retained respondsTo link in those archived threads. The topological ordering regression and builder guard check only recorded links, so they do not cover this missing-link case. The restricted seed-membership lookup can miss offer/response metadata even when an occurrence is independently perceived through the pattern ledger. This remains a harness limitation, not evidence of backwards world causation. The rated packet is unchanged; [ranking.json](ranking.json) retains the exact flagged IDs and the candidate audit. These results support improving observation/adapter coverage and then testing ranking, rather than an architecture verdict or a quantified allocation of blame.
+**Seen before.** Weighted new/reminds/same counts are E 3/9/12 in a and 2/11/11 in b; A1 2/12/10 in a and 3/10/11 in b; A5 2/8/14 in a and 2/7/15 in b. E is not consistently more novel than A1: it has more same answers in a and the same number in b. E's evidence/current same counts are 3/9 in a and 7/4 in b, so evidence does not consistently remove repetition. A5 full/matched same counts are 9/5 in a and 9/6 in b. These order-dependent model judgements remain separate per rater; all weighted/unweighted cells and calibration are reported above and below.
+
+**Residual chronology limitation.** The retained actor/time audit flags four E and two A1 population threads in restless/decline where a comply/refuse precedes an actor-matched ask at the same observation time, including sampled memberships H-025 (E) and H-096 (A1). Neither response has a retained respondsTo link, so the recorded-link ordering guard does not cover them. Restricted seed-membership lookup can miss offer/response metadata even when an occurrence is independently perceived through the pattern ledger. This remains a harness limitation, not evidence of backwards world causation. The direction of bias from this chronology residual is uncertain: equal sampled counts do not establish an unbiased comparison. No run or rated account was repaired during rescoring; [ranking.json](ranking.json) retains the flagged identities. Observation/adapter repair and stronger tests of ranking remain necessary before a stronger architecture claim.
 
 
 ## Logged candidate competition
@@ -620,8 +625,8 @@ The winner audit compares the largest logged keyed-noise total with the largest 
 
 | Rater | Cards | Delta predicts recast | Rater same | Both | Delta only | Rater only | Agreement |
 |---|---|---|---|---|---|---|---|
-| codex-gpt-6.1-sol-a | 75.000 | 54.000 | 35.000 | 34.000 | 20.000 | 1.000 | 0.720 |
-| codex-gpt-6.1-sol-b | 75.000 | 55.000 | 40.000 | 39.000 | 16.000 | 1.000 | 0.773 |
+| codex-gpt-6.1-sol-a | 79.000 | 58.000 | 39.000 | 37.000 | 21.000 | 2.000 | 0.709 |
+| codex-gpt-6.1-sol-b | 79.000 | 59.000 | 44.000 | 43.000 | 16.000 | 1.000 | 0.785 |
 
 Calibration uses the actual shown prefixes against all earlier accounts in that rater's order; R1 is within-run and uses full observed traces. No threshold is tuned. This is model, not human, calibration.
 

@@ -1,7 +1,7 @@
 {
- "schema": 2,
+ "schema": 3,
  "sampledAccounts": 96,
- "canonicalAccounts": 75,
+ "canonicalAccounts": 79,
  "quotas": [
   {
    "configuration": "m3c-w0|steady|accept-last",
@@ -210,29 +210,6 @@
    ]
   },
   {
-   "id": "H-021",
-   "members": 3,
-   "configurations": [
-    "m3c-w0|steady|accept-last",
-    "m3c-w0|calm|engage"
-   ],
-   "arms": [
-    "A1",
-    "E"
-   ]
-  },
-  {
-   "id": "H-022",
-   "members": 2,
-   "configurations": [
-    "m3c-w1|steady|engage",
-    "m3c-w1|restless|accept-middle"
-   ],
-   "arms": [
-    "A1"
-   ]
-  },
-  {
    "id": "H-031",
    "members": 5,
    "configurations": [
@@ -257,33 +234,19 @@
   },
   {
    "id": "H-035",
-   "members": 3,
+   "members": 2,
    "configurations": [
     "m3c-w1|steady|engage",
     "m3c-w1|restless|accept-middle"
    ],
    "arms": [
-    "E",
-    "A1"
+    "E"
    ]
   },
   {
    "id": "H-042",
    "members": 3,
    "configurations": [
-    "m3c-w0|calm|engage",
-    "m3c-w0|steady|accept-last"
-   ],
-   "arms": [
-    "A1",
-    "E"
-   ]
-  },
-  {
-   "id": "H-047",
-   "members": 4,
-   "configurations": [
-    "m3c-w0|restless|decline",
     "m3c-w0|calm|engage",
     "m3c-w0|steady|accept-last"
    ],
@@ -305,10 +268,33 @@
    ]
   },
   {
+   "id": "H-059",
+   "members": 3,
+   "configurations": [
+    "m3c-w0|calm|engage",
+    "m3c-w0|steady|accept-last"
+   ],
+   "arms": [
+    "E",
+    "A1"
+   ]
+  },
+  {
    "id": "H-060",
    "members": 2,
    "configurations": [
     "m3c-w1|calm|ignore"
+   ],
+   "arms": [
+    "A1",
+    "E"
+   ]
+  },
+  {
+   "id": "H-077",
+   "members": 2,
+   "configurations": [
+    "m3c-w0|calm|engage"
    ],
    "arms": [
     "A1",
@@ -390,10 +376,10 @@
    },
    {
     "id": "P-018",
-    "left": "H-021",
-    "right": "H-021",
-    "e": "H-021",
-    "other": "H-021",
+    "left": "H-077",
+    "right": "H-077",
+    "e": "H-077",
+    "other": "H-077",
     "eSample": "H-094",
     "otherSample": "H-077",
     "against": "A1",
@@ -476,10 +462,10 @@
    },
    {
     "id": "P-018",
-    "left": "H-021",
-    "right": "H-021",
-    "e": "H-021",
-    "other": "H-021",
+    "left": "H-077",
+    "right": "H-077",
+    "e": "H-077",
+    "other": "H-077",
     "eSample": "H-094",
     "otherSample": "H-077",
     "against": "A1",
@@ -520,10 +506,10 @@
    },
    {
     "id": "P-018",
-    "left": "H-021",
-    "right": "H-021",
-    "e": "H-021",
-    "other": "H-021",
+    "left": "H-077",
+    "right": "H-077",
+    "e": "H-077",
+    "other": "H-077",
     "eSample": "H-094",
     "otherSample": "H-077",
     "against": "A1",
@@ -606,10 +592,10 @@
    },
    {
     "id": "P-018",
-    "left": "H-021",
-    "right": "H-021",
-    "e": "H-021",
-    "other": "H-021",
+    "left": "H-077",
+    "right": "H-077",
+    "e": "H-077",
+    "other": "H-077",
     "eSample": "H-094",
     "otherSample": "H-077",
     "against": "A1",
@@ -1121,7 +1107,7 @@
    "sample": "H-010",
    "arm": "E",
    "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1132,7 +1118,7 @@
    "sample": "H-010",
    "arm": "E",
    "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1143,7 +1129,7 @@
    "sample": "H-010",
    "arm": "E",
    "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1154,7 +1140,7 @@
    "sample": "H-010",
    "arm": "E",
    "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1165,7 +1151,7 @@
    "sample": "H-072",
    "arm": "E",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1176,7 +1162,7 @@
    "sample": "H-072",
    "arm": "E",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1187,7 +1173,7 @@
    "sample": "H-072",
    "arm": "E",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1198,7 +1184,7 @@
    "sample": "H-072",
    "arm": "E",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1717,7 +1703,7 @@
    "sample": "H-021",
    "arm": "A1",
    "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1728,7 +1714,7 @@
    "sample": "H-021",
    "arm": "A1",
    "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1739,7 +1725,7 @@
    "sample": "H-021",
    "arm": "A1",
    "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1750,95 +1736,7 @@
    "sample": "H-021",
    "arm": "A1",
    "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 1,
-   "id": "H-021",
-   "sample": "H-077",
-   "arm": "A1",
-   "configuration": "m3c-w0|calm|engage",
    "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 2,
-   "id": "H-021",
-   "sample": "H-077",
-   "arm": "A1",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 3,
-   "id": "H-021",
-   "sample": "H-077",
-   "arm": "A1",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 4,
-   "id": "H-021",
-   "sample": "H-077",
-   "arm": "A1",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 1,
-   "id": "H-021",
-   "sample": "H-094",
-   "arm": "E",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 2,
-   "id": "H-021",
-   "sample": "H-094",
-   "arm": "E",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 3,
-   "id": "H-021",
-   "sample": "H-094",
-   "arm": "E",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 4,
-   "id": "H-021",
-   "sample": "H-094",
-   "arm": "E",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "current",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -1882,50 +1780,6 @@
    "sample": "H-022",
    "arm": "A1",
    "configuration": "m3c-w1|steady|engage",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 3,
-   "shownOccurrences": 3
-  },
-  {
-   "sheet": 1,
-   "id": "H-022",
-   "sample": "H-092",
-   "arm": "A1",
-   "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 3,
-   "shownOccurrences": 3
-  },
-  {
-   "sheet": 2,
-   "id": "H-022",
-   "sample": "H-092",
-   "arm": "A1",
-   "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 3,
-   "shownOccurrences": 3
-  },
-  {
-   "sheet": 3,
-   "id": "H-022",
-   "sample": "H-092",
-   "arm": "A1",
-   "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 3,
-   "shownOccurrences": 3
-  },
-  {
-   "sheet": 4,
-   "id": "H-022",
-   "sample": "H-092",
-   "arm": "A1",
-   "configuration": "m3c-w1|restless|accept-middle",
    "renderer": "current",
    "length": "full",
    "fullOccurrences": 3,
@@ -2615,7 +2469,7 @@
    "sample": "H-034",
    "arm": "A5",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 2,
    "shownOccurrences": 2
@@ -2626,7 +2480,7 @@
    "sample": "H-034",
    "arm": "A5",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "matched",
    "limit": 1,
    "target": 1,
@@ -2640,7 +2494,7 @@
    "sample": "H-034",
    "arm": "A5",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 2,
    "shownOccurrences": 2
@@ -2651,7 +2505,7 @@
    "sample": "H-034",
    "arm": "A5",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "matched",
    "limit": 1,
    "target": 1,
@@ -2741,50 +2595,6 @@
    "id": "H-035",
    "sample": "H-050",
    "arm": "E",
-   "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 1,
-   "id": "H-035",
-   "sample": "H-087",
-   "arm": "A1",
-   "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 2,
-   "id": "H-035",
-   "sample": "H-087",
-   "arm": "A1",
-   "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 3,
-   "id": "H-035",
-   "sample": "H-087",
-   "arm": "A1",
-   "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 4,
-   "id": "H-035",
-   "sample": "H-087",
-   "arm": "A1",
    "configuration": "m3c-w1|restless|accept-middle",
    "renderer": "evidence",
    "length": "full",
@@ -3377,138 +3187,6 @@
   },
   {
    "sheet": 1,
-   "id": "H-047",
-   "sample": "H-059",
-   "arm": "E",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 2,
-   "id": "H-047",
-   "sample": "H-059",
-   "arm": "E",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 3,
-   "id": "H-047",
-   "sample": "H-059",
-   "arm": "E",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 4,
-   "id": "H-047",
-   "sample": "H-059",
-   "arm": "E",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 1,
-   "id": "H-047",
-   "sample": "H-062",
-   "arm": "A1",
-   "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 2,
-   "id": "H-047",
-   "sample": "H-062",
-   "arm": "A1",
-   "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 3,
-   "id": "H-047",
-   "sample": "H-062",
-   "arm": "A1",
-   "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 4,
-   "id": "H-047",
-   "sample": "H-062",
-   "arm": "A1",
-   "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 1,
-   "id": "H-047",
-   "sample": "H-080",
-   "arm": "A1",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 2,
-   "id": "H-047",
-   "sample": "H-080",
-   "arm": "A1",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 3,
-   "id": "H-047",
-   "sample": "H-080",
-   "arm": "A1",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 4,
-   "id": "H-047",
-   "sample": "H-080",
-   "arm": "A1",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "evidence",
-   "length": "full",
-   "fullOccurrences": 1,
-   "shownOccurrences": 1
-  },
-  {
-   "sheet": 1,
    "id": "H-048",
    "sample": "H-048",
    "arm": "A3",
@@ -3879,6 +3557,138 @@
   },
   {
    "sheet": 1,
+   "id": "H-059",
+   "sample": "H-059",
+   "arm": "E",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 2,
+   "id": "H-059",
+   "sample": "H-059",
+   "arm": "E",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 3,
+   "id": "H-059",
+   "sample": "H-059",
+   "arm": "E",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 4,
+   "id": "H-059",
+   "sample": "H-059",
+   "arm": "E",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 1,
+   "id": "H-059",
+   "sample": "H-062",
+   "arm": "A1",
+   "configuration": "m3c-w0|steady|accept-last",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 2,
+   "id": "H-059",
+   "sample": "H-062",
+   "arm": "A1",
+   "configuration": "m3c-w0|steady|accept-last",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 3,
+   "id": "H-059",
+   "sample": "H-062",
+   "arm": "A1",
+   "configuration": "m3c-w0|steady|accept-last",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 4,
+   "id": "H-059",
+   "sample": "H-062",
+   "arm": "A1",
+   "configuration": "m3c-w0|steady|accept-last",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 1,
+   "id": "H-059",
+   "sample": "H-080",
+   "arm": "A1",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 2,
+   "id": "H-059",
+   "sample": "H-080",
+   "arm": "A1",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 3,
+   "id": "H-059",
+   "sample": "H-080",
+   "arm": "A1",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 4,
+   "id": "H-059",
+   "sample": "H-080",
+   "arm": "A1",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 1,
    "id": "H-060",
    "sample": "H-060",
    "arm": "A1",
@@ -4153,7 +3963,7 @@
    "sample": "H-067",
    "arm": "E",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "full",
    "fullOccurrences": 3,
    "shownOccurrences": 3
@@ -4164,7 +3974,7 @@
    "sample": "H-067",
    "arm": "E",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 3,
    "shownOccurrences": 3
@@ -4175,7 +3985,7 @@
    "sample": "H-067",
    "arm": "E",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "full",
    "fullOccurrences": 3,
    "shownOccurrences": 3
@@ -4186,7 +3996,7 @@
    "sample": "H-067",
    "arm": "E",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 3,
    "shownOccurrences": 3
@@ -4241,7 +4051,7 @@
    "sample": "H-070",
    "arm": "A5",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "matched",
    "limit": 3,
    "target": 3,
@@ -4255,7 +4065,7 @@
    "sample": "H-070",
    "arm": "A5",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 4,
    "shownOccurrences": 4
@@ -4266,7 +4076,7 @@
    "sample": "H-070",
    "arm": "A5",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "matched",
    "limit": 3,
    "target": 3,
@@ -4280,7 +4090,7 @@
    "sample": "H-070",
    "arm": "A5",
    "configuration": "m3c-w0|restless|decline",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 4,
    "shownOccurrences": 4
@@ -4291,13 +4101,27 @@
    "sample": "H-071",
    "arm": "A5",
    "configuration": "m3c-w1|restless|accept-middle",
+   "renderer": "evidence",
+   "length": "matched",
+   "limit": 3,
+   "target": 3,
+   "exact": true,
+   "fullOccurrences": 5,
+   "shownOccurrences": 3
+  },
+  {
+   "sheet": 2,
+   "id": "H-071",
+   "sample": "H-071",
+   "arm": "A5",
+   "configuration": "m3c-w1|restless|accept-middle",
    "renderer": "current",
    "length": "full",
    "fullOccurrences": 5,
    "shownOccurrences": 5
   },
   {
-   "sheet": 2,
+   "sheet": 3,
    "id": "H-071",
    "sample": "H-071",
    "arm": "A5",
@@ -4311,29 +4135,15 @@
    "shownOccurrences": 3
   },
   {
-   "sheet": 3,
-   "id": "H-071",
-   "sample": "H-071",
-   "arm": "A5",
-   "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 5,
-   "shownOccurrences": 5
-  },
-  {
    "sheet": 4,
    "id": "H-071",
    "sample": "H-071",
    "arm": "A5",
    "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "evidence",
-   "length": "matched",
-   "limit": 3,
-   "target": 3,
-   "exact": true,
+   "renderer": "current",
+   "length": "full",
    "fullOccurrences": 5,
-   "shownOccurrences": 3
+   "shownOccurrences": 5
   },
   {
    "sheet": 1,
@@ -4386,9 +4196,12 @@
    "arm": "A5",
    "configuration": "m3c-w0|calm|engage",
    "renderer": "current",
-   "length": "full",
+   "length": "matched",
+   "limit": 1,
+   "target": 1,
+   "exact": true,
    "fullOccurrences": 5,
-   "shownOccurrences": 5
+   "shownOccurrences": 1
   },
   {
    "sheet": 2,
@@ -4397,12 +4210,9 @@
    "arm": "A5",
    "configuration": "m3c-w0|calm|engage",
    "renderer": "evidence",
-   "length": "matched",
-   "limit": 1,
-   "target": 1,
-   "exact": true,
+   "length": "full",
    "fullOccurrences": 5,
-   "shownOccurrences": 1
+   "shownOccurrences": 5
   },
   {
    "sheet": 3,
@@ -4411,9 +4221,12 @@
    "arm": "A5",
    "configuration": "m3c-w0|calm|engage",
    "renderer": "current",
-   "length": "full",
+   "length": "matched",
+   "limit": 1,
+   "target": 1,
+   "exact": true,
    "fullOccurrences": 5,
-   "shownOccurrences": 5
+   "shownOccurrences": 1
   },
   {
    "sheet": 4,
@@ -4422,12 +4235,9 @@
    "arm": "A5",
    "configuration": "m3c-w0|calm|engage",
    "renderer": "evidence",
-   "length": "matched",
-   "limit": 1,
-   "target": 1,
-   "exact": true,
+   "length": "full",
    "fullOccurrences": 5,
-   "shownOccurrences": 1
+   "shownOccurrences": 5
   },
   {
    "sheet": 1,
@@ -4475,17 +4285,102 @@
   },
   {
    "sheet": 1,
+   "id": "H-077",
+   "sample": "H-077",
+   "arm": "A1",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 2,
+   "id": "H-077",
+   "sample": "H-077",
+   "arm": "A1",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 3,
+   "id": "H-077",
+   "sample": "H-077",
+   "arm": "A1",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 4,
+   "id": "H-077",
+   "sample": "H-077",
+   "arm": "A1",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 1,
+   "id": "H-077",
+   "sample": "H-094",
+   "arm": "E",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 2,
+   "id": "H-077",
+   "sample": "H-094",
+   "arm": "E",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 3,
+   "id": "H-077",
+   "sample": "H-094",
+   "arm": "E",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 4,
+   "id": "H-077",
+   "sample": "H-094",
+   "arm": "E",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 1,
    "id": "H-078",
    "sample": "H-078",
    "arm": "A5",
    "configuration": "m3c-w0|calm|engage",
    "renderer": "evidence",
-   "length": "matched",
-   "limit": 1,
-   "target": 1,
-   "exact": true,
+   "length": "full",
    "fullOccurrences": 5,
-   "shownOccurrences": 1
+   "shownOccurrences": 5
   },
   {
    "sheet": 2,
@@ -4494,17 +4389,6 @@
    "arm": "A5",
    "configuration": "m3c-w0|calm|engage",
    "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 5,
-   "shownOccurrences": 5
-  },
-  {
-   "sheet": 3,
-   "id": "H-078",
-   "sample": "H-078",
-   "arm": "A5",
-   "configuration": "m3c-w0|calm|engage",
-   "renderer": "evidence",
    "length": "matched",
    "limit": 1,
    "target": 1,
@@ -4513,15 +4397,29 @@
    "shownOccurrences": 1
   },
   {
+   "sheet": 3,
+   "id": "H-078",
+   "sample": "H-078",
+   "arm": "A5",
+   "configuration": "m3c-w0|calm|engage",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 5,
+   "shownOccurrences": 5
+  },
+  {
    "sheet": 4,
    "id": "H-078",
    "sample": "H-078",
    "arm": "A5",
    "configuration": "m3c-w0|calm|engage",
    "renderer": "current",
-   "length": "full",
+   "length": "matched",
+   "limit": 1,
+   "target": 1,
+   "exact": true,
    "fullOccurrences": 5,
-   "shownOccurrences": 5
+   "shownOccurrences": 1
   },
   {
    "sheet": 1,
@@ -4573,13 +4471,10 @@
    "sample": "H-081",
    "arm": "A5",
    "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "evidence",
-   "length": "matched",
-   "limit": 1,
-   "target": 1,
-   "exact": true,
+   "renderer": "current",
+   "length": "full",
    "fullOccurrences": 5,
-   "shownOccurrences": 1
+   "shownOccurrences": 5
   },
   {
    "sheet": 2,
@@ -4587,13 +4482,27 @@
    "sample": "H-081",
    "arm": "A5",
    "configuration": "m3c-w0|steady|accept-last",
+   "renderer": "evidence",
+   "length": "matched",
+   "limit": 1,
+   "target": 1,
+   "exact": true,
+   "fullOccurrences": 5,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 3,
+   "id": "H-081",
+   "sample": "H-081",
+   "arm": "A5",
+   "configuration": "m3c-w0|steady|accept-last",
    "renderer": "current",
    "length": "full",
    "fullOccurrences": 5,
    "shownOccurrences": 5
   },
   {
-   "sheet": 3,
+   "sheet": 4,
    "id": "H-081",
    "sample": "H-081",
    "arm": "A5",
@@ -4605,17 +4514,6 @@
    "exact": true,
    "fullOccurrences": 5,
    "shownOccurrences": 1
-  },
-  {
-   "sheet": 4,
-   "id": "H-081",
-   "sample": "H-081",
-   "arm": "A5",
-   "configuration": "m3c-w0|steady|accept-last",
-   "renderer": "current",
-   "length": "full",
-   "fullOccurrences": 5,
-   "shownOccurrences": 5
   },
   {
    "sheet": 1,
@@ -4723,7 +4621,7 @@
    "sample": "H-084",
    "arm": "E",
    "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "full",
    "fullOccurrences": 3,
    "shownOccurrences": 3
@@ -4734,7 +4632,7 @@
    "sample": "H-084",
    "arm": "E",
    "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 3,
    "shownOccurrences": 3
@@ -4745,7 +4643,7 @@
    "sample": "H-084",
    "arm": "E",
    "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "full",
    "fullOccurrences": 3,
    "shownOccurrences": 3
@@ -4756,7 +4654,7 @@
    "sample": "H-084",
    "arm": "E",
    "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 3,
    "shownOccurrences": 3
@@ -4857,6 +4755,50 @@
   },
   {
    "sheet": 1,
+   "id": "H-087",
+   "sample": "H-087",
+   "arm": "A1",
+   "configuration": "m3c-w1|restless|accept-middle",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 2,
+   "id": "H-087",
+   "sample": "H-087",
+   "arm": "A1",
+   "configuration": "m3c-w1|restless|accept-middle",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 3,
+   "id": "H-087",
+   "sample": "H-087",
+   "arm": "A1",
+   "configuration": "m3c-w1|restless|accept-middle",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 4,
+   "id": "H-087",
+   "sample": "H-087",
+   "arm": "A1",
+   "configuration": "m3c-w1|restless|accept-middle",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 1,
+   "shownOccurrences": 1
+  },
+  {
+   "sheet": 1,
    "id": "H-088",
    "sample": "H-088",
    "arm": "A1",
@@ -4945,11 +4887,55 @@
   },
   {
    "sheet": 1,
+   "id": "H-092",
+   "sample": "H-092",
+   "arm": "A1",
+   "configuration": "m3c-w1|restless|accept-middle",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 3,
+   "shownOccurrences": 3
+  },
+  {
+   "sheet": 2,
+   "id": "H-092",
+   "sample": "H-092",
+   "arm": "A1",
+   "configuration": "m3c-w1|restless|accept-middle",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 3,
+   "shownOccurrences": 3
+  },
+  {
+   "sheet": 3,
+   "id": "H-092",
+   "sample": "H-092",
+   "arm": "A1",
+   "configuration": "m3c-w1|restless|accept-middle",
+   "renderer": "evidence",
+   "length": "full",
+   "fullOccurrences": 3,
+   "shownOccurrences": 3
+  },
+  {
+   "sheet": 4,
+   "id": "H-092",
+   "sample": "H-092",
+   "arm": "A1",
+   "configuration": "m3c-w1|restless|accept-middle",
+   "renderer": "current",
+   "length": "full",
+   "fullOccurrences": 3,
+   "shownOccurrences": 3
+  },
+  {
+   "sheet": 1,
    "id": "H-093",
    "sample": "H-093",
    "arm": "A1",
    "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -4960,7 +4946,7 @@
    "sample": "H-093",
    "arm": "A1",
    "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -4971,7 +4957,7 @@
    "sample": "H-093",
    "arm": "A1",
    "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "current",
+   "renderer": "evidence",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1
@@ -4982,7 +4968,7 @@
    "sample": "H-093",
    "arm": "A1",
    "configuration": "m3c-w1|restless|accept-middle",
-   "renderer": "evidence",
+   "renderer": "current",
    "length": "full",
    "fullOccurrences": 1,
    "shownOccurrences": 1

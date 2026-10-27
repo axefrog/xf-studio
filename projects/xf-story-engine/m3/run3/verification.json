@@ -1,24 +1,37 @@
 {
   "date": "2026-10-27",
+  "status": "complete-rerated-schema-3",
   "method": "reviewed-v5",
-  "packetSchema": 2,
-  "packetSha256": "d7d34d65589ef506dfa760c28a0c2c65293dbe55cf4c925102f9b632436459db",
+  "packetSchema": 3,
+  "packetSha256": "4e4d9f8b7149cfdd2a24bd65de8c9802e219bbf6763cded134d7409daf0f83b7",
   "ratings": {
     "raters": 2,
-    "cardsEach": 75,
+    "pending": false,
+    "supersededPasses": 2,
+    "cardsEach": 79,
     "pairsEach": 42,
     "omittedTiesEach": 6,
     "sampledMemberships": 96
   },
-  "defaultSuite": {
-    "passed": 1717,
-    "skipped": 45,
+  "targetedSuite": {
+    "passed": 600,
+    "skipped": 37,
     "failed": 0,
-    "expectations": 184015,
-    "files": 131,
-    "seconds": 330.67,
+    "expectations": 12851,
+    "files": 43,
+    "seconds": 98.9,
     "guardLimitGB": 4,
-    "guardPeakGB": 1.4
+    "guardPeakGB": 0.8
+  },
+  "defaultSuite": {
+    "passed": 1805,
+    "skipped": 46,
+    "failed": 0,
+    "expectations": 192578,
+    "files": 140,
+    "seconds": 442.38,
+    "guardLimitGB": 4,
+    "guardPeakGB": 1.5
   },
   "typechecks": {
     "reference": "pass",
@@ -30,8 +43,10 @@
     "changed": false
   },
   "audits": {
-    "independentActualRatingChecks": 1836,
-    "packetSourceAndAnswerHashes": "pass",
+    "packetChecks": 1598,
+    "independentR5ArithmeticChecks": 768,
+    "canonicalGroupsSplit": 4,
+    "packetSourceHashes": "pass; all 16 run hashes unchanged",
     "canonicalMembershipAndOrdering": "pass",
     "sharedConfigurationQuotas": "pass",
     "pairOmissionsAndMirroredSides": "pass",
@@ -41,21 +56,25 @@
     "privacyFindingsUntrackedPublic": 0,
     "privacySelfTestVectors": 82,
     "privacySelfTestFailures": 0,
+    "strictUtf8TextFilesInBranch": 67,
+    "strictUtf8GzipPayloadsInBranch": 16,
     "diffWhitespace": "pass",
-    "priorRunsAndDesignLibrary": "unchanged"
+    "priorRunsSpecsAndDesignLibrary": "unchanged",
+    "independentActualRatingChecks": 5801,
+    "packetSourceAndAnswerHashes": "pass"
   },
   "disk": {
-    "freeCGB": 285.4,
+    "freeCGB": 283.6,
     "taskOwnedPayloadOver5GB": false
   },
   "limitations": [
-    "Passing recorded-link chronology checks does not validate missing links: four E and two A1 population threads are flagged by the post-rating actor/time audit, including sampled memberships H-025 and H-096.",
-    "Independent arithmetic checks verify scoring, not validity of the simulation or model judgements."
+    "Two model passes are not independent populations; no pooled significance test or architecture verdict is claimed.",
+    "Four E and two A1 population threads retain the missing-link chronology residual; the direction of bias is uncertain. Equal sampled counts do not establish an unbiased comparison.",
+    "Length-matched forced-choice preferences depend strongly on renderer; extra evidence and prefix length compare balanced halves of different accounts, not causal percentages."
   ],
   "cleanup": {
     "ownedProcessesRunning": 0,
-    "scratchBytes": 1779914,
-    "scratchReparsePoints": 0,
-    "scratchDeletion": "Rejected by automatic approval review: blocked by policy. Coordinator cleanup required."
+    "scratchBytes": 1893065,
+    "scratchDeletion": "Intentionally left for the maintainer to delete, as requested."
   }
 }

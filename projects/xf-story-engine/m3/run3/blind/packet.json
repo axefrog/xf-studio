@@ -112,10 +112,10 @@
    "id": "H-010",
    "text": "Kabuki, within one week.\n\nDay 2, 00:00 (trace): Mei Watanabe acted against Jun Roxas.\n\nNo closing account is included at this observation cutoff.",
    "texts": [
-    "Kabuki, within one week.\n\nDay 2, 00:00 (trace): Mei Watanabe acted against Jun Roxas. Recorded wrong arguments: by: Mei Watanabe; to: Jun Roxas. Occurrence kind: assault. Recorded participants: aggressor: Mei Watanabe; victim: Jun Roxas. Recorded effects: harm on Jun Roxas. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
     "Kabuki, within one week.\n\nDay 2, 00:00 (trace): Mei Watanabe acted against Jun Roxas.\n\nNo closing account is included at this observation cutoff.",
     "Kabuki, within one week.\n\nDay 2, 00:00 (trace): Mei Watanabe acted against Jun Roxas. Recorded wrong arguments: by: Mei Watanabe; to: Jun Roxas. Occurrence kind: assault. Recorded participants: aggressor: Mei Watanabe; victim: Jun Roxas. Recorded effects: harm on Jun Roxas. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
-    "Kabuki, within one week.\n\nDay 2, 00:00 (trace): Mei Watanabe acted against Jun Roxas.\n\nNo closing account is included at this observation cutoff."
+    "Kabuki, within one week.\n\nDay 2, 00:00 (trace): Mei Watanabe acted against Jun Roxas.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 2, 00:00 (trace): Mei Watanabe acted against Jun Roxas. Recorded wrong arguments: by: Mei Watanabe; to: Jun Roxas. Occurrence kind: assault. Recorded participants: aggressor: Mei Watanabe; victim: Jun Roxas. Recorded effects: harm on Jun Roxas. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff."
    ],
    "run": "E-m3c-w0-steady-accept-last",
    "start": 14324
@@ -244,10 +244,10 @@
    "id": "H-021",
    "text": "Kabuki, within one week.\n\nDay 1, 13:40 (trace): Ying Luo acted against Kaori Tanaka.\n\nNo closing account is included at this observation cutoff.",
    "texts": [
-    "Kabuki, within one week.\n\nDay 1, 13:40 (trace): Ying Luo acted against Kaori Tanaka. Recorded wrong arguments: by: Ying Luo; to: Kaori Tanaka. Occurrence kind: theft. Recorded participants: aggressor: Ying Luo; victim: Kaori Tanaka. Recorded effects: take on Kaori Tanaka. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
     "Kabuki, within one week.\n\nDay 1, 13:40 (trace): Ying Luo acted against Kaori Tanaka.\n\nNo closing account is included at this observation cutoff.",
     "Kabuki, within one week.\n\nDay 1, 13:40 (trace): Ying Luo acted against Kaori Tanaka. Recorded wrong arguments: by: Ying Luo; to: Kaori Tanaka. Occurrence kind: theft. Recorded participants: aggressor: Ying Luo; victim: Kaori Tanaka. Recorded effects: take on Kaori Tanaka. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
-    "Kabuki, within one week.\n\nDay 1, 13:40 (trace): Ying Luo acted against Kaori Tanaka.\n\nNo closing account is included at this observation cutoff."
+    "Kabuki, within one week.\n\nDay 1, 13:40 (trace): Ying Luo acted against Kaori Tanaka.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 1, 13:40 (trace): Ying Luo acted against Kaori Tanaka. Recorded wrong arguments: by: Ying Luo; to: Kaori Tanaka. Occurrence kind: theft. Recorded participants: aggressor: Ying Luo; victim: Kaori Tanaka. Recorded effects: take on Kaori Tanaka. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff."
    ],
    "run": "A1-m3c-w0-steady-accept-last",
    "start": 8152
@@ -388,10 +388,10 @@
    "id": "H-034",
    "text": "Kabuki, within one week.\n\nDay 3, 00:10 (trace): Salma Rahman asked you for help.\n\nDay 3, 00:20 (message): you refused Salma Rahman.\n\nNo closing account is included at this observation cutoff.",
    "texts": [
-    "Kabuki, within one week.\n\nDay 3, 00:10 (trace): Salma Rahman asked you for help. Recorded ask arguments: by: Salma Rahman; of: you. Proposed act: you acted against Salma Rahman. Available responses: accept; decline; leave unanswered.\n\nDay 3, 00:20 (message): you refused Salma Rahman. Recorded refuse arguments: who: you; to: Salma Rahman.\n\nNo closing account is included at this observation cutoff. The path stops at the unanswered or declined request.",
-    "Kabuki, within one week.\n\nDay 3, 00:10 (trace): Salma Rahman asked you for help.\n\nNo closing account is included at this observation cutoff.",
-    "Kabuki, within one week.\n\nDay 3, 00:10 (trace): Salma Rahman asked you for help. Recorded ask arguments: by: Salma Rahman; of: you. Proposed act: you acted against Salma Rahman. Available responses: accept; decline; leave unanswered.\n\nDay 3, 00:20 (message): you refused Salma Rahman. Recorded refuse arguments: who: you; to: Salma Rahman.\n\nNo closing account is included at this observation cutoff. The path stops at the unanswered or declined request.",
-    "Kabuki, within one week.\n\nDay 3, 00:10 (trace): Salma Rahman asked you for help.\n\nNo closing account is included at this observation cutoff."
+    "Kabuki, within one week.\n\nDay 3, 00:10 (trace): Salma Rahman asked you for help.\n\nDay 3, 00:20 (message): you refused Salma Rahman.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 3, 00:10 (trace): Salma Rahman asked you for help. Recorded ask arguments: by: Salma Rahman; of: you. Proposed act: you acted against Salma Rahman. Available responses: accept; decline; leave unanswered.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 3, 00:10 (trace): Salma Rahman asked you for help.\n\nDay 3, 00:20 (message): you refused Salma Rahman.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 3, 00:10 (trace): Salma Rahman asked you for help. Recorded ask arguments: by: Salma Rahman; of: you. Proposed act: you acted against Salma Rahman. Available responses: accept; decline; leave unanswered.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff."
    ],
    "run": "m3c-w0-restless-decline-A5",
    "start": 28900
@@ -613,6 +613,18 @@
    "start": 43300
   },
   {
+   "id": "H-059",
+   "text": "Kabuki, within one week.\n\nDay 5, 14:00 (trace): Haruto Hayashi acted against Dmitri Zielinski.\n\nNo closing account is included at this observation cutoff.",
+   "texts": [
+    "Kabuki, within one week.\n\nDay 5, 14:00 (trace): Haruto Hayashi acted against Dmitri Zielinski.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 5, 14:00 (trace): Haruto Hayashi acted against Dmitri Zielinski. Recorded wrong arguments: by: Haruto Hayashi; to: Dmitri Zielinski. Occurrence kind: theft. Recorded participants: aggressor: Haruto Hayashi; victim: Dmitri Zielinski. Recorded effects: take on Dmitri Zielinski. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 5, 14:00 (trace): Haruto Hayashi acted against Dmitri Zielinski.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 5, 14:00 (trace): Haruto Hayashi acted against Dmitri Zielinski. Recorded wrong arguments: by: Haruto Hayashi; to: Dmitri Zielinski. Occurrence kind: theft. Recorded participants: aggressor: Haruto Hayashi; victim: Dmitri Zielinski. Recorded effects: take on Dmitri Zielinski. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff."
+   ],
+   "run": "E-m3c-w0-calm-engage",
+   "start": 66000
+  },
+  {
    "id": "H-060",
    "text": "Kabuki, within one week.\n\nDay 1, 07:20 (trace): Takeshi Watanabe made a demand of Ying Huang.\n\nDay 1, 14:10 (sight): Ying Huang asked you for help.\n\nNo closing account is included at this observation cutoff.",
    "texts": [
@@ -676,10 +688,10 @@
    "id": "H-067",
    "text": "Kabuki, within one week.\n\nDay 1, 17:30 (trace): Ying Luo acted against Kaori Tanaka.\n\nDay 2, 12:40 (sight): Kaori Tanaka asked you for help.\n\nDay 2, 12:40 (message): you refused Kaori Tanaka.\n\nNo closing account is included at this observation cutoff.",
    "texts": [
-    "Kabuki, within one week.\n\nDay 1, 17:30 (trace): Ying Luo acted against Kaori Tanaka.\n\nDay 2, 12:40 (sight): Kaori Tanaka asked you for help.\n\nDay 2, 12:40 (message): you refused Kaori Tanaka.\n\nNo closing account is included at this observation cutoff.",
     "Kabuki, within one week.\n\nDay 1, 17:30 (trace): Ying Luo acted against Kaori Tanaka. Recorded wrong arguments: by: Ying Luo; to: Kaori Tanaka. Occurrence kind: theft. Recorded participants: aggressor: Ying Luo; victim: Kaori Tanaka. Recorded effects: take on Kaori Tanaka. Recorded act outcome: done.\n\nDay 2, 12:40 (sight): Kaori Tanaka asked you for help. Recorded ask arguments: by: Kaori Tanaka; of: you. Proposed act: Kaori Tanaka learned about the recorded police-action occurrence (target: Shun Okada; outcome: done). Available actions: act (help), bargain (bargain); decline; leave unanswered. act cost: time spent following this thread (now). bargain cost: a favour owed for assistance (now). Occurrence kind: offer. Recorded participants: asker: Kaori Tanaka; protagonist: you. Recorded causes among supplied observations: the recorded theft occurrence (aggressor: Ying Luo; victim: Kaori Tanaka; outcome: done).\n\nDay 2, 12:40 (message): you refused Kaori Tanaka. Recorded refuse arguments: who: you; to: Kaori Tanaka. Recorded response: decline:decline. Occurrence kind: response. Recorded participants: protagonist: you; asker: Kaori Tanaka. Recorded causes among supplied observations: the recorded offer occurrence (asker: Kaori Tanaka; protagonist: you); the recorded theft occurrence (aggressor: Ying Luo; victim: Kaori Tanaka; outcome: done).\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
     "Kabuki, within one week.\n\nDay 1, 17:30 (trace): Ying Luo acted against Kaori Tanaka.\n\nDay 2, 12:40 (sight): Kaori Tanaka asked you for help.\n\nDay 2, 12:40 (message): you refused Kaori Tanaka.\n\nNo closing account is included at this observation cutoff.",
-    "Kabuki, within one week.\n\nDay 1, 17:30 (trace): Ying Luo acted against Kaori Tanaka. Recorded wrong arguments: by: Ying Luo; to: Kaori Tanaka. Occurrence kind: theft. Recorded participants: aggressor: Ying Luo; victim: Kaori Tanaka. Recorded effects: take on Kaori Tanaka. Recorded act outcome: done.\n\nDay 2, 12:40 (sight): Kaori Tanaka asked you for help. Recorded ask arguments: by: Kaori Tanaka; of: you. Proposed act: Kaori Tanaka learned about the recorded police-action occurrence (target: Shun Okada; outcome: done). Available actions: act (help), bargain (bargain); decline; leave unanswered. act cost: time spent following this thread (now). bargain cost: a favour owed for assistance (now). Occurrence kind: offer. Recorded participants: asker: Kaori Tanaka; protagonist: you. Recorded causes among supplied observations: the recorded theft occurrence (aggressor: Ying Luo; victim: Kaori Tanaka; outcome: done).\n\nDay 2, 12:40 (message): you refused Kaori Tanaka. Recorded refuse arguments: who: you; to: Kaori Tanaka. Recorded response: decline:decline. Occurrence kind: response. Recorded participants: protagonist: you; asker: Kaori Tanaka. Recorded causes among supplied observations: the recorded offer occurrence (asker: Kaori Tanaka; protagonist: you); the recorded theft occurrence (aggressor: Ying Luo; victim: Kaori Tanaka; outcome: done).\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff."
+    "Kabuki, within one week.\n\nDay 1, 17:30 (trace): Ying Luo acted against Kaori Tanaka. Recorded wrong arguments: by: Ying Luo; to: Kaori Tanaka. Occurrence kind: theft. Recorded participants: aggressor: Ying Luo; victim: Kaori Tanaka. Recorded effects: take on Kaori Tanaka. Recorded act outcome: done.\n\nDay 2, 12:40 (sight): Kaori Tanaka asked you for help. Recorded ask arguments: by: Kaori Tanaka; of: you. Proposed act: Kaori Tanaka learned about the recorded police-action occurrence (target: Shun Okada; outcome: done). Available actions: act (help), bargain (bargain); decline; leave unanswered. act cost: time spent following this thread (now). bargain cost: a favour owed for assistance (now). Occurrence kind: offer. Recorded participants: asker: Kaori Tanaka; protagonist: you. Recorded causes among supplied observations: the recorded theft occurrence (aggressor: Ying Luo; victim: Kaori Tanaka; outcome: done).\n\nDay 2, 12:40 (message): you refused Kaori Tanaka. Recorded refuse arguments: who: you; to: Kaori Tanaka. Recorded response: decline:decline. Occurrence kind: response. Recorded participants: protagonist: you; asker: Kaori Tanaka. Recorded causes among supplied observations: the recorded offer occurrence (asker: Kaori Tanaka; protagonist: you); the recorded theft occurrence (aggressor: Ying Luo; victim: Kaori Tanaka; outcome: done).\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 1, 17:30 (trace): Ying Luo acted against Kaori Tanaka.\n\nDay 2, 12:40 (sight): Kaori Tanaka asked you for help.\n\nDay 2, 12:40 (message): you refused Kaori Tanaka.\n\nNo closing account is included at this observation cutoff."
    ],
    "run": "E-m3c-w0-restless-decline",
    "start": 10464
@@ -700,10 +712,10 @@
    "id": "H-070",
    "text": "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Yui Ishikawa threatened Marcus Banks.\n\nDay 5, 00:20 (trace): Yui Ishikawa acted against Marcus Banks.\n\nDay 5, 00:30 (trace): Yui Ishikawa asked you for help.\n\nDay 5, 00:40 (message): you refused Yui Ishikawa.\n\nNo closing account is included at this observation cutoff.",
    "texts": [
-    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Yui Ishikawa threatened Marcus Banks.\n\nDay 5, 00:20 (trace): Yui Ishikawa acted against Marcus Banks.\n\nDay 5, 00:30 (trace): Yui Ishikawa asked you for help.\n\nNo closing account is included at this observation cutoff.",
-    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Yui Ishikawa threatened Marcus Banks. Recorded threaten arguments: by: Yui Ishikawa; to: Marcus Banks.\n\nDay 5, 00:20 (trace): Yui Ishikawa acted against Marcus Banks. Recorded wrong arguments: by: Yui Ishikawa; to: Marcus Banks.\n\nDay 5, 00:30 (trace): Yui Ishikawa asked you for help. Recorded ask arguments: by: Yui Ishikawa; of: you. Proposed act: you acted against Yui Ishikawa. Available responses: accept; decline; leave unanswered.\n\nDay 5, 00:40 (message): you refused Yui Ishikawa. Recorded refuse arguments: who: you; to: Yui Ishikawa.\n\nNo closing account is included at this observation cutoff. The path stops at the unanswered or declined request.",
-    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Yui Ishikawa threatened Marcus Banks.\n\nDay 5, 00:20 (trace): Yui Ishikawa acted against Marcus Banks.\n\nDay 5, 00:30 (trace): Yui Ishikawa asked you for help.\n\nNo closing account is included at this observation cutoff.",
-    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Yui Ishikawa threatened Marcus Banks. Recorded threaten arguments: by: Yui Ishikawa; to: Marcus Banks.\n\nDay 5, 00:20 (trace): Yui Ishikawa acted against Marcus Banks. Recorded wrong arguments: by: Yui Ishikawa; to: Marcus Banks.\n\nDay 5, 00:30 (trace): Yui Ishikawa asked you for help. Recorded ask arguments: by: Yui Ishikawa; of: you. Proposed act: you acted against Yui Ishikawa. Available responses: accept; decline; leave unanswered.\n\nDay 5, 00:40 (message): you refused Yui Ishikawa. Recorded refuse arguments: who: you; to: Yui Ishikawa.\n\nNo closing account is included at this observation cutoff. The path stops at the unanswered or declined request."
+    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Yui Ishikawa threatened Marcus Banks. Recorded threaten arguments: by: Yui Ishikawa; to: Marcus Banks.\n\nDay 5, 00:20 (trace): Yui Ishikawa acted against Marcus Banks. Recorded wrong arguments: by: Yui Ishikawa; to: Marcus Banks.\n\nDay 5, 00:30 (trace): Yui Ishikawa asked you for help. Recorded ask arguments: by: Yui Ishikawa; of: you. Proposed act: you acted against Yui Ishikawa. Available responses: accept; decline; leave unanswered.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Yui Ishikawa threatened Marcus Banks.\n\nDay 5, 00:20 (trace): Yui Ishikawa acted against Marcus Banks.\n\nDay 5, 00:30 (trace): Yui Ishikawa asked you for help.\n\nDay 5, 00:40 (message): you refused Yui Ishikawa.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Yui Ishikawa threatened Marcus Banks. Recorded threaten arguments: by: Yui Ishikawa; to: Marcus Banks.\n\nDay 5, 00:20 (trace): Yui Ishikawa acted against Marcus Banks. Recorded wrong arguments: by: Yui Ishikawa; to: Marcus Banks.\n\nDay 5, 00:30 (trace): Yui Ishikawa asked you for help. Recorded ask arguments: by: Yui Ishikawa; of: you. Proposed act: you acted against Yui Ishikawa. Available responses: accept; decline; leave unanswered.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Yui Ishikawa threatened Marcus Banks.\n\nDay 5, 00:20 (trace): Yui Ishikawa acted against Marcus Banks.\n\nDay 5, 00:30 (trace): Yui Ishikawa asked you for help.\n\nDay 5, 00:40 (message): you refused Yui Ishikawa.\n\nNo closing account is included at this observation cutoff."
    ],
    "run": "m3c-w0-restless-decline-A5",
    "start": 57700
@@ -712,10 +724,10 @@
    "id": "H-071",
    "text": "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Imran Malik asked you for help.\n\nDay 5, 00:20 (message): you agreed to Imran Malik's request.\n\nDay 5, 00:30 (trace): you acted against Imran Malik.\n\nDay 5, 00:40 (trace): Aiko Ishikawa learned about the recorded subject.\n\nDay 5, 00:50 (trace): Aiko Ishikawa made a demand of you.\n\nA closing account reached you.",
    "texts": [
-    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Imran Malik asked you for help.\n\nDay 5, 00:20 (message): you agreed to Imran Malik's request.\n\nDay 5, 00:30 (trace): you acted against Imran Malik.\n\nDay 5, 00:40 (trace): Aiko Ishikawa learned about the recorded subject.\n\nDay 5, 00:50 (trace): Aiko Ishikawa made a demand of you.\n\nA closing account reached you.",
     "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Imran Malik asked you for help. Recorded ask arguments: by: Imran Malik; of: you. Proposed act: you acted against Imran Malik. Available responses: accept; decline; leave unanswered.\n\nDay 5, 00:20 (message): you agreed to Imran Malik's request. Recorded comply arguments: who: you; to: Imran Malik.\n\nDay 5, 00:30 (trace): you acted against Imran Malik. Recorded wrong arguments: by: you; to: Imran Malik.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
     "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Imran Malik asked you for help.\n\nDay 5, 00:20 (message): you agreed to Imran Malik's request.\n\nDay 5, 00:30 (trace): you acted against Imran Malik.\n\nDay 5, 00:40 (trace): Aiko Ishikawa learned about the recorded subject.\n\nDay 5, 00:50 (trace): Aiko Ishikawa made a demand of you.\n\nA closing account reached you.",
-    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Imran Malik asked you for help. Recorded ask arguments: by: Imran Malik; of: you. Proposed act: you acted against Imran Malik. Available responses: accept; decline; leave unanswered.\n\nDay 5, 00:20 (message): you agreed to Imran Malik's request. Recorded comply arguments: who: you; to: Imran Malik.\n\nDay 5, 00:30 (trace): you acted against Imran Malik. Recorded wrong arguments: by: you; to: Imran Malik.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff."
+    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Imran Malik asked you for help. Recorded ask arguments: by: Imran Malik; of: you. Proposed act: you acted against Imran Malik. Available responses: accept; decline; leave unanswered.\n\nDay 5, 00:20 (message): you agreed to Imran Malik's request. Recorded comply arguments: who: you; to: Imran Malik.\n\nDay 5, 00:30 (trace): you acted against Imran Malik. Recorded wrong arguments: by: you; to: Imran Malik.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Imran Malik asked you for help.\n\nDay 5, 00:20 (message): you agreed to Imran Malik's request.\n\nDay 5, 00:30 (trace): you acted against Imran Malik.\n\nDay 5, 00:40 (trace): Aiko Ishikawa learned about the recorded subject.\n\nDay 5, 00:50 (trace): Aiko Ishikawa made a demand of you.\n\nA closing account reached you."
    ],
    "run": "m3c-w1-restless-accept-middle-A5",
    "start": 57700
@@ -736,10 +748,10 @@
    "id": "H-074",
    "text": "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Sora Mori asked you for help.\n\nDay 5, 00:20 (message): you agreed to Sora Mori's request.\n\nDay 5, 00:30 (trace): you acted against Sora Mori.\n\nDay 5, 00:40 (trace): Mario Mendoza learned about the recorded subject.\n\nDay 5, 00:50 (trace): Mario Mendoza made a demand of you.\n\nA closing account reached you.",
    "texts": [
-    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Sora Mori asked you for help.\n\nDay 5, 00:20 (message): you agreed to Sora Mori's request.\n\nDay 5, 00:30 (trace): you acted against Sora Mori.\n\nDay 5, 00:40 (trace): Mario Mendoza learned about the recorded subject.\n\nDay 5, 00:50 (trace): Mario Mendoza made a demand of you.\n\nA closing account reached you.",
-    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Sora Mori asked you for help. Recorded ask arguments: by: Sora Mori; of: you. Proposed act: you acted against Sora Mori. Available responses: accept; decline; leave unanswered.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
-    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Sora Mori asked you for help.\n\nDay 5, 00:20 (message): you agreed to Sora Mori's request.\n\nDay 5, 00:30 (trace): you acted against Sora Mori.\n\nDay 5, 00:40 (trace): Mario Mendoza learned about the recorded subject.\n\nDay 5, 00:50 (trace): Mario Mendoza made a demand of you.\n\nA closing account reached you.",
-    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Sora Mori asked you for help. Recorded ask arguments: by: Sora Mori; of: you. Proposed act: you acted against Sora Mori. Available responses: accept; decline; leave unanswered.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff."
+    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Sora Mori asked you for help.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Sora Mori asked you for help. Recorded ask arguments: by: Sora Mori; of: you. Proposed act: you acted against Sora Mori. Available responses: accept; decline; leave unanswered.\n\nDay 5, 00:20 (message): you agreed to Sora Mori's request. Recorded comply arguments: who: you; to: Sora Mori.\n\nDay 5, 00:30 (trace): you acted against Sora Mori. Recorded wrong arguments: by: you; to: Sora Mori.\n\nDay 5, 00:40 (trace): Mario Mendoza learned about the recorded subject. Recorded learn arguments: who: Mario Mendoza; what: the recorded subject.\n\nDay 5, 00:50 (trace): Mario Mendoza made a demand of you. Recorded demand arguments: by: Mario Mendoza; of: you; what: the recorded subject.\n\nA closing account reached you. Recorded outcome: resolved; closing pattern: reckoning.",
+    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Sora Mori asked you for help.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 5, 00:10 (trace): Sora Mori asked you for help. Recorded ask arguments: by: Sora Mori; of: you. Proposed act: you acted against Sora Mori. Available responses: accept; decline; leave unanswered.\n\nDay 5, 00:20 (message): you agreed to Sora Mori's request. Recorded comply arguments: who: you; to: Sora Mori.\n\nDay 5, 00:30 (trace): you acted against Sora Mori. Recorded wrong arguments: by: you; to: Sora Mori.\n\nDay 5, 00:40 (trace): Mario Mendoza learned about the recorded subject. Recorded learn arguments: who: Mario Mendoza; what: the recorded subject.\n\nDay 5, 00:50 (trace): Mario Mendoza made a demand of you. Recorded demand arguments: by: Mario Mendoza; of: you; what: the recorded subject.\n\nA closing account reached you. Recorded outcome: resolved; closing pattern: reckoning."
    ],
    "run": "m3c-w0-calm-engage-A5",
    "start": 57700
@@ -757,13 +769,25 @@
    "start": 57700
   },
   {
+   "id": "H-077",
+   "text": "Kabuki, within one week.\n\nDay 3, 21:20 (trace): Ying Luo acted against Kaori Tanaka.\n\nNo closing account is included at this observation cutoff.",
+   "texts": [
+    "Kabuki, within one week.\n\nDay 3, 21:20 (trace): Ying Luo acted against Kaori Tanaka. Recorded wrong arguments: by: Ying Luo; to: Kaori Tanaka. Occurrence kind: theft. Recorded participants: aggressor: Ying Luo; victim: Kaori Tanaka. Recorded effects: take on Kaori Tanaka. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 3, 21:20 (trace): Ying Luo acted against Kaori Tanaka.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 3, 21:20 (trace): Ying Luo acted against Kaori Tanaka. Recorded wrong arguments: by: Ying Luo; to: Kaori Tanaka. Occurrence kind: theft. Recorded participants: aggressor: Ying Luo; victim: Kaori Tanaka. Recorded effects: take on Kaori Tanaka. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 3, 21:20 (trace): Ying Luo acted against Kaori Tanaka.\n\nNo closing account is included at this observation cutoff."
+   ],
+   "run": "A1-m3c-w0-calm-engage",
+   "start": 41599
+  },
+  {
    "id": "H-078",
    "text": "Kabuki, within one week.\n\nDay 6, 00:10 (trace): Daichi Fujita asked you for help.\n\nDay 6, 00:20 (message): you agreed to Daichi Fujita's request.\n\nDay 6, 00:30 (trace): you acted against Daichi Fujita.\n\nDay 6, 00:40 (trace): Long Deng learned about the recorded subject.\n\nDay 6, 00:50 (trace): Long Deng made a demand of you.\n\nA closing account reached you.",
    "texts": [
-    "Kabuki, within one week.\n\nDay 6, 00:10 (trace): Daichi Fujita asked you for help. Recorded ask arguments: by: Daichi Fujita; of: you. Proposed act: you acted against Daichi Fujita. Available responses: accept; decline; leave unanswered.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
-    "Kabuki, within one week.\n\nDay 6, 00:10 (trace): Daichi Fujita asked you for help.\n\nDay 6, 00:20 (message): you agreed to Daichi Fujita's request.\n\nDay 6, 00:30 (trace): you acted against Daichi Fujita.\n\nDay 6, 00:40 (trace): Long Deng learned about the recorded subject.\n\nDay 6, 00:50 (trace): Long Deng made a demand of you.\n\nA closing account reached you.",
-    "Kabuki, within one week.\n\nDay 6, 00:10 (trace): Daichi Fujita asked you for help. Recorded ask arguments: by: Daichi Fujita; of: you. Proposed act: you acted against Daichi Fujita. Available responses: accept; decline; leave unanswered.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
-    "Kabuki, within one week.\n\nDay 6, 00:10 (trace): Daichi Fujita asked you for help.\n\nDay 6, 00:20 (message): you agreed to Daichi Fujita's request.\n\nDay 6, 00:30 (trace): you acted against Daichi Fujita.\n\nDay 6, 00:40 (trace): Long Deng learned about the recorded subject.\n\nDay 6, 00:50 (trace): Long Deng made a demand of you.\n\nA closing account reached you."
+    "Kabuki, within one week.\n\nDay 6, 00:10 (trace): Daichi Fujita asked you for help. Recorded ask arguments: by: Daichi Fujita; of: you. Proposed act: you acted against Daichi Fujita. Available responses: accept; decline; leave unanswered.\n\nDay 6, 00:20 (message): you agreed to Daichi Fujita's request. Recorded comply arguments: who: you; to: Daichi Fujita.\n\nDay 6, 00:30 (trace): you acted against Daichi Fujita. Recorded wrong arguments: by: you; to: Daichi Fujita.\n\nDay 6, 00:40 (trace): Long Deng learned about the recorded subject. Recorded learn arguments: who: Long Deng; what: the recorded subject.\n\nDay 6, 00:50 (trace): Long Deng made a demand of you. Recorded demand arguments: by: Long Deng; of: you; what: the recorded subject.\n\nA closing account reached you. Recorded outcome: resolved; closing pattern: reckoning.",
+    "Kabuki, within one week.\n\nDay 6, 00:10 (trace): Daichi Fujita asked you for help.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 6, 00:10 (trace): Daichi Fujita asked you for help. Recorded ask arguments: by: Daichi Fujita; of: you. Proposed act: you acted against Daichi Fujita. Available responses: accept; decline; leave unanswered.\n\nDay 6, 00:20 (message): you agreed to Daichi Fujita's request. Recorded comply arguments: who: you; to: Daichi Fujita.\n\nDay 6, 00:30 (trace): you acted against Daichi Fujita. Recorded wrong arguments: by: you; to: Daichi Fujita.\n\nDay 6, 00:40 (trace): Long Deng learned about the recorded subject. Recorded learn arguments: who: Long Deng; what: the recorded subject.\n\nDay 6, 00:50 (trace): Long Deng made a demand of you. Recorded demand arguments: by: Long Deng; of: you; what: the recorded subject.\n\nA closing account reached you. Recorded outcome: resolved; closing pattern: reckoning.",
+    "Kabuki, within one week.\n\nDay 6, 00:10 (trace): Daichi Fujita asked you for help.\n\nNo closing account is included at this observation cutoff."
    ],
    "run": "m3c-w0-calm-engage-A5",
    "start": 72100
@@ -784,10 +808,10 @@
    "id": "H-081",
    "text": "Kabuki, within one week.\n\nDay 4, 00:10 (trace): Noriko Ogawa asked you for help.\n\nDay 4, 00:20 (message): you agreed to Noriko Ogawa's request.\n\nDay 4, 00:30 (trace): you acted against Noriko Ogawa.\n\nDay 4, 00:40 (trace): Mario Navarro learned about the recorded subject.\n\nDay 4, 00:50 (trace): Mario Navarro made a demand of you.\n\nA closing account reached you.",
    "texts": [
-    "Kabuki, within one week.\n\nDay 4, 00:10 (trace): Noriko Ogawa asked you for help. Recorded ask arguments: by: Noriko Ogawa; of: you. Proposed act: you acted against Noriko Ogawa. Available responses: accept; decline; leave unanswered.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
     "Kabuki, within one week.\n\nDay 4, 00:10 (trace): Noriko Ogawa asked you for help.\n\nDay 4, 00:20 (message): you agreed to Noriko Ogawa's request.\n\nDay 4, 00:30 (trace): you acted against Noriko Ogawa.\n\nDay 4, 00:40 (trace): Mario Navarro learned about the recorded subject.\n\nDay 4, 00:50 (trace): Mario Navarro made a demand of you.\n\nA closing account reached you.",
     "Kabuki, within one week.\n\nDay 4, 00:10 (trace): Noriko Ogawa asked you for help. Recorded ask arguments: by: Noriko Ogawa; of: you. Proposed act: you acted against Noriko Ogawa. Available responses: accept; decline; leave unanswered.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
-    "Kabuki, within one week.\n\nDay 4, 00:10 (trace): Noriko Ogawa asked you for help.\n\nDay 4, 00:20 (message): you agreed to Noriko Ogawa's request.\n\nDay 4, 00:30 (trace): you acted against Noriko Ogawa.\n\nDay 4, 00:40 (trace): Mario Navarro learned about the recorded subject.\n\nDay 4, 00:50 (trace): Mario Navarro made a demand of you.\n\nA closing account reached you."
+    "Kabuki, within one week.\n\nDay 4, 00:10 (trace): Noriko Ogawa asked you for help.\n\nDay 4, 00:20 (message): you agreed to Noriko Ogawa's request.\n\nDay 4, 00:30 (trace): you acted against Noriko Ogawa.\n\nDay 4, 00:40 (trace): Mario Navarro learned about the recorded subject.\n\nDay 4, 00:50 (trace): Mario Navarro made a demand of you.\n\nA closing account reached you.",
+    "Kabuki, within one week.\n\nDay 4, 00:10 (trace): Noriko Ogawa asked you for help. Recorded ask arguments: by: Noriko Ogawa; of: you. Proposed act: you acted against Noriko Ogawa. Available responses: accept; decline; leave unanswered.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff."
    ],
    "run": "m3c-w0-steady-accept-last-A5",
    "start": 43300
@@ -820,10 +844,10 @@
    "id": "H-084",
    "text": "Kabuki, within one week.\n\nDay 7, 14:00 (sight): Dmitri Novak asked you for help.\n\nDay 7, 14:00 (sight): you agreed to Dmitri Novak's request.\n\nDay 7, 14:00 (message): Sakura Aoki acted against Shun Matsuda.\n\nNo closing account is included at this observation cutoff.",
    "texts": [
-    "Kabuki, within one week.\n\nDay 7, 14:00 (sight): Dmitri Novak asked you for help.\n\nDay 7, 14:00 (sight): you agreed to Dmitri Novak's request.\n\nDay 7, 14:00 (message): Sakura Aoki acted against Shun Matsuda.\n\nNo closing account is included at this observation cutoff.",
     "Kabuki, within one week.\n\nDay 7, 14:00 (sight): Dmitri Novak asked you for help. Recorded ask arguments: by: Dmitri Novak; of: you. Proposed act: Dmitri Novak helped Shun Matsuda. Available actions: act (help), bargain (bargain); decline; leave unanswered. act cost: time spent following this thread (now). bargain cost: a favour owed for assistance (now). Occurrence kind: offer. Recorded participants: asker: Dmitri Novak; protagonist: you.\n\nDay 7, 14:00 (sight): you agreed to Dmitri Novak's request. Recorded comply arguments: who: you; to: Dmitri Novak. Recorded response: action:bargain (bargain). Occurrence kind: response. Recorded participants: protagonist: you; asker: Dmitri Novak. Recorded causes among supplied observations: the recorded offer occurrence (asker: Dmitri Novak; protagonist: you).\n\nDay 7, 14:00 (message): Sakura Aoki acted against Shun Matsuda. Recorded wrong arguments: by: Sakura Aoki; to: Shun Matsuda. Occurrence kind: gang-clash. Recorded participants: aggressor: Sakura Aoki; victim: Shun Matsuda. Recorded effects: harm on Shun Matsuda. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
     "Kabuki, within one week.\n\nDay 7, 14:00 (sight): Dmitri Novak asked you for help.\n\nDay 7, 14:00 (sight): you agreed to Dmitri Novak's request.\n\nDay 7, 14:00 (message): Sakura Aoki acted against Shun Matsuda.\n\nNo closing account is included at this observation cutoff.",
-    "Kabuki, within one week.\n\nDay 7, 14:00 (sight): Dmitri Novak asked you for help. Recorded ask arguments: by: Dmitri Novak; of: you. Proposed act: Dmitri Novak helped Shun Matsuda. Available actions: act (help), bargain (bargain); decline; leave unanswered. act cost: time spent following this thread (now). bargain cost: a favour owed for assistance (now). Occurrence kind: offer. Recorded participants: asker: Dmitri Novak; protagonist: you.\n\nDay 7, 14:00 (sight): you agreed to Dmitri Novak's request. Recorded comply arguments: who: you; to: Dmitri Novak. Recorded response: action:bargain (bargain). Occurrence kind: response. Recorded participants: protagonist: you; asker: Dmitri Novak. Recorded causes among supplied observations: the recorded offer occurrence (asker: Dmitri Novak; protagonist: you).\n\nDay 7, 14:00 (message): Sakura Aoki acted against Shun Matsuda. Recorded wrong arguments: by: Sakura Aoki; to: Shun Matsuda. Occurrence kind: gang-clash. Recorded participants: aggressor: Sakura Aoki; victim: Shun Matsuda. Recorded effects: harm on Shun Matsuda. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff."
+    "Kabuki, within one week.\n\nDay 7, 14:00 (sight): Dmitri Novak asked you for help. Recorded ask arguments: by: Dmitri Novak; of: you. Proposed act: Dmitri Novak helped Shun Matsuda. Available actions: act (help), bargain (bargain); decline; leave unanswered. act cost: time spent following this thread (now). bargain cost: a favour owed for assistance (now). Occurrence kind: offer. Recorded participants: asker: Dmitri Novak; protagonist: you.\n\nDay 7, 14:00 (sight): you agreed to Dmitri Novak's request. Recorded comply arguments: who: you; to: Dmitri Novak. Recorded response: action:bargain (bargain). Occurrence kind: response. Recorded participants: protagonist: you; asker: Dmitri Novak. Recorded causes among supplied observations: the recorded offer occurrence (asker: Dmitri Novak; protagonist: you).\n\nDay 7, 14:00 (message): Sakura Aoki acted against Shun Matsuda. Recorded wrong arguments: by: Sakura Aoki; to: Shun Matsuda. Occurrence kind: gang-clash. Recorded participants: aggressor: Sakura Aoki; victim: Shun Matsuda. Recorded effects: harm on Shun Matsuda. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 7, 14:00 (sight): Dmitri Novak asked you for help.\n\nDay 7, 14:00 (sight): you agreed to Dmitri Novak's request.\n\nDay 7, 14:00 (message): Sakura Aoki acted against Shun Matsuda.\n\nNo closing account is included at this observation cutoff."
    ],
    "run": "E-m3c-w1-restless-accept-middle",
    "start": 94781
@@ -853,6 +877,18 @@
    "start": 28900
   },
   {
+   "id": "H-087",
+   "text": "Kabuki, within one week.\n\nDay 7, 09:30 (trace): Hector Guerrero acted against Farah Qureshi.\n\nNo closing account is included at this observation cutoff.",
+   "texts": [
+    "Kabuki, within one week.\n\nDay 7, 09:30 (trace): Hector Guerrero acted against Farah Qureshi.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 7, 09:30 (trace): Hector Guerrero acted against Farah Qureshi. Recorded wrong arguments: by: Hector Guerrero; to: Farah Qureshi. Occurrence kind: theft. Recorded participants: aggressor: Hector Guerrero; victim: Farah Qureshi. Recorded effects: take on Farah Qureshi. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 7, 09:30 (trace): Hector Guerrero acted against Farah Qureshi.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 7, 09:30 (trace): Hector Guerrero acted against Farah Qureshi. Recorded wrong arguments: by: Hector Guerrero; to: Farah Qureshi. Occurrence kind: theft. Recorded participants: aggressor: Hector Guerrero; victim: Farah Qureshi. Recorded effects: take on Farah Qureshi. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff."
+   ],
+   "run": "A1-m3c-w1-restless-accept-middle",
+   "start": 92045
+  },
+  {
    "id": "H-088",
    "text": "Kabuki, within one week.\n\nDay 5, 14:00 (trace): Taeyang Kang acted against Bea Magsaysay.\n\nNo closing account is included at this observation cutoff.",
    "texts": [
@@ -877,13 +913,25 @@
    "start": 64469
   },
   {
+   "id": "H-092",
+   "text": "Kabuki, within one week.\n\nDay 2, 17:20 (message): Takeshi Watanabe acted against Ellis Holt.\n\nDay 3, 00:20 (sight): Ellis Holt asked you for help.\n\nDay 3, 00:20 (sight): you agreed to Ellis Holt's request.\n\nNo closing account is included at this observation cutoff.",
+   "texts": [
+    "Kabuki, within one week.\n\nDay 2, 17:20 (message): Takeshi Watanabe acted against Ellis Holt. Recorded wrong arguments: by: Takeshi Watanabe; to: Ellis Holt. Occurrence kind: assault. Recorded participants: aggressor: Takeshi Watanabe; victim: Ellis Holt. Recorded effects: harm on Ellis Holt. Recorded act outcome: done.\n\nDay 3, 00:20 (sight): Ellis Holt asked you for help. Recorded ask arguments: by: Ellis Holt; of: you. Proposed act: Ellis Holt learned about the recorded subject. Available actions: act (help), bargain (bargain); decline; leave unanswered. act cost: time spent following this thread (now). bargain cost: a favour owed for assistance (now). Occurrence kind: offer. Recorded participants: asker: Ellis Holt; protagonist: you. Recorded causes among supplied observations: the recorded assault occurrence (aggressor: Takeshi Watanabe; victim: Ellis Holt; outcome: done).\n\nDay 3, 00:20 (sight): you agreed to Ellis Holt's request. Recorded comply arguments: who: you; to: Ellis Holt. Recorded response: action:bargain (bargain). Occurrence kind: response. Recorded participants: protagonist: you; asker: Ellis Holt. Recorded causes among supplied observations: the recorded offer occurrence (asker: Ellis Holt; protagonist: you); the recorded assault occurrence (aggressor: Takeshi Watanabe; victim: Ellis Holt; outcome: done).\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 2, 17:20 (message): Takeshi Watanabe acted against Ellis Holt.\n\nDay 3, 00:20 (sight): Ellis Holt asked you for help.\n\nDay 3, 00:20 (sight): you agreed to Ellis Holt's request.\n\nNo closing account is included at this observation cutoff.",
+    "Kabuki, within one week.\n\nDay 2, 17:20 (message): Takeshi Watanabe acted against Ellis Holt. Recorded wrong arguments: by: Takeshi Watanabe; to: Ellis Holt. Occurrence kind: assault. Recorded participants: aggressor: Takeshi Watanabe; victim: Ellis Holt. Recorded effects: harm on Ellis Holt. Recorded act outcome: done.\n\nDay 3, 00:20 (sight): Ellis Holt asked you for help. Recorded ask arguments: by: Ellis Holt; of: you. Proposed act: Ellis Holt learned about the recorded subject. Available actions: act (help), bargain (bargain); decline; leave unanswered. act cost: time spent following this thread (now). bargain cost: a favour owed for assistance (now). Occurrence kind: offer. Recorded participants: asker: Ellis Holt; protagonist: you. Recorded causes among supplied observations: the recorded assault occurrence (aggressor: Takeshi Watanabe; victim: Ellis Holt; outcome: done).\n\nDay 3, 00:20 (sight): you agreed to Ellis Holt's request. Recorded comply arguments: who: you; to: Ellis Holt. Recorded response: action:bargain (bargain). Occurrence kind: response. Recorded participants: protagonist: you; asker: Ellis Holt. Recorded causes among supplied observations: the recorded offer occurrence (asker: Ellis Holt; protagonist: you); the recorded assault occurrence (aggressor: Takeshi Watanabe; victim: Ellis Holt; outcome: done).\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 2, 17:20 (message): Takeshi Watanabe acted against Ellis Holt.\n\nDay 3, 00:20 (sight): Ellis Holt asked you for help.\n\nDay 3, 00:20 (sight): you agreed to Ellis Holt's request.\n\nNo closing account is included at this observation cutoff."
+   ],
+   "run": "A1-m3c-w1-restless-accept-middle",
+   "start": 24790
+  },
+  {
    "id": "H-093",
    "text": "Kabuki, within one week.\n\nDay 6, 16:30 (trace): Deepa Singh acted against Meiling Xu.\n\nNo closing account is included at this observation cutoff.",
    "texts": [
-    "Kabuki, within one week.\n\nDay 6, 16:30 (trace): Deepa Singh acted against Meiling Xu.\n\nNo closing account is included at this observation cutoff.",
     "Kabuki, within one week.\n\nDay 6, 16:30 (trace): Deepa Singh acted against Meiling Xu. Recorded wrong arguments: by: Deepa Singh; to: Meiling Xu. Occurrence kind: theft. Recorded participants: aggressor: Deepa Singh; victim: Meiling Xu. Recorded effects: take on Meiling Xu. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
     "Kabuki, within one week.\n\nDay 6, 16:30 (trace): Deepa Singh acted against Meiling Xu.\n\nNo closing account is included at this observation cutoff.",
-    "Kabuki, within one week.\n\nDay 6, 16:30 (trace): Deepa Singh acted against Meiling Xu. Recorded wrong arguments: by: Deepa Singh; to: Meiling Xu. Occurrence kind: theft. Recorded participants: aggressor: Deepa Singh; victim: Meiling Xu. Recorded effects: take on Meiling Xu. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff."
+    "Kabuki, within one week.\n\nDay 6, 16:30 (trace): Deepa Singh acted against Meiling Xu. Recorded wrong arguments: by: Deepa Singh; to: Meiling Xu. Occurrence kind: theft. Recorded participants: aggressor: Deepa Singh; victim: Meiling Xu. Recorded effects: take on Meiling Xu. Recorded act outcome: done.\n\nNo closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.",
+    "Kabuki, within one week.\n\nDay 6, 16:30 (trace): Deepa Singh acted against Meiling Xu.\n\nNo closing account is included at this observation cutoff."
    ],
    "run": "A1-m3c-w1-restless-accept-middle",
    "start": 81857
@@ -1438,10 +1486,6 @@
    "configuration": "m3c-w0|steady|accept-last",
    "variants": [
     {
-     "renderer": "evidence",
-     "length": "full"
-    },
-    {
      "renderer": "current",
      "length": "full"
     },
@@ -1451,6 +1495,10 @@
     },
     {
      "renderer": "current",
+     "length": "full"
+    },
+    {
+     "renderer": "evidence",
      "length": "full"
     }
    ],
@@ -2129,10 +2177,6 @@
    "configuration": "m3c-w0|steady|accept-last",
    "variants": [
     {
-     "renderer": "evidence",
-     "length": "full"
-    },
-    {
      "renderer": "current",
      "length": "full"
     },
@@ -2142,6 +2186,10 @@
     },
     {
      "renderer": "current",
+     "length": "full"
+    },
+    {
+     "renderer": "evidence",
      "length": "full"
     }
    ],
@@ -2160,41 +2208,10 @@
        "play": 8152
       }
      ]
-    },
-    {
-     "sample": "H-077",
-     "arm": "A1",
-     "thread": "4809b9a7907aad55f1ac81ec49443085",
-     "run": "A1-m3c-w0-calm-engage",
-     "configuration": "m3c-w0|calm|engage",
-     "start": 41599,
-     "times": [
-      {
-       "id": "75211eae54135a20b015dc5061b1ec18",
-       "at": 249600,
-       "play": 41599
-      }
-     ]
-    },
-    {
-     "sample": "H-094",
-     "arm": "E",
-     "thread": "4809b9a7907aad55f1ac81ec49443085",
-     "run": "E-m3c-w0-calm-engage",
-     "configuration": "m3c-w0|calm|engage",
-     "start": 41599,
-     "times": [
-      {
-       "id": "75211eae54135a20b015dc5061b1ec18",
-       "at": 249600,
-       "play": 41599
-      }
-     ]
     }
    ],
    "multiplicity": {
-    "A1": 2,
-    "E": 1
+    "A1": 1
    },
    "sequence": [
     "75211eae54135a20b015dc5061b1ec18"
@@ -2248,35 +2265,10 @@
        "play": 28976
       }
      ]
-    },
-    {
-     "sample": "H-092",
-     "arm": "A1",
-     "thread": "a6d04bd61ed787ee7140a41bdb6582ec",
-     "run": "A1-m3c-w1-restless-accept-middle",
-     "configuration": "m3c-w1|restless|accept-middle",
-     "start": 24790,
-     "times": [
-      {
-       "id": "3f04613aa3befaca53f4d02799dc6de7",
-       "at": 148800,
-       "play": 24790
-      },
-      {
-       "id": "7120d25321e3f129e0842382b435b6e7",
-       "at": 174000,
-       "play": 28976
-      },
-      {
-       "id": "3a9b5224aba1633a74f2397b0880ef4d",
-       "at": 174000,
-       "play": 28976
-      }
-     ]
     }
    ],
    "multiplicity": {
-    "A1": 2
+    "A1": 1
    },
    "sequence": [
     "3f04613aa3befaca53f4d02799dc6de7",
@@ -2964,22 +2956,22 @@
    "configuration": "m3c-w0|restless|decline",
    "variants": [
     {
-     "renderer": "evidence",
+     "renderer": "current",
      "length": "full"
     },
     {
-     "renderer": "current",
+     "renderer": "evidence",
      "length": "matched",
      "limit": 1,
      "target": 1,
      "exact": true
     },
     {
-     "renderer": "evidence",
+     "renderer": "current",
      "length": "full"
     },
     {
-     "renderer": "current",
+     "renderer": "evidence",
      "length": "matched",
      "limit": 1,
      "target": 1,
@@ -3069,26 +3061,10 @@
        "play": 34766
       }
      ]
-    },
-    {
-     "sample": "H-087",
-     "arm": "A1",
-     "thread": "c38fb2b1c51ed901519bb1e06fcb4dee",
-     "run": "A1-m3c-w1-restless-accept-middle",
-     "configuration": "m3c-w1|restless|accept-middle",
-     "start": 92045,
-     "times": [
-      {
-       "id": "73b6eec215f0b107afc31c268591332a",
-       "at": 552600,
-       "play": 92045
-      }
-     ]
     }
    ],
    "multiplicity": {
-    "E": 2,
-    "A1": 1
+    "E": 2
    },
    "sequence": [
     "73b6eec215f0b107afc31c268591332a"
@@ -3723,56 +3699,10 @@
        "play": 56248
       }
      ]
-    },
-    {
-     "sample": "H-059",
-     "arm": "E",
-     "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
-     "run": "E-m3c-w0-calm-engage",
-     "configuration": "m3c-w0|calm|engage",
-     "start": 66000,
-     "times": [
-      {
-       "id": "1369dc7da675a77468e883069b585698",
-       "at": 396000,
-       "play": 66000
-      }
-     ]
-    },
-    {
-     "sample": "H-062",
-     "arm": "A1",
-     "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
-     "run": "A1-m3c-w0-steady-accept-last",
-     "configuration": "m3c-w0|steady|accept-last",
-     "start": 66000,
-     "times": [
-      {
-       "id": "1369dc7da675a77468e883069b585698",
-       "at": 396000,
-       "play": 66000
-      }
-     ]
-    },
-    {
-     "sample": "H-080",
-     "arm": "A1",
-     "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
-     "run": "A1-m3c-w0-calm-engage",
-     "configuration": "m3c-w0|calm|engage",
-     "start": 66000,
-     "times": [
-      {
-       "id": "1369dc7da675a77468e883069b585698",
-       "at": 396000,
-       "play": 66000
-      }
-     ]
     }
    ],
    "multiplicity": {
-    "A1": 3,
-    "E": 1
+    "A1": 1
    },
    "sequence": [
     "1369dc7da675a77468e883069b585698"
@@ -4207,6 +4137,84 @@
     "m3c-w1-steady-engage-A5-3xf.composite:reckoning/billed"
    ]
   },
+  "H-059": {
+   "arm": "E",
+   "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
+   "run": "E-m3c-w0-calm-engage",
+   "configuration": "m3c-w0|calm|engage",
+   "variants": [
+    {
+     "renderer": "current",
+     "length": "full"
+    },
+    {
+     "renderer": "evidence",
+     "length": "full"
+    },
+    {
+     "renderer": "current",
+     "length": "full"
+    },
+    {
+     "renderer": "evidence",
+     "length": "full"
+    }
+   ],
+   "memberships": [
+    {
+     "sample": "H-059",
+     "arm": "E",
+     "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
+     "run": "E-m3c-w0-calm-engage",
+     "configuration": "m3c-w0|calm|engage",
+     "start": 66000,
+     "times": [
+      {
+       "id": "1369dc7da675a77468e883069b585698",
+       "at": 396000,
+       "play": 66000
+      }
+     ]
+    },
+    {
+     "sample": "H-062",
+     "arm": "A1",
+     "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
+     "run": "A1-m3c-w0-steady-accept-last",
+     "configuration": "m3c-w0|steady|accept-last",
+     "start": 66000,
+     "times": [
+      {
+       "id": "1369dc7da675a77468e883069b585698",
+       "at": 396000,
+       "play": 66000
+      }
+     ]
+    },
+    {
+     "sample": "H-080",
+     "arm": "A1",
+     "thread": "a5fe6cebe4ade2b6e3a3f977b89fd1dd",
+     "run": "A1-m3c-w0-calm-engage",
+     "configuration": "m3c-w0|calm|engage",
+     "start": 66000,
+     "times": [
+      {
+       "id": "1369dc7da675a77468e883069b585698",
+       "at": 396000,
+       "play": 66000
+      }
+     ]
+    }
+   ],
+   "multiplicity": {
+    "E": 1,
+    "A1": 2
+   },
+   "sequence": [
+    "1369dc7da675a77468e883069b585698"
+   ]
+  },
   "H-060": {
    "arm": "A1",
    "thread": "2d7e50b645f4295ce36c2a56a8c5bf44",
@@ -4536,10 +4544,6 @@
    "configuration": "m3c-w0|restless|decline",
    "variants": [
     {
-     "renderer": "current",
-     "length": "full"
-    },
-    {
      "renderer": "evidence",
      "length": "full"
     },
@@ -4549,6 +4553,10 @@
     },
     {
      "renderer": "evidence",
+     "length": "full"
+    },
+    {
+     "renderer": "current",
      "length": "full"
     }
    ],
@@ -4642,25 +4650,25 @@
    "configuration": "m3c-w0|restless|decline",
    "variants": [
     {
-     "renderer": "current",
+     "renderer": "evidence",
      "length": "matched",
      "limit": 3,
      "target": 3,
      "exact": true
     },
     {
-     "renderer": "evidence",
+     "renderer": "current",
      "length": "full"
     },
     {
-     "renderer": "current",
+     "renderer": "evidence",
      "length": "matched",
      "limit": 3,
      "target": 3,
      "exact": true
     },
     {
-     "renderer": "evidence",
+     "renderer": "current",
      "length": "full"
     }
    ],
@@ -4713,10 +4721,6 @@
    "configuration": "m3c-w1|restless|accept-middle",
    "variants": [
     {
-     "renderer": "current",
-     "length": "full"
-    },
-    {
      "renderer": "evidence",
      "length": "matched",
      "limit": 3,
@@ -4733,6 +4737,10 @@
      "limit": 3,
      "target": 3,
      "exact": true
+    },
+    {
+     "renderer": "current",
+     "length": "full"
     }
    ],
    "memberships": [
@@ -4838,25 +4846,25 @@
    "variants": [
     {
      "renderer": "current",
-     "length": "full"
-    },
-    {
-     "renderer": "evidence",
      "length": "matched",
      "limit": 1,
      "target": 1,
      "exact": true
+    },
+    {
+     "renderer": "evidence",
+     "length": "full"
     },
     {
      "renderer": "current",
-     "length": "full"
-    },
-    {
-     "renderer": "evidence",
      "length": "matched",
      "limit": 1,
      "target": 1,
      "exact": true
+    },
+    {
+     "renderer": "evidence",
+     "length": "full"
     }
    ],
    "memberships": [
@@ -4960,6 +4968,69 @@
     "E-m3c-w0-calm-engage-A3-4-removal-answer"
    ]
   },
+  "H-077": {
+   "arm": "A1",
+   "thread": "4809b9a7907aad55f1ac81ec49443085",
+   "run": "A1-m3c-w0-calm-engage",
+   "configuration": "m3c-w0|calm|engage",
+   "variants": [
+    {
+     "renderer": "evidence",
+     "length": "full"
+    },
+    {
+     "renderer": "current",
+     "length": "full"
+    },
+    {
+     "renderer": "evidence",
+     "length": "full"
+    },
+    {
+     "renderer": "current",
+     "length": "full"
+    }
+   ],
+   "memberships": [
+    {
+     "sample": "H-077",
+     "arm": "A1",
+     "thread": "4809b9a7907aad55f1ac81ec49443085",
+     "run": "A1-m3c-w0-calm-engage",
+     "configuration": "m3c-w0|calm|engage",
+     "start": 41599,
+     "times": [
+      {
+       "id": "75211eae54135a20b015dc5061b1ec18",
+       "at": 249600,
+       "play": 41599
+      }
+     ]
+    },
+    {
+     "sample": "H-094",
+     "arm": "E",
+     "thread": "4809b9a7907aad55f1ac81ec49443085",
+     "run": "E-m3c-w0-calm-engage",
+     "configuration": "m3c-w0|calm|engage",
+     "start": 41599,
+     "times": [
+      {
+       "id": "75211eae54135a20b015dc5061b1ec18",
+       "at": 249600,
+       "play": 41599
+      }
+     ]
+    }
+   ],
+   "multiplicity": {
+    "A1": 1,
+    "E": 1
+   },
+   "sequence": [
+    "75211eae54135a20b015dc5061b1ec18"
+   ]
+  },
   "H-078": {
    "arm": "A5",
    "thread": "m3c-w0-calm-engage-A5-5",
@@ -4968,25 +5039,25 @@
    "variants": [
     {
      "renderer": "evidence",
+     "length": "full"
+    },
+    {
+     "renderer": "current",
      "length": "matched",
      "limit": 1,
      "target": 1,
      "exact": true
-    },
-    {
-     "renderer": "current",
-     "length": "full"
     },
     {
      "renderer": "evidence",
+     "length": "full"
+    },
+    {
+     "renderer": "current",
      "length": "matched",
      "limit": 1,
      "target": 1,
      "exact": true
-    },
-    {
-     "renderer": "current",
-     "length": "full"
     }
    ],
    "memberships": [
@@ -5097,13 +5168,6 @@
    "configuration": "m3c-w0|steady|accept-last",
    "variants": [
     {
-     "renderer": "evidence",
-     "length": "matched",
-     "limit": 1,
-     "target": 1,
-     "exact": true
-    },
-    {
      "renderer": "current",
      "length": "full"
     },
@@ -5117,6 +5181,13 @@
     {
      "renderer": "current",
      "length": "full"
+    },
+    {
+     "renderer": "evidence",
+     "length": "matched",
+     "limit": 1,
+     "target": 1,
+     "exact": true
     }
    ],
    "memberships": [
@@ -5316,10 +5387,6 @@
    "configuration": "m3c-w1|restless|accept-middle",
    "variants": [
     {
-     "renderer": "current",
-     "length": "full"
-    },
-    {
      "renderer": "evidence",
      "length": "full"
     },
@@ -5329,6 +5396,10 @@
     },
     {
      "renderer": "evidence",
+     "length": "full"
+    },
+    {
+     "renderer": "current",
      "length": "full"
     }
    ],
@@ -5498,6 +5569,53 @@
     "m3c-w2-steady-accept-first-A5-2xf.composite:reckoning/billed"
    ]
   },
+  "H-087": {
+   "arm": "A1",
+   "thread": "c38fb2b1c51ed901519bb1e06fcb4dee",
+   "run": "A1-m3c-w1-restless-accept-middle",
+   "configuration": "m3c-w1|restless|accept-middle",
+   "variants": [
+    {
+     "renderer": "current",
+     "length": "full"
+    },
+    {
+     "renderer": "evidence",
+     "length": "full"
+    },
+    {
+     "renderer": "current",
+     "length": "full"
+    },
+    {
+     "renderer": "evidence",
+     "length": "full"
+    }
+   ],
+   "memberships": [
+    {
+     "sample": "H-087",
+     "arm": "A1",
+     "thread": "c38fb2b1c51ed901519bb1e06fcb4dee",
+     "run": "A1-m3c-w1-restless-accept-middle",
+     "configuration": "m3c-w1|restless|accept-middle",
+     "start": 92045,
+     "times": [
+      {
+       "id": "73b6eec215f0b107afc31c268591332a",
+       "at": 552600,
+       "play": 92045
+      }
+     ]
+    }
+   ],
+   "multiplicity": {
+    "A1": 1
+   },
+   "sequence": [
+    "73b6eec215f0b107afc31c268591332a"
+   ]
+  },
   "H-088": {
    "arm": "A1",
    "thread": "304e82298c1efd461954a909a9e1724b",
@@ -5592,6 +5710,65 @@
     "b02a1a002f4fa674cc7ef525dbcdcb0c"
    ]
   },
+  "H-092": {
+   "arm": "A1",
+   "thread": "a6d04bd61ed787ee7140a41bdb6582ec",
+   "run": "A1-m3c-w1-restless-accept-middle",
+   "configuration": "m3c-w1|restless|accept-middle",
+   "variants": [
+    {
+     "renderer": "evidence",
+     "length": "full"
+    },
+    {
+     "renderer": "current",
+     "length": "full"
+    },
+    {
+     "renderer": "evidence",
+     "length": "full"
+    },
+    {
+     "renderer": "current",
+     "length": "full"
+    }
+   ],
+   "memberships": [
+    {
+     "sample": "H-092",
+     "arm": "A1",
+     "thread": "a6d04bd61ed787ee7140a41bdb6582ec",
+     "run": "A1-m3c-w1-restless-accept-middle",
+     "configuration": "m3c-w1|restless|accept-middle",
+     "start": 24790,
+     "times": [
+      {
+       "id": "3f04613aa3befaca53f4d02799dc6de7",
+       "at": 148800,
+       "play": 24790
+      },
+      {
+       "id": "7120d25321e3f129e0842382b435b6e7",
+       "at": 174000,
+       "play": 28976
+      },
+      {
+       "id": "3a9b5224aba1633a74f2397b0880ef4d",
+       "at": 174000,
+       "play": 28976
+      }
+     ]
+    }
+   ],
+   "multiplicity": {
+    "A1": 1
+   },
+   "sequence": [
+    "3f04613aa3befaca53f4d02799dc6de7",
+    "7120d25321e3f129e0842382b435b6e7",
+    "3a9b5224aba1633a74f2397b0880ef4d"
+   ]
+  },
   "H-093": {
    "arm": "A1",
    "thread": "cc4929462d19eee80cd45db86fd03d77",
@@ -5599,10 +5776,6 @@
    "configuration": "m3c-w1|restless|accept-middle",
    "variants": [
     {
-     "renderer": "current",
-     "length": "full"
-    },
-    {
      "renderer": "evidence",
      "length": "full"
     },
@@ -5612,6 +5785,10 @@
     },
     {
      "renderer": "evidence",
+     "length": "full"
+    },
+    {
+     "renderer": "current",
      "length": "full"
     }
    ],
@@ -5728,9 +5905,11 @@
    "H-083",
    "H-090",
    "H-001",
+   "H-059",
    "H-042",
    "H-085",
    "H-049",
+   "H-077",
    "H-039",
    "H-024",
    "H-005",
@@ -5753,6 +5932,7 @@
    "H-007",
    "H-084",
    "H-046",
+   "H-092",
    "H-018",
    "H-028",
    "H-010",
@@ -5761,6 +5941,7 @@
    "H-093",
    "H-014",
    "H-033",
+   "H-087",
    "H-045",
    "H-067",
    "H-069",
@@ -5776,13 +5957,13 @@
    "H-052",
    "H-042",
    "H-069",
-   "H-021",
+   "H-077",
    "H-081",
    "H-015",
    "H-040",
    "H-003",
    "H-063",
-   "H-047",
+   "H-059",
    "H-030",
    "H-031",
    "H-034",
@@ -5804,11 +5985,12 @@
    "H-060",
    "H-028",
    "H-006",
+   "H-092",
    "H-093",
    "H-082",
    "H-010",
    "H-029",
-   "H-035",
+   "H-087",
    "H-014",
    "H-032",
    "H-083",
@@ -5816,6 +5998,7 @@
    "H-009",
    "H-044",
    "H-065",
+   "H-035",
    "H-064",
    "H-013",
    "H-007",
@@ -5827,6 +6010,7 @@
    "H-079",
    "H-017",
    "H-086",
+   "H-047",
    "H-011",
    "H-090",
    "H-088",
@@ -5839,6 +6023,7 @@
    "H-025",
    "H-001",
    "H-053",
+   "H-021",
    "H-019",
    "H-002",
    "H-045",
@@ -5864,17 +6049,18 @@
    "H-042",
    "H-049",
    "H-055",
-   "H-021",
+   "H-077",
    "H-024",
    "H-023",
    "H-079",
    "H-003",
-   "H-047",
+   "H-059",
    "H-036",
    "H-053",
    "H-019",
    "H-044",
    "H-034",
+   "H-021",
    "H-066",
    "H-032",
    "H-064",
@@ -5912,6 +6098,7 @@
    "H-006",
    "H-052",
    "H-040",
+   "H-047",
    "H-082",
    "H-030",
    "H-083",
@@ -5919,10 +6106,12 @@
    "H-084",
    "H-037",
    "H-045",
+   "H-092",
    "H-093",
    "H-075",
    "H-086",
    "H-011",
+   "H-087",
    "H-043"
   ],
   [
@@ -5955,9 +6144,10 @@
    "H-055",
    "H-049",
    "H-004",
-   "H-021",
+   "H-077",
    "H-017",
    "H-024",
+   "H-059",
    "H-048",
    "H-090",
    "H-053",
@@ -5988,12 +6178,15 @@
    "H-078",
    "H-001",
    "H-026",
+   "H-092",
    "H-045",
    "H-093",
    "H-075",
    "H-081",
    "H-063",
    "H-043",
+   "H-087",
+   "H-021",
    "H-057",
    "H-028",
    "H-032",
@@ -6021,8 +6214,8 @@
    {
     "id": "P-017",
     "left": "H-042",
-    "right": "H-047",
-    "e": "H-047",
+    "right": "H-059",
+    "e": "H-059",
     "other": "H-042",
     "eSample": "H-059",
     "otherSample": "H-042",
@@ -6033,15 +6226,15 @@
    },
    {
     "id": "P-023",
-    "left": "H-084",
-    "right": "H-035",
-    "e": "H-084",
-    "other": "H-035",
-    "eSample": "H-084",
-    "otherSample": "H-087",
+    "left": "H-009",
+    "right": "H-093",
+    "e": "H-009",
+    "other": "H-093",
+    "eSample": "H-009",
+    "otherSample": "H-093",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
-    "renderer": "current",
+    "renderer": "evidence",
     "length": "full"
    },
    {
@@ -6080,7 +6273,7 @@
     "otherSample": "H-070",
     "against": "A5",
     "configuration": "m3c-w0|restless|decline",
-    "renderer": "current",
+    "renderer": "evidence",
     "length": "matched"
    },
    {
@@ -6098,11 +6291,11 @@
    },
    {
     "id": "P-024",
-    "left": "H-009",
-    "right": "H-022",
-    "e": "H-009",
-    "other": "H-022",
-    "eSample": "H-009",
+    "left": "H-084",
+    "right": "H-092",
+    "e": "H-084",
+    "other": "H-092",
+    "eSample": "H-084",
     "otherSample": "H-092",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
@@ -6132,7 +6325,7 @@
     "otherSample": "H-034",
     "against": "A5",
     "configuration": "m3c-w0|restless|decline",
-    "renderer": "evidence",
+    "renderer": "current",
     "length": "full"
    },
    {
@@ -6150,8 +6343,8 @@
    },
    {
     "id": "P-045",
-    "left": "H-046",
-    "right": "H-025",
+    "left": "H-025",
+    "right": "H-046",
     "e": "H-025",
     "other": "H-046",
     "eSample": "H-025",
@@ -6184,17 +6377,17 @@
     "otherSample": "H-071",
     "against": "A5",
     "configuration": "m3c-w1|restless|accept-middle",
-    "renderer": "current",
-    "length": "full"
+    "renderer": "evidence",
+    "length": "matched"
    },
    {
     "id": "P-001",
-    "left": "H-047",
-    "right": "H-042",
-    "e": "H-042",
-    "other": "H-047",
-    "eSample": "H-056",
-    "otherSample": "H-062",
+    "left": "H-021",
+    "right": "H-010",
+    "e": "H-010",
+    "other": "H-021",
+    "eSample": "H-010",
+    "otherSample": "H-021",
     "against": "A1",
     "configuration": "m3c-w0|steady|accept-last",
     "renderer": "current",
@@ -6242,10 +6435,10 @@
    {
     "id": "P-007",
     "left": "H-047",
-    "right": "H-067",
-    "e": "H-067",
+    "right": "H-010",
+    "e": "H-010",
     "other": "H-047",
-    "eSample": "H-067",
+    "eSample": "H-072",
     "otherSample": "H-047",
     "against": "A1",
     "configuration": "m3c-w0|restless|decline",
@@ -6281,10 +6474,10 @@
    {
     "id": "P-009",
     "left": "H-088",
-    "right": "H-010",
-    "e": "H-010",
+    "right": "H-067",
+    "e": "H-067",
     "other": "H-088",
-    "eSample": "H-072",
+    "eSample": "H-067",
     "otherSample": "H-088",
     "against": "A1",
     "configuration": "m3c-w0|restless|decline",
@@ -6315,7 +6508,7 @@
     "against": "A5",
     "configuration": "m3c-w0|calm|engage",
     "renderer": "current",
-    "length": "full"
+    "length": "matched"
    },
    {
     "id": "P-044",
@@ -6332,29 +6525,29 @@
    },
    {
     "id": "P-002",
-    "left": "H-010",
-    "right": "H-021",
-    "e": "H-010",
-    "other": "H-021",
-    "eSample": "H-010",
-    "otherSample": "H-021",
+    "left": "H-042",
+    "right": "H-059",
+    "e": "H-042",
+    "other": "H-059",
+    "eSample": "H-056",
+    "otherSample": "H-062",
     "against": "A1",
     "configuration": "m3c-w0|steady|accept-last",
-    "renderer": "evidence",
+    "renderer": "current",
     "length": "full"
    },
    {
     "id": "P-041",
-    "left": "H-021",
-    "right": "H-078",
-    "e": "H-021",
+    "left": "H-078",
+    "right": "H-077",
+    "e": "H-077",
     "other": "H-078",
     "eSample": "H-094",
     "otherSample": "H-078",
     "against": "A5",
     "configuration": "m3c-w0|calm|engage",
     "renderer": "evidence",
-    "length": "matched"
+    "length": "full"
    },
    {
     "id": "P-014",
@@ -6379,17 +6572,17 @@
     "otherSample": "H-081",
     "against": "A5",
     "configuration": "m3c-w0|steady|accept-last",
-    "renderer": "evidence",
-    "length": "matched"
+    "renderer": "current",
+    "length": "full"
    },
    {
     "id": "P-022",
     "left": "H-035",
-    "right": "H-093",
+    "right": "H-087",
     "e": "H-035",
-    "other": "H-093",
+    "other": "H-087",
     "eSample": "H-050",
-    "otherSample": "H-093",
+    "otherSample": "H-087",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
     "renderer": "current",
@@ -6398,9 +6591,9 @@
    {
     "id": "P-016",
     "left": "H-042",
-    "right": "H-047",
+    "right": "H-059",
     "e": "H-042",
-    "other": "H-047",
+    "other": "H-059",
     "eSample": "H-051",
     "otherSample": "H-080",
     "against": "A1",
@@ -6515,8 +6708,8 @@
    {
     "id": "P-037",
     "left": "H-002",
-    "right": "H-047",
-    "e": "H-047",
+    "right": "H-059",
+    "e": "H-059",
     "other": "H-002",
     "eSample": "H-059",
     "otherSample": "H-002",
@@ -6555,11 +6748,11 @@
   [
    {
     "id": "P-009",
-    "left": "H-010",
+    "left": "H-067",
     "right": "H-088",
-    "e": "H-010",
+    "e": "H-067",
     "other": "H-088",
-    "eSample": "H-072",
+    "eSample": "H-067",
     "otherSample": "H-088",
     "against": "A1",
     "configuration": "m3c-w0|restless|decline",
@@ -6594,28 +6787,28 @@
    },
    {
     "id": "P-041",
-    "left": "H-078",
-    "right": "H-021",
-    "e": "H-021",
+    "left": "H-077",
+    "right": "H-078",
+    "e": "H-077",
     "other": "H-078",
     "eSample": "H-094",
     "otherSample": "H-078",
     "against": "A5",
     "configuration": "m3c-w0|calm|engage",
     "renderer": "current",
-    "length": "full"
+    "length": "matched"
    },
    {
     "id": "P-002",
-    "left": "H-021",
-    "right": "H-010",
-    "e": "H-010",
-    "other": "H-021",
-    "eSample": "H-010",
-    "otherSample": "H-021",
+    "left": "H-059",
+    "right": "H-042",
+    "e": "H-042",
+    "other": "H-059",
+    "eSample": "H-056",
+    "otherSample": "H-062",
     "against": "A1",
     "configuration": "m3c-w0|steady|accept-last",
-    "renderer": "current",
+    "renderer": "evidence",
     "length": "full"
    },
    {
@@ -6672,8 +6865,8 @@
    },
    {
     "id": "P-045",
-    "left": "H-025",
-    "right": "H-046",
+    "left": "H-046",
+    "right": "H-025",
     "e": "H-025",
     "other": "H-046",
     "eSample": "H-025",
@@ -6737,11 +6930,11 @@
    },
    {
     "id": "P-024",
-    "left": "H-022",
-    "right": "H-009",
-    "e": "H-009",
-    "other": "H-022",
-    "eSample": "H-009",
+    "left": "H-092",
+    "right": "H-084",
+    "e": "H-084",
+    "other": "H-092",
+    "eSample": "H-084",
     "otherSample": "H-092",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
@@ -6763,10 +6956,10 @@
    },
    {
     "id": "P-016",
-    "left": "H-047",
+    "left": "H-059",
     "right": "H-042",
     "e": "H-042",
-    "other": "H-047",
+    "other": "H-059",
     "eSample": "H-051",
     "otherSample": "H-080",
     "against": "A1",
@@ -6789,11 +6982,11 @@
    },
    {
     "id": "P-007",
-    "left": "H-067",
+    "left": "H-010",
     "right": "H-047",
-    "e": "H-067",
+    "e": "H-010",
     "other": "H-047",
-    "eSample": "H-067",
+    "eSample": "H-072",
     "otherSample": "H-047",
     "against": "A1",
     "configuration": "m3c-w0|restless|decline",
@@ -6841,12 +7034,12 @@
    },
    {
     "id": "P-001",
-    "left": "H-042",
-    "right": "H-047",
-    "e": "H-042",
-    "other": "H-047",
-    "eSample": "H-056",
-    "otherSample": "H-062",
+    "left": "H-010",
+    "right": "H-021",
+    "e": "H-010",
+    "other": "H-021",
+    "eSample": "H-010",
+    "otherSample": "H-021",
     "against": "A1",
     "configuration": "m3c-w0|steady|accept-last",
     "renderer": "evidence",
@@ -6862,8 +7055,8 @@
     "otherSample": "H-081",
     "against": "A5",
     "configuration": "m3c-w0|steady|accept-last",
-    "renderer": "current",
-    "length": "full"
+    "renderer": "evidence",
+    "length": "matched"
    },
    {
     "id": "P-021",
@@ -6901,7 +7094,7 @@
     "otherSample": "H-034",
     "against": "A5",
     "configuration": "m3c-w0|restless|decline",
-    "renderer": "current",
+    "renderer": "evidence",
     "length": "matched"
    },
    {
@@ -6953,7 +7146,7 @@
     "otherSample": "H-070",
     "against": "A5",
     "configuration": "m3c-w0|restless|decline",
-    "renderer": "evidence",
+    "renderer": "current",
     "length": "full"
    },
    {
@@ -6966,14 +7159,14 @@
     "otherSample": "H-071",
     "against": "A5",
     "configuration": "m3c-w1|restless|accept-middle",
-    "renderer": "evidence",
-    "length": "matched"
+    "renderer": "current",
+    "length": "full"
    },
    {
     "id": "P-037",
-    "left": "H-047",
+    "left": "H-059",
     "right": "H-002",
-    "e": "H-047",
+    "e": "H-059",
     "other": "H-002",
     "eSample": "H-059",
     "otherSample": "H-002",
@@ -7023,12 +7216,12 @@
    },
    {
     "id": "P-022",
-    "left": "H-093",
+    "left": "H-087",
     "right": "H-035",
     "e": "H-035",
-    "other": "H-093",
+    "other": "H-087",
     "eSample": "H-050",
-    "otherSample": "H-093",
+    "otherSample": "H-087",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
     "renderer": "evidence",
@@ -7036,9 +7229,9 @@
    },
    {
     "id": "P-017",
-    "left": "H-047",
+    "left": "H-059",
     "right": "H-042",
-    "e": "H-047",
+    "e": "H-059",
     "other": "H-042",
     "eSample": "H-059",
     "otherSample": "H-042",
@@ -7058,7 +7251,7 @@
     "against": "A5",
     "configuration": "m3c-w0|calm|engage",
     "renderer": "evidence",
-    "length": "matched"
+    "length": "full"
    },
    {
     "id": "P-035",
@@ -7075,15 +7268,15 @@
    },
    {
     "id": "P-023",
-    "left": "H-035",
-    "right": "H-084",
-    "e": "H-084",
-    "other": "H-035",
-    "eSample": "H-084",
-    "otherSample": "H-087",
+    "left": "H-093",
+    "right": "H-009",
+    "e": "H-009",
+    "other": "H-093",
+    "eSample": "H-009",
+    "otherSample": "H-093",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
-    "renderer": "evidence",
+    "renderer": "current",
     "length": "full"
    },
    {
@@ -7103,15 +7296,15 @@
   [
    {
     "id": "P-002",
-    "left": "H-010",
-    "right": "H-021",
-    "e": "H-010",
-    "other": "H-021",
-    "eSample": "H-010",
-    "otherSample": "H-021",
+    "left": "H-042",
+    "right": "H-059",
+    "e": "H-042",
+    "other": "H-059",
+    "eSample": "H-056",
+    "otherSample": "H-062",
     "against": "A1",
     "configuration": "m3c-w0|steady|accept-last",
-    "renderer": "evidence",
+    "renderer": "current",
     "length": "full"
    },
    {
@@ -7190,7 +7383,7 @@
     "against": "A5",
     "configuration": "m3c-w0|calm|engage",
     "renderer": "current",
-    "length": "full"
+    "length": "matched"
    },
    {
     "id": "P-039",
@@ -7221,8 +7414,8 @@
    {
     "id": "P-017",
     "left": "H-042",
-    "right": "H-047",
-    "e": "H-047",
+    "right": "H-059",
+    "e": "H-059",
     "other": "H-042",
     "eSample": "H-059",
     "otherSample": "H-042",
@@ -7267,16 +7460,16 @@
     "otherSample": "H-071",
     "against": "A5",
     "configuration": "m3c-w1|restless|accept-middle",
-    "renderer": "current",
-    "length": "full"
+    "renderer": "evidence",
+    "length": "matched"
    },
    {
     "id": "P-007",
     "left": "H-047",
-    "right": "H-067",
-    "e": "H-067",
+    "right": "H-010",
+    "e": "H-010",
     "other": "H-047",
-    "eSample": "H-067",
+    "eSample": "H-072",
     "otherSample": "H-047",
     "against": "A1",
     "configuration": "m3c-w0|restless|decline",
@@ -7285,12 +7478,12 @@
    },
    {
     "id": "P-001",
-    "left": "H-047",
-    "right": "H-042",
-    "e": "H-042",
-    "other": "H-047",
-    "eSample": "H-056",
-    "otherSample": "H-062",
+    "left": "H-021",
+    "right": "H-010",
+    "e": "H-010",
+    "other": "H-021",
+    "eSample": "H-010",
+    "otherSample": "H-021",
     "against": "A1",
     "configuration": "m3c-w0|steady|accept-last",
     "renderer": "current",
@@ -7306,7 +7499,7 @@
     "otherSample": "H-070",
     "against": "A5",
     "configuration": "m3c-w0|restless|decline",
-    "renderer": "current",
+    "renderer": "evidence",
     "length": "matched"
    },
    {
@@ -7345,8 +7538,8 @@
     "otherSample": "H-081",
     "against": "A5",
     "configuration": "m3c-w0|steady|accept-last",
-    "renderer": "evidence",
-    "length": "matched"
+    "renderer": "current",
+    "length": "full"
    },
    {
     "id": "P-036",
@@ -7389,24 +7582,24 @@
    },
    {
     "id": "P-023",
-    "left": "H-084",
-    "right": "H-035",
-    "e": "H-084",
-    "other": "H-035",
-    "eSample": "H-084",
-    "otherSample": "H-087",
+    "left": "H-009",
+    "right": "H-093",
+    "e": "H-009",
+    "other": "H-093",
+    "eSample": "H-009",
+    "otherSample": "H-093",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
-    "renderer": "current",
+    "renderer": "evidence",
     "length": "full"
    },
    {
     "id": "P-024",
-    "left": "H-009",
-    "right": "H-022",
-    "e": "H-009",
-    "other": "H-022",
-    "eSample": "H-009",
+    "left": "H-084",
+    "right": "H-092",
+    "e": "H-084",
+    "other": "H-092",
+    "eSample": "H-084",
     "otherSample": "H-092",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
@@ -7429,9 +7622,9 @@
    {
     "id": "P-016",
     "left": "H-042",
-    "right": "H-047",
+    "right": "H-059",
     "e": "H-042",
-    "other": "H-047",
+    "other": "H-059",
     "eSample": "H-051",
     "otherSample": "H-080",
     "against": "A1",
@@ -7449,17 +7642,17 @@
     "otherSample": "H-034",
     "against": "A5",
     "configuration": "m3c-w0|restless|decline",
-    "renderer": "evidence",
+    "renderer": "current",
     "length": "full"
    },
    {
     "id": "P-022",
     "left": "H-035",
-    "right": "H-093",
+    "right": "H-087",
     "e": "H-035",
-    "other": "H-093",
+    "other": "H-087",
     "eSample": "H-050",
-    "otherSample": "H-093",
+    "otherSample": "H-087",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
     "renderer": "current",
@@ -7493,8 +7686,8 @@
    },
    {
     "id": "P-045",
-    "left": "H-046",
-    "right": "H-025",
+    "left": "H-025",
+    "right": "H-046",
     "e": "H-025",
     "other": "H-046",
     "eSample": "H-025",
@@ -7507,10 +7700,10 @@
    {
     "id": "P-009",
     "left": "H-088",
-    "right": "H-010",
-    "e": "H-010",
+    "right": "H-067",
+    "e": "H-067",
     "other": "H-088",
-    "eSample": "H-072",
+    "eSample": "H-067",
     "otherSample": "H-088",
     "against": "A1",
     "configuration": "m3c-w0|restless|decline",
@@ -7610,22 +7803,22 @@
    },
    {
     "id": "P-041",
-    "left": "H-021",
-    "right": "H-078",
-    "e": "H-021",
+    "left": "H-078",
+    "right": "H-077",
+    "e": "H-077",
     "other": "H-078",
     "eSample": "H-094",
     "otherSample": "H-078",
     "against": "A5",
     "configuration": "m3c-w0|calm|engage",
     "renderer": "evidence",
-    "length": "matched"
+    "length": "full"
    },
    {
     "id": "P-037",
     "left": "H-002",
-    "right": "H-047",
-    "e": "H-047",
+    "right": "H-059",
+    "e": "H-059",
     "other": "H-002",
     "eSample": "H-059",
     "otherSample": "H-002",
@@ -7651,8 +7844,8 @@
   [
    {
     "id": "P-045",
-    "left": "H-025",
-    "right": "H-046",
+    "left": "H-046",
+    "right": "H-025",
     "e": "H-025",
     "other": "H-046",
     "eSample": "H-025",
@@ -7664,11 +7857,11 @@
    },
    {
     "id": "P-024",
-    "left": "H-022",
-    "right": "H-009",
-    "e": "H-009",
-    "other": "H-022",
-    "eSample": "H-009",
+    "left": "H-092",
+    "right": "H-084",
+    "e": "H-084",
+    "other": "H-092",
+    "eSample": "H-084",
     "otherSample": "H-092",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
@@ -7703,12 +7896,12 @@
    },
    {
     "id": "P-022",
-    "left": "H-093",
+    "left": "H-087",
     "right": "H-035",
     "e": "H-035",
-    "other": "H-093",
+    "other": "H-087",
     "eSample": "H-050",
-    "otherSample": "H-093",
+    "otherSample": "H-087",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
     "renderer": "evidence",
@@ -7737,16 +7930,16 @@
     "otherSample": "H-081",
     "against": "A5",
     "configuration": "m3c-w0|steady|accept-last",
-    "renderer": "current",
-    "length": "full"
+    "renderer": "evidence",
+    "length": "matched"
    },
    {
     "id": "P-007",
-    "left": "H-067",
+    "left": "H-010",
     "right": "H-047",
-    "e": "H-067",
+    "e": "H-010",
     "other": "H-047",
-    "eSample": "H-067",
+    "eSample": "H-072",
     "otherSample": "H-047",
     "against": "A1",
     "configuration": "m3c-w0|restless|decline",
@@ -7777,7 +7970,7 @@
     "against": "A5",
     "configuration": "m3c-w0|calm|engage",
     "renderer": "evidence",
-    "length": "matched"
+    "length": "full"
    },
    {
     "id": "P-034",
@@ -7802,7 +7995,7 @@
     "otherSample": "H-034",
     "against": "A5",
     "configuration": "m3c-w0|restless|decline",
-    "renderer": "current",
+    "renderer": "evidence",
     "length": "matched"
    },
    {
@@ -7846,16 +8039,16 @@
    },
    {
     "id": "P-041",
-    "left": "H-078",
-    "right": "H-021",
-    "e": "H-021",
+    "left": "H-077",
+    "right": "H-078",
+    "e": "H-077",
     "other": "H-078",
     "eSample": "H-094",
     "otherSample": "H-078",
     "against": "A5",
     "configuration": "m3c-w0|calm|engage",
     "renderer": "current",
-    "length": "full"
+    "length": "matched"
    },
    {
     "id": "P-032",
@@ -7898,10 +8091,10 @@
    },
    {
     "id": "P-016",
-    "left": "H-047",
+    "left": "H-059",
     "right": "H-042",
     "e": "H-042",
-    "other": "H-047",
+    "other": "H-059",
     "eSample": "H-051",
     "otherSample": "H-080",
     "against": "A1",
@@ -7937,9 +8130,9 @@
    },
    {
     "id": "P-017",
-    "left": "H-047",
+    "left": "H-059",
     "right": "H-042",
-    "e": "H-047",
+    "e": "H-059",
     "other": "H-042",
     "eSample": "H-059",
     "otherSample": "H-042",
@@ -7950,12 +8143,12 @@
    },
    {
     "id": "P-001",
-    "left": "H-042",
-    "right": "H-047",
-    "e": "H-042",
-    "other": "H-047",
-    "eSample": "H-056",
-    "otherSample": "H-062",
+    "left": "H-010",
+    "right": "H-021",
+    "e": "H-010",
+    "other": "H-021",
+    "eSample": "H-010",
+    "otherSample": "H-021",
     "against": "A1",
     "configuration": "m3c-w0|steady|accept-last",
     "renderer": "evidence",
@@ -8028,9 +8221,9 @@
    },
    {
     "id": "P-037",
-    "left": "H-047",
+    "left": "H-059",
     "right": "H-002",
-    "e": "H-047",
+    "e": "H-059",
     "other": "H-002",
     "eSample": "H-059",
     "otherSample": "H-002",
@@ -8049,7 +8242,7 @@
     "otherSample": "H-070",
     "against": "A5",
     "configuration": "m3c-w0|restless|decline",
-    "renderer": "evidence",
+    "renderer": "current",
     "length": "full"
    },
    {
@@ -8062,8 +8255,8 @@
     "otherSample": "H-071",
     "against": "A5",
     "configuration": "m3c-w1|restless|accept-middle",
-    "renderer": "evidence",
-    "length": "matched"
+    "renderer": "current",
+    "length": "full"
    },
    {
     "id": "P-012",
@@ -8093,15 +8286,15 @@
    },
    {
     "id": "P-023",
-    "left": "H-035",
-    "right": "H-084",
-    "e": "H-084",
-    "other": "H-035",
-    "eSample": "H-084",
-    "otherSample": "H-087",
+    "left": "H-093",
+    "right": "H-009",
+    "e": "H-009",
+    "other": "H-093",
+    "eSample": "H-009",
+    "otherSample": "H-093",
     "against": "A1",
     "configuration": "m3c-w1|restless|accept-middle",
-    "renderer": "evidence",
+    "renderer": "current",
     "length": "full"
    },
    {
@@ -8119,24 +8312,24 @@
    },
    {
     "id": "P-002",
-    "left": "H-021",
-    "right": "H-010",
-    "e": "H-010",
-    "other": "H-021",
-    "eSample": "H-010",
-    "otherSample": "H-021",
+    "left": "H-059",
+    "right": "H-042",
+    "e": "H-042",
+    "other": "H-059",
+    "eSample": "H-056",
+    "otherSample": "H-062",
     "against": "A1",
     "configuration": "m3c-w0|steady|accept-last",
-    "renderer": "current",
+    "renderer": "evidence",
     "length": "full"
    },
    {
     "id": "P-009",
-    "left": "H-010",
+    "left": "H-067",
     "right": "H-088",
-    "e": "H-010",
+    "e": "H-067",
     "other": "H-088",
-    "eSample": "H-072",
+    "eSample": "H-067",
     "otherSample": "H-088",
     "against": "A1",
     "configuration": "m3c-w0|restless|decline",
@@ -8282,36 +8475,36 @@
  "sort": [
   "H-048",
   "H-003",
-  "H-070",
+  "H-090",
   "H-046",
-  "H-074",
-  "H-084",
+  "H-073",
+  "H-082",
   "H-039",
   "H-015",
-  "H-075",
-  "H-067",
-  "H-096",
+  "H-074",
+  "H-066",
+  "H-088",
   "H-002",
   "H-031",
   "H-029",
-  "H-064",
-  "H-081",
+  "H-063",
+  "H-078",
   "H-032",
   "H-041",
   "H-042",
   "H-030",
-  "H-006",
+  "H-093",
   "H-016",
   "H-034",
-  "H-060",
-  "H-066",
+  "H-059",
+  "H-065",
   "H-025",
-  "H-063",
-  "H-093",
+  "H-060",
+  "H-087",
   "H-026",
   "H-023"
  ],
- "schema": 2,
+ "schema": 3,
  "sampleSize": 96,
  "omitted": [
   [
@@ -8387,10 +8580,10 @@
    },
    {
     "id": "P-018",
-    "left": "H-021",
-    "right": "H-021",
-    "e": "H-021",
-    "other": "H-021",
+    "left": "H-077",
+    "right": "H-077",
+    "e": "H-077",
+    "other": "H-077",
     "eSample": "H-094",
     "otherSample": "H-077",
     "against": "A1",
@@ -8473,10 +8666,10 @@
    },
    {
     "id": "P-018",
-    "left": "H-021",
-    "right": "H-021",
-    "e": "H-021",
-    "other": "H-021",
+    "left": "H-077",
+    "right": "H-077",
+    "e": "H-077",
+    "other": "H-077",
     "eSample": "H-094",
     "otherSample": "H-077",
     "against": "A1",
@@ -8517,10 +8710,10 @@
    },
    {
     "id": "P-018",
-    "left": "H-021",
-    "right": "H-021",
-    "e": "H-021",
-    "other": "H-021",
+    "left": "H-077",
+    "right": "H-077",
+    "e": "H-077",
+    "other": "H-077",
     "eSample": "H-094",
     "otherSample": "H-077",
     "against": "A1",
@@ -8603,10 +8796,10 @@
    },
    {
     "id": "P-018",
-    "left": "H-021",
-    "right": "H-021",
-    "e": "H-021",
-    "other": "H-021",
+    "left": "H-077",
+    "right": "H-077",
+    "e": "H-077",
+    "other": "H-077",
     "eSample": "H-094",
     "otherSample": "H-077",
     "against": "A1",
@@ -9179,29 +9372,6 @@
    ]
   },
   {
-   "id": "H-021",
-   "members": 3,
-   "configurations": [
-    "m3c-w0|steady|accept-last",
-    "m3c-w0|calm|engage"
-   ],
-   "arms": [
-    "A1",
-    "E"
-   ]
-  },
-  {
-   "id": "H-022",
-   "members": 2,
-   "configurations": [
-    "m3c-w1|steady|engage",
-    "m3c-w1|restless|accept-middle"
-   ],
-   "arms": [
-    "A1"
-   ]
-  },
-  {
    "id": "H-031",
    "members": 5,
    "configurations": [
@@ -9226,33 +9396,19 @@
   },
   {
    "id": "H-035",
-   "members": 3,
+   "members": 2,
    "configurations": [
     "m3c-w1|steady|engage",
     "m3c-w1|restless|accept-middle"
    ],
    "arms": [
-    "E",
-    "A1"
+    "E"
    ]
   },
   {
    "id": "H-042",
    "members": 3,
    "configurations": [
-    "m3c-w0|calm|engage",
-    "m3c-w0|steady|accept-last"
-   ],
-   "arms": [
-    "A1",
-    "E"
-   ]
-  },
-  {
-   "id": "H-047",
-   "members": 4,
-   "configurations": [
-    "m3c-w0|restless|decline",
     "m3c-w0|calm|engage",
     "m3c-w0|steady|accept-last"
    ],
@@ -9274,10 +9430,33 @@
    ]
   },
   {
+   "id": "H-059",
+   "members": 3,
+   "configurations": [
+    "m3c-w0|calm|engage",
+    "m3c-w0|steady|accept-last"
+   ],
+   "arms": [
+    "E",
+    "A1"
+   ]
+  },
+  {
    "id": "H-060",
    "members": 2,
    "configurations": [
     "m3c-w1|calm|ignore"
+   ],
+   "arms": [
+    "A1",
+    "E"
+   ]
+  },
+  {
+   "id": "H-077",
+   "members": 2,
+   "configurations": [
+    "m3c-w0|calm|engage"
    ],
    "arms": [
     "A1",

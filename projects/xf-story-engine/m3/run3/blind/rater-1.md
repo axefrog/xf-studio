@@ -89,15 +89,7 @@ Kabuki, within one week.
 
 Day 5, 00:10 (trace): Sora Mori asked you for help.
 
-Day 5, 00:20 (message): you agreed to Sora Mori's request.
-
-Day 5, 00:30 (trace): you acted against Sora Mori.
-
-Day 5, 00:40 (trace): Mario Mendoza learned about the recorded subject.
-
-Day 5, 00:50 (trace): Mario Mendoza made a demand of you.
-
-A closing account reached you.
+No closing account is included at this observation cutoff.
 
 ### H-030
 
@@ -129,7 +121,15 @@ Kabuki, within one week.
 
 Day 6, 00:10 (trace): Daichi Fujita asked you for help. Recorded ask arguments: by: Daichi Fujita; of: you. Proposed act: you acted against Daichi Fujita. Available responses: accept; decline; leave unanswered.
 
-No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
+Day 6, 00:20 (message): you agreed to Daichi Fujita's request. Recorded comply arguments: who: you; to: Daichi Fujita.
+
+Day 6, 00:30 (trace): you acted against Daichi Fujita. Recorded wrong arguments: by: you; to: Daichi Fujita.
+
+Day 6, 00:40 (trace): Long Deng learned about the recorded subject. Recorded learn arguments: who: Long Deng; what: the recorded subject.
+
+Day 6, 00:50 (trace): Long Deng made a demand of you. Recorded demand arguments: by: Long Deng; of: you; what: the recorded subject.
+
+A closing account reached you. Recorded outcome: resolved; closing pattern: reckoning.
 
 ### H-041
 
@@ -259,9 +259,9 @@ No closing account is included at this observation cutoff.
 
 Kabuki, within one week.
 
-Day 1, 13:40 (trace): Ying Luo acted against Kaori Tanaka. Recorded wrong arguments: by: Ying Luo; to: Kaori Tanaka. Occurrence kind: theft. Recorded participants: aggressor: Ying Luo; victim: Kaori Tanaka. Recorded effects: take on Kaori Tanaka. Recorded act outcome: done.
+Day 1, 13:40 (trace): Ying Luo acted against Kaori Tanaka.
 
-No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
+No closing account is included at this observation cutoff.
 
 ### H-008
 
@@ -349,6 +349,14 @@ Day 4, 00:20 (message): You accepted and completed the request.
 
 A closing account reached you.
 
+### H-059
+
+Kabuki, within one week.
+
+Day 5, 14:00 (trace): Haruto Hayashi acted against Dmitri Zielinski.
+
+No closing account is included at this observation cutoff.
+
 ### H-042
 
 Kabuki, within one week.
@@ -380,6 +388,14 @@ Day 2, 00:30 (trace): Jericho Aquino acted against Alex Marsh. Recorded wrong ar
 Day 2, 00:40 (trace): Alex Marsh learned about the recorded subject. Recorded learn arguments: who: Alex Marsh; what: the recorded subject.
 
 A closing account reached you. Recorded outcome: resolved; closing pattern: betrayal.
+
+### H-077
+
+Kabuki, within one week.
+
+Day 3, 21:20 (trace): Ying Luo acted against Kaori Tanaka. Recorded wrong arguments: by: Ying Luo; to: Kaori Tanaka. Occurrence kind: theft. Recorded participants: aggressor: Ying Luo; victim: Kaori Tanaka. Recorded effects: take on Kaori Tanaka. Recorded act outcome: done.
+
+No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
 
 ### H-039
 
@@ -457,9 +473,17 @@ A closing account reached you. Recorded outcome: resolved; closing pattern: betr
 
 Kabuki, within one week.
 
-Day 4, 00:10 (trace): Noriko Ogawa asked you for help. Recorded ask arguments: by: Noriko Ogawa; of: you. Proposed act: you acted against Noriko Ogawa. Available responses: accept; decline; leave unanswered.
+Day 4, 00:10 (trace): Noriko Ogawa asked you for help.
 
-No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
+Day 4, 00:20 (message): you agreed to Noriko Ogawa's request.
+
+Day 4, 00:30 (trace): you acted against Noriko Ogawa.
+
+Day 4, 00:40 (trace): Mario Navarro learned about the recorded subject.
+
+Day 4, 00:50 (trace): Mario Navarro made a demand of you.
+
+A closing account reached you.
 
 ### H-065
 
@@ -513,11 +537,11 @@ A closing account reached you.
 
 Kabuki, within one week.
 
-Day 3, 00:10 (trace): Salma Rahman asked you for help. Recorded ask arguments: by: Salma Rahman; of: you. Proposed act: you acted against Salma Rahman. Available responses: accept; decline; leave unanswered.
+Day 3, 00:10 (trace): Salma Rahman asked you for help.
 
-Day 3, 00:20 (message): you refused Salma Rahman. Recorded refuse arguments: who: you; to: Salma Rahman.
+Day 3, 00:20 (message): you refused Salma Rahman.
 
-No closing account is included at this observation cutoff. The path stops at the unanswered or declined request.
+No closing account is included at this observation cutoff.
 
 ### H-009
 
@@ -545,13 +569,13 @@ A closing account reached you.
 
 Kabuki, within one week.
 
-Day 5, 00:10 (trace): Yui Ishikawa threatened Marcus Banks.
+Day 5, 00:10 (trace): Yui Ishikawa threatened Marcus Banks. Recorded threaten arguments: by: Yui Ishikawa; to: Marcus Banks.
 
-Day 5, 00:20 (trace): Yui Ishikawa acted against Marcus Banks.
+Day 5, 00:20 (trace): Yui Ishikawa acted against Marcus Banks. Recorded wrong arguments: by: Yui Ishikawa; to: Marcus Banks.
 
-Day 5, 00:30 (trace): Yui Ishikawa asked you for help.
+Day 5, 00:30 (trace): Yui Ishikawa asked you for help. Recorded ask arguments: by: Yui Ishikawa; of: you. Proposed act: you acted against Yui Ishikawa. Available responses: accept; decline; leave unanswered.
 
-No closing account is included at this observation cutoff.
+No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
 
 ### H-022
 
@@ -597,13 +621,13 @@ A closing account reached you.
 
 Kabuki, within one week.
 
-Day 7, 14:00 (sight): Dmitri Novak asked you for help.
+Day 7, 14:00 (sight): Dmitri Novak asked you for help. Recorded ask arguments: by: Dmitri Novak; of: you. Proposed act: Dmitri Novak helped Shun Matsuda. Available actions: act (help), bargain (bargain); decline; leave unanswered. act cost: time spent following this thread (now). bargain cost: a favour owed for assistance (now). Occurrence kind: offer. Recorded participants: asker: Dmitri Novak; protagonist: you.
 
-Day 7, 14:00 (sight): you agreed to Dmitri Novak's request.
+Day 7, 14:00 (sight): you agreed to Dmitri Novak's request. Recorded comply arguments: who: you; to: Dmitri Novak. Recorded response: action:bargain (bargain). Occurrence kind: response. Recorded participants: protagonist: you; asker: Dmitri Novak. Recorded causes among supplied observations: the recorded offer occurrence (asker: Dmitri Novak; protagonist: you).
 
-Day 7, 14:00 (message): Sakura Aoki acted against Shun Matsuda.
+Day 7, 14:00 (message): Sakura Aoki acted against Shun Matsuda. Recorded wrong arguments: by: Sakura Aoki; to: Shun Matsuda. Occurrence kind: gang-clash. Recorded participants: aggressor: Sakura Aoki; victim: Shun Matsuda. Recorded effects: harm on Shun Matsuda. Recorded act outcome: done.
 
-No closing account is included at this observation cutoff.
+No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
 
 ### H-046
 
@@ -618,6 +642,18 @@ Day 6, 00:30 (trace): Noriko Ishikawa acted against Mila Sokolov. Recorded wrong
 Day 6, 00:40 (trace): Mila Sokolov learned about the recorded subject. Recorded learn arguments: who: Mila Sokolov; what: the recorded subject.
 
 A closing account reached you. Recorded outcome: resolved; closing pattern: betrayal.
+
+### H-092
+
+Kabuki, within one week.
+
+Day 2, 17:20 (message): Takeshi Watanabe acted against Ellis Holt. Recorded wrong arguments: by: Takeshi Watanabe; to: Ellis Holt. Occurrence kind: assault. Recorded participants: aggressor: Takeshi Watanabe; victim: Ellis Holt. Recorded effects: harm on Ellis Holt. Recorded act outcome: done.
+
+Day 3, 00:20 (sight): Ellis Holt asked you for help. Recorded ask arguments: by: Ellis Holt; of: you. Proposed act: Ellis Holt learned about the recorded subject. Available actions: act (help), bargain (bargain); decline; leave unanswered. act cost: time spent following this thread (now). bargain cost: a favour owed for assistance (now). Occurrence kind: offer. Recorded participants: asker: Ellis Holt; protagonist: you. Recorded causes among supplied observations: the recorded assault occurrence (aggressor: Takeshi Watanabe; victim: Ellis Holt; outcome: done).
+
+Day 3, 00:20 (sight): you agreed to Ellis Holt's request. Recorded comply arguments: who: you; to: Ellis Holt. Recorded response: action:bargain (bargain). Occurrence kind: response. Recorded participants: protagonist: you; asker: Ellis Holt. Recorded causes among supplied observations: the recorded offer occurrence (asker: Ellis Holt; protagonist: you); the recorded assault occurrence (aggressor: Takeshi Watanabe; victim: Ellis Holt; outcome: done).
+
+No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
 
 ### H-018
 
@@ -649,25 +685,21 @@ A closing account reached you.
 
 Kabuki, within one week.
 
-Day 2, 00:00 (trace): Mei Watanabe acted against Jun Roxas. Recorded wrong arguments: by: Mei Watanabe; to: Jun Roxas. Occurrence kind: assault. Recorded participants: aggressor: Mei Watanabe; victim: Jun Roxas. Recorded effects: harm on Jun Roxas. Recorded act outcome: done.
+Day 2, 00:00 (trace): Mei Watanabe acted against Jun Roxas.
 
-No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
+No closing account is included at this observation cutoff.
 
 ### H-071
 
 Kabuki, within one week.
 
-Day 5, 00:10 (trace): Imran Malik asked you for help.
+Day 5, 00:10 (trace): Imran Malik asked you for help. Recorded ask arguments: by: Imran Malik; of: you. Proposed act: you acted against Imran Malik. Available responses: accept; decline; leave unanswered.
 
-Day 5, 00:20 (message): you agreed to Imran Malik's request.
+Day 5, 00:20 (message): you agreed to Imran Malik's request. Recorded comply arguments: who: you; to: Imran Malik.
 
-Day 5, 00:30 (trace): you acted against Imran Malik.
+Day 5, 00:30 (trace): you acted against Imran Malik. Recorded wrong arguments: by: you; to: Imran Malik.
 
-Day 5, 00:40 (trace): Aiko Ishikawa learned about the recorded subject.
-
-Day 5, 00:50 (trace): Aiko Ishikawa made a demand of you.
-
-A closing account reached you.
+No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
 
 ### H-029
 
@@ -683,9 +715,9 @@ A closing account reached you.
 
 Kabuki, within one week.
 
-Day 6, 16:30 (trace): Deepa Singh acted against Meiling Xu.
+Day 6, 16:30 (trace): Deepa Singh acted against Meiling Xu. Recorded wrong arguments: by: Deepa Singh; to: Meiling Xu. Occurrence kind: theft. Recorded participants: aggressor: Deepa Singh; victim: Meiling Xu. Recorded effects: take on Meiling Xu. Recorded act outcome: done.
 
-No closing account is included at this observation cutoff.
+No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
 
 ### H-014
 
@@ -709,6 +741,14 @@ Day 6, 00:30 (trace): you acted against Haneul Hwang. Recorded wrong arguments: 
 
 No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
 
+### H-087
+
+Kabuki, within one week.
+
+Day 7, 09:30 (trace): Hector Guerrero acted against Farah Qureshi.
+
+No closing account is included at this observation cutoff.
+
 ### H-045
 
 Kabuki, within one week.
@@ -723,13 +763,13 @@ A closing account reached you.
 
 Kabuki, within one week.
 
-Day 1, 17:30 (trace): Ying Luo acted against Kaori Tanaka.
+Day 1, 17:30 (trace): Ying Luo acted against Kaori Tanaka. Recorded wrong arguments: by: Ying Luo; to: Kaori Tanaka. Occurrence kind: theft. Recorded participants: aggressor: Ying Luo; victim: Kaori Tanaka. Recorded effects: take on Kaori Tanaka. Recorded act outcome: done.
 
-Day 2, 12:40 (sight): Kaori Tanaka asked you for help.
+Day 2, 12:40 (sight): Kaori Tanaka asked you for help. Recorded ask arguments: by: Kaori Tanaka; of: you. Proposed act: Kaori Tanaka learned about the recorded police-action occurrence (target: Shun Okada; outcome: done). Available actions: act (help), bargain (bargain); decline; leave unanswered. act cost: time spent following this thread (now). bargain cost: a favour owed for assistance (now). Occurrence kind: offer. Recorded participants: asker: Kaori Tanaka; protagonist: you. Recorded causes among supplied observations: the recorded theft occurrence (aggressor: Ying Luo; victim: Kaori Tanaka; outcome: done).
 
-Day 2, 12:40 (message): you refused Kaori Tanaka.
+Day 2, 12:40 (message): you refused Kaori Tanaka. Recorded refuse arguments: who: you; to: Kaori Tanaka. Recorded response: decline:decline. Occurrence kind: response. Recorded participants: protagonist: you; asker: Kaori Tanaka. Recorded causes among supplied observations: the recorded offer occurrence (asker: Kaori Tanaka; protagonist: you); the recorded theft occurrence (aggressor: Ying Luo; victim: Kaori Tanaka; outcome: done).
 
-No closing account is included at this observation cutoff.
+No closing account is included at this observation cutoff. No outcome explanation is supplied by a closing account at this cutoff.
 
 ### H-069
 
@@ -819,11 +859,11 @@ Left: H-086; right: H-090.
 
 ### P-017
 
-Left: H-042; right: H-047.
+Left: H-042; right: H-059.
 
 ### P-023
 
-Left: H-084; right: H-035.
+Left: H-009; right: H-093.
 
 ### P-029
 
@@ -843,7 +883,7 @@ Left: H-032; right: H-026.
 
 ### P-024
 
-Left: H-009; right: H-022.
+Left: H-084; right: H-092.
 
 ### P-035
 
@@ -859,7 +899,7 @@ Left: H-006; right: H-060.
 
 ### P-045
 
-Left: H-046; right: H-025.
+Left: H-025; right: H-046.
 
 ### P-034
 
@@ -871,7 +911,7 @@ Left: H-071; right: H-084.
 
 ### P-001
 
-Left: H-047; right: H-042.
+Left: H-021; right: H-010.
 
 ### P-039
 
@@ -887,7 +927,7 @@ Left: H-031; right: H-082.
 
 ### P-007
 
-Left: H-047; right: H-067.
+Left: H-047; right: H-010.
 
 ### P-040
 
@@ -899,7 +939,7 @@ Left: H-024; right: H-023.
 
 ### P-009
 
-Left: H-088; right: H-010.
+Left: H-088; right: H-067.
 
 ### P-011
 
@@ -915,11 +955,11 @@ Left: H-035; right: H-020.
 
 ### P-002
 
-Left: H-010; right: H-021.
+Left: H-042; right: H-059.
 
 ### P-041
 
-Left: H-021; right: H-078.
+Left: H-078; right: H-077.
 
 ### P-014
 
@@ -931,11 +971,11 @@ Left: H-081; right: H-010.
 
 ### P-022
 
-Left: H-035; right: H-093.
+Left: H-035; right: H-087.
 
 ### P-016
 
-Left: H-042; right: H-047.
+Left: H-042; right: H-059.
 
 ### P-030
 
@@ -971,7 +1011,7 @@ Left: H-037; right: H-017.
 
 ### P-037
 
-Left: H-002; right: H-047.
+Left: H-002; right: H-059.
 
 ### P-013
 
@@ -983,4 +1023,4 @@ Left: H-035; right: H-073.
 
 ## Free sorting
 
-Group each ID once: H-048, H-003, H-070, H-046, H-074, H-084, H-039, H-015, H-075, H-067, H-096, H-002, H-031, H-029, H-064, H-081, H-032, H-041, H-042, H-030, H-006, H-016, H-034, H-060, H-066, H-025, H-063, H-093, H-026, H-023.
+Group each ID once: H-048, H-003, H-090, H-046, H-073, H-082, H-039, H-015, H-074, H-066, H-088, H-002, H-031, H-029, H-063, H-078, H-032, H-041, H-042, H-030, H-093, H-016, H-034, H-059, H-065, H-025, H-060, H-087, H-026, H-023.

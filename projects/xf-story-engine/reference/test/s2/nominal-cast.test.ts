@@ -40,3 +40,35 @@ test('the nominal casting pool and keyed draw are stable across scope order, sav
  expect(pools.length).toBeGreaterThanOrEqual(3);for(const pool of pools)expect(pool).toEqual([group,person]);
  expect(query(w,'core:actor',[person,group,place])).toEqual([]);
 });
+
+for(const snapshot of [false,true])test(`saved-only structural membership prevents nominal widening (${snapshot?'snapshot':'incremental'})`,()=>{
+ const {w,inst,person,group}=fixture('saved-structural-'+snapshot),seed=H(s('saved-structural-consumer'));
+ w.k.config.snapshotEvery=snapshot?1:10000;
+ const actor=w.k.mint(w.v,cause,'structural-actor','core:actor');
+ w.k.retention.setSeed({id:seed,state:{},nodes:[actor]});w.k.settle();w.k.persistence.save('structural');w.k.retention.endSeed(seed);
+ w.k.retention.scheduleSweep();w.k.settle();expect(w.k.store.header(actor)).toBeUndefined();
+ expect([...w.k.persistence.discoveryIdsOfKind('core:actor')]).toEqual([actor]);
+ inst.st.document.roles.npc!.scope={nodes:[person,group]};delete inst.st.draws['cast:npc'];
+ expect(castRole(w.l2,inst,'npc')).toMatchObject({candidates:0});
+ expect(w.k.store.header(actor),'the global membership test must not recover an out-of-scope header').toBeUndefined();
+ const pools:string[][]=[],fit=w.l2.fitWeights.bind(w.l2);w.l2.fitWeights=input=>{if(input.choice==='cast:npc')pools.push(input.options.map(o=>o.id));return fit(input);};
+ inst.st.document.roles.npc!.scope={nodes:[group,actor,person]};
+ for(let i=0;i<2;i++){delete inst.st.draws['cast:npc'];expect(castRole(w.l2,inst,'npc')).toEqual({node:actor,candidates:1});}
+ expect(pools).toEqual([[actor],[actor]]);expect(w.k.store.header(actor)).toBeDefined();
+});
+
+for(const snapshot of [false,true])test(`nominal pool recovers swept candidates in kind/query order and recomputes the same draw (${snapshot?'snapshot':'incremental'})`,()=>{
+ const run=(sweep:boolean)=>{
+  const w=makeWorld('nominal-swept-'+snapshot,{config:{snapshotEvery:snapshot?1:10000}}),seed=H(s('candidate-consumer'));
+  const groups=['g1','g2'].map(n=>w.k.mint(w.v,cause,n,'core:group')).sort(),people=[w.k.mint(w.v,cause,'p1','core:person'),w.k.mint(w.v,cause,'c1','fx:character')].sort(),nodes=[...groups,...people];
+  w.k.retention.setSeed({id:seed,state:{},nodes});w.k.settle();w.k.persistence.save('candidates');w.k.retention.endSeed(seed);
+  if(sweep){w.k.retention.scheduleSweep();w.k.settle();for(const id of nodes)expect(w.k.store.header(id)).toBeUndefined();}
+  const pack=miniPack({}, {roles:{npc:{kind:'core:actor',scope:{nodes:nodes.slice().reverse()},onUnfilled:['wait','withdraw']}},windows:[{id:'w',opens:'yes',onClose:'withdraw'}]});
+  expect(w.l2.installPack(pack)).toEqual([]);const result=w.l2.sow(MINI_PACK,MINI_ID);expect(result.ok).toBe(true);const inst=w.l2.instance(result.instance!)!;
+  const pools:string[][]=[],fit=w.l2.fitWeights.bind(w.l2);w.l2.fitWeights=input=>{if(input.choice==='cast:npc')pools.push(input.options.map(o=>o.id));return fit(input);};
+  const attempts=[];for(const scope of [nodes,nodes.slice().reverse()]){inst.st.document.roles.npc!.scope={nodes:scope};delete inst.st.draws['cast:npc'];attempts.push(castRole(w.l2,inst,'npc'));}
+  expect(pools).toEqual([nodes,nodes]);for(const id of nodes)expect(w.k.store.header(id)).toBeDefined();
+  return {attempts,draw:inst.st.draws['cast:npc']};
+ };
+ expect(run(true)).toEqual(run(false));
+});
