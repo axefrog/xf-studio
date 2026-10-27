@@ -305,6 +305,21 @@ describe("presets", () => {
     expect(again.document.recipe.layers[0]!.opacity).toBe(0.5);
   });
 
+  test("P3-vi review: initialize preserves a removed assigned look even when another live look is available", async () => {
+    const studio = await profileStudio({ looks: [{ name: "Assigned", recipe: initialRecipe() }, { name: "Other", recipe: initialRecipe() }] });
+    await studio.collection.initialize();
+    const ref = studio.scene.look()!, collection = studio.owner.collection(ref.collection)!;
+    expect(studio.owner.dispatch({ kind: "collection.removeLook", collection: ref.collection, base: collection.revision, look: ref.look }).ok).toBe(true);
+    await studio.settle();
+    const again = await restart(studio);
+    expect((await again.collection.initialize()).ok).toBe(true);
+    expect(again.scene.look()).toEqual(ref); expect(again.owner.targetStatus(ref).state).toBe("removed");
+    expect(again.owner.collection(ref.collection)!.looks).toHaveLength(1);
+    const retained = again.owner.collection(ref.collection)!;
+    expect(again.owner.dispatch({ kind: "collection.restoreLook", collection: ref.collection, base: retained.revision, look: ref.look }).ok).toBe(true);
+    expect(again.scene.look()).toEqual(ref); expect(again.document.recipe.layers).toHaveLength(initialRecipe().layers.length);
+  });
+
   test("a recipe file becomes a preset of its own, shown at once", async () => {
     const studio = await profileStudio();
     await studio.collection.initialize();

@@ -84,12 +84,14 @@ export class PanelActions {
         const compatible = context.kind === "view" ? pin === "view" : context.kind === "scene" ? pin === "scene" || pin === "view"
           : context.kind === "subject" ? pin !== "look" : pin !== "subject";
         const world = this.deps.world(), resolved = resolveBinding(world, { tab: action.destination.tab, binding, context, rules: this.deps.rules });
-        const subject = resolved.state === "resolved" || resolved.state === "empty" ? resolved.target?.subject : undefined;
-        const scene = resolved.state === "resolved" || resolved.state === "empty" ? resolved.target?.scene : undefined;
+        const subject = resolved.target?.subject, scene = resolved.target?.scene;
         if (!compatible || context.kind === "subject" && (subject ? !context.subjects.includes(subject.kind) : scene && !context.subjects.includes(world.scenes[scene]!.kind))
           || scene && context.scenes && !context.scenes.includes(world.scenes[scene]!.kind))
           throw new TabRefusal("incompatible_mode", "This panel can't use that kind of target.");
-        if (resolved.state === "dangling") throw new TabRefusal("missing_target", resolved.reason);
+        // A retained scene/view is a valid panel anchor even while its assigned document needs recovery. Missing anchors and direct
+        // document pins are still refused; accepting the scene does not authorize edits of its removed subject/look.
+        if (resolved.state === "dangling" && !(scene && (pin === "scene" || pin === "view")))
+          throw new TabRefusal("missing_target", resolved.reason);
         if (resolved.state === "empty" && !resolved.missing) throw new TabRefusal("incompatible_mode", resolved.reason);
       }
     }

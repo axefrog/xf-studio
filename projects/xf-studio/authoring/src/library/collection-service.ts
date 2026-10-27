@@ -909,12 +909,14 @@ export class CollectionService {
     });
   }
   /**
-   * The scene shows a live look: its own when it has one; else the first of its collection (an empty one stays shown, so its removed
-   * presets can be restored); else the first look of the first collection with any; else a new collection with one starter look.
+   * An assigned missing look keeps its recovery identity. An unassigned scene shows the first of its collection, else the first look
+   * of the first collection with any, else a new collection with one starter look. Bound profile panels preserve unassigned scenes too.
    */
   private ensureShown() {
     if (this.deps.preserveEmpty) return;
     const owner = this.deps.owner, ref = this.deps.scene.look();
+    // Legacy initialize/conflict recovery must preserve retained work too, even without the bound facade's preserveEmpty policy.
+    if (ref && owner.targetStatus(ref).state !== "present") { this.current = ref.collection; return; }
     if (ref && owner.look(ref)?.state === "live" && owner.collection(ref.collection)?.looks.includes(ref.look)) return;
     // A collection whose presets were all removed stays shown, named by its removed look (Restore brings it back).
     if (ref && owner.collection(ref.collection)?.looks.length === 0) { this.current = ref.collection; return; }

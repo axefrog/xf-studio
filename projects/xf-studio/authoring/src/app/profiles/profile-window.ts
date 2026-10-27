@@ -23,6 +23,7 @@ import type { LookRef } from "../../library/collection-documents";
 import type { ViewGraphData } from "../../platform/api/view-graph";
 import { documentKey } from "../../platform/api/document-commands";
 import { CHARACTER_KIND } from "../../platform/api/characters";
+import { targetPresent } from "../../platform/api/target-status";
 import type { ViewGraph, ViewGraphOwner } from "../../platform/core/view-graph";
 import { CHARACTER_DOCUMENT } from "../../character/character-document";
 import { LOOK_WORKING, lookRef as lookDocument } from "../../library/collection-documents";
@@ -199,19 +200,24 @@ export function sceneHeadTargets(state: ProfileSessions, services: Pick<ProfileS
     view: () => drawnView(state),
     of: (view: string) => state.graph.has(view) ? state.graph.node(view, "scene").id : undefined,
     has: (scene: string) => state.graph.viewsOf(scene).length > 0,
-    subject: (scene: string) => { const subject = state.scene(scene).subject; return subject?.kind === CHARACTER_KIND ? subject.id : undefined; },
+    // The stored assignment survives deletion. Only a usable V is offered to the renderer; recovery is resolved from the owner status.
+    subject: (scene: string) => { const subject = state.knownScene(scene)?.subject;
+      return subject?.kind === CHARACTER_KIND && targetPresent(services.characters.targetStatus(subject.id)) ? subject.id : undefined; },
     ensureSubject: (scene: string) => sceneCharacter(state, scene, services),
-    subscribe: (listener: () => void) => state.subscribe(listener),
+    subscribe: (listener: () => void) => { const offSession = state.subscribe(listener), offCharacters = services.characters.subscribe(listener);
+      return () => { offSession(); offCharacters(); }; },
   };
 }
 
 /**
- * The V a scene shows, made when it has none (or its V was deleted): a new default V, listed in the session's profile, shown on the scene.
- * Answers its ID (null when no V could be made: this window may not write).
+ * The V a scene shows, made only when the scene has no assigned target. An assigned target is never replaced by an ensure path,
+ * including while removed, purged, unavailable or recovering. Answers null while that assignment cannot be shown.
  */
 export async function sceneCharacter(state: ProfileSessions, scene: string, services: Pick<ProfileServices, "profiles" | "characters">): Promise<string | null> {
-  const shown = state.scene(scene).subject;
-  if (shown?.kind === "character" && services.characters.document(shown.id)) return shown.id;
+  const target = state.knownScene(scene);
+  if (!target) return null;
+  const shown = target.subject;
+  if (shown) return shown.kind === CHARACTER_KIND && targetPresent(services.characters.targetStatus(shown.id)) ? shown.id : null;
   const profile = services.profiles.profile(state.profile);
   const made = await services.characters.create(profile ? { profile: { id: profile.id, base: profile.revision } } : {});
   if (!made.ok) return null;

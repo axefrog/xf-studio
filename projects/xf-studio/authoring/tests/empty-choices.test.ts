@@ -3,7 +3,7 @@ import { characterRef } from "../src/platform/api/characters";
 import { profileSessionOf } from "../src/app/profiles/profile-session";
 import { describe, expect, test } from "bun:test";
 import { emptyChoicesPort } from "../src/app/profiles/empty-choices";
-import { createProfileServices, createTargetResolver, sceneCommands } from "../src/app/profiles/profile-window";
+import { createProfileServices, createTargetResolver, sceneCharacter, sceneCommands } from "../src/app/profiles/profile-window";
 import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
 import { CreatorCatalogue } from "../src/character/creator-catalogue";
 import { createStudioSubjects } from "../src/compose/subjects";
@@ -516,6 +516,49 @@ test("P3-vi: a subject chooser absent from its scene is added as an inspector wi
   expect(f.session.focus.focusedPanel()).toBe(exact);
   expect(f.session.panel(exact)).toMatchObject({ type: "character", binding: { policy: "pinned", target: { scene } } });
   await f.outbox.settle();
+});
+
+for (const route of ["look", "subject"] as const) test(`P3-vi review: an absent ${route} recovery chooser is added on its retained scene and restores the original`, async () => {
+  const f = await fixture(1), tab = f.session.tabId();
+  f.session.setPanelBinding(tab, f.session.instance("presets"), { policy: "pinned", target: { scene: f.scene } });
+  const view = f.session.addView("main", {}), scene = f.session.graph.node(view, "scene").id;
+  if (route === "look") {
+    const collection = f.services.collections.list()[0]!, ref = { collection: collection.id, look: collection.looks[0]! };
+    f.session.setLook(scene, ref);
+    expect(f.services.collections.dispatch({ kind: "collection.removeLook", collection: collection.id, base: collection.revision, look: ref.look }).ok).toBe(true);
+  } else {
+    f.session.setSubject(scene, characterRef(f.subjects[0]!));
+    expect((await f.services.characters.delete(f.subjects[0]!, f.services.characters.targetStatus(f.subjects[0]!).revision!)).ok).toBe(true);
+  }
+  const inspector = f.session.addPanel(tab, route === "look" ? "layers" : "quality", { binding: { policy: "pinned", target: route === "look" ? { scene } : { view } } });
+  const missing = f.port.snapshot(inspector)!, request = missing.owner!.action!, type = route === "look" ? "presets" : "character";
+  const before = f.session.scene(scene), views = f.session.graph.viewIds(), count = f.session.instances(type).length, depth = f.session.graph.history().depth;
+  expect(missing.status?.state).toBe("removed"); expect(missing.owner?.panel).toBeUndefined();
+  expect(f.port.capability(request)).toEqual({ available: true });
+  expect(await f.port.execute(request)).toEqual({ ok: true });
+  const exact = f.port.snapshot(inspector)!.owner!.panel!;
+  expect(f.session.panel(exact)).toMatchObject({ type, binding: { policy: "pinned", target: { scene } } });
+  expect(f.session.focus.focusedPanel()).toBe(exact); expect(f.session.graph.history().depth).toBe(depth + 1);
+  expect(await f.port.execute(request)).toEqual({ ok: true }); expect(f.session.instances(type)).toHaveLength(count + 1);
+  expect(f.session.graph.history().depth).toBe(depth + 1); expect(f.session.graph.viewIds()).toEqual(views);
+  const restore = f.port.snapshot(exact)!.choices.find(choice => "restore" in choice.action.choice)!.action;
+  expect(await f.port.execute(restore)).toEqual({ ok: true }); expect(f.resolver.resolve(exact).state).toBe("resolved");
+  expect(f.session.scene(scene)).toEqual(before); await f.outbox.settle(); f.outbox.stop();
+});
+
+for (const state of ["removed", "purged", "unavailable"] as const) test(`P3-vi review: ensureSubject preserves an assigned ${state} target`, async () => {
+  const f = await fixture(1), original = characterRef(f.subjects[0]!);
+  if (state === "unavailable") f.session.setSubject(f.scene, { kind: "location", id: "place" });
+  else {
+    f.session.setSubject(f.scene, original);
+    expect((await f.services.characters.delete(original.id, f.services.characters.targetStatus(original.id).revision!)).ok).toBe(true);
+    if (state === "purged") f.advance(TOMBSTONE_RETENTION_MS + 1);
+  }
+  const before = f.session.session(), characters = f.services.characters.list();
+  expect(await sceneCharacter(f.session, f.scene, f.services)).toBeNull();
+  expect(await sceneCharacter(f.session, "missing-scene", f.services)).toBeNull();
+  expect(f.session.session()).toEqual(before); expect(f.services.characters.list()).toEqual(characters);
+  await f.outbox.settle(); f.outbox.stop();
 });
 
 

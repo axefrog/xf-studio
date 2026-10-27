@@ -135,5 +135,5 @@ test("G3 seed 1875: dragging a peer on a partial Redo branch keeps the retained 
 test("P3-vi generator: tombstone, restore, detach, expiry, purge and restart match the independent retention model", async () => {
   const { generateRecoverySeeds } = await import("./fixtures/profile-session-generator");
   const result = await generateRecoverySeeds(1, 8);
-  expect(result).toEqual({ seeds: 8, count: 512, restarts: 24, purges: 8 });
+  expect(result).toEqual({ seeds: 8, count: 512, restarts: 40, purges: 8 });
 }, 60_000);

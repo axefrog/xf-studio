@@ -394,6 +394,8 @@ export function generateInstanceCommands(seed: number, length = 48) {
 /** Retention operations run through the real owners; restart reconstructs the outbox, resolver and editing services. */
 export async function generateRecoverySeeds(first: number, last: number) {
   const { profileContextStudio } = await import("./profile-context-studio"), { ManualClock } = await import("./platform-doubles");
+  const { sceneHeadTargets } = await import("../../src/app/profiles/profile-window"), { harness } = await import("./fake-heads");
+  const { createBrowserSceneHeads } = await import("../../src/preview/browser/browser-scene-heads");
   let count = 0, restarts = 0, purges = 0;
   for (let seed = first; seed <= last; seed++) {
     const clock = new ManualClock(), random = seededRandom(seed + 61000), model = new RecoveryModel(), trace: unknown[] = [];
@@ -405,6 +407,19 @@ export async function generateRecoverySeeds(first: number, last: number) {
     }
     const subjects = [...w.vs], looks = structuredClone(w.looks), initialScenes = structuredClone(w.session.session().views.scenes);
     const pins = subjects.map((id, index) => ({ instance: `character--target${index}`, subject: { kind: "character", id } }));
+    const startup = async () => {
+      const sceneTargets = sceneHeadTargets(w.session, w.services), device = harness();
+      const heads = createBrowserSceneHeads({ head: { ...device.ports, graph: w.session.graph }, scenes: sceneTargets,
+        characters: w.services.characters, prepareCore: async () => {}, pending: () => {}, notice: () => {}, shown: () => {}, previews: null });
+      try {
+        await heads.load();
+        const drawn = sceneTargets.view(), scene = drawn && sceneTargets.of(drawn), index = initialScenes.findIndex(item => item.id === scene);
+        const expected = model.startupSubject(index);
+        equal(!!heads.shown(), expected !== undefined, "startup shows only the original live assignment");
+        for (let i = 0; i < initialScenes.length; i++)
+          equal(await sceneTargets.ensureSubject(initialScenes[i]!.id), model.startupSubject(i) === undefined ? null : subjects[i], "ensure never substitutes removed/purged assignments");
+      } finally { heads.dispose(); }
+    };
     const verify = () => {
       for (let i = 0; i < 3; i++) {
         equal(w.services.characters.targetStatus(subjects[i]!).state, model.subjects[i], "retained subject state");
@@ -425,7 +440,9 @@ export async function generateRecoverySeeds(first: number, last: number) {
     };
     try {
       for (let n = 0; n < 64; n++) {
-        const index = n < 2 ? 0 : n < 4 ? 2 : Math.floor(random() * 3), operation = n < 4 ? n : n === 40 ? 5 : n === 20 || n === 45 || n === 63 ? 6 : Math.floor(random() * 5);
+        // Force delete -> actual startup -> restore for both the original V and its look before the seeded interleaving.
+        const index = n < 3 ? 0 : n < 6 ? 2 : Math.floor(random() * 3), operation = n < 6 ? [0, 6, 1, 2, 6, 3][n]!
+          : n === 40 ? 5 : n === 20 || n === 45 || n === 63 ? 6 : Math.floor(random() * 5);
         trace.push({ operation, index });
         if (operation === 0) {
           const expected = model.remove("subject", index), status = w.services.characters.targetStatus(subjects[index]!);
@@ -452,7 +469,9 @@ export async function generateRecoverySeeds(first: number, last: number) {
           await w.settle(); const stored = w.stored(); await w.dispose();
           w = await profileContextStudio({ restart: stored, clock }); restarts++;
         }
-        await w.settle(); verify(); count++;
+        await w.settle();
+        if (operation === 6 || n === 2 || n === 5) await startup();
+        verify(); count++;
       }
     } catch (error) { throw Error(`P3-vi retention seed ${seed}; trace ${JSON.stringify(trace)}: ${error instanceof Error ? error.message : String(error)}`); }
     finally { await w.dispose(); w.library.close(); }

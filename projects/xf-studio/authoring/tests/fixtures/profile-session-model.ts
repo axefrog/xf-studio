@@ -182,6 +182,8 @@ export class RecoveryModel {
   readonly members = [true, true, true];
   private readonly deletedAt = new Map<string, number>();
   now = 0;
+  /** These scenes keep their original assignments through deletion/restart; startup renders only a live assignment. */
+  startupSubject(scene: number): number | undefined { return this.subjects[scene] === "present" ? scene : undefined; }
   remove(kind: "subject" | "look", index: number): boolean {
     const states = kind === "subject" ? this.subjects : this.looks;
     if (states[index] !== "present") return false;

@@ -248,6 +248,8 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   /** The runtimes of scenes that no longer exist (their tab closed) go, unless one is shown: it goes once another takes over. */
   function closeGone() {
     if (disposed) return;
+    // A deleted V's context is terminal. Its runtimes cannot stay warm and be reused with that old context after Restore.
+    for (const want of residency.wants()) if (!ports.characters.document(want.character)) residency.close(want.scene);
     const shown = residency.shownWant()?.scene;
     for (const scene of new Set([...residency.wants().map(want => want.scene), ...(residency.pending() ? [residency.pending()!.scene] : [])]))
       if (scene !== shown && !ports.scenes.has(scene)) residency.close(scene);
@@ -276,7 +278,8 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
       scheduled = false;
       closeGone();
       const want = current();
-      if (!want || disposed) return;
+      if (disposed) return;
+      if (!want) { residency.hideShown(); return; }
       const pending = residency.pending();
       if (pending ? pending.key === want.key : residency.shownWant()?.key === want.key) return;
       void request(want).catch(() => { /* Reported in `request`. */ });
