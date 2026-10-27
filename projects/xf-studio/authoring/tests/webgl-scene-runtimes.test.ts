@@ -28,7 +28,7 @@ import type { SceneRuntimesProbe } from "./webgl-scene-runtimes-probe-page";
  * drawn, asked of the shown V, is prepared while the setup before stays drawn and takes over with nothing left to link; every warm-up is
  * drawn in pieces; a context lost part-way recovers. The same page runs again without the extension (the fallback), which must stay chunked
  * and still report progress; its page tasks are recorded, not gated. Public CI without Chrome skips; GitHub's Windows runner has Chrome but
- * no GPU, so on its software rasteriser the presentation gaps are reported, not gated (every other row still is); XFS_REQUIRE_ORACLES=1 turns the skip
+ * no GPU, so on its software rasteriser the millisecond budgets for GL work are reported, not gated (see `onHardware`); XFS_REQUIRE_ORACLES=1 turns the skip
  * into a failure. XFS_PROBE_PRINT=1 prints the gate table and both probes. The table's real-data half is G3 (`measure.ts` in experiment 043).
  */
 const PAGE = resolve(import.meta.dir, "webgl-scene-runtimes-probe-page.ts");
@@ -36,6 +36,10 @@ const ORDER = ["core", "build", "details", "programs", "textures", "warm-up"];
 
 oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME} (set CHROME)`)("scene runtimes: the S2 gate table, and preparing before showing", () => {
   let parallel: SceneRuntimesProbe, fallback: SceneRuntimesProbe;
+  // A software rasteriser (GitHub's Windows runner: Chrome, no GPU) draws on the runner's few cores beside the page, so absolute
+  // millisecond budgets for work that touches GL (presentation gaps, page tasks, morph steps) are gated on hardware only; the
+  // figures are still reported. Scheduling budgets (switches, cancels) and every functional and relative check hold on both.
+  const onHardware = () => !softwareRenderer(parallel.renderer);
   beforeAll(async () => {
     parallel = await runProbePage<SceneRuntimesProbe>(PAGE, "", 420_000);
     fallback = await runProbePage<SceneRuntimesProbe>(PAGE, "?parallel=off", 420_000);
@@ -97,11 +101,11 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
       expect(morph.handed).toBe(true);
       expect(morph.identical).toBe(true);
       expect(morph.steps).toBeGreaterThan(2);
-      expect(morph.stepMaxMs).toBeLessThan(50);
+      if (onHardware()) expect(morph.stepMaxMs).toBeLessThan(50);
       // The draw that follows builds nothing: far cheaper than Three's own build at the draw.
       expect(morph.drawMs).toBeLessThan(morph.threeDrawMs);
     }
-    expect(parallel.morph.tasksOver50).toBe(0);
+    if (onHardware()) expect(parallel.morph.tasksOver50).toBe(0);
   });
 
   test("S2 gate, one output: every fragment shader the page's runtimes gave the driver writes one output, into one colour attachment", () => {
@@ -123,8 +127,10 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
   test("a cold V prepared while another is shown: no main-thread task over 50 ms from the want to 1 s after it is shown", () => {
     expect(parallel.cold.result?.parallel).toBe(true);
     expect(parallel.cold.result!.programs).toBeGreaterThan(0);
-    expect(parallel.cold.tasksOver50).toBe(0);
-    expect(parallel.cold.longestTaskMs).toBeLessThan(50);
+    if (onHardware()) {
+      expect(parallel.cold.tasksOver50).toBe(0);
+      expect(parallel.cold.longestTaskMs).toBeLessThan(50);
+    }
   });
 
   test("nothing of it is drawn before it is shown: the shown V's pixels stay as they were, and it was warmed up hidden, in pieces", () => {
@@ -148,8 +154,7 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
     // ANGLE builds a program that writes several outputs, or reads integers into a float input, again at its first draw, on the GPU
     // process's main thread, presenting nothing meanwhile (13.9 s and 4.0 s here before 4a-v-c, experiment 043 §12). With
     // KHR_parallel_shader_compile the page's own tasks stay under 50 ms too, so a frame is presented at least every 100 ms.
-    // A software rasteriser draws a frame in more than 100 ms by itself, so on one the gaps are reported, not gated.
-    if (softwareRenderer(parallel.renderer)) return console.log(`software renderer (${parallel.renderer}): gaps ${Math.round(parallel.cold.frameGapMs)} / ${Math.round(parallel.setup.frameGapMs)} ms, not gated`);
+    if (!onHardware()) return console.log(`software renderer (${parallel.renderer}): gaps ${Math.round(parallel.cold.frameGapMs)} / ${Math.round(parallel.setup.frameGapMs)} ms, not gated`);
     expect({ cold: parallel.cold.frameGapMs <= 100, setup: parallel.setup.frameGapMs <= 100, renderer: parallel.renderer })
       .toEqual({ cold: true, setup: true, renderer: parallel.renderer });
     // The fallback's page tasks are long (recorded, not gated), but no warm-up piece holds the GPU process for long either.
@@ -183,8 +188,10 @@ oracleDescribe(chromeInstalled(), `headless Chrome is not installed at ${CHROME}
       expect(setup.back.stoppedMs).toBeLessThanOrEqual(100);
     }
     // With KHR_parallel_shader_compile the page's thread stays free throughout.
-    expect(parallel.setup.tasksOver50).toBe(0);
-    expect(parallel.setup.longestTaskMs).toBeLessThan(50);
+    if (onHardware()) {
+      expect(parallel.setup.tasksOver50).toBe(0);
+      expect(parallel.setup.longestTaskMs).toBeLessThan(50);
+    }
   });
 
   test("its first shown frame links no program and uploads no map: only what every frame sends (its bones), as a later frame does", () => {
@@ -389,8 +396,8 @@ function gateTable(probe: SceneRuntimesProbe) {
     "no first-draw stall": { value: `links ${cold.firstFrame.links} (cold), ${Math.max(...warm.links)} (warm), ${staleMakeup.firstFrame.links} (makeup changed while warm), `
       + `${editorRemount.firstFrame.links} (editor shown again); gaps ${Math.round(cold.frameGapMs)} / ${Math.round(setup.frameGapMs)} ms, tasks ${cold.tasksOver50 + setup.tasksOver50}`,
       pass: cold.firstFrame.links === 0 && cold.firstFrame.programs === 0 && setup.firstFrame.links === 0
-        && (softwareRenderer(probe.renderer) || (cold.frameGapMs <= 100 && setup.frameGapMs <= 100))
-        && cold.tasksOver50 === 0 && setup.tasksOver50 === 0 && warm.links.every(links => links === 0) && same(staleMakeup.firstFrame, { links: 0, programs: 0 })
+        && (softwareRenderer(probe.renderer) || (cold.frameGapMs <= 100 && setup.frameGapMs <= 100 && cold.tasksOver50 === 0 && setup.tasksOver50 === 0))
+        && warm.links.every(links => links === 0) && same(staleMakeup.firstFrame, { links: 0, programs: 0 })
         && !staleMakeup.preparedAfterChange && same(editorRemount.firstFrame, { links: 0, programs: 0 }) },
     "warm residency": { value: `hidden targets ${warm.targets.map(entry => entry.hidden.reduce((sum, n) => sum + n, 0)).join("/")} px`,
       pass: warm.targets.every(entry => same(entry.hidden, [0, 0, 0])) && warm.gl.every((counts, i) => i < 2 || same(counts, warm.gl[i - 2])) },

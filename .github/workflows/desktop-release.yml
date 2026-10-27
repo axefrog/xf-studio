@@ -133,7 +133,7 @@ jobs:
       - name: Test
         env:
           XFS_PRIVATE_ASSETS: absent
-        run: bun test
+        run: bun run test
 
       # build:canary also downloads the pinned Inno Setup release (SHA-256 checked, inno-setup.ts)
       # into this job-local folder and wraps the setup ZIP into the single setup program.
