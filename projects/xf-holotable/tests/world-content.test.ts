@@ -5,10 +5,11 @@ import { RedHandle, RedObject } from "../../xf-studio/authoring/src/native/red-m
 import { NativeBudgetError, NativeMalformedError } from "../../xf-studio/authoring/src/native/native-errors";
 import { tempDir } from "../../xf-studio/authoring/tests/temp-dir";
 import { mapContentNode, CONTENT_SECTOR_VERSION, encodeContentSector, decodeContentSector, type ContentSector, type ContentPlacement } from "../src/world-content-data.ts";
-import { ContentAssembler, boxOverlapsPlace, checkCounts, coverage, defaultPlacement, placementId, placeAt, poiKind, selectSlice, yaw, type WorldContent } from "../src/world-content.ts";
+import { ContentAssembler, WORLD_CONTENT_READER, boxOverlapsPlace, checkCounts, coverage, count, defaultPlacement, placementId, placeAt, poiKind, selectSlice, yaw, type WorldContent } from "../src/world-content.ts";
+import { ContentBudget, CONTENT_LIMITS } from "../src/world-content-budget.ts";
 import { journalHash, indexJournal, mapMappins, mapWorkspot } from "../src/world-content-resources.ts";
 import { cachedWorldContent, validateContent, worldContentCacheKey } from "../src/world-content-source.ts";
-import { createSectorCache, type SourceStamp } from "../src/sector-cache.ts";
+import { createSectorCache, SectorWorkers, type SourceStamp } from "../src/sector-cache.ts";
 import type { Area, WorldPack } from "../src/model.ts";
 
 const obj=(type:string,fields:Record<string,unknown>={})=>new RedObject(type,fields);
@@ -23,7 +24,7 @@ const pl=(index:number,nodeIndex:number,ref="0"):ContentPlacement=>({index,nodeI
 const sector=(nodes:ContentSector["nodes"],placements:ContentSector["placements"]):ContentSector=>({version:CONTENT_SECTOR_VERSION,nodes,placements,variantIndices:[0],persistentNodeIndex:-1});
 function result(key:string):WorldContent {
   const a=new ContentAssembler(pack,selectSlice(pack,"test"));
-  return {schema:"xfh/world-content-1",slice:{id:"test",title:"Test",places:[area.id]},source:{game:"test",archives:"test",reader:"w1.1",built:"test",key},communities:[],spots:[],spawners:[],pois:[],counts:a.counts};
+  return {schema:"xfh/world-content-1",slice:{id:"test",title:"Test",places:[area.id]},source:{game:"test",archives:"test",reader:WORLD_CONTENT_READER,built:"test",key},communities:[],spots:[],spawners:[],pois:[],counts:a.counts};
 }
 
 test("every node class maps stored fields through the actual handles and id structs",()=>{
@@ -141,4 +142,98 @@ test("the content codec reuses W0's per-sector owner and isolates its disk ident
   const owner=createSectorCache(dir,reader,codec),signal=new AbortController().signal;
   await owner.read(request,signal);await createSectorCache(dir,reader,codec).read(request,signal);expect(reads).toBe(1);
   await createSectorCache(dir,reader,{...codec,version:CONTENT_SECTOR_VERSION+1}).read(request,signal);expect(reads).toBe(2);
+});
+
+test("repeated placements expand a shared community once, while every serialized copy consumes budget",()=>{
+  let expansions=0;
+  const entries=Array.from({length:1000},(_,i)=>({name:`resident${i}`,phases:[]}));
+  const node={nodeIndex:0,type:"worldCompiledCommunityAreaNode_Streamable",get entries(){expansions++;return entries;}};
+  const placements=Array.from({length:100},(_,i)=>pl(i,0));
+  const out=new ContentAssembler(pack,selectSlice(pack,"test"));
+  out.addSector("sector",sector([node],placements),[0]);out.finishCommunities();
+  expect(expansions).toBe(1);expect(out.communities).toHaveLength(100);
+  expect(out.communities[99].entries).toBe(out.communities[0].entries);
+  expect(out.counts.kept["community.entries"]).toBe(100_000);
+  expect(out.budget.snapshot().nested).toBe(100_000);
+  const bounded=new ContentAssembler(pack,selectSlice(pack,"test"),new ContentBudget({...CONTENT_LIMITS,nested:1500}));
+  bounded.addSector("sector",sector([node],placements),[0]);
+  expect(()=>bounded.finishCommunities()).toThrow(NativeBudgetError);
+  expect(expansions).toBe(2);expect(bounded.communities[1].entries).toHaveLength(0);
+});
+
+test("nested, link and estimated byte limits refuse before allocating a result past the budget",()=>{
+  const node={nodeIndex:0,type:"worldCompiledCommunityAreaNode_Streamable",entries:[{name:"resident",phases:[{name:"day",periods:[{spots:["42","43"]}]}]}]};
+  const s=sector([node,{nodeIndex:1,type:"worldAISpotNode"}],[pl(0,0),pl(1,1,"42"),pl(2,1,"43")]);
+  for(const limits of [{...CONTENT_LIMITS,nested:1},{...CONTENT_LIMITS,links:1},{...CONTENT_LIMITS,bytes:1}]) {
+    const out=new ContentAssembler(pack,selectSlice(pack,"test"),new ContentBudget(limits));
+    expect(()=>{out.addSector("sector",s,[0]);out.finishCommunities();}).toThrow(NativeBudgetError);
+    const used=out.budget.snapshot();expect(used.nested).toBeLessThanOrEqual(limits.nested);expect(used.links).toBeLessThanOrEqual(limits.links);expect(used.bytes).toBeLessThanOrEqual(limits.bytes);
+  }
+});
+
+test("valid-JSON damage in every assembled collection and nested structure rebuilds the file",async()=>{
+  const dir=tempDir("w1-damaged-file-"),file=join(dir,"content.json"),signal=new AbortController().signal;
+  const invalid:[keyof Pick<WorldContent,"spots"|"communities"|"spawners"|"pois">,unknown][]=[
+    ["spots",{id:"s",place:area.id}],
+    ["spots",{id:"s",place:area.id,at:[1,2,3],yaw:0,communities:[],workspot:{path:"x",tags:[null]}}],
+    ["communities",{id:"c",place:area.id,entries:[null]}],
+    ["communities",{id:"c",place:area.id,entries:[{name:"e",phases:[{name:"p",spots:[null]}]}]}],
+    ["spawners",{id:"sp",place:area.id,at:[1,2,3],yaw:0}],
+    ["pois",{id:"poi",place:area.id,at:[1,2,3]}],
+  ];
+  let rebuilds=0;
+  for(const [collection,row] of invalid) {
+    const value=result("key");(value[collection] as unknown[]).push(row);count(value.counts,collection);
+    expect(()=>validateContent(value,"key")).toThrow(NativeMalformedError);
+    writeFileSync(file,JSON.stringify(value));
+    const loaded=await cachedWorldContent(file,"key",async()=>{rebuilds++;return result("key");},signal);
+    expect(loaded.cached).toBe(false);expect(loaded.content[collection]).toHaveLength(0);
+  }
+  expect(rebuilds).toBe(invalid.length);
+});
+
+test("valid-JSON sector damage is refused and regenerated by the per-sector cache",async()=>{
+  const dir=tempDir("w1-damaged-sector-"),request={root:"game",resource:"sector.streamingsector",source:{path:"vanilla.archive",size:1,mtimeMs:2}};
+  const invalid=sector([{nodeIndex:0,type:"worldCompiledCommunityAreaNode_Streamable",entries:[null as never]}],[pl(0,0)]);
+  const damaged=encodeContentSector(invalid),good=encodeContentSector(sector([],[]));
+  expect(()=>decodeContentSector(damaged)).toThrow(NativeMalformedError);
+  // Write a structurally invalid, valid-JSON disk entry with a permissive previous decoder.
+  const signal=new AbortController().signal;
+  await createSectorCache(dir,async()=>damaged,{version:CONTENT_SECTOR_VERSION,decode:()=>invalid}).read(request,signal);
+  let rebuilt=0;
+  const owner=createSectorCache(dir,async()=>{rebuilt++;return good;},{version:CONTENT_SECTOR_VERSION,decode:decodeContentSector});
+  expect((await owner.read(request,signal)).nodes).toEqual([]);expect(rebuilt).toBe(1);
+  for(const entries of [[{name:"e",phases:[null]}],[{name:"e",phases:[{name:"p",periods:[{spots:[null]}]}]}]]) {
+    expect(()=>decodeContentSector(encodeContentSector(sector([{nodeIndex:0,type:"worldCompiledCommunityAreaNode",entries:entries as never}],[pl(0,0)])))).toThrow(NativeMalformedError);
+  }
+});
+
+test("explicit owner shutdown terminates a stalled decode within its deadline after cancellation",async()=>{
+  const shared=new SharedArrayBuffer(4),state=new Int32Array(shared);
+  const workers=new SectorWorkers(1,"content",()=>{const w=new Worker(new URL("./fixtures/stalled-sector-worker.ts",import.meta.url).href);w.postMessage({state:shared});return w;});
+  const ctl=new AbortController(),read=workers.read({root:"game",resource:"sector",source:{path:"archive",size:1,mtimeMs:1}},ctl.signal);
+  const outcome=read.then(()=>false,()=>true);
+  try {
+    const deadline=performance.now()+2000;
+    while(Atomics.load(state,0)===0&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,5));
+    expect(Atomics.load(state,0)).toBe(1);
+    ctl.abort();expect(await outcome).toBe(true);
+    const start=performance.now();await workers.shutdown(30);expect(performance.now()-start).toBeLessThan(1000);
+    await workers.shutdown(30); // idempotent, and no later reader can restart the owner
+    await expect(workers.read({root:"game",resource:"next",source:{path:"archive",size:1,mtimeMs:1}},new AbortController().signal)).rejects.toThrow("shut down");
+  }finally{ctl.abort();await workers.shutdown(30);}
+});
+
+test("W0 requester cancellation and closeIdle preserve an active worker for the next reader",async()=>{
+  const sent:unknown[]=[],worker={onmessage:null as null|((event:{data:unknown})=>void),onerror:null,postMessage:(m:unknown)=>{sent.push(m);},terminate:()=>{throw Error("Shared worker must not terminate.");}};
+  const workers=new SectorWorkers(1,"collisions",()=>worker as unknown as Worker);
+  const request={root:"game",resource:"sector",source:{path:"archive",size:1,mtimeMs:1}},a=new AbortController(),b=new AbortController();
+  const first=workers.read(request,a.signal),firstOutcome=first.then(()=>false,()=>true);
+  const second=workers.read(request,b.signal);
+  a.abort();expect(await firstOutcome).toBe(true);await workers.closeIdle();expect(sent).toHaveLength(1);
+  worker.onmessage!({data:{data:new Uint8Array([1])}}); // cancelled active read drains; queued reader then starts
+  expect(sent).toHaveLength(2);worker.onmessage!({data:{data:new Uint8Array([2])}});
+  expect(await second).toEqual(new Uint8Array([2]));
+  const closed=workers.closeIdle();expect(sent[2]).toEqual({close:true});worker.onmessage!({data:{closed:true}});await closed;
+  await workers.shutdown();
 });

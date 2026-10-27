@@ -13,7 +13,9 @@ import { depotHash } from "../../xf-studio/authoring/src/game/depot-path";
 import { vanillaSources } from "./solid-source.ts";
 import { createSectorCache, SectorWorkers, type SourceStamp } from "./sector-cache.ts";
 import { CONTENT_SECTOR_VERSION, decodeContentSector, list, object, reference, vector } from "./world-content-data.ts";
-import { ContentAssembler, CONTENT_FILE_CAP, CONTENT_CAP, CONTENT_POLICY, WORLD_CONTENT_READER, boxOverlapsPlace, checkCounts, count, selectSlice, type WorldContent } from "./world-content.ts";
+import { ContentAssembler, CONTENT_FILE_CAP, CONTENT_POLICY, WORLD_CONTENT_READER, boxOverlapsPlace, count, selectSlice, type WorldContent } from "./world-content.ts";
+import { validateContent } from "./world-content-validation.ts";
+export { validateContent } from "./world-content-validation.ts";
 import { indexJournal, mapMappins, mapWorkspot, type JournalIndex } from "./world-content-resources.ts";
 import type { WorldPack, Vec3 } from "./model.ts";
 
@@ -22,19 +24,6 @@ const BLOCKS=[BASE+"blocks\\all.streamingblock",BASE+"ep1\\blocks\\all.streaming
 const digest=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export function worldContentCacheKey(sources:readonly SourceStamp[],pack:WorldPack,slice:string,reader=WORLD_CONTENT_READER) {
   return digest({sources,pack,slice,reader,native:NATIVE_READER_VERSION,sector:SECTOR_READER_VERSION,contentSector:CONTENT_SECTOR_VERSION,policy:CONTENT_POLICY});
-}
-export function validateContent(content:WorldContent,key:string) {
-  if(content?.schema!=="xfh/world-content-1"||content.source?.key!==key||content.source.reader!==WORLD_CONTENT_READER)throw new NativeMalformedError("Invalid world-content identity.");
-  const collections=[content.communities,content.spots,content.spawners,content.pois];
-  if(collections.some(c=>!Array.isArray(c))||collections.reduce((n,c)=>n+c.length,0)>CONTENT_CAP)throw new NativeBudgetError("Slice exceeds 50,000 records; use a smaller slice.");
-  checkCounts(content.counts);
-  for(const [name,rows] of [["communities",content.communities],["spots",content.spots],["spawners",content.spawners],["pois",content.pois]] as const) {
-    if(content.counts.kept[name]!==rows.length)throw new NativeMalformedError("World-content collection count disagrees.");
-    const ids=new Set<string>();for(const row of rows) {
-      if(!row.id||!row.place||ids.has(row.id))throw new NativeMalformedError("Invalid world-content record identity.");ids.add(row.id);
-      if("at" in row&&(!Array.isArray(row.at)||row.at.length!==3||!row.at.every(Number.isFinite)))throw new NativeMalformedError("Invalid world-content position.");
-    }
-  }
 }
 /** Probe the small assembled file before opening archive indexes. Damaged entries rebuild atomically. */
 export async function cachedWorldContent(file:string,key:string,build:()=>Promise<WorldContent>,signal:AbortSignal) {
@@ -111,7 +100,7 @@ export async function buildWorldContent(options:{root:string;pack:WorldPack;slic
       return {schema:"xfh/world-content-1",slice:{id:slice.id,title:slice.title,places:slice.places},
         source:{game:pack.provenance.game,archives:digest(sources),reader:WORLD_CONTENT_READER,built:(options.now??(()=>new Date().toISOString()))(),key},
         communities:out.communities,spots:out.spots,spawners:out.spawners,pois:out.pois,counts:out.counts};
-    } finally {try {await workers.closeIdle();cache.trim();}finally{cache.end();pool.close();oodle.close();}}
+    } finally {try {await workers.shutdown();cache.trim();}finally{cache.end();pool.close();oodle.close();}}
   },signal);
   unchanged();return result;
 }

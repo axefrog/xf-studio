@@ -133,6 +133,27 @@ test("a refused shared content handle cannot become a successful partial object 
   expect(s.nodes.every(n=>n.object===undefined)).toBe(true);
 });
 
+test("refused nested exports unwind depth while retaining cumulative work budgets for later content",()=>{
+  const f=new Cr2wBuilder(),data=f.buffer(placement()),resource=f.import("synthetic.workspot");
+  f.export("worldStreamingSector",[],w=>{
+    w.i32(62);const size=w.length;w.i32(0);v.buffer(data)(w);
+    w.u8(3).i32(2).i32(3).i32(4).u8(0).u8(1).i32(0).i32(-1);w.set32(size,w.length-size);
+  });
+  f.export("worldAISpotNode",[prop("spot","handle:AISpot",v.handle(4))]);
+  f.export("worldAISpotNode",[prop("spot","handle:AISpot",v.handle(4))]);
+  f.export("worldAISpotNode",[prop("spot","handle:AISpot",v.handle(5))]);
+  f.export("AIActionSpot",[],w=>w.u32(42));
+  f.export("AIActionSpot",[prop("resource","raRef:workWorkspotResource",v.ref(resource))]);
+  const session=new DecodeSession({...DEFAULT_LIMITS,maxDepth:2,maxNodes:10000});
+  const s=readStreamingSectorContent(f.build(),fakeDecompress,session);
+  expect(s.nodes.map(n=>n.refusal)).toEqual(["NativeUnsupportedError","NativeUnsupportedError",undefined]);
+  expect(s.nodes[2].object?.fields.spot).toBeDefined();
+  // At root again, both depth levels are available. Values/bytes already charged remain charged.
+  session.enter();session.enter();session.leave();session.leave();
+  expect(session.usage.nodes).toBeGreaterThan(48);expect(session.usage.decodedBytes).toBeGreaterThan(0);
+  expect(()=>session.nodes(10000-session.usage.nodes+1)).toThrow(NativeBudgetError);
+});
+
 // No game payload fixtures. Generate private references with tools/native-sector-diff.ts, under the memory guard.
 const game = process.env.XFS_TEST_GAME_ROOT, oracle = process.env.XFS_TEST_SECTOR_ORACLE;
 for (const path of SECTOR_SAMPLES) (game && oracle ? test : test.skip)(`real sector matches WolvenKit: ${path}`, () => {

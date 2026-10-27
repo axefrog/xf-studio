@@ -3,8 +3,9 @@ import { RedHandle, RedObject } from "../../xf-studio/authoring/src/native/red-m
 import { NativeBudgetError, NativeMalformedError } from "../../xf-studio/authoring/src/native/native-errors";
 import type { readStreamingSectorContent } from "../../xf-studio/authoring/src/native/streaming-sector";
 import type { Vec3 } from "./model.ts";
+import { ContentBudget, shape, array, optionalString, string, finiteTuple, integer, stringList, stringBytes } from "./world-content-budget.ts";
 
-export const CONTENT_SECTOR_VERSION = 101;
+export const CONTENT_SECTOR_VERSION = 102;
 export const CONTENT_BYTES_LIMIT = 32 * 1024 * 1024;
 export const object = (v: unknown): Record<string, unknown> => v instanceof RedHandle ? object(v.target) : v instanceof RedObject ? v.fields : {};
 export const list = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
@@ -71,21 +72,49 @@ export function decodeContentSector(bytes: Uint8Array): ContentSector {
   if (bytes.length > CONTENT_BYTES_LIMIT) throw new NativeBudgetError("Content sector exceeds 32 MiB.");
   let s: ContentSector;
   try {s=JSON.parse(new TextDecoder().decode(bytes)) as ContentSector;}catch{throw new NativeMalformedError("Invalid content-sector JSON.");}
-  if (s?.version !== CONTENT_SECTOR_VERSION || !Array.isArray(s.nodes) || !Array.isArray(s.placements) || !Array.isArray(s.variantIndices)
-    || s.nodes.length > 200_000 || s.placements.length > 200_000) throw new NativeMalformedError("Invalid content-sector cache.");
+  validateContentSector(s);
+  return s;
+}
+export function validateContentSector(s: unknown): asserts s is ContentSector {
+  shape(s,"content sector");
+  if(s.version!==CONTENT_SECTOR_VERSION)throw new NativeMalformedError("Invalid content-sector version.");
+  array(s.nodes,"content nodes");array(s.placements,"content placements");array(s.variantIndices,"variant ranges");
+  const budget=new ContentBudget();
   const known=new Set<number>();
   for(const n of s.nodes) {
-    if(!Number.isInteger(n.nodeIndex)||n.nodeIndex<0||known.has(n.nodeIndex)||!['worldAISpotNode','worldPopulationSpawnerNode','worldCommunityRegistryNode','worldCompiledCommunityAreaNode','worldCompiledCommunityAreaNode_Streamable'].includes(n.type))throw new NativeMalformedError("Invalid cached content node.");
+    shape(n,"content node");integer(n.nodeIndex,0,200_000,"node index");string(n.type,"node type");
+    if(known.has(n.nodeIndex)||!['worldAISpotNode','worldPopulationSpawnerNode','worldCommunityRegistryNode','worldCompiledCommunityAreaNode','worldCompiledCommunityAreaNode_Streamable'].includes(n.type))throw new NativeMalformedError("Invalid cached content node.");
+    for(const field of ["name","refusal","sourceId","workspot","record"]) {optionalString(n[field],`node ${field}`);budget.charge({bytes:stringBytes(n[field] as string|undefined)});}
+    if(n.onStart!==undefined&&typeof n.onStart!=="boolean")throw new NativeMalformedError("Invalid spawn flag.");
+    budget.charge({nested:1,bytes:128});
     known.add(n.nodeIndex);
+    if(n.type==="worldCommunityRegistryNode"&&!n.refusal || n.registry!==undefined) {
+      array(n.registry,"registry items");
+      for(const r of n.registry) {
+        shape(r,"registry item");optionalString(r.id,"registry id");array(r.entries,"registry entries");budget.charge({nested:1,bytes:64});
+        for(const e of r.entries) {shape(e,"registry entry");optionalString(e.name,"entry name");optionalString(e.record,"entry record");budget.charge({nested:1,bytes:64+stringBytes(e.name as string|undefined)+stringBytes(e.record as string|undefined)});}
+      }
+    }
+    if((n.type==="worldCompiledCommunityAreaNode"||n.type==="worldCompiledCommunityAreaNode_Streamable")&&!n.refusal || n.entries!==undefined) {
+      array(n.entries,"community entries");
+      for(const e of n.entries) {
+        shape(e,"community entry");optionalString(e.name,"entry name");optionalString(e.record,"entry record");array(e.phases,"entry phases");budget.charge({nested:1,bytes:64+stringBytes(e.name as string|undefined)});
+        for(const p of e.phases) {
+          shape(p,"community phase");optionalString(p.name,"phase name");array(p.periods,"phase periods");budget.charge({nested:1,bytes:64+stringBytes(p.name as string|undefined)});
+          for(const t of p.periods) {shape(t,"community period");optionalString(t.name,"period name");budget.charge({nested:1,bytes:64+stringBytes(t.name as string|undefined)});stringList(t.spots,"period spots",budget);}
+        }
+      }
+    }
   }
   let previous=-1;
   for(const p of s.placements) {
-    if(!Number.isInteger(p.index)||p.index<=previous||!known.has(p.nodeIndex)||typeof p.ref!=="string"||!/^\d+$/.test(p.ref)
-      ||!Array.isArray(p.at)||p.at.length!==3||!p.at.every(Number.isFinite)||!Array.isArray(p.orientation)||p.orientation.length!==4||!p.orientation.every(Number.isFinite))throw new NativeMalformedError("Invalid cached content placement.");
+    shape(p,"content placement");integer(p.index,0,200_000,"placement index");integer(p.nodeIndex,0,200_000,"placement node index");
+    string(p.ref,"placement ref");finiteTuple(p.at,3,"placement position");finiteTuple(p.orientation,4,"placement orientation");
+    if(p.index<=previous||!known.has(p.nodeIndex)||!/^\d{1,20}$/.test(p.ref)||Math.hypot(...p.orientation)<1e-8)throw new NativeMalformedError("Invalid cached content placement.");
+    budget.charge({bytes:192+stringBytes(p.ref)});
     previous=p.index;
   }
   previous=-1;
-  for(const v of s.variantIndices) {if(!Number.isInteger(v)||v<previous||v<0)throw new NativeMalformedError("Invalid cached variant ranges.");previous=v;}
-  if(!Number.isInteger(s.persistentNodeIndex)||s.persistentNodeIndex < -1)throw new NativeMalformedError("Invalid cached persistent range.");
-  return s;
+  for(const v of s.variantIndices) {integer(v,0,200_000,"variant range");if(v<previous)throw new NativeMalformedError("Invalid cached variant ranges.");previous=v;}
+  integer(s.persistentNodeIndex,-1,200_000,"persistent range");
 }

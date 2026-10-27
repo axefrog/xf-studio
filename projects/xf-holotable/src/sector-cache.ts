@@ -21,9 +21,13 @@ export class SectorWorkers {
   private slots: Slot[] = [];
   private queue: Task[] = [];
   private idle: ReturnType<typeof setTimeout> | undefined;
-  constructor(private readonly concurrency = 2, private readonly mode: "collisions" | "content" = "collisions") {}
+  private stopped = false;
+  private shutdownJob?: Promise<void>;
+  constructor(private readonly concurrency = 2, private readonly mode: "collisions" | "content" = "collisions",
+    private readonly makeWorker: () => Worker = () => new Worker(new URL("./sector-worker.ts", import.meta.url).href)) {}
   read = (request: SectorRequest, signal: AbortSignal): Promise<Uint8Array> => new Promise((resolve, reject) => {
     signal.throwIfAborted();
+    if (this.stopped) throw Error("Sector workers are shut down.");
     clearTimeout(this.idle);
     const task: Task = { request, resolve, reject, signal, cancelled: false, abort: () => {
       task.cancelled = true; this.queue = this.queue.filter(t => t !== task); reject(signal.reason ?? new DOMException("Cancelled.", "AbortError"));
@@ -31,11 +35,12 @@ export class SectorWorkers {
     signal.addEventListener("abort", task.abort, { once: true }); this.queue.push(task); this.pump();
   });
   private pump() {
+    if (this.stopped) return;
     while (this.queue.length) {
       let slot = this.slots.find(s => !s.task && !s.closing);
       if (!slot) {
         if (this.slots.filter(s => !s.closing).length >= this.concurrency) return;
-        slot = { worker: new Worker(new URL("./sector-worker.ts", import.meta.url).href) }; this.slots.push(slot);
+        slot = { worker: this.makeWorker() }; this.slots.push(slot);
         const mine = slot;
         mine.worker.onmessage = event => {
           if (event.data.closed) { this.slots = this.slots.filter(s => s !== mine); mine.closed?.(); return; }
@@ -48,7 +53,7 @@ export class SectorWorkers {
             }
           }
           this.pump();
-          if (!this.queue.length && this.slots.every(s => !s.task)) this.idle = setTimeout(() => { void this.closeIdle(); }, 250);
+          if (!this.stopped && !this.queue.length && this.slots.every(s => !s.task)) this.idle = setTimeout(() => { void this.closeIdle(); }, 250);
         };
         mine.worker.onerror = event => {
           const task = mine.task; if (task) { task.signal.removeEventListener("abort", task.abort); task.reject(Error(event.message)); }
@@ -64,6 +69,34 @@ export class SectorWorkers {
     clearTimeout(this.idle);
     const idle = this.slots.filter(s => !s.task && !s.closing);
     await Promise.all(idle.map(s => { s.closing = new Promise<void>(resolve => { s.closed = resolve; }); s.worker.postMessage({ close: true }); return s.closing; }));
+  }
+  /** Final owner shutdown, not requester cancellation. Queue close behind active reads; terminate stalled slots at the deadline.
+   * W0's shared consumers continue to use closeIdle(), which never interrupts an active/shared read. */
+  shutdown(deadlineMs = 1000): Promise<void> {
+    if (this.shutdownJob) return this.shutdownJob;
+    if (!Number.isFinite(deadlineMs) || deadlineMs < 0 || deadlineMs > 60_000) throw Error("Invalid worker shutdown deadline.");
+    this.stopped = true; clearTimeout(this.idle);
+    const error = new DOMException("Sector worker owner shut down.", "AbortError");
+    for (const task of [...this.queue, ...this.slots.flatMap(s => s.task ? [s.task] : [])]) {
+      task.signal.removeEventListener("abort", task.abort); task.cancelled = true; task.reject(error);
+    }
+    this.queue = [];
+    const slots = [...this.slots];
+    const closing = slots.map(s => {
+      if (!s.closing) { s.closing = new Promise<void>(resolve => { s.closed = resolve; }); s.worker.postMessage({ close: true }); }
+      return s.closing;
+    });
+    this.shutdownJob = new Promise<void>(resolve => {
+      const timer = setTimeout(() => {
+        for (const s of slots) if (this.slots.includes(s)) {
+          s.worker.onmessage = null; s.worker.onerror = null; s.worker.terminate();
+          s.task = undefined; this.slots = this.slots.filter(slot => slot !== s); s.closed?.();
+        }
+        resolve();
+      }, deadlineMs);
+      void Promise.all(closing).then(() => { clearTimeout(timer); resolve(); });
+    });
+    return this.shutdownJob;
   }
 }
 

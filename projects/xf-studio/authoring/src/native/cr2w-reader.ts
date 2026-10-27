@@ -48,12 +48,13 @@ export class Cr2wDecoder implements ValueContext {
     object = new RedObject(entry.className);
     this.objects.set(index, object);
     this.session.enter();
-    const cursor = new Cursor(this.file.bytes, entry.dataOffset, entry.dataOffset + entry.dataSize, this.file.view);
-    this.readBody(cursor, object);
-    this.readAppendix(cursor, object);
-    if (cursor.pos !== cursor.end) throw new NativeUnsupportedError(`${entry.className} has ${cursor.end - cursor.pos} bytes of data after its properties that this reader does not decode.`);
-    this.session.leave();
-    return object;
+    try {
+      const cursor = new Cursor(this.file.bytes, entry.dataOffset, entry.dataOffset + entry.dataSize, this.file.view);
+      this.readBody(cursor, object);
+      this.readAppendix(cursor, object);
+      if (cursor.pos !== cursor.end) throw new NativeUnsupportedError(`${entry.className} has ${cursor.end - cursor.pos} bytes of data after its properties that this reader does not decode.`);
+      return object;
+    } finally { this.session.leave(); }
   }
 
   /** A property list: 0x00, records, u16 0. */
@@ -162,9 +163,8 @@ export class Cr2wDecoder implements ValueContext {
   object(cursor: Cursor, type: string): RedObject {
     const object = new RedObject(type);
     this.session.enter();
-    this.readBody(cursor, object);
-    this.session.leave();
-    return object;
+    try { this.readBody(cursor, object); return object; }
+    finally { this.session.leave(); }
   }
 
   handle(cursor: Cursor): RedHandle {
@@ -219,9 +219,10 @@ export class Cr2wDecoder implements ValueContext {
     if (kind === "package") return new RedBuffer(flags, memSize, bytes, readPackage(bytes(), owner, this.session));
     if (kind === "cr2w-list") {
       this.session.enter();
-      const files = readCr2wList(bytes(), this.decompress, this.session);
-      this.session.leave();
-      return new RedBuffer(flags, memSize, bytes, { kind: "cr2w-list", files });
+      try {
+        const files = readCr2wList(bytes(), this.decompress, this.session);
+        return new RedBuffer(flags, memSize, bytes, { kind: "cr2w-list", files });
+      } finally { this.session.leave(); }
     }
     return new RedBuffer(flags, memSize, bytes);
   }

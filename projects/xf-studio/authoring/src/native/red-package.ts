@@ -84,9 +84,8 @@ class PackageDecoder implements ValueContext {
     object = new RedObject(entry.type);
     this.objects.set(index, object);
     this.session.enter();
-    this.readFields(new Cursor(this.bytes, this.base + entry.offset, this.base + entry.end, this.view), object);
-    this.session.leave();
-    return object;
+    try { this.readFields(new Cursor(this.bytes, this.base + entry.offset, this.base + entry.end, this.view), object); return object; }
+    finally { this.session.leave(); }
   }
 
   /**
@@ -130,9 +129,8 @@ class PackageDecoder implements ValueContext {
     if (kind !== "class" && kind !== "unsliced-class") throw new NativeUnsupportedError(`Package values of type ${type} are not decoded (not a class the RTTI knows).`);
     const object = new RedObject(type);
     this.session.enter();
-    this.readFields(cursor, object);
-    this.session.leave();
-    return object;
+    try { this.readFields(cursor, object); return object; }
+    finally { this.session.leave(); }
   }
 
   handle(cursor: Cursor): RedHandle {
