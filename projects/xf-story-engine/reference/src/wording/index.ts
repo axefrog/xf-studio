@@ -17,7 +17,7 @@ const lookup = (table: object, key: string): string | undefined => (table as Rec
 export const sentence = (s: string) => s ? s[0].toUpperCase() + s.slice(1) : '';
 /** One boundary for display text from records, libraries and external feeds. */
 export function displayText(value: unknown, multiline = false): string | undefined {
-  return typeof value === 'string' && value.trim() && (multiline || !value.includes('\n')) && !/\b[a-f\d]{32}\b|se:|xf[.:]|\?[a-z]|\b\d+\.\d+\b|[{}\[\]]|not recorded|not opened|\bcoarse\b|[\x00-\x09\x0b-\x1f\x7f-\x9f]/i.test(value) ? value : undefined;
+  return typeof value === 'string' && value.trim() && (multiline || !value.includes('\n')) && !/[a-f\d]{16,}|\d{10,}|[+-]?(?:\d+(?:\.\d*)?|\.\d+)[eE][+-]?\d+|se:|xf[.:]|\?[a-z]|\d+\.\d+|[{}\[\]]|not recorded|not opened|\bcoarse\b|[\x00-\x09\x0b-\x1f\x7f-\x9f]/i.test(value) ? value : undefined;
 }
 export const words = (s?: string) => displayText(s)?.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ');
 export const strength = (n: number) => n < .34 ? 'weak' : n < .67 ? 'moderate' : 'strong';

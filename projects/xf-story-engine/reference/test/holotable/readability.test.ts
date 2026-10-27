@@ -19,9 +19,25 @@ import type { PoolEntry } from '../../src/procedural/types.ts';
 import { ShadowHost } from '../../src/shadow/host.ts';
 import { defaultReader, type Batch, type WorldPack } from '../../src/shadow/feed.ts';
 
-const internals = /\b[a-f\d]{32}\b|se:|xf[.:]|\?[a-z]|\b\d+\.\d+\b|[{}\[\]]|not recorded|not opened|\bcoarse\b/i;
+// Independent oracle: scan runs and parse exponent mantissa/suffix pairs,
+// rather than reuse the producer's guard or its combined regular expression.
+function hasInternals(value: string): boolean {
+  if (/se:|xf[.:]|\?[a-z]|\d+\.\d+|[{}\[\]]|not recorded|not opened|\bcoarse\b/i.test(value)) return true;
+  let hex = 0, digits = 0;
+  for (const char of value.toLowerCase()) {
+    hex = '0123456789abcdef'.includes(char) ? hex + 1 : 0;
+    digits = '0123456789'.includes(char) ? digits + 1 : 0;
+    if (hex >= 16 || digits >= 10) return true;
+  }
+  for (const token of value.split(/\s+/)) for (let i = 0; i < token.length; i++) {
+    if (token[i].toLowerCase() !== 'e') continue;
+    const before = token.slice(0, i), after = token.slice(i + 1);
+    if (/(?:\d+\.?\d*|\.\d+)$/.test(before) && /^[+-]?\d/.test(after)) return true;
+  }
+  return false;
+}
 export function readable(item: Item) {
-  for (const value of [item.label, item.detail, ...Object.keys(item.facets ?? {}), ...Object.values(item.facets ?? {}), item.value?.name, item.value?.role, item.value?.type]) if (value) expect(value).not.toMatch(internals);
+  for (const value of [item.label, item.detail, ...Object.keys(item.facets ?? {}), ...Object.values(item.facets ?? {}), item.value?.name, item.value?.role, item.value?.type]) if (value) expect(hasInternals(value)).toBe(false);
 }
 function scratch<T>(run: (dir: string) => T): T {
   const dir = resolve(import.meta.dir, '../../../../../.scratch-holo1', randomUUID());
@@ -183,4 +199,17 @@ test('the internals checker covers facet keys as well as values', () => {
   const item: Item = { schema: 'xfh/item-1', id: 'one', kind: 'point', t: 0, anchor: { region: 'r' }, cite: 'se:node:one', facets: { 'xf.item:hidden': 'A key' } };
   expect(() => readable(item)).toThrow();
   expect(() => readable({ ...item, facets: { holder: 'Mara' } })).not.toThrow();
+});
+
+test('guard and independent checker reject embedded hashes, exponent numbers, long digits and syntax fragments', () => {
+  const bad = ['key_1234567890abcdef1234567890abcdef', 'prefix_DEADBEEFDEADBEEF_suffix', 'key_0123456789abcdef', '1e-7', '2E+10', '.5e2', '-1.2e-3', 'rate_3e7_value', 'key_0.123_value', '1234567890', 'xf.item:key', '?x', '{"key":', '["fragment"'];
+  const base: Item = { schema: 'xfh/item-1', id: 'one', kind: 'point', t: 0, anchor: { region: 'r' }, cite: 'se:node:one' };
+  for (const value of bad) {
+    expect(text.displayText(value)).toBeUndefined();
+    for (const fields of [{ label: value }, { detail: value }, { facets: { [value]: 'Mara' } }, { facets: { who: value } }, { value: { name: value } }, { value: { type: value } }]) expect(() => readable({ ...base, ...fields })).toThrow();
+  }
+  for (const value of ['Mara Ilić', 'Day 2, 14:05', 'About 27 people in the background', 'civilians 81 %', 'block 123456789']) {
+    expect(text.displayText(value)).toBe(value);
+    expect(() => readable({ ...base, label: value, facets: { about: value } })).not.toThrow();
+  }
 });

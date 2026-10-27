@@ -18,6 +18,7 @@ const raw: Record<string, string> = {
  'Events.setMaterialisation': 'header-first replay hook', 'Events.forgetMaterialisation': 'collector hook',
  'Events.setCanonRecord': 'replay hook',
  'Persistence.savedHeader': 'saved identity lookup used by collector, no live lookup',
+ 'Persistence.pinEligibleForPersistence': 'physical pin/save eligibility predicate; diagnostic callers must never recover',
  'Persistence.discoveryIdsOfKind': 'candidate index only; consumer charges and recovers reached ids',
  'Persistence.discoveryChildren': 'candidate index only; consumer charges and recovers reached ids',
  'Persistence.canSweepEdge': 'exact recoverability predicate', 'Persistence.canSweepContribution': 'exact recoverability predicate',

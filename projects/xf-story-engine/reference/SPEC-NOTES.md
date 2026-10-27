@@ -1717,6 +1717,7 @@ Schema, hashing and identity arithmetic never inspect live state.
 | `Persistence.canSweepEdge` | raw: exact recoverability predicate |
 | `Persistence.currentView` | via marked, eventFacts |
 | `Persistence.installPack` | via contribute |
+| `Persistence.pinEligibleForPersistence` | raw: physical pin/save eligibility predicate; diagnostic callers must never recover |
 | `Persistence.restoreContribution` | recoverIfSaved |
 | `Persistence.restoreEdge` | recoverIfSaved |
 | `Persistence.restoreReferencedHeader` | recoverIfSaved |

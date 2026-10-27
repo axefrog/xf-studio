@@ -195,12 +195,19 @@ test('layer bound counts distinct item ids across expiry, retractions, replaceme
   expect(publisher.counts().events).toMatchObject({ items: 5000, revisions: 10000 });
 });
 
-test('people split above 4000 keeps cross-layer relation references consistent', () => {
+test('crossing 4000 unnamed headers changes no people layer or published stops', () => {
   const sim = quietSim('holo-split', undefined, []), cell = sim.w.districts[0].cellIds[0];
+  const observer = new HolotableObserver(sim), first = observer.sample();
+  const publisher = new RunPublisher(tempDir(), { set: 'header-threshold', title: 'Header threshold', from: first.t, to: first.t + 100 });
+  publisher.publish(first);
+  const counts = publisher.counts(), path = join(publisher.directory, 'people.jsonl'), bytes = readFileSync(path, 'utf8');
   for (let i = 0; i < 4001; i++) sim.k.store.addHeader({ id: H(s(`holo-person-${i}`)), kind: 'xf:resident', origin: { by: 'value', owner: cell, slot: `fixture-${i}` } });
-  const observation = new HolotableObserver(sim).sample();
-  expect(observation.layers.get('people')).toEqual([]);
-  expect([...observation.layers].filter(([l]) => l.startsWith('people-')).flatMap(([, a]) => a).length).toBe([...sim.people.populationSnapshot().values()].filter((n) => n > 0).length + 1); // cold-cell crowds plus V
+  sim.k.now += 10;
+  const observation = observer.sample(); publisher.publish(observation);
+  expect([...observation.layers.keys()].some((l) => l.startsWith('people-'))).toBe(false);
+  expect(observation.layers.get('people')!.map((i) => i.id)).toEqual(first.layers.get('people')!.map((i) => i.id));
+  expect(publisher.counts()).toEqual(counts);
+  expect(readFileSync(path, 'utf8')).toBe(bytes);
 });
 
 test('a save branch retracts inherited prefix items only on that branch, once', () => {

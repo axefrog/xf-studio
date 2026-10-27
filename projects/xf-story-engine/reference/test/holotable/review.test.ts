@@ -138,7 +138,7 @@ test('cold district crowds survive removing unmaterialised resident headers', ()
   const sim = quietSim('holo-empty-district', undefined, []), cell = sim.w.districts[0].cellIds[0];
   const ids = Array.from({ length: 4001 }, (_, i) => H(s(`district-actor-${i}`)));
   for (const id of ids) sim.k.store.addHeader({ id, kind: 'xf:resident', origin: { by: 'value', owner: cell, slot: id } });
-  const observer = new HolotableObserver(sim), first = observer.sample(), layer = [...first.layers].find(([key, items]) => key.startsWith('people-') && items.some((i) => i.id === `crowd-${cell}`))![0];
+  const observer = new HolotableObserver(sim), first = observer.sample(), layer = 'people';
   const publisher = new RunPublisher(tempDir(), { set: 'empty-district', title: 'Empty district', from: observer.epoch, to: observer.epoch + 100 });
   publisher.publish(first);
   for (const id of ids) sim.k.store.removeHeader(id);
@@ -149,6 +149,45 @@ test('cold district crowds survive removing unmaterialised resident headers', ()
   expect(publisher.counts()[layer].live).toBe(first.layers.get(layer)!.length);
   expect(rows(publisher, layer).filter((i) => i.retract)).toHaveLength(0);
 });
+
+test('published count crosses 4000 once, with clean retractions, district references and sticky layers', () => {
+  const sim = quietSim('holo-published-split', undefined, []), k = sim.k, cell = sim.w.districts[0].cellIds[0];
+  const observer = new HolotableObserver(sim), baseline = observer.sample().layers.get('people')!.length;
+  const add = (i: number) => {
+    const id = H(s(`published-person-${i}`));
+    k.store.addHeader({ id, kind: 'xf:person', origin: { by: 'value', owner: cell, slot: `fixture-${i}` } });
+    return id;
+  };
+  const firstActor = add(0);
+  for (let i = 1; i < 4000 - baseline; i++) add(i);
+  const tie = k.addEdge({ type: 'xf:tie', from: sim.w.v, to: firstActor, cause: sim.w.v, attrs: { kind: 'friend' } });
+  const first = observer.sample();
+  expect(first.layers.get('people')).toHaveLength(4000);
+  expect([...first.layers.keys()].some((layer) => layer.startsWith('people-'))).toBe(false);
+  const publisher = new RunPublisher(tempDir(), { set: 'published-threshold', title: 'Published threshold', from: first.t, to: first.t + 100 });
+  publisher.publish(first);
+  const crossing = add(4000 - baseline);
+  k.now += 10;
+  const split = observer.sample(); publisher.publish(split);
+  expect(split.layers.get('people')).toEqual([]);
+  const districtLayer = 'people-fx-d1';
+  expect(split.layers.get(districtLayer)).toHaveLength(4000);
+  expect(split.layers.get('people-unplaced')!.map((i) => i.id)).toEqual([sim.w.v]);
+  expect(split.layers.get('ties')!.find((i) => i.id === tie.id)).toMatchObject({ anchor: { item: `story-engine/people-unplaced/${sim.w.v}` }, value: { to: { item: `story-engine/${districtLayer}/${firstActor}` } } });
+  const retired = rows(publisher).filter((r) => r.retract);
+  expect(retired).toHaveLength(4000);
+  expect(new Set(retired.map((r) => r.retract)).size).toBe(4000);
+  expect(publisher.counts().people.live).toBe(0);
+  const unchanged = publisher.counts();
+  k.now += 10; publisher.publish(observer.sample());
+  expect(publisher.counts()).toEqual(unchanged);
+  k.store.removeHeader(crossing); k.now += 10;
+  const below = observer.sample(); publisher.publish(below);
+  expect(below.layers.get('people')).toEqual([]);
+  expect(below.layers.get(districtLayer)).toHaveLength(3999);
+  expect(rows(publisher).filter((r) => r.retract)).toEqual(retired);
+  expect(rows(publisher, districtLayer).filter((r) => r.retract).map((r) => r.retract)).toEqual([crossing]);
+}, 60000);
 
 test('missing event digest is coarse, but an omitted sparse band in a present digest is quiet', () => {
   const sim = quietSim('holo-heat', undefined, []), observer = new HolotableObserver(sim);

@@ -62,6 +62,26 @@ test('name headers and observed detailed slots stay opened immediately across re
   check(); sim.k.persistence.save('opened'); sim.k.persistence.load('opened'); check();
 });
 
+test('a pin withdrawn before its first save cannot open a retained unnamed resident', () => {
+  for (const savedBeforeWithdrawal of [false, true]) {
+    const sim = quietSim(`review-withdrawn-${savedBeforeWithdrawal}`, undefined, []), k = sim.k, cell = sim.w.districts[0].cellIds[0];
+    const person = k.address(k.address(cell, 'households[0]'), 'm0');
+    k.retention.streamIn([person]);
+    const pin = k.pin({ node: person, slot: 'age', value: 30, reason: 'authored', cause: sim.w.v });
+    if (savedBeforeWithdrawal) k.persistence.save('before-withdrawal');
+    k.withdrawPin(pin.id, sim.w.v);
+    expect(k.persistence.pinEligibleForPersistence(pin)).toBe(savedBeforeWithdrawal);
+    const check = () => {
+      const rows = people(new HolotableObserver(sim));
+      expect(rows.some((i) => i.id === person)).toBe(savedBeforeWithdrawal);
+      const expected = sim.people.populationSnapshot().get(cell)! - Number(savedBeforeWithdrawal);
+      expect(rows.find((i) => i.id === `crowd-${cell}`)?.label).toBe(`About ${expected} people in the background`);
+    };
+    check(); k.persistence.save('after-withdrawal'); k.persistence.load('after-withdrawal'); check();
+    expect(k.store.pinsOfNode(person).some((p) => p.id === pin.id)).toBe(savedBeforeWithdrawal);
+  }
+});
+
 test('beliefs cover actual effect, news, cause, reason, grievance and mirrored alive vocabularies', () => {
   const events = new Map([['incident', event()], ['news', { ...event('threat'), id: 'news' }]]);
   const samples: Array<[Belief, string]> = [

@@ -116,10 +116,7 @@ export class HolotableObserver {
       return name && c ? `${name}, block ${[...d.cellIds].sort().indexOf(id) + 1}` : name;
     };
     const actors = [...headers.values()].filter((h) => /^xf:resident(?:-[0-5])?$/.test(h.kind) || h.kind === 'xf:person' || h.id === sim.w.v);
-    if (actors.length > BOUNDS.people) this.splitPeople = true;
-    const actorLayers = new Map(actors.map((h) => [h.id, this.splitPeople ? `people-${districtSlug(districtOf(h.id) ?? '')}` : 'people']));
-    for (const layer of actorLayers.values()) this.peopleLayers.add(layer);
-    for (const layer of this.peopleLayers) layers.set(layer, []);
+    const actorLayers = new Map(actors.map((h) => [h.id, 'people']));
     const groups = [...headers.values()].filter((h) => k.schema.isKind(h.kind, 'core:group'));
     const groupIds = new Set(groups.map((h) => h.id));
     const events = new Map<string, EventView>();
@@ -199,12 +196,22 @@ export class HolotableObserver {
     const opened = new Set<string>([sim.w.v]);
     for (const h of actors) {
       const named = headers.has(ownedId(h.id, 'name')) || k.persistence.savedHeader(ownedId(h.id, 'name')) !== undefined;
-      const detailed = k.store.pinsOfNode(h.id).some((p) => (k.schema.slotInfo(h.kind, p.slot.split('@')[0])?.def.tier ?? 0) >= 3);
+      const detailed = k.store.pinsOfNode(h.id).some((p) => k.persistence.pinEligibleForPersistence(p) && (k.schema.slotInfo(h.kind, p.slot.split('@')[0])?.def.tier ?? 0) >= 3);
       if (h.kind === 'xf:person' || h.origin.by === 'mirrored' || named || detailed) opened.add(h.id);
     }
     for (const ev of events.values()) for (const p of ev.participants) if (actorLayers.has(p.who)) opened.add(p.who);
     for (const e of l3?.state.pool ?? []) for (const id of Object.values(e.bindings)) if (actorLayers.has(id)) opened.add(id);
     for (const f of frames) if (actorLayers.has(f.actor)) opened.add(f.actor);
+    const crowdCounts = new Map(sim.people.populationSnapshot());
+    for (const h of actors) if (opened.has(h.id) && /^xf:resident(?:-[0-5])?$/.test(h.kind)) {
+      const cell = ownerRegion(h.id);
+      if (cell && crowdCounts.has(cell)) crowdCounts.set(cell, Math.max(0, crowdCounts.get(cell)! - 1));
+    }
+    const publishedCount = actors.filter((h) => opened.has(h.id)).length + [...crowdCounts.values()].filter((n) => n > 0).length;
+    if (publishedCount > BOUNDS.people) this.splitPeople = true;
+    for (const h of actors) actorLayers.set(h.id, this.splitPeople ? `people-${districtSlug(districtOf(h.id) ?? '')}` : 'people');
+    for (const h of actors) if (opened.has(h.id)) this.peopleLayers.add(actorLayers.get(h.id)!);
+    for (const layer of this.peopleLayers) layers.set(layer, []);
     const crowdId = (cell: string) => `crowd-${cell}`;
     const crowdLayer = (cell: string) => this.splitPeople ? `people-${districtSlug(sim.w.index.cells[cell]?.district ?? '')}` : 'people';
     const endpoint = (id: string, seen = new Set<string>()): string => {
@@ -279,9 +286,7 @@ export class HolotableObserver {
         glyph: personGlyph(role), label: text.label, value: { name: name(h.id)!, ...(wording.roleWord(role) ? { role: wording.roleWord(role) } : {}) }, facets: text.facets,
       });
     }
-    for (const [cell, population] of sim.people.populationSnapshot()) {
-      const known = actors.filter((h) => /^xf:resident(?:-[0-5])?$/.test(h.kind) && opened.has(h.id) && ownerRegion(h.id) === cell).length;
-      const background = Math.max(0, population - known);
+    for (const [cell, background] of crowdCounts) {
       if (!background) continue;
       const who = wording.share(sim.w.index.cells[cell].presence);
       const layer = crowdLayer(cell); this.peopleLayers.add(layer);
