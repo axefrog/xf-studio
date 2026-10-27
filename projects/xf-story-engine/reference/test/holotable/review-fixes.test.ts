@@ -216,3 +216,9 @@ test('every sower gate reads as a plain reason, and an unknown numbered code nev
   expect(wording.reason('S3-gate-7')).toBe('a check did not pass');
   expect(wording.reason('phase-settling')).toBe('waiting for things to calm down');
 });
+
+test('numbered rule codes never pass the display guard, and refused sowing reads plainly', () => {
+  for (const code of ['Held back: gate 2', 'gate-10', 'S3-gate-7', 'blocked by gate12']) expect(wording.displayText(code)).toBeUndefined();
+  expect(wording.reason('sow-refused')).toBe("it couldn't be set up here");
+  expect(wording.displayText('Held back: waiting for things to calm down')).toBe('Held back: waiting for things to calm down');
+});

@@ -23,6 +23,9 @@ import { defaultReader, type Batch, type WorldPack } from '../../src/shadow/feed
 // rather than reuse the producer's guard or its combined regular expression.
 function hasInternals(value: string): boolean {
   if (/se:|xf[.:]|\?[a-z]|[{}\[\]]|not recorded|not opened|\bcoarse\b/i.test(value)) return true;
+  // Numbered rule codes such as 'gate 2', 'gate-10' or 'S3-gate-7'.
+  for (const token of value.toLowerCase().split(/[^a-z0-9-]+/)) if (/^gate-?\d/.test(token) || /^[a-z]\d+-/.test(token)) return true;
+  if (/\bgate \d/i.test(value)) return true;
   for (let i = 0; i < value.length - 1; i++) if (value[i] === '.' && '0123456789'.includes(value[i + 1])) return true;
   let hex = 0, digits = 0;
   for (const char of value.toLowerCase()) {
@@ -233,3 +236,8 @@ test('leading-dot decimal item labels are replaced before publication', () => sc
   expect(records).toHaveLength(3);
   for (const item of records) { expect(item.label).toBe('An item'); readable(item); }
 }));
+
+test('the independent checker flags numbered rule codes', () => {
+  for (const code of ['Held back: gate 2', 'gate-10', 'S3-gate-7', 'blocked by gate12']) expect(hasInternals(code)).toBe(true);
+  for (const plain of ['Held back: waiting for things to calm down', 'Day 2, 14:05', 'Kabuki, block 18']) expect(hasInternals(plain)).toBe(false);
+});
