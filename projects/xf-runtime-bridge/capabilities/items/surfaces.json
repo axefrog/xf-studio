@@ -439,10 +439,11 @@
     "summary": "A world-space canvas in the native overlay host: primitives, anchors, caps and a per-tick camera snapshot, with the radar view, so producers draw in game with no per-layer game-side code.",
     "area": "surfaces",
     "kind": "surface",
-    "stage": "planned",
+    "stage": "built",
     "evidence": "none",
     "health": "unknown",
     "priority": "P2",
+    "branch": "claude/bridge-canvas",
     "demand": [
       {
         "consumer": "holotable",
@@ -461,7 +462,7 @@
         "since": "2026-10-26"
       }
     ],
-    "updated": "2026-10-27"
+    "updated": "2026-10-28"
   },
   {
     "id": "surfaces.canvas-keys",
@@ -469,10 +470,11 @@
     "summary": "Show, hide and mode keys for the canvas through the bridge's own key route, rebindable in CET, with a canvas.visible state.",
     "area": "surfaces",
     "kind": "surface",
-    "stage": "proposed",
+    "stage": "built",
     "evidence": "none",
     "health": "unknown",
     "priority": "P2",
+    "branch": "claude/bridge-canvas",
     "depends_on": ["surfaces.canvas"],
     "demand": [
       {
@@ -484,7 +486,7 @@
         "since": "2026-10-26"
       }
     ],
-    "updated": "2026-10-27"
+    "updated": "2026-10-28"
   },
   {
     "id": "surfaces.lua-snapshot",

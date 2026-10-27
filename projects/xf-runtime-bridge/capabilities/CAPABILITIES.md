@@ -10,7 +10,7 @@
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 6 | 14 | 18 | 2 | 4 | 128 | 0 | 0 |
+| items | 6 | 12 | 17 | 2 | 7 | 128 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
@@ -26,7 +26,7 @@
 
 ### Evidence debt
 
-Built, merged or released capabilities with no game evidence (none or offline): 23. Age is in days to 2026-10-28.
+Built, merged or released capabilities with no game evidence (none or offline): 26. Age is in days to 2026-10-28.
 
 | Capability | Stage | Evidence | Since (version) | Age |
 |---|---|---|---|---:|
@@ -35,6 +35,7 @@ Built, merged or released capabilities with no game evidence (none or offline): 
 | [`character.live-pose`](#character.live-pose) Live posing (L0) | merged | offline | 2026-10-26 (0.3.0) | 2 d |
 | [`incidents.spawn-link`](#incidents.spawn-link) Actors joining an incident | merged | offline | 2026-10-26 (0.8.21) | 2 d |
 | [`lifecycle.options-read`](#lifecycle.options-read) Graphics settings record | merged | offline | 2026-10-26 (0.3.0) | 2 d |
+| [`link.display-feed`](#link.display-feed) The display access class and canvas.feed | built | none | 2026-10-26 | 2 d |
 | [`npc.gestures`](#npc.gestures) Gestures | merged | offline | 2026-10-26 (0.8.8) | 2 d |
 | [`photo.camera-place`](#photo.camera-place) Placing photo mode's camera directly | merged | offline | 2026-10-26 (0.5.2) | 2 d |
 | [`photo.camera-preset`](#photo.camera-preset) Rewriting a camera preset | merged | offline | 2026-10-26 (0.6.0) | 2 d |
@@ -44,6 +45,8 @@ Built, merged or released capabilities with no game evidence (none or offline): 
 | [`supervisor.actor-entries`](#supervisor.actor-entries) Supervising XF actors | merged | offline | 2026-10-26 (0.8.19) | 2 d |
 | [`supervisor.plan-module`](#supervisor.plan-module) Plans | merged | offline | 2026-10-26 | 2 d |
 | [`supervisor.while-away`](#supervisor.while-away) While you were away | merged | offline | 2026-10-26 (0.8.15) | 2 d |
+| [`surfaces.canvas`](#surfaces.canvas) World-space canvas (canvas@1) | built | none | 2026-10-26 | 2 d |
+| [`surfaces.canvas-keys`](#surfaces.canvas-keys) Canvas keys and canvas.visible | built | none | 2026-10-26 | 2 d |
 | [`tooling.capability-registry`](#tooling.capability-registry) The capability registry | merged | offline | 2026-10-26 | 2 d |
 | [`tooling.lint`](#tooling.lint) Lints and contracts | merged | offline | 2026-10-26 (0.3.0) | 2 d |
 | [`tooling.preflight`](#tooling.preflight) Session preflight | merged | offline | 2026-10-26 | 2 d |
@@ -208,20 +211,20 @@ Per consumer, blocking first.
 | Level | Ref | Milestone | Capability | Stage | Evidence | Need |
 |---|---|---|---|---|---|---|
 | needs | want 14 | M6 | [`link.observers`](#link.observers) | merged | partial | The headless service as a read-only observer (readOnly: true). The runner, the Story Engine and Holotable each want a slot, so please raise the default from 3 to 6 after measuring. |
-| needs | want 13 | M8 | [`link.display-feed`](#link.display-feed) | proposed | none | Bridge proposal C. Story Engine layers reach the overlay through it. |
+| needs | want 13 | M8 | [`link.display-feed`](#link.display-feed) | built | none | Bridge proposal C. Story Engine layers reach the overlay through it. |
 | needs | proposal 5.1 | M6 | [`recorder.catchup`](#recorder.catchup) | merged | partial | The live feed reads catch-up with detail: true and its cursor, at most once a second, backing off when there is no more. |
 | needs | milestone 6 | M6 | [`recorder.status`](#recorder.status) | merged | none | Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run. |
 | needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.actor-identity`](#recorder.actor-identity) | built | none | Story Engine shadow mode binds simulated residents to recorded actors; Holotable shows affiliation in the People layer. |
 | needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.deaths`](#recorder.deaths) | proposed | none | Story Engine shadow mode reacts to deaths; Holotable draws them as events. |
 | needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.combat`](#recorder.combat) | proposed | none | Shadow mode and Holotable timelines. |
 | needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.crime`](#recorder.crime) | proposed | none | Shadow mode and Holotable timelines. |
-| needs | want 10 | M7 | [`surfaces.canvas`](#surfaces.canvas) | planned | none | Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building. |
-| needs | want 11 | M7 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) | proposed | none | Show and hide while playing, without opening CET (CET blocks input). |
+| needs | want 10 | M7 | [`surfaces.canvas`](#surfaces.canvas) | built | none | Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building. |
+| needs | want 11 | M7 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) | built | none | Show and hide while playing, without opening CET (CET blocks input). |
 | needs | want 12 | M7 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) | proposed | none | Lets the overlay work with no other XF program running (bridge proposal B). |
 | wants | want 15 | M6 | [`recorder.observe-result`](#recorder.observe-result) | built | none | Lets Holotable draw what sessions already asked, at no extra game cost. |
 | wants | agent-layers clock | M6b | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) | built | none | Agents and the Story Engine may publish items in wall-clock time; live uses recorder.status start.at, replay has no mapping today. |
 | wants | agent-layers game clock | M6c | [`recorder.game-time`](#recorder.game-time) | built | none | Read alongside the existing sample on the game thread (no extra call). Until then producers stamp with the recording clock. |
-| wants | want plate | M7 | [`surfaces.canvas`](#surfaces.canvas) | planned | none | The design comes from the UI component track; the bridge exposes the token to canvas@1. |
+| wants | want plate | M7 | [`surfaces.canvas`](#surfaces.canvas) | built | none | The design comes from the UI component track; the bridge exposes the token to canvas@1. |
 
 #### Photo Mode Tools
 
@@ -253,7 +256,7 @@ The pipe, discovery, the writer seat and reader slots, the command catalogue, re
 | [`link.observers`](#link.observers) One writer and read-only observers | service | merged | partial | caveats | P2 |
 | [`link.catalogue`](#link.catalogue) One command catalogue | service | merged | proven | works | P3 |
 | [`link.undo`](#link.undo) Undo on every write | service | merged | partial | caveats | P3 |
-| [`link.display-feed`](#link.display-feed) The display access class and canvas.feed | service | proposed | none | unknown | P3 |
+| [`link.display-feed`](#link.display-feed) The display access class and canvas.feed | service | built | none | unknown | P3 |
 
 <a id="link.pipe"></a>
 
@@ -385,13 +388,14 @@ Each write logs what it changed with its reversal and returns a machine-readable
 
 ### The display access class and canvas.feed
 
-`link.display-feed` · service · stage **proposed** · evidence **none** · health **unknown** · P3
+`link.display-feed` · service · stage **built** · evidence **none** · health **unknown** · P3
 
 A display access class and a canvas.feed command usable from read-only connections, so producers such as the Story Engine can draw in game in bounded batches (1-4 Hz).
 
+- **Version:** branch `claude/bridge-canvas`
 - **Depends on:** [`surfaces.canvas`](#surfaces.canvas)
 - **Demand (holotable, needs, want 13, M8):** Bridge proposal C. Story Engine layers reach the overlay through it.
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 
 ## Safety
 
@@ -2810,8 +2814,8 @@ The ink panel, the XF overlay box, the CET window and line, their themes and mot
 | ↳ [`surfaces.motion`](#surfaces.motion) The motion setting | surface | merged | partial | works | P1 |
 | [`surfaces.overlay-set`](#surfaces.overlay-set) Overlay settings live | surface | merged | partial | unknown | P1 |
 | [`surfaces.overlay-state`](#surfaces.overlay-state) Overlay state | sense | merged | partial | caveats | P1 |
-| [`surfaces.canvas`](#surfaces.canvas) World-space canvas (canvas@1) | surface | planned | none | unknown | P2 |
-| [`surfaces.canvas-keys`](#surfaces.canvas-keys) Canvas keys and canvas.visible | surface | proposed | none | unknown | P2 |
+| [`surfaces.canvas`](#surfaces.canvas) World-space canvas (canvas@1) | surface | built | none | unknown | P2 |
+| [`surfaces.canvas-keys`](#surfaces.canvas-keys) Canvas keys and canvas.visible | surface | built | none | unknown | P2 |
 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) Read-only Lua snapshot for CET modules | sense | proposed | none | unknown | P3 |
 
 <a id="surfaces.ink-panel"></a>
@@ -3055,25 +3059,27 @@ overlay.state reports the XF box (on or off, hooked, drawing or why not, back bu
 
 ### World-space canvas (canvas@1)
 
-`surfaces.canvas` · surface · stage **planned** · evidence **none** · health **unknown** · P2
+`surfaces.canvas` · surface · stage **built** · evidence **none** · health **unknown** · P2
 
 A world-space canvas in the native overlay host: primitives, anchors, caps and a per-tick camera snapshot, with the radar view, so producers draw in game with no per-layer game-side code.
 
+- **Version:** branch `claude/bridge-canvas`
 - **Demand (holotable, needs, want 10, M7):** Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building.
 - **Demand (holotable, wants, want plate, M7):** The design comes from the UI component track; the bridge exposes the token to canvas@1.
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 
 <a id="surfaces.canvas-keys"></a>
 
 ### Canvas keys and canvas.visible
 
-`surfaces.canvas-keys` · surface · stage **proposed** · evidence **none** · health **unknown** · P2
+`surfaces.canvas-keys` · surface · stage **built** · evidence **none** · health **unknown** · P2
 
 Show, hide and mode keys for the canvas through the bridge's own key route, rebindable in CET, with a canvas.visible state.
 
+- **Version:** branch `claude/bridge-canvas`
 - **Depends on:** [`surfaces.canvas`](#surfaces.canvas)
 - **Demand (holotable, needs, want 11, M7):** Show and hide while playing, without opening CET (CET blocks input).
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 
 <a id="surfaces.lua-snapshot"></a>
 

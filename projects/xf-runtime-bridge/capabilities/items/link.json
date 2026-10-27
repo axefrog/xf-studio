@@ -260,10 +260,11 @@
     "summary": "A display access class and a canvas.feed command usable from read-only connections, so producers such as the Story Engine can draw in game in bounded batches (1-4 Hz).",
     "area": "link",
     "kind": "service",
-    "stage": "proposed",
+    "stage": "built",
     "evidence": "none",
     "health": "unknown",
     "priority": "P3",
+    "branch": "claude/bridge-canvas",
     "depends_on": ["surfaces.canvas"],
     "demand": [
       {
@@ -275,6 +276,6 @@
         "since": "2026-10-26"
       }
     ],
-    "updated": "2026-10-27"
+    "updated": "2026-10-28"
   }
 ]
