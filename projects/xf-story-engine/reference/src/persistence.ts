@@ -469,15 +469,6 @@ export class Persistence {
 
   // ---- the live persistable state (spec 14.1) ----
 
-  /** Eligibility within the selected save's candidate pins, without marking,
-   * recovery or mutation. Game readings need an observed twin or a retained
-   * dependency; callers without that context fail closed for new game pins. */
-  pinEligibleForPersistence(pin: Pin, context: { saved?: boolean; observedTwin?: boolean; kept?: boolean } = {}): boolean {
-    const saved = context.saved ?? this.base.pins.has(pin.id);
-    if (this.k.store.withdrawn.has(pin.id) && !saved) return false;
-    return pin.reason !== 'game' || saved || context.observedTwin === true || context.kept === true;
-  }
-
   /** Build the persistable view of the live state. */
   currentView(base: PersistedView = this.base): PersistedView {
     const k = this.k;
@@ -521,9 +512,13 @@ export class Persistence {
     const all = k.store.allPins().filter((p) => marked.has(p.node) || base.pins.has(p.id));
     for (const p of all) if (p.reason !== 'game') { keep.add(p.cause); if (p.evidence) keep.add(p.evidence); }
     for (const p of all) {
-      const observedTwin = p.reason === 'game' && all.some((o) => o.reason === 'observed' && o.node === p.node && o.slot === p.slot && o.valid.from === p.valid.from);
-      if (!this.pinEligibleForPersistence(p, { saved: base.pins.has(p.id), observedTwin, kept: keep.has(p.id) })) continue;
+      if (p.reason === 'game' && !base.pins.has(p.id)) {
+        const observedTwin = all.some((o) => o.reason === 'observed' && o.node === p.node && o.slot === p.slot && o.valid.from === p.valid.from);
+        if (!observedTwin && !keep.has(p.id)) continue;
+      }
       const w = k.store.withdrawn.get(p.id);
+      // A pin withdrawn before it was ever persisted is history, not state (SPEC-NOTES 19).
+      if (w && !base.pins.has(p.id)) continue;
       v.pins.set(p.id, w ? { pin: clone(p), withdrawn: { by: w.by, at: w.at } } : { pin: clone(p) });
     }
     return v;

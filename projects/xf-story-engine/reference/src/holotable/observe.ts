@@ -196,8 +196,7 @@ export class HolotableObserver {
     const opened = new Set<string>([sim.w.v]);
     for (const h of actors) {
       const named = headers.has(ownedId(h.id, 'name')) || k.persistence.savedHeader(ownedId(h.id, 'name')) !== undefined;
-      const detailed = k.store.pinsOfNode(h.id).some((p) => k.persistence.pinEligibleForPersistence(p) && (k.schema.slotInfo(h.kind, p.slot.split('@')[0])?.def.tier ?? 0) >= 3);
-      if (h.kind === 'xf:person' || h.origin.by === 'mirrored' || named || detailed) opened.add(h.id);
+      if (h.kind === 'xf:person' || h.origin.by === 'mirrored' || named) opened.add(h.id);
     }
     for (const ev of events.values()) for (const p of ev.participants) if (actorLayers.has(p.who)) opened.add(p.who);
     for (const e of l3?.state.pool ?? []) for (const id of Object.values(e.bindings)) if (actorLayers.has(id)) opened.add(id);

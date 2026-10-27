@@ -22,7 +22,8 @@ import { defaultReader, type Batch, type WorldPack } from '../../src/shadow/feed
 // Independent oracle: scan runs and parse exponent mantissa/suffix pairs,
 // rather than reuse the producer's guard or its combined regular expression.
 function hasInternals(value: string): boolean {
-  if (/se:|xf[.:]|\?[a-z]|\d+\.\d+|[{}\[\]]|not recorded|not opened|\bcoarse\b/i.test(value)) return true;
+  if (/se:|xf[.:]|\?[a-z]|[{}\[\]]|not recorded|not opened|\bcoarse\b/i.test(value)) return true;
+  for (let i = 0; i < value.length - 1; i++) if (value[i] === '.' && '0123456789'.includes(value[i + 1])) return true;
   let hex = 0, digits = 0;
   for (const char of value.toLowerCase()) {
     hex = '0123456789abcdef'.includes(char) ? hex + 1 : 0;
@@ -202,7 +203,7 @@ test('the internals checker covers facet keys as well as values', () => {
 });
 
 test('guard and independent checker reject embedded hashes, exponent numbers, long digits and syntax fragments', () => {
-  const bad = ['key_1234567890abcdef1234567890abcdef', 'prefix_DEADBEEFDEADBEEF_suffix', 'key_0123456789abcdef', '1e-7', '2E+10', '.5e2', '-1.2e-3', 'rate_3e7_value', 'key_0.123_value', '1234567890', 'xf.item:key', '?x', '{"key":', '["fragment"'];
+  const bad = ['key_1234567890abcdef1234567890abcdef', 'prefix_DEADBEEFDEADBEEF_suffix', 'key_0123456789abcdef', '1e-7', '2E+10', '.5e2', '-1.2e-3', 'rate_3e7_value', 'key_0.123_value', '.5', '-.5', '+.5', 'label_.5_suffix', '1234567890', 'xf.item:key', '?x', '{"key":', '["fragment"'];
   const base: Item = { schema: 'xfh/item-1', id: 'one', kind: 'point', t: 0, anchor: { region: 'r' }, cite: 'se:node:one' };
   for (const value of bad) {
     expect(text.displayText(value)).toBeUndefined();
@@ -213,3 +214,20 @@ test('guard and independent checker reject embedded hashes, exponent numbers, lo
     expect(() => readable({ ...base, label: value, facets: { about: value } })).not.toThrow();
   }
 });
+
+test('leading-dot decimal item labels are replaced before publication', () => scratch((dir) => {
+  const sim = quietSim('leading-dot-items', undefined, []), k = sim.k;
+  for (const [i, label] of ['.5', '-.5', '+.5'].entries()) {
+    const item = k.root(`decimal-item-${i}`, 'xf:item');
+    k.pin({ node: item, slot: 'label', value: label, reason: 'authored', cause: sim.w.v });
+    k.value(item, 'label');
+    k.addEdge({ type: 'xf:held-by', from: item, to: sim.w.v, cause: sim.w.v });
+    expect(text.itemName(label)).toBe('an item');
+  }
+  const observer = new HolotableObserver(sim), observation = observer.sample();
+  const publisher = new RunPublisher(dir, { set: 'decimal-items', title: 'Decimal items', from: observation.t, to: observation.t + 10 });
+  publisher.publish(observation);
+  const records = readFileSync(join(dir, 'items.jsonl'), 'utf8').trim().split('\n').slice(1).map((line) => JSON.parse(line));
+  expect(records).toHaveLength(3);
+  for (const item of records) { expect(item.label).toBe('An item'); readable(item); }
+}));

@@ -40,7 +40,7 @@ test('cold population estimates do not materialise or change on ordinary reads',
   expect(people(observer)).toEqual(cold);
 });
 
-test('name headers and observed detailed slots stay opened immediately across replacement loads', () => {
+test('name headers and frame evidence stay opened across replacement loads; detailed pins alone do not', () => {
   const sim = quietSim('review-replacement', undefined, []), cell = sim.w.districts[0].cellIds[0];
   const hh = sim.k.address(cell, 'households[0]'), a = sim.k.address(hh, 'm0');
   const b = sim.k.address(sim.k.address(cell, 'households[1]'), 'm0');
@@ -55,14 +55,14 @@ test('name headers and observed detailed slots stay opened immediately across re
   const check = () => {
     const rows = people(new HolotableObserver(sim));
     expect(rows.some((i) => i.id === a && i.kind === 'actor')).toBe(true);
-    expect(rows.some((i) => i.id === b && i.kind === 'actor')).toBe(true);
+    expect(rows.some((i) => i.id === b && i.kind === 'actor')).toBe(false);
     expect(rows.some((i) => i.id === c && i.kind === 'actor')).toBe(true);
-    expect(rows.find((i) => i.id === `crowd-${cell}`)?.label).toBe(`About ${Math.max(0, expected - 3)} people in the background`);
+    expect(rows.find((i) => i.id === `crowd-${cell}`)?.label).toBe(`About ${Math.max(0, expected - 2)} people in the background`);
   };
   check(); sim.k.persistence.save('opened'); sim.k.persistence.load('opened'); check();
 });
 
-test('a pin withdrawn before its first save cannot open a retained unnamed resident', () => {
+test('withdrawn pins cannot open a retained unnamed resident, including previously saved history', () => {
   for (const savedBeforeWithdrawal of [false, true]) {
     const sim = quietSim(`review-withdrawn-${savedBeforeWithdrawal}`, undefined, []), k = sim.k, cell = sim.w.districts[0].cellIds[0];
     const person = k.address(k.address(cell, 'households[0]'), 'm0');
@@ -70,16 +70,37 @@ test('a pin withdrawn before its first save cannot open a retained unnamed resid
     const pin = k.pin({ node: person, slot: 'age', value: 30, reason: 'authored', cause: sim.w.v });
     if (savedBeforeWithdrawal) k.persistence.save('before-withdrawal');
     k.withdrawPin(pin.id, sim.w.v);
-    expect(k.persistence.pinEligibleForPersistence(pin)).toBe(savedBeforeWithdrawal);
     const check = () => {
       const rows = people(new HolotableObserver(sim));
-      expect(rows.some((i) => i.id === person)).toBe(savedBeforeWithdrawal);
-      const expected = sim.people.populationSnapshot().get(cell)! - Number(savedBeforeWithdrawal);
+      expect(rows.some((i) => i.id === person)).toBe(false);
+      const expected = sim.people.populationSnapshot().get(cell)!;
       expect(rows.find((i) => i.id === `crowd-${cell}`)?.label).toBe(`About ${expected} people in the background`);
     };
     check(); k.persistence.save('after-withdrawal'); k.persistence.load('after-withdrawal'); check();
     expect(k.store.pinsOfNode(person).some((p) => p.id === pin.id)).toBe(savedBeforeWithdrawal);
   }
+});
+
+test('a detailed game pin kept by an authored dependency changes no people or crowds on save/load', () => {
+  const sim = quietSim('review-game-pin-dependency', undefined, []), k = sim.k, cell = sim.w.districts[0].cellIds[0];
+  const person = k.address(k.address(cell, 'households[0]'), 'm0');
+  k.retention.streamIn([person]);
+  const game = k.pin({ node: person, slot: 'age', value: 30, reason: 'game', cause: sim.w.v });
+  k.pin({ node: person, slot: 'boundary', value: 'keep', reason: 'authored', cause: sim.w.v, evidence: game.id });
+  const snapshot = () => {
+    const before = JSON.stringify(k.store.capture(), (_, value) => value instanceof Map ? [...value] : value instanceof Set ? [...value] : value);
+    const rows = people(new HolotableObserver(sim));
+    expect(JSON.stringify(k.store.capture(), (_, value) => value instanceof Map ? [...value] : value instanceof Set ? [...value] : value)).toBe(before);
+    expect(rows.some((i) => i.id === person)).toBe(false);
+    expect(rows.find((i) => i.id === `crowd-${cell}`)?.label).toBe(`About ${sim.people.populationSnapshot().get(cell)} people in the background`);
+    return rows.map(({ id, kind, label, facets }) => ({ id, kind, label, facets }));
+  };
+  const before = snapshot();
+  k.persistence.save('game-pin-dependency');
+  expect(snapshot()).toEqual(before);
+  k.persistence.load('game-pin-dependency');
+  expect(k.store.pinsOfNode(person).some((p) => p.id === game.id)).toBe(true);
+  expect(snapshot()).toEqual(before);
 });
 
 test('beliefs cover actual effect, news, cause, reason, grievance and mirrored alive vocabularies', () => {
