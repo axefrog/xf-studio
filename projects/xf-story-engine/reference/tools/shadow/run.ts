@@ -30,7 +30,7 @@ export async function runCli(args: string[]) {
   let host: ShadowHost | undefined;
   const prelude: Batch[] = [];
   const sink = { consume(batch: Batch) {
-    if (!host && !batch.v.length && !batch.actors.length) { prelude.push(batch); return; }
+    if (!host && !batch.v.length && !batch.actors.some(a => a.valid) && !batch.events.some(e => e.kind === 'incident')) { prelude.push(batch); return; }
     host ??= new ShadowHost(reader, world, batch.meta, out!, defaultStart, initialGameTime(batch, defaultStart));
     for (const earlier of prelude.splice(0)) host.consume(earlier);
     host.consume(batch);

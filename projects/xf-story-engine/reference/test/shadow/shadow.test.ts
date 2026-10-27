@@ -24,10 +24,113 @@ afterAll(() => { for (const p of folders) rmSync(p, { recursive: true, force: tr
 const world: WorldPack = { schema: 'xfh/world-pack-1', provenance: { game: 'synthetic', source: 'test', built: 'test' }, cells: [],
   areas: ['Kabuki', 'Northside', 'LittleChina'].map((name, i) => ({ id: `Districts.${name}`, name, kind: 'district', poly: [[i * 100, 0], [i * 100 + 90, 0], [i * 100 + 90, 90], [i * 100, 90]], zlo: -20, zhi: 200 })) };
 const meta: Batch['meta'] = { schema: 'xfh/session-1', session: 'synthetic', run: 1, worldGeneration: 1, pluginVersion: 'fixture', start: 100, end: 260, from: 100, to: 260,
-  channels: ['v', 'actors', 'camera', 'incidents', 'unknown-channel'], complete: true, dropped: 0, missedDeadlines: 0, largestGapS: 80, coverage: 'synthetic', problems: [] };
+  channels: ['v', 'actors', 'camera', 'incidents', 'unknown-channel'].map(name => ({ name, read: 0, kept: 0, dropped: 0, reasons: {} })), complete: true, dropped: 0, missedDeadlines: 0, largestGapS: 80, coverage: 'synthetic', problems: [] };
 const v = (t: number, seq = 1, position: [number, number, number] = [20, 20, 0]) => ({ t, seq, position, yaw: 0, speed: 0, health: 100, healthMax: 100, inCombat: false, vehicle: false, busy: '' });
-const batch = (): Batch => ({ meta, v: [v(100), v(180, 3), v(260, 5)], actors: [{ t: 101, who: 'a1', entity: 'entity-1', position: [21, 20, 0] }], camera: [], events: [], gaps: [] });
+const batch = (): Batch => ({ meta, v: [v(100), v(180, 3), v(260, 5)], actors: [{ t: 101, who: 'a1', valid: true, entity: 'entity-1', position: [21, 20, 0] }], camera: [], events: [], gaps: [] });
 const spool = (dir: string) => Object.fromEntries(readdirSync(dir).filter(f => f.endsWith('.jsonl')).sort().map(f => [f, readFileSync(join(dir, f), 'utf8')]));
+const peopleRows = (host: ShadowHost) => readFileSync(join(host.publisher.directory, 'people.jsonl'), 'utf8').trim().split('\n').slice(1).map(l => JSON.parse(l));
+const incident = (t: number, seq: number, receipt: NonNullable<Batch['events'][number]['incident']>): Batch['events'][number] => ({
+  t, seq, id: `incident-${seq}`, kind: 'incident', summary: 'Incident observation', level: 'full', cite: `recorder:synthetic:1:${seq}`, incident: receipt,
+});
+const emptyBatch = (): Batch => ({ meta, v: [], actors: [], camera: [], events: [], gaps: [] });
+
+test('invalid actor observations submit nothing and retract only that person until reobserved', () => {
+  const host = new ShadowHost(defaultReader, world, meta, temp());
+  host.consume({ ...batch(), v: [v(100), v(180)] });
+  const actor = mirroredId(host.key('a1')), before = peopleRows(host), inputs = host.summary().pendingInputs;
+  const submit = spyOn(host.port, 'submit');
+  host.consume({ ...emptyBatch(), actors: [{ t: 181, who: 'a1', valid: false, entity: 'entity-1', position: [999, 999, 999] }] });
+  expect(submit).not.toHaveBeenCalled(); submit.mockRestore();
+  expect(host.summary().pendingInputs).toBe(inputs);
+  expect(host.summary().unmapped['actor invalid']).toBe(1);
+  expect(peopleRows(host).slice(before.length)).toEqual([{ retract: actor, t: 181 }]);
+  const broken = peopleRows(host).length;
+  host.consume({ ...emptyBatch(), v: [v(260)] });
+  expect(peopleRows(host).slice(broken).filter(row => row.id === actor)).toEqual([]);
+  host.consume({ ...emptyBatch(), actors: [{ t: 261, who: 'a1', valid: true, position: [25, 20, 0] }], v: [v(340)] });
+  expect(peopleRows(host).filter(row => row.id === actor).at(-1).anchor).toEqual({ at: [25, 20, 0] });
+  expect(host.sim.k.value(actor, 'position')).toEqual([25, 20, 0]);
+});
+
+test('actor-only gap batches revoke all people without V, clock advancement or synthetic inputs', () => {
+  const host = new ShadowHost(defaultReader, world, meta, temp());
+  host.consume({ ...batch(), v: [v(100), v(180)], actors: [...batch().actors, { t: 102, who: 'a2', valid: true, position: [22, 20, 0] }] });
+  const before = host.summary(), position = host.sim.k.value(host.sim.w.vState, 'position'), rows = peopleRows(host).length;
+  const clock = spyOn(host.clock, 'at');
+  const resolve = spyOn(host.sim.k, 'value');
+  host.consume({ ...emptyBatch(), gaps: [{ from: 181, to: 181, fromSeq: 5, toSeq: 5, reason: 'invalid', channel: 'actors' }] });
+  expect(resolve).not.toHaveBeenCalled(); resolve.mockRestore();
+  expect(clock).not.toHaveBeenCalled(); clock.mockRestore();
+  const after = host.summary();
+  for (const key of ['windows', 'observations', 'inputs', 'pendingInputs', 'gameThrough', 'lastObservedGameTime', 'clock'] as const) expect(after[key]).toEqual(before[key]);
+  expect(host.sim.k.value(host.sim.w.vState, 'position')).toEqual(position);
+  expect(peopleRows(host).slice(rows).map(row => row.retract).sort()).toEqual(['a1', 'a2'].map(who => mirroredId(host.key(who))).sort());
+  // A later V sample still follows its own track through the actor-scoped gap.
+  host.consume({ ...emptyBatch(), v: [v(182, 6, [30, 20, 0]), v(260)] });
+  expect(host.sim.k.value(host.sim.w.vState, 'position')).toEqual([30, 20, 0]);
+  expect(defaultReader.snapshotAt({ ...host.session, v: [v(180), v(182)] }, 182, 'full', world).trail).toHaveLength(1);
+});
+
+test('channel coverage carries read/kept/dropped/reasons, sorted, including unmapped channels', () => {
+  const host = new ShadowHost(defaultReader, world, meta, temp());
+  const channels: Batch['meta']['channels'] = [
+    { name: 'z-unmapped', read: 7, kept: 2, dropped: 5, reasons: { unsupported: 3, invalid: 2 } },
+    { name: 'actors', read: 4, kept: 3, dropped: 1, reasons: { invalid: 1 } },
+    { name: 'incidents', read: 10, kept: 10, dropped: 0, reasons: {} },
+  ];
+  host.consume({ ...emptyBatch(), meta: { ...meta, channels } });
+  expect(host.summary().coverage.channels).toEqual([channels[1], channels[2], channels[0]]);
+  expect(host.summary().unmappedSourceChannels).toEqual(['z-unmapped']);
+  expect(JSON.stringify(host.summary().coverage.channels.at(-1)?.reasons)).toBe('{"invalid":2,"unsupported":3}');
+});
+
+test('witness reports feed admitted raw port events once per incident at the causal observation clock', () => {
+  const host = new ShadowHost(defaultReader, world, meta, temp());
+  const submit = spyOn(host.port, 'submit');
+  const report = { event: 'witness.report' as const, incident: 'inc-1', kind: 'assault',
+    place: { position: [20, 20, 0] as [number, number, number], first: [20, 20, 0] as [number, number, number], last: [20, 20, 0] as [number, number, number], district_v: 'Kabuki' },
+    when: { start_sim_s: 1, end_sim_s: 2, duration_s: 1, start_game_s: 10000, end_game_s: 10001 }, delayed: true };
+  expect(initialGameTime({ ...emptyBatch(), events: [incident(101, 2, report)] })).toBe(8);
+  host.consume({ ...emptyBatch(), v: [v(100)], events: [incident(101, 2, report), incident(102, 3, report)] });
+  host.consume({ ...emptyBatch(), events: [incident(103, 4, { ...report, incident: 'inc-2' })], v: [v(180)] });
+  const raws = submit.mock.calls.flatMap(([lines]) => lines).filter(line => line.op === 'event');
+  submit.mockRestore();
+  expect(raws.map(line => [line.kind, line.t])).toEqual([
+    ['game.incident', 8], ['game.witness.report', 8], ['game.witness.report', 16], ['game.incident', 24], ['game.witness.report', 24],
+  ]);
+  expect(raws.every(line => line.place === host.locate([20, 20, 0]).cell && !line.effects && line.participants.length === 0)).toBe(true);
+  expect(host.summary().mapped).toEqual({ 'game.incident': 2, 'game.witness.report': 3 });
+  const minted = [...host.sim.k.store.headers.keys()].flatMap(id => { const fact = host.sim.k.events.mintedFacts(id); return fact && fact.kind.startsWith('game.') ? [fact] : []; });
+  expect(minted.map(f => [f.kind, f.time]).sort()).toEqual(raws.map(line => [line.kind, line.t]).sort());
+  for (const name of ['game.incident', 'game.witness.report']) {
+    expect(host.sim.w.kinds.get(name)?.family).toBe('raw');
+    expect(host.sim.k.eventKinds.eventKind(name)?.fills).toEqual([]);
+    expect(host.sim.w.kinds.get(name)?.effects).toEqual([]);
+  }
+});
+
+test('incident gaps, unwitnessed receipts and coverage retain their counts and native coverage values', () => {
+  const host = new ShadowHost(defaultReader, world, meta, temp());
+  const events = [incident(101, 1, { event: 'witness.gap', incident: 'inc-gap', reason: 'queue_limit', queue_limit: 64 }),
+    incident(102, 2, { event: 'witness.unwitnessed', incident: 'inc-unseen' }),
+    incident(103, 3, { event: 'incident.coverage', reports: 2, dropped_invalid: 0, declared: 4, valid: false, tap_dropped_cap: 7 }),
+    incident(104, 4, { event: 'incident.coverage', reports: 3, dropped_invalid: 1, declared: 0, valid: true })];
+  host.consume({ ...emptyBatch(), v: [v(100)], events });
+  expect(host.summary().mapped).toEqual({});
+  expect(host.summary().unmapped).toMatchObject({ 'incident event:witness.gap': 1, 'incident event:witness.unwitnessed': 1, 'incident event:incident.coverage': 2 });
+  expect(host.summary().incidentReceipts).toEqual(events.map(e => ({ t: e.t, seq: e.seq, receipt: e.incident! })));
+});
+
+test('actor trail breaks retract inherited people only on the current save branch', () => {
+  const host = new ShadowHost(defaultReader, world, meta, temp());
+  host.consume({ ...batch(), v: [v(100), v(180)] });
+  const actor = mirroredId(host.key('a1'));
+  host.sim.k.persistence.save('shadow-branch');
+  host.consume({ ...emptyBatch(), actors: [{ t: 181, who: 'a1', valid: false }] });
+  expect(peopleRows(host).filter(row => row.retract === actor)).toEqual([{ retract: actor, t: 181, branch: 'shadow-branch' }]);
+  host.consume({ ...emptyBatch(), actors: [{ t: 182, who: 'a1', valid: true, position: [23, 20, 0] }], v: [v(260)] });
+  expect(peopleRows(host).filter(row => row.id === actor).at(-1)).toMatchObject({ branch: 'shadow-branch', anchor: { at: [23, 20, 0] } });
+});
 
 test('clock prefers game readings; fallback is causal, declared and rejects rollback', () => {
   const c = new ShadowClock(meta);
@@ -70,8 +173,8 @@ test('V maps to writer grid; actors are game readings without invented identity 
   expect(host.locate([120, 20, 0]).cell).toBeUndefined();
   const summary = host.summary();
   expect(summary.absentFromRecorder).toContain('actors.affiliation');
-  expect(summary.unquantifiedSourceChannels).toContain('unknown-channel');
-  expect(summary.pendingHolotableModel).toContain('typed incidents');
+  expect(summary.unmappedSourceChannels).toContain('unknown-channel');
+  expect(summary.coverage.channels.map(c => c.name)).toEqual(['actors', 'camera', 'incidents', 'unknown-channel', 'v']);
   const lines = readFileSync(join(host.publisher.directory, 'people.jsonl'), 'utf8').trim().split('\n').slice(1).map(l => JSON.parse(l));
   const a = lines.find(l => l.id === actor);
   expect(a.anchor).toEqual({ entity: 'entity-1' }); expect(a.value.name).toBe('Unidentified person');
@@ -85,6 +188,11 @@ test('V maps to writer grid; actors are game readings without invented identity 
 test('recording spools and summaries are byte-identical across independent runs', () => {
   const a = new ShadowHost(defaultReader, world, meta, temp()), b = new ShadowHost(defaultReader, world, meta, temp());
   const input = batch(); input.v = [v(100, 1, [120, 20, 0]), v(750, 2, [120, 20, 0])];
+  input.actors.push({ t: 200, who: 'a1', valid: false });
+  input.gaps.push({ from: 210, to: 210, fromSeq: 3, toSeq: 3, reason: 'invalid', channel: 'actors' });
+  input.events = [incident(110, 2, { event: 'witness.report', incident: 'inc-1' }),
+    incident(120, 3, { event: 'witness.report', incident: 'inc-1' }),
+    incident(130, 4, { event: 'incident.coverage', observed: 2, reports: 2, dropped_rate: 0 })];
   const shared = People.shared;
   a.consume(input); b.consume(input); expect(spool(a.publisher.directory)).toEqual(spool(b.publisher.directory));
   expect(People.shared).toBe(shared);
@@ -101,7 +209,8 @@ test('explicit paused game time does not advance windows through intervening act
   const host = new ShadowHost(defaultReader, world, meta, temp(), 0, 7200);
   const data = batch();
   data.v = [{ ...v(100), gameTime: 7200 }, { ...v(101), gameTime: 7200 }, { ...v(180), gameTime: 7800 }];
-  data.actors = [{ t: 100.5, who: 'a1', position: [20, 20, 0] }];
+  data.actors = [{ t: 100.5, who: 'a1', valid: true, position: [20, 20, 0] }];
+  data.events = [incident(100.6, 2, { event: 'witness.report', incident: 'paused-incident' })];
   const boundaries: number[] = [], evolution = host.sim.k.evolution, step = evolution.stepBoundary.bind(evolution);
   evolution.stepBoundary = report => { boundaries.push(evolution.cursor + 1); return step(report); };
   host.consume(data); expect(host.summary().windows).toBe(1);
@@ -112,7 +221,7 @@ test('explicit paused game time does not advance windows through intervening act
 test('latest source reading wins per node/slot/second across live batches', () => {
   const host = new ShadowHost(defaultReader, world, meta, temp(), 0, 600);
   const feed = (t: number, gameTime: number, position: [number, number, number]): Batch => ({ ...batch(),
-    v: [{ ...v(t, 1, position), gameTime }], actors: [{ t, who: 'a1', position }], camera: [], events: [], gaps: [] });
+    v: [{ ...v(t, 1, position), gameTime }], actors: [{ t, who: 'a1', valid: true, position }], camera: [], events: [], gaps: [] });
   host.consume(feed(100, 600.1, [20, 20, 0]));
   host.consume(feed(100.05, 600.5, [220, 20, 0]));
   host.consume(feed(100.1, 600.9, [120, 20, 0]));
@@ -130,7 +239,7 @@ test('CLI starts from the earliest observation with the consumption clock, holdi
   const data: Batch = { ...batch(), meta: { ...meta, gameTimeSamples: [{ source: 100, game: 0 }, { source: 275, game: 600 }] },
     v: [v(200), v(275)], actors: [] };
   expect(initialGameTime(data)).toBe(0);
-  expect(initialGameTime({ ...data, v: [{ ...v(200), gameTime: 900 }], actors: [{ t: 150, who: 'first', position: [20, 20, 0] }] })).toBe(0);
+  expect(initialGameTime({ ...data, v: [{ ...v(200), gameTime: 900 }], actors: [{ t: 150, who: 'first', valid: true, position: [20, 20, 0] }] })).toBe(0);
   expect(initialGameTime({ ...data, v: [v(275), v(200)] })).toBe(0);
   const folder = temp(), log = join(folder, 'input.jsonl'), pack = join(folder, 'world.json'), out = temp();
   writeFileSync(log, JSON.stringify({ schema: 'xfse/shadow-live-1' }) + '\n' + JSON.stringify({ batch: data }) + '\n');
@@ -227,7 +336,7 @@ test('simulated live batches use their own read slot at <=1 Hz; exact log replay
       expect(input.now).toBe(false); expect(input.detail).toBe(true); times.push(now);
       const i = pageNo++, t = [100, 180, 260][i];
       const records: any[] = [row(t, i * 2 + 1)];
-      if (i === 0) records.push({ ...row(101, 2), channel: 'actors', data: { actors: [{ who: 'a1', entity: 'entity-1', valid: true, position: [21, 20, 0] }] } });
+      if (i === 0) records.push({ ...row(101, 2), channel: 'actors', data: { actors: [{ who: 'a1', valid: true, entity: 'entity-1', position: [21, 20, 0] }] } });
       return { cursor: { sid: 'synthetic', run: 1, world: 1, record: i * 2 + 2, event: 0 }, records, events: [], calibration: { source_s: t, host_after_ms: now }, source: { active: true }, more: false };
     }, close() { closed = true; },
   };

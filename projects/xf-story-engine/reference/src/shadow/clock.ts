@@ -2,7 +2,9 @@ import type { Batch, Session } from './feed.ts';
 
 /** Use the same causal clock as consumption, at the earliest driving observation. */
 export function initialGameTime(batch: Batch, defaultStart = 0): number {
-  const t = Math.min(batch.v.reduce((t, v) => Math.min(t, v.t), Infinity), batch.actors.reduce((t, a) => Math.min(t, a.t), Infinity));
+  const t = Math.min(batch.v.reduce((t, v) => Math.min(t, v.t), Infinity),
+    batch.actors.filter(a => a.valid).reduce((t, a) => Math.min(t, a.t), Infinity),
+    batch.events.filter(e => e.kind === 'incident').reduce((t, e) => Math.min(t, e.t), Infinity));
   const v = batch.v.find(v => v.t === t);
   return new ShadowClock(batch.meta, defaultStart).at(t, v?.gameTime, !v).game;
 }
@@ -27,7 +29,7 @@ export class ShadowClock {
       derived = true;
       const anchor = this.anchor && (!recorded || this.anchor.source >= recorded.source) ? this.anchor : recorded;
       if (anchor && holdRecorded && this.previousSource >= anchor.source) {
-        game = this.previous; derived = this.previousDerived; this.rules.add('last effective game time held for actor samples');
+        game = this.previous; derived = this.previousDerived; this.rules.add('last effective game time held for actor/incident samples');
       }
       else if (anchor && (holdRecorded || recorded && anchor === recorded)) {
         game = anchor.game; derived = false; this.rules.add('recorded game time held between samples');

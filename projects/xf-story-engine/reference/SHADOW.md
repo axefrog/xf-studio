@@ -30,35 +30,59 @@ Actors become session/run-scoped mirrored people with sampled entity and positio
 They are labelled **Unidentified person**. Record, affiliation and crowd readings
 are absent and never inferred. Entity anchors use Holotable's actor track; a
 position-only actor uses its observed coordinates. An invalid/missing position
-is counted and is never presented as a new position reading.
+is counted and is never presented as a new position reading. `valid:false` breaks
+the actor's track even if a malformed sample carries coordinates. The host
+immediately removes a previously published actor from the people snapshot, letting
+the existing writer retract it at the break's QPC time on the current branch.
+Later windows suppress it until a valid position reobserves it. Historical game
+readings remain evidence: S1 does not permit withdrawing them. Failed whole-channel
+actor reads and shared recorder gaps break every known actor; actor-only gaps
+leave V's track and the clock untouched, including batches with no V sample.
 
-Typed incidents and per-channel omitted-row counts await Holotable's model.
-The host reserves raw `game.incident` and `game.witness.report` kinds with no
-effects or fills, but invents no incident input and derives nothing from them.
-S1 schema admission for these reserved kinds is also pending: registration alone
-does not extend the schema's event-kind enum. That engine interface change belongs
-to the incident follow-up, after Holotable's contract lands.
+Typed `witness.report` receipts submit raw `game.witness.report` events through
+ReplayPort, plus one raw `game.incident` per native incident id across the run.
+Both use the observation's whole game second from the feed clock, including for
+delayed reports; native `when` simulation intervals are not QPC and do not rewind
+the clock. The source position selects the existing cell/district where possible;
+the port's city fallback applies otherwise. Native participant roles are counted
+as unmapped rather than guessed into S1 roles or turned into actor-track readings.
+These raw kinds have no effects, fills or inferred derived events. Schema admission
+and registration live entirely inside the [host adapter](src/shadow/host.ts): S1Data's raw-kind list
+does not extend its schema enum, so the adapter extends only its own schema
+instance and registers the two evidence-only kinds. Engine code is unchanged.
+
+`witness.gap`, `witness.unwitnessed` and `incident.coverage` receipts are counted
+under `unmapped` and listed individually under `incidentReceipts`, with their
+QPC time, sequence and typed payload. Coverage values (including zeros and false)
+are carried through per receipt; cumulative counters and gauges are never summed
+across heartbeats. `mapped` counts the submitted raw kinds. Reports without a
+native incident id still submit the witness report and count the missing identity.
 There is no private recording parser or sidecar. Death, combat and crime events,
-plus actor record, affiliation and crowd, are listed as absent from the recorder.
+as separate channels, plus actor record, affiliation and crowd, are listed as
+absent from the recorder. Native incident classifications remain incident evidence.
 The V combat flag remains an unmapped sample field, not a synthesized combat event.
 
 The summary counts unmapped modeled camera samples, timeline-event kinds and
-unused V fields, and lists source channels the reader does not carry as
-**unquantified**. Reader omissions are explicit; zero actors or incidents does
-not establish an empty street. The next recording needs nonempty actor samples
-and typed incident/witness reports, exposed by Holotable, to validate that path.
+unused V fields. `coverage.channels` carries Holotable's real per-channel
+`{name, read, kept, dropped, reasons}`, sorted by name with sorted reason keys.
+`unmappedSourceChannels` lists channels the shadow host does not map, including
+modeled content that it only counts. Per-channel counts cover rows actually read;
+they include intentional reader omissions, and are distinct from the manifest's
+global dropped count and transport/chunk gaps. Zero actor observations or witness
+reports does not establish an empty street. A further recording needs nonempty
+actor samples and witness reports to validate those mappings with recorded data.
 
 ## Time, determinism and limits
 
 The host uses sampled game time when available. Recorded game-time anchors are
-held between their samples; actor samples hold the last effective clock value
+held between their samples; actor and incident samples hold the last effective clock value
 and its derived/recorded label, including after a V sample extrapolated an
 intermittent explicit clock. A new explicit sample still refuses a real rollback.
 With no game
 clock, it uses QPC elapsed seconds times eight from the session start, beginning
 at the declared default game epoch zero (`--default-game-start` overrides it).
 The summary names every rule used. Actual game-clock rollback refuses the run.
-CLI initialization uses this same clock at the earliest V or actor observation.
+CLI initialization uses this same clock at the earliest V, valid actor or incident observation.
 The simulation starts at that observation's containing window through the existing
 `Sim.startAt` interface; boundaries before that window never execute.
 
@@ -66,8 +90,8 @@ Readings use whole game seconds. Until a window closes, the adapter coalesces ea
 node/slot/second to its latest source observation, including across live batches,
 so pin-hash arbitration cannot select an older subsecond position. Position,
 district and cell therefore come from the same latest valid V sample. The summary's
-`inputs` counts submitted coalesced readings; `pendingInputs` includes buffered
-readings in the unfinished window.
+`inputs` counts submitted coalesced readings and raw events; `pendingInputs`
+includes buffered readings and queued events in the unfinished window.
 
 Every manifest uses `clock: "recording"` and binds its session and run. Item and
 retraction times are the QPC observation that drove their completed window.
@@ -95,24 +119,58 @@ Retain a live log only while needed for replay, then delete it.
 
 ## Offline evidence
 
-The named street recording has 6,524 V samples, no actors and 374 modeled
-timeline events (373 voice, one line). It produces eight completed windows:
+The named street recording has 6,524 V samples, no actor observations (despite
+6,524 kept actor-channel rows), and 993 modeled timeline events (373 voice, one
+line, 619 incident coverage receipts). It has no witness reports, witness gaps or
+unwitnessed receipts: zero raw incidents and zero raw witness reports are mapped.
+The raw-report path therefore has synthetic offline evidence only.
+It produces eight completed windows:
 25 places, 1,597 people, four groups, two ties and one simulated event; all seven
 other layers are empty. These people/events are simulation results, not mirrored
 street observations. Its V stays in Little China, which has no simulation cells.
 Its clock rule is QPC × 8 from the declared default game epoch. Twelve layer
-spools and `summary.json` are byte-identical across reruns. Its source marks coverage incomplete,
-with five dropped rows. Three source channels (face, incidents, UI) are
-unquantified until Holotable exposes reader omission counts. Bounded captions
+spools and `summary.json` are byte-identical across reruns (27 October 2026).
+Its source marks coverage incomplete, with five globally dropped rows. The
+per-channel counts total 25,062 read, 20,565 kept and 4,497 dropped; these include
+intentional reader omissions and are not the same measure as the global five.
+
+| Channel | Read | Kept | Dropped | Reasons |
+|---|---:|---:|---:|---|
+| actors | 6,524 | 6,524 | 0 | — |
+| camera | 6,524 | 6,524 | 0 | — |
+| contacts | 619 | 0 | 619 | no mapped content: 619 |
+| face | 779 | 0 | 779 | not mapped: 779 |
+| incidents | 619 | 619 | 0 | — |
+| subtitles | 642 | 1 | 641 | invalid: 2; no mapped content: 639 |
+| supervisor | 619 | 0 | 619 | no mapped content: 619 |
+| ui | 1,030 | 0 | 1,030 | not mapped: 1,030 |
+| v | 6,524 | 6,524 | 0 | — |
+| voice | 1,182 | 373 | 809 | invalid: 2; no mapped content: 807 |
+
+All 619 incident coverage payloads are retained. The final receipt reports 2,539
+observed/accepted/admitted observations, zero reports, zero pending reports and
+report gaps, and 1,470 repeat evidence coalescences. Unmapped host counts are
+6,524 camera samples, 373 voice events, one line event and 619 coverage receipts;
+all 6,524 V samples have unused non-position fields and are in a real district
+without simulation cells. The seven unmapped source channels are camera,
+contacts, face, subtitles, supervisor, UI and voice. Bounded captions
 report eight truncations in places; no unknown glyphs occur.
 
-The alternate combat recording likewise has no actors. Synthetic fixtures test
-V/cell mapping, game-layer actor readings, explicit absence, schema refusal,
-read-only command enforcement, simulated live cadence and exact live-log replay.
+The alternate combat recording previously likewise had no actors. Synthetic fixtures test
+V/cell mapping, game-layer actor readings, invalid observations, immediate scoped
+retractions and reappearance, actor-only gaps without V or clock advancement,
+sorted channel coverage, raw incident deduplication/timing/schema admission,
+unmapped incident receipts, schema refusal, byte-identical reruns with incidents
+and breaks, read-only command enforcement, simulated live cadence and exact live-log replay.
 The live safety regression traverses the real shadow adapter and `CommandApi.run`
 with an injected native transport that requires reader selection and rejects
 every method outside the retained-data read allowlist. Transport-log failure tests
 cover both discovery and catch-up receipts, with budget and disk failures.
+Validation: 21 shadow tests pass; the guarded default suite has 1,733 passes,
+46 skips and no failures. The frozen v3 digest remains
+`746601727380a3fdff647f873c91c971`, and v4 remains
+`8fce55b19462a1e02f03ca5336bd8c16`. Typechecking, Markdown links and the
+private-path scan pass. Scratch spools and logs are removed after verification.
 No game session was run. See [performance evidence](PERFORMANCE.md) and
 [Holotable's writer contract](HOLOTABLE.md).
 
