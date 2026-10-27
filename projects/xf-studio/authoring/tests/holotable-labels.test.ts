@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { actorCaption, createPlateObstacles, gameSpan, itemTitle, labelContext, labelPriority, layerCounts, placeLabels, type AgentLabel, type PlateObstacle } from "../src/features/holotable/view/agent-labels";
+import { actorCaption, createPlateObstacles, gameSpan, itemTitle, labelContext, labelPriority, layerCounts, placeLabels, placeLabelSteps, type AgentLabel, type PlateObstacle } from "../src/features/holotable/view/agent-labels";
 import { agentInRange } from "../src/features/holotable/view/agent-bounds";
 import { camera, fitOrbit, ORBITS } from "../src/features/holotable/view/projection";
 import type { AgentItem } from "../src/features/holotable/agent-types";
@@ -121,9 +121,18 @@ test("bounds culling retains paths, areas, fields and relations crossing the 350
 test("community labels keep the largest at a collision, respect plates even when selected, and show at most twelve",()=>{
  const community=(key:string,n:number,x=20,y=30):AgentLabel=>({...label(key,4,x,y),text:`Community · ${n} ${n===1?"spot":"spots"}`,communitySpots:n});
  const large=community("large",20),small=community("small",1);
- expect(placeLabels([small,large],measure,1100,400).map(l=>l.key)).toEqual(["large"]);
+ expect(placeLabels([large,small],measure,1100,400).map(l=>l.key)).toEqual(["large"]);
  expect(placeLabels([{...large,selected:true,plate:{x:20,y:30,radius:9}}],measure,1100,400,40,[],[{key:"poi",x:60,y:30,radius:9}])).toEqual([]);
  const many=Array.from({length:20},(_,i)=>community(String(i),20-i,20+(i%5)*210,30+Math.floor(i/5)*50));
- const placed=placeLabels(many.reverse(),measure,1100,400);
+ const placed=placeLabels(many,measure,1100,400);
  expect(placed).toHaveLength(12);expect(placed.map(l=>l.communitySpots)).toEqual(Array.from({length:12},(_,i)=>20-i));
+});
+
+test("dense blocked communities measure at most 64 candidates, with placement resumable in small slices",()=>{
+ let measured=0;
+ const candidates=Array.from({length:10000},(_,i)=>({...label(String(i),4),communitySpots:10000-i,selected:i===9999}));
+ const steps=placeLabelSteps(candidates,()=>{measured++;return 120;},850,500,40,[],{add(){},overlaps:()=>true});
+ let previous=0,yields=0,step=steps.next();
+ while(!step.done){expect(measured-previous).toBeLessThanOrEqual(8);previous=measured;yields++;step=steps.next();}
+ expect(step.value).toEqual([]);expect(measured).toBe(64);expect(yields).toBeGreaterThan(8);
 });

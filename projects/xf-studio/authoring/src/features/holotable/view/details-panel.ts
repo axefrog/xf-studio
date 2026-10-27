@@ -79,7 +79,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
     title.append(card.title);
     const body=h("div",{"data-holo-card":key},title,h("p",{style:"white-space:pre-line;overflow-wrap:anywhere",text:card.summary}));
     if(card.when)body.append(h("h5",{text:"When"}),note(card.when,"muted"));
-    if(card.involved.length){const chips=h("div",{class:"control-line",style:"flex-wrap:wrap"});for(const chip of card.involved)chips.append(button({label:chip.label,small:true,variant:"quiet",onClick:()=>focusItem(chip.key)}));if(card.more)chips.append(note(`+${card.more} more`,"muted"));body.append(h("h5",{text:"Involved"}),chips);}
+    if(card.involved.length||card.furtherAway){const chips=h("div",{class:"control-line",style:"flex-wrap:wrap"});for(const chip of card.involved)chips.append(button({label:chip.label,small:true,variant:"quiet",onClick:()=>focusItem(chip.key)}));if(card.more)chips.append(note(`+${card.more} more`,"muted"));body.append(h("h5",{text:"Involved"}),chips);if(card.furtherAway)body.append(note(`${card.furtherAway} more further away`,"muted"));}
     const open=facade.preference("technical"),id=uid("holotable-base-technical"),technical=propertyList(card.technical,{label:"Technical details"});technical.id=id;technical.hidden=!open;
     const disclosure=expander("row",{expanded:open,controls:id},expanderLabel("Technical"));disclosure.addEventListener("click",()=>{const expanded=disclosure.getAttribute("aria-expanded")!=="true";facade.remember("technical",expanded);setExpanded(disclosure,expanded);technical.hidden=!expanded;});body.append(disclosure,technical);return body;
   }

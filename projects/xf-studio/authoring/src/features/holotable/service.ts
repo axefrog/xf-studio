@@ -136,10 +136,13 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     if (!answer.ok || !data?.ok) throw Object.assign(new Error(data?.error?.message ?? `The Holotable service answered ${answer.status}.`), { code: answer.status === 404 ? "unavailable" : data?.error?.code ?? "failed" });
     return data.result as T;
   };
+  const contentConsumer=crypto.randomUUID();let contentDemand=Promise.resolve();
   const contexts=worldContexts({later,
     source:()=>visible&&state.open&&(state.open.dir!=="live"||watchId) ? {identity:`${state.open.dir}:${state.open.session.meta.session}:${state.open.session.meta.run}`,
       params:{...(state.open.dir==="live"?{watch:watchId}:{dir:state.open.dir}),...((state.layers.pois||state.layers.spots||state.layers.communities)?{content:true}:{})}} : undefined,
-    load:(params,cancel)=>call<HoloWorld>("world.around",params,cancel),
+    load:(params,cancel)=>call<HoloWorld>("world.around",{...params,...(params.content?{contentConsumer}:{})},cancel),
+    // Preserve acquire/release order, including the final release after this service's signal ends.
+    contentDemand:wanted=>{contentDemand=contentDemand.then(()=>call("world.content.demand",{consumer:contentConsumer,wanted},AbortSignal.timeout(5000))).then(()=>{},()=>{});},
     changed:world=>{if(state.open&&!signal.aborted)set({open:{...state.open,world:{...world,extent:world.extent??state.open.world.extent}}});},
   },signal);
   // Listing and opening are separate requests: a refresh never cancels an open in flight. Each supersedes only its own kind.

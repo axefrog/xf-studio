@@ -9,7 +9,7 @@ import { holotableFacade } from "../src/features/holotable/facade";
 import { holotableDetailsPanel } from "../src/features/holotable/view/details-panel";
 import { keyBinding } from "../src/app/input-bindings";
 import type { AgentAnswer, AgentItem } from "../src/features/holotable/agent-types";
-import type { HoloSession } from "../src/features/holotable/types";
+import type { HoloContent, HoloSession } from "../src/features/holotable/types";
 import type { ModuleViewContext } from "../src/studio-ui/views/feature-view";
 import type { HolotableFacade } from "../src/features/holotable/facade";
 
@@ -25,8 +25,8 @@ test("legend groups glyphs and kind fallbacks into stable families, leaving unma
  expect(counts.get("person")?.count).toBe(3);expect(counts.get("marker")?.count).toBe(3);expect(counts.has("relation")).toBe(false);expect(counts.has("influence")).toBe(false);
  const sparse=new Map<string,LegendEntry>();addLegend(sparse,{...item("only"),glyph:undefined});expect(orderedLegend(sparse).map(e=>FAMILY_TITLES[e.family])).toEqual(["People"]);
 });
-async function fixture(layers:AgentAnswer=answer){
- const ctl=new AbortController();const service=createHolotable({later:()=>()=>{},transport:async(method)=>({ok:true,status:200,data:{ok:true,result:method==="runs.list"?[{dir:"synthetic",session:"s",run:1,start:0,end:864000,bytes:0,complete:true}]:method==="session.open"?session:method==="world.around"?{provenance:null,areas:[],cells:[]}:method==="layers.watch"?{watch:"test"}:method==="layers.poll"?layers:{}}})},ctl.signal);
+async function fixture(layers:AgentAnswer=answer,content?:HoloContent){
+ const ctl=new AbortController();const service=createHolotable({later:(ms,run)=>{if(content&&ms===250){const timer=setTimeout(run,0);return()=>clearTimeout(timer);}return()=>{};},transport:async(method)=>({ok:true,status:200,data:{ok:true,result:method==="runs.list"?[{dir:"synthetic",session:"s",run:1,start:0,end:864000,bytes:0,complete:true}]:method==="session.open"?session:method==="world.around"?{provenance:null,areas:[],cells:[],content}:method==="layers.watch"?{watch:"test"}:method==="layers.poll"?layers:{}}})},ctl.signal);
  service.shown();await service.dispatch({kind:"holo.refresh"});await service.dispatch({kind:"holo.open",dir:"synthetic"});return {ctl,service};
 }
 
@@ -38,6 +38,19 @@ test("overlapping plates merge transitively and split on reprojection, with fixe
  const job=clusterPlateSteps(dense);let yields=0,step=job.next();while(!step.done){yields++;step=job.next();}expect(yields).toBeGreaterThan(200);expect(step.value.hidden.size).toBe(5000);
  expect(result.clusters).toHaveLength(1);expect(result.visits).toBeLessThanOrEqual(dense.length*16);
  expect(clusterPlates(dense.slice(0,12),true).clusters).toHaveLength(0);expect(clusterPlates(dense.slice(0,13),true).clusters).toHaveLength(1);
+});
+
+test("community Details offers only resolvable spot buttons and a non-interactive further-away line",async()=>{
+ const content:HoloContent={available:true,slices:["test"],pois:[],spots:[{id:"near",place:"test",at:[0,0,0],yaw:0,communities:["c"]}],communities:[{id:"c",place:"test",entries:[{name:"resident",phases:[{name:"Morning",spots:["near","far"]}]}]}]};
+ const {service,ctl}=await fixture(answer,content),facade=holotableFacade(service);
+ await service.dispatch({kind:"holo.layer",id:"communities",on:true});await service.dispatch({kind:"holo.layer",id:"spots",on:true});service.context(ctl.signal).want([0,0,0]);await new Promise(resolve=>setTimeout(resolve,5));
+ const panel=holotableDetailsPanel({facade,changed(){},targets:()=>({}),dispatch:(action:HoloAction)=>service.dispatch(action)} as unknown as ModuleViewContext<HolotableFacade>),root=panel.spec.element as unknown as LightElement;
+ try{
+  await service.dispatch({kind:"holo.select",id:"base:communities:c"});panel.update(undefined as never);
+  expect(root.textContent).toContain("1 more further away");
+  const buttons=root.querySelectorAll("button");expect(buttons.filter(b=>b.textContent.startsWith("Spot ·"))).toHaveLength(1);expect(buttons.some(b=>b.textContent.includes("further away"))).toBe(false);
+  buttons.find(b=>b.textContent==="Spot · 1")!.dispatchEvent(lightEvent("click"));expect(service.snapshot().selected).toBe("base:spots:near");
+ }finally{panel.dispose?.();ctl.abort();}
 });
 
 test("focus stores eight detached viewpoints; back animates for 300 ms and reduced motion is instant",()=>{

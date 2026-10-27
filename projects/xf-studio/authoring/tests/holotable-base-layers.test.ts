@@ -28,19 +28,53 @@ test("base cards keep raw values in Technical and expose phases and bounded chip
  expect(baseCard(content,"base:pois:p")).toMatchObject({title:"Ripperdoc",summary:"Point of interest",technical:[["Id","p"],["Variant","ServicePointRipperdocVariant"],["Record","1"],["Journal","journal/p"]]});
  expect(baseCard(content,"base:spots:s1")).toMatchObject({title:"Spot",summary:"Stand around, Talk to friend",involved:[{key:"base:communities:c",label:"Community"}]});
  expect(baseCard(content,"base:communities:c")).toMatchObject({summary:"Street vendor · 1",when:"1 time phase",more:0,involved:[{key:"base:spots:s1",label:"Spot · stand around"},{key:"base:spots:s2",label:"Spot · 2"},{key:"base:spots:far",label:"Spot · 3"}]});
- const many={...content,communities:[{...content.communities[0],entries:[{name:"resident",record:"12345",phases:[{name:"night",spots:Array.from({length:20},(_,i)=>String(i))}]}]}]};
+ const many={...content,spots:Array.from({length:20},(_,i)=>({...content.spots[0],id:String(i)})),communities:[{...content.communities[0],entries:[{name:"resident",record:"12345",phases:[{name:"night",spots:Array.from({length:20},(_,i)=>String(i))}]}]}]};
  expect(baseCard(many,"base:communities:c")).toMatchObject({summary:"1 character type",more:8});expect(baseCard(many,"base:communities:c")?.involved).toHaveLength(12);
 });
+
+test("community chips resolve only nearby response spots and count distant links separately",()=>{
+ const nearby={...content,spots:[content.spots[0]],communities:[{...content.communities[0],entries:[{name:"resident",phases:[{name:"Morning",spots:["s1","distant","s1"]}]}]}]};
+ const card=baseCard(nearby,"base:communities:c")!;
+ expect(card.involved).toEqual([{key:"base:spots:s1",label:"Spot · stand around"}]);
+ expect(card.more).toBe(0);expect(card.furtherAway).toBe(1);
+ for(const chip of card.involved)expect(baseItem(nearby,chip.key)).toBeDefined();
+ expect(baseCard({...nearby,spots:[]},"base:communities:c")).toMatchObject({involved:[],more:0,furtherAway:2});
+});
+
+test("community size order is prepared once per content response and cooperates with the frame budget",()=>{
+ let sizesRead=0;
+ const communities=Array.from({length:200},(_,i)=>({id:String(i),place:"test",get entries(){sizesRead++;return [{name:"resident",phases:[{name:"Morning",spots:Array.from({length:i+1},(_,s)=>String(s))}]}];}}));
+ const dense={...content,communities,spots:[{...content.spots[0],communities:communities.map(c=>c.id)}]};
+ const prepare=()=>{const steps=baseLayerSteps(dense,{pois:false,spots:false,communities:true});let yields=0,step=steps.next();while(!step.done){yields++;step=steps.next();}return {items:step.value,yields};};
+ const first=prepare();expect(first.items.map(i=>i.id)).toEqual(communities.map(c=>c.id).reverse());expect(first.yields).toBeGreaterThan(300);expect(sizesRead).toBe(200);
+ expect(prepare().items.map(i=>i.id)).toEqual(first.items.map(i=>i.id));expect(sizesRead).toBe(200);
+ baseLayerItems({...dense}, {pois:false,spots:false,communities:true});expect(sizesRead).toBe(400);
+});
+
+test("content demand follows active leases, layer demand, reset and lifetime release",()=>{
+ const ctl=new AbortController(),a=new AbortController(),b=new AbortController(),demands:boolean[]=[],timers=new Set<()=>void>();let enabled=true;
+ const contexts=worldContexts({source:()=>({identity:"test",params:{content:enabled}}),later:(_ms,fn)=>{timers.add(fn);return()=>{timers.delete(fn);};},load:async()=>({provenance:null,areas:[],cells:[]}),changed(){},contentDemand:wanted=>demands.push(wanted)},ctl.signal);
+ try{
+  const one=contexts.lease(a.signal),two=contexts.lease(b.signal);expect(demands).toEqual([]);
+  one.want([0,0,0]);two.want([100,0,0]);expect(demands).toEqual([true]);
+  a.abort();expect(demands).toEqual([true]);enabled=false;contexts.refresh(true);expect(demands).toEqual([true,false]);
+  enabled=true;contexts.refresh(true);expect(demands).toEqual([true,false,true]);b.abort();expect(demands).toEqual([true,false,true,false]);
+  const c=new AbortController(),three=contexts.lease(c.signal);three.want([0,0,0]);contexts.reset();expect(demands.slice(-2)).toEqual([true,false]);
+  three.want([0,0,0]);ctl.abort();expect(demands.slice(-2)).toEqual([true,false]);c.abort();expect(timers.size).toBe(0);
+ }finally{a.abort();b.abort();ctl.abort();}
+});
 test("view leases acquire content only while a base layer is enabled and static content never adds a change",async()=>{
- const ctl=new AbortController(),view=new AbortController(),timers=new Set<()=>void>(),calls:Record<string,unknown>[]=[];
+ const ctl=new AbortController(),view=new AbortController(),timers=new Set<()=>void>(),calls:Record<string,unknown>[]=[],demands:Record<string,unknown>[]=[];
  const session={meta:{session:"test",run:1,start:0,end:100,from:0,to:100,channels:[],complete:true,dropped:0,missedDeadlines:0,largestGapS:0,coverage:"",problems:[]},v:[],camera:[],events:[],gaps:[]};
- const service=createHolotable({later:(ms,fn)=>{if(ms===250)timers.add(fn);return()=>timers.delete(fn);},transport:async(method,p)=>{let result:unknown={};if(method==="runs.list")result=[{dir:"r",session:"test",run:1}];if(method==="session.open")result=session;if(method==="world.around"){calls.push(p);result={provenance:null,areas:[],cells:[],content:{...content,...(p.content?{}:{pois:[],spots:[],communities:[]})}};}return {ok:true,status:200,data:{ok:true,result}};}},ctl.signal);
+ const service=createHolotable({later:(ms,fn)=>{if(ms===250)timers.add(fn);return()=>timers.delete(fn);},transport:async(method,p)=>{let result:unknown={};if(method==="runs.list")result=[{dir:"r",session:"test",run:1}];if(method==="session.open")result=session;if(method==="world.content.demand")demands.push(p);if(method==="world.around"){calls.push(p);result={provenance:null,areas:[],cells:[],content:{...content,...(p.content?{}:{pois:[],spots:[],communities:[]})}};}return {ok:true,status:200,data:{ok:true,result}};}},ctl.signal);
  const settle=()=>new Promise(r=>setTimeout(r,0)),flush=async()=>{for(const fn of [...timers]){timers.delete(fn);fn();}await settle();};
  try{
   service.shown();await settle();await service.dispatch({kind:"holo.open",dir:"r"});service.context(view.signal).want([0,0,0]);await flush();expect(calls.every(c=>!c.content)).toBe(true);
   expect(service.snapshot().layers).toMatchObject({pois:false,spots:false,communities:false});await service.dispatch({kind:"holo.layer",id:"pois",on:true});await flush();expect(calls.at(-1)?.content).toBe(true);expect(service.nextVisibleChange()).toBeUndefined();
   await service.dispatch({kind:"holo.layer",id:"pois",on:false});await flush();expect(calls.at(-1)?.content).toBeUndefined();
-  view.abort();expect(service.snapshot().open?.world.content?.pois).toEqual([]);
+  await service.dispatch({kind:"holo.layer",id:"communities",on:true});await flush();
+  view.abort();expect(service.snapshot().open?.world.content?.pois).toEqual([]);await settle();
+  expect(demands.map(p=>p.wanted)).toEqual([true,false,true,false]);expect(new Set(demands.map(p=>p.consumer)).size).toBe(1);expect(calls.at(-1)?.contentConsumer).toBe(demands[0].consumer);
  }finally{view.abort();ctl.abort();}
 });
 

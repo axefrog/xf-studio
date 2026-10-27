@@ -48,7 +48,7 @@ const until = <T>(p: Promise<T>, signal: AbortSignal) => new Promise<T>((resolve
 
 /** Holds sessions by folder (loaded once, shared by every requester) and the world pack. */
 export function createService(options: ServiceOptions) {
-  const content = worldContentFiles(options.worldContentDir ?? join(dirname(options.worldPackPath), "world"));
+  const content = worldContentFiles(options.worldContentDir ?? join(dirname(options.worldPackPath), "world"), options.liveClock);
   const layers = createLayerSpool(options.layersRoot ?? defaultOptions().layersRoot!);
   const solids = options.solidSource ?? createSolidWorkerPort(options.solidCacheDir ?? join(import.meta.dir, "..", "..", "..", "local", "holotable", "cache"));
   const sessions = new Map<string, Session>();
@@ -183,6 +183,11 @@ export function createService(options: ServiceOptions) {
       const s = await open(await known(p.dir, true, signal), signal);
       return solids.status ? solids.status(pathFor(s), signal) : { cold: false };
     },
+    "world.content.demand": (p, signal) => {
+      signal.throwIfAborted();
+      if(typeof p.consumer!=="string"||!p.consumer.length||p.consumer.length>128||typeof p.wanted!=="boolean")throw coded("bad_request","Content demand needs a consumer and wanted flag.");
+      content.demand(p.consumer,p.wanted);return {wanted:p.wanted};
+    },
     "world.around": async (p, signal) => {
       if (typeof p.watch === "string" && p.center === undefined) {
         // Validate and renew this watch without asking the bridge for anything.
@@ -196,6 +201,8 @@ export function createService(options: ServiceOptions) {
       if (!Number.isFinite(margin) || margin < 0 || margin > 1000) throw coded("bad_request", "Margin must be between 0 and 1000 metres.");
       const path = pathFor(s, p.center), geometry = await solids.around(path, margin, signal);
       signal.throwIfAborted();
+      // A child may have restarted since the explicit acquire; a region read restores its demand.
+      if(p.content===true&&typeof p.contentConsumer==="string"&&p.contentConsumer.length>0&&p.contentConsumer.length<=128)content.demand(p.contentConsumer,true);
       return { ...(w ? region(w, boxOf(path), margin) : { schema: "xfh/world-pack-1", provenance: null, areas: [], cells: [] }), ...geometry, content: content.around(w ?? undefined, path, margin, p.content === true, signal) };
     },
     "session.report": async (p, signal) => {

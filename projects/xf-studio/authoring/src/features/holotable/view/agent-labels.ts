@@ -46,13 +46,16 @@ export function actorCaption(value: string): string {
   const line = value.replace(/\s+/g, " ").trim();
   return line.length > 28 ? line.slice(0, 27).trimEnd() + "…" : line;
 }
-/** Greedy, deterministic label culling. Important labels displace ordinary text by being placed first. */
-export function placeLabels(candidates: readonly AgentLabel[], measure: (text: string) => number, width: number, height: number, cap = 40, reserved: readonly LabelBounds[] = [],plates:readonly PlateObstacle[]|PlateObstacles=[]): PlacedLabel[] {
-  const placed: PlacedLabel[] = [], names = new Set<string>(), consumed=new Set<AgentLabel>();let communities=0;
+export const COMMUNITY_LABEL_ATTEMPTS = 64;
+/** Greedy culling. Community input already follows its content's cached size order. */
+export function* placeLabelSteps(candidates: readonly AgentLabel[], measure: (text: string) => number, width: number, height: number, cap = 40, reserved: readonly LabelBounds[] = [],plates:readonly PlateObstacle[]|PlateObstacles=[]): Generator<void,PlacedLabel[]> {
+  const placed: PlacedLabel[] = [], names = new Set<string>(), consumed=new Set<AgentLabel>();let communities=0,work=0;
   if (width < 8 || height < 18) return placed;
   const obstacles="overlaps" in plates?plates:createPlateObstacles();
   if(!("overlaps" in plates))for(const plate of plates)obstacles.add(plate);
-  const ordered = [...candidates].sort((a, b) => Number(!!b.selected&&b.communitySpots===undefined)-Number(!!a.selected&&a.communitySpots===undefined) || a.priority - b.priority || (b.communitySpots??0)-(a.communitySpots??0) || Number(!!a.caption) - Number(!!b.caption) || a.key.localeCompare(b.key));
+  const ordinary:AgentLabel[]=[],community:AgentLabel[]=[];
+  for(const candidate of candidates){if(work++%64===0)yield;if(candidate.communitySpots===undefined)ordinary.push(candidate);else if(community.length<COMMUNITY_LABEL_ATTEMPTS)community.push(candidate);}
+  const ordered = ordinary.sort((a, b) => Number(!!b.selected)-Number(!!a.selected) || a.priority - b.priority || Number(!!a.caption) - Number(!!b.caption) || a.key.localeCompare(b.key)).concat(community);
   const fitText=(candidate:AgentLabel)=>{
     let text=candidate.text,size=measure(text);
     if(size>width-8){
@@ -63,9 +66,10 @@ export function placeLabels(candidates: readonly AgentLabel[], measure: (text: s
     return {...candidate,text,width:size};
   };
   for (const candidate of ordered) {
+    if(work++%8===0)yield;
     if (placed.length >= cap) break;
     if(consumed.has(candidate))continue;
-    if(candidate.communitySpots!==undefined&&communities>=12)continue;
+    if(candidate.communitySpots!==undefined&&communities>=12)break;
     if (candidate.caption && !names.has(candidate.key)) continue;
     if(candidate.selected&&candidate.plate&&!candidate.caption&&candidate.communitySpots===undefined){
       const caption=ordered.find(c=>c.caption&&c.key===candidate.key),lines=[fitText(candidate),...(caption&&placed.length+1<cap?[fitText(caption)]:[])];
@@ -85,6 +89,9 @@ export function placeLabels(candidates: readonly AgentLabel[], measure: (text: s
     if (!candidate.caption) names.add(candidate.key);
   }
   return placed;
+}
+export function placeLabels(...args:Parameters<typeof placeLabelSteps>):PlacedLabel[] {
+  const steps=placeLabelSteps(...args);let step=steps.next();while(!step.done)step=steps.next();return step.value;
 }
 
 export function itemTitle(item: AgentItem, items: readonly AgentItem[], owner?: string): string {

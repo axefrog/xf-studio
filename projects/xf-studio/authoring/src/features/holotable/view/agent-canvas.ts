@@ -6,7 +6,7 @@ import type { Vec3 } from "../types";
 import type { camera } from "./projection";
 import { clusterPlateSteps, clearSelectedPlate, clusterRadius, type PlateCluster } from "./clusters";
 import { addLegend, orderedLegend, FAMILY_TITLES, type LegendEntry } from "./friendly";
-import { actorCaption, createPlateObstacles, labelContext, labelPriority, placeLabels, type AgentLabel, type LabelBounds, type PlacedLabel } from "./agent-labels";
+import { actorCaption, COMMUNITY_LABEL_ATTEMPTS, createPlateObstacles, labelContext, labelPriority, placeLabelSteps, type AgentLabel, type LabelBounds, type PlacedLabel } from "./agent-labels";
 
 import { BADGE_TONES, glyphIcon } from "./glyphs";
 import { playbackEffects, EFFECT_MARKERS, type PaintedMarker } from "./playback-effects";
@@ -117,6 +117,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
   const labels = document.createElement("canvas"); labels.style.cssText = canvas.style.cssText; labels.setAttribute("aria-hidden", "true"); canvas.after(labels); labels.after(motionCanvas);
   const text = labels.getContext("2d")!;
   let candidates: AgentLabel[] = [], labelsPainted = false, previousHover: string | null = null;
+  let communityCandidates=0,labelPreparation:ReturnType<typeof placeLabelSteps>|undefined;
   let overlayLabels: PlacedLabel[] = [], previousOverlay = "";
   let badges: LabelBounds[] = [];
   let plates = createPlateObstacles();
@@ -129,7 +130,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
   const path = (ctx: CanvasRenderingContext2D, ps: readonly XY[], closed = false) => { if (!ps.length) return; ctx.moveTo(...ps[0]); for (let i = 1; i < ps.length; i++) ctx.lineTo(...ps[i]); if (closed) ctx.closePath(); };
   function clear(width: number, height: number) {
     painted = new Map(); paintFailed = false;legend.clear();baseCounts.pois=baseCounts.spots=baseCounts.communities=0;screenClusters=[];currentCollapsed=new Set();preparation=undefined;prepared=undefined;clusterCursor=0;clusterMember=0;
-    previous = undefined; cursor = 0; fieldCell = 0; candidates = []; labelsPainted = false; badges = []; plates = createPlateObstacles(); overlayLabels = [];
+    previous = undefined; cursor = 0; fieldCell = 0; candidates = []; communityCandidates=0;labelPreparation=undefined;labelsPainted = false; badges = []; plates = createPlateObstacles(); overlayLabels = [];
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) { canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); }
     labels.width = Math.round(width * dpr); labels.height = Math.round(height * dpr);
@@ -180,6 +181,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     let label = rule.label.replace("{label}", item.label ?? "").replace("{name}", item.value?.name ?? "actor").replace("{type}", item.value?.type ?? "");
     if(item.base==="communities"){
       if(!item.opacity)return "skip";
+      if(communityCandidates++>=COMMUNITY_LABEL_ATTEMPTS)return "skip";
       addLabel(label,[xy[0],xy[1]]);return "drawn";
     }
     const a = item.resolvedAnchor ?? item.anchor;
@@ -312,7 +314,10 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       if (cursor >= items.length && !labelsPainted) {
         text.font = ctx.font;
         text.strokeStyle = stageColour; text.lineWidth = 3; text.lineJoin = "round";
-        const placed = placeLabels([...candidates, ...overlays], value => text.measureText(value).width, C.width, C.height, 40, badges,plates);
+        labelPreparation??=placeLabelSteps([...candidates, ...overlays], value => text.measureText(value).width, C.width, C.height, 40, badges,plates);
+        let placed:PlacedLabel[]|undefined;
+        while(performance.now()<=deadline){const step=labelPreparation.next();if(step.done){placed=step.value;labelPreparation=undefined;break;}}
+        if(!placed){paintFailed=true;effects.clear();return {pending:true,drawn,total:items.length};}
         overlayLabels = placed.filter(label => label.overlay);
         for (const label of placed.filter(label => !label.overlay)) {
           text.globalAlpha = label.alpha; text.fillStyle = label.colour;

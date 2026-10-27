@@ -11,8 +11,14 @@ export function worldContexts(options: {
   load(params: Record<string,unknown>, signal: AbortSignal): Promise<HoloWorld>;
   later(ms:number, run:()=>void): ()=>void;
   changed(world:HoloWorld): void;
+  contentDemand?(wanted:boolean):void;
 }, signal: AbortSignal) {
   const rows=new Set<Row>(),jobs=new Map<string,Job>();
+  let contentWanted=false;
+  function demand(){
+    const wanted=!signal.aborted&&options.source()?.params.content===true&&[...rows].some(row=>row.position);
+    if(wanted!==contentWanted){contentWanted=wanted;options.contentDemand?.(wanted);}
+  }
   function cancel(row: Row){row.stop?.();row.stop=undefined;row.ctl?.abort();row.ctl=undefined;}
   function publish(){
     const ready=[...rows].filter(row=>row.world),union=new Map<string,HoloSolid>();
@@ -64,7 +70,7 @@ export function worldContexts(options: {
     const source=options.source();if(!source||signal.aborted||!rows.has(row))return;
     const same=row.source?.identity===source.identity;
     if(!force&&same&&row.position&&Math.hypot(...position.map((n,i)=>n-row.position![i]))<=(moved?0:150))return;
-    cancel(row);row.source=source;row.position=[...position] as Vec3;
+    cancel(row);row.source=source;row.position=[...position] as Vec3;demand();
     const ctl=new AbortController();row.ctl=ctl;
     row.stop=options.later(250,()=>{
       row.stop=undefined;
@@ -76,13 +82,13 @@ export function worldContexts(options: {
       });
     });
   }
-  function reset(){for(const row of rows){cancel(row);row.source=undefined;row.position=undefined;row.world=undefined;row.cut=0;}}
+  function reset(){for(const row of rows){cancel(row);row.source=undefined;row.position=undefined;row.world=undefined;row.cut=0;}demand();}
   signal.addEventListener("abort",()=>{reset();rows.clear();},{once:true});
   return {
     lease(lifetime:AbortSignal):WorldContextLease {
       const row:Row={};if(!signal.aborted&&!lifetime.aborted)rows.add(row);
       lifetime.addEventListener("abort",()=>{
-        cancel(row);if(!rows.delete(row))return;publish();
+        cancel(row);if(!rows.delete(row))return;demand();publish();
         // A departing view frees its quota. Remaining views can recover their full selection from the shared sector cache.
         for(const other of rows)if(other.position&&other.world&&!other.ctl)want(other,other.position,false,true);
       },{once:true});
@@ -90,7 +96,7 @@ export function worldContexts(options: {
     },
     reset,
     /** Live observations refresh only regions still wanted; a pan already pending keeps its own debounce. */
-    refresh(force=false) { for (const row of rows) if (row.position && (force || !row.ctl)) want(row, row.position, false, true); },
+    refresh(force=false) { demand();for (const row of rows) if (row.position && (force || !row.ctl)) want(row, row.position, false, true); },
     active:()=>rows.size>0,
   };
 }

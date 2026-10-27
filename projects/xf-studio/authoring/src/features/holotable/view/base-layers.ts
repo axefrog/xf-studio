@@ -23,7 +23,31 @@ export type BaseSwitches = Readonly<{ pois: boolean; spots: boolean; communities
 const marker = (type: "pois"|"spots"|"communities", id: string, at: Vec3, label: string): AgentItem => ({
   id, key:`base:${type}:${id}`, base:type, kind:type==="communities"?"label":"point", anchor:{at}, place:at, label, tone:"muted",
 });
-/** Every source traversal yields after 64 records; sorting is bounded by the reader's 50k cap. */
+const communityOrders=new WeakMap<HoloContent,readonly HoloContent["communities"][number][]>();
+/** Stable source-size order belongs to a content response, not to a camera frame. */
+function* communityOrder(content:HoloContent):Generator<void,readonly HoloContent["communities"][number][]> {
+  const cached=communityOrders.get(content);if(cached)return cached;
+  let work=0,rows:{community:HoloContent["communities"][number];size:number}[]=[];
+  for(const community of content.communities){
+    if(work++%64===0)yield;const ids=new Set<string>();
+    for(const entry of community.entries){if(work++%64===0)yield;for(const phase of entry.phases){if(work++%64===0)yield;for(const id of phase.spots){if(work++%64===0)yield;ids.add(id);}}}
+    rows.push({community,size:ids.size});
+  }
+  // Cooperative merge sort also bounds the first load's uninterrupted work.
+  for(let span=1;span<rows.length;span*=2){
+    const next:typeof rows=[];
+    for(let start=0;start<rows.length;start+=2*span){
+      const mid=Math.min(start+span,rows.length),end=Math.min(start+2*span,rows.length);let a=start,b=mid;
+      while(a<mid||b<end){if(work++%64===0)yield;
+        const left=rows[a],right=rows[b];
+        if(b>=end||a<mid&&(left.size>right.size||left.size===right.size&&left.community.id.localeCompare(right.community.id)<=0))next.push(rows[a++]);else next.push(rows[b++]);
+      }
+    }
+    rows=next;
+  }
+  const ordered:HoloContent["communities"][number][]=[];for(const row of rows){if(work++%64===0)yield;ordered.push(row.community);}communityOrders.set(content,ordered);return ordered;
+}
+/** Every source traversal and initial community ordering yields after 64 records. */
 export function* baseLayerSteps(content: HoloContent | undefined, on: BaseSwitches, C?: ReturnType<typeof camera>): Generator<void, AgentItem[]> {
   if(!content)return [];
   let work=0;const items:AgentItem[]=[],spots:typeof content.spots[number][]=[];
@@ -47,7 +71,7 @@ export function* baseLayerSteps(content: HoloContent | undefined, on: BaseSwitch
       const sums=new Map<string,{at:[number,number,number];n:number}>();
       for(const s of spots){if(work++%64===0)yield;for(const id of s.communities){if(work++%64===0)yield;const sum=sums.get(id)??{at:[0,0,0],n:0};sum.n++;for(let i=0;i<3;i++)sum.at[i]+=s.at[i];sums.set(id,sum);}}
       // Keep presence independent of label opacity: the Show count includes close communities.
-      for(const c of content.communities){if(work++%64===0)yield;const sum=sums.get(c.id);if(sum)items.push({...marker("communities",c.id,sum.at.map(n=>n/sum.n) as [number,number,number],communityLabel(sum.n)),opacity:alpha,communitySpots:sum.n});}
+      for(const c of yield* communityOrder(content)){if(work++%64===0)yield;const sum=sums.get(c.id);if(sum)items.push({...marker("communities",c.id,sum.at.map(n=>n/sum.n) as [number,number,number],communityLabel(sum.n)),opacity:alpha,communitySpots:sum.n});}
   }
   return items;
 }
@@ -65,10 +89,10 @@ export function baseItem(content:HoloContent|undefined,key:string):AgentItem|und
     return {...marker("communities",c.id,[0,1,2].map(axis=>spots.reduce((sum,s)=>sum+s.at[axis],0)/spots.length) as [number,number,number],communityLabel(spots.length)),communitySpots:spots.length};}
 }
 
-export interface BaseCard { title:string; summary:string; when?:string; involved:{key:string;label:string}[]; more:number; technical:[string,string][] }
+export interface BaseCard { title:string; summary:string; when?:string; involved:{key:string;label:string}[]; more:number; furtherAway:number; technical:[string,string][] }
 export function baseCard(content:HoloContent|undefined,key:string):BaseCard|undefined {
   if(!content)return;
-  const card:BaseCard={title:"",summary:"",involved:[],more:0,technical:[]};
+  const card:BaseCard={title:"",summary:"",involved:[],more:0,furtherAway:0,technical:[]};
   const p=content.pois.find(p=>`base:pois:${p.id}`===key);
   if(p){card.title=poiTitle(p);card.summary=card.title==="Place"?"Map pin":"Point of interest";card.technical=[["Id",p.id],["Variant",p.variant??p.kind],...(p.record?[["Record",p.record] as [string,string]]:[]),...(p.journal?[["Journal",p.journal] as [string,string]]:[])];return card;}
   const s=content.spots.find(s=>`base:spots:${s.id}`===key);
@@ -83,7 +107,8 @@ export function baseCard(content:HoloContent|undefined,key:string):BaseCard|unde
     const coded=[...phases].some(name=>name.trim().length<=3||!/^\p{L}+(?:[ '\u2019-]\p{L}+)*$/u.test(name));
     card.when=coded?`${phases.size} time ${phases.size===1?"phase":"phases"}`:[...phases].join(", ");
     const byId=new Map(content.spots.map(s=>[s.id,s]));
-    card.involved=[...spots].slice(0,12).map((id,index)=>{const tag=byId.get(id)?.workspot?.tags[0]?.replace(/[-_]+/g," ").trim();return {key:`base:spots:${id}`,label:`Spot · ${tag||index+1}`};});
-    card.more=Math.max(0,spots.size-12);card.technical=[["Id",c.id],...(raw.length?[["Character records",raw.join(", ")] as [string,string]]:[]),...(coded?[["Time phases",[...phases].join(", ")] as [string,string]]:[])];return card;
+    const nearby=[...spots].filter(id=>byId.has(id));
+    card.involved=nearby.slice(0,12).map((id,index)=>{const tag=byId.get(id)?.workspot?.tags[0]?.replace(/[-_]+/g," ").trim();return {key:`base:spots:${id}`,label:`Spot · ${tag||index+1}`};});
+    card.more=Math.max(0,nearby.length-12);card.furtherAway=spots.size-nearby.length;card.technical=[["Id",c.id],...(raw.length?[["Character records",raw.join(", ")] as [string,string]]:[]),...(coded?[["Time phases",[...phases].join(", ")] as [string,string]]:[])];return card;
   }
 }
