@@ -59,7 +59,7 @@ export interface PoolEntry {
 }
 export interface Layer3State {
   schema: 1 | 2;
-  /** Typed story kind retained after graph configuration is unloaded. Absent on legacy worlds. */
+  /** Effective story schema: adopted when graphs install, restored solely from this marker on load. */
   storyData?: true;
   slots: { open: { next: number } };
   nextSeq: number;

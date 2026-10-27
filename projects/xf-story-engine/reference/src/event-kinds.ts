@@ -78,6 +78,11 @@ export class EventKinds {
     return [...this.entries.keys()].sort();
   }
 
+  /** Remove an owner's declaration when restoring configuration; invalidate derived projections. */
+  unregister(name: string): void {
+    if (this.entries.delete(name)) this.version++;
+  }
+
   /** The reason a `data` record is refused for an event of `kind`, or undefined when it is allowed (S0 9.2). Absent data on a kind with declared fields is not allowed either. */
   dataProblem(kind: string, data: Record<string, Value> | undefined): string | undefined {
     if (data === undefined) {

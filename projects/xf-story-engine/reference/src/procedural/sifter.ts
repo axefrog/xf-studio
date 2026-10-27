@@ -174,6 +174,8 @@ export class Sifter {
         else if (p.graph && b.change) this.graph.onChange(p, b.change, undefined, b.event.time);
         else this.onEvent(p, b.event);
       }
+      // Empty or obsolete emissions still consume one resumable queue step.
+      if (this.work === before) this.work++;
       cost += this.work - before;
       // Matching can publish a story at this occurrence's time. Merge it before
       // any later occurrence, retaining the same budget across the whole chain.

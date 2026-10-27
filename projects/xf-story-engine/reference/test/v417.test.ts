@@ -30,6 +30,23 @@ const STORY = {
   },
 } as const;
 
+test('restoring kind declarations invalidates projections and permits a later re-adoption', () => {
+  const k = kernel('registry-restore');
+  k.eventKinds.register(STORY as never);
+  k.eventKinds.register({ name: 'meta:other', producers: ['fixture'] });
+  const version = k.eventKinds.version;
+  k.eventKinds.unregister('meta:story');
+  expect(k.eventKinds.version).toBe(version + 1);
+  expect(k.eventKinds.names()).not.toContain('meta:story');
+  expect(k.eventKinds.dataProblem('meta:story', undefined)).toBeUndefined();
+  expect(k.eventKinds.eventKind('meta:other')?.producers).toEqual(['fixture']);
+  k.eventKinds.unregister('meta:story');
+  expect(k.eventKinds.version).toBe(version + 1);
+  k.eventKinds.register(STORY as never);
+  expect(k.eventKinds.version).toBe(version + 2);
+  expect(k.eventKinds.dataProblem('meta:story', undefined)).toContain('needs its data record');
+});
+
 describe('F-26: data on meta: events (V4-50)', () => {
   function world(name: string) {
     const k = kernel(name);

@@ -6,6 +6,7 @@ import { layeredWeek } from './layered-week.ts';
 import { HolotableObserver } from '../../src/holotable/observe.ts';
 import { serialize } from 'node:v8';
 import { H, s, id } from '../../src/id.ts';
+import { Budget } from '../../src/work.ts';
 
 function mixedWorld(name: string, aftermath = false) {
   const stage = pattern({ version: 7 });
@@ -101,6 +102,110 @@ test('a stage story precedes later occurrences in the same batch, independent of
   const split = run(true);
   expect(run(false)).toEqual(split);
   expect(run(false, true)).toEqual(split);
+});
+
+test('adoption is saved while graphs remain loaded; removing graphs at load preserves typed stage output', () => {
+  for (const snapshot of [false, true]) {
+    const name = `adopt-loaded-${snapshot}`, stage = pattern({ version: 7 });
+    const source = graphWorld(name, library);
+    source.k.config.snapshotEvery = snapshot ? 1 : 10000;
+    expect(source.l3.installPatterns([...library, stage]).filter((f) => f.level === 'error')).toEqual([]);
+    expect(source.l3.state.storyData).toBe(true);
+    source.k.persistence.save('adopted'); source.k.persistence.save('still-loaded');
+    const stageOnly = world(name, { patterns: [stage] }), graphAtLoad = graphWorld(name, library);
+    for (const fresh of [stageOnly, graphAtLoad]) {
+      for (const [id, record] of source.k.persistence.chain) fresh.k.persistence.chain.set(id, structuredClone(record));
+      fresh.k.persistence.load('still-loaded');
+    }
+    for (const w of [source, stageOnly, graphAtLoad]) {
+      expect(w.l3.installPatterns([stage])).toEqual([]);
+      complete(w); w.l3.flush();
+      expect(w.l3.kv.event(w.l3.state.pool[0].story!)?.data?.outcome).toBe('complete');
+    }
+    const observe = (w: typeof source) => ({ state: w.l3.state, story: w.l3.kv.event(w.l3.state.pool[0].story!), candidates: w.l3.sower.collect(w.l3.counts) });
+    expect(observe(stageOnly)).toEqual(observe(source));
+    expect(observe(graphAtLoad)).toEqual(observe(source));
+  }
+});
+
+test('rewinding to pre-adoption state removes the schema even when graph configuration remains loaded', () => {
+  for (const snapshot of [false, true]) {
+    const name = `adopt-rewind-${snapshot}`, stage = pattern({ version: 7 });
+    const make = () => {
+      const w = graphWorld(name);
+      w.k.config.snapshotEvery = snapshot ? 1 : 10000;
+      expect(w.l3.installPatterns([stage])).toEqual([]);
+      w.k.persistence.save('pre-adoption'); w.k.persistence.save('pre-adoption-again');
+      return w;
+    };
+    const original = make(), adopted = make();
+    expect(adopted.l3.installPatterns([...library, stage]).filter((f) => f.level === 'error')).toEqual([]);
+    expect(adopted.k.eventKinds.eventKind('meta:story')?.dataFields).toBeDefined();
+    adopted.k.persistence.load('pre-adoption-again');
+    expect(adopted.l3.state.storyData).toBeUndefined();
+    expect(adopted.k.eventKinds.eventKind('meta:story')?.dataFields).toBeUndefined();
+    // Do not re-install patterns: that would be a new, explicit adoption.
+    for (const w of [original, adopted]) { complete(w); w.k.settle({ to: 600 }); w.l3.flush(); }
+    const observe = (w: typeof original) => ({ state: w.l3.state, story: w.l3.kv.event(w.l3.state.pool[0].story!) });
+    expect(observe(adopted)).toEqual(observe(original));
+    expect(observe(adopted).story?.data).toBeUndefined();
+  }
+});
+
+test('entry-only graph matches report work and yield within one boundary invocation', () => {
+  const make = () => {
+    const stage = pattern({ once: undefined });
+    const p = simple({ id: 'xf.test:entry-only', entry: ['first'], edges: [],
+      junctures: { first: { fn: 'story', args: { pattern: stage.id, outcome: 'complete' }, binds: { a: '?a', b: '?b' } } },
+      outcomes: { done: { reached: ['first'], kind: 'resolved' } }, tell: { form: 'recap', binds: { subject: '?a', other: '?b' } } });
+    const w = graphWorld('entry-budget', [p]);
+    expect(w.l3.installPatterns([p, stage]).filter((f) => f.level === 'error')).toEqual([]);
+    for (let n = 0; n < 10; n++) complete(w, 100 + n * 10);
+    return { ...w, p };
+  };
+  const direct = make(), first = direct.l3.state.buffer[0].event, beforeDirect = direct.l3.sifter.work;
+  direct.l3.sifter.onEvent(direct.l3.sifter.patterns.get(direct.p.id)!, first);
+  expect(direct.l3.sifter.work).toBeGreaterThan(beforeDirect);
+  const small = make(), large = make();
+  const before = small.l3.sifter.work, originalStories = new Set(small.l3.state.buffer.map((b) => b.event.id));
+  expect(small.l3.sifter.boundary(600, 0, new Budget(1))).toBe(false);
+  expect(small.l3.sifter.work).toBeGreaterThan(before);
+  expect(small.l3.state.pool.filter((e) => e.graph && e.complete)).toHaveLength(1);
+  expect(small.l3.state.buffer.filter((b) => originalStories.has(b.event.id))).toHaveLength(9);
+  let done = false;
+  for (let n = 0; n < 100 && !done; n++) done = small.l3.sifter.boundary(600, 0, new Budget(1));
+  expect(done).toBe(true);
+  expect(large.l3.sifter.boundary(600, 0, new Budget(100000))).toBe(true);
+  expect(small.l3.state).toEqual(large.l3.state);
+});
+
+test('graph writers respect a pre-adoption rewind until graphs are explicitly installed again', () => {
+  const name = 'rewound-graph-writer', legacy = world(name, { patterns: [] });
+  legacy.k.persistence.save('legacy');
+  const p = simple(), w = graphWorld(name, [p]);
+  for (const [id, record] of legacy.k.persistence.chain) w.k.persistence.chain.set(id, structuredClone(record));
+  w.k.persistence.load('legacy');
+  const run = (at: number) => {
+    const first = event(w, 'wrong-' + at, 'wrong', at);
+    const last = event(w, 'help-' + at, 'helped', at + 1, { participants: [{ who: w.b, role: 'actor' }, { who: w.a, role: 'target' }], causes: [first.id] });
+    const doc = w.l3.sifter.patterns.get(p.id)!;
+    w.l3.sifter.onEvent(doc, first); w.l3.sifter.onEvent(doc, last);
+    return w.l3.kv.event(w.l3.state.pool.find((e) => e.firstTime === at)!.story!)!;
+  };
+  expect(run(100).data).toBeUndefined();
+  expect(w.l3.installPatterns([p]).filter((f) => f.level === 'error')).toEqual([]);
+  expect(run(200).data?.outcome).toBe('done');
+});
+
+test('graph emissions with no fills also consume budget and leave later emissions pending', () => {
+  const w = graphWorld('empty-emission-budget', [simple()]);
+  const p = [...w.l3.sifter.patterns.values()][0];
+  for (let n = 0; n < 10; n++) w.l3.state.buffer.push({ pattern: p.id, version: p.version, event: event(w, 'empty-' + n, 'generic', n) });
+  const before = w.l3.sifter.work;
+  expect(w.l3.sifter.boundary(600, 0, new Budget(1))).toBe(false);
+  expect(w.l3.sifter.work - before).toBe(1);
+  expect(w.l3.state.buffer).toHaveLength(9);
+  expect(w.l3.state.pool).toEqual([]);
 });
 
 test('mixed stories survive unswept, swept and replacement-load executions in both save modes', () => {

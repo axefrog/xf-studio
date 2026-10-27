@@ -181,12 +181,10 @@ export class Layer3 {
     return this.sifter.install(patterns);
   }
   private registerVocabulary(patterns: SiftPattern[]): void {
-    const graphs = patterns.some((p) => p.graph);
-    // With graphs loaded the declaration follows from configuration. Once they
-    // unload, keep that adoption in the layer record, even before the first story.
-    if (!graphs && this.k.eventKinds.eventKind('meta:story')?.dataFields) this.state.storyData = true;
-    if ((graphs || this.state.storyData) && !this.k.eventKinds.eventKind('meta:story')) this.k.eventKinds.register({ name: 'meta:story', producers: ['s3'],
-      dataFields: { pattern: { t: 'text' }, instance: { t: 'ref' }, outcome: { t: 'text' }, kind: { t: 'enum', values: ['resolved', 'failed', 'parked'] }, depth: { t: 'int' } } });
+    // Installing graphs is an explicit adoption, saved immediately. Loading a
+    // record instead reconciles its marker without adopting from current options.
+    if (patterns.some((p) => p.graph)) this.state.storyData = true;
+    this.reconcileStorySchema();
     for (const [name, values] of [
       ['core:event-kind', ['meta:story']],
       ['core:participant-role', patterns.flatMap((p) => Object.keys(p.roles ?? {}).map((v) => v.slice(1)))],
@@ -197,6 +195,16 @@ export class Layer3 {
         ...dim,
         value: { ...dim.value, values: [...new Set([...dim.value.values, ...values])].sort(cmp) },
       });
+    }
+  }
+  private reconcileStorySchema(): void {
+    const declared = this.k.eventKinds.eventKind('meta:story');
+    if (!this.state.storyData) {
+      if (declared?.dataFields) this.k.eventKinds.unregister('meta:story');
+    } else if (!declared?.dataFields) {
+      if (declared) this.k.eventKinds.unregister('meta:story');
+      this.k.eventKinds.register({ name: 'meta:story', producers: ['s3'],
+        dataFields: { pattern: { t: 'text' }, instance: { t: 'ref' }, outcome: { t: 'text' }, kind: { t: 'enum', values: ['resolved', 'failed', 'parked'] }, depth: { t: 'int' } } });
     }
   }
   private syncTempo(): void {
@@ -584,7 +592,7 @@ export class Layer3 {
     this.state.buffer ??= [];
     this.state.evidence ??= [];
     this.state.consumedOutcomes ??= [];
-    if (this.state.storyData) this.registerVocabulary([...this.sifter.patterns.values()]);
+    this.reconcileStorySchema();
     if (this.k.readOnly) {
       this.threadView = threads(this.lv.instances(), this.l2.playTotal(), this.data);
       this.counts = counts(this.threadView);

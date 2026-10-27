@@ -223,7 +223,8 @@ export class GraphMatcher {
       .filter((n) => !!this.owner.view.event(n)).slice(0, this.owner.data.sifter.maxJunctures);
     const story = this.owner.k.events.mintEvent({ creator: this.owner.keys.director, cause: e.id, name: 'meta:story', time: at,
       kind: 'meta:story', participants: Object.keys(e.bindings).sort(cmp).map((v) => ({ who: e.bindings[v], role: v.slice(1) })),
-      effects: [], causes, witnesses: [], data: { pattern: p.id, instance: e.id, outcome: name, kind, depth: g.depth } });
+      effects: [], causes, witnesses: [], ...(this.owner.k.eventKinds.eventKind('meta:story')?.dataFields
+        ? { data: { pattern: p.id, instance: e.id, outcome: name, kind, depth: g.depth } } : {}) });
     g.outcome = { name, kind, at, story }; g.armed = undefined; e.story = story; e.complete = true;
     g.state = outcome?.aftermath ? 'aftermath' : kind === 'parked' ? 'parked' : 'resolved';
     if (outcome?.aftermath) g.aftermathUntil = at + (outcome.aftermath.days ?? this.owner.data.sifter.aftermathDays) * 86400;
@@ -289,6 +290,7 @@ export class GraphMatcher {
       this.advance(p, e, fills, at);
     }
     for (const key of p.entry.slice().sort(cmp)) for (const f of fills) {
+      this.owner.work++;
       const fixed = Object.fromEntries(Object.entries(p.roles).flatMap(([v, r]) => { const b = bound(r.identity); return b.status === 'fixed' && b.value ? [[v, this.owner.k.expandId(b.value === 'v' ? 'root:v' : b.value)]] : []; }));
       if (!Object.entries(fixed).every(([v, n]) => this.accepts(p, v, n, fixed, at))) continue;
       const binds = this.test(p, p.junctures[key], f, fixed);
