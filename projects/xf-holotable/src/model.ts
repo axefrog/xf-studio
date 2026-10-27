@@ -84,7 +84,12 @@ export interface TimelineEvent {
 }
 
 /** A stretch with no samples (a missed deadline, a drop, a sequence jump): absence is never proof. */
-export interface Gap { from: number; to: number; reason: "sequence" | "time" | "invalid" | "missing"; fromSeq: number; toSeq: number }
+export interface Gap {
+  from: number; to: number; reason: "sequence" | "time" | "invalid" | "missing"; fromSeq: number; toSeq: number;
+  /** Absent means shared recorder loss; actor-only breaks must not invalidate V.
+   * An invalid actor point revokes older positions until the person is reobserved. */
+  channel?: "actors";
+}
 
 export interface SessionMeta {
   schema: "xfh/session-1";

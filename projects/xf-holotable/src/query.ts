@@ -10,7 +10,7 @@ export const RECENT_S = 5;
 
 export function snapshotAt(s: Session, t: number, level: ContentLevel, world?: WorldPack): Snapshot {
   const v = lastAtOrBefore(s.v, t), cam = lastAtOrBefore(s.camera, t);
-  const inGap = s.gaps.some(g => g.from < t && t < g.to);
+  const inGap = s.gaps.some(g => !g.channel && g.from < t && t < g.to);
   return {
     t, level,
     v: v && { ...v, stale: t - v.t > STALE_S },
@@ -26,7 +26,7 @@ export function snapshotAt(s: Session, t: number, level: ContentLevel, world?: W
 /** V's path up to t, broken at every gap: no projection may draw through missing samples. */
 export function trailUntil(s: Session, t: number): Vec3[][] {
   // Gaps are anchored on the V samples either side of them (recording.ts), so a break falls between two samples.
-  const breaks = new Set(s.gaps.map(g => g.to));
+  const breaks = new Set(s.gaps.filter(g => !g.channel).map(g => g.to));
   const runs: Vec3[][] = []; let run: Vec3[] = [];
   for (const x of s.v) {
     if (x.t > t) break;

@@ -3,7 +3,7 @@
  * state. The panel writes them as SVG; the same rules feed the agent's text report in the headless service. World axes are the game's:
  * x east, y north, z up, metres.
  */
-import type { HoloActorSample, HoloArea, HoloCameraSample, HoloCell, HoloEvent, HoloSession, HoloSolid, HoloVSample, HoloWorld, Vec3 } from "../types";
+import type { HoloActorSample, HoloArea, HoloCameraSample, HoloCell, HoloEvent, HoloGap, HoloSession, HoloSolid, HoloVSample, HoloWorld, Vec3 } from "../types";
 import type { HoloLayer } from "../service";
 import { solidGeometry, type SolidInstance, SOLID_DRAW_CAP } from "./solid-projection";
 
@@ -42,7 +42,7 @@ export function at<T extends { t: number }>(xs: readonly T[], t: number): T | un
 
 /** V's path up to t, broken where a gap sits between two samples: nothing is drawn through missing samples. */
 export function trail(s: HoloSession, t: number): Vec3[][] {
-  const breaks = new Set(s.gaps.map(g => g.to));
+  const breaks = new Set(s.gaps.filter(g => !g.channel).map(g => g.to));
   const runs: Vec3[][] = []; let run: Vec3[] = [];
   for (const x of s.v) {
     if (x.t > t) break;
@@ -180,18 +180,19 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
   }
   out.push(...geometry.instances);
   if (layers.v) for (const run of trail(s, t)) lines(run.map(p => [p[0], p[1], p[2] + 0.3] as Vec3), "trail", 0.85);
-  if (layers.gaps) for (const g of s.gaps) if (g.from <= t) {
+  if (layers.gaps) for (const g of s.gaps) if (!g.channel && g.from <= t) {
     const a = at(s.v, g.from), b = at(s.v, g.to);
     if (a && b && b.t <= t) lines([a.position, b.position], "gap", 1);
   }
   // Each channel is judged on its own freshness: a camera sample older than STALE_S isn't drawn as current.
   const camStale = !!cam && t - cam.t > STALE_S;
   if (layers.camera && cam && !camStale) frustum(cam, C, out);
+  const peopleBreaks = layers.people ? peopleGapWindow(s.gaps, t) : [];
   if (layers.people) for (const [id, samples] of peopleAt(s, t)) {
     const actor = samples.at(-1)!;
     for (let i = 1; i < samples.length; i++) {
       const a = samples[i - 1], b = samples[i];
-      if (a.entity === b.entity && a.position && b.position && b.t - a.t <= STALE_S && !s.gaps.some(g => g.from < b.t && g.to > a.t))
+      if (a.entity === b.entity && a.position && b.position && b.t - a.t <= STALE_S && !peopleBreaks.some(g => g.from <= b.t && g.to > a.t))
         lines([a.position, b.position], "people", Math.max(0, 1 - (t - a.t) / 5) * 0.6);
     }
     if (actor.valid && actor.position && t - actor.t <= STALE_S) {
@@ -218,7 +219,7 @@ export function project(s: HoloSession, world: HoloWorld, t: number, layers: Rea
   // A scale bar that tells the truth: the largest round distance that fits in 140 px at V.
   const ppm = C.scale(target), choice = [5, 10, 20, 50, 100, 200, 500].filter(m => m * ppm <= 140).pop() ?? 5;
   return { primitives: out, solids: geometry.instances, solidCamera: C, v, cam, camStale, vStale: !!v && t - v.t > STALE_S, recent: s.events.filter(e => e.t <= t && t - e.t <= 5),
-    inGap: s.gaps.some(g => g.from < t && t < g.to), metresPerBar: choice, barPx: choice * ppm,
+    inGap: inSharedGap(s.gaps, t), metresPerBar: choice, barPx: choice * ppm,
     solidsDrawn: geometry.instances.length, solidsCut: geometry.cut };
 }
 
@@ -356,6 +357,53 @@ function frustum(cam: HoloCameraSample, C: ReturnType<typeof camera>, out: Primi
 
 export type { HoloArea, HoloCell };
 
+type Interval = { from: number; to: number };
+// Index once per gap snapshot, never once per actor segment or animation frame. Unioning
+// overlapping intervals gives monotonic endpoints even when live V/actor gaps interleave.
+const peopleGapIndexes = new WeakMap<readonly HoloGap[], { length: number; breaks: Interval[]; shared: Interval[]; invalid: { t: number }[] }>();
+function peopleGapIndex(gaps: readonly HoloGap[]) {
+  let index = peopleGapIndexes.get(gaps);
+  if (index?.length === gaps.length) return index;
+  const sorted: Interval[] = [], shared: Interval[] = [], invalid: { t: number }[] = [];
+  for (const g of gaps) {
+    const interval = { from: g.from, to: g.to };
+    sorted.push(interval);
+    if (!g.channel) shared.push({ ...interval });
+    if (g.channel === "actors" && g.reason === "invalid") invalid.push({ t: g.to });
+  }
+  invalid.sort((a, b) => a.t - b.t);
+  index = { length: gaps.length, breaks: unionIntervals(sorted), shared: unionIntervals(shared), invalid };
+  peopleGapIndexes.set(gaps, index);
+  return index;
+}
+function unionIntervals(sorted: Interval[]): Interval[] {
+  sorted.sort((a, b) => a.from - b.from || a.to - b.to);
+  const breaks: Interval[] = [];
+  for (const g of sorted) {
+    const previous = breaks.at(-1);
+    if (previous && g.from < previous.to) previous.to = Math.max(previous.to, g.to);
+    else breaks.push(g);
+  }
+  return breaks;
+}
+function firstGapAfter(breaks: readonly Interval[], t: number): number {
+  let lo = 0, hi = breaks.length;
+  while (lo < hi) { const mid = (lo + hi) >>> 1; if (breaks[mid].to <= t) lo = mid + 1; else hi = mid; }
+  return lo;
+}
+function inSharedGap(gaps: readonly HoloGap[], t: number): boolean {
+  const { shared } = peopleGapIndex(gaps), gap = shared[firstGapAfter(shared, t)];
+  return !!gap && gap.from < t;
+}
+/** Binary-search past history, then visit only breaks intersecting the five-second trail. */
+function peopleGapWindow(gaps: readonly HoloGap[], t: number): Interval[] {
+  const { breaks } = peopleGapIndex(gaps);
+  const lo = firstGapAfter(breaks, t - 5);
+  const recent: Interval[] = [];
+  for (let i = lo; i < breaks.length && breaks[i].from <= t; i++) recent.push(breaks[i]);
+  return recent;
+}
+
 /** Only the last five seconds; entity changes never join two people's paths. */
 export function peopleAt(s: HoloSession, t: number): Map<string, HoloActorSample[]> {
   const people = new Map<string, HoloActorSample[]>();
@@ -370,6 +418,12 @@ export function peopleAt(s: HoloSession, t: number): Map<string, HoloActorSample
     let track = people.get(key); if (!track) people.set(key, track = []);
     track.push(a);
   }
-  for (const track of people.values()) track.reverse();
+  const invalid = at(peopleGapIndex(s.gaps).invalid, t);
+  for (const [who, track] of people) {
+    track.reverse();
+    // A channel-wide failure has no handles. Keep its invalidation until each person
+    // is actually observed again, including when the failed read is the live tail.
+    if (invalid && invalid.t > track.at(-1)!.t) track.push({ t: invalid.t, who, valid: false });
+  }
   return people;
 }

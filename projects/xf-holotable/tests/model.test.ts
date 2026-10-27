@@ -13,7 +13,7 @@ const actor: Omit<ActorSample, "t"> = { who: "a1", valid: true, entity: "42", po
 const incident: Incident = { event: "witness.report", schema: "xfb/witness-1", incident: "inc-1", kind: "assault", place: { position: [1,2,3], first: [1,2,3], last: [1,2,3], district_v: "Test" }, declared: { id: "private-story", kind: "private-kind", roles: { a1: "secret-role" }, at: [1,2,3], ttl_s: 10 } };
 function rows() {
   return [
-    { channel: "actors", data: { actors: [actor, { who: "a2", valid: false }] } },
+    { channel: "actors", valid: false, data: { actors: [actor, { who: "a2", valid: false }] } },
     { channel: "incidents", data: incident },
     { channel: "incidents", data: { event: "witness.unwitnessed", declared: incident.declared, reason: "no_view" } },
     { channel: "incidents", data: { event: "witness.gap", kind: "gunfire", reason: "report_queue_full" } },
@@ -68,4 +68,64 @@ test("actor tracks share live row budgets and reset with the epoch", async () =>
     const b=source.poll(watch,a.since,"full"); expect(b.actors).toHaveLength(44); expect(b.more).toBe(false);
     expect(source.poll(watch,{...b.since,epoch:-1},"full").reset).toBe(true);
   } finally {source.close();}
+});
+
+const actorRow = (seq: number, t: number) => ({ session: "abc123", run: 1, world_generation: 1,
+  channel: "actors", seq, source_s: t, valid: true, data: { actors: [actor] } });
+const failedActors = { ...actorRow(2, 1000.1), valid: false, data: { error: "sample_failed" } };
+test("replay keeps a failed actors read as channel invalidation and counts it as invalid", () => {
+  fixture = writeFixture();
+  const path = join(fixture.dir, "manifest.json"), manifest = JSON.parse(readFileSync(path, "utf8"));
+  manifest.channels = ["actors"]; writeFileSync(path, JSON.stringify(manifest));
+  writeFileSync(join(fixture.dir, "chunk-1.jsonl"), [actorRow(1, 1000), failedActors, actorRow(3, 1000.2)].map(r => JSON.stringify(r)).join("\n") + "\n");
+  const s = readRun(fixture.dir);
+  expect(s.actors?.map(a => a.t)).toEqual([1000, 1000.2]);
+  expect(s.gaps).toEqual([{ from: 1000.1, to: 1000.1, fromSeq: 2, toSeq: 2, channel: "actors", reason: "invalid" }]);
+  expect(s.meta.channels).toEqual([{ name: "actors", read: 3, kept: 2, dropped: 1, reasons: { invalid: 1 } }]);
+});
+test("live publishes a failed actors read at the tail, before recovery and without V", async () => {
+  const bridge = new FakeBridge(); bridge.recorder.channels = ["actors"];
+  bridge.pages.push(bridge.page([actorRow(1, 1000)]), bridge.page([failedActors]), bridge.page([actorRow(3, 1000.2)]));
+  const source = createLiveSource(bridge, { clock: bridge.clock });
+  try {
+    const { watch } = source.watch(); await settle();
+    const first = source.poll(watch, undefined, "full");
+    await bridge.clock.advance(1000);
+    const failure = source.poll(watch, first.since, "full");
+    expect(failure.actors).toEqual([]);
+    expect(failure.gaps).toMatchObject([{ from: 1000.1, to: 1000.1, channel: "actors", reason: "invalid" }]);
+    expect(failure.meta!.channels).toEqual([{ name: "actors", read: 2, kept: 1, dropped: 1, reasons: { invalid: 1 } }]);
+    await bridge.clock.advance(1000);
+    const recovery = source.poll(watch, failure.since, "full");
+    expect(recovery.actors).toHaveLength(1); expect(recovery.gaps).toEqual([]);
+    expect(recovery.meta!.channels[0]).toMatchObject({ read: 3, kept: 2, dropped: 1 });
+  } finally { source.close(); }
+});
+for (const invalidV of [false, true]) test(`live sequence breaks precede actors on ${invalidV ? "invalid-V" : "actors-only"} pages`, async () => {
+  const bridge = new FakeBridge(); bridge.recorder.channels = invalidV ? ["actors", "v"] : ["actors"];
+  bridge.pages.push(bridge.page([actorRow(1, 1000)]), bridge.page([
+    ...(invalidV ? [{ ...actorRow(3, 1000.1), channel: "v", valid: false, data: {} }] : []),
+    actorRow(invalidV ? 4 : 3, 1000.2),
+  ]));
+  const source = createLiveSource(bridge, { clock: bridge.clock });
+  try {
+    const { watch } = source.watch(); await settle(); const first = source.poll(watch, undefined, "full");
+    await bridge.clock.advance(1000); const next = source.poll(watch, first.since, "full");
+    expect(next.v).toEqual([]); expect(next.actors).toHaveLength(1);
+    expect(next.gaps).toMatchObject([{ from: 1000, to: 1000.2, channel: "actors", reason: "sequence" }]);
+  } finally { source.close(); }
+});
+test("actor breaks cannot be bypassed by actor deltas under the poll row budget", async () => {
+  const bridge = new FakeBridge(); bridge.recorder.channels = ["actors"];
+  bridge.pages.push(bridge.page(Array.from({ length: 300 }, (_, i) => actorRow(2 * i + 1, 1000 + i / 100))));
+  const source = createLiveSource(bridge, { clock: bridge.clock });
+  try {
+    const { watch } = source.watch(); await settle();
+    const first = source.poll(watch, undefined, "full");
+    expect(first.gaps).toHaveLength(LIVE_BOUNDS.pollRows); expect(first.actors).toEqual([]);
+    const second = source.poll(watch, first.since, "full");
+    expect(first.gaps.length + second.gaps.length).toBe(299);
+    expect(second.actors.length).toBeGreaterThan(0);
+    expect(second.gaps.length + second.actors.length).toBe(LIVE_BOUNDS.pollRows);
+  } finally { source.close(); }
 });

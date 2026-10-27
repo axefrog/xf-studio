@@ -33,6 +33,14 @@ handles, not a census of everyone around V. People is a base Show toggle, off in
 after Camera: 3 px muted dots, fading trails over the last five seconds, and command state
 in the existing inspector. Stale/invalid samples are not drawn as current; trails break on
 invalid observations, entity changes, sample gaps and known recorder gaps.
+When a failed actors-channel read has no `data.actors`, the adapter retains an
+actor-scoped invalid gap (`channel:"actors"`, `from = to = failure time`), counts the
+source row as dropped/invalid, and invalidates every earlier actor position until
+that person is observed again. These point invalidations break People trails without
+breaking V's trail. A false row validity with an actor list still preserves its valid
+and invalid per-person observations, as the native sampler does.
+Live sequence/transport loss also publishes actor-scoped intervals before affected
+actor deltas, independently of whether any valid V sample has arrived.
 
 `EventKind` includes **`"incident"`**. Each row from the native `incidents` channel becomes:
 
@@ -94,6 +102,11 @@ zero, and existing poll byte/row budgets apply across all five tracks.
 
 People evaluation binary-searches the last observation at the requested moment before
 walking the five-second window, avoiding a scan of future samples during early scrubbing.
+Gap snapshots are indexed once into sorted, merged intervals and channel invalidation
+times; subsequent frames binary-search and inspect only intervals overlapping that
+window. Nested/overlapping gaps and future history are covered by counted-access
+regressions, without a timing threshold. Hiding People clears a selected person;
+showing the layer again does not restore the selection.
 
 `bun tools/capture-live.ts --model` captures synthetic People-on views in light/dark at
 narrow/wide widths, beside the library Toggle pattern, under ignored

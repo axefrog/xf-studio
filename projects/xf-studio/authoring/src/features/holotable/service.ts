@@ -351,7 +351,8 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       case "holo.play":
         if (state.live.following) set({ live: { ...state.live, following: false }, playing: false });
         if (action.on) play(); else pause(); break;
-      case "holo.layer": set({ layers: { ...state.layers, [action.id]: action.on } }); break;
+      case "holo.layer": set({ layers: { ...state.layers, [action.id]: action.on },
+        selected: !action.on && action.id === "people" && state.selected?.startsWith("person:") ? null : state.selected }); break;
       case "holo.level": await setLevel(action.level); break;
       case "holo.select": set({ selected: action.id, position: null }); break;
       case "holo.place": set({ position: action.position, selected: null }); break;

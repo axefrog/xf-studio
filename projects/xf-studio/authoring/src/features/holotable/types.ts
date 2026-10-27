@@ -21,7 +21,7 @@ export interface HoloEvent {
   readonly id: string; readonly kind: string; readonly t: number; readonly seq: number; readonly at?: Vec3;
   readonly incident?: { readonly event: string; readonly kind?: string }; readonly summary: string; readonly detail?: string; readonly level: ContentLevel; readonly cite: string;
 }
-export interface HoloGap { readonly from: number; readonly to: number; readonly reason: "sequence" | "time" | "invalid" | "missing" }
+export interface HoloGap { readonly from: number; readonly to: number; readonly reason: "sequence" | "time" | "invalid" | "missing"; readonly channel?: "actors" }
 export interface HoloSession {
   readonly meta: {
     readonly session: string; readonly run: number; readonly start: number; readonly end: number; readonly channels: readonly (string | { readonly name: string; readonly read: number; readonly kept: number; readonly dropped: number; readonly reasons: Readonly<Record<string, number>> })[];

@@ -10,8 +10,11 @@ Last reviewed **29 September 2026** (finishes, runtime bridge, showroom and wait
 
 Holotable's model-field candidate preserves the recorder's selected-actor observations,
 adds typed incident events and per-channel read/kept/dropped counts, delivers actors through
-live polls, and adds an opt-in People layer. It is verified with synthetic offline tests
-and isolated light/dark captures; independent review and integration remain pending.
+live polls, and adds an opt-in People layer. Review fixes retain whole-channel actor
+failures and live sequence breaks without valid V, bound People gap lookups to the
+trail window, and clear a selected person when People is hidden. It is verified with
+synthetic offline tests
+and isolated light/dark captures, and its independent review's findings are fixed; integration remains pending.
 The [model contract](../projects/xf-holotable/README.md#recorded-people-incidents-and-coverage)
 documents exact fields and source limitations.
 

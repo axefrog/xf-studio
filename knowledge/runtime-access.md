@@ -31,6 +31,19 @@ retains those as `kind:"incident"`, `incident: Incident`, with full payload behi
 content level, and gives every declared channel source-row read/kept/dropped reasons.
 Synthetic replay/live tests verify these mappings and disclosure boundaries. This is
 source/offline evidence, not a runtime population census or cadence measurement.
+The native sampler can also fail the whole actors read, leaving no `data.actors`
+([native sampling](../projects/xf-runtime-bridge/native/src/core/Recording.cpp)).
+Holotable retains an actor-scoped invalidation at that source time: earlier positions
+are invalid until reobserved, and trails never join across it. A false row with an
+actor list instead retains the individual observations: the script sets row validity
+false if any selected puppet is unavailable. Synthetic replay/live regressions in
+[model tests](../projects/xf-holotable/tests/model.test.ts) and
+[People tests](../projects/xf-studio/authoring/tests/holotable-people.test.ts) cover both,
+including a failed live tail and actor sequence loss without valid V. The People
+projection indexes overlapping gap history once per snapshot, then binary-searches
+the five-second trail window; counted property accesses verify that later frames do
+not reread old/future gap history. This is bounded-work offline evidence, not an
+in-game frame-time measurement.
 
 **Holotable live observer [source/offline, 27 October 2026]:** the [M6 candidate](../research/live-world-view/live-checkpoint.md) uses a dedicated `CommandApi({readOnly:true})` observer, never the writer or an emergency command. Discovery targets the confirmed 0.8.23 bridge-thread `recorder.status` contract: `{active, run, session, world, channels, start:{s,at}, latest, stop_reason, requested_hz, duration_s, byte_cap, ack}`. Before the first run it answers `active:false`, `channels:[]`, the current `session`, and null for every other field. The maintainer reports this built as `fdb214bc` on `claude/bridge-0823`, pending main for 0.8.23; that report is contract evidence, not runtime proof. It has no game-thread call, lease or ack. The adapter maps `start.s` and `stop_reason` in one place: `start.s` is QPC seconds on the manifest/sample timeline; `start.at` is derived ISO wall time for display only. An older bridge's unknown-command answer hides the live action. This contract has not passed in-game row RS1. Holotable never starts the recorder. Detailed catch-up uses the exact opaque returned cursor with `now:false`; cursor paging/backlog is not loss. The observer drains its current stopped run through `more:false` before waiting, and delivers every known gap before any samples it splits. Discovery combines requester/source cancellation; late cancelled results cannot update the cache. Epoch resets put paused/scrubbed time at the new start and following time at the latest sample, clearing absent selections. Failing-before/passing-after regressions cover these client policies. Its fake-backed tests establish client/source policy, budgets, cancellation and replay parity only, not native discovery, cadence, frame cost or runtime teardown. Session events carry `source_s` but no universal top-level world id ([native event log](../projects/xf-runtime-bridge/native/src/core/Events.cpp)); the adapter scopes them from the active run's source start and respects `data.world_generation` where a receipt has it. Load/run identity changes end that timeline before a new epoch is admitted.
 

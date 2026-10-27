@@ -81,3 +81,33 @@ test("layers-only readout counts active items in visible layers, with a singular
  expect(momentItems(base)).toBe("3 items at this moment");expect(momentItems({...base,agentEnabled:{"writer/actors":false}})).toBe("");
  expect(momentItems({...base,agents:{...full,layers:[{...full.layers[0],items:full.layers[0].items.slice(0,1)}]}})).toBe("1 item at this moment");ctl.abort();
 });
+
+test("the People toggle clears its inspector and does not restore the person when shown again", async () => {
+  const ctl = new AbortController();
+  const recorded = { ...session, actors: [{ t: 0, who: "a1", entity: "42", valid: true,
+    position: [0, 0, 0] as const, command_state: "Executing" }] };
+  const service = createHolotable({ later: () => () => {}, transport: async method => {
+    const result = method === "runs.list" ? [{ session: "s", run: 1, dir: "people", start: 0, end: 10, bytes: 0, complete: true }]
+      : method === "session.open" ? recorded : method === "world.around" ? { provenance: null, areas: [], cells: [] }
+      : method === "layers.watch" ? { watch: "people" } : { layers: [], here: [], specs: full.specs };
+    return { ok: true, status: 200, data: { ok: true, result } };
+  } }, ctl.signal);
+  let panel: ReturnType<typeof holotableDetailsPanel> | undefined;
+  try {
+    await service.dispatch({ kind: "holo.refresh" }); await service.dispatch({ kind: "holo.open", dir: "people" });
+    const ctx = { facade: holotableFacade(service), dispatch: async (action: any) => (await service.dispatch(action)).ok } as ModuleViewContext<HolotableFacade>;
+    panel = holotableDetailsPanel(ctx); panel.update(undefined as never);
+    const toggle = (panel.spec.element as unknown as LightElement).querySelectorAll("input").find(i => i.parentNode?.textContent.includes("People"))!;
+    toggle.checked = true; toggle.dispatchEvent(lightEvent("change")); await settle();
+    await service.dispatch({ kind: "holo.select", id: "person:a1" }); panel.update(undefined as never);
+    expect(panel.spec.element.textContent).toContain("Recorded person");
+    expect(panel.spec.element.textContent).toContain("Executing");
+    toggle.checked = false; toggle.dispatchEvent(lightEvent("change")); await settle(); panel.update(undefined as never);
+    expect(service.snapshot().selected).toBeNull();
+    expect(panel.spec.element.textContent).not.toContain("Recorded person");
+    expect(panel.spec.element.textContent).toContain("V has no sample yet at this moment.");
+    toggle.checked = true; toggle.dispatchEvent(lightEvent("change")); await settle(); panel.update(undefined as never);
+    expect(service.snapshot().selected).toBeNull();
+    expect(panel.spec.element.textContent).not.toContain("Recorded person");
+  } finally { ctl.abort(); panel?.dispose?.(); }
+});

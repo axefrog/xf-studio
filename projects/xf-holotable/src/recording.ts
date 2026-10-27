@@ -108,7 +108,11 @@ export function ingest(row: Json, s: Session, cite: (seq: number) => Cite, lines
   const mapped = ["actors", "v", "camera", "incidents", "supervisor", "contacts", "subtitles", "voice"].includes(row.channel);
   const size = () => s.v.length + s.camera.length + s.events.length + (s.actors?.length ?? 0);
   const before = size();
-  const invalid = row.valid === false && row.channel !== "actors";
+  // Invalid people in a successful read still carry handles. A failed channel read
+  // has no handle list, and invalidates every prior actor position until observed again.
+  const invalid = row.valid === false && (row.channel !== "actors" || !Array.isArray(row.data?.actors));
+  if (invalid && row.channel === "actors") s.gaps.push({ from: row.source_s, to: row.source_s,
+    reason: "invalid", channel: "actors", fromSeq: row.seq, toSeq: row.seq });
   if (!invalid) ingestMapped(row, s, cite, lines);
   if (coverage) {
     coverage.read++;
@@ -197,7 +201,7 @@ function push(s: Session, e: Omit<TimelineEvent, "id">) { s.events.push({ id: `e
 
 /**
  * Pauses in V's 10 Hz samples become time gaps, and an invalid V sample a gap between the valid samples either side of it; sequence
- * gaps keep their place from the surrounding samples. Every gap is anchored on V samples, so the trail breaks exactly there.
+ * gaps keep their place from the surrounding samples. Shared gaps anchor on V; actor-only invalidations keep their channel time.
  */
 function timeGaps(s: Session, invalidV: number[]) {
   for (let i = 1; i < s.v.length; i++) {
@@ -208,7 +212,7 @@ function timeGaps(s: Session, invalidV: number[]) {
     const a = lastAtOrBefore(s.v, t), b = s.v.find(x => x.t > t);
     if (a && b && !s.gaps.some(g => g.from === a.t && g.to === b.t)) s.gaps.push({ from: a.t, to: b.t, reason: "invalid", fromSeq: a.seq, toSeq: b.seq });
   }
-  for (const g of s.gaps) if (g.reason === "sequence") {
+  for (const g of s.gaps) if (!g.channel && g.reason === "sequence") {
     const before = lastAtOrBefore(s.v, g.from - 1e-9), after = s.v.find(x => x.seq > g.toSeq - 1);
     if (before) g.from = before.t; if (after) g.to = after.t;
   }

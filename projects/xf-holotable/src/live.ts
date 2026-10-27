@@ -38,6 +38,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
   let ctl = new AbortController(), cancelTimer: (() => void) | undefined, disposed = false;
   let cursor: unknown, epoch = 0, session: Session | null = null, lastSeq = 0, lastEvent = 0;
   let pendingGap: Gap["reason"] | undefined, lines = new Map<string, Json>(), retained = 0;
+  let pendingActorGap: Gap["reason"] | undefined, lastActor: { t: number; seq: number } | undefined;
   let discovery: Discovery = { available: false, reason: "not_checked" }, statusAt = -Infinity;
   let statusJob: Promise<Discovery> | undefined, sourceJob: Promise<void> | undefined;
   let sourceAt = -Infinity, emptyReads = 0, lastPageAt = 0, sourceNow = 0;
@@ -70,6 +71,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
   }
   function reset(r: RecorderStatus) {
     epoch++; cursor = undefined; lastSeq = lastEvent = 0; pendingGap = undefined; lines = new Map(); retained = 0;
+    pendingActorGap = undefined; lastActor = undefined;
     stoppedDrained = false;
     session = { meta: { schema: "xfh/session-1", session: r.session!, run: r.run!, worldGeneration: r.world!, pluginVersion: "",
       start: r.start!, wallStart: r.wallStart, end: r.start!, from: r.start!, to: r.start!, channels: channelCoverage(r.channels), complete: false,
@@ -97,7 +99,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
         if (coverage) { coverage.read++; coverage.dropped++; coverage.reasons["batch budget"] = (coverage.reasons["batch budget"] ?? 0) + 1; }
       }
       cursor = c; sourceNow = page.calibration.source_s; lastPageAt = sampledAt;
-      pendingGap = "missing"; state.droppedBatches++; s.meta.dropped += rows;
+      pendingGap = pendingActorGap = "missing"; state.droppedBatches++; s.meta.dropped += rows;
       const problem = "A live batch exceeded the byte or row budget and was dropped.";
       if (!s.meta.problems.includes(problem)) s.meta.problems.push(problem);
       return true;
@@ -120,17 +122,28 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
     }
     retained += bytes;
     cursor = c; sourceNow = page.calibration.source_s; lastPageAt = sampledAt;
-    if (page.gaps?.length) pendingGap = "missing";
+    if (page.gaps?.length) pendingGap = pendingActorGap = "missing";
     for (const row of page.records as Json[]) {
       if (row.session !== s.meta.session || row.run !== s.meta.run || row.world_generation !== s.meta.worldGeneration || !Number.isSafeInteger(row.seq) || row.seq <= lastSeq || !Number.isFinite(row.source_s)) throw Error("Invalid live recorder row");
-      if (lastSeq && row.seq !== lastSeq + 1) pendingGap ??= "sequence";
+      if (lastSeq && row.seq !== lastSeq + 1) { pendingGap ??= "sequence"; pendingActorGap ??= "sequence"; }
       lastSeq = row.seq;
+      // Actors can arrive without a valid V sample. Publish their loss independently,
+      // before ingesting that delta; poll's gap-first ordering also holds across budgets.
+      if (row.channel === "actors") {
+        if (pendingActorGap) s.gaps.push({ from: lastActor?.t ?? row.source_s, to: row.source_s,
+          fromSeq: lastActor?.seq ?? row.seq, toSeq: row.seq, reason: pendingActorGap, channel: "actors" });
+        pendingActorGap = undefined; lastActor = { t: row.source_s, seq: row.seq };
+      }
       const vec = (v: unknown) => Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
       const d = row.data;
       const valid = (row.valid === true || row.channel === "actors") && d && (d.event === undefined || typeof d.event === "string") &&
         (row.channel !== "v" || vec(d.position) && Number.isFinite(d.yaw) && (!d.velocity || vec(d.velocity))) &&
         (row.channel !== "camera" || vec(d.camera?.position) && vec(d.camera?.forward) && vec(d.camera?.up) && Number.isFinite(d.camera?.fov) && Number.isFinite(d.camera?.aspect));
-      if (!valid) { ingest({ ...row, valid: false }, s, seq => `recorder:${s.meta.session}:${s.meta.run}:${seq}`, lines); pendingGap = "invalid"; continue; }
+      if (!valid) {
+        ingest({ ...row, valid: false }, s, seq => `recorder:${s.meta.session}:${s.meta.run}:${seq}`, lines);
+        if (row.channel !== "actors") pendingGap = "invalid";
+        continue;
+      }
       const previous = s.v.at(-1);
       if (row.channel === "v" && previous) {
         if (row.source_s < previous.t) throw Error("Live source clock went backwards");
@@ -190,7 +203,7 @@ export function createLiveSource(bridge: LiveBridge, options: { clock?: LiveCloc
       } catch {
         if (!signal.aborted) {
           state = { ...state, phase: "disconnected", message: lostMessage, available: false };
-          statusAt = -Infinity; bridge.close(); pendingGap = "missing";
+          statusAt = -Infinity; bridge.close(); pendingGap = pendingActorGap = "missing";
         }
       }
     })();
