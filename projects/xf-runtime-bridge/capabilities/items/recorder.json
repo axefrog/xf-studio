@@ -289,10 +289,11 @@
     "summary": "A subscribable feed of what happens in the world: V's district and interior changes, combat, kills and knockdowns, crimes and heat, vehicle use and purchases, calls and dialogue choices, fact changes, time, weather and loads.",
     "area": "recorder",
     "kind": "sense",
-    "stage": "planned",
+    "stage": "built",
     "evidence": "none",
     "health": "unknown",
     "priority": "P2",
+    "branch": "claude/bridge-0824",
     "depends_on": ["recorder.game-events-probe"],
     "demand": [
       {
@@ -304,11 +305,18 @@
         "since": "2026-10-26"
       }
     ],
+    "improvements": [
+      {
+        "summary": "Next cut: district, vehicle (mount, dismount, theft), vehicle.acquired and time skips, as table rows beside the first cut",
+        "value": "medium",
+        "effort": "small"
+      }
+    ],
     "docs": [
       "knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed",
       "knowledge/game-events.md#11-what-the-bridge-has-and-what-it-should-add"
     ],
-    "updated": "2026-10-27"
+    "updated": "2026-10-28"
   },
   {
     "id": "recorder.status",
@@ -440,10 +448,11 @@
     "summary": "A recorder channel (or incident kind) for deaths and knockdowns with victim, instigator and cause, with positions.",
     "area": "recorder",
     "kind": "sense",
-    "stage": "proposed",
+    "stage": "built",
     "evidence": "none",
     "health": "unknown",
     "priority": "P3",
+    "branch": "claude/bridge-0824",
     "depends_on": ["recorder.world-event-feed"],
     "demand": [
       {
@@ -465,7 +474,7 @@
     ],
     "unknowns": [],
     "docs": ["knowledge/game-events.md#3-deaths-knockdowns-and-combat", "knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed"],
-    "updated": "2026-10-27"
+    "updated": "2026-10-28"
   },
   {
     "id": "recorder.combat",
@@ -473,10 +482,11 @@
     "summary": "Combat start and end events with participants.",
     "area": "recorder",
     "kind": "sense",
-    "stage": "proposed",
+    "stage": "built",
     "evidence": "none",
     "health": "unknown",
     "priority": "P3",
+    "branch": "claude/bridge-0824",
     "depends_on": ["recorder.world-event-feed"],
     "demand": [
       {
@@ -498,7 +508,7 @@
     ],
     "unknowns": [],
     "docs": ["knowledge/game-events.md#3-deaths-knockdowns-and-combat", "knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed"],
-    "updated": "2026-10-27"
+    "updated": "2026-10-28"
   },
   {
     "id": "recorder.crime",
@@ -506,10 +516,11 @@
     "summary": "Crime events with offender and the police heat level over time.",
     "area": "recorder",
     "kind": "sense",
-    "stage": "proposed",
+    "stage": "built",
     "evidence": "none",
     "health": "unknown",
     "priority": "P3",
+    "branch": "claude/bridge-0824",
     "depends_on": ["recorder.world-event-feed"],
     "demand": [
       {
@@ -531,6 +542,6 @@
     ],
     "unknowns": [],
     "docs": ["knowledge/game-events.md#4-crimes-and-police-heat", "knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed"],
-    "updated": "2026-10-27"
+    "updated": "2026-10-28"
   }
 ]

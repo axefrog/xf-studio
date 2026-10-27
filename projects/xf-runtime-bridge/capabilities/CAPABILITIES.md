@@ -10,7 +10,7 @@
 
 | Stage | requested | proposed | planned | building | built | merged | released | retired |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| items | 6 | 12 | 17 | 2 | 7 | 128 | 0 | 0 |
+| items | 6 | 9 | 16 | 2 | 11 | 128 | 0 | 0 |
 
 | Evidence | none | offline | partial | proven | regressed |
 |---|---:|---:|---:|---:|---:|
@@ -26,7 +26,7 @@
 
 ### Evidence debt
 
-Built, merged or released capabilities with no game evidence (none or offline): 26. Age is in days to 2026-10-28.
+Built, merged or released capabilities with no game evidence (none or offline): 30. Age is in days to 2026-10-28.
 
 | Capability | Stage | Evidence | Since (version) | Age |
 |---|---|---|---|---:|
@@ -41,6 +41,7 @@ Built, merged or released capabilities with no game evidence (none or offline): 
 | [`photo.camera-preset`](#photo.camera-preset) Rewriting a camera preset | merged | offline | 2026-10-26 (0.6.0) | 2 d |
 | [`photo.poses`](#photo.poses) V's photo-mode pose | merged | offline | 2026-10-26 (0.3.0) | 2 d |
 | [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | built | none | 2026-10-26 | 2 d |
+| [`recorder.world-event-feed`](#recorder.world-event-feed) World event feed | built | none | 2026-10-26 | 2 d |
 | [`safety.contact-alerts`](#safety.contact-alerts) Contact alerts | merged | offline | 2026-10-26 (0.8.15) | 2 d |
 | [`supervisor.actor-entries`](#supervisor.actor-entries) Supervising XF actors | merged | offline | 2026-10-26 (0.8.19) | 2 d |
 | [`supervisor.plan-module`](#supervisor.plan-module) Plans | merged | offline | 2026-10-26 | 2 d |
@@ -53,6 +54,9 @@ Built, merged or released capabilities with no game evidence (none or offline): 
 | [`tooling.selftest`](#tooling.selftest) Self-test host and unit checks | merged | offline | 2026-10-26 (0.2.0) | 2 d |
 | [`world.doors`](#world.doors) Doors | merged | offline | 2026-10-26 (0.8.12) | 2 d |
 | [`recorder.actor-identity`](#recorder.actor-identity) Actor identity on recorder samples | built | none | 2026-10-27 | 1 d |
+| [`recorder.combat`](#recorder.combat) Combat start and end on the recorder | built | none | 2026-10-27 | 1 d |
+| [`recorder.crime`](#recorder.crime) Crimes and police heat on the recorder | built | none | 2026-10-27 | 1 d |
+| [`recorder.deaths`](#recorder.deaths) Deaths and knockdowns on the recorder | built | none | 2026-10-27 | 1 d |
 | [`recorder.game-time`](#recorder.game-time) Game time on recorder samples | built | none | 2026-10-27 | 1 d |
 | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | built | none | 2026-10-27 | 1 d |
 | [`recorder.status`](#recorder.status) Read-only recorder status | merged | none | 2026-10-27 | 1 d |
@@ -157,11 +161,11 @@ Per consumer, blocking first.
 | needs | V9 | M5 | [`story.rewards`](#story.rewards) | requested | none | Money, items, street cred and fixer standing. |
 | needs | S6 | M4 | [`character.cyberware`](#character.cyberware) | merged | partial | V's cyberware. |
 | needs | S1 | M4 | [`recorder.session-events`](#recorder.session-events) | merged | partial | The bridge's own event ring and npc.* events are part of the world event feed. |
-| needs | S1 | M4 | [`recorder.world-event-feed`](#recorder.world-event-feed) | planned | none | A world event feed; the graded hooks and a minimal set of twelve event kinds are designed. Gaps: interior entry is polled, no 'any fact changed' hook, dialogue picks inferred. |
+| needs | S1 | M4 | [`recorder.world-event-feed`](#recorder.world-event-feed) | built | none | A world event feed; the graded hooks and a minimal set of twelve event kinds are designed. Gaps: interior entry is polled, no 'any fact changed' hook, dialogue picks inferred. |
 | needs | D-34; S1, S3 | shadow-mode | [`recorder.actor-identity`](#recorder.actor-identity) | built | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
-| needs | D-34; S1, S3 | shadow-mode | [`recorder.deaths`](#recorder.deaths) | proposed | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
-| needs | D-34; S1, S3 | shadow-mode | [`recorder.combat`](#recorder.combat) | proposed | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
-| needs | D-34; S1, S3 | shadow-mode | [`recorder.crime`](#recorder.crime) | proposed | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.deaths`](#recorder.deaths) | built | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.combat`](#recorder.combat) | built | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
+| needs | D-34; S1, S3 | shadow-mode | [`recorder.crime`](#recorder.crime) | built | none | Shadow mode reads these from the recorder (live and replay) through Holotable's model. |
 | needs | runtime-requirements.md#scene-execution-what-the-engine-needs-from-the-bridges-plan-layer | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | The engine decides what is true and what happens next; the plan decides how bodies carry it out, performs, observes and reports, and never changes the record. |
 | needs | runtime-requirements.md#1-what-a-scene-decides-at-run-time-and-against-which-signals | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | Anticipated outcomes map onto the scene's declared branches; an unanticipated outcome is reported as such and takes the fallback. |
 | needs | runtime-requirements.md#3-several-actors | M4 | [`supervisor.plan-module`](#supervisor.plan-module) | merged | offline | A scene is a unit with a cast: joint beats, roles bound to actors, one blackboard per scene, one report stream per scene, up to 5 actors. |
@@ -215,9 +219,9 @@ Per consumer, blocking first.
 | needs | proposal 5.1 | M6 | [`recorder.catchup`](#recorder.catchup) | merged | partial | The live feed reads catch-up with detail: true and its cursor, at most once a second, backing off when there is no more. |
 | needs | milestone 6 | M6 | [`recorder.status`](#recorder.status) | merged | none | Holotable's Live game row polls it every 5 s, only while the view is shown. Today InfoJson() and Status() expose no recorder state, and game.catchup needs a positive run. |
 | needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.actor-identity`](#recorder.actor-identity) | built | none | Story Engine shadow mode binds simulated residents to recorded actors; Holotable shows affiliation in the People layer. |
-| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.deaths`](#recorder.deaths) | proposed | none | Story Engine shadow mode reacts to deaths; Holotable draws them as events. |
-| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.combat`](#recorder.combat) | proposed | none | Shadow mode and Holotable timelines. |
-| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.crime`](#recorder.crime) | proposed | none | Shadow mode and Holotable timelines. |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.deaths`](#recorder.deaths) | built | none | Story Engine shadow mode reacts to deaths; Holotable draws them as events. |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.combat`](#recorder.combat) | built | none | Shadow mode and Holotable timelines. |
+| needs | shadow mode (SE D-34; S1, S3) | M6c | [`recorder.crime`](#recorder.crime) | built | none | Shadow mode and Holotable timelines. |
 | needs | want 10 | M7 | [`surfaces.canvas`](#surfaces.canvas) | built | none | Bridge proposal A as agreed: the bridge draws, Holotable decides what. Schema to Holotable for review before building. |
 | needs | want 11 | M7 | [`surfaces.canvas-keys`](#surfaces.canvas-keys) | built | none | Show and hide while playing, without opening CET (CET blocks input). |
 | needs | want 12 | M7 | [`surfaces.lua-snapshot`](#surfaces.lua-snapshot) | proposed | none | Lets the overlay work with no other XF program running (bridge proposal B). |
@@ -2407,15 +2411,15 @@ Continuous channels, taps, session events and catching up on what happened betwe
 | ↳ [`recorder.taps-ui`](#recorder.taps-ui) UI channel | sense | merged | partial | caveats | P3 |
 | [`recorder.catchup`](#recorder.catchup) Catch-up | service | merged | partial | works | P2 |
 | [`recorder.game-events-probe`](#recorder.game-events-probe) Game-events probe | research | merged | partial | caveats | P3 |
-| [`recorder.world-event-feed`](#recorder.world-event-feed) World event feed | sense | planned | none | unknown | P2 |
+| [`recorder.world-event-feed`](#recorder.world-event-feed) World event feed | sense | built | none | unknown | P2 |
 | [`recorder.status`](#recorder.status) Read-only recorder status | sense | merged | none | unknown | P1 |
 | [`recorder.observe-result`](#recorder.observe-result) Published probe and scene results (observe.result) | service | built | none | unknown | P3 |
 | [`recorder.manifest-wall-clock`](#recorder.manifest-wall-clock) Wall-clock time in the run manifest | service | built | none | unknown | P2 |
 | [`recorder.game-time`](#recorder.game-time) Game time on recorder samples | sense | built | none | unknown | P3 |
 | [`recorder.actor-identity`](#recorder.actor-identity) Actor identity on recorder samples | sense | built | none | unknown | P3 |
-| [`recorder.deaths`](#recorder.deaths) Deaths and knockdowns on the recorder | sense | proposed | none | unknown | P3 |
-| [`recorder.combat`](#recorder.combat) Combat start and end on the recorder | sense | proposed | none | unknown | P3 |
-| [`recorder.crime`](#recorder.crime) Crimes and police heat on the recorder | sense | proposed | none | unknown | P3 |
+| [`recorder.deaths`](#recorder.deaths) Deaths and knockdowns on the recorder | sense | built | none | unknown | P3 |
+| [`recorder.combat`](#recorder.combat) Combat start and end on the recorder | sense | built | none | unknown | P3 |
+| [`recorder.crime`](#recorder.crime) Crimes and police heat on the recorder | sense | built | none | unknown | P3 |
 
 <a id="recorder.session-events"></a>
 
@@ -2553,14 +2557,16 @@ test.events records the hooks the game-events research recommends (deaths, comba
 
 ### World event feed
 
-`recorder.world-event-feed` · sense · stage **planned** · evidence **none** · health **unknown** · P2
+`recorder.world-event-feed` · sense · stage **built** · evidence **none** · health **unknown** · P2
 
 A subscribable feed of what happens in the world: V's district and interior changes, combat, kills and knockdowns, crimes and heat, vehicle use and purchases, calls and dialogue choices, fact changes, time, weather and loads.
 
+- **Version:** branch `claude/bridge-0824`
 - **Depends on:** [`recorder.game-events-probe`](#recorder.game-events-probe)
 - **Demand (story-engine, needs, S1, M4):** A world event feed; the graded hooks and a minimal set of twelve event kinds are designed. Gaps: interior entry is polled, no 'any fact changed' hook, dialogue picks inferred.
+- **Could improve (value medium, effort small):** Next cut: district, vehicle (mount, dismount, theft), vehicle.acquired and time skips, as table rows beside the first cut
 - **Docs:** [knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed](../../../knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed), [knowledge/game-events.md#11-what-the-bridge-has-and-what-it-should-add](../../../knowledge/game-events.md#11-what-the-bridge-has-and-what-it-should-add)
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 
 <a id="recorder.status"></a>
 
@@ -2629,43 +2635,46 @@ The actors channel carries each actor's character record id, affiliation and cro
 
 ### Deaths and knockdowns on the recorder
 
-`recorder.deaths` · sense · stage **proposed** · evidence **none** · health **unknown** · P3
+`recorder.deaths` · sense · stage **built** · evidence **none** · health **unknown** · P3
 
 A recorder channel (or incident kind) for deaths and knockdowns with victim, instigator and cause, with positions.
 
+- **Version:** branch `claude/bridge-0824`
 - **Depends on:** [`recorder.world-event-feed`](#recorder.world-event-feed)
 - **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Story Engine shadow mode reacts to deaths; Holotable draws them as events.
 - **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
 - **Docs:** [knowledge/game-events.md#3-deaths-knockdowns-and-combat](../../../knowledge/game-events.md#3-deaths-knockdowns-and-combat), [knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed](../../../knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed)
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 
 <a id="recorder.combat"></a>
 
 ### Combat start and end on the recorder
 
-`recorder.combat` · sense · stage **proposed** · evidence **none** · health **unknown** · P3
+`recorder.combat` · sense · stage **built** · evidence **none** · health **unknown** · P3
 
 Combat start and end events with participants.
 
+- **Version:** branch `claude/bridge-0824`
 - **Depends on:** [`recorder.world-event-feed`](#recorder.world-event-feed)
 - **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Shadow mode and Holotable timelines.
 - **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
 - **Docs:** [knowledge/game-events.md#3-deaths-knockdowns-and-combat](../../../knowledge/game-events.md#3-deaths-knockdowns-and-combat), [knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed](../../../knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed)
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 
 <a id="recorder.crime"></a>
 
 ### Crimes and police heat on the recorder
 
-`recorder.crime` · sense · stage **proposed** · evidence **none** · health **unknown** · P3
+`recorder.crime` · sense · stage **built** · evidence **none** · health **unknown** · P3
 
 Crime events with offender and the police heat level over time.
 
+- **Version:** branch `claude/bridge-0824`
 - **Depends on:** [`recorder.world-event-feed`](#recorder.world-event-feed)
 - **Demand (holotable, needs, shadow mode (SE D-34; S1, S3), M6c):** Shadow mode and Holotable timelines.
 - **Demand (story-engine, needs, D-34; S1, S3, shadow-mode):** Shadow mode reads these from the recorder (live and replay) through Holotable's model.
 - **Docs:** [knowledge/game-events.md#4-crimes-and-police-heat](../../../knowledge/game-events.md#4-crimes-and-police-heat), [knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed](../../../knowledge/game-events.md#12-recommended-minimal-hook-set-for-a-first-event-feed)
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 
 ## Supervisor and plans
 
