@@ -15,7 +15,7 @@ import type { GraphState, JState } from '../../src/procedural/graph-types.ts';
 
 const dirs: string[] = [];
 function tempDir() {
-  const dir = resolve(import.meta.dir, '../../../../../.scratch-holo', `glyphs-${randomUUID()}`);
+  const dir = resolve(import.meta.dir, '../../../../../.scratch-holo1', `glyphs-${randomUUID()}`);
   mkdirSync(dir, { recursive: true }); dirs.push(dir); return dir;
 }
 afterAll(() => { for (const dir of dirs) rmSync(dir, { recursive: true, force: true }); });
@@ -45,7 +45,7 @@ test('every published fixture item has a vocabulary glyph, with no invented badg
       expect(GLYPHS.has(item.glyph!)).toBe(true);
       if (item.badge !== undefined) expect(BADGES.has(item.badge)).toBe(true);
       else if (layer !== 'stories') expect(item.badge).toBeUndefined();
-      if (layer === 'groups') expect(item.glyph).toBe('group');
+      if (layer === 'groups') expect(['gang', 'corp', 'group']).toContain(item.glyph!);
       if (layer === 'placement') expect(item.glyph).toBe('scene');
     }
   } });
@@ -65,9 +65,9 @@ test('story badges prefer ready then pending then matched and preserve every exa
   const sample = () => new HolotableObserver(sim, undefined, l3).sample().layers.get('stories')![0];
   const item = sample();
   expect(item.glyph).toBe('story'); expect(item.badge).toBe('ready');
-  expect(item.facets!['pattern family']).toBe('tension'); expect(item.label).toContain('tension');
-  expect(JSON.parse(item.facets!.junctures)).toEqual(Object.fromEntries(states.map((s) => [s, s])));
-  l3.sifter.patterns.clear(); expect(sample().facets!['pattern family']).toBe('not recorded'); expect(sample().label).toContain('not recorded');
+  expect(item.facets!.kind).toBe('a tension'); expect(item.label).toBe('A story');
+  expect(item.facets!.junctures).toBeUndefined();
+  l3.sifter.patterns.clear(); expect(sample().facets!.kind).toBeUndefined(); expect(sample().label).toBe('A story');
 });
 
 test('delivery holds publish held targets and retract at their recorded clear time without retracting sows', () => {
@@ -77,8 +77,8 @@ test('delivery holds publish held targets and retract at their recorded clear ti
   const l3 = { state: { pool: [], evidence: [], buffer: [] }, log, threadView: [] } as unknown as Layer3;
   const observer = new HolotableObserver(sim, undefined, l3), publisher = new RunPublisher(tempDir(), { set: 'holds', title: 'Holds', from: observer.epoch, to: observer.epoch + 100 });
   publisher.publish(observer.sample());
-  expect(rows(publisher).map((i) => i.glyph)).toEqual(['sown', 'refused', 'held']);
-  expect(rows(publisher).find((i) => i.glyph === 'held').facets).toEqual({ decision: 'held: headroom', 'reason held': 'headroom', gate: 'headroom', delivery: 'delivery' });
+  expect(rows(publisher).map((i) => i.glyph)).toEqual(['sown', 'held', 'held']);
+  expect(rows(publisher).find((i) => i.id === 'hold-1').facets).toEqual({ decision: 'Held back: waiting for room in your current stories' });
   add(4, 5, 'hold', 'hold-cleared', { delivery: 'delivery', reason: 'headroom' }); sim.k.now = 10;
   const cleared = { ...observer.sample(), branch: 'save-a' };
   publisher.publish(cleared); publisher.publish(cleared);

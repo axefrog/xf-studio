@@ -6,6 +6,7 @@ export type Box = { box: { min: Vec3; max: Vec3 } };
 export type Anchor = { region: string } | { entity: string } | { at: Vec3 } | { item: string } | Box;
 export interface Manifest {
   schema: 'xfh/layer-1'; producer: 'story-engine'; layer: string; title: string; description?: string;
+  producer_title?: string; facet_titles?: Record<string, string>;
   content: 'full'; clock: 'game' | 'recording'; kinds: Kind[]; branch?: string;
   session?: string; run?: number;
   standalone?: { set: string; title?: string; from: number; to: number; clock: 'game' };
@@ -23,16 +24,18 @@ export const BOUNDS = { items: 5000, bytes: 16 * 1024 * 1024, line: 1024 * 1024,
 const kinds: Kind[] = ['zone', 'actor', 'relation', 'point', 'target'];
 const obj = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const keys = (v: Record<string, unknown>, allowed: string[]) => Object.keys(v).every((k) => allowed.includes(k));
-const text = (v: unknown, max = 160): v is string => typeof v === 'string' && v.length > 0 && v.length <= max && !/[\u0000-\u001f]/.test(v);
+const text = (v: unknown, max = 160): v is string => typeof v === 'string' && v.length > 0 && v.length <= max && !/[\u0000-\u001f\u007f-\u009f]/.test(v);
+const detailText = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 4000 && v.split('\n').length <= 40 && !/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/.test(v);
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const slug = (v: unknown) => typeof v === 'string' && v.length <= 64 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v);
 const unit = (v: unknown) => num(v) && v >= 0 && v <= 1;
 export function validateManifest(v: unknown): asserts v is Manifest {
-  if (!obj(v) || !keys(v, ['schema', 'producer', 'layer', 'title', 'description', 'content', 'clock', 'kinds', 'branch', 'standalone', 'session', 'run']) ||
+  if (!obj(v) || !keys(v, ['schema', 'producer', 'layer', 'title', 'description', 'content', 'clock', 'kinds', 'branch', 'standalone', 'session', 'run', 'producer_title', 'facet_titles']) ||
     v.schema !== 'xfh/layer-1' || v.producer !== 'story-engine' || !slug(v.layer) || !text(v.title) ||
     v.content !== 'full' || !['game', 'recording'].includes(v.clock) || !Array.isArray(v.kinds) || !v.kinds.length ||
     v.kinds.some((k: Kind) => !kinds.includes(k)) || new Set(v.kinds).size !== v.kinds.length ||
     v.description !== undefined && !text(v.description, 2000) || v.branch !== undefined && !text(v.branch)) throw Error('Invalid Holotable manifest');
+  if (v.producer_title !== undefined && !text(v.producer_title, 80) || v.facet_titles !== undefined && (!obj(v.facet_titles) || Object.keys(v.facet_titles).length > 16 || !Object.entries(v.facet_titles).every(([k, x]) => text(k, 40) && text(x, 60)))) throw Error('Invalid Holotable content hooks');
   if (v.clock === 'recording') {
     if (!text(v.session) || !Number.isSafeInteger(v.run) || v.run < 1 || v.standalone !== undefined) throw Error('Invalid recording binding');
     return;
@@ -59,7 +62,7 @@ export function validateRecord(v: unknown, m: Manifest): asserts v is RecordLine
     v.schema !== 'xfh/item-1' || !text(v.id) || v.id.includes('/') || !m.kinds.includes(v.kind) || !num(v.t) ||
     v.until !== undefined && (!num(v.until) || v.until < v.t) || !anchor(v.anchor) ||
     !text(v.cite, 512) || !/^se:(event|node|edge|frame|belief|seed|inst|sow|stage):[^\s]+$/.test(v.cite) ||
-    v.label !== undefined && !text(v.label) || v.detail !== undefined && !text(v.detail, 4000) ||
+    v.label !== undefined && !text(v.label) || v.detail !== undefined && !detailText(v.detail) ||
     v.branch !== undefined && !text(v.branch) || v.glyph !== undefined && (!slug(v.glyph) || v.glyph.length > 32) || v.badge !== undefined && (!slug(v.badge) || v.badge.length > 32) ||
     v.tone !== undefined && !['muted', 'signal', 'accent', 'warning', 'danger'].includes(v.tone))
     throw Error('Invalid Holotable item, citation or time');

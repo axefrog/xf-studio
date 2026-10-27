@@ -1,5 +1,14 @@
 import type { Item } from './schema.ts';
 
+/** The blank line separates the summary block from its causes. Current-story
+ * text belongs to that summary block, never to the arrow-linked cause chain. */
+export function compatibilityDetail(detail: string): string {
+  const [summary, ...causeBlocks] = detail.split('\n\n');
+  const heading = summary.split('\n').filter(Boolean).join(' ');
+  const causes = causeBlocks.flatMap((block) => block.split('\n')).filter(Boolean);
+  return causes.length ? `${heading} Why: ${causes.join(' → ')}` : heading;
+}
+
 /** Keep the largest complete prefix of a diagnostic list/map that fits. For
  * scalar text N counts omitted UTF-16 characters, matching the schema's bound.
  */
@@ -35,14 +44,14 @@ function caption(value: string, limit = 500): string {
 export function boundText(item: Item): number {
   const long = Object.entries(item.facets ?? {}).filter(([, v]) => v.length > 500);
   const label = item.label && item.label.length > 160 ? item.label : undefined;
-  const full = long.length || label ? JSON.stringify({ ...(item.detail ? { detail: item.detail } : {}), ...(label ? { label } : {}), ...Object.fromEntries(long) }) : item.detail;
+  const full = long.length || label ? [item.detail, label, ...long.map(([key, value]) => `${key}: ${value}`)].filter(Boolean).join('\n') : item.detail;
   for (const [key, value] of long) item.facets![key] = caption(value);
   if (label) item.label = caption(label, 160);
   let count = long.length + (label ? 1 : 0);
   if (full !== undefined) {
-    if (full.length > 4000) {
-      const suffix = `… (truncated; full record at ${item.cite})`;
-      item.detail = full.slice(0, 4000 - suffix.length) + suffix;
+    if (full.length > 4000 || full.split('\n').length > 40) {
+      const suffix = '… (more in the record link)';
+      item.detail = full.split('\n').slice(0, 40).join('\n').slice(0, 4000 - suffix.length) + suffix;
       count++;
     } else item.detail = full;
   }

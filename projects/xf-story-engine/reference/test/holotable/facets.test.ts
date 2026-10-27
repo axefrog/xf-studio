@@ -16,14 +16,15 @@ test('a long diagnostic list reports omitted entries and preserves its full valu
   const head = JSON.parse(value.facets.thinking.split('…')[0]);
   const omitted = Number(/\+(\d+) more/.exec(value.facets.thinking)![1]);
   expect(head.length + omitted).toBe(rows.length);
-  expect(JSON.parse(value.detail!).thinking).toBe(JSON.stringify(rows));
+  expect(value.detail).toBe('thinking: '+JSON.stringify(rows));
 });
 
 test('overflow detail retains the item and names its full-record citation', () => {
   const value = item(); value.facets = { goal: JSON.stringify(Array.from({ length: 200 }, () => 'x'.repeat(40))) };
   expect(boundText(value)).toBe(2);
   expect(value.detail!.length).toBe(4000);
-  expect(value.detail!.endsWith('… (truncated; full record at se:event:one)')).toBe(true);
+  expect(value.detail!.endsWith('… (more in the record link)')).toBe(true);
+  expect(value.detail).not.toContain('se:');
   expect(value.facets.goal).toMatch(/… \(\+\d+ more\)$/);
 });
 
@@ -40,7 +41,7 @@ test('labels and scalar captions stay bounded without hiding their truncation', 
   expect(boundText(value)).toBe(2);
   expect(value.label.length).toBeLessThanOrEqual(160);
   expect(value.facets.state.length).toBeLessThanOrEqual(500);
-  expect(JSON.parse(value.detail!).label).toBe('a'.repeat(200));
+  expect(value.detail).toContain('a'.repeat(200));
 });
 
 test('one JSON line cannot exceed 1 MiB', () => {
@@ -48,7 +49,7 @@ test('one JSON line cannot exceed 1 MiB', () => {
 });
 
 test('run summary counts published truncations once per revision and per layer', () => {
-  const dir = resolve(import.meta.dir, `../../../../../.scratch-holo/bounds-${randomUUID()}`);
+  const dir = resolve(import.meta.dir, `../../../../../.scratch-holo1/bounds-${randomUUID()}`);
   mkdirSync(dir, { recursive: true });
   try {
     const publisher = new RunPublisher(dir, { set: 'bounds', title: 'Bounds', from: 0, to: 10 });

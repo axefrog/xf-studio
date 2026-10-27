@@ -1,0 +1,625 @@
+{
+  "functions": {
+    "hold": {
+      "past": "{who} took hold of {what}",
+      "waiting": "waiting for {who} to get {what}",
+      "holds": "{who} has {what}"
+    },
+    "want": {
+      "past": "{who} came to want {what}",
+      "waiting": "waiting for {who} to want {what}",
+      "holds": "{who} wants {what}"
+    },
+    "transfer": {
+      "past": "{what} passed from {from} to {to}",
+      "waiting": "waiting for {what} to pass from {from} to {to}",
+      "holds": ""
+    },
+    "wrong": {
+      "past": "{by} did {to} wrong",
+      "waiting": "waiting for {by} to act against {to}",
+      "holds": ""
+    },
+    "befall": {
+      "past": "misfortune struck {who}",
+      "waiting": "waiting for misfortune to strike {who}",
+      "holds": ""
+    },
+    "help": {
+      "past": "{by} helped {to}",
+      "waiting": "waiting for {by} to help {to}",
+      "holds": ""
+    },
+    "sacrifice": {
+      "past": "{who} gave something up for {for}",
+      "waiting": "waiting for {who} to give something up for {for}",
+      "holds": ""
+    },
+    "obligate": {
+      "past": "{debtor} came to owe {creditor}",
+      "waiting": "waiting for {debtor} to owe {creditor}",
+      "holds": "{debtor} owes {creditor}"
+    },
+    "repay": {
+      "past": "{debtor} paid {creditor} back",
+      "waiting": "waiting for {debtor} to pay {creditor} back",
+      "holds": ""
+    },
+    "ask": {
+      "past": "{by} asked {of} for {what}",
+      "waiting": "waiting for {by} to ask {of} for {what}",
+      "holds": ""
+    },
+    "demand": {
+      "past": "{by} demanded {what} from {of}",
+      "waiting": "waiting for {by} to demand {what} from {of}",
+      "holds": ""
+    },
+    "comply": {
+      "past": "{who} gave in to {to}",
+      "waiting": "waiting to see if {who} gives in to {to}",
+      "holds": ""
+    },
+    "refuse": {
+      "past": "{who} refused {to}",
+      "waiting": "waiting to see if {who} refuses {to}",
+      "holds": ""
+    },
+    "learn": {
+      "past": "{who} found out about {what}",
+      "waiting": "waiting for {who} to find out about {what}",
+      "holds": ""
+    },
+    "conceal": {
+      "past": "{who} hid {what} from {from}",
+      "waiting": "",
+      "holds": "{who} is hiding {what} from {from}"
+    },
+    "expose": {
+      "past": "{by} let {to} know about {what}",
+      "waiting": "waiting for {what} to come out",
+      "holds": ""
+    },
+    "blame": {
+      "past": "{who} came to blame {of} for {for}",
+      "waiting": "",
+      "holds": "{who} blames {of} for {for}"
+    },
+    "protect": {
+      "past": "{guard} took {ward} under protection",
+      "waiting": "",
+      "holds": "{guard} looks after {ward}"
+    },
+    "threaten": {
+      "past": "{by} threatened {to}",
+      "waiting": "waiting for {by} to threaten {to}",
+      "holds": ""
+    },
+    "pursue": {
+      "past": "{who} went after {target}",
+      "waiting": "",
+      "holds": "{who} is going after {target}"
+    },
+    "decide": {
+      "past": "{group} decided on {what}",
+      "waiting": "waiting for {group} to decide",
+      "holds": ""
+    },
+    "bind": {
+      "past": "{a} and {b} grew closer",
+      "waiting": "waiting for {a} and {b} to come together",
+      "holds": ""
+    },
+    "sever": {
+      "past": "{a} and {b} fell out",
+      "waiting": "waiting to see if {a} and {b} fall out",
+      "holds": ""
+    },
+    "compete": {
+      "past": "{a} beat {b} to {prize}",
+      "waiting": "waiting for {a} and {b} to compete for {prize}",
+      "holds": ""
+    },
+    "turn": {
+      "past": "{who} changed sides",
+      "waiting": "waiting to see if {who} turns",
+      "holds": ""
+    },
+    "choose": {
+      "past": "{who} made a choice",
+      "waiting": "waiting for {who} to choose",
+      "holds": ""
+    },
+    "story": {
+      "past": "the {pattern} story ended: {outcome}",
+      "waiting": "",
+      "holds": ""
+    }
+  },
+  "patterns": {
+    "debt": {
+      "title": "Debt: {?d} owes {?c}",
+      "fallback": ""
+    },
+    "divided-loyalty": {
+      "title": "Torn: {?m} between {?g1} and {?x}",
+      "fallback": ""
+    },
+    "secret": {
+      "title": "A secret: {?k} keeps something from {?u}",
+      "fallback": ""
+    },
+    "rivalry": {
+      "title": "Rivals: {?a} and {?b}",
+      "fallback": ""
+    },
+    "protection": {
+      "title": "Protection: {?gd} stands between {?wd} and {?th}",
+      "fallback": "Protection: {?gd} looks after {?wd}"
+    },
+    "ambition-vs-obligation": {
+      "title": "Tempted: {?a}, a chance against a duty to {?o}",
+      "fallback": ""
+    },
+    "coveted": {
+      "title": "Wanted: {?w} wants what {?h} has",
+      "fallback": ""
+    },
+    "grievance": {
+      "title": "A grudge: {?wr} against {?by}",
+      "fallback": ""
+    },
+    "squeeze": {
+      "title": "The squeeze: {?pw} on {?wk}",
+      "fallback": ""
+    },
+    "complication": {
+      "title": "A snag: {?a} runs into trouble",
+      "fallback": ""
+    },
+    "reversal": {
+      "title": "It turned: what {?a} gained goes wrong",
+      "fallback": ""
+    },
+    "revelation": {
+      "title": "Found out: {?l} learns what {?k} hid",
+      "fallback": ""
+    },
+    "escalation": {
+      "title": "Escalation: {?a} answers {?b}",
+      "fallback": ""
+    },
+    "betrayal": {
+      "title": "Betrayal: {?t} turns on {?bt}",
+      "fallback": ""
+    },
+    "sacrifice": {
+      "title": "A sacrifice: {?s} for {?for}",
+      "fallback": ""
+    },
+    "closing-choice": {
+      "title": "A choice: {?ch} can't have both",
+      "fallback": ""
+    },
+    "interception": {
+      "title": "Interception: {?i} goes after {?car}'s delivery",
+      "fallback": "Interception: {?i} goes after a delivery"
+    },
+    "misattribution": {
+      "title": "Wrongly blamed: {?bl} blames {?acc}",
+      "fallback": ""
+    },
+    "test-of-creed": {
+      "title": "Tested: {?n} is pushed from both sides",
+      "fallback": ""
+    },
+    "payoff": {
+      "title": "Payback: {?b} returns what {?a} gave",
+      "fallback": ""
+    },
+    "loss": {
+      "title": "Lost for good: {?l}",
+      "fallback": ""
+    },
+    "settlement": {
+      "title": "Settled on terms: {?a} and {?b}",
+      "fallback": ""
+    },
+    "loose-end": {
+      "title": "Left open: {?x}",
+      "fallback": ""
+    },
+    "settled-without-you": {
+      "title": "Settled without you: {?cl} got help elsewhere",
+      "fallback": ""
+    },
+    "reckoning": {
+      "title": "It comes back: {?by} brings {?doer}'s act home",
+      "fallback": ""
+    },
+    "heist": {
+      "title": "A job: {?cl} hires a crew against {?mk}",
+      "fallback": ""
+    },
+    "feud": {
+      "title": "Feud: {?g1} and {?g2}",
+      "fallback": ""
+    },
+    "hunted": {
+      "title": "Hunted: {?h} are after {?q}",
+      "fallback": ""
+    },
+    "uprising": {
+      "title": "Uprising: people refuse {?pw}",
+      "fallback": ""
+    }
+  },
+  "roles": {
+    "vendor": "stallholder",
+    "shopkeeper": "shopkeeper",
+    "service": "service worker",
+    "corporate": "corporate worker",
+    "nightlife": "nightlife worker",
+    "unemployed": "looking for work",
+    "gang": "gang member",
+    "police": "police officer",
+    "medic": "medic",
+    "fixer": "fixer",
+    "courier": "courier",
+    "netrunner": "netrunner",
+    "civilian": "civilian",
+    "protagonist": "protagonist",
+    "collector": "collector",
+    "stallholder": "stallholder",
+    "aggressor": "attacker",
+    "victim": "victim",
+    "target": "target",
+    "hostile": "opponent",
+    "responder": "responding officer",
+    "enforcer": "enforcer",
+    "giver": "gave",
+    "taker": "received",
+    "participant": "participant",
+    "teller": "told the news",
+    "listener": "heard the news",
+    "subject": "subject",
+    "entry": "story",
+    "actor": "involved",
+    "promiser": "made a promise",
+    "promisee": "received a promise",
+    "receiver": "received help",
+    "repairer": "made amends",
+    "exposer": "revealed the truth",
+    "confessor": "confessed",
+    "audience": "audience",
+    "asker": "asked for help",
+    "replier": "answered",
+    "bidder": "made an offer",
+    "told": "the news",
+    "guard": "protector",
+    "ward": "under protection",
+    "other": "other",
+    "item": "item",
+    "group": "group",
+    "decider": "decider",
+    "object": "object",
+    "successor": "successor",
+    "predecessor": "predecessor",
+    "late": "former leader",
+    "creditor": "creditor",
+    "debtor": "debtor",
+    "warner": "gave a warning",
+    "warned": "warned",
+    "searcher": "searching",
+    "asked": "asked",
+    "sought": "being sought",
+    "confronter": "confronted",
+    "confronted": "challenged",
+    "labourer": "labourer",
+    "technician": "technician",
+    "student": "student",
+    "retired": "retired resident"
+  },
+  "groups": {
+    "civilian": "civilians",
+    "ncpd": "NCPD",
+    "TygerClaws": "Tyger Claws",
+    "TheMox": "Mox",
+    "Mox": "Mox",
+    "Scavengers": "Scavengers",
+    "Valentinos": "Valentinos",
+    "Maelstrom": "Maelstrom",
+    "Arasaka": "Arasaka",
+    "other": "others",
+    "A1": "Tyger Claws",
+    "A2": "Mox",
+    "A3": "Scavengers",
+    "stallholders": "stallholders",
+    "GA": "Group A",
+    "GB": "Group B",
+    "Militech": "Militech",
+    "KangTao": "Kang Tao",
+    "TraumaTeam": "Trauma Team",
+    "SixthStreet": "6th Street",
+    "Animals": "Animals",
+    "VoodooBoys": "Voodoo Boys",
+    "Barghest": "Barghest",
+    "Aldecaldos": "Aldecaldos"
+  },
+  "events": {
+    "theft": "{aggressor} stole from {victim}",
+    "assault": "{aggressor} assaulted {victim}",
+    "gang-clash": "{aggressor} clashed with {victim}",
+    "shakedown": "{aggressor} shook down {victim}'s stall",
+    "police-action": "The police moved against {target}",
+    "psycho-break": "{aggressor} attacked {victim} in a cyberpsychotic episode",
+    "disorder": "Unrest broke out",
+    "accident": "{victim} was caught in an accident",
+    "outage": "The power went out",
+    "commerce": "{giver} traded with {taker}",
+    "generic": "{actor} met {target}",
+    "tell": "{teller} told {listener} the news",
+    "promise": "{promiser} made a promise to {promisee}",
+    "threat": "{aggressor} threatened {victim}",
+    "confess": "{confessor} confessed to {audience}",
+    "betrayal": "{actor} betrayed {target}",
+    "expose": "{exposer} revealed the truth to {audience}",
+    "conceal": "{actor} kept a secret",
+    "presence": "{guard} took {ward} under protection",
+    "call-in": "{creditor} called in a debt from {debtor}",
+    "warning": "{warner} warned {warned}",
+    "price": "{warner} demanded payment from {warned}",
+    "search": "{searcher} searched for {sought}",
+    "confront": "{confronter} confronted {confronted}",
+    "reply": "{replier} answered {asker}",
+    "bid": "{bidder} made an offer",
+    "disclosure": "{teller} shared a secret with {listener}",
+    "favour": "{giver} helped {receiver}",
+    "conflict": "{actor} fell out with {target}",
+    "repair": "{repairer} made amends to {receiver}",
+    "joint-activity": "{actor} spent time with {other}",
+    "crisis": "{actor} faced a crisis",
+    "retract": "{actor} took back a claim",
+    "succession": "{successor} took over as leader",
+    "regime-start": "A change came to the district",
+    "regime-end": "The district returned to its usual rules",
+    "gig-outcome": "A job came to an end",
+    "offer": "{asker} asked {protagonist} for help",
+    "response": "{protagonist} answered an offer",
+    "seed-outcome": "A story came to an end",
+    "game.death": "{actor} died",
+    "game.combat.start": "Fighting broke out",
+    "game.combat.end": "The fighting stopped",
+    "game.district": "You arrived in the district",
+    "game.journal.finished": "You finished a job",
+    "game.journal.failed": "A job ended in failure",
+    "fixture.paid": "{actor} paid {target}",
+    "fixture.guard": "{actor} took {target} under protection",
+    "fixture.help": "{actor} helped {target}",
+    "fixture.refused": "{actor} refused {target}",
+    "game.heat.0": "The police stood down",
+    "game.heat.1": "The police took notice",
+    "game.heat.2": "The police began searching",
+    "game.heat.3": "The police stepped up their search",
+    "game.heat.4": "The police sent reinforcements",
+    "game.heat.5": "The police launched a full pursuit",
+    "decide.collect-fee": "{group} decided to collect fees",
+    "relent.collect-fee": "{group} stopped trying to collect fees",
+    "decide.protect": "{group} decided to protect its people",
+    "relent.protect": "{group} stopped trying to protect its people",
+    "decide.retaliate": "{group} decided to strike back",
+    "relent.retaliate": "{group} stopped trying to strike back",
+    "decide.punish": "{group} decided to make you pay",
+    "relent.punish": "{group} stopped trying to make you pay",
+    "decide.expand": "{group} decided to expand its territory",
+    "relent.expand": "{group} stopped trying to expand its territory",
+    "decide.protect-members": "{group} decided to protect its members",
+    "relent.protect-members": "{group} stopped trying to protect its members",
+    "enf.fee.word": "{enforcer} issued a warning to {target}",
+    "enf.fee.shun": "{enforcer} shunned {target}",
+    "enf.fee.fine": "{enforcer} fined {target}",
+    "enf.fee.beating": "{enforcer} beat {target}",
+    "enf.uniforms.word": "{enforcer} issued a warning to {target}",
+    "enf.uniforms.shun": "{enforcer} shunned {target}",
+    "enf.uniforms.fine": "{enforcer} fined {target}",
+    "enf.uniforms.beating": "{enforcer} beat {target}",
+    "meta:story": "A story came to an end",
+    "game.witness.report": "A witness reported an incident",
+    "game.incident": "An incident was observed"
+  },
+  "eventFallbacks": {
+    "theft": "A theft took place",
+    "shakedown": "A shakedown took place",
+    "assault": "A assault took place",
+    "generic": "People met",
+    "commerce": "A trade took place",
+    "accident": "An accident happened",
+    "gang-clash": "Groups clashed",
+    "police-action": "The police took action",
+    "psycho-break": "A cyberpsychotic episode broke out",
+    "tell": "News spread",
+    "offer": "Help was requested",
+    "response": "An offer was answered",
+    "promise": "A promise was made",
+    "threat": "A threat was made",
+    "presence": "Protection was provided",
+    "call-in": "A debt was called in",
+    "price": "Payment was demanded",
+    "warning": "A warning was given",
+    "search": "A search began",
+    "confront": "A confrontation took place",
+    "reply": "A request was answered",
+    "bid": "An offer was made",
+    "disclosure": "A secret was shared",
+    "favour": "A favour was done",
+    "conflict": "A disagreement broke out",
+    "repair": "Amends were made",
+    "joint-activity": "People spent time together",
+    "crisis": "A crisis struck",
+    "retract": "A claim was taken back",
+    "succession": "A new leader took over",
+    "confess": "A confession was made",
+    "betrayal": "A trust was betrayed",
+    "expose": "The truth came out",
+    "conceal": "A secret was kept",
+    "fixture.paid": "A payment was made",
+    "fixture.guard": "Protection was provided",
+    "fixture.help": "Help was given",
+    "fixture.refused": "A demand was refused",
+    "decide.collect-fee": "A group decided to collect fees",
+    "relent.collect-fee": "A group stopped trying to collect fees",
+    "decide.protect": "A group decided to protect its people",
+    "relent.protect": "A group stopped trying to protect its people",
+    "decide.retaliate": "A group decided to strike back",
+    "relent.retaliate": "A group stopped trying to strike back",
+    "decide.punish": "A group decided to make you pay",
+    "relent.punish": "A group stopped trying to make you pay",
+    "decide.expand": "A group decided to expand its territory",
+    "relent.expand": "A group stopped trying to expand its territory",
+    "decide.protect-members": "A group decided to protect its members",
+    "relent.protect-members": "A group stopped trying to protect its members",
+    "enf.fee.word": "A warning was issued",
+    "enf.fee.shun": "Someone was shunned",
+    "enf.fee.fine": "A fine was imposed",
+    "enf.fee.beating": "A beating took place",
+    "enf.uniforms.word": "A warning was issued",
+    "enf.uniforms.shun": "Someone was shunned",
+    "enf.uniforms.fine": "A fine was imposed",
+    "enf.uniforms.beating": "A beating took place"
+  },
+  "intentions": {
+    "collect-fee": "collect fees",
+    "protect": "protect its people",
+    "retaliate": "strike back",
+    "punish": "make you pay",
+    "expand": "expand its territory",
+    "protect-members": "protect its members"
+  },
+  "reasons": {
+    "phase-settling": "waiting for things to calm down",
+    "escalation": "too big a step up",
+    "legibility-debt": "you haven't been shown enough yet",
+    "nudge-legality": "not allowed to steer this",
+    "headroom": "waiting for room in your current stories",
+    "phase-rest": "giving you a breather",
+    "phase-peak": "letting the current high point play out",
+    "phase-fade": "letting the current story settle",
+    "climax-rest": "giving the high point room to breathe",
+    "lead-aim": "waiting for the right moment",
+    "gate-7": "the story did not pass its checks"
+  },
+  "nouns": {
+    "debt": {
+      "owed": "what was owed"
+    },
+    "squeeze": {
+      "burden": "the fee"
+    },
+    "interception": {
+      "plan": "the delivery plan"
+    },
+    "test-of-creed": {
+      "stood": "that stand"
+    }
+  },
+  "routines": {
+    "home": "At home.",
+    "work": "At work.",
+    "out": "Out in the neighbourhood.",
+    "away": "Away from the neighbourhood.",
+    "post": "Keeping watch.",
+    "sleep": "Sleeping.",
+    "working": "Working.",
+    "idle": "Taking a break."
+  },
+  "phrases": {
+    "goal-collect": "Wants {target} to pay back a debt.",
+    "goal-redress": "Wants redress from {target}.",
+    "goal-guard": "Wants to keep {target} safe.",
+    "goal-search": "Wants to find {target}.",
+    "goal-strike": "Wants to strike back at {target}.",
+    "goal-collect-fee": "Wants to collect fees.",
+    "goal-target": "Wants to act on a goal involving {target}.",
+    "planning": "Plans to {intent}.",
+    "intends": "Intends to {intent}.",
+    "claim-goal": "{who} is pursuing a goal.",
+    "claim-alive": "{who} is alive.",
+    "claim-dead": "{who} is dead.",
+    "claim-role": "{who} is a {role}.",
+    "claim-with": "{who} is with {affiliation}.",
+    "claim-public": "{who} is {access}.",
+    "claim-label": "The item is called {label}.",
+    "wants-give": "Wants to give something to {target}.",
+    "wants-help": "Wants to help {target}.",
+    "wants-protect": "Wants to protect {target}.",
+    "wants-harm": "Wants to hurt {target}.",
+    "wants-take": "Wants to take something from {target}.",
+    "crowd": "{count} people in the background",
+    "crowd-about": "Simulated as a crowd here. They get names and lives when a story needs them.",
+    "placed-district": "Placed by district: {place}",
+    "director-held": "Held back: {reason}",
+    "director-surface": "Brought {story} to the surface",
+    "director-realise": "Made it happen: {step}",
+    "director-explain": "Explained {story}",
+    "director-told": "Told you about {story}",
+    "placement": "Scene set: {story}",
+    "game-person": "Someone nearby",
+    "game-person-about": "Seen in the game; who they are isn't recorded yet.",
+    "schematic-block-about": "A sketch of this block, not the real streets yet."
+  },
+  "eventFunctions": {
+    "presence": {
+      "fn": "protect",
+      "args": {
+        "guard": "guard",
+        "ward": "ward"
+      }
+    },
+    "threat": {
+      "fn": "threaten",
+      "args": {
+        "by": "aggressor",
+        "to": "victim"
+      }
+    },
+    "fixture.guard": {
+      "fn": "protect",
+      "args": {
+        "guard": "actor",
+        "ward": "target"
+      }
+    },
+    "fixture.help": {
+      "fn": "help",
+      "args": {
+        "by": "actor",
+        "to": "target"
+      }
+    },
+    "fixture.refused": {
+      "fn": "refuse",
+      "args": {
+        "who": "actor",
+        "to": "target"
+      }
+    }
+  },
+  "eventNouns": {
+    "theft": "the theft",
+    "assault": "the attack",
+    "gang-clash": "the clash",
+    "shakedown": "the shakedown",
+    "police-action": "the police action",
+    "conceal": "the secret",
+    "disclosure": "the secret",
+    "promise": "the promise",
+    "favour": "the favour",
+    "repair": "the amends",
+    "warning": "the warning",
+    "price": "the demand for payment",
+    "offer": "the request",
+    "response": "the answer",
+    "fixture.paid": "the payment",
+    "meta:story": "the story's ending"
+  }
+}

@@ -18,7 +18,7 @@ import { createLayerSpool } from '../../../../xf-holotable/src/layer-spool.ts';
 import { evaluateLayers } from '../../../../xf-holotable/src/layers.ts';
 
 setDefaultTimeout(180_000);
-const scratch = resolve(import.meta.dir, '../../../../../.scratch-shadow');
+const scratch = resolve(import.meta.dir, '../../../../../.scratch-holo1/shadow');
 mkdirSync(scratch, { recursive: true });
 const folders: string[] = [];
 const temp = () => { const p = mkdtempSync(join(scratch, 'test-')); folders.push(p); return p; };
@@ -103,7 +103,7 @@ for (const channel of ['actors', undefined] as const) for (const publishedAt of 
     const roots = [temp(), temp()];
     const [live, offline] = roots.map(root => new ShadowHost(defaultReader, world, meta, join(root, 'story-engine')));
     const readers = roots.map(root => createLayerSpool(root));
-    const initial: Batch = { ...batch(), actors: [{ ...batch().actors[0], entity: undefined }], v: [v(100), v(180), ...(publishedAt === 250 ? [v(250)] : [])] };
+    const initial: Batch = { ...batch(), actors: [{ ...batch().actors[0], entity: undefined }, ...(publishedAt === 250 ? [{ t: 181, who: 'a1', valid: true, position: [22, 20, 0] as [number, number, number] }] : [])], v: [v(100), v(180), ...(publishedAt === 250 ? [v(250)] : [])] };
     const gap = { from: publishedAt - 0.1, to: publishedAt + 1, fromSeq: 5, toSeq: 8, reason: 'sequence' as const, ...(channel ? { channel } : {}) };
     const actor = mirroredId(live.key('a1'));
     const visible = (data: Awaited<ReturnType<typeof readers[0]['read']>>, host: ShadowHost, t: number) =>
@@ -112,7 +112,7 @@ for (const channel of ['actors', undefined] as const) for (const publishedAt of 
       live.consume(initial);
       const before = await readers[0].read();
       expect(visible(before, live, publishedAt)).toBe(true);
-      expect(evaluateLayers(before, live.session, publishedAt, 'full', [], world).flatMap(layer => layer.items).find(item => item.id === actor)?.place).toEqual([21, 20, 0]);
+      expect(evaluateLayers(before, live.session, publishedAt, 'full', [], world).flatMap(layer => layer.items).find(item => item.id === actor)?.place).toEqual([publishedAt === 250 ? 22 : 21, 20, 0]);
       live.consume({ ...emptyBatch(), gaps: [gap] });
       offline.consume({ ...initial, gaps: [gap] });
       const tombstones = (host: ShadowHost) => peopleRows(host).filter(row => row.retract === actor);
@@ -135,7 +135,9 @@ test('a retrospective gap supersedes the latest revision on its save branch and 
   const root = temp(), host = new ShadowHost(defaultReader, world, meta, join(root, 'story-engine'));
   const reader = createLayerSpool(root), actor = mirroredId(host.key('a1'));
   try {
-    host.consume({ ...batch(), v: [v(100), v(180), v(250), v(330)] });
+    host.consume({ ...batch(), actors: [...batch().actors,
+      { t: 181, who: 'a1', valid: true, position: [22, 20, 0] },
+      { t: 251, who: 'a1', valid: true, position: [23, 20, 0] }], v: [v(100), v(180), v(250), v(330)] });
     host.sim.k.persistence.save('late-gap-branch');
     host.consume({ ...emptyBatch(), gaps: [{ from: 249.9, to: 331, fromSeq: 5, toSeq: 8, reason: 'sequence', channel: 'actors' }] });
     const data = await reader.read();
@@ -228,7 +230,7 @@ test('clock prefers game readings; fallback is causal, declared and rejects roll
 test('recording mode validates its binding; standalone bytes retain the original manifest', () => {
   const standalone = temp(), rec = temp();
   new RunPublisher(standalone, { set: 'test', title: 'Test', from: 0, to: 100 });
-  expect(readFileSync(join(standalone, 'people.jsonl'), 'utf8')).toBe('{"schema":"xfh/layer-1","producer":"story-engine","layer":"people","title":"people","content":"full","clock":"game","kinds":["actor"],"standalone":{"set":"test","title":"Test","from":0,"to":100,"clock":"game"}}\n');
+  expect(readFileSync(join(standalone, 'people.jsonl'), 'utf8')).toBe('{"schema":"xfh/layer-1","producer":"story-engine","layer":"people","title":"people","content":"full","clock":"game","kinds":["actor","point"],"standalone":{"set":"test","title":"Test","from":0,"to":100,"clock":"game"}}\n');
   new RunPublisher(rec, { mode: 'recording', session: 'synthetic', run: 1, from: 100, to: 200 });
   const m = JSON.parse(readFileSync(join(rec, 'people.jsonl'), 'utf8')); validateManifest(m);
   expect(m.clock).toBe('recording'); expect(m.session).toBe('synthetic'); expect(m.standalone).toBeUndefined();
@@ -254,11 +256,14 @@ test('V maps to writer grid; actors are game readings without invented identity 
   expect(summary.coverage.channels.map(c => c.name)).toEqual(['actors', 'camera', 'incidents', 'unknown-channel', 'v']);
   const lines = readFileSync(join(host.publisher.directory, 'people.jsonl'), 'utf8').trim().split('\n').slice(1).map(l => JSON.parse(l));
   const a = lines.find(l => l.id === actor);
-  expect(a.anchor).toEqual({ entity: 'entity-1' }); expect(a.value.name).toBe('Unidentified person');
-  expect(a.facets['game time (derived)']).toBeDefined(); expect(a.t).toBe(180);
+  expect(a.anchor).toEqual({ entity: 'entity-1' }); expect(a.value.name).toBe('Someone nearby');
+  expect(a.facets.about).toBe("Seen in the game; who they are isn't recorded yet."); expect(a.value.role).toBeUndefined(); expect(a.facets.handle).toBeUndefined(); expect(a.t).toBe(180);
   for (const text of Object.values(spool(host.publisher.directory))) for (const line of text.trim().split('\n').slice(1)) {
     const item = JSON.parse(line);
-    if (item.id) expect(item.facets['game time (derived)']).toBeDefined();
+    if (item.id) {
+      expect(item.facets?.['game time (derived)']).toBeUndefined();
+      expect(JSON.stringify([item.label, item.facets, item.detail, item.value?.name, item.value?.role])).not.toMatch(/not recorded|not opened|\bcoarse\b|\b[a-f0-9]{32}\b|se:|xf[.:]|\?[a-z]|\b\d+\.\d+\b/i);
+    }
   }
 });
 

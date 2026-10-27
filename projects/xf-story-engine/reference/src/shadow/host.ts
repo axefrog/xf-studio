@@ -6,6 +6,7 @@ import { defaultData } from '../sim/data.ts';
 import { People } from '../sim/people.ts';
 import { ReplayPort, type ReplayLine } from '../sim/port.ts';
 import { HolotableObserver } from '../holotable/observe.ts';
+import { phrase } from '../wording/index.ts';
 import { schematicLayout } from '../holotable/layout.ts';
 import { RunPublisher, type ItemRevision } from '../../tools/holotable/publish-run.ts';
 import { ShadowClock } from './clock.ts';
@@ -74,7 +75,7 @@ export class ShadowHost {
       this.sim.k.eventKinds.register({ name, tags: [], producers: ['port'], roles: [], fills: [] });
     }
     this.port = new ReplayPort(this.sim);
-    this.observer = new HolotableObserver(this.sim, undefined, undefined, { gameEpochSeconds: 0, layout: this.layout, entities: this.entities });
+    this.observer = new HolotableObserver(this.sim, undefined, undefined, { gameEpochSeconds: 0, runStartSeconds: initialGameTime, layout: this.layout, entities: this.entities });
     this.publisher = new RunPublisher(out, { mode: 'recording', session: meta.session, run: meta.run, from: meta.start, to: Number.MAX_SAFE_INTEGER, schematic: true });
   }
   private count(key: string, n = 1) { if (n) this.unmapped[key] = (this.unmapped[key] ?? 0) + n; }
@@ -239,24 +240,18 @@ export class ShadowHost {
   }
   private publish(qpc: number, derived: boolean, peopleOnly = false) {
     if (!peopleOnly) this.publishedDerived = derived;
-    const observation = this.observer.sample(), game = observation.t; observation.t = qpc;
+    const observation = this.observer.sample(); observation.t = qpc;
     for (const [layer] of observation.layers) {
       if (peopleOnly && layer !== 'people' && !layer.startsWith('people-')) { observation.layers.delete(layer); continue; }
     }
     for (const items of observation.layers.values()) for (const item of items) {
-      const interval = item.until === undefined ? undefined : `${item.t} to ${item.until}`;
       item.t = qpc; delete item.until;
-      const [caption, ...facets] = Object.entries(item.facets ?? {});
-      // Keep the caption first and the clock second, even when the common
-      // publisher bounds a verbose diagnostic item's remaining facets.
-      const publishedFacets: Record<string, string> = Object.fromEntries([...(caption ? [caption] : []),
-        [derived ? 'game time (derived)' : 'game time', String(game)],
-        ...(interval ? [['game interval', interval]] : []), ...facets]);
-      item.facets = publishedFacets;
       const actor = this.actorFacts.get(item.id);
       if (actor) {
-        publishedFacets.handle = actor.who;
-        item.value = { name: 'Unidentified person', role: 'not recorded' };
+        // Recorder handles are identity, not names. Keep them in id/cite.
+        item.label = phrase('game-person');
+        item.value = { name: phrase('game-person') };
+        item.facets = { ...item.facets, about: phrase('game-person-about') };
         if (!actor.entity) item.anchor = vec(actor.position) ? { at: actor.position } : { region: 'unplaced' };
       }
       if (item.id === this.sim.w.v) {

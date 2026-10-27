@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import { serialize } from 'node:v8';
-import { plainWords, unopenedDoing, storyCaption } from '../../src/holotable/captions.ts';
 import { HolotableObserver } from '../../src/holotable/observe.ts';
 import { quietSim } from '../sim/helpers.ts';
 import { ownedId } from '../../src/id.ts';
@@ -9,21 +8,6 @@ import type { PoolEntry } from '../../src/procedural/types.ts';
 import type { GraphState } from '../../src/procedural/graph-types.ts';
 import type { Pattern } from '../../src/seeding/pattern-types.ts';
 import type { EventsDigest } from '../../src/sim/proc-events.ts';
-
-test('story captions use the next ready function, recorded actor name, last match and outcome', () => {
-  const graph = { junctures: { old: { state: 'matched', filler: { at: 1 } }, latest: { state: 'matched', filler: { at: 2 } }, next: { state: 'ready', readySince: 3 }, later: { state: 'ready', readySince: 4 } } } as unknown as GraphState;
-  const entry = { graph, bindings: { '?actor': 'recorded-actor' }, complete: false } as unknown as PoolEntry;
-  const pattern = { junctures: { next: { fn: 'pay-debt', args: { by: '?actor' } }, later: { fn: 'leave', args: {} } } } as unknown as Pattern;
-  expect(storyCaption(entry, pattern, (id) => id === 'recorded-actor' ? 'Mira' : 'not recorded')).toBe('waiting for pay debt by Mira');
-  expect(storyCaption(entry, undefined, () => 'not recorded')).toBe('waiting for not recorded by not recorded');
-  graph.junctures.next.state = 'pending'; graph.junctures.later.state = 'pending';
-  expect(storyCaption(entry, pattern, () => 'not recorded')).toBe('under way: latest');
-  graph.outcome = { name: 'debt-paid' } as GraphState['outcome'];
-  expect(storyCaption(entry, pattern, () => 'not recorded')).toBe('ended: debt paid');
-  expect(unopenedDoing('vendor')).toBe('a merchant (not yet opened)');
-  expect(unopenedDoing()).toBe('a person (role not recorded; not yet opened)');
-  expect(plainWords('police-action')).toBe('police action');
-});
 
 test('first facets are plain captions, and every known cell fallback references its places item without resolving', () => {
   const sim = quietSim('holo-captions', undefined, []), k = sim.k;
@@ -44,12 +28,12 @@ test('first facets are plain captions, and every known cell fallback references 
   const before = serialize({ store: k.store.capture(), events: k.events.capture(), record: sim.record, state: l3.state, log: l3.log });
   const layers = new HolotableObserver(sim, undefined, l3).sample().layers;
   const first = (layer: string) => Object.keys(layers.get(layer)![0].facets!)[0];
-  expect(first('places')).toBe('heat'); expect(first('people')).toBe('doing'); expect(first('groups')).toBe('intent');
-  expect(first('events')).toBe('what'); expect(first('stories')).toBe('now'); expect(first('director')).toBe('decision');
-  expect(layers.get('places')!.find((i) => i.id === cell)!.facets!.heat).toBe('quiet, crackdown');
-  expect(layers.get('events')!.find((i) => i.id === event)!.facets!.what).toBe('theft (done) at not recorded');
-  expect(layers.get('stories')![0].facets!.now).toBe(`waiting for repay by ${expectedName}`);
-  expect(layers.get('director')![0].facets!.decision).toBe('refused at gate 7');
+  expect(first('places')).toBe('mood'); expect(first('people')).toBeUndefined(); expect(Object.keys(layers.get('groups')![0].facets!)).toHaveLength(0);
+  expect(first('events')).toBe('what happened'); expect(first('stories')).toBe('kind'); expect(first('director')).toBe('decision');
+  expect(layers.get('places')!.find((i) => i.id === cell)!.facets!.mood).toBe('quiet, under a crackdown');
+  expect(layers.get('events')!.find((i) => i.id === event)!.facets!['what happened']).toBe('A theft took place');
+  expect(layers.get('stories')![0].facets!.now).toBeUndefined();
+  expect(layers.get('director')![0].facets!.decision).toBe('Held back: the story did not pass its checks');
   for (const layer of ['people', 'events', 'stories', 'director']) {
     const item = layers.get(layer)!.find((i) => layer !== 'people' || i.id === actor)!;
     expect(item.anchor).toEqual({ item: `story-engine/places/${cell}` });
@@ -61,10 +45,10 @@ test('first facets are plain captions, and every known cell fallback references 
 test('group captions distinguish an active intention, recorded absence, and missing records', () => {
   const sim = quietSim('holo-group-caption', undefined, []), observer = new HolotableObserver(sim);
   const id = observer.sample().layers.get('groups')![0].id;
-  expect(observer.sample().layers.get('groups')![0].facets!.intent).toBe('not recorded');
-  const group = { intent: 'active:protect-market', active: { name: 'protect-market' } };
+  expect(observer.sample().layers.get('groups')![0].facets!.intends).toBeUndefined();
+  const group = { intent: 'active:protect-members', active: { name: 'protect-members' } };
   sim.k.evolution.digestPeek = <T>(key: string) => (key === 'group.decide' ? { groups: { [id]: group } } : undefined) as T | undefined;
-  expect(observer.sample().layers.get('groups')![0].facets!.intent).toBe('protect market');
+  expect(observer.sample().layers.get('groups')![0].facets!.intends).toBe('Intends to protect its members.');
   group.intent = 'none'; group.active = null as unknown as typeof group.active;
-  expect(observer.sample().layers.get('groups')![0].facets!.intent).toBe('no active intention');
+  expect(observer.sample().layers.get('groups')![0].facets!.intends).toBeUndefined();
 });

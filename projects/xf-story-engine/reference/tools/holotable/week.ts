@@ -8,6 +8,8 @@ import { schematicLayout, type Area } from '../../src/holotable/layout.ts';
 export async function runWeekCli(args: string[]): Promise<void> {
   const usage = 'Usage: bun tools/holotable/publish-run.ts <fresh-output-directory> [--world-pack <file>] [--game-epoch-seconds <number>]';
   if (!args[0] || args[0].startsWith('--')) throw Error(usage);
+  const holotableHooks = args.includes('--holotable-hooks');
+  args = args.filter((a) => a !== '--holotable-hooks');
   let worldPack = resolve(import.meta.dir, '../../../../../local/holotable/world-pack.json'), gameEpochSeconds: number | undefined;
   for (let i = 1; i < args.length; i += 2) {
     const value = args[i + 1]; if (value === undefined) throw Error(usage);
@@ -29,7 +31,7 @@ export async function runWeekCli(args: string[]): Promise<void> {
     sample(sim, l2, l3) {
       const before = performance.now();
       observer ??= new HolotableObserver(sim, l2, l3, { gameEpochSeconds, layout: schematicLayout(sim.w.index, areas) });
-      publisher ??= new RunPublisher(args[0], { set: `m3-week-${sim.k.worldSeed}`, title: 'Kabuki week (reference model)', from: observer.epoch, to: 604800 + observer.epoch, schematic: true });
+      publisher ??= new RunPublisher(args[0], { set: `m3-week-${sim.k.worldSeed}`, title: 'Kabuki week (reference model)', from: observer.epoch, to: 604800 + observer.epoch, schematic: true }, { holotableHooks });
       publishBoundary(observer, publisher);
       publishingMs += performance.now() - before; observations++;
     },

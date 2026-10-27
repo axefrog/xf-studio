@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { serialize } from 'node:v8';
-import { HolotableObserver, COARSE } from '../../src/holotable/observe.ts';
+import { HolotableObserver } from '../../src/holotable/observe.ts';
 import { RunPublisher } from '../../tools/holotable/publish-run.ts';
 import { validateManifest, type Item } from '../../src/holotable/schema.ts';
 import { quietSim, child, inject } from '../sim/helpers.ts';
@@ -17,7 +17,7 @@ import type { EventView, PoolEntry, LogEntry } from '../../src/procedural/types.
 
 const dirs: string[] = [];
 function tempDir() {
-  const dir = resolve(import.meta.dir, '../../../../../.scratch-holo', `review-${randomUUID()}`);
+  const dir = resolve(import.meta.dir, '../../../../../.scratch-holo1', `review-${randomUUID()}`);
   mkdirSync(dir, { recursive: true }); dirs.push(dir); return dir;
 }
 afterAll(() => { for (const dir of dirs) rmSync(dir, { recursive: true, force: true }); });
@@ -72,7 +72,9 @@ test('opened SF1-A-1 summary scene events retain cached descriptors and scene-ow
     expect(item).toBeDefined(); expect(item.cite).toBe(`se:event:${ev.id}`);
     expect(item.t).toBe(ev.time + (sim.w.index.clock?.sod0 ?? 0));
     expect(item.anchor).toEqual({ item: `story-engine/places/${cell}` });
-    expect(item.facets).toMatchObject({ kind: 'theft', outcome: 'done', participants: JSON.stringify(ev.participants.map((p) => `${p.role}:${p.who}`)) });
+    expect(item.label).toContain('stole from');
+    expect(item.facets!['what happened']).toBe(item.label!);
+    expect(item.facets!.who).not.toMatch(/[a-f0-9]{32}/);
   }
   expect(snapshot(sim).equals(before)).toBe(true);
 });
@@ -96,8 +98,8 @@ test('belief truth reads recorded subject values at the stated time, excluding e
   for (const name of ['cached', 'stale', 'other-time']) k.store.ensureNode(idOf(name), 20).slots.set('affiliation', { s: 'resolved', status: 'ok', value: 'civilian', at: name === 'other-time' ? 5 : 20, revision: k.revision - (name === 'stale' ? 1 : 0) });
   forbidResolution(sim); const before = snapshot(sim);
   const beliefs = new HolotableObserver(sim).sample().layers.get('beliefs')!;
-  for (const name of ['current', 'historic', 'pre-withdrawal', 'cached', 'region']) expect(beliefs.find((i) => i.facets!.about === idOf(name))!.value!.type).toBe('believes-wrongly');
-  for (const name of ['expired', 'future', 'withdrawn', 'stale', 'other-time']) expect(beliefs.find((i) => i.facets!.about === idOf(name))!.value!.type).toBe('believes');
+  for (const name of ['current', 'historic', 'pre-withdrawal', 'cached', 'region']) expect(beliefs.find((i) => i.value?.to?.item === `story-engine/people/${idOf(name)}`)!.value!.type).toBe('is wrong about');
+  for (const name of ['expired', 'future', 'withdrawn', 'stale', 'other-time']) expect(beliefs.find((i) => i.value?.to?.item === `story-engine/people/${idOf(name)}`)!.value!.type).toBe('believes');
   expect(snapshot(sim).equals(before)).toBe(true);
 });
 
@@ -136,7 +138,7 @@ test('previously emitted district people layers remain present when empty and re
   const sim = quietSim('holo-empty-district', undefined, []), cell = sim.w.districts[0].cellIds[0];
   const ids = Array.from({ length: 4001 }, (_, i) => H(s(`district-actor-${i}`)));
   for (const id of ids) sim.k.store.addHeader({ id, kind: 'xf:resident', origin: { by: 'value', owner: cell, slot: id } });
-  const observer = new HolotableObserver(sim), first = observer.sample(), layer = [...first.layers].find(([key, items]) => key.startsWith('people-') && items.length === 4001)![0];
+  const observer = new HolotableObserver(sim), first = observer.sample(), layer = [...first.layers].find(([key, items]) => key.startsWith('people-') && items.some((i) => i.label === '4001 people in the background'))![0];
   const publisher = new RunPublisher(tempDir(), { set: 'empty-district', title: 'Empty district', from: observer.epoch, to: observer.epoch + 100 });
   publisher.publish(first);
   for (const id of ids) sim.k.store.removeHeader(id);
@@ -145,18 +147,18 @@ test('previously emitted district people layers remain present when empty and re
   expect(snapshot(sim).equals(before)).toBe(true);
   publisher.publish({ ...next, t: next.t + 10 });
   expect(publisher.counts()[layer].live).toBe(0);
-  expect(rows(publisher, layer).filter((i) => i.retract)).toHaveLength(4001);
+  expect(rows(publisher, layer).filter((i) => i.retract)).toHaveLength(1);
 });
 
 test('missing event digest is coarse, but an omitted sparse band in a present digest is quiet', () => {
   const sim = quietSim('holo-heat', undefined, []), observer = new HolotableObserver(sim);
   for (const item of observer.sample().layers.get('places')!) {
-    expect(item.facets!['heat band']).toBe(COARSE); expect(item.tone).toBeUndefined();
+    expect(item.facets!.mood).toBeUndefined(); expect(item.tone).toBeUndefined();
   }
   sim.k.evolution.digestPeek = <T>(id: string) => (id === 'city.events' ? { bands: {}, regimes: [], refuge: {} } : undefined) as T | undefined;
   forbidResolution(sim); const before = snapshot(sim);
   for (const item of observer.sample().layers.get('places')!) {
-    expect(item.facets!['heat band']).toBe('quiet'); expect(item.tone).toBe('muted');
+    expect(item.facets!.mood).toBe('quiet');
   }
   expect(snapshot(sim).equals(before)).toBe(true);
 });
@@ -167,8 +169,9 @@ test('director uses the known entry pattern and marks absent pattern, candidate 
   const log = (seq: number, data: Record<string, unknown>): LogEntry => ({ seq, data, kind: 'sow', at: { game: 0, playTotal: 0, playClock: 0 }, purpose: 'schedule', class: 0, rule: 'sow', inputs: {}, chain: [] });
   forbidResolution(sim); const before = snapshot(sim);
   const items = new HolotableObserver(sim, undefined, layer3(pool, [log(1, { entry: 'entry' }), log(2, {}), log(3, { pattern: 'explicit' })])).sample().layers.get('director')!;
-  expect(items.map((i) => i.facets!.pattern)).toEqual(['known-pattern', 'not recorded', 'explicit']);
-  for (const i of items) expect(i.facets).toMatchObject({ 'candidate kind': 'not recorded', score: 'not recorded' });
+  expect(items[0].facets!.story).toBe('A story');
+  expect(items[1].facets!.story).toBeUndefined(); expect(items[2].facets!.story).toBeUndefined();
+  for (const i of items) { expect(i.facets!.score).toBeUndefined(); expect(i.label).toContain('Told you about'); expect(i.facets!.checks).toBe('passed'); }
   expect(snapshot(sim).equals(before)).toBe(true);
 });
 

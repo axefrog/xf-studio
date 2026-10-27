@@ -27,8 +27,10 @@ Locations outside the index and districts without cells are counted explicitly;
 leaving a cell clears the old reading with a declared unknown id.
 
 Actors become session/run-scoped mirrored people with sampled entity and position.
-They are labelled **Unidentified person**. Record, affiliation and crowd readings
-are absent and never inferred. Entity anchors use Holotable's actor track; a
+They are labelled **Someone nearby**, with no role, and the explanation
+"Seen in the game; who they are isn't recorded yet." Recorder handles remain in
+identity/citation fields. Record, affiliation and crowd readings are absent and
+never inferred. Entity anchors use Holotable's actor track; a
 position-only actor uses its observed coordinates. An invalid/missing position
 is counted and is never presented as a new position reading. `valid:false` breaks
 the actor's track even if a malformed sample carries coordinates. The host
@@ -107,13 +109,15 @@ includes buffered readings and queued events in the unfinished window.
 
 Every manifest uses `clock: "recording"` and binds its session and run. Item and
 retraction times are the QPC observation that drove their completed window.
-The game time remains in a facet, labelled `game time (derived)` when applicable.
-Source game intervals remain in a facet rather than being mistaken for QPC.
+Clock conversion and its derived/recorded rules remain in the summary. Raw game
+times and source intervals are omitted from display facets. Timed cause sentences
+use the shared wording renderer, with days counted from this run's start.
 An unfinished final window stays queued and its pending-input count is reported;
 the host never advances beyond the feed just to flush it.
 
 The existing publisher retains its bounds, glyphs, captions and branch rules.
-Standalone mode retains its original manifest bytes. Recording spools and
+Standalone mode retains its game-clock binding; people now admits crowd points
+alongside actors, as described in [Holotable layers](HOLOTABLE.md). Recording spools and
 `summary.json` contain no wall-clock timings; timing diagnostics go to stdout.
 Live mode owns a read-only connection through Holotable's live source, whose
 catch-up requests are capped at one per second. The only admitted commands are

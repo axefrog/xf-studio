@@ -20,10 +20,12 @@ export function personGlyph(role?: string): string {
   return ['merchant', 'collector', 'fixer', 'police', 'medic', 'courier', 'gang-member', 'gang-leader', 'netrunner', 'civilian'].includes(name) ? name : 'person';
 }
 export function eventGlyph(kind: string): string {
-  const aliases: Record<string, string> = { 'gang-clash': 'clash', 'psycho-break': 'cyberpsychosis', commerce: 'trade', tell: 'rumour', telling: 'rumour', confront: 'confrontation' };
+  const aliases: Record<string, string> = { 'gang-clash': 'clash', 'psycho-break': 'cyberpsychosis', commerce: 'trade', tell: 'rumour', telling: 'rumour', confront: 'confrontation', threat: 'warning', price: 'warning', search: 'confrontation', presence: 'scene', 'game.death': 'death', 'meta:story': 'story' };
   const name = aliases[kind] ?? kind;
-  return ['theft', 'assault', 'clash', 'shakedown', 'police-action', 'cyberpsychosis', 'disorder', 'accident', 'outage', 'trade', 'rumour', 'warning', 'confrontation', 'death'].includes(name) ? name : 'event';
+  return ['theft', 'assault', 'clash', 'shakedown', 'police-action', 'cyberpsychosis', 'disorder', 'accident', 'outage', 'trade', 'rumour', 'warning', 'confrontation', 'death', 'scene', 'story'].includes(name) ? name : 'event';
 }
+export const storyGlyph = (family?: string) => family === 'turn' ? 'juncture' : family === 'shape' ? 'thread' : 'story';
+export const decisionGlyph = (kind?: string, held = false) => held ? 'held' : kind === 'told' ? 'rumour' : kind === 'surface' ? 'direction' : kind === 'explain' ? 'note' : 'sown';
 export function placeGlyph(regimes: readonly string[], refuge: boolean): string {
   return regimes.includes('crackdown') ? 'crackdown' : regimes.includes('festival') ? 'festival' : refuge ? 'refuge' : 'place';
 }

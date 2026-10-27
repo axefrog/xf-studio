@@ -2,8 +2,9 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } fro
 import { resolve, join } from 'node:path';
 import { HolotableObserver, LAYERS, type Observation } from '../../src/holotable/observe.ts';
 import { BOUNDS, validateManifest, validateRecord, type Manifest, type RecordLine, type Item } from '../../src/holotable/schema.ts';
-import { boundText } from '../../src/holotable/facets.ts';
+import { boundText, compatibilityDetail } from '../../src/holotable/facets.ts';
 import { KIND_GLYPHS, unknownGlyphs } from '../../src/holotable/glyphs.ts';
+import { facetTitles } from '../../src/holotable/titles.ts';
 
 export type RunOptions = {
   set: string; title: string; from: number; to: number;
@@ -36,7 +37,7 @@ export function spoolLine(record: unknown): string {
 export class RunPublisher {
   readonly directory: string;
   private layers = new Map<string, LayerState>();
-  constructor(directory: string, readonly run: RunOptions) {
+  constructor(directory: string, readonly run: RunOptions, readonly options: { holotableHooks?: boolean } = {}) {
     this.directory = resolve(directory);
     if (existsSync(this.directory) && readdirSync(this.directory).some((f) => f.endsWith('.jsonl'))) throw Error('Output directory already contains spools; use a fresh directory');
     const manifests = Object.entries(LAYERS).map(([layer, kinds]) => this.manifest(layer, kinds));
@@ -49,6 +50,7 @@ export class RunPublisher {
       : { clock: 'game' as const, standalone: { set: this.run.set, title: this.run.title, from: this.run.from, to: this.run.to, clock: 'game' as const } };
     const { clock, ...identity } = binding;
     return { schema: 'xfh/layer-1', producer: 'story-engine', layer, title: layer.replaceAll('-', ' ') + (layer === 'places' && this.run.schematic ? ' (schematic layout)' : ''),
+      ...(this.options.holotableHooks ? { producer_title: 'Story Engine', facet_titles: facetTitles(layer) } : {}),
       ...(this.run.schematic ? { description: 'Districts use real place ids; synthetic cells and their contents use a schematic layout, not measured street geometry.' } : {}), content: 'full', clock, kinds,
       ...identity };
   }
@@ -65,7 +67,7 @@ export class RunPublisher {
     for (const layer of new Set([...observation.layers.keys(), ...(observation.retractions?.keys() ?? [])])) {
       const incoming = observation.layers.get(layer) ?? [];
       const old = this.layers.get(layer);
-      const m = old?.manifest ?? this.manifest(layer, ['actor']);
+      const m = old?.manifest ?? this.manifest(layer, ['actor', 'point']);
       validateManifest(m);
       const state = old ?? { manifest: m, bytes: Buffer.byteLength(spoolLine(m)), values: new Map(), retracted: new Set<string>(), retractionTimes: new Map<string, Set<number>>(), records: [], truncations: 0, unknownGlyphs: 0 };
       const values = new Map(state.values), retracted = new Set(state.retracted), seen = new Set<string>(), lines: RecordLine[] = [];
@@ -79,7 +81,11 @@ export class RunPublisher {
       for (const value of incoming) {
         const item = structuredClone(value);
         item.glyph ??= KIND_GLYPHS[item.kind];
-        const shortened = boundText(item) + (observation.truncations?.get(layer)?.get(item.id) ?? 0);
+        let shortened = boundText(item) + (observation.truncations?.get(layer)?.get(item.id) ?? 0);
+        if (!this.options.holotableHooks && item.detail) {
+          item.detail = compatibilityDetail(item.detail);
+          shortened += boundText(item); // separators can lengthen a near-limit detail
+        }
         item.branch ??= observation.branch;
         validateRecord(item, m);
         const id = key(item.id, item.branch);

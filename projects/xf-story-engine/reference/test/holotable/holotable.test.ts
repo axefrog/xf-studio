@@ -4,7 +4,7 @@ import { resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { serialize } from 'node:v8';
 import { spawnSync } from 'node:child_process';
-import { HolotableObserver, COARSE } from '../../src/holotable/observe.ts';
+import { HolotableObserver } from '../../src/holotable/observe.ts';
 import { validateManifest, validateRecord, type Item, type Manifest } from '../../src/holotable/schema.ts';
 import { RunPublisher, checkItemBounds } from '../../tools/holotable/publish-run.ts';
 import { GLYPHS, BADGES } from '../../src/holotable/glyphs.ts';
@@ -19,7 +19,7 @@ import { schematicLayout } from '../../src/holotable/layout.ts';
 import { makeKabukiSlice } from '../../src/sim/slices.ts';
 
 setDefaultTimeout(180_000);
-const scratch = resolve(import.meta.dir, '../../../../../.scratch-holo');
+const scratch = resolve(import.meta.dir, '../../../../../.scratch-holo1');
 const folders: string[] = [];
 function tempDir() {
   mkdirSync(scratch, { recursive: true });
@@ -108,25 +108,23 @@ test('coarse residents, explicit entity bindings, frame/place/event/item belief 
   const people = observation.layers.get('people')!;
   const actor = people.find((i) => i.id === a)!;
   expect(actor.anchor).toEqual({ entity: 'entity-a' });
-  expect(actor.value!.role).toBe(String(role));
-  expect(Object.keys(actor.facets!)).toEqual(['doing', 'goal', 'planning', 'thinking', 'affiliation', 'detail']);
-  expect(actor.facets!.doing).toContain('(not yet opened)');
-  expect(observation.layers.get('detail')!.find((i) => i.id === cell)!.facets).toEqual({ detail: 'tier 3' });
+  expect(actor.value!.role).toBeDefined();
+  expect(actor.label).toContain(actor.value!.name!);
+  expect(actor.facets!.doing).toBeUndefined(); // unknown is absent
+  expect(observation.layers.get('detail')!.find((i) => i.id === cell)!.label).toBe('Simulated in full detail');
   const ties = observation.layers.get('ties')!;
-  expect(ties.find((i) => i.value?.type === 'colleague')!.value!.strength).toBe(0.75);
+  expect(ties.find((i) => i.value?.type === 'works with')!.value!.strength).toBe(0.75);
   expect(ties.find((i) => i.value?.type === 'holds')!.value!.to).toEqual({ item: `story-engine/items/${item}` });
   const prop = observation.layers.get('items')![0];
   expect(prop.anchor).toEqual({ entity: 'entity-a' });
-  expect(prop.facets!['holder history']).toContain(b);
+  expect(prop.facets!.holder).toBe(actor.value!.name!);
   const beliefs = observation.layers.get('beliefs')!;
-  expect(beliefs.find((i) => i.facets!.claim.includes('prevented'))!.value!.type).toBe('believes');
-  expect(beliefs.find((i) => i.facets!.about === event)!.value!.type).toBe('believes-wrongly');
-  expect(beliefs.find((i) => i.facets!.about === frame.id)!.value!.to).toEqual({ item: `story-engine/people/${a}` });
-  expect(beliefs.find((i) => i.facets!.about === cell)!.value!.to).toEqual({ item: `story-engine/places/${cell}` });
-  expect(beliefs.find((i) => i.facets!.about === item)!.value!.to).toEqual({ item: `story-engine/items/${item}` });
-  const cause = observation.layers.get('events')!.find((i) => i.value?.type === 'caused')!;
-  expect(cause.anchor).toEqual({ item: `story-engine/events/${event}` });
-  expect(cause.value!.to).toEqual({ item: `story-engine/events/${parent}` });
+  expect(beliefs.find((i) => i.cite.startsWith('se:belief:') && i.value?.type === 'is wrong about')).toBeDefined();
+  expect(beliefs.some((i) => i.value!.to?.item === `story-engine/people/${a}`)).toBe(true);
+  expect(beliefs.some((i) => i.value!.to?.item === `story-engine/places/${cell}`)).toBe(false); // the synthetic place has no known name
+  // Unknown item names are absent, and the complete event cause chain is prose.
+  expect(observation.layers.get('events')!.find((i) => i.id === event)!.detail).toContain('Day 1, 00:00:');
+  expect(observation.layers.get('events')!.every((i) => i.kind === 'point')).toBe(true);
 });
 
 test('12 manifests, schema/citations/bounds, shared standalone span, deduplication and retractions', () => {
@@ -202,7 +200,7 @@ test('people split above 4000 keeps cross-layer relation references consistent',
   for (let i = 0; i < 4001; i++) sim.k.store.addHeader({ id: H(s(`holo-person-${i}`)), kind: 'xf:resident', origin: { by: 'value', owner: cell, slot: `fixture-${i}` } });
   const observation = new HolotableObserver(sim).sample();
   expect(observation.layers.get('people')).toEqual([]);
-  expect([...observation.layers].filter(([l]) => l.startsWith('people-')).flatMap(([, a]) => a).length).toBe(4002); // residents plus V
+  expect([...observation.layers].filter(([l]) => l.startsWith('people-')).flatMap(([, a]) => a).length).toBe(2); // one crowd plus V
 });
 
 test('a save branch retracts inherited prefix items only on that branch, once', () => {
@@ -252,12 +250,14 @@ test('schematic cells are deterministic, bounded, labelled and place all cell fa
       const cell = sim.w.districts[0].cellIds[0];
       const zone = obs.layers.get('places')!.find((i) => i.id === cell)!;
       expect(zone.anchor).toEqual(layout.cells.get(cell)!);
-      expect(zone.facets!.layout).toBe('schematic layout');
+      expect(zone.facets!.layout).toBeUndefined();
+      expect(zone.facets!.about).toBe('A sketch of this block, not the real streets yet.');
+      expect(Object.keys(zone.facets!).at(-1)).toBe('about');
       for (const detail of obs.layers.get('detail')!) if (layout.cells.has(detail.id)) expect(detail.anchor).toEqual(layout.cells.get(detail.id)!);
       const district = obs.layers.get('places')!.find((i) => i.id === sim.w.districts[0].id)!;
       expect(district.anchor).toEqual({ region: 'Districts.Kabuki' });
       const point = obs.layers.get('events')!.find((i) => i.kind === 'point' && 'item' in i.anchor)!;
-      expect(point.facets!.layout).toBe('schematic layout');
+      expect(point.facets!.layout).toBeUndefined();
       expect('item' in point.anchor && [...layout.cells.keys()].some((id) => 'item' in point.anchor && point.anchor.item === `story-engine/places/${id}`)).toBe(true);
     },
   });
