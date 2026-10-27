@@ -1,12 +1,13 @@
 /** Synthetic friendly-map acceptance. Owns its headless browser and ephemeral loopback server. */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { checkFriendlyNavigation } from "./friendly-navigation-acceptance";
 import { launch, type Session } from "../../xf-studio/authoring/tools/cdp";
 const output=resolve(import.meta.dir,"../../../local/holotable/evidence/friendly");mkdirSync(output,{recursive:true});
 const built=await Bun.build({entrypoints:[join(import.meta.dir,"friendly-preview-client.ts")],target:"browser",format:"esm"});if(!built.success)throw Error(built.logs.join("\n"));
 const script=await built.outputs[0].text(),authoring=resolve(import.meta.dir,"../../xf-studio/authoring");
 const server=Bun.serve({hostname:"127.0.0.1",port:0,fetch(request){const url=new URL(request.url);if(url.pathname==="/studio.css")return new Response(Bun.file(join(authoring,"public/studio.css")),{headers:{"content-type":"text/css"}});if(url.pathname==="/client.js")return new Response(script,{headers:{"content-type":"text/javascript"}});if(url.searchParams.get("verify")!=="1")return new Response("Verification workspace required",{status:400});return new Response('<!doctype html><html><meta charset="utf-8"><title>Friendly map verification</title><link rel="stylesheet" href="/studio.css"><body><script type="module" src="/client.js"></script></body></html>',{headers:{"content-type":"text/html"}});}});
-const reviewOnly=Bun.argv.includes("--review-only"),selectedOnly=Bun.argv.includes("--selected-only"),layoutOnly=Bun.argv.includes("--layout-only");
+const reviewOnly=Bun.argv.includes("--review-only"),selectedOnly=Bun.argv.includes("--selected-only"),layoutOnly=Bun.argv.includes("--layout-only"),inputOnly=Bun.argv.includes("--input-only");
 let page:Session|undefined;const results:unknown[]=[];
 try{
  page=await launch(`http://127.0.0.1:${server.port}/?verify=1`,{width:1520,height:840,motion:"no-preference",args:["--disable-gpu","--no-sandbox"]});
@@ -16,6 +17,8 @@ try{
   await page.waitFor('document.body.dataset.ready==="true"',15000);
   await page.waitFor('globalThis.holoVerification.frames.length>0',5000);
   await page.waitFor("globalThis.holoVerification.service.snapshot().open.world.areas.length>0",5000);
+  const navigation=inputOnly||!reviewOnly&&!selectedOnly&&!layoutOnly?await checkFriendlyNavigation(page):undefined;
+  if(inputOnly){results.push({theme,width,navigation});continue;}
   const prefix=`${theme}-${width}`;
   const initial=await page.evaluate('globalThis.holoVerification.frames.at(-1).target');
   const inspect=await page.evaluate(`(()=>{const d=document.querySelector('.holotable-details'),c=d.querySelector('[data-holo-card]'),t=[...c.querySelectorAll('button')].find(b=>b.textContent==='Technical');return {summary:c.textContent.includes('Waiting for the courier.'),technical:t.getAttribute('aria-expanded'),facet:c.textContent.includes('Affiliation'),count:d.textContent.includes('of 31 in this set'),district:[...document.querySelectorAll('.holotable-panel svg text')].some(t=>t.textContent==='Synthetic district'),overflow:document.querySelector('.holotable-panel').scrollWidth>document.querySelector('.holotable-panel').clientWidth};})()`);
@@ -69,8 +72,8 @@ try{
   await page.evaluate(`document.querySelector('[data-holotable-layer]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:600,clientY:450}))`);
   await page.evaluate(`[...document.querySelectorAll('[role="menuitem"]')].find(b=>b.textContent.includes('Focus on this layer')).click()`);
   await page.waitFor(`!document.querySelector('.holotable-panel button[aria-label="Back"]').hidden`,5000);
-  results.push({theme,width,inspect,quiet,focus:true,back:true,singleClusterClick:true,reducedMotion:true,jump:true,layerFocus:true,frames:await page.evaluate('globalThis.holoVerification.frames')});
+  results.push({theme,width,navigation,inspect,quiet,focus:true,back:true,singleClusterClick:true,reducedMotion:true,jump:true,layerFocus:true,frames:await page.evaluate('globalThis.holoVerification.frames')});
  }
  if(page.console.some(e=>e.type==="exception"||e.type==="error"))throw Error(JSON.stringify(page.console));
- writeFileSync(join(output,layoutOnly?"architecture-layout-measurements.json":selectedOnly?"code-review-measurements.json":reviewOnly?"design-fixes-measurements.json":"measurements.json"),JSON.stringify(results,null,2));console.log(`Saved ${layoutOnly?0:selectedOnly?1:reviewOnly?8:28} captures and acceptance results to ${output}`);
+ writeFileSync(join(output,inputOnly?"navigation-acceptance.json":layoutOnly?"architecture-layout-measurements.json":selectedOnly?"code-review-measurements.json":reviewOnly?"design-fixes-measurements.json":"measurements.json"),JSON.stringify(results,null,2));console.log(`Saved ${inputOnly||layoutOnly?0:selectedOnly?1:reviewOnly?8:28} captures and acceptance results to ${output}`);
 }finally{await page?.close();server.stop(true);}

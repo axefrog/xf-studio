@@ -42,7 +42,7 @@ const DASH: Partial<Record<Style, string>> = { gap: "2 5", area: "10 4 2 4", cam
 /** Each dash pattern's length (an odd-length list repeats twice), so a line cut at the edge continues its pattern in phase. */
 const DASH_PERIOD = Object.fromEntries(Object.entries(DASH).map(([style, d]) => { const xs = d!.split(" ").map(Number), sum = xs.reduce((a, b) => a + b, 0); return [style, xs.length % 2 ? sum * 2 : sum]; })) as Partial<Record<Style, number>>;
 
-export interface HolotableFrame { ms: number; projectMs: number; drawMs: number; width: number; height: number; target: Vec3; solids: number; cut: number; pending?: boolean; preparationFrames?: number; preparationMs?: number; clusters?: readonly {x:number;y:number;count:number}[] }
+export interface HolotableFrame { ms: number; projectMs: number; drawMs: number; width: number; height: number; target: Vec3; orbit: Orbit; viewpoints: number; solids: number; cut: number; pending?: boolean; preparationFrames?: number; preparationMs?: number; clusters?: readonly {x:number;y:number;count:number}[] }
 export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => void, motionClock?: () => number): PanelController {
   const facade = ctx.facade;
   const viewId=ctx.instance?.("holotable.view")??"holotable.view";
@@ -155,6 +155,8 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     const target = event.target as HTMLElement;
     const binding = keyBinding("holotable", event, { textInput: isTextInput(target), modalOpen: !!document.querySelector("dialog[open],[role=dialog],[role=alertdialog],[role=menu]") });
     if (binding?.action.kind !== "module") return;
+    // Escape during a drag cancels the drag (the viewpoint returns to where it was at the press) and goes no further back.
+    if(binding.id==="holo.view.back"&&drag){event.preventDefault();event.stopPropagation();const d=drag;drag=null;orbit={...d.start};if(svg.hasPointerCapture(d.id))svg.releasePointerCapture(d.id);svg.style.cursor="grab";drawnKey="";ctx.changed();return;}
     if(binding.id==="holo.view.back"){if(facade.capability({kind:"holo.view.back",view:viewId}).available){event.preventDefault();event.stopPropagation();void ctx.dispatch({kind:"holo.view.back",view:viewId},{quiet:true});}return;}
     event.preventDefault(); event.stopPropagation();
     void ctx.dispatch({ kind: binding.id === "holo.change.previous" ? "holo.change.previous" : "holo.change.next" }, { quiet: true });
@@ -174,8 +176,8 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     if(centerOverride)return centerOverride;
     return state.open?.session.meta.standalone ? focusAt(state) : vAt(state)?.position ?? state.open?.session.v[0]?.position ?? [0,0,0];
   }
-  let clusterClick:ReturnType<typeof setTimeout>|undefined,lastPicked:string|null=null;
-  let drag: { id: number; mode: "pan" | "orbit"; press: Vec3 | null; extent?: Extent; x: number; y: number; yaw: number; pitch: number; moved: boolean; mark: string | null } | null = null;
+  let clusterClick:ReturnType<typeof setTimeout>|undefined;
+  let drag: { id: number; mode: "pan" | "orbit"; press: Vec3 | null; extent?: Extent; x: number; y: number; yaw: number; pitch: number; moved: boolean; mark: string | null; start: Orbit } | null = null;
   svg.addEventListener("contextmenu",event=>event.preventDefault());
   svg.addEventListener("pointerdown", event => {
     const binding=holotablePointerBinding(pointerInputOf(event));
@@ -187,7 +189,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     const mode = binding.effect, state=facade.snapshot();
     const mark = mode==="orbit" ? (event.target as Element | null)?.closest?.("[data-id]")?.getAttribute("data-id") ?? layersCanvas.pick(event.clientX - bounds.left, event.clientY - bounds.top) : null;
     drag = { id: event.pointerId, mode, press: mode==="pan"&&currentScene ? groundPoint(currentScene.solidCamera,event.clientX-bounds.left,event.clientY-bounds.top) : null,
-      extent:state.open?panExtent(state.open.session,state.open.world):undefined, x: event.clientX, y: event.clientY, yaw: orbit.yaw, pitch: orbit.pitch, moved: false, mark };
+      extent:state.open?panExtent(state.open.session,state.open.world):undefined, x: event.clientX, y: event.clientY, yaw: orbit.yaw, pitch: orbit.pitch, moved: false, mark, start: { ...orbit } };
     if(mode==="pan")svg.style.cursor="grabbing";
     svg.setPointerCapture(event.pointerId);
   });
@@ -215,7 +217,6 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     if (!drag || event.pointerId !== drag.id) return;
     const clicked = drag.mode==="orbit"&&!drag.moved, picked = clicked ? drag.mark : null;
     drag = null; svg.style.cursor="grab";
-    lastPicked=picked;
     if (picked?.startsWith("plates:")) {clearTimeout(clusterClick);clusterClick=setTimeout(()=>{clusterClick=undefined;void ctx.dispatch({kind:"holo.view.focus",view:viewId,id:picked},{quiet:true});},250);}
     else if (picked) void ctx.dispatch({ kind: "holo.select", id: picked }, { quiet: true });
     else if (clicked && currentScene) {
@@ -228,7 +229,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   svg.addEventListener("dblclick",event=>{
     if(holotablePointerBinding("double-click")?.effect!=="focus")return;
     event.preventDefault();event.stopPropagation();drag=null;clearTimeout(clusterClick);clusterClick=undefined;
-    const bounds=svg.getBoundingClientRect(),id=(event.target as Element)?.closest?.("[data-id]")?.getAttribute("data-id")??layersCanvas.pick(event.clientX-bounds.left,event.clientY-bounds.top)??lastPicked;
+    const bounds=svg.getBoundingClientRect(),id=(event.target as Element)?.closest?.("[data-id]")?.getAttribute("data-id")??layersCanvas.pick(event.clientX-bounds.left,event.clientY-bounds.top);
     if(id)void ctx.dispatch({kind:"holo.view.focus",view:viewId,id},{quiet:true});
   });
   svg.addEventListener("pointercancel", () => { drag = null; svg.style.cursor="grab"; });
@@ -318,7 +319,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     trim(textLayer, textList.length);
     // Markers are few (V and the placed events): rebuilt each frame.
     marksLayer.replaceChildren(...scene.primitives.filter(p => p.kind === "marker").map(p => marker(p as Extract<Primitive, { kind: "marker" }>)));
-    measured?.({ ms: performance.now() - started, projectMs: projectedAt - started, drawMs: paintedAt - projectedAt, width, height, target, solids: scene.solidsDrawn, cut: scene.solidsCut, pending, preparationFrames, preparationMs,clusters:layersCanvas.clusters().map(c=>({x:c.x,y:c.y,count:c.items.length})) });
+    measured?.({ ms: performance.now() - started, projectMs: projectedAt - started, drawMs: paintedAt - projectedAt, width, height, target, orbit:{...frame.orbit,pan:frame.orbit.pan?[...frame.orbit.pan]:undefined}, viewpoints:nav.depth, solids: scene.solidsDrawn, cut: scene.solidsCut, pending, preparationFrames, preparationMs,clusters:layersCanvas.clusters().map(c=>({x:c.x,y:c.y,count:c.items.length})) });
     if (pending && !disposed) resumeFrame = requestAnimationFrame(() => {
       resumeFrame = undefined;
       if (!disposed && element.isConnected && element.getClientRects().length) { drawnKey = ""; draw(facade.snapshot()); }

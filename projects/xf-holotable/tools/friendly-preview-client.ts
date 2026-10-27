@@ -1,7 +1,7 @@
 import { camera, fitOrbit, ORBITS, project } from "../../xf-studio/authoring/src/features/holotable/view/projection";
 import { moduleTargetMenu } from "../../xf-studio/authoring/src/studio-ui/target-menus";
 // Asset-free isolated verification fixture. Uses the real service, panels, components and renderer.
-import { createHolotable } from "../../xf-studio/authoring/src/features/holotable/service";
+import { createHolotable, type HoloAction } from "../../xf-studio/authoring/src/features/holotable/service";
 import { holotableFacade, type HolotableFacade } from "../../xf-studio/authoring/src/features/holotable/facade";
 import { holotablePanel } from "../../xf-studio/authoring/src/features/holotable/view/panel";
 import { holotableDetailsPanel } from "../../xf-studio/authoring/src/features/holotable/view/details-panel";
@@ -33,9 +33,10 @@ const session:HoloSession={meta:{session:"synthetic",run:1,start:0,end:game?6048
   standalone:{set:"synthetic/glyphs",title:"Glyph plates",clock:game?"game":"recording",branches:[],extent:{min:[-220,-220,0],max:[220,220,30]}}},v:[],camera:[],events:[{id:"synthetic-event",kind:"line",t:0,seq:1,summary:"Synthetic event",detail:"Said line one\nSaid line two",level:"full",cite:"synthetic:event"}],gaps:[]};
 const service=createHolotable({transport:async(method,p,signal)=>{if(method==="world.around"&&p.center)contexts.push({center:p.center,signal});return({ok:true,status:200,data:{ok:true,result:method==="runs.list"?[{dir:"synthetic",session:"synthetic",run:1,start:0,end:session.meta.to,bytes:1,complete:true,standalone:true}]:method==="session.open"?session:method==="layers.watch"?{watch:"synthetic"}:method==="layers.poll"?answer(Number(p.t)):method==="world.around"?{provenance:null,areas:[{id:"district",name:"Synthetic district",kind:"district",poly:[[80,100],[220,100],[220,220],[80,220]],zlo:0,zhi:30}],cells:[]}:{} }});},
   every:(_ms,fn)=>{tick=fn;return()=>{tick=()=>{};};},later:(ms,fn)=>{if(ms!==250)return()=>{};const id=setTimeout(fn,ms);return()=>clearTimeout(id);}},ctl.signal);
+const actions:HoloAction[]=[];
 const facade=holotableFacade(service),panels:ReturnType<typeof holotablePanel>[]=[],frames:unknown[]=[];
 const paint=()=>{for(const panel of panels)panel.update(undefined as never);};
-const ctx={facade,instance:(id:string)=>id,targets:()=>({view:"holotable.view"}),changed:paint,targetMenu:(definition,anchor,invoker)=>{moduleTargetMenu(facade,definition,action=>{void ctx.dispatch(action as never);},anchor,{invoker});},dispatch:async action=>(await service.dispatch(action)).ok} as ModuleViewContext<HolotableFacade>;
+const ctx={facade,instance:(id:string)=>id,targets:()=>({view:"holotable.view"}),changed:paint,targetMenu:(definition,anchor,invoker)=>{moduleTargetMenu(facade,definition,action=>{void ctx.dispatch(action as never);},anchor,{invoker});},dispatch:async action=>{actions.push(action);return (await service.dispatch(action)).ok;}} as ModuleViewContext<HolotableFacade>;
 const view=holotablePanel(ctx,f=>{frames.push(f);if(frames.length>100)frames.shift();}),details=holotableDetailsPanel(ctx);panels.push(view,details);
 const reference=new GroupSection({title:"Component reference",key:"verification:playback",expanded:true});
 const pattern=new Segmented({label:"Compact Segmented",compact:true,options:[{value:1,label:"1×"},{value:4,label:"4×"},{value:16,label:"16×"}],onSelect(){}});pattern.update(4);
@@ -47,7 +48,7 @@ document.body.replaceChildren(h("main",{style:"padding:20px;width:max-content"},
 service.subscribe(paint);service.shown();
 for(let n=0;n<30;n++)await Promise.resolve();await service.dispatch({kind:"holo.open",dir:"synthetic"});await service.dispatch({kind:"holo.select",id:"synthetic/glyphs/Fixer"});paint();
 paint();
-(globalThis as any).holoVerification={service,frames,contexts,paint,async producerTitle(title?:string){producerTitle=title;await service.dispatch({kind:"holo.seek",t:service.snapshot().t});paint();},async pulse(){await service.dispatch({kind:"holo.seek",t:threshold-.01});await service.dispatch({kind:"holo.play",on:true});tick();for(let n=0;n<30;n++)await Promise.resolve();clock=150;paint();},async fade(){await service.dispatch({kind:"holo.seek",t:threshold*2-.01});await service.dispatch({kind:"holo.play",on:true});tick();for(let n=0;n<30;n++)await Promise.resolve();clock=300;paint();}};
+(globalThis as any).holoVerification={service,frames,contexts,actions,paint,async producerTitle(title?:string){producerTitle=title;await service.dispatch({kind:"holo.seek",t:service.snapshot().t});paint();},async pulse(){await service.dispatch({kind:"holo.seek",t:threshold-.01});await service.dispatch({kind:"holo.play",on:true});tick();for(let n=0;n<30;n++)await Promise.resolve();clock=150;paint();},async fade(){await service.dispatch({kind:"holo.seek",t:threshold*2-.01});await service.dispatch({kind:"holo.play",on:true});tick();for(let n=0;n<30;n++)await Promise.resolve();clock=300;paint();}};
 (globalThis as any).holoVerification.details=details;
 (globalThis as any).holoVerification.debug=()=>{const state=service.snapshot(),r=view.spec.element.querySelector("svg")!.getBoundingClientRect(),o=fitOrbit(session.meta.standalone!.extent!,ORBITS.tilt,r.width,r.height);return {world:state.open!.world,orbit:o,text:project(session,state.open!.world,state.t,state.layers,o,r.width,r.height,state.selected,[0,0,15]).primitives.filter(p=>p.kind==="text")};};
 (globalThis as any).holoVerification.initialPoint=(point:readonly[number,number,number])=>{const svg=view.spec.element.querySelector("svg")!,r=svg.getBoundingClientRect(),extent=session.meta.standalone!.extent!,orbit=fitOrbit(extent,ORBITS.tilt,r.width,r.height),center=extent.min.map((n,i)=>(n+extent.max[i])/2) as [number,number,number],xy=camera(center,orbit,r.width,r.height).point(point)!;return {x:r.left+xy[0],y:r.top+xy[1]};};
