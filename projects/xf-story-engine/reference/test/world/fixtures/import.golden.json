@@ -154,10 +154,10 @@
           }
         ],
         "pop": [
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379
         ],
         "presence": {
           "Animals": 0.006072874493927126,
@@ -325,10 +325,10 @@
           }
         ],
         "pop": [
-          1966.1691542288559,
-          1966.1691542288559,
-          1966.1691542288559,
-          1966.1691542288559
+          2079.6019900497513,
+          2079.6019900497513,
+          2079.6019900497513,
+          2079.6019900497513
         ],
         "presence": {
           "TygerClaws": 0.5,
@@ -495,10 +495,10 @@
           }
         ],
         "pop": [
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379
         ],
         "presence": {
           "Animals": 0.006072874493927126,
@@ -664,10 +664,10 @@
           }
         ],
         "pop": [
-          983.0845771144279,
-          983.0845771144279,
-          983.0845771144279,
-          983.0845771144279
+          1039.8009950248756,
+          1039.8009950248756,
+          1039.8009950248756,
+          1039.8009950248756
         ],
         "presence": {
           "civilian": 1
@@ -827,10 +827,10 @@
           }
         ],
         "pop": [
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379
         ],
         "presence": {
           "Animals": 0.006072874493927126,
@@ -1420,7 +1420,7 @@
         ]
       }
     },
-    "hash": "f2bbfd4e5b78ef9255837232217a6d9f",
+    "hash": "229f9911f2d322f63184b110a6cc2a9e",
     "names": {
       "grid:0,0": "afe58497541db22ba7fe7cef72d2587d",
       "grid:0,1": "c395de04232f26a7f02010379a825034",
@@ -1826,7 +1826,7 @@
       },
       {
         "field": "presence/pop",
-        "rule": "Each person-entry period/spot link contributes quantity times span overlap / six hours to S1 windows starting 06:00, 12:00, 18:00, 00:00. Absent quantity means an unexported class default, treated as one unit, not a verified game default; explicit zero contributes nothing. Normalise once so the district mean over four periods equals the stand-in census total. Presence has no per-period slot: one quantity/duration-weighted affiliation share over all spans. Exclude vehicle/other/unresolved affiliations; civilian/Unaffiliated merged, NCPD normalized. Alternative phases are summed as potential content, not asserted active. Legacy phases lacking periods use distinct all-day entry/spot links. Blocks without eligible person links get an all-day floor of 1% of mean block weight (mean 1 if all empty); explicit-zero links do not trigger a floor. Empty-weight presence uses census affiliation shares. No simultaneous occupancy claim.",
+        "rule": "Each person-entry period/spot link contributes quantity times span overlap / six hours to S1 windows starting 06:00, 12:00, 18:00, 00:00. Absent quantity means an unexported class default, treated as one unit, not a verified game default; explicit zero contributes nothing. Normalise once to the mean of the four stand-in district pop totals, derived from its original cell pop arrays independently of residential census/headcount (see population.standInPopTotals/popTarget/popMean). Presence has no per-period slot: one quantity/duration-weighted affiliation share over all spans. Exclude vehicle/other/unresolved affiliations; civilian/Unaffiliated merged, NCPD normalized. Alternative phases are summed as potential content, not asserted active. Legacy phases lacking periods use distinct all-day entry/spot links. Blocks without eligible person links get an all-day floor of 1% of mean block weight (mean 1 if all empty); explicit-zero links do not trigger a floor. Empty-weight presence uses census affiliation shares. No simultaneous occupancy claim.",
         "source": "derived"
       },
       {
@@ -1880,10 +1880,10 @@
         "name": "Judy's Apartment",
         "personLinks": 1,
         "pop": [
-          983.0845771144279,
-          983.0845771144279,
-          983.0845771144279,
-          983.0845771144279
+          1039.8009950248756,
+          1039.8009950248756,
+          1039.8009950248756,
+          1039.8009950248756
         ],
         "presenceFloor": false,
         "presenceTop3": [
@@ -1910,10 +1910,10 @@
         "name": "Kabuki, block 2",
         "personLinks": 2,
         "pop": [
-          1966.1691542288559,
-          1966.1691542288559,
-          1966.1691542288559,
-          1966.1691542288559
+          2079.6019900497513,
+          2079.6019900497513,
+          2079.6019900497513,
+          2079.6019900497513
         ],
         "presenceFloor": false,
         "presenceTop3": [
@@ -1942,10 +1942,10 @@
         "name": "Kabuki, block 3",
         "personLinks": 0,
         "pop": [
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379
         ],
         "presenceFloor": true,
         "presenceTop3": [
@@ -1978,10 +1978,10 @@
         "name": "Kabuki, block 4",
         "personLinks": 0,
         "pop": [
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379
         ],
         "presenceFloor": true,
         "presenceTop3": [
@@ -2014,10 +2014,10 @@
         "name": "Kabuki, block 5",
         "personLinks": 0,
         "pop": [
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214,
-          4.91542288557214
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379,
+          5.199004975124379
         ],
         "presenceFloor": true,
         "presenceTop3": [
@@ -2081,7 +2081,7 @@
       "districtAreaM2": 160000,
       "retainedBlockAreaM2": 160000
     },
-    "indexHash": "f2bbfd4e5b78ef9255837232217a6d9f",
+    "indexHash": "229f9911f2d322f63184b110a6cc2a9e",
     "lineage": "Different input content or geometry creates a new lineage. Origin-anchored grid keys are stable; ordinal member ids can shift when earlier cells are inserted.",
     "periods": {
       "names": [],
@@ -2129,8 +2129,16 @@
     },
     "population": {
       "census": 2964,
+      "popMean": 3135,
+      "popTarget": 3135,
       "roundedHeadcount": 2964,
-      "roundingDelta": 0
+      "roundingDelta": 0,
+      "standInPopTotals": [
+        2820,
+        3239.9999999999995,
+        3900,
+        2580
+      ]
     },
     "schema": "xf.s1-world-import-report@1",
     "templates": {

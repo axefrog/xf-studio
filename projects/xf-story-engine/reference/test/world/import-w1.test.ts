@@ -261,7 +261,13 @@ test('population census, zero venue residents, affiliation normalization, floor 
   expect(report.counts.floorBlocks).toBe(3);
   expect(report.counts.nonPersonSpotLinks).toBe(1);
   expect(Object.values(report.affiliations.personSpotLinks).reduce((a,b)=>a+b,0)).toBe(3);
-  expect(Object.values(index.cells).reduce((s,c)=>s+c.pop[0],0)).toBeCloseTo(2964, 9);
+  const standIn=makeKabukiSlice();
+  const target=Object.values(standIn.cells).filter((c)=>standIn.districts[c.district].key==='wat_kab')
+    .reduce((n,c)=>n+c.pop.reduce((a,b)=>a+b,0)/4,0);
+  expect(Object.values(index.cells).reduce((s,c)=>s+c.pop[0],0)).toBeCloseTo(target, 9);
+  expect(report.population.popTarget).toBeCloseTo(target,9);
+  expect(report.population.popMean).toBeCloseTo(target,9);
+  expect(report.population.popTarget).not.toBe(report.population.census);
   const { pack, content } = fixture(); content.records['2'].affiliationName = 'Factions.NCPD';
   expect(importW1(pack,content).report.affiliations.personEntries.ncpd).toBe(1);
 });
@@ -276,7 +282,7 @@ test('residential shares conserve the census when rounded clipping changes retai
     expect(cells).toHaveLength(2);
     expect(report.geometry).toEqual({ districtAreaM2: 20, retainedBlockAreaM2: 20.05, areaDeltaM2: 0.05 });
     expect(cells.reduce((n, c) => n + c.headShare, 0)).toBe(1);
-    expect(report.population).toEqual({ census: 2964, roundedHeadcount: 2964, roundingDelta: 0 });
+    expect(report.population).toMatchObject({ census: 2964, roundedHeadcount: 2964, roundingDelta: 0 });
     expect(report.cells.reduce((n, c) => n + c.residents, 0)).toBe(2964);
   }
   // More cells and sloped/disconnected geometry also close exactly in cell order.

@@ -30,7 +30,8 @@ export interface ImportReport {
     droppedServices: number; coverage: Record<string, number>; standInTemplate: string }>;
   templates: { block: { name: string; id: string; rule: string }; venue: { name: string; id: string; rule: string } };
   geometry: { districtAreaM2: number; retainedBlockAreaM2: number; areaDeltaM2: number };
-  population: { census: number; roundedHeadcount: number; roundingDelta: number };
+  population: { census: number; roundedHeadcount: number; roundingDelta: number;
+    standInPopTotals: Per4; popTarget: number; popMean: number };
   affiliations: { census: Array<{ aff: string; q: number }>; personEntries: Record<string, number>; personSpotLinks: Record<string, number> };
   periods: { reader: string | null; names: Array<{ name: string; count: number; start: number | null; rule: PeriodRule }>;
     unknownNames: Record<string, number>; quantities: { stated: number; absent: number; explicitZero: number };
@@ -105,6 +106,10 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
     pois: sourceContent.pois.map((p)=>({...p,at:quantiseXYZ(p.at)}))};
   for(const a of pack.areas) if(a.poly.length<3||area(a.poly)<=0) throw Error('W1 import refused: invalid area after mm quantisation');
   const base = makeKabukiSlice(), district = base.districts[districtIdOf('wat_kab')];
+  // Capture the stand-in's presence scale before replacing its district cells.
+  // Population present is independent of the residential census/headcount.
+  const standInPopTotals = [0,1,2,3].map((p) => district.cellIds.reduce((n,id) => n + base.cells[id].pop[p], 0)) as Per4;
+  const popTarget = standInPopTotals.reduce((n,total) => n + total, 0) / 4;
   const outlines = pack.areas.filter((a) => a.id === 'Districts.Kabuki');
   if (outlines.length !== 1) throw Error('W1 import requires one Kabuki district outline');
   const outline = outlines[0], districtArea = area(outline.poly);
@@ -265,7 +270,7 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
       c.headShare = g === blocks[blocks.length - 1] ? 1 - allocatedHeadShare : g.area / retainedBlockArea;
       allocatedHeadShare += c.headShare;
     }
-    c.pop = popWeights[id].map((weight) => totalWeight ? district.entry.total * weight / totalWeight : 0) as Per4;
+    c.pop = popWeights[id].map((weight) => popTarget * weight / totalWeight) as Per4;
     const n = sum(weights[id]);
     c.presence = n ? Object.fromEntries(Object.keys(weights[id]).sort(cmp).map((aff) => [aff, weights[id][aff] / n])) : { ...censusShares };
     c.adj1 = []; c.adj2 = [];
@@ -324,13 +329,14 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
     cells: rows, templates, periods,
     geometry: { districtAreaM2: districtArea / 1_000_000, retainedBlockAreaM2: retainedBlockArea / 1_000_000,
       areaDeltaM2: (retainedBlockArea - districtArea) / 1_000_000 },
-    population: { census: district.entry.total, roundedHeadcount, roundingDelta: roundedHeadcount - district.entry.total },
+    population: { census: district.entry.total, roundedHeadcount, roundingDelta: roundedHeadcount - district.entry.total,
+      standInPopTotals, popTarget, popMean: [0,1,2,3].reduce((n,p) => n + cellIds.reduce((total,id) => total + cells[id].pop[p], 0), 0) / 4 },
     affiliations: { census: district.entry.byAff.map(({ aff, q }) => ({ aff, q })), personEntries, personSpotLinks }, counts, unknownPoiKinds,
     assumptions: [
       { source: 'derived', field: 'geometry', rule: 'Input coordinates quantised once by Math.round(metres * 1000); integer-mm geometry, exact 200000 mm grid, rounded integer-mm clip intersections and reused on-line endpoints. Disconnected simple components stay separate. Areas/orientations use BigInt; venue overlap requires exact intersection area >=1 mm2. Centres round once to mm; squared-distance comparisons use BigInt and id ties. Only the final index/report projection converts back to metres/m2. Venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.' },
       { source: 'derived', field: 'neighbours', rule: 'Grid edge neighbours, diagonal second neighbours; venues intersect actual clipped block polygons in XY. Geometry only; traversability unknown. Venue host is the nearest genuinely overlapping block centre by fixed-order squared distance, then cell id.' },
       { source: 'derived', field: 'headShare', rule: 'Clipped block area / sum of retained block areas; final block absorbs floating-point share residue so shares sum to exactly 1 in cell order. Report retained-minus-district area separately from per-cell headcount rounding; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.' },
-      { source: 'derived', field: 'presence/pop', rule: 'Each person-entry period/spot link contributes quantity times span overlap / six hours to S1 windows starting 06:00, 12:00, 18:00, 00:00. Absent quantity means an unexported class default, treated as one unit, not a verified game default; explicit zero contributes nothing. Normalise once so the district mean over four periods equals the stand-in census total. Presence has no per-period slot: one quantity/duration-weighted affiliation share over all spans. Exclude vehicle/other/unresolved affiliations; civilian/Unaffiliated merged, NCPD normalized. Alternative phases are summed as potential content, not asserted active. Legacy phases lacking periods use distinct all-day entry/spot links. Blocks without eligible person links get an all-day floor of 1% of mean block weight (mean 1 if all empty); explicit-zero links do not trigger a floor. Empty-weight presence uses census affiliation shares. No simultaneous occupancy claim.' },
+      { source: 'derived', field: 'presence/pop', rule: 'Each person-entry period/spot link contributes quantity times span overlap / six hours to S1 windows starting 06:00, 12:00, 18:00, 00:00. Absent quantity means an unexported class default, treated as one unit, not a verified game default; explicit zero contributes nothing. Normalise once to the mean of the four stand-in district pop totals, derived from its original cell pop arrays independently of residential census/headcount (see population.standInPopTotals/popTarget/popMean). Presence has no per-period slot: one quantity/duration-weighted affiliation share over all spans. Exclude vehicle/other/unresolved affiliations; civilian/Unaffiliated merged, NCPD normalized. Alternative phases are summed as potential content, not asserted active. Legacy phases lacking periods use distinct all-day entry/spot links. Blocks without eligible person links get an all-day floor of 1% of mean block weight (mean 1 if all empty); explicit-zero links do not trigger a floor. Empty-weight presence uses census affiliation shares. No simultaneous occupancy claim.' },
       { source: 'derived', field: 'period starts/spans', rule: 'periods.json is an assumption pending an in-game check: Morning 06:00, Day/Noon 12:00, Evening 18:00, Night 22:00, Midnight 00:00; valid _HH_MM labels use that clock time; H:MM AM/PM labels use a 12-hour clock (12:xx AM = 00:xx, 12:xx PM = 12:xx); all other labels run all day. Within each phase, known starts run to the next distinct start, wrapping midnight; duplicate starts share the span; a single start runs all day. Unknowns do not split known spans. Phase modes: absent/empty or all-unknown periods are all-day; otherwise single-period or multi-period by row count. allDay separately records whether every span is 24 hours.' },
       { source: 'derived', field: 'services', rule: 'One plain-kind table; nearest 15 by fixed-order squared 3D distance to footprint-weighted cell centre, ties by POI id. Market only when a retained POI service has a declared retail vendor type. Unknown kinds counted, never guessed. Evidence pins never become services.' },
       { source: 'derived', field: 'binding', rule: 'All linked entry types retained; exact (community placement id, entry name, spot id), deduplicated only across phases of the same entry. Copy registry id and sourceObjectId alongside the placement id when supplied; absent legacy registry metadata is omitted, never invented. Ordinals unavailable; no runtime binding. Fallback ids counted by colon format.' },

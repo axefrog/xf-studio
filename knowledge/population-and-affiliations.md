@@ -389,7 +389,12 @@ On real Kabuki, unchanged per-cell rounding
 yields 2,963 headcount units, with household membership still drawn from the
 existing recipe. W1 w1.7.1 supplies 2,852 raw periods: 432 stated quantities (99 explicit
 zeros), 2,420 absent. The v0.1 importer integrates quantity-weighted person/spot
-links over four six-hour windows, normalising the district mean to 2,964.
+links over four six-hour windows, normalising the district mean to **3,135**.
+That target is derived from the unchanged stand-in district’s four `pop` totals
+(2,820 / 3,240 / 3,900 / 2,580), independently of the 2,964 residential census.
+The importer report exposes source totals, target and realised mean separately
+from residential headcount. Targeted normalisation tests compare with the
+stand-in cell arrays, not the census [offline].
 Absent quantity is an unexported class default, treated as one unit as a declared
 derived assumption, never a verified game default. Named starts (including
 `Noon` at 12:00), `_HH_MM` and `H:MM AM` / `H:MM PM` labels follow the

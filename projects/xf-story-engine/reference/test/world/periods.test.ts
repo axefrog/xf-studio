@@ -6,6 +6,7 @@ import contentFixture from './fixtures/period-content.json';
 import { importW1, stableJson } from '../../src/world/import-w1.ts';
 import { periodStart, periodSpans, spanOverlap } from '../../src/world/periods.ts';
 import type { W1Content, W1Pack } from '../../src/world/types.ts';
+import { makeKabukiSlice } from '../../src/sim/slices.ts';
 
 const fixture = () => ({ pack: structuredClone(packFixture) as W1Pack, content: structuredClone(contentFixture) as unknown as W1Content });
 
@@ -46,7 +47,15 @@ test('stated/default/zero weights, duration presence, registry and global mean n
   const scale=shared.pop[1]/3;
   for (const [i,raw] of [5,3,4,7].entries()) expect(shared.pop[i]).toBeCloseTo(raw*scale,10);
   expect(index.cells[shared.id].presence).toEqual({TygerClaws:12/19,civilian:7/19});
-  expect(Object.values(index.cells).reduce((n,c)=>n+c.pop.reduce((a,b)=>a+b,0)/4,0)).toBeCloseTo(2964,9);
+  const standIn=makeKabukiSlice();
+  const standInCells=Object.values(standIn.cells).filter((c)=>standIn.districts[c.district].key==='wat_kab');
+  const target=standInCells.reduce((n,c)=>n+c.pop.reduce((a,b)=>a+b,0)/4,0);
+  const mean=Object.values(index.cells).reduce((n,c)=>n+c.pop.reduce((a,b)=>a+b,0)/4,0);
+  expect(mean).toBeCloseTo(target,9);
+  expect(report.population.popTarget).toBeCloseTo(target,9);
+  expect(report.population.popMean).toBeCloseTo(mean,9);
+  expect(report.population.popTarget).not.toBe(report.population.census);
+  expect(report.population.census).toBe(2964);
   expect(report.periods.quantities).toEqual({stated:4,absent:1,explicitZero:1});
   expect(report.periods.unknownNames).toEqual({});
   expect(report.periods.phases.map((p)=>p.mode)).toEqual(['multi-period','single-period']);

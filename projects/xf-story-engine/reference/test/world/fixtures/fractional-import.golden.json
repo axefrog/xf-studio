@@ -155,10 +155,10 @@
           }
         ],
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presence": {
           "Animals": 0.006072874493927126,
@@ -325,10 +325,10 @@
           }
         ],
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presence": {
           "Animals": 0.006072874493927126,
@@ -495,10 +495,10 @@
           }
         ],
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presence": {
           "Animals": 0.006072874493927126,
@@ -665,10 +665,10 @@
           }
         ],
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presence": {
           "Animals": 0.006072874493927126,
@@ -837,10 +837,10 @@
           }
         ],
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presence": {
           "Animals": 0.006072874493927126,
@@ -1009,10 +1009,10 @@
           }
         ],
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presence": {
           "Animals": 0.006072874493927126,
@@ -1185,10 +1185,10 @@
           }
         ],
         "pop": [
-          2937.8854625550666,
-          2937.8854625550666,
-          2937.8854625550666,
-          2937.8854625550666
+          3107.378854625551,
+          3107.378854625551,
+          3107.378854625551,
+          3107.378854625551
         ],
         "presence": {
           "civilian": 1
@@ -1592,10 +1592,10 @@
           }
         ],
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presence": {
           "Animals": 0.006072874493927126,
@@ -1764,10 +1764,10 @@
           }
         ],
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presence": {
           "Animals": 0.006072874493927126,
@@ -2378,7 +2378,7 @@
         ]
       }
     },
-    "hash": "c5b8e9dbf9e94043e92ea5977f554ab6",
+    "hash": "4f588c796285671fff7e90970e0d31fa",
     "names": {
       "grid:-1,-1": "afe58497541db22ba7fe7cef72d2587d",
       "grid:-1,0": "c395de04232f26a7f02010379a825034",
@@ -3004,7 +3004,7 @@
       },
       {
         "field": "presence/pop",
-        "rule": "Each person-entry period/spot link contributes quantity times span overlap / six hours to S1 windows starting 06:00, 12:00, 18:00, 00:00. Absent quantity means an unexported class default, treated as one unit, not a verified game default; explicit zero contributes nothing. Normalise once so the district mean over four periods equals the stand-in census total. Presence has no per-period slot: one quantity/duration-weighted affiliation share over all spans. Exclude vehicle/other/unresolved affiliations; civilian/Unaffiliated merged, NCPD normalized. Alternative phases are summed as potential content, not asserted active. Legacy phases lacking periods use distinct all-day entry/spot links. Blocks without eligible person links get an all-day floor of 1% of mean block weight (mean 1 if all empty); explicit-zero links do not trigger a floor. Empty-weight presence uses census affiliation shares. No simultaneous occupancy claim.",
+        "rule": "Each person-entry period/spot link contributes quantity times span overlap / six hours to S1 windows starting 06:00, 12:00, 18:00, 00:00. Absent quantity means an unexported class default, treated as one unit, not a verified game default; explicit zero contributes nothing. Normalise once to the mean of the four stand-in district pop totals, derived from its original cell pop arrays independently of residential census/headcount (see population.standInPopTotals/popTarget/popMean). Presence has no per-period slot: one quantity/duration-weighted affiliation share over all spans. Exclude vehicle/other/unresolved affiliations; civilian/Unaffiliated merged, NCPD normalized. Alternative phases are summed as potential content, not asserted active. Legacy phases lacking periods use distinct all-day entry/spot links. Blocks without eligible person links get an all-day floor of 1% of mean block weight (mean 1 if all empty); explicit-zero links do not trigger a floor. Empty-weight presence uses census affiliation shares. No simultaneous occupancy claim.",
         "source": "derived"
       },
       {
@@ -3092,10 +3092,10 @@
         "name": "Kabuki, block 2",
         "personLinks": 0,
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presenceFloor": true,
         "presenceTop3": [
@@ -3128,10 +3128,10 @@
         "name": "Kabuki, block 3",
         "personLinks": 0,
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presenceFloor": true,
         "presenceTop3": [
@@ -3164,10 +3164,10 @@
         "name": "Kabuki, block 4",
         "personLinks": 0,
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presenceFloor": true,
         "presenceTop3": [
@@ -3200,10 +3200,10 @@
         "name": "Kabuki, block 5",
         "personLinks": 0,
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presenceFloor": true,
         "presenceTop3": [
@@ -3236,10 +3236,10 @@
         "name": "Kabuki, block 6",
         "personLinks": 1,
         "pop": [
-          2937.8854625550666,
-          2937.8854625550666,
-          2937.8854625550666,
-          2937.8854625550666
+          3107.378854625551,
+          3107.378854625551,
+          3107.378854625551,
+          3107.378854625551
         ],
         "presenceFloor": false,
         "presenceTop3": [
@@ -3264,10 +3264,10 @@
         "name": "Kabuki, block 7",
         "personLinks": 0,
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presenceFloor": true,
         "presenceTop3": [
@@ -3300,10 +3300,10 @@
         "name": "Kabuki, block 8",
         "personLinks": 0,
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presenceFloor": true,
         "presenceTop3": [
@@ -3336,10 +3336,10 @@
         "name": "Kabuki, block 9",
         "personLinks": 0,
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presenceFloor": true,
         "presenceTop3": [
@@ -3372,10 +3372,10 @@
         "name": "Kabuki, block 10",
         "personLinks": 0,
         "pop": [
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741,
-          3.264317180616741
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168,
+          3.452643171806168
         ],
         "presenceFloor": true,
         "presenceTop3": [
@@ -3439,7 +3439,7 @@
       "districtAreaM2": 47658.812816,
       "retainedBlockAreaM2": 47658.859899
     },
-    "indexHash": "c5b8e9dbf9e94043e92ea5977f554ab6",
+    "indexHash": "4f588c796285671fff7e90970e0d31fa",
     "lineage": "Different input content or geometry creates a new lineage. Origin-anchored grid keys are stable; ordinal member ids can shift when earlier cells are inserted.",
     "periods": {
       "names": [],
@@ -3463,8 +3463,16 @@
     },
     "population": {
       "census": 2964,
+      "popMean": 3135.000000000001,
+      "popTarget": 3135,
       "roundedHeadcount": 2963,
-      "roundingDelta": -1
+      "roundingDelta": -1,
+      "standInPopTotals": [
+        2820,
+        3239.9999999999995,
+        3900,
+        2580
+      ]
     },
     "schema": "xf.s1-world-import-report@1",
     "templates": {

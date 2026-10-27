@@ -63,7 +63,11 @@ phases still run all day, as required by the brief.
 Every person-entry period/spot link contributes `quantity × overlap hours / 6`
 to S1 windows starting **06:00 / 12:00 / 18:00 / 00:00**, in that order. Explicit
 zero contributes nothing. One global normalisation makes the district mean over
-the four windows **2,964** (observed 2,963.9999999999986, floating-point residue).
+the four windows **3,135** (observed 3,134.9999999999986, floating-point residue).
+This target is derived before replacing the stand-in cells: its district `pop`
+totals are **2,820 / 3,240 / 3,900 / 2,580**, whose mean is **3,135**.
+It is independent of the **2,964 residential census**. The report records the
+source totals, target and realised mean separately from residential headcount.
 Alternative phases sum as potential content; no activation or occupancy is
 claimed. Presence has no per-period S1 slot: one quantity/duration-weighted
 affiliation share is integrated over all spans. Vehicles/other/unresolved
@@ -74,7 +78,7 @@ entry/spot links, preserving v0. Blocks with no eligible person links receive
 the v0 floor (1% of mean block weight, or a mean of one if all empty), all day.
 Explicit-zero links do not trigger this floor. Six real blocks receive it.
 If every block has zero schedule weight and none qualifies for the floor, import
-refuses because normalisation cannot preserve both zero and the census scale.
+refuses because normalisation cannot preserve both zero and the stand-in pop scale.
 Nonempty period arrays must agree with the retained phase spot union.
 
 ## Real cells and population
@@ -92,33 +96,33 @@ Pop is a normalised model weight, not observed simultaneous occupancy.
 | Cell (grid key) | Area m² | Residents | Spots | Services | 06:00 | 12:00 | 18:00 | 00:00 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | Judy's Apartment | 269.310 | 0 | 45 | 1 | 0.000 | 0.000 | 0.000 | 0.000 |
-| Lizzie's Bar | 1701.590 | 0 | 433 | 1 | 322.281 | 322.281 | 320.673 | 320.673 |
-| No-Tell Motel | 2257.618 | 0 | 28 | 0 | 7.351 | 4.364 | 5.360 | 7.351 |
-| block 4 (-7,4) | 2192.870 | 13 | 16 | 0 | 41.807 | 41.807 | 40.429 | 40.429 |
-| block 5 (-7,5) | 14362.700 | 88 | 230 | 0 | 210.413 | 209.724 | 181.776 | 181.929 |
-| block 6 (-7,6) | 12082.300 | 74 | 136 | 0 | 28.714 | 27.182 | 28.101 | 29.173 |
-| block 7 (-7,7) | 9801.700 | 60 | 157 | 0 | 27.335 | 27.335 | 27.642 | 28.254 |
-| block 8 (-7,8) | 7521.100 | 46 | 59 | 0 | 36.294 | 34.456 | 33.231 | 35.375 |
-| block 9 (-7,9) | 14980.805 | 91 | 351 | 2 | 94.640 | 101.761 | 99.387 | 94.640 |
-| block 10 (-7,10) | 16549.084 | 101 | 305 | 2 | 79.939 | 86.830 | 82.236 | 67.534 |
-| block 11 (-6,4) | 7935.177 | 48 | 0 | 0 | 1.052 | 1.052 | 1.052 | 1.052 |
-| block 12 (-6,5) | 38464.569 | 235 | 318 | 0 | 97.396 | 99.923 | 124.808 | 125.880 |
-| block 13 (-6,6) | 40000.000 | 244 | 748 | 1 | 222.817 | 221.439 | 221.745 | 220.061 |
-| block 14 (-6,7) | 40000.000 | 244 | 1195 | 4 | 435.987 | 458.498 | 450.841 | 438.743 |
-| block 15 (-6,8) | 40000.000 | 244 | 1319 | 1 | 615.848 | 601.836 | 602.678 | 629.631 |
-| block 16 (-6,9) | 40000.000 | 244 | 647 | 0 | 183.078 | 184.686 | 195.252 | 196.630 |
-| block 17 (-6,10) | 37111.990 | 227 | 694 | 3 | 196.630 | 227.411 | 194.486 | 151.148 |
-| block 18 (-6,11) | 235.714 | 1 | 0 | 0 | 1.052 | 1.052 | 1.052 | 1.052 |
-| block 19 (-5,5) | 1751.162 | 11 | 0 | 0 | 1.052 | 1.052 | 1.052 | 1.052 |
-| block 20 (-5,6) | 8701.298 | 53 | 12 | 0 | 2.067 | 2.067 | 2.067 | 2.067 |
-| block 21 (-5,7) | 20921.841 | 128 | 33 | 0 | 2.986 | 2.986 | 2.986 | 2.986 |
-| block 22 (-5,8) | 39997.285 | 244 | 481 | 2 | 136.906 | 152.986 | 185.834 | 170.673 |
-| block 23 (-5,9) | 39682.786 | 242 | 185 | 0 | 59.494 | 77.871 | 74.502 | 58.576 |
-| block 24 (-5,10) | 35911.668 | 219 | 104 | 0 | 112.098 | 109.801 | 110.566 | 112.098 |
-| block 25 (-5,11) | 4655.815 | 28 | 3 | 0 | 1.052 | 1.052 | 1.052 | 1.052 |
-| block 26 (-4,8) | 8473.879 | 52 | 2 | 0 | 1.052 | 1.052 | 1.052 | 1.052 |
-| block 27 (-4,9) | 3979.021 | 24 | 33 | 0 | 5.743 | 5.743 | 5.743 | 5.743 |
-| block 28 (-4,10) | 304.049 | 2 | 0 | 0 | 1.052 | 1.052 | 1.052 | 1.052 |
+| Lizzie's Bar | 1701.590 | 0 | 433 | 1 | 340.874 | 340.874 | 339.173 | 339.173 |
+| No-Tell Motel | 2257.618 | 0 | 28 | 0 | 7.775 | 4.616 | 5.669 | 7.775 |
+| block 4 (-7,4) | 2192.870 | 13 | 16 | 0 | 44.219 | 44.219 | 42.761 | 42.761 |
+| block 5 (-7,5) | 14362.700 | 88 | 230 | 0 | 222.552 | 221.823 | 192.263 | 192.425 |
+| block 6 (-7,6) | 12082.300 | 74 | 136 | 0 | 30.370 | 28.750 | 29.722 | 30.856 |
+| block 7 (-7,7) | 9801.700 | 60 | 157 | 0 | 28.912 | 28.912 | 29.236 | 29.884 |
+| block 8 (-7,8) | 7521.100 | 46 | 59 | 0 | 38.388 | 36.444 | 35.148 | 37.416 |
+| block 9 (-7,9) | 14980.805 | 91 | 351 | 2 | 100.100 | 107.632 | 105.121 | 100.100 |
+| block 10 (-7,10) | 16549.084 | 101 | 305 | 2 | 84.550 | 91.839 | 86.980 | 71.430 |
+| block 11 (-6,4) | 7935.177 | 48 | 0 | 0 | 1.113 | 1.113 | 1.113 | 1.113 |
+| block 12 (-6,5) | 38464.569 | 235 | 318 | 0 | 103.015 | 105.688 | 132.009 | 133.143 |
+| block 13 (-6,6) | 40000.000 | 244 | 748 | 1 | 235.672 | 234.214 | 234.538 | 232.757 |
+| block 14 (-6,7) | 40000.000 | 244 | 1195 | 4 | 461.140 | 484.950 | 476.851 | 464.055 |
+| block 15 (-6,8) | 40000.000 | 244 | 1319 | 1 | 651.378 | 636.557 | 637.448 | 665.956 |
+| block 16 (-6,9) | 40000.000 | 244 | 647 | 0 | 193.640 | 195.341 | 206.517 | 207.974 |
+| block 17 (-6,10) | 37111.990 | 227 | 694 | 3 | 207.974 | 240.531 | 205.707 | 159.868 |
+| block 18 (-6,11) | 235.714 | 1 | 0 | 0 | 1.113 | 1.113 | 1.113 | 1.113 |
+| block 19 (-5,5) | 1751.162 | 11 | 0 | 0 | 1.113 | 1.113 | 1.113 | 1.113 |
+| block 20 (-5,6) | 8701.298 | 53 | 12 | 0 | 2.187 | 2.187 | 2.187 | 2.187 |
+| block 21 (-5,7) | 20921.841 | 128 | 33 | 0 | 3.158 | 3.158 | 3.158 | 3.158 |
+| block 22 (-5,8) | 39997.285 | 244 | 481 | 2 | 144.805 | 161.812 | 196.555 | 180.520 |
+| block 23 (-5,9) | 39682.786 | 242 | 185 | 0 | 62.927 | 82.364 | 78.800 | 61.955 |
+| block 24 (-5,10) | 35911.668 | 219 | 104 | 0 | 118.565 | 116.135 | 116.945 | 118.565 |
+| block 25 (-5,11) | 4655.815 | 28 | 3 | 0 | 1.113 | 1.113 | 1.113 | 1.113 |
+| block 26 (-4,8) | 8473.879 | 52 | 2 | 0 | 1.113 | 1.113 | 1.113 | 1.113 |
+| block 27 (-4,9) | 3979.021 | 24 | 33 | 0 | 6.074 | 6.074 | 6.074 | 6.074 |
+| block 28 (-4,10) | 304.049 | 2 | 0 | 0 | 1.113 | 1.113 | 1.113 | 1.113 |
 
 The five busiest blocks by mean pop are **15, 14, 13, 5 and 17**. Judy’s Apartment
 has 45 spots but **zero binding/person links**. Its zero population is correct:
@@ -129,8 +133,8 @@ links (`6:00 AM` / `6:00 PM`) were unknown and therefore all day; its remaining
 204 `Day` links also ran all day from single-period phases. That explains the
 old flat result and was correct under the original table. With clock mapping,
 **459 links remain all day** and **31 run in 12-hour spans** (06:00–18:00 or
-18:00–06:00); no labels are unknown. It now varies slightly: 322.281 at 06:00 /
-12:00, 320.673 at 18:00 / 00:00. This is correct under the amended brief.
+18:00–06:00); no labels are unknown. It now varies slightly: 340.874 at 06:00 /
+12:00, 339.173 at 18:00 / 00:00. This is correct under the amended brief.
 Evidence: private `venue-audit.json` beside the candidate import; joins follow
 binding tuple → owning entry → period spot set and span, not venue placement.
 
@@ -172,32 +176,31 @@ regressions and both byte goldens remain covered. The new synthetic period fixtu
 has its own byte golden; existing source fixtures are untouched.
 
 The guarded targeted world/digest run passed **36 tests**, with three existing
-profile-gated digest checks skipped, in **43.94 s / 0.6 GB peak**; `bun run check`
-passed. This rerun includes the 12-hour/noon mapping, all-zero refusal and
-phase-union regressions. The private imported day covered 86,400 seconds /
+profile-gated digest checks skipped, in **41.49 s / 0.6 GB peak**; `bun run check`
+passed. This rerun checks the corrected stand-in population target separately
+from residential census/headcount, plus the existing schedule and binding regressions. The private imported day covered 86,400 seconds /
 144 windows, **145**
 read-only observer samples, **132** records and **35** place items over 13 layers,
 with zero truncations; the external Holotable validator reported no refusals.
-Its run took **16.59 s**. Both frozen digests remain v3
+Its run took **16.68 s**. Both frozen digests remain v3
 `746601727380a3fdff647f873c91c971`, v4 `8fce55b19462a1e02f03ca5336bd8c16`.
 
-The two legacy goldens deliberately change **report bytes only**: per-cell `pop`,
-the period audit and revised assumptions. Their entire index objects, including
-hashes and integer-mm-derived geometry, are identical. The period golden covers the additional schedule/registry path. This clock-rule
-follow-up changes only report bytes in **all three** goldens: the declared rule
-text, and the period golden’s `4:00 AM` rule/start and phase mode. Its single
-period remains all day, so even that synthetic index is unchanged. Real Kabuki
-population/presence and the real index hash change; geometry does not. Local attributes preserve JSON bytes
-across Windows/Linux.
+All three byte goldens deliberately change **cell pop arrays and index hashes**
+for the corrected normalisation target. Report bytes change in cell `pop`,
+`indexHash`, the normalisation assumption and the population audit (stand-in
+period totals, `popTarget`, `popMean`). All other index fields compare unchanged
+against f49078d3, including geometry, headShare, presence, registry bindings,
+services and source hashes. Stand-in source fixtures and frozen digests are
+untouched. Local attributes preserve JSON bytes across Windows/Linux.
 
 | Golden | UTF-8 bytes | SHA-256 |
 |---|---:|---|
-| [import.golden.json](test/world/fixtures/import.golden.json) | 57,151 | `2aeee57e29e81709d53dd5e98cb8de589d0968593b7bdf92c5b3e34ba47d94a2` |
-| [fractional-import.golden.json](test/world/fixtures/fractional-import.golden.json) | 92,828 | `4783248c9d0525b8db1468d26bbde28c8f3b8ca0e4fa86cdf70d7700f8926a2c` |
-| [period-import.golden.json](test/world/fixtures/period-import.golden.json) | 57,563 | `4f2bd54772c36f8163d2cfe8b46c5e0ee7eba6dd718c77d6f39749615062a48c` |
+| [import.golden.json](test/world/fixtures/import.golden.json) | 57,459 | `5657c25419d9bc2763636d8c916f6ed3453689a8cff52a68f391616de3039067` |
+| [fractional-import.golden.json](test/world/fixtures/fractional-import.golden.json) | 93,109 | `c169bacfffb73fe4c96db145bc15855617e5f45da8f146b1f283bb6cd13f43e2` |
+| [period-import.golden.json](test/world/fixtures/period-import.golden.json) | 57,861 | `12b11b60238176678d1d46d869974e2b66d7d686419f3eab98b82bf96c8860ca` |
 
-Two real CLI imports produced byte-identical index/report outputs in **274 ms**
-and **204 ms**, peaking at **0.3 GB** under the 4 GB guard. Process startup is
+Two real CLI imports produced byte-identical index/report outputs in **283 ms**
+and **200 ms**, peaking at **0.3 GB** under the 4 GB guard. Process startup is
 excluded; shared-machine samples do not establish a performance trend. Import
 preparation still exceeds the standing 100 ms target. No retained task output
 exceeds 5 GB. The coordinator owns scratch cleanup.
