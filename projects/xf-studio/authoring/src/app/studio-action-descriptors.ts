@@ -353,13 +353,14 @@ export type RegistryEntry = { id: string; family: "action" | "request" | "gestur
 /**
  * `actions` is the application's action registry (the union of every owner's table); the requests,
  * gesture proposals and file workflows come from the registered library and files families and the
- * live feature's gestures. Each defaults to this file's table.
+ * registered features' gestures. Inputs are explicit: a composition without a feature never
+ * inherits that product's static descriptor or gesture table.
  */
-export function actionRegistry(actions: Readonly<Record<string, ActionDescriptor>> = ACTION_DESCRIPTORS,
+export function actionRegistry(actions: Readonly<Record<string, ActionDescriptor>>,
   families: { requests?: Readonly<Record<string, { scope: readonly string[] }>>;
     gestures?: Readonly<Record<string, { scope: readonly string[]; undo: UndoPolicy }>>;
     files?: Readonly<Record<string, { scope: readonly string[]; undo?: UndoPolicy }>> } = {}): RegistryEntry[] {
-  const { requests = REQUEST_DESCRIPTORS, gestures = GESTURE_DESCRIPTORS, files = FILE_DESCRIPTORS } = families;
+  const { requests = {}, gestures = {}, files = {} } = families;
   return [
     ...Object.entries(actions).map(([id, d]) => ({ id, family: "action" as const, scope: d.scope, undo: d.undo, async: false })),
     ...Object.entries(requests).map(([id, d]) => ({ id, family: "request" as const, scope: d.scope, undo: "none" as const, async: true })),

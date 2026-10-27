@@ -1,4 +1,7 @@
 import type { AuthoringDocument } from "./authoring/makeup-document";
+import type { AuthoringDocument as LookDocument } from "./authoring/authoring-document";
+import { featureApplication, type FeatureFacadeHost } from "./feature-application";
+import type { FeatureFacade } from "./studio-presentation";
 import type { AuthoringControlEdits } from "./authoring/authoring-control-edits";
 import { fromView3d, gestureSource, type AuthoringGestures, type GestureOrigin, type GestureSource } from "./authoring/authoring-gestures";
 import type { HistoryCommand as HistoryAction, HistoryMove, HistorySnapshot, HistoryState, HistoryScopeDetails } from "../platform/api/history";
@@ -32,7 +35,7 @@ import { isLookScope as lookScoped, lookScope } from "../platform/core/history-s
 import { plannedModules, type PlannedModule, type StudioModule, type ViewSummaryContribution, type ViewToolContribution, type ViewToolFilter } from "../platform/api";
 import type { Layer, Point, Recipe, WarpField } from "../engines/layered-makeup/recipe";
 import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "../engines/layered-makeup/recipe-actions";
-import type { EyeMakeupPort, EyeMakeupSpec } from "../legacy/eye-makeup/authoring-eye-makeup";
+import type { EyeMakeupPort } from "../legacy/eye-makeup/authoring-eye-makeup";
 import type { EyeMakeupAction } from "../legacy/eye-makeup/eye-makeup-model";
 import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "../character/saved-appearance-actions";
 import { actionRegistry, type ActionDescriptor, type FileDescriptor, type RequestDescriptor,
@@ -57,13 +60,11 @@ import { layerEdgeReach, type SurfaceOutline } from "../engines/layered-makeup/s
 /** Undo and Redo with no editing context (profiles design §3.7). */
 export const NOTHING_TO_UNDO = "Nothing to undo here yet.";
 /**
- * Each owner this application binds a handler for, with its action union, keyed by owner ID. The
- * composition list (`compose/studio-registry.ts`) must register exactly these owners: it checks
- * this map at compile time, and the constructor checks the injected registry at run time.
+ * System-family handlers, with their action unions. Composition checks this fixed system map
+ * at compile time; feature handlers derive from registration and join the runtime equality check.
  */
 export type StudioOwnerActions = {
   history: HistoryAction;
-  "eye-makeup": Naming<EyeMakeupAction, { look: LookRef }>;
   collection: CollectionStudioAction;
   preview: PreviewAction;
   motion: MotionAction;
@@ -78,6 +79,8 @@ export type StudioOwnerActions = {
   views: ViewAction;
 };
 export type StudioOwnerId = keyof StudioOwnerActions;
+/** Released presentation action typing; feature runtime handlers are derived from registration. */
+export type StudioFeatureActions = Naming<EyeMakeupAction, { look: LookRef }>;
 /**
  * Each asynchronous family this application binds a handler for (CORE-36): the collection library's
  * requests and the file workflows. The composition list registers exactly these beside the owners above.
@@ -90,7 +93,7 @@ export type StudioOwnerRequests = {
 };
 export type StudioRequestOwnerId = keyof StudioOwnerRequests;
 /** Every action a presentation may dispatch: the union of the registered owners' actions. */
-export type StudioAction = StudioOwnerActions[StudioOwnerId];
+export type StudioAction = StudioOwnerActions[StudioOwnerId] | StudioFeatureActions;
 /** A layer's export status within its preset. `blockedBy` says whether its own finish ("layer")
  * or the rest of the preset ("preset") keeps it out of the mod. */
 export type LayerExportStatus = Extract<LayerExport, { exportable: true }> |
@@ -123,11 +126,13 @@ type AsyncHandlers = {
   readonly presets: AsyncActionHandler<PartPresetRequest, PartPresetOutcome>;
   readonly empty: AsyncActionHandler<EmptyChoiceRequest, StudioDispatchResult>;
 };
-export type StudioApplicationServices = { document: AuthoringDocument;
+export type StudioApplicationServices = { document: AuthoringDocument | LookDocument;
+  /** The look owner revokes this facade with the same lifetime as its registered editors. */
+  signal?: AbortSignal;
   /** A bound facade's destination/lifetime gate. It never consults focus. */
   input?: { check(): StudioCapability };
   /** Eye makeup's live part and editor state, and where its pure action results are published. */
-  eyeMakeup: EyeMakeupPort;
+  eyeMakeup?: EyeMakeupPort;
   /** Where new items' IDs come from for the other features' actions (default: random UUIDs). */
   newId?: () => string;
   /** The session's history service: Undo and Redo act on the scope they name (the look's, a V's, or an experiment's document). */
@@ -157,7 +162,7 @@ export type StudioApplicationServices = { document: AuthoringDocument;
    * its captures', profiles design §3.3). Without it (a core no session holds) an action naming a scene's `gen` can't be checked, and is refused.
    */
   targetCheck?: { check(named: { view?: string; scene?: string; sceneGen?: number }): StudioCapability };
-  gestures: AuthoringGestures; controls: AuthoringControlEdits;
+  gestures?: AuthoringGestures; controls?: AuthoringControlEdits;
   collection?: CollectionService; files?: StudioFileOperations;
   /** The shown runtime's preview and motion services: what the presentation reads (the drawn view's). */
   preview?: PreviewActions; motion?: MotionActions;
@@ -206,6 +211,14 @@ let nextContextIdentity = 0;
 
 /** One read-only, target-aware entry point for a replaceable presentation. */
 export class StudioApplication {
+  /** Neutral application routes use the authoritative owner, including for the former primary feature. */
+  private get lookDocument(): LookDocument { const document = this.services.document; return "lookDocument" in document ? document.lookDocument : document; }
+  /** Remaining concrete context/gesture reads belong to slices 6–7, never constructor requirements. */
+  private get makeupDocument(): AuthoringDocument {
+    const document = this.services.document;
+    if (!("recipe" in document)) throw Error("This operation requires the legacy makeup editor projection.");
+    return document;
+  }
   private readonly contextIdentity = ++nextContextIdentity;
   private services: Services;
   private listeners = new Set<() => void>();
@@ -224,8 +237,8 @@ export class StudioApplication {
   /** One handler per asynchronous family (library requests, file workflows). */
   private readonly asyncHandlers: AsyncHandlers;
   /**
-   * The other registered features' handlers: their pure capability and apply over their live
-   * documents (`document.others`), bound generically, so a feature module needs no handler of its own.
+   * Every registered feature's handler over the neutral owner, with optional registered
+   * application publication. Feature IDs never select a built-in handler.
    */
   private readonly featureHandlers = new Map<string, ActionHandler<{ kind: string }>>();
   /** The open generic feature control (`featureControlBegin`): one Undo step over its feature's part for a run of edits. */
@@ -239,39 +252,47 @@ export class StudioApplication {
   private readonly forks = new Map<StudioApplication, Set<keyof Services>>();
   private replacingOff: () => void;
   private parentOff?: () => void;
+  private abortOff?: () => void;
   private disposed = false;
   /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
   constructor(services: Services, registry: Registry<AnyOwner>, edits?: EditingState) {
+    if (services.signal?.aborted) throw Error("This editing context was released.");
     this.edits = edits ?? { ended: new Set() };
     this.services = services; this.services = this.bindServices(services); this.routes = registry; this.handlers = this.bindHandlers();
-    // A gesture or control run belongs to the content it began on: it settles (commits) before the document shows other content, another
-    // look's or the same look's replaced from elsewhere, and is over. A gesture ends with its session; a control run's later edits are
-    // refused until the control begins again (`ended`).
-    this.replacingOff = services.document.onReplacing(() => {
-      const control = this.services.controls.snapshot();
-      if (control) this.ended.add(`control:${control.id}`);
-      if (this.featureControl) this.ended.add(`feature:${this.featureControl.id}`);
-      this.settleEdits();
-    });
     this.asyncHandlers = this.bindAsyncHandlers();
     for (const owner of registry.owners())
-      if (owner.owner === "feature" && !(owner.id in this.handlers)) {
+      if (owner.owner === "feature") {
         // A document with live documents must have one per feature; a bare single-feature document (fixtures, tools) binds the
         // feature anyway and its capability refuses with `not_ready`.
-        if (services.document.others && !services.document.others.has(owner.id)) throw Error(`Feature ${owner.id} has no live document.`);
-        this.featureHandlers.set(owner.id, this.featureHandler(owner.id));
+        if (("lookDocument" in services.document ? services.document.others && !services.document.others.has(owner.id) && owner.id !== services.document.feature
+          : !this.lookDocument.features.has(owner.id))) throw Error(`Feature ${owner.id} has no live document.`);
+        this.featureHandlers.set(owner.id, featureApplication(owner)?.bind?.(() => this.services, () => this.routes,
+          action => !this.look && this.routes.undoPolicy(action) !== "none") ?? this.featureHandler(owner.id));
       }
     // Exhaustive at run time too: an owner without a handler, or a handler without an owner, is a composition error.
     const owners = registry.owners().filter(owner => !("module" in owner)).map(owner => owner.id).sort(),
       bound = [...Object.keys(this.handlers), ...Object.keys(this.asyncHandlers), ...this.featureHandlers.keys()].sort();
     if (owners.join() !== bound.join())
       throw Error(`Registered owners (${owners.join(", ")}) do not match the application's handlers (${bound.join(", ")}).`);
+    if (services.signal?.aborted) throw Error("This editing context was released.");
+    // A gesture or control run belongs to the content it began on: it settles (commits) before the document shows other content, another
+    // look's or the same look's replaced from elsewhere, and is over. A gesture ends with its session; a control run's later edits are
+    // refused until the control begins again (`ended`).
+    this.replacingOff = services.document.onReplacing(() => {
+      const control = this.services.controls?.snapshot();
+      if (control) this.ended.add(`control:${control.id}`);
+      if (this.featureControl) this.ended.add(`feature:${this.featureControl.id}`);
+      this.settleEdits();
+    });
     this.subscribeSources();
+    const abort = () => this.dispose();
+    services.signal?.addEventListener("abort", abort, { once: true });
+    this.abortOff = () => services.signal?.removeEventListener("abort", abort);
   }
   /** The injected registry, including the current experiment registrations when the presentation binds them. */
   actionRegistry() { return this.routes; }
   useActionRegistry(registry: Registry<AnyOwner>) { this.routes = registry; }
-  attach(next: Partial<Omit<Services, "document" | "eyeMakeup" | "gestures" | "controls">>) {
+  attach(next: Partial<Omit<Services, "document" | "eyeMakeup" | "gestures" | "controls" | "signal">>) {
     if (next.collection && next.collection !== this.services.collection) this.collectionRevision++;
     this.services = this.bindServices({ ...this.services, ...next }); this.subscribeSources(); this.notify();
     for (const [fork, own] of this.forks) fork.attach(Object.fromEntries(Object.entries(next).filter(([key]) => !own.has(key as keyof Services))));
@@ -279,7 +300,7 @@ export class StudioApplication {
   /** A bound application facade. Editing machinery stays owned once; only named destination/device services differ. */
   private bindServices(services: Services): Services {
     return { ...services, starters: services.starters?.bind?.((look, id) => lookScope(look) === services.document.scopeId
-      ? services.document.recipe.layers.find(layer => layer.id === id) : undefined) ?? services.starters };
+      ? ("recipe" in services.document ? services.document.recipe.layers.find(layer => layer.id === id) : undefined) : undefined) ?? services.starters };
   }
   fork(overrides: Partial<Services>, editing?: StudioApplication): StudioApplication {
     const services = { ...this.services, ...overrides };
@@ -291,11 +312,12 @@ export class StudioApplication {
     return app;
   }
   dispose() {
-    if (this.edits.controlOwner === this) { const control = this.services.controls.snapshot(); if (control) { this.ended.add(`control:${control.id}`); this.controlCommit(control.id); } }
+    if (this.disposed) return;
+    if (this.edits.controlOwner === this) { const control = this.services.controls?.snapshot(); if (control) { this.ended.add(`control:${control.id}`); this.controlCommit(control.id); } }
     if (this.edits.featureOwner === this && this.featureControl) { this.ended.add(`feature:${this.featureControl.id}`); this.featureControlCommit(this.featureControl.id); }
     if (this.edits.gestureOwner === this && this.gesture) this.endGesture(this.gesture.source);
     this.disposed = true;
-    this.parentOff?.(); this.replacingOff();
+    this.parentOff?.(); this.replacingOff(); this.abortOff?.();
     for (const child of [...this.forks.keys()]) child.dispose();
     for (const off of this.unsubs) off();
     this.unsubs = []; this.listeners.clear();
@@ -329,10 +351,15 @@ export class StudioApplication {
   requestDescriptors() {
     return structuredClone(this.routes.asyncDescriptors("library")) as Record<CollectionRequest["kind"], RequestDescriptor>;
   }
-  /** Gesture proposals: eye makeup's registered gestures (the session and its Undo transaction are the platform's). */
+  /** Registered features' gesture proposals (the session and its Undo transaction are the platform's). */
   gestureDescriptors() {
-    const owner = this.routes.owner("eye-makeup") as FeatureModule | undefined;
-    return structuredClone(owner?.gestures?.descriptors ?? {}) as Record<StudioGestureProposal["kind"], ActionDescriptor>;
+    const descriptors = Object.assign({}, ...this.routes.owners().flatMap(owner => owner.owner === "feature"
+      ? [(owner as FeatureModule).gestures?.descriptors ?? {}] : []));
+    return structuredClone(descriptors) as Record<StudioGestureProposal["kind"], ActionDescriptor>;
+  }
+  /** Optional registered compatibility extension; absence uses the generic facade. */
+  featureFacade(feature: string, base: FeatureFacade, host: FeatureFacadeHost) {
+    return featureApplication(this.routes.owner(feature))?.facade?.(base, host);
   }
   /** File workflow IDs (the registered `files` family, run by `StudioFileOperations`). */
   fileKinds() { return [...this.routes.kinds("files")] as StudioFileAction["kind"][]; }
@@ -364,7 +391,7 @@ export class StudioApplication {
     const owner = this.routes.owner(feature);
     if (owner?.owner !== "feature") return unknownCommand();
     if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
-    const locked = this.services.document.locked;
+    const locked = this.lookDocument.locked;
     return locked ? refusal("unavailable", locked) : { available: true };
   }
   /**
@@ -374,17 +401,15 @@ export class StudioApplication {
    */
   featureLocked(feature: string): string | undefined {
     if (this.routes.owner(feature)?.owner !== "feature" || this.unowned()) return undefined;
-    return this.services.document.locked;
+    return this.lookDocument.locked;
   }
   /** A feature's live part and editor state for the selected look, detached (features beside the editor document). */
   featureState(feature: string): { part?: unknown; editor?: unknown } | undefined {
-    return this.services.document.others?.document(feature)?.export();
+    return this.lookDocument.features.document(feature)?.export();
   }
-  /** The pure state a feature's specs read: eye makeup's from its port, any other feature's from its live document. */
+  /** The pure state a feature's specs read from the same authoritative feature document. */
   private featureStateOf(feature: string): FeatureState<unknown, unknown> | undefined {
-    // The feature the editor document edits reads through its port; every other one through its live document.
-    if (feature === this.services.document.feature) return this.services.eyeMakeup.state();
-    return this.services.document.others?.document(feature)?.state();
+    return this.lookDocument.features.document(feature)?.state();
   }
   /** Full scope listing; payload-required entries must still be checked with capability(actualAction). */
   descriptorsFor(target: StudioTarget) {
@@ -396,12 +421,15 @@ export class StudioApplication {
     }));
   }
   targetCapability(target: StudioTarget): StudioCapability {
-    const s = this.services, recipe = s.document.recipe;
-    if (target.kind === "layer" && !recipe.layers.some(layer => layer.id === target.id))
+    const s = this.services;
+    const recipe = "recipe" in s.document ? s.document.recipe : undefined;
+    if ((target.kind === "layer" || target.kind === "point" || target.kind === "field") && !recipe)
+      return missingTarget("That target isn't available in this editor.");
+    if (target.kind === "layer" && !recipe!.layers.some(layer => layer.id === target.id))
       return missingTarget("That layer no longer exists.");
-    if (target.kind === "point" && !recipe.layers.find(layer => layer.id === target.layerId)?.points[target.index])
+    if (target.kind === "point" && !recipe!.layers.find(layer => layer.id === target.layerId)?.points[target.index])
       return missingTarget("That control point no longer exists.");
-    if (target.kind === "field" && !recipe.layers.find(layer => layer.id === target.layerId)?.fields.some(field => field.id === target.id))
+    if (target.kind === "field" && !recipe!.layers.find(layer => layer.id === target.layerId)?.fields.some(field => field.id === target.id))
       return missingTarget("That warp no longer exists.");
     // Cheap reads: target checks never clone the draft (CORE-05).
     if (target.kind === "preset" && !s.collection?.hasPreset(target.id))
@@ -479,7 +507,7 @@ export class StudioApplication {
       contextIdentity: this.contextIdentity,
       selectedPresetId: draft?.selected,
       collectionRevision: this.collectionRevision,
-      geometryRevision: this.services.document.geometryVersion.revision });
+      geometryRevision: this.makeupDocument.geometryVersion.revision });
   }
   private boundContextCapability(context: StudioBoundContext): StudioCapability {
     if (context.contextIdentity !== this.contextIdentity) return missingTarget("This editing context changed after the menu opened.");
@@ -493,11 +521,11 @@ export class StudioApplication {
     if (context.hit.kind !== "collection" && context.hit.kind !== "preset" &&
       context.selectedPresetId !== draft?.selected)
       return missingTarget("The selected preset changed after this menu opened.");
-    if (geometryHit(context.hit) && context.geometryRevision !== this.services.document.geometryVersion.revision)
+    if (geometryHit(context.hit) && context.geometryRevision !== this.makeupDocument.geometryVersion.revision)
       return missingTarget("The shape changed after this menu opened.");
     if (context.hit.kind === "tangent") {
       const hit = context.hit;
-      const layer = this.services.document.recipe.layers.find(item => item.id === hit.layerId);
+      const layer = this.makeupDocument.recipe.layers.find(item => item.id === hit.layerId);
       if (layer?.pathMode !== "bezier" || !layer.points[hit.index]?.handles)
         return missingTarget("That Bézier tangent no longer exists.");
     }
@@ -508,7 +536,7 @@ export class StudioApplication {
   /** Input candidates carry an applicable/disabled reason but no forged placeholder action. */
   contextOptionsFor(context: StudioBoundContext, complete?: CompleteInput) {
     const bound = this.boundContextCapability(context), target = contextScope(context.hit), hit = context.hit;
-    return contextCandidates(context.hit, this.services.document.recipe, context.named.collection).map(candidate => {
+    return contextCandidates(context.hit, this.makeupDocument.recipe, context.named.collection).map(candidate => {
       if ("action" in candidate) {
         const action = this.withTargets(candidate.action as StudioAction, context.named);
         return { ...candidate, action, requiresInput: false as const,
@@ -518,7 +546,7 @@ export class StudioApplication {
       let capability = bound;
       if (capability.available && (hit.kind === "point" || hit.kind === "tangent")) {
         if (candidate.id === "point.softness" &&
-          this.services.document.recipe.layers.find(layer => layer.id === hit.layerId)?.softness.mode !== "boundary")
+          this.makeupDocument.recipe.layers.find(layer => layer.id === hit.layerId)?.softness.mode !== "boundary")
           capability = { available: false, code: "incompatible_mode",
             reason: "Turn on Per-point edge softness before editing one point's edge." };
       }
@@ -542,7 +570,7 @@ export class StudioApplication {
       reason: "No standalone edit command applies off the makeup." };
     const variant = "command" in action && action.command && typeof action.command === "object" &&
       "kind" in action.command ? action.command.kind : undefined;
-    const candidate = contextCandidates(context.hit, this.services.document.recipe, context.named.collection).find(item =>
+    const candidate = contextCandidates(context.hit, this.makeupDocument.recipe, context.named.collection).find(item =>
       "action" in item ? item.action.kind === action.kind &&
         ("command" in item.action && item.action.command && typeof item.action.command === "object" &&
           "kind" in item.action.command ? item.action.command.kind : undefined) === variant :
@@ -559,12 +587,12 @@ export class StudioApplication {
   }
   snapshot() {
     const s = this.services;
-    return structuredClone({ document: s.document.snapshot(), collection: s.collection?.view(),
+    return structuredClone({ document: this.makeupDocument.snapshot(), collection: s.collection?.view(),
       preview: s.preview?.snapshot(), character: s.characterContext?.snapshot(),
       eyeShapeOptions: s.preview?.eyeShapeOptions(), lighting: s.preview?.lightingStatus() ?? null,
       lightingSetups: s.preview?.lightingSetups() ?? null, motion: s.motion?.snapshot(),
       quality: s.quality?.snapshot(), savedV: s.savedV?.snapshot(),
-      gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
+      gesture: s.gestures?.snapshot(), control: s.controls?.snapshot() });
   }
   /**
    * Preview/motion/quality/saved-V state without the document or collection draft.
@@ -577,7 +605,7 @@ export class StudioApplication {
       lightingSetups: s.preview?.lightingSetups() ?? null, motion: s.motion?.snapshot(), quality: s.quality?.snapshot(),
       savedV: { loaded: !!saved?.savedV, gameVersion: saved?.savedV?.gameVersion,
         result: saved?.result, suggestedEyeShape: saved?.suggestedEyeShape },
-      gesture: s.gestures.snapshot(), control: s.controls.snapshot() });
+      gesture: s.gestures?.snapshot(), control: s.controls?.snapshot() });
   }
   /**
    * The Character panel's large, read-only reads (character-context-actions.ts): the installed creator options, the view of the
@@ -622,7 +650,7 @@ export class StudioApplication {
   }
   /** What an action, file workflow or library request replaces, writes or discards, and how to recover. */
   consequences(subject: ConsequenceSubject): Consequence {
-    const look = this.services.document.history;
+    const look = this.lookDocument.history;
     const jump = "action" in subject && subject.action.kind === "history.jumpTo" ? this.historyScope(subject.action.scope)?.plan(subject.action.entryId) : undefined;
     // An action's own consequence: the generic rule from its descriptor, with its spec's override.
     const route = "action" in subject ? this.routes.route(subject.action.kind) : undefined;
@@ -653,14 +681,14 @@ export class StudioApplication {
     return this.historyScope(scope)?.timeline() ?? { startId: "start", steps: [], current: -1, redoCount: 0, trimmed: false };
   }
   /** Static finish and Glitter-model descriptors, including the compiler's export gate. */
-  finishCatalogue() { return finishCatalogue(this.services.eyeMakeup.region.wording); }
+  finishCatalogue() { return finishCatalogue(this.services.eyeMakeup!.region.wording); }
   /**
    * Game-export status of one layer in the current preset, from the same preset-level plan
    * Check uses: a layer whose finish exports on its own can still be left out because of the
    * other layers (a Colour-shifting layer beside Matte). A hidden layer is judged as if shown.
    */
   layerExport(layerId: string): LayerExportStatus | undefined {
-    const layers = this.services.document.recipe.layers, layer = layers.find(item => item.id === layerId);
+    const layers = this.makeupDocument.recipe.layers, layer = layers.find(item => item.id === layerId);
     if (!layer) return undefined;
     const alone = layerExport(layer);
     if (!alone.exportable) return { ...alone, blockedBy: "layer" };
@@ -675,15 +703,15 @@ export class StudioApplication {
    * before the head is loaded or for an unknown layer. Output is unchanged: this only lets the editor say so.
    */
   layerSurfaceEdge(layerId: string): Float64Array | undefined {
-    const outline = this.services.surfaceOutline, layer = this.services.document.recipe.layers.find(item => item.id === layerId);
-    return outline && layer ? layerEdgeReach(layer, outline, this.services.eyeMakeup.region.mirror) : undefined;
+    const outline = this.services.surfaceOutline, layer = this.makeupDocument.recipe.layers.find(item => item.id === layerId);
+    return outline && layer ? layerEdgeReach(layer, outline, this.services.eyeMakeup!.region.mirror) : undefined;
   }
   /** The edited surface's outline and the cut segments of one layer (none without it), for the UV editor's overlay; undefined before the head. */
   surfaceEdge(layerId: string | undefined): { outline: Float64Array; cut: Float64Array } | undefined {
     const outline = this.services.surfaceOutline;
     return outline ? { outline: outline.segments, cut: (layerId && this.layerSurfaceEdge(layerId)) || new Float64Array() } : undefined;
   }
-  glitterModelCatalogue() { return glitterModelCatalogue(this.services.eyeMakeup.region.wording); }
+  glitterModelCatalogue() { return glitterModelCatalogue(this.services.eyeMakeup!.region.wording); }
   /** Mottle's presets (ID, label and every setting but the seed): the inspector's preset row and which one a layer matches. */
   mottleCatalogue() { return mottleCatalogue(); }
   /** The registered Studio modules in catalogue order (the Modules menu's rows; visibility is the presentation's). */
@@ -791,10 +819,10 @@ export class StudioApplication {
       return { available: false, code: "missing_target", reason: NO_PRESET };
     if (this.previewUnavailable && route.owner.owner === "system" && route.owner.needsScene)
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
-    if (route.owner.id === "history" && (s.gestures.snapshot() || s.controls.snapshot() || this.featureControl))
+    if (route.owner.id === "history" && (s.gestures?.snapshot() || s.controls?.snapshot() || this.featureControl))
       return { available: false, code: "busy", reason: "Finish or cancel the current adjustment first (Esc)." };
     // A look holding a newer build's data is kept exactly as it came: no feature edits it here (step 5).
-    if (route.owner.owner === "feature" && s.document.locked) return refusal("unavailable", s.document.locked);
+    if (route.owner.owner === "feature" && this.lookDocument.locked) return refusal("unavailable", this.lookDocument.locked);
     // A look transaction records the parts it names: nothing else may change while it runs.
     if (this.look && !this.look.features.includes(route.owner.id))
       return { available: false, code: "busy", reason: "Only the parts this change names can be edited while it is applied." };
@@ -845,7 +873,7 @@ export class StudioApplication {
   private editsLook(look: unknown): boolean {
     const ref = look as Partial<LookRef> | null;
     return !!ref && typeof ref.collection === "string" && typeof ref.look === "string"
-      && lookScoped(this.services.document.scopeId) && lookScope(ref as LookRef) === this.services.document.scopeId;
+      && lookScoped(this.lookDocument.scopeId) && lookScope(ref as LookRef) === this.lookDocument.scopeId;
   }
   private handler(owner: string) {
     return (this.handlers[owner as StudioOwnerId] ?? this.featureHandlers.get(owner)) as ActionHandler<StudioAction>;
@@ -857,7 +885,7 @@ export class StudioApplication {
    */
   private featureHandler(feature: string): ActionHandler<{ kind: string }> {
     const app = this;
-    const live = () => app.services.document.others?.document(feature);
+    const live = () => app.lookDocument.features.document(feature);
     const specOf = (action: { kind: string }) => {
       const route = app.routes.route(action.kind);
       if (!route.ok || route.owner.id !== feature) throw Error(`${action.kind} is not an action of ${feature}.`);
@@ -873,9 +901,9 @@ export class StudioApplication {
         const concrete = spec.assignIds?.(action, app.services.newId ?? (() => crypto.randomUUID())) ?? action;
         const result = spec.apply(document.state(), concrete);
         if (!result.changed) return result.effect;
-        if (!app.look && app.routes.undoPolicy(concrete) !== "none") app.services.document.history.checkpoint([feature], spec.label(concrete));
+        if (!app.look && app.routes.undoPolicy(concrete) !== "none") app.lookDocument.history.checkpoint([feature], spec.label(concrete));
         document.set(result.part, result.editor);
-        app.services.document.partChanged();
+        if ("partChanged" in app.services.document) app.services.document.partChanged();
         return result.effect;
       },
     };
@@ -891,15 +919,15 @@ export class StudioApplication {
    */
   transaction<T>(label: HistoryLabel, features: readonly string[], fn: () => NotThenable<T>): StudioDispatchResult {
     const s = this.services;
-    if (this.look || this.gesture || s.controls.snapshot() || this.featureControl)
+    if (this.look || this.gesture || s.controls?.snapshot() || this.featureControl)
       return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
     if (this.unowned()) return { ok: false, code: "missing_target", message: NO_PRESET };
-    if (s.document.locked) return { ok: false, code: "unavailable", message: s.document.locked };
-    const unknown = features.filter(feature => feature !== s.document.feature && !s.document.others?.has(feature));
+    if (this.lookDocument.locked) return { ok: false, code: "unavailable", message: this.lookDocument.locked };
+    const unknown = features.filter(feature => !this.lookDocument.features.has(feature));
     if (!features.length || unknown.length)
       return { ok: false, code: "invalid_value", message: `These parts can't be changed together here: ${unknown.join(", ") || "none named"}.` };
     // One `look` step over the named parts, with the form-control policy: empty when the content is back at its start.
-    const transaction = s.document.history.begin(features, CONTROL_TRANSACTION, { label, scope: "look" });
+    const transaction = this.lookDocument.history.begin(features, CONTROL_TRANSACTION, { label, scope: "look" });
     this.look = { features };
     let result: NotThenable<T>;
     try { result = fn(); }
@@ -923,35 +951,11 @@ export class StudioApplication {
     transaction.commit(); this.notify();
     return { ok: true, result };
   }
-  /** Eye makeup's registered spec for one of its actions: the module's pure capability and apply. */
-  /**
-   * A layer added or reset from a starter carries the starter's shape into the pure apply (which has no starter list of its own): the
-   * one the command names, else the default. A starter that is gone refuses. Other actions pass as they are.
-   */
-  private withStarter<A extends { kind: string }>(input: A): { action: A; refused?: StudioCapability } {
-    const action = input as unknown as EyeMakeupAction;
-    if (action.kind !== "layer.edit" || (action.command.kind !== "add" && action.command.kind !== "reset") || action.command.shape !== undefined
-      || !this.services.starterShapes) return { action: input };
-    const starter = this.services.starterShapes.get(action.command.starter ?? this.services.starterShapes.defaultId());
-    const shape = starter?.shape;
-    if (!starter || !shape) return { action: input, refused: missingTarget("That starter isn't available any more.") };
-    return { action: { ...action, command: { ...action.command, shape, ...(action.command.kind === "add" ? { starterName: starter.name } : {}) } } as unknown as A };
-  }
-  private eyeMakeupSpec(action: EyeMakeupAction) {
-    const route = this.routes.route(action.kind);
-    if (!route.ok || route.owner.owner !== "feature") throw Error(`${action.kind} is not a feature action.`);
-    return route.spec as EyeMakeupSpec;
-  }
-  /**
-   * Each owner's live behaviour. Eye makeup's is its module's pure capability and apply over
-   * the live document's part and editor state, published through the document port; the
-   * system families still bind their services. No kind falls through to another owner.
-   */
+  /** System handlers bind once; every feature binds from its existing registration. */
   private bindHandlers(): Handlers {
     const app = this;
     // An action records an Undo entry by its Undo policy (its variant's first), never by its effect (CORE-32).
     // Inside a look transaction the transaction records the one step.
-    const recorded = (action: StudioAction) => !this.look && this.routes.undoPolicy(action) !== "none";
     return {
       // Undo, Redo and jumps act on the history scope they name, which decides what is available.
       history: {
@@ -968,16 +972,6 @@ export class StudioApplication {
           if (!scope) return undefined;
           const moved = scope.command(moveOf(action));
           return isLookScope(scope.id) ? moved : undefined;
-        },
-      },
-      "eye-makeup": {
-        capability: action => { const resolved = app.withStarter(action);
-          return resolved.refused ?? app.eyeMakeupSpec(action).capability(app.services.eyeMakeup.state(), resolved.action); },
-        dispatch: input => {
-          const action = app.withStarter(input).action, s = app.services, spec = app.eyeMakeupSpec(action);
-          // The step is named by the registered spec (feature-module platform §3).
-          s.document.withHistoryLabel(spec.label(action), () => s.eyeMakeup.apply(spec, action, recorded(action)));
-          return undefined;
         },
       },
       collection: {
@@ -1070,7 +1064,7 @@ export class StudioApplication {
   }
   /** A locked look's recipe and masks are not exported as if it were empty: this build cannot read them. */
   private lockedExport(action: StudioFileAction): StudioCapability | undefined {
-    const locked = this.services.document.locked;
+    const locked = this.lookDocument.locked;
     return locked && (action.kind === "recipe.export" || action.kind === "mask.export") ? refusal("unavailable", locked) : undefined;
   }
   /** The async family that owns `kind`, when it is `family`. */
@@ -1080,7 +1074,7 @@ export class StudioApplication {
   }
   /** Candidate actions use the hit target, never the currently selected row; `named`: the targets the input layer resolved. */
   actionsFor(target: StudioTarget, named?: NamedTargets, complete?: CompleteInput): StudioActionInfo[] {
-    const s = this.services, recipe = s.document.snapshot().recipe;
+    const s = this.services, recipe = this.makeupDocument.snapshot().recipe;
     let actions: Unnamed<StudioAction>[] = [];
     if (target.kind === "workspace") actions = [{ kind: "history.undo" }];
     if (target.kind === "collection") actions = [
@@ -1127,10 +1121,10 @@ export class StudioApplication {
    * when it began (profiles design §3.3): the editor must show it, and its edits name it.
    */
   controlBegin(id: string, layerId: string, look?: LookRef) {
-    if (!look || !this.editsLook(look)) return false;
-    if (this.services.controls.snapshot() && this.edits.controlOwner !== this) return false;
-    if (this.denied() || this.gesture || this.look || this.featureControl || this.unowned() || this.services.document.locked) return false;
-    const begun = this.services.controls.begin(id, layerId);
+    if (!this.services.controls || !look || !this.editsLook(look)) return false;
+    if (this.services.controls?.snapshot() && this.edits.controlOwner !== this) return false;
+    if (this.denied() || this.gesture || this.look || this.featureControl || this.unowned() || this.lookDocument.locked) return false;
+    const begun = this.services.controls!.begin(id, layerId);
     if (begun) { this.edits.controlOwner = this; this.ended.delete(`control:${id}`); this.notify(); }
     return begun;
   }
@@ -1142,7 +1136,8 @@ export class StudioApplication {
    * cancels that transaction as usual.
    */
   controlEdit(id: string, action: Naming<RecipeAction, { look: LookRef }>): StudioDispatchResult {
-    if (this.services.controls.snapshot() && this.edits.controlOwner !== this)
+    if (!this.services.controls) return { ok: false, code: "not_ready", message: "This editor has no legacy form controls." };
+    if (this.services.controls?.snapshot() && this.edits.controlOwner !== this)
       return { ok: false, code: "busy", message: "Another requester owns this adjustment." };
     if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
     if (this.ended.has(`control:${id}`)) return { ok: false, code: "missing_target", message: RUN_ENDED };
@@ -1152,26 +1147,26 @@ export class StudioApplication {
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
     try {
-      const hadControl = this.services.controls.snapshot();
-      const outcome = this.services.controls.edit(id, action.layerId, action);
-      if (!hadControl && this.services.controls.snapshot()) this.edits.controlOwner = this;
+      const hadControl = this.services.controls?.snapshot();
+      const outcome = this.services.controls!.edit(id, action.layerId, action);
+      if (!hadControl && this.services.controls?.snapshot()) this.edits.controlOwner = this;
       if (outcome === "stale") return { ok: false, code: "missing_target",
         message: "That layer changed while you were adjusting it; the edit was not applied." };
       return { ok: true, result: outcome === "changed" };
     } catch (error) { return { ok: false, ...failure(undefined, error) }; }
   }
-  controlCommit(id: string) { if (this.edits.controlOwner !== this) return; if (this.services.controls.snapshot()?.id === id) this.edits.controlOwner = undefined; this.services.controls.commit(id); this.notify(); }
+  controlCommit(id: string) { if (this.edits.controlOwner !== this) return; if (this.services.controls?.snapshot()?.id === id) this.edits.controlOwner = undefined; this.services.controls!.commit(id); this.notify(); }
   /**
    * Ends this requester's pointer gesture or form-control run. Peers sharing the document retain their own adjustments.
    * Document replacement/final release asks each requester to settle through the document's replacing notification.
    */
   settleEdits() {
     if (this.gesture && this.edits.gestureOwner === this) this.endGesture(this.gesture.source);
-    const control = this.services.controls.snapshot();
+    const control = this.services.controls?.snapshot();
     if (control && this.edits.controlOwner === this) this.controlCommit(control.id);
     if (this.featureControl && this.edits.featureOwner === this) this.featureControlCommit(this.featureControl.id);
   }
-  controlCancel(id: string) { if (this.edits.controlOwner !== this) return; if (this.services.controls.snapshot()?.id === id) this.edits.controlOwner = undefined; this.services.controls.cancel(id); this.notify(); }
+  controlCancel(id: string) { if (this.edits.controlOwner !== this) return; if (this.services.controls?.snapshot()?.id === id) this.edits.controlOwner = undefined; this.services.controls!.cancel(id); this.notify(); }
   /**
    * A form control's run of edits on a feature bound by the generic handler (a slider drag), as one Undo step (feature-module platform
    * section 3): the platform's `HistoryTransaction` with the form-control policy over that feature's part. Refused inside a gesture,
@@ -1184,9 +1179,9 @@ export class StudioApplication {
     if (open && this.edits.featureOwner !== this) return false;
     if (open?.feature === feature && open.id === id) return true;
     if (open) this.featureControlCommit(open.id);
-    if (this.denied() || this.gesture || this.look || this.services.controls.snapshot() || this.unowned() || this.services.document.locked
+    if (this.denied() || this.gesture || this.look || this.services.controls?.snapshot() || this.unowned() || this.lookDocument.locked
       || !this.featureHandlers.has(feature)) return false;
-    this.featureControl = { feature, id, transaction: this.services.document.history.begin([feature], CONTROL_TRANSACTION) };
+    this.featureControl = { feature, id, transaction: this.lookDocument.history.begin([feature], CONTROL_TRANSACTION) };
     this.edits.featureOwner = this;
     this.ended.delete(`feature:${id}`);
     this.notify();
@@ -1203,12 +1198,12 @@ export class StudioApplication {
     const owned = this.featureControl?.feature === feature && this.featureControl.id === id;
     if (!owned && !this.featureControlBegin(feature, id, (action as { look?: LookRef }).look)) return { ok: false, code: "busy", message: "Finish or cancel the current adjustment first (Esc)." };
     const control = this.featureControl!;
-    const before = this.services.document.contentKey([feature]);
+    const before = this.lookDocument.features.content([feature]);
     // Inside the transaction the action records no step of its own (the transaction's checkpoint is the step).
     this.look = { features: [feature] };
     try {
       this.featureHandlers.get(feature)!.dispatch(action);
-      const changed = this.services.document.contentKey([feature]) !== before;
+      const changed = this.lookDocument.features.content([feature]) !== before;
       const route = this.routes.route(action.kind);
       control.transaction.applied(changed, () => route.ok ? (route.spec as FeatureActionSpec<unknown, unknown>).label(action)
         : { label: action.kind, actionKind: action.kind });
@@ -1258,7 +1253,7 @@ export class StudioApplication {
   }
   /** A feature's live part in its current schema (its empty part when the look lacks it), for saving it as a preset. */
   featureEnvelope(feature: string): PartEnvelope | undefined {
-    const document = this.services.document.others?.document(feature);
+    const document = this.lookDocument.features.document(feature);
     return document ? document.module.part.serialize(document.part ?? document.module.part.empty()) : undefined;
   }
   /** A feature's saved presets (loaded on first ask). */
@@ -1310,11 +1305,11 @@ export class StudioApplication {
     if (!look) return refusal("missing_target", NO_TARGET.look);
     if (!this.editsLook(look)) return refusal("missing_target", OTHER_LOOK);
     if (this.unowned()) return { available: false, code: "missing_target", reason: NO_PRESET };
-    if (this.services.document.locked) return refusal("unavailable", this.services.document.locked);
+    if (this.lookDocument.locked) return refusal("unavailable", this.lookDocument.locked);
     if (fromView3d(source) && this.previewUnavailable)
       return { available: false, code: "asset_unavailable", reason: this.previewUnavailable };
     if (this.gesture || this.look) return { available: false, code: "busy", reason: "Another gesture is active." };
-    if (this.services.controls.snapshot() && this.edits.controlOwner !== this || this.featureControl && this.edits.featureOwner !== this)
+    if (this.services.controls?.snapshot() && this.edits.controlOwner !== this || this.featureControl && this.edits.featureOwner !== this)
       return { available: false, code: "busy", reason: "Another requester owns this adjustment." };
     return this.targetCapability({ kind: "layer", id: layerId });
   }
@@ -1325,8 +1320,8 @@ export class StudioApplication {
     if (!session || session.source.view !== gestureSource(source).view) return { available: false, code: "not_ready",
       reason: "Begin a gesture on the target layer first." };
     // The capture: the editor still shows the look the gesture began on.
-    if (this.services.document.scopeId !== session.scope) return missingTarget("This view now shows another look.");
-    if (!this.services.document.recipe.layers.includes(session.layer))
+    if (this.lookDocument.scopeId !== session.scope) return missingTarget("This view now shows another look.");
+    if (!this.makeupDocument.recipe.layers.includes(session.layer))
       return missingTarget("That gesture layer was replaced.");
     if (target.kind === "point" && (!session.points[target.index] ||
       session.layer.points[target.index] !== session.points[target.index]))
@@ -1338,14 +1333,14 @@ export class StudioApplication {
   }
   beginGesture(source: GestureOrigin, layerId: string, look?: LookRef) {
     if (!this.canBeginGesture(source, layerId, look).available) return false;
-    const layer = this.services.document.recipe.layers.find(item => item.id === layerId);
+    const layer = this.makeupDocument.recipe.layers.find(item => item.id === layerId);
     if (!layer) return false;
     // Finish an open form transaction first, so its later Escape cannot revert this gesture.
-    const control = this.services.controls.snapshot();
+    const control = this.services.controls?.snapshot();
     if (control) this.controlCommit(control.id);
     if (this.featureControl) this.featureControlCommit(this.featureControl.id);
-    if (!this.services.gestures.begin(source, layer)) return false;
-    this.gesture = { source: gestureSource(source), scope: this.services.document.scopeId, layer, points: [...layer.points],
+    if (!this.services.gestures!.begin(source, layer)) return false;
+    this.gesture = { source: gestureSource(source), scope: this.lookDocument.scopeId, layer, points: [...layer.points],
       fields: new Map(layer.fields.map(field => [field.id, field])) }; this.edits.gestureOwner = this; this.notify(); return true;
   }
   applyGesture(source: GestureOrigin, proposal: StudioGestureProposal) {
@@ -1363,12 +1358,12 @@ export class StudioApplication {
         expectedField: session.fields.get(proposal.fieldId)! } : { ...base, ...proposal };
     if (proposal.kind === "point.replace" && !session.points[proposal.index] ||
       proposal.kind === "field.replace" && !session.fields.has(proposal.fieldId)) return false;
-    return this.services.gestures.apply(source, action);
+    return this.services.gestures!.apply(source, action);
   }
   endGesture(source: GestureOrigin, cancel = false) {
     if (this.edits.gestureOwner !== this) return;
     if (this.gesture?.source.view !== gestureSource(source).view) return;
-    if (cancel) this.services.gestures.cancel(source); else this.services.gestures.commit(source);
+    if (cancel) this.services.gestures!.cancel(source); else this.services.gestures!.commit(source);
     this.gesture = undefined; this.edits.gestureOwner = undefined; this.notify();
   }
 }

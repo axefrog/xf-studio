@@ -64,7 +64,7 @@ export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   try {
     const makeup = createMakeupEditing(editing, workspace, { ...ports, release: () => life.abort() }, composition);
     const { views, viewActions } = createViewServices(workspace.preview, workspace.views, composition.modules, history, ports.views);
-    const app = new StudioApplication({ ...makeup, history, views, viewActions,
+    const app = new StudioApplication({ ...makeup, signal: editing.signal, history, views, viewActions,
       ...(ports.newId ? { newId: ports.newId } : {}) }, composition.registry);
     return { ...editing, ...makeup, app, history, documents: composition.documents, views };
   } catch (error) { life.abort(); throw error; }

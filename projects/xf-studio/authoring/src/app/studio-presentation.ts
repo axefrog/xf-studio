@@ -565,17 +565,12 @@ export function createStudioPresentation<Slot>(sources: {
   };
   const facades = new Map<string, FeatureFacade>(infos.map(info => {
     const base = facade(info);
-    if (info.id !== "eye-makeup") return [info.id, Object.freeze({ ...base, view: () => a.featureState(info.id),
+    const extension = a.featureFacade(info.id, base, { application: a, editor, begin: beginRun, run: runApp, name: nameRun, end: endRun });
+    return [info.id, Object.freeze(extension ?? { ...base, view: () => a.featureState(info.id),
       controlBegin: (id: string) => a.featureControlBegin(info.id, id, beginRun(id).look),
       controlEdit: (id: string, action: { kind: string }) => runApp(id).featureControlEdit(info.id, id, nameRun(id, action)),
-      controlCommit: (id: string) => { runApp(id).featureControlCommit(id); endRun(id); }, controlCancel: (id: string) => { runApp(id).featureControlCancel(id); endRun(id); } }) as GenericFeatureFacade];
-    const eye: EyeMakeupFacade = { ...(base as FeatureFacade<EyeMakeupAction>), view: () => editor,
-      controlBegin: (id, layerId) => a.controlBegin(id, layerId, beginRun(id).look),
-      controlEdit: (id, action) => runApp(id).controlEdit(id, nameRun<RecipeAction>(id, action) as Parameters<StudioApplication["controlEdit"]>[1]),
-      controlCommit: id => { runApp(id).controlCommit(id); endRun(id); }, controlCancel: id => { runApp(id).controlCancel(id); endRun(id); },
-      layerExport: layerId => a.layerExport(layerId), layerSurfaceEdge: layerId => a.layerSurfaceEdge(layerId), finishCatalogue: () => a.finishCatalogue(),
-      glitterModelCatalogue: () => a.glitterModelCatalogue(), mottleCatalogue: () => a.mottleCatalogue() };
-    return [info.id, Object.freeze(eye)];
+      controlCommit: (id: string) => { runApp(id).featureControlCommit(id); endRun(id); },
+      controlCancel: (id: string) => { runApp(id).featureControlCancel(id); endRun(id); } })];
   }));
   const feature = ((id: string) => facades.get(id)) as FeatureLookup;
   const withPart = (request: PartPresetRequest): PartPresetRequest => request.kind === "partPreset.save" && !request.part

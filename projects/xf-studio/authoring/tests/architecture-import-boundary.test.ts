@@ -43,6 +43,13 @@ test("the temporary makeup editing bridge stays confined to profile and concrete
   expect(DISK.names.filter(name => resolved(name).includes(bridge)).sort())
     .toEqual(["app/profiles/profile-authoring", "app/trusted-authoring-core"]);
 });
+test("registered makeup application publication is composed once, with no ID routing in the application (CORE-03)", () => {
+  expect(DISK.names.filter(name => resolved(name).includes("app/authoring/makeup-application")).sort())
+    .toEqual(["compose/studio-registry"]);
+  expect(DISK.text("app/studio-application")).not.toContain('owner("eye-makeup")');
+  expect(DISK.text("app/studio-application")).not.toContain('"eye-makeup": {');
+  expect(DISK.text("app/studio-presentation")).not.toMatch(/info\.id\s*!?==\s*"eye-makeup"/);
+});
 /** A module's imports with whether each is type-only, as src-relative module names. */
 const usesIn = (tree: Tree, name: string) => importUses(tree.text(name)).map(use => ({ path: resolveFrom(name, use.specifier), typeOnly: use.typeOnly }));
 /** A resolved import as the module it names (`x` or `x/index`), when it names one in the tree. */

@@ -36,7 +36,9 @@ function counted(overrides: Record<string, Partial<ActionSpec>> = {}) {
   const calls = { apply: 0, gestures: 0 };
   const actions = Object.fromEntries(Object.entries(EYE_MAKEUP.actions).map(([kind, spec]) => [kind, { ...spec, ...overrides[kind],
     apply: (state: never, action: never) => { calls.apply++; return (spec as Spec).apply(state, action); } }]));
-  const module = { ...EYE_MAKEUP, actions, gestures: { apply: (part: never, edit: never) => { calls.gestures++; return EYE_MAKEUP.gestures!.apply(part, edit); } } };
+  // Replace the pure specs while retaining the composition's registered application publication/facade adapter.
+  const module = { ...STUDIO_OWNERS.find(owner => owner.id === EYE_MAKEUP.id)!, actions,
+    gestures: { apply: (part: never, edit: never) => { calls.gestures++; return EYE_MAKEUP.gestures!.apply(part, edit); } } };
   const registry = new Registry(STUDIO_OWNERS.map(owner => owner.id === EYE_MAKEUP.id ? module : owner) as never);
   const composition: StudioComposition = { registry, documents: STUDIO_COMPOSITION.documents, region: STUDIO_COMPOSITION.region };
   let ids = 0;

@@ -1,4 +1,9 @@
-/** Stateless compatibility bundle for the still-concrete application. Remove after CORE-03 slices 5–6. */
+/**
+ * Stateless compatibility projections over the neutral look. Slice 5 routes actions/facades from
+ * the feature's composition registration, not this bundle. Slice 6 must move gesture/control
+ * transactions and recipe/effect publication to the registered editor, then delete this bundle;
+ * the geometry/view and released-input projections remain explicit adapters in their later slices.
+ */
 import { AuthoringControlEdits } from "./authoring-control-edits";
 import { AuthoringDocument } from "./makeup-document";
 import { eyeMakeupPort, RecipeActions, type EyeMakeupGestures, type EyeMakeupSpec } from "../../legacy/eye-makeup/authoring-eye-makeup";

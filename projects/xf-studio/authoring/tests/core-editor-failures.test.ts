@@ -54,14 +54,14 @@ describe("CORE-03 captured startup failures", () => {
     }
   });
 
-  test("slice 5 flips: removing only eye makeup leaves an extra application handler", () => {
+  test("slice 5 resolved: removing eye makeup leaves no extra application handler", () => {
     const core = createTrustedAuthoringCore(freshWorkspace(emptyRecipe()), { resetStack() {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION);
     const registry = new Registry(STUDIO_OWNERS.filter(owner => owner.id !== "eye-makeup"));
     try {
       probe(() => {
         const application = new StudioApplication(core, registry);
         application.dispose();
-      }, `Registered owners (${registry.owners().map(owner => owner.id).sort().join(", ")}) do not match the application's handlers (${STUDIO_OWNERS.map(owner => owner.id).sort().join(", ")}).`);
+      }, null);
     } finally { core.app.dispose(); core.document.dispose(); }
   });
 

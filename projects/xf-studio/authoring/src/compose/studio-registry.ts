@@ -4,9 +4,10 @@
  *
  * Only composition roots import this module (the browser startup, the server and desktop hosts,
  * tools and tests); every other module receives the registry, the part registry and the live
- * feature as arguments (CORE-29). Adding a feature module adds it here; the compiler then requires
- * `StudioApplication` to bind a handler for it (`StudioOwnerActions`).
+ * feature as arguments (CORE-29). Features bind from this registration; the compiler checks
+ * the application's system-family handlers independently of the feature list.
  */
+import { MAKEUP_APPLICATION } from "../app/authoring/makeup-application";
 import { Registry } from "../platform/core/registry";
 import { PartRegistry } from "../platform/core/document";
 import { EYE_MAKEUP, EYE_MAKEUP_ID, EYE_MAKEUP_REGION } from "../features/eye-makeup";
@@ -24,17 +25,17 @@ export type { StudioOwnerActions, StudioOwnerId };
  * Registration order is catalogue order: the golden registry snapshot pins it. The asynchronous
  * families (library requests, file workflows) route by owner too, outside the synchronous table.
  */
-export const STUDIO_OWNERS = [HISTORY_FAMILY, EYE_MAKEUP, COLLECTION_FAMILY, SCENES_FAMILY, TABS_FAMILY, PANELS_FAMILY, STARTERS_FAMILY, PREVIEW_FAMILY, MOTION_FAMILY, TRANSITIONS_FAMILY,
+export const STUDIO_OWNERS = [HISTORY_FAMILY, { ...EYE_MAKEUP, application: MAKEUP_APPLICATION }, COLLECTION_FAMILY, SCENES_FAMILY, TABS_FAMILY, PANELS_FAMILY, STARTERS_FAMILY, PREVIEW_FAMILY, MOTION_FAMILY, TRANSITIONS_FAMILY,
   QUALITY_FAMILY, SAVED_V_FAMILY, CHARACTER_CONTEXT_FAMILY, VIEWS_FAMILY, LIBRARY_FAMILY, FILES_FAMILY, EXPRESSIONS, PRESETS_FAMILY, EMPTY_CHOICES_FAMILY] as const;
 /**
- * Features the application binds through its generic handler (their spec's capability and apply over their live document, feature-module
- * platform step 5): they need no bespoke handler, so they are not in `StudioOwnerActions`.
+ * Every feature binds from registration, using pure specs by default. Eye makeup's temporary
+ * application publication/facade adapter is contributed above, beside that same registration.
  */
-type GenericFeatureIds = typeof EXPRESSIONS.id;
+type GenericFeatureIds = Extract<(typeof STUDIO_OWNERS)[number], { owner: "feature" }> ["id"];
 
 // Compile-time: the list's IDs, apart from the generically bound features, are exactly the owners StudioApplication binds handlers for.
 type ListedIds = Exclude<(typeof STUDIO_OWNERS)[number]["id"], GenericFeatureIds>;
-type BoundIds = StudioOwnerId | StudioRequestOwnerId;
+type BoundIds = Exclude<StudioOwnerId, GenericFeatureIds> | StudioRequestOwnerId;
 type Unlisted = { [K in BoundIds]: [Extract<ListedIds, K>] extends [never] ? K : never }[BoundIds];
 const exact: [ListedIds] extends [BoundIds] ? [Unlisted] extends [never] ? true : false : false = true;
 void exact;
