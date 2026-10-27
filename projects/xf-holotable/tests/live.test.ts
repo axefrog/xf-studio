@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createLiveSource, LIVE_BOUNDS, type LiveUpdate } from "../src/live.ts";
 import { createLiveBridge, mapRecorderStatus } from "../src/live-bridge.ts";
-import { createService } from "../src/service.ts";
+import { createService, LIVE_WORLD_IDLE_MS } from "../src/service.ts";
 import { emptySolids } from "../src/solid-source.ts";
 import { readRun } from "../src/recording.ts";
 import { trailUntil } from "../src/query.ts";
@@ -244,9 +244,10 @@ test("service polls never wait for live solids, and hiding cancels their want", 
   const { watch } = await service.handlers["live.watch"]({}, sig()) as { watch: string }; await settle();
   await new Promise(resolve => setImmediate(resolve));
   const update = await service.handlers["live.poll"]({ watch }, sig()) as LiveUpdate;
-  expect(update.v).toHaveLength(50); expect(shapeSignal?.aborted).toBe(false);
+  expect(update.v).toHaveLength(50); expect(shapeSignal).toBeUndefined();
   const geometry = await service.handlers["world.around"]({ watch }, sig()) as any;
   expect(geometry.pending).toBe(true); expect(geometry.world).toBeNull();
+  await new Promise(resolve=>setImmediate(resolve));expect(shapeSignal?.aborted).toBe(false);
   await service.handlers["live.stop"]({ watch }, sig()); expect(shapeSignal?.aborted).toBe(true);
 });
 
@@ -257,12 +258,58 @@ test("a new world withdraws old geometry before its first V sample", async () =>
   closes.push(() => service.close());
   const { watch } = await service.handlers["live.watch"]({}, sig()) as { watch: string }; await settle();
   await new Promise(resolve => setImmediate(resolve)); await settle();
+  const pending = await service.handlers["world.around"]({ watch }, sig()) as any;expect(pending.pending).toBe(true);
+  await new Promise(resolve=>setImmediate(resolve));await settle();
   const first = await service.handlers["world.around"]({ watch }, sig()) as any;
   expect(first.world).not.toBeNull();
-  await bridge.clock.advance(4000);
+  for(let i=0;i<4;i++){await bridge.clock.advance(1000);await service.handlers["world.around"]({watch},sig());}
   bridge.recorder.run = 2; bridge.recorder.world = 2; bridge.recorder.start = 2000;
   bridge.pages.push(bridge.page([], { now: 2000 })); await bridge.clock.advance(3000);
   const next = await service.handlers["world.around"]({ watch, since: first.version }, sig()) as any;
   expect(next.version).toBeGreaterThan(first.version); expect(next.world).toBeNull();
   expect(service.live.session()?.v).toHaveLength(0);
+});
+
+
+test("Details-only live watching and polling never starts solid work",async()=>{
+ const {bridge,rows}=setup();bridge.pages.push(bridge.page(rows));let reads=0,status=0;
+ const service=createService({recordingsRoot:fixture!.root,worldPackPath:"",liveBridge:bridge,liveClock:bridge.clock,solidSource:{status:async()=>{status++;return{cold:false};},around:async()=>{reads++;return emptySolids();}}});closes.push(()=>service.close());
+ const {watch}=await service.handlers["live.watch"]({},sig()) as {watch:string};await settle();
+ for(let i=0;i<6;i++){
+  await bridge.clock.advance(1000);await service.handlers["live.poll"]({watch},sig());await new Promise(resolve=>setImmediate(resolve));
+ }
+ expect(service.live.session()!.v.length).toBeGreaterThan(0);expect(reads).toBe(0);expect(status).toBe(0);
+});
+
+test("legacy live world wants share work; cancellation is per watch and late geometry cannot republish",async()=>{
+ const {bridge,rows}=setup();bridge.pages.push(bridge.page(rows));
+ const reads:{signal:AbortSignal;resolve:(value:ReturnType<typeof emptySolids>)=>void}[]=[];
+ const service=createService({recordingsRoot:fixture!.root,worldPackPath:"",liveBridge:bridge,liveClock:bridge.clock,solidSource:{around:async(_p,_m,signal)=>new Promise(resolve=>reads.push({signal,resolve}))}});closes.push(()=>service.close());
+ const one=await service.handlers["live.watch"]({},sig()) as {watch:string},two=await service.handlers["live.watch"]({},sig()) as {watch:string};await settle();
+ const a=new AbortController(),b=new AbortController();
+ const first=await service.handlers["world.around"](one,a.signal) as any;await service.handlers["world.around"](two,b.signal);await new Promise(resolve=>setImmediate(resolve));
+ expect(first.pending).toBe(true);expect(reads).toHaveLength(1);
+ a.abort();expect(reads[0].signal.aborted).toBe(false);b.abort();expect(reads[0].signal.aborted).toBe(true);
+ reads[0].resolve({...emptySolids(),solids:[{id:"late",kind:"box",center:[0,0,0],size:[1,1,1],axes:[[1,0,0],[0,1,0],[0,0,1]]}]});await settle();
+ const latest=new AbortController(),old=new AbortController();
+ const next=await service.handlers["world.around"](one,old.signal) as any;expect(next.world).toBeNull();
+ await service.handlers["world.around"](one,latest.signal);await new Promise(resolve=>setImmediate(resolve));expect(reads).toHaveLength(2);
+ old.abort();expect(reads[1].signal.aborted).toBe(false);latest.abort();expect(reads[1].signal.aborted).toBe(true);reads[1].resolve(emptySolids());
+});
+
+test("legacy world idle timeout drops retained geometry and stops warming while live polling continues",async()=>{
+ const {bridge,rows}=setup();bridge.pages.push(bridge.page(rows));let reads=0;
+ const service=createService({recordingsRoot:fixture!.root,worldPackPath:"",liveBridge:bridge,liveClock:bridge.clock,solidSource:{around:async()=>{reads++;return emptySolids();}}});closes.push(()=>service.close());
+ const {watch}=await service.handlers["live.watch"]({},sig()) as {watch:string};await settle();
+ await service.handlers["world.around"]({watch},sig());await new Promise(resolve=>setImmediate(resolve));await settle();
+ let ready=await service.handlers["world.around"]({watch},sig()) as any;expect(ready.world).not.toBeNull();expect(reads).toBe(1);
+ const position=rows.find(r=>r.channel==="v"&&r.valid)!;
+ bridge.pages.push(bridge.page([{...position,seq:999,source_s:1010,data:{...position.data,position:[1000,1000,0]}}],{record:999}));
+ await bridge.clock.advance(1000);await new Promise(resolve=>setImmediate(resolve));await settle();expect(reads).toBe(2);
+ ready=await service.handlers["world.around"]({watch},sig()) as any;
+ await bridge.clock.advance(LIVE_WORLD_IDLE_MS+1);await service.handlers["live.poll"]({watch},sig());
+ bridge.pages.push(bridge.page([{...position,seq:1000,source_s:1020,data:{...position.data,position:[2000,2000,0]}}],{record:1000}));
+ await bridge.clock.advance(1000);await new Promise(resolve=>setImmediate(resolve));expect(reads).toBe(2);
+ const renewed=await service.handlers["world.around"]({watch,since:ready.version},sig()) as any;
+ expect(renewed.world).toBeNull();expect(renewed.pending).toBe(true);expect(renewed.version).toBeGreaterThan(ready.version);
 });

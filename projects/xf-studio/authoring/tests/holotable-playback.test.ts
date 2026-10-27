@@ -67,18 +67,18 @@ test("stepping binary-searches long histories",()=>{
 
 test("pulses and retraction fades use 300 real ms; seek, step, pause and reduced motion clear continuity",()=>{
   let now=0;const effects=playbackEffects<string>(()=>now), item=(version:number)=>({key:"a",version,visual:"geometry"});
-  effects.observe([item(0)],true,0,false);expect(effects.frame().effects).toEqual([]);
-  effects.observe([item(1)],true,0,false);now=150;expect(effects.frame().effects[0]).toMatchObject({kind:"pulse",progress:.5});
-  effects.observe([],true,0,false);now=300;expect(effects.frame().effects[0]).toMatchObject({kind:"fade",progress:.5,item:{visual:"geometry"}});
+  effects.observe([item(0)],true,0,false);effects.prepare();expect(effects.frame().effects).toEqual([]);
+  effects.observe([item(1)],true,0,false);effects.prepare();now=150;expect(effects.frame().effects[0]).toMatchObject({kind:"pulse",progress:.5});
+  effects.observe([],true,0,false);effects.prepare();now=300;expect(effects.frame().effects[0]).toMatchObject({kind:"fade",progress:.5,item:{visual:"geometry"}});
   now=450;expect(effects.frame().pending).toBe(false);
-  for(const [playing,epoch,reduced] of [[true,1,false],[false,1,false],[true,1,true]] as const){effects.observe([item(2)],playing,epoch,reduced);expect(effects.frame().effects).toEqual([]);}
+  for(const [playing,epoch,reduced] of [[true,1,false],[false,1,false],[true,1,true]] as const){effects.observe([item(2)],playing,epoch,reduced);effects.prepare();expect(effects.frame().effects).toEqual([]);}
 });
 
 test("many-marker pulse work is bounded per frame and expires without another observation",()=>{
   let now=0;const effects=playbackEffects<number>(()=>now), items=Array.from({length:5000},(_,n)=>({key:String(n),version:0,visual:n}));
-  effects.observe([],true,0,false);effects.observe(items,true,0,false);
-  for(let n=0;n<30;n++)expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);
-  now=300;for(let n=0;n<30;n++)expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);expect(effects.frame().pending).toBe(false);
+  effects.observe([],true,0,false);effects.prepare();effects.observe(items,true,0,false);
+  for(let n=0;n<30;n++){expect(effects.prepare().visited).toBeLessThanOrEqual(EFFECT_WORK);expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);}
+  now=300;for(let n=0;n<30;n++){expect(effects.prepare().visited).toBeLessThanOrEqual(EFFECT_WORK);expect(effects.frame().visited).toBeLessThanOrEqual(EFFECT_WORK);}expect(effects.frame().pending).toBe(false);
 });
 
 test("glyph resolution: exact icon, family, known kind fallback, then unknown without a plate",()=>{
@@ -95,17 +95,27 @@ test("glyph resolution: exact icon, family, known kind fallback, then unknown wi
 test("all holo actions are registered while on, withdrawn while off, and captured dispatches cannot outlive a registration",async()=>{
   const f=await fixture();try{
     const service=holotableFacade(f.service), registration={module:HOLOTABLE_MODULE,service,renderer:{feature:"holotable" as never,create:()=>({dispose(){}})}};
-    let on=true,generation=0;
-    const live=liveModuleActions(STUDIO_REGISTRY,{registrationGeneration:()=>generation,registrations:()=>on?[registration]:[]});
+    let on=true,generation=0;const listeners=new Set<()=>void>();
+    const live=liveModuleActions(STUDIO_REGISTRY,{registrationGeneration:()=>generation,registrations:()=>on?[registration]:[],onRegistrationsChanged:listener=>{listeners.add(listener);return()=>{listeners.delete(listener);};}});
     for(const kind of Object.keys(HOLOTABLE_ACTIONS))expect(live.registry.routeAsync(kind).ok).toBe(true);
     expect(live.registry.route("camera.front").ok).toBe(true);
     const captured=live.bind(service);expect(captured.capability({kind:"holo.refresh"}).available).toBe(true);
-    on=false;generation++;
+    generation++;for(const listener of listeners)listener();expect(captured.capability({kind:"holo.refresh"}).available).toBe(true);
+    on=false;generation++;for(const listener of listeners)listener();
     expect(live.registry.routeAsync("holo.refresh").ok).toBe(false);
     expect(captured.capability({kind:"holo.refresh"})).toMatchObject({available:false,reason:expect.stringContaining("switched off")});
     expect((await captured.dispatch({kind:"holo.refresh"})).ok).toBe(false);
-    on=true;generation++;expect(live.registry.routeAsync("holo.refresh").ok).toBe(true);
+    on=true;generation++;for(const listener of listeners)listener();expect(live.registry.routeAsync("holo.refresh").ok).toBe(true);
     expect(STUDIO_REGISTRY.routeAsync("holo.refresh").ok).toBe(false);
+    expect(captured.capability({kind:"holo.refresh"}).available).toBe(false);
+    expect((await captured.dispatch({kind:"holo.refresh"})).ok).toBe(false);
+    expect((await live.bind(service).dispatch({kind:"holo.refresh"})).ok).toBe(true);
+    const capturedAgain=live.bind(service);
+    // No intervening capability or registry reads: both transitions must retire the original lifetime.
+    on=false;generation++;for(const listener of listeners)listener();
+    on=true;generation++;for(const listener of listeners)listener();
+    expect((await capturedAgain.dispatch({kind:"holo.refresh"})).ok).toBe(false);
+    expect(live.bind(service).capability({kind:"holo.refresh"}).available).toBe(true);
     const docs=renderCatalogue();for(const kind of Object.keys(HOLOTABLE_ACTIONS))expect(docs).toContain(kind);expect(docs).toContain("experiment holotable");
     const golden=JSON.parse(readFileSync(new URL("./golden/spec-fields.json",import.meta.url),"utf8"));
     expect(golden.experimentActions.holotable).toEqual({speed:{values:HOLOTABLE_ACTIONS["holo.speed"].payload.speed.values},scope:HOLOTABLE_ACTIONS["holo.speed"].scope,undo:HOLOTABLE_ACTIONS["holo.speed"].undo,changeScope:{layer:HOLOTABLE_ACTIONS["holo.change.scope"].payload.layer}});
@@ -162,4 +172,34 @@ test("a temporary shared stepping scope skips other layers and clears on hide, r
   await f.service.dispatch({kind:"holo.open",dir:"game"});expect(f.service.snapshot().changeScope).toBeNull();
   await f.service.dispatch({kind:"holo.change.scope",layer:"p/b"});await f.service.dispatch({kind:"holo.producer",producer:"p",on:false});expect(f.service.snapshot().changeScope).toBeNull();
  }finally{layers=original;f.ctl.abort();}
+});
+
+
+test("animation preparation is lazy, deadline-bound and resumable for 5,000 revisions and removals",()=>{
+ let now=0,reads=0;
+ const effects=playbackEffects<number>(()=>now);
+ function* snapshot(version:number){for(let i=0;i<5000;i++){reads++;yield{key:String(i),version,visual:i};}}
+ effects.observe(snapshot(0),true,"same",false);expect(reads).toBe(0);
+ expect(effects.prepare(()=>false)).toEqual({visited:0,pending:true});expect(reads).toBe(0);
+ let budget=5;expect(effects.prepare(()=>budget-->0)).toEqual({visited:5,pending:true});expect(reads).toBe(5);
+ for(const version of [0,1]){
+  if(version)effects.observe(snapshot(version),true,"same",false);
+  let pending=true,frames=0;
+  while(pending&&frames++<50){const before=reads,step=effects.prepare();expect(step.visited).toBeLessThanOrEqual(EFFECT_WORK);expect(reads-before).toBeLessThanOrEqual(EFFECT_WORK);pending=step.pending;}
+  expect(pending).toBe(false);expect(frames).toBeGreaterThan(10);
+ }
+ effects.observe([],true,"same",false);
+ let frames=0,pending=true;
+ while(pending&&frames++<50){const step=effects.prepare();expect(step.visited).toBeLessThanOrEqual(EFFECT_WORK);pending=step.pending;}
+ expect(pending).toBe(false);expect(frames).toBeGreaterThan(10);
+ now=300;for(let i=0;i<25;i++)effects.frame();expect(effects.frame().pending).toBe(false);
+});
+
+test("preparation finishes its slice sequence while coalescing newer answers instead of restarting",()=>{
+ const effects=playbackEffects<number>(()=>0),rows=Array.from({length:5000},(_,i)=>({key:String(i),version:0,visual:i}));
+ effects.observe(rows,true,"one",false);
+ for(let i=0;i<19;i++){effects.prepare();effects.observe(rows,true,"one",false);}
+ // The first baseline completes after 5,000 visits despite repeated answers. The queued changed answer then pulses.
+ const changed=rows.map(row=>({...row,version:1}));effects.observe(changed,true,"one",false);
+ for(let i=0;i<25;i++)effects.prepare();expect(effects.frame().effects.some(effect=>effect.kind==="pulse")).toBe(true);
 });

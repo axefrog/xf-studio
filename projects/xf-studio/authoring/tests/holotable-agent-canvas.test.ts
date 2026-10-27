@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { agentCanvas } from "../src/features/holotable/view/agent-canvas";
+import { EFFECT_WORK } from "../src/features/holotable/view/playback-effects";
 import { camera, ORBITS } from "../src/features/holotable/view/projection";
 
 function withCanvas(run: (renderer: ReturnType<typeof agentCanvas>, arcs: number[][], strokes: () => number, names: string[]) => void, options: { reduced?: boolean; now?: () => number } = {}) {
@@ -51,7 +52,7 @@ test("known plates retain kind geometry, selection is 22px and badges 6px; unkno
  const radii=arcs.map(a=>a[2]);expect(radii).toContain(11);expect(radii).toContain(3);expect(radii).toContain(9);expect(radii).toContain(6.8);expect(strokes()).toBeGreaterThan(7);
 }));
 
-test("animation replays a retired item's cached drawing, and reduced motion suppresses it",()=>{
+test("animation reprojects a retired item's world geometry, and reduced motion suppresses it",()=>{
  for(const reduced of [false,true]){
    let now=0;
    withCanvas((renderer,arcs,strokes)=>{
@@ -87,3 +88,42 @@ test("painted glyph plates block other labels while either selected item's name 
  names.length=0;renderer.draw(answer,enabled,C,"p/a",1000);expect(names).toContain("Fixer");expect(names).not.toContain("Clinic");
  names.length=0;renderer.draw(answer,enabled,C,"p/b",1000);expect(names).toContain("Clinic");expect(names).not.toContain("Fixer");
 }));
+
+
+test("following a moving camera preserves pulse and fade age and reprojects both at each frame",()=>{
+ let now=0;withCanvas((renderer,arcs)=>{
+  const enabled={},base={specs:{schema:"xfh/projections-1",kinds:{point:{style:"tone",label:"{label}",draw:"ring"}}},here:[],layers:[{id:"p/a",producer:"p",layer:"a",title:"A",notPlaced:[],otherBranches:[],refused:0,reason:"",items:[{id:"a",key:"p/a/a",version:0,kind:"point",anchor:{at:[10,0,0] as const},place:[10,0,0] as const}]}]};
+  const playback={playing:true,epoch:"continuous"};
+  renderer.draw(base,enabled,camera([0,0,0],ORBITS.top,800,500),null,1000,null,[],350,playback);
+  const changed={...base,layers:[{...base.layers[0],items:[{...base.layers[0].items[0],version:1}]}]};
+  renderer.draw(changed,enabled,camera([0,0,0],ORBITS.top,800,500),null,1000,null,[],350,playback);
+  now=100;const moving=camera([1,0,0],ORBITS.top,800,500);
+  renderer.draw(changed,enabled,moving,null,1000,null,[],350,playback);
+  arcs.length=0;expect(renderer.animate()).toBe(true);
+  expect(arcs.at(-1)!.slice(0,2)).toEqual(moving.point([10,0,0])!);expect(arcs.at(-1)![2]).toBeCloseTo(6.8+3+100/300*10);
+  const removed={...base,layers:[{...base.layers[0],items:[]}]};
+  renderer.draw(removed,enabled,moving,null,1000,null,[],350,playback);
+  now=200;const followed=camera([2,3,0],ORBITS.top,800,500);
+  renderer.draw(removed,enabled,followed,null,1000,null,[],350,playback);
+  arcs.length=0;expect(renderer.animate()).toBe(true);
+  expect(arcs.at(-1)!.slice(0,2)).toEqual(followed.point([10,0,0])!);expect(arcs.at(-1)![2]).toBeCloseTo(6.8);
+  now=400;expect(renderer.animate()).toBe(false);
+ },{now:()=>now});
+});
+
+test("fresh answers prepare at most 256 animation visuals/revisions per draw and zero outside the deadline",()=>{
+ let reads=0;withCanvas((renderer)=>{
+  const items=Array.from({length:5000},(_,i)=>({id:String(i),key:`p/a/${i}`,get version(){reads++;return 1;},kind:"point",anchor:{at:[i,0,0] as const},place:[i,0,0] as const}));
+  const answer={specs:{schema:"xfh/projections-1",kinds:{point:{draw:"ring",style:"tone",label:"{label}"}}},here:[],layers:[{id:"p/a",title:"A",producer:"p",layer:"a",items,notPlaced:[],otherBranches:[],refused:0,reason:""}]};
+  const C=camera([0,0,0],ORBITS.top,800,500),enabled={},playback={playing:true,epoch:"one"};
+  const first=renderer.draw(answer,enabled,C,null,-1,null,[],350,playback);expect(reads).toBe(0);expect(first?.prepared).toBe(0);
+  for(let i=0;i<25;i++){
+   const before=reads,result=renderer.draw(answer,enabled,C,null,1000,null,[],350,playback);
+   expect(reads-before).toBeLessThanOrEqual(EFFECT_WORK);expect(result!.prepared).toBeLessThanOrEqual(EFFECT_WORK);
+  }
+  expect(reads).toBe(5000);
+  reads=0;const next={...answer,layers:[{...answer.layers[0],items:items.map(item=>({...item,get version(){reads++;return 2;}}))}]};reads=0;
+  const result=renderer.draw(next,enabled,C,null,1000,null,[],350,playback);
+  expect(reads).toBeLessThanOrEqual(EFFECT_WORK);expect(result!.prepared).toBe(EFFECT_WORK);
+ });
+});

@@ -20,6 +20,8 @@ import { standaloneSession, standaloneSets } from "./layer-timelines.ts";
 export const PROTOCOL = "xfh/service-1";
 /** The longest request line accepted; a longer one is refused and dropped without growing the buffer. */
 export const FRAME_LIMIT = 1024 * 1024;
+/** Legacy live geometry stays warm only while callers poll it. */
+export const LIVE_WORLD_IDLE_MS = 2000;
 
 export interface ServiceOptions { recordingsRoot: string; worldPackPath: string; layersRoot?: string; solidSource?: SolidPort; solidCacheDir?: string; liveBridge?: LiveBridge; liveClock?: LiveClock }
 
@@ -55,13 +57,38 @@ export function createService(options: ServiceOptions) {
   let liveWorld: unknown = null, worldVersion = 0, worldPending = false, worldCold = false;
   let worldCtl = new AbortController(), worldIdentity = "", covered: Session["v"][number]["position"][] = [];
   let requested: Session | undefined;
-  // Source updates only enqueue a want. The retained-data poll never awaits geometry.
+  const worldTime = options.liveClock ?? { later(ms:number, run:()=>void) { const timer=setTimeout(run,ms);timer.unref?.();return()=>clearTimeout(timer); } };
+  const worldWants = new Map<string, { stop():void; off():void }>();
+  function dropWorld() {
+    worldCtl.abort(); worldCtl = new AbortController(); worldPending = worldCold = false;
+    liveWorld = null; covered = []; requested = undefined; worldVersion++;
+  }
+  function stopWorldWant(watch:string, row=worldWants.get(watch)) {
+    if(!row || worldWants.get(watch)!==row)return;
+    row.stop();row.off();worldWants.delete(watch);
+    if(!worldWants.size)dropWorld();
+  }
+  function startWorldWant(watch:string,signal:AbortSignal) {
+    signal.throwIfAborted();
+    // Renewal supersedes only this watch; aborting an older request cannot release its successor.
+    const old=worldWants.get(watch);old?.stop();old?.off();
+    const row={stop:()=>{},off:()=>{}};worldWants.set(watch,row);
+    const stop=()=>stopWorldWant(watch,row);
+    signal.addEventListener("abort",stop,{once:true});row.off=()=>signal.removeEventListener("abort",stop);
+    row.stop=worldTime.later(LIVE_WORLD_IDLE_MS,stop);
+  }
+  function stopWorldWants() {
+    for(const row of worldWants.values()){row.stop();row.off();}
+    worldWants.clear();dropWorld();
+  }
+  // Retained-data polling never awaits or starts geometry. Source updates warm only explicit recent wants.
   function wantWorld(s: Session) {
+    if(!worldWants.size)return;
     requested = s;
     const identity = `${s.meta.session}:${s.meta.run}:${s.meta.worldGeneration}`;
     if (worldIdentity !== identity) {
       worldCtl.abort(); worldCtl = new AbortController(); worldIdentity = identity;
-      liveWorld = null; covered = []; worldVersion++; worldPending = false;
+      liveWorld = null; covered = []; worldVersion++; worldPending = worldCold = false;
     }
     const newest = s.v.at(-1)?.position;
     if (!newest || worldPending || covered.some(p => Math.hypot(...p.map((v, i) => v - newest[i])) < 100)) return;
@@ -69,7 +96,10 @@ export function createService(options: ServiceOptions) {
     worldPending = true;
     setImmediate(() => { void (async () => {
       try {
-        worldCold = (await solids.status?.(path, signal))?.cold ?? false;
+        signal.throwIfAborted();
+        const status = await solids.status?.(path, signal);
+        signal.throwIfAborted();
+        worldCold = status?.cold ?? false;
         const geometry = await solids.around(path, 250, signal); signal.throwIfAborted();
         const w = pack();
         liveWorld = { ...(w ? region(w, boxOf(path), 250) : { provenance: null, areas: [], cells: [] }), ...geometry };
@@ -82,7 +112,7 @@ export function createService(options: ServiceOptions) {
     })(); });
   }
   const live = createLiveSource(options.liveBridge ?? createLiveBridge(), { clock: options.liveClock, changed: wantWorld,
-    idle() { worldCtl.abort(); worldCtl = new AbortController(); worldPending = false; } });
+    idle: stopWorldWants });
   async function open(dir: string, signal: AbortSignal): Promise<Session> {
     if (signal.aborted) throw coded("cancelled", "Cancelled.");
     if (dir.startsWith("layers:")) return standaloneSession(layers.snapshot(), dir, pack() ?? undefined);
@@ -142,7 +172,7 @@ export function createService(options: ServiceOptions) {
     "layers.at": (p, signal) => layerAnswer(p, signal),
     "live.status": (_p, signal) => live.status(signal),
     "live.watch": () => live.watch(),
-    "live.stop": p => { live.stop(String(p.watch)); return { stopped: true }; },
+    "live.stop": p => { stopWorldWant(String(p.watch)); live.stop(String(p.watch)); return { stopped: true }; },
     "live.poll": p => live.poll(String(p.watch), p.since as LiveCursor | undefined, level(p.level)),
     "service.info": () => ({ protocol: PROTOCOL, recordingsRoot: options.recordingsRoot, worldPack: Boolean(pack()) }),
     "runs.list": async (_p, signal) => [...standaloneSets(await readLayers(signal)).map(s => ({ session: s.dir, run: 0, dir: s.dir, start: s.from, end: s.to, bytes: 0, complete: true, title: s.title, standalone: true, clock: s.clock })), ...listRuns(options.recordingsRoot)],
@@ -154,7 +184,8 @@ export function createService(options: ServiceOptions) {
     "world.around": async (p, signal) => {
       if (typeof p.watch === "string" && p.center === undefined) {
         // Validate and renew this watch without asking the bridge for anything.
-        live.renew(p.watch);
+        signal.throwIfAborted();live.renew(p.watch);startWorldWant(p.watch,signal);
+        const session=live.session();if(session)wantWorld(session);
         return { version: worldVersion, world: p.since === worldVersion ? null : liveWorld, pending: worldPending, cold: worldCold };
       }
       const s = typeof p.watch === "string" ? (live.renew(p.watch), live.session()) : await open(await known(p.dir, true, signal), signal), w = pack();
@@ -173,7 +204,7 @@ export function createService(options: ServiceOptions) {
       return report(s, p.t, level(p.level), pack() ?? undefined, answer.layers, Array.isArray(p.position) ? p.position as [number, number, number] : undefined, Array.isArray(p.hidden) ? p.hidden as string[] : []);
     },
   };
-  return { handlers, sessions, close() { layers.close(); live.close(); worldCtl.abort(); solids.close?.(); }, live, layers };
+  return { handlers, sessions, close() { layers.close(); live.close(); stopWorldWants(); solids.close?.(); }, live, layers };
 }
 
 /** Runs the service over stdin and stdout until stdin closes. */

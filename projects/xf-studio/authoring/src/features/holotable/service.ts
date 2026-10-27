@@ -112,7 +112,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
   const later = device.later ?? ((ms: number, tick: () => void) => { const id = setTimeout(tick, ms); return () => clearTimeout(id); });
   let visible = false, stopLiveTimer: (() => void) | null = null, stopStatusTimer: (() => void) | null = null;
   let liveCtl: AbortController | null = null, statusCtl: AbortController | null = null;
-  let watchId: string | null = null, liveSince: HoloLiveCursor | undefined, worldSince = -1;
+  let watchId: string | null = null, liveSince: HoloLiveCursor | undefined;
   let resumeWatch = false;
   let layerWatch: string | null = null, layerCtl: AbortController | null = null, stopLayerTimer: (() => void) | null = null;
   let layerGeneration = 0;
@@ -198,7 +198,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
   function stopWatching(clear = true, keepCursor = false) {
     liveCtl?.abort(); liveCtl = null; stopLiveTimer?.(); stopLiveTimer = null;
     const id = watchId; watchId = null;
-    if (!keepCursor) { liveSince = undefined; worldSince = -1; }
+    if (!keepCursor) liveSince = undefined;
     if (id && !signal.aborted) void call("live.stop", { watch: id }, signal).catch(() => {});
     if (clear) set({ live: { ...state.live, watching: false, following: false }, playing: false, speed: memory[clockFamily(state)] });
   }
@@ -230,18 +230,14 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
         if (update.reset) { contexts.reset(); set({ motionEpoch: state.motionEpoch + 1 }); clearAgents(); }
         if (!update.more) break;
       }
-      const geometry = await call<{ version: number; world: HoloWorld | null; pending: boolean; cold: boolean }>("world.around", { watch: id, since: worldSince }, cancel);
-      if (cancel.aborted || watchId !== id) return;
-      worldSince = geometry.version;
-      if (geometry.world && state.open?.dir === "live" && !contexts.active()) set({ open: { ...state.open, world: geometry.world } });
+      contexts.refresh();
       void takeLayers();
-      if (geometry.cold && !state.live.message) set({ message: "Reading the city around this recording from the game files… This happens once." });
     } catch (e) {
       if (!cancel.aborted && visible) {
         set({ live: { ...state.live, phase: "disconnected" }, message: "The game stopped sending. Showing what arrived; Holotable reconnects when the game is back." });
         if ((e as { code?: string }).code === "bad_request" || (e as { code?: string }).code === "exited") {
           recovering = true;
-          liveSince = undefined; worldSince = -1;
+          liveSince = undefined;
           stopLiveTimer = later(5000, () => { if (visible && !cancel.aborted) void watch(true); });
           return;
         }

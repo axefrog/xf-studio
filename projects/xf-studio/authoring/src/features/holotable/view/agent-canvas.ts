@@ -13,20 +13,18 @@ type Camera = ReturnType<typeof camera>;
 type XY = readonly [number, number];
 export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now: () => number = () => performance.now()) {
   const context = canvas.getContext("2d"); if (!context) throw Error("Canvas 2D is unavailable for Agent layers.");
-  type Command = { method: string; args: unknown[] } | { property: string; value: unknown };
-  type Visual = { commands: Command[]; xy?: XY; colour?: string; size?: number };
-  let recording: Command[] | undefined, stageColour = "";
-  // Cache each painted item's display list. Retraction animation replays only that geometry, never all markers.
-  const ctx = new Proxy(context, {
-    get(target, key) { const value = Reflect.get(target, key, target); return typeof value === "function" ? (...args: unknown[]) => {
-      if (recording && key !== "measureText") recording.push({ method: String(key), args });
-      return value.apply(target, args);
-    } : value; },
-    set(target, key, value) { if (recording) recording.push({ property: String(key), value }); return Reflect.set(target, key, value, target); },
-  });
+  type Visual = {
+    item: AgentItem; layer: string; rule?: AgentAnswer["specs"]["kinds"][string];
+    offset?: XY; toOffset?: XY; selected?: boolean; painted?: boolean; colour?: string; size?: number; fieldMax?: number;
+    labels?: { text: string; x: number; y: number; colour: string; alpha: number; font: string }[];
+  };
+  const ctx = context;
+  let stageColour = "", currentCamera: Camera | undefined, currentRadius = 350;
+  let currentEnabled: Readonly<Record<string, boolean>> = {};
   const motionCanvas = document.createElement("canvas"); motionCanvas.style.cssText = canvas.style.cssText; motionCanvas.setAttribute("aria-hidden", "true");
   const motion = motionCanvas.getContext("2d")!;
   const effects = playbackEffects<Visual>(now);
+  let currentAnswer:AgentAnswer|undefined;
   let visuals = new Map<string, Visual>(), observed: AgentAnswer | undefined, motionKey = "", previousPlaying = false;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
   const stopMotion = () => { effects.clear(); observed = undefined; motion.clearRect(0, 0, motionCanvas.width, motionCanvas.height); changed(); };
@@ -37,7 +35,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     if (!shapes && isIconName(name)) { shapes = [...icon(name).children].map(path => ({ path: new Path2D(path.getAttribute("d")!), fill: path.getAttribute("fill") === "currentColor", dash: path.getAttribute("stroke-dasharray") ?? "", faint: !!path.getAttribute("stroke-opacity") })); paths.set(name, shapes); }
     return shapes ?? [];
   }
-  function defaultMark(draw: string, xy: XY, size: number) {
+  function defaultMark(ctx: CanvasRenderingContext2D, draw: string, xy: XY, size: number) {
     const [x,y] = xy; ctx.beginPath();
     if (draw === "diamond" || draw === "volume") { ctx.moveTo(x,y-size); ctx.lineTo(x+size,y); ctx.lineTo(x,y+size); ctx.lineTo(x-size,y); ctx.closePath(); }
     else if (draw === "crosshair") { ctx.moveTo(x-size,y); ctx.lineTo(x+size,y); ctx.moveTo(x,y-size); ctx.lineTo(x,y+size); }
@@ -47,7 +45,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     else ctx.arc(x,y,size,0,Math.PI*2);
     ctx.stroke();
   }
-  function plate(item: AgentItem, draw: string, xy: XY, selected: boolean, colour: string, alpha: number) {
+  function plate(ctx: CanvasRenderingContext2D, item: AgentItem, draw: string, xy: XY, selected: boolean, colour: string, alpha: number) {
     const glyph = glyphIcon(item.glyph, isIconName); if (!glyph.known) return false;
     const radius = selected ? 11 : 9;
     ctx.globalAlpha = 1; ctx.lineWidth = 1.5; ctx.fillStyle = stageColour;
@@ -56,30 +54,40 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       ctx.save(); ctx.translate(xy[0]-6,xy[1]-6); ctx.scale(0.75,0.75); ctx.lineWidth = 1.5;
       for (const shape of iconShapes(glyph.icon)) { ctx.globalAlpha = alpha * (shape.faint ? 0.45 : 1); ctx.setLineDash(shape.dash ? shape.dash.split(/\s+/).map(Number) : []); if (shape.fill) ctx.fill(shape.path); else ctx.stroke(shape.path); }
       ctx.restore();
-    } else defaultMark(draw,xy,4.5);
+    } else defaultMark(ctx,draw,xy,4.5);
     const tone = item.badge && Object.hasOwn(BADGE_TONES,item.badge) ? BADGE_TONES[item.badge] : undefined;
     if (tone) { ctx.globalAlpha = 1; ctx.fillStyle = palette[tone] ?? colour; ctx.beginPath(); ctx.arc(xy[0]+radius*0.72,xy[1]-radius*0.72,3,0,Math.PI*2); ctx.fill(); ctx.stroke(); }
     return true;
   }
+  const faded = new Proxy(motion, { set(target, key, value) {
+    return Reflect.set(target, key, key === "globalAlpha" ? Number(value) * fadeOpacity : value, target);
+  }, get(target,key) { const value=Reflect.get(target,key,target); return typeof value === "function" ? value.bind(target) : value; } });
+  let fadeOpacity = 1;
+  const noPositions = new Map<string, XY>(), noImportant = new Set<string>();
+  const offsetPoint = (point: XY | null, offset?: XY): XY | null => point && [point[0]+(offset?.[0]??0),point[1]+(offset?.[1]??0)];
   function animate() {
     const frame = effects.frame(), dpr = window.devicePixelRatio || 1;
     motion.setTransform(dpr,0,0,dpr,0,0); motion.clearRect(0,0,motionCanvas.width/dpr,motionCanvas.height/dpr);
-    const deadline = performance.now()+1;
+    const deadline = performance.now()+1, C = currentCamera;
     for (const effect of frame.effects) {
       if (performance.now() > deadline) break;
       const visual = effect.item.visual;
-      if (effect.kind === "pulse" && visual.xy) {
+      if (!C || !visual.painted || !visual.item.place || currentEnabled[visual.layer] === false) continue;
+      // Retain world data, never the followed camera's old screen coordinates.
+      const raw = C.point(visual.item.place), xy = offsetPoint(raw,visual.offset);
+      if (effect.kind === "pulse" && xy) {
         motion.globalAlpha = 1-effect.progress; motion.strokeStyle = visual.colour!; motion.lineWidth = 1.5;
-        motion.beginPath(); motion.arc(...visual.xy,(visual.size ?? 9)+3+effect.progress*10,0,Math.PI*2); motion.stroke();
+        motion.beginPath(); motion.arc(...xy,(visual.size ?? 9)+3+effect.progress*10,0,Math.PI*2); motion.stroke();
       } else if (effect.kind === "fade") {
-        // Each list consists of the original item's canvas operations (including zones, paths and its plate).
-        motion.save(); let depth = 0;
-        for (const command of visual.commands) {
-          if (performance.now()>deadline) break;
-          if ("method" in command) { if (command.method === "save") depth++; else if (command.method === "restore") depth--; (motion as unknown as Record<string, (...args: unknown[])=>unknown>)[command.method](...command.args); }
-          else (motion as unknown as Record<string, unknown>)[command.property] = command.property === "globalAlpha" ? Number(command.value)*(1-effect.progress) : command.value;
+        motion.save(); fadeOpacity = 1-effect.progress;
+        faded.lineJoin = "round";
+        const painted = paintItem(visual.item,C,visual.selected?visual.item.key:null,null,noPositions,noImportant,currentRadius,deadline,faded,visual);
+        if(raw && painted !== "skip")for(const label of visual.labels??[]) {
+          if(performance.now()>deadline)break;
+          faded.font=label.font;faded.lineWidth=3;faded.lineJoin="round";faded.globalAlpha=label.alpha;
+          faded.strokeStyle=stageColour;faded.fillStyle=label.colour;
+          faded.strokeText(label.text,raw[0]+label.x,raw[1]+label.y);faded.fillText(label.text,raw[0]+label.x,raw[1]+label.y);
         }
-        while (depth-- > 0) motion.restore();
         motion.restore();
       }
     }
@@ -97,9 +105,9 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
   for (const root of [document.documentElement, document.body]) theme.observe(root, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
   const media = matchMedia("(prefers-color-scheme: dark)"); media.addEventListener("change", invalidate);
   let previous: AgentAnswer | undefined, previousEnabled: Readonly<Record<string, boolean>> | undefined, previousCamera = "", previousSelection: string | null = null, cursor = 0, fieldCell = 0;
-  const path = (ps: readonly XY[], closed = false) => { if (!ps.length) return; ctx.moveTo(...ps[0]); for (let i = 1; i < ps.length; i++) ctx.lineTo(...ps[i]); if (closed) ctx.closePath(); };
+  const path = (ctx: CanvasRenderingContext2D, ps: readonly XY[], closed = false) => { if (!ps.length) return; ctx.moveTo(...ps[0]); for (let i = 1; i < ps.length; i++) ctx.lineTo(...ps[i]); if (closed) ctx.closePath(); };
   function clear(width: number, height: number) {
-    recording = undefined; previous = undefined; cursor = 0; fieldCell = 0; candidates = []; labelsPainted = false; badges = []; plates = createPlateObstacles(); overlayLabels = [];
+    previous = undefined; cursor = 0; fieldCell = 0; candidates = []; labelsPainted = false; badges = []; plates = createPlateObstacles(); overlayLabels = [];
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) { canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); }
     labels.width = Math.round(width * dpr); labels.height = Math.round(height * dpr);
@@ -107,10 +115,104 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, width, height); hits = [];
     if (!palette.signal) palette = Object.fromEntries([...swatches].map(([t, e]) => [t, getComputedStyle(e).color]));
   }
+  function paintItem(item:AgentItem,C:Camera,selected:string|null,hovered:string|null,positions:ReadonlyMap<string,XY>,important:ReadonlySet<string>,radius:number,deadline:number,ctx:CanvasRenderingContext2D,retired?:Visual):"drawn"|"skip"|"pending" {
+    let cell=retired?0:fieldCell;
+    const far=Math.max(1500,Math.hypot(...C.position.map((n,i)=>n-C.target[i]))+radius),fade=Math.max(1800,far*1.2);
+    const answer=currentAnswer!;
+    const p = item.place!; if (!agentInRange(item, C.target, radius)) return "skip";
+    const rule = retired?.rule ?? answer.specs.kinds[item.kind]; if (!rule) return "skip";
+    const area = item.resolvedAnchor ?? item.anchor;
+    const extended = ["polyline", "volume", "grid", "curve", "arrow"].includes(rule.draw) || rule.draw === "crosshair" && !!item.to || "box" in area || "zone" in area || "sphere" in area;
+    const clipped = item.to ? C.line([p,item.to]) : [];
+    const markerXY = retired ? offsetPoint(C.point(p),retired.offset) : positions.get(item.links?.from ?? item.key);
+    const xy = markerXY ?? clipped[0]?.points[0] ?? (extended ? C.point(C.target) : null); if (!xy) return "skip";
+    if (Math.hypot(...p.map((n, j) => n - C.position[j])) > far || xy[0] < -64 || xy[0] > C.width + 64 || xy[1] < -64 || xy[1] > C.height + 64) {
+      if (!extended) return "skip";
+    }
+    const visual = retired ?? visuals.get(item.key);
+    if (visual && !retired) {
+      const raw = C.point(p), to = item.to && C.point(item.to), placedTo = positions.get(item.links?.to ?? item.key+":to");
+      visual.item=item;visual.rule=rule;visual.painted=true;visual.selected=selected===item.key;visual.labels=[];
+      visual.offset=raw&&markerXY?[markerXY[0]-raw[0],markerXY[1]-raw[1]]:undefined;
+      visual.toOffset=to&&placedTo?[placedTo[0]-to[0],placedTo[1]-to[1]]:undefined;
+    }
+    const weight = item.weight ?? 0.7, size = 4 + weight * 4, alpha = (0.35 + weight * 0.65) * Math.max(0.12, 1 - Math.hypot(...p.map((n, j) => n - C.position[j])) / fade);
+    const colour = palette[rule.style === "tone" ? item.tone ?? "signal" : rule.style] ?? palette.signal;
+    if (visual) { visual.colour = colour; visual.size = item.glyph && glyphIcon(item.glyph,isIconName).known ? 9 : size; }
+    ctx.strokeStyle = colour; ctx.fillStyle = colour; ctx.lineWidth = 1 + weight * 2; ctx.globalAlpha = alpha; ctx.setLineDash([]);
+    const hit = (ps: XY[], fill = false, priority = fill ? 1 : 2) => { if(!retired)hits.push({ key: item.key, points: ps, fill, priority }); };
+    const stroke = (ps: readonly Vec3[], opacity = 1, closed = false) => { for (const run of C.line(ps, closed)) { ctx.beginPath(); path(ctx,run.points); ctx.globalAlpha = alpha * opacity; ctx.stroke(); hit(run.points); } ctx.globalAlpha = alpha; };
+    const polygon = (ps: Vec3[], opacity: number) => { const projected = C.polygon(ps); ctx.beginPath(); path(ctx,projected, true); ctx.globalAlpha = alpha * opacity; ctx.fill(); hit(projected, true); ctx.globalAlpha = alpha; };
+    const volume = (a: AgentAnchor, fill: boolean) => {
+      let poly: readonly (readonly [number, number])[] = [], lo = p[2], hi = p[2];
+      if ("zone" in a) { poly = a.zone.poly; lo = a.zone.zlo; hi = a.zone.zhi; }
+      else if ("box" in a) { const b = a.box; poly = [[b.min[0], b.min[1]], [b.max[0], b.min[1]], [b.max[0], b.max[1]], [b.min[0], b.max[1]]]; lo = b.min[2]; hi = b.max[2]; }
+      else if ("sphere" in a) { const s = a.sphere; poly = Array.from({ length: 32 }, (_, n) => [s.at[0] + Math.cos(n * Math.PI / 16) * s.r, s.at[1] + Math.sin(n * Math.PI / 16) * s.r] as const); lo = s.at[2] - s.r * 0.6; hi = s.at[2] + s.r * 0.6; }
+      if (!poly.length) return;
+      const bottom = poly.map(([x, y]): Vec3 => [x, y, lo]), top = poly.map(([x, y]): Vec3 => [x, y, hi]);
+      if (fill) polygon(bottom, weight * 0.1);
+      stroke(bottom, fill ? 0.7 : 0.2, true); stroke(top, 0.12, true);
+    };
+    const arrow = (a: XY, b: XY) => { const angle = Math.atan2(b[1] - a[1], b[0] - a[0]); ctx.beginPath(); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle - 0.45), b[1] - 7 * Math.sin(angle - 0.45)); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle + 0.45), b[1] - 7 * Math.sin(angle + 0.45)); ctx.stroke(); };
+    const addLabel = (value: string, at: XY, caption = false) => { if (value && !retired) candidates.push({ key: item.key, text: value, x: at[0], y: at[1], priority: caption ? 1.5 : item.key === hovered ? -2 : item.key === selected ? -1 : labelPriority(item, important), colour: caption ? palette.muted ?? colour : colour, alpha: caption ? 0.85 : alpha, caption,selected:!caption&&item.key===selected }); };
+    let label = rule.label.replace("{label}", item.label ?? "").replace("{name}", item.value?.name ?? "actor").replace("{type}", item.value?.type ?? "");
+    const a = item.resolvedAnchor ?? item.anchor;
+    if (item.region && selected === item.key && !["actor", "zone"].includes(item.kind)) volume(a, false);
+    if (item.toRegion && item.toResolvedAnchor && selected === item.key) volume(item.toResolvedAnchor, false);
+    if (rule.draw === "crosshair" && item.to) { ctx.setLineDash([4, 4]); stroke([p, item.to], 0.7); ctx.setLineDash([]); }
+    if (rule.draw === "polyline" && "path" in a) stroke(a.path);
+    else if (rule.draw === "volume") volume(a, true);
+    else if (rule.draw === "grid" && "grid" in a) {
+      const g = a.grid; if (Math.max(C.scale(g.origin), C.scale(C.target)) * g.cell < 2) return "skip";
+      const scalars = item.value?.scalars, vectors = item.value?.vectors;
+      const max = retired?.fieldMax ?? (scalars ? Math.max(1e-9, ...scalars.map(Math.abs)) : 1);
+      if (visual && !retired) visual.fieldMax = max;
+      for (; cell < g.rows * g.cols; cell++) {
+        if (cell % 16 === 0 && performance.now() > deadline) { if(!retired)fieldCell=cell; return "pending"; }
+        const row = Math.floor(cell / g.cols), col = cell % g.cols, n = cell;
+        const x = g.origin[0] + col * g.cell, y = g.origin[1] + row * g.cell, z = g.origin[2];
+        if (scalars) polygon([[x, y, z], [x + g.cell, y, z], [x + g.cell, y + g.cell, z], [x, y + g.cell, z]], 0.05 + Math.abs(scalars[n]) / max * 0.4);
+        else if (vectors) { const v = vectors[n], start: Vec3 = [x + g.cell / 2, y + g.cell / 2, z], end: Vec3 = [start[0] + v[0], start[1] + v[1], z]; stroke([start, end]); const pa = C.point(start), pb = C.point(end); if (pa && pb) arrow(pa, pb); }
+      }
+      cell = 0;
+    } else if ((rule.draw === "curve" || rule.draw === "arrow") && item.to) {
+      const to = (retired ? offsetPoint(C.point(item.to),retired.toOffset) : positions.get(item.links?.to ?? item.key + ":to")) ?? C.point(item.to) ?? clipped.at(-1)?.points.at(-1); if (!to) return "skip";
+      if (rule.draw === "curve") {
+        ctx.lineWidth = 1 + (item.value?.strength ?? weight) * 3;
+        const dx = to[0] - xy[0], dy = to[1] - xy[1], len = Math.hypot(dx, dy) || 1;
+        const bend = Math.min(24, len * 0.16), mid: XY = [(xy[0] + to[0]) / 2 - dy / len * bend, (xy[1] + to[1]) / 2 + dx / len * bend];
+        const points = Array.from({ length: 17 }, (_, n): XY => { const k = n / 16; return [(1-k)**2*xy[0]+2*(1-k)*k*mid[0]+k*k*to[0], (1-k)**2*xy[1]+2*(1-k)*k*mid[1]+k*k*to[1]]; });
+        ctx.beginPath(); path(ctx,points); ctx.stroke(); hit(points);
+        if (!item.value?.mutual) arrow(points[15], to);
+        if (label) addLabel(label, [points[8][0] + 4, points[8][1] - 4]); label = "";
+      } else { ctx.beginPath(); path(ctx,[xy, to]); ctx.stroke(); hit([xy, to]); arrow(xy, to); }
+    } else {
+      if (!markerXY) { if (rule.draw === "diamond") volume(area, false); return rule.draw === "crosshair" && item.to ? "drawn" : "skip"; }
+      if (glyphIcon(item.glyph,isIconName).known) { if (rule.draw === "diamond") volume(a,false); }
+      else if (rule.draw === "diamond") { volume(a, false); ctx.beginPath(); path(ctx,[[xy[0], xy[1]-size], [xy[0]+size,xy[1]], [xy[0],xy[1]+size], [xy[0]-size,xy[1]]], true); ctx.stroke(); }
+      else if (rule.draw === "ring") { ctx.beginPath(); ctx.arc(...xy, size, 0, Math.PI*2); ctx.stroke(); }
+      else if (rule.draw === "crosshair") {
+        ctx.beginPath(); ctx.moveTo(xy[0]-size,xy[1]); ctx.lineTo(xy[0]+size,xy[1]); ctx.moveTo(xy[0],xy[1]-size); ctx.lineTo(xy[0],xy[1]+size); ctx.stroke();
+      }
+      hit([[xy[0]-size-3,xy[1]-size-3], [xy[0]+Math.max(size+3, rule.draw === "text" ? label.length*7 : size+3),xy[1]-size-3], [xy[0]+size+3,xy[1]+size+3], [xy[0]-size-3,xy[1]+size+3]], true, 3);
+    }
+    const plated = markerXY ? plate(ctx,item,rule.draw,xy,selected === item.key,colour,alpha) : false;
+    if (plated && !retired) { hit([[xy[0]-12,xy[1]-12],[xy[0]+12,xy[1]-12],[xy[0]+12,xy[1]+12],[xy[0]-12,xy[1]+12]],true,3);
+      // Index construction belongs to this marker's existing budgeted slice, including resumed frames.
+      if(xy[0]>=-16&&xy[0]<=C.width+16&&xy[1]>=-16&&xy[1]<=C.height+16) plates.add({key:item.key,x:xy[0],y:xy[1],radius:selected===item.key?15:10}); }
+    if (label && xy[0] >= -32 && xy[0] <= C.width+32 && xy[1] >= -32 && xy[1] <= C.height+32) addLabel(label, [xy[0]+(plated ? 11 : size)+4, xy[1]-4]);
+    const facet = Object.entries(item.facets ?? item.value?.facets ?? {})[0];
+    if (facet && rule.draw === "diamond") addLabel(actorCaption(facet[1]), [xy[0]+(plated ? 11 : size)+4, xy[1]+13], true);
+    if (selected === item.key) { ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(...xy, plated ? 14 : size+5, 0, Math.PI*2); ctx.stroke(); }
+    if(!retired)fieldCell=0;
+    return "drawn";
+  }
   return {
     clear: (width: number, height: number) => { effects.clear(); observed = undefined; motion.clearRect(0,0,motionCanvas.width,motionCanvas.height); clear(width,height); }, animate,
     overlayLabels: () => overlayLabels,
     draw(answer: AgentAnswer, enabled: Readonly<Record<string, boolean>>, C: Camera, selected: string | null, budgetMs = 8, hovered: string | null = null, overlays: readonly AgentLabel[] = [], radius = 350, playback = { playing: false, epoch: "" }) {
+      const deadline = performance.now() + budgetMs;
+      currentCamera=C;currentRadius=radius;currentAnswer=answer;currentEnabled=enabled;
       for (const [tone, token] of Object.entries(answer.specs.tones ?? {})) if (!swatches.has(tone) && /^[a-z-]+$/.test(token)) {
         const span = document.createElement("span"); span.style.cssText = `position:absolute;visibility:hidden;color:var(--${token})`;
         canvas.parentElement!.append(span); swatches.set(tone, span); palette = {};
@@ -118,24 +220,29 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       for (const [name, token] of [["good", "success"], ["stage", "pv-ground"]]) if (!swatches.has(name)) { const span = document.createElement("span"); span.style.cssText = `position:absolute;visibility:hidden;color:var(--${token})`; canvas.parentElement!.append(span); swatches.set(name,span); palette = {}; }
       const cameraKey = JSON.stringify([C.position, C.ray(C.width / 2, C.height / 2).direction, C.width, C.height, radius]);
       const overlayKey = JSON.stringify(overlays);
-      const key = `${playback.epoch}:${cameraKey}:${JSON.stringify(enabled)}`;
+      const key = playback.epoch;
       const fresh = previousPlaying !== playback.playing || motionKey !== key || observed !== answer || previous !== answer || previousEnabled !== enabled || previousCamera !== cameraKey || previousSelection !== selected || previousHover !== hovered || previousOverlay !== overlayKey;
       if (fresh) {
-        if (previousPlaying !== playback.playing || observed !== answer || motionKey !== key || !playback.playing || reduced.matches) {
-          const items = answer.layers.filter(l=>enabled[l.id] !== false).flatMap(l=>l.items);
-          const next = new Map<string, Visual>();
-          for (const item of items) next.set(item.key, { commands: [] });
-          // New effects point at the new display lists; removed effects retain the old lists.
-          effects.observe(items.map(item=>({key:item.key,version:item.version ?? item.t ?? 0,visual:next.get(item.key)!})), playback.playing, key, reduced.matches);
-          visuals = next; observed = answer; motionKey = key; previousPlaying = playback.playing;
+        if (previousPlaying !== playback.playing || observed !== answer || motionKey !== key || previousEnabled !== enabled) {
+          function* snapshot() {
+            const next=new Map<string,Visual>();
+            if(playback.playing&&!reduced.matches)for(const layer of answer.layers)if(enabled[layer.id]!==false)for(const item of layer.items){
+              const visual=visuals.get(item.key)??{item,layer:layer.id};
+              next.set(item.key,visual);visuals.set(item.key,visual);
+              yield {key:item.key,version:item.version??item.t??0,visual};
+            }
+            visuals=next;
+          }
+          effects.observe(snapshot(), playback.playing, key, reduced.matches);
+          observed = answer; motionKey = key; previousPlaying = playback.playing;
         }
         clear(C.width, C.height); previous = answer; previousEnabled = enabled; previousCamera = cameraKey; previousSelection = selected; previousHover = hovered; previousOverlay = overlayKey; }
       if (answer.specs.schema !== "xfh/projections-1") return;
       const dpr = window.devicePixelRatio || 1;
       if (motionCanvas.width !== Math.round(C.width*dpr) || motionCanvas.height !== Math.round(C.height*dpr)) { motionCanvas.width = Math.round(C.width*dpr); motionCanvas.height = Math.round(C.height*dpr); }
       stageColour = palette.stage;
-      const deadline = performance.now() + budgetMs;
-      const far = Math.max(1500, Math.hypot(...C.position.map((n, axis) => n - C.target[axis])) + radius), fade = Math.max(1800, far * 1.2);
+      const preparation=effects.prepare(()=>performance.now()<=deadline);
+      if(performance.now()>deadline)return {pending:true,drawn:0,total:0,prepared:preparation.visited};
       ctx.font = "11px " + getComputedStyle(canvas).getPropertyValue("--font-mono"); ctx.lineJoin = "round";
       const items = answer.layers.filter(l => enabled[l.id] !== false).flatMap(l => l.items.filter(i => i.place && !l.notPlaced.includes(i.id)));
       const important = labelContext(items, selected, hovered);
@@ -158,92 +265,13 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       }
       let drawn = 0;
       for (; cursor < items.length; cursor++) {
-        recording = undefined;
         const item = items[cursor];
         if (performance.now() > deadline) break;
         if (collapsed.has(item.key)) continue;
-        const p = item.place!; if (!agentInRange(item, C.target, radius)) continue;
-        const rule = answer.specs.kinds[item.kind]; if (!rule) continue;
-        const area = item.resolvedAnchor ?? item.anchor;
-        const extended = ["polyline", "volume", "grid", "curve", "arrow"].includes(rule.draw) || rule.draw === "crosshair" && !!item.to || "box" in area || "zone" in area || "sphere" in area;
-        const clipped = item.to ? C.line([p,item.to]) : [];
-        const markerXY = positions.get(item.links?.from ?? item.key);
-        const xy = markerXY ?? clipped[0]?.points[0] ?? (extended ? C.point(C.target) : null); if (!xy) continue;
-        if (Math.hypot(...p.map((n, j) => n - C.position[j])) > far || xy[0] < -64 || xy[0] > C.width + 64 || xy[1] < -64 || xy[1] > C.height + 64) {
-          if (!extended) continue;
-        }
-        const visual = visuals.get(item.key);
-        if (visual) { if (!fieldCell) visual.commands.length = 0; recording = visual.commands; visual.xy = xy; }
-        const weight = item.weight ?? 0.7, size = 4 + weight * 4, alpha = (0.35 + weight * 0.65) * Math.max(0.12, 1 - Math.hypot(...p.map((n, j) => n - C.position[j])) / fade);
-        const colour = palette[rule.style === "tone" ? item.tone ?? "signal" : rule.style] ?? palette.signal;
-        if (visual) { visual.colour = colour; visual.size = item.glyph && glyphIcon(item.glyph,isIconName).known ? 9 : size; }
-        ctx.strokeStyle = colour; ctx.fillStyle = colour; ctx.lineWidth = 1 + weight * 2; ctx.globalAlpha = alpha; ctx.setLineDash([]);
-        const hit = (ps: XY[], fill = false, priority = fill ? 1 : 2) => hits.push({ key: item.key, points: ps, fill, priority });
-        const stroke = (ps: readonly Vec3[], opacity = 1, closed = false) => { for (const run of C.line(ps, closed)) { ctx.beginPath(); path(run.points); ctx.globalAlpha = alpha * opacity; ctx.stroke(); hit(run.points); } ctx.globalAlpha = alpha; };
-        const polygon = (ps: Vec3[], opacity: number) => { const projected = C.polygon(ps); ctx.beginPath(); path(projected, true); ctx.globalAlpha = alpha * opacity; ctx.fill(); hit(projected, true); ctx.globalAlpha = alpha; };
-        const volume = (a: AgentAnchor, fill: boolean) => {
-          let poly: readonly (readonly [number, number])[] = [], lo = p[2], hi = p[2];
-          if ("zone" in a) { poly = a.zone.poly; lo = a.zone.zlo; hi = a.zone.zhi; }
-          else if ("box" in a) { const b = a.box; poly = [[b.min[0], b.min[1]], [b.max[0], b.min[1]], [b.max[0], b.max[1]], [b.min[0], b.max[1]]]; lo = b.min[2]; hi = b.max[2]; }
-          else if ("sphere" in a) { const s = a.sphere; poly = Array.from({ length: 32 }, (_, n) => [s.at[0] + Math.cos(n * Math.PI / 16) * s.r, s.at[1] + Math.sin(n * Math.PI / 16) * s.r] as const); lo = s.at[2] - s.r * 0.6; hi = s.at[2] + s.r * 0.6; }
-          if (!poly.length) return;
-          const bottom = poly.map(([x, y]): Vec3 => [x, y, lo]), top = poly.map(([x, y]): Vec3 => [x, y, hi]);
-          if (fill) polygon(bottom, weight * 0.1);
-          stroke(bottom, fill ? 0.7 : 0.2, true); stroke(top, 0.12, true);
-        };
-        const arrow = (a: XY, b: XY) => { const angle = Math.atan2(b[1] - a[1], b[0] - a[0]); ctx.beginPath(); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle - 0.45), b[1] - 7 * Math.sin(angle - 0.45)); ctx.moveTo(...b); ctx.lineTo(b[0] - 7 * Math.cos(angle + 0.45), b[1] - 7 * Math.sin(angle + 0.45)); ctx.stroke(); };
-        const addLabel = (value: string, at: XY, caption = false) => { if (value) candidates.push({ key: item.key, text: value, x: at[0], y: at[1], priority: caption ? 1.5 : item.key === hovered ? -2 : item.key === selected ? -1 : labelPriority(item, important), colour: caption ? palette.muted ?? colour : colour, alpha: caption ? 0.85 : alpha, caption,selected:!caption&&item.key===selected }); };
-        let label = rule.label.replace("{label}", item.label ?? "").replace("{name}", item.value?.name ?? "actor").replace("{type}", item.value?.type ?? "");
-        const a = item.resolvedAnchor ?? item.anchor;
-        if (item.region && selected === item.key && !["actor", "zone"].includes(item.kind)) volume(a, false);
-        if (item.toRegion && item.toResolvedAnchor && selected === item.key) volume(item.toResolvedAnchor, false);
-        if (rule.draw === "crosshair" && item.to) { ctx.setLineDash([4, 4]); stroke([p, item.to], 0.7); ctx.setLineDash([]); }
-        if (rule.draw === "polyline" && "path" in a) stroke(a.path);
-        else if (rule.draw === "volume") volume(a, true);
-        else if (rule.draw === "grid" && "grid" in a) {
-          const g = a.grid; if (Math.max(C.scale(g.origin), C.scale(C.target)) * g.cell < 2) continue;
-          const scalars = item.value?.scalars, vectors = item.value?.vectors;
-          const max = scalars ? Math.max(1e-9, ...scalars.map(Math.abs)) : 1;
-          for (; fieldCell < g.rows * g.cols; fieldCell++) {
-            if (fieldCell % 16 === 0 && performance.now() > deadline) { recording = undefined; return { pending: true, drawn, total: items.length }; }
-            const row = Math.floor(fieldCell / g.cols), col = fieldCell % g.cols, n = fieldCell;
-            const x = g.origin[0] + col * g.cell, y = g.origin[1] + row * g.cell, z = g.origin[2];
-            if (scalars) polygon([[x, y, z], [x + g.cell, y, z], [x + g.cell, y + g.cell, z], [x, y + g.cell, z]], 0.05 + Math.abs(scalars[n]) / max * 0.4);
-            else if (vectors) { const v = vectors[n], start: Vec3 = [x + g.cell / 2, y + g.cell / 2, z], end: Vec3 = [start[0] + v[0], start[1] + v[1], z]; stroke([start, end]); const pa = C.point(start), pb = C.point(end); if (pa && pb) arrow(pa, pb); }
-          }
-          fieldCell = 0;
-        } else if ((rule.draw === "curve" || rule.draw === "arrow") && item.to) {
-          const to = positions.get(item.links?.to ?? item.key + ":to") ?? C.point(item.to) ?? clipped.at(-1)?.points.at(-1); if (!to) continue;
-          if (rule.draw === "curve") {
-            ctx.lineWidth = 1 + (item.value?.strength ?? weight) * 3;
-            const dx = to[0] - xy[0], dy = to[1] - xy[1], len = Math.hypot(dx, dy) || 1;
-            const bend = Math.min(24, len * 0.16), mid: XY = [(xy[0] + to[0]) / 2 - dy / len * bend, (xy[1] + to[1]) / 2 + dx / len * bend];
-            const points = Array.from({ length: 17 }, (_, n): XY => { const k = n / 16; return [(1-k)**2*xy[0]+2*(1-k)*k*mid[0]+k*k*to[0], (1-k)**2*xy[1]+2*(1-k)*k*mid[1]+k*k*to[1]]; });
-            ctx.beginPath(); path(points); ctx.stroke(); hit(points);
-            if (!item.value?.mutual) arrow(points[15], to);
-            if (label) addLabel(label, [points[8][0] + 4, points[8][1] - 4]); label = "";
-          } else { ctx.beginPath(); path([xy, to]); ctx.stroke(); hit([xy, to]); arrow(xy, to); }
-        } else {
-          if (!markerXY) { if (rule.draw === "diamond") volume(area, false); if (rule.draw === "crosshair" && item.to) drawn++; continue; }
-          if (glyphIcon(item.glyph,isIconName).known) { if (rule.draw === "diamond") volume(a,false); }
-          else if (rule.draw === "diamond") { volume(a, false); ctx.beginPath(); path([[xy[0], xy[1]-size], [xy[0]+size,xy[1]], [xy[0],xy[1]+size], [xy[0]-size,xy[1]]], true); ctx.stroke(); }
-          else if (rule.draw === "ring") { ctx.beginPath(); ctx.arc(...xy, size, 0, Math.PI*2); ctx.stroke(); }
-          else if (rule.draw === "crosshair") {
-            ctx.beginPath(); ctx.moveTo(xy[0]-size,xy[1]); ctx.lineTo(xy[0]+size,xy[1]); ctx.moveTo(xy[0],xy[1]-size); ctx.lineTo(xy[0],xy[1]+size); ctx.stroke();
-          }
-          hit([[xy[0]-size-3,xy[1]-size-3], [xy[0]+Math.max(size+3, rule.draw === "text" ? label.length*7 : size+3),xy[1]-size-3], [xy[0]+size+3,xy[1]+size+3], [xy[0]-size-3,xy[1]+size+3]], true, 3);
-        }
-        const plated = markerXY ? plate(item,rule.draw,xy,selected === item.key,colour,alpha) : false;
-        if (plated) { hit([[xy[0]-12,xy[1]-12],[xy[0]+12,xy[1]-12],[xy[0]+12,xy[1]+12],[xy[0]-12,xy[1]+12]],true,3);
-          // Index construction belongs to this marker's existing budgeted slice, including resumed frames.
-          if(xy[0]>=-16&&xy[0]<=C.width+16&&xy[1]>=-16&&xy[1]<=C.height+16) plates.add({key:item.key,x:xy[0],y:xy[1],radius:selected===item.key?15:10}); }
-        if (label && xy[0] >= -32 && xy[0] <= C.width+32 && xy[1] >= -32 && xy[1] <= C.height+32) addLabel(label, [xy[0]+(plated ? 11 : size)+4, xy[1]-4]);
-        const facet = Object.entries(item.facets ?? item.value?.facets ?? {})[0];
-        if (facet && rule.draw === "diamond") addLabel(actorCaption(facet[1]), [xy[0]+(plated ? 11 : size)+4, xy[1]+13], true);
-        if (selected === item.key) { ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(...xy, plated ? 14 : size+5, 0, Math.PI*2); ctx.stroke(); }
-        drawn++;
+        const result=paintItem(item,C,selected,hovered,positions,important,radius,deadline,ctx);
+        if(result==="pending")return {pending:true,drawn,total:items.length,prepared:preparation.visited};
+        if(result==="drawn")drawn++;
       }
-      recording = undefined;
       if (cursor >= items.length && !labelsPainted) {
         text.font = ctx.font;
         text.strokeStyle = stageColour; text.lineWidth = 3; text.lineJoin = "round";
@@ -253,13 +281,12 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
           text.globalAlpha = label.alpha; text.fillStyle = label.colour;
           text.strokeText(label.text, label.x, label.y);
           text.fillText(label.text, label.x, label.y);
-          visuals.get(label.key)?.commands.push({ property: "font", value: text.font }, { property: "lineJoin", value: "round" },
-            { property: "lineWidth", value: 3 }, { property: "globalAlpha", value: label.alpha }, { property: "strokeStyle", value: stageColour },
-            { property: "fillStyle", value: label.colour }, { method: "strokeText", args: [label.text,label.x,label.y] }, { method: "fillText", args: [label.text,label.x,label.y] });
+          const visual=visuals.get(label.key), raw=visual?.item.place&&C.point(visual.item.place);
+          if(visual&&raw)(visual.labels??=[]).push({text:label.text,x:label.x-raw[0],y:label.y-raw[1],font:text.font,colour:label.colour,alpha:label.alpha});
         }
         labelsPainted = true;
       }
-      ctx.globalAlpha = 1; return { pending: cursor < items.length, drawn, total: items.length };
+      ctx.globalAlpha = 1; return { pending: cursor < items.length || preparation.pending, drawn, total: items.length, prepared:preparation.visited };
     },
     pick(x: number, y: number): string | null {
       for (const priority of [3, 2, 1]) for (let n = hits.length - 1; n >= 0; n--) {

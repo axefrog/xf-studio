@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHolotable } from "../src/features/holotable/service";
-import type { HoloLiveUpdate, HoloTransport, HoloSession } from "../src/features/holotable/types";
+import type { HoloLiveUpdate, HoloTransport, HoloSession, HoloWorld } from "../src/features/holotable/types";
 
 // A retained-data service fake: no game, pipe, files or browser.
 const disposals: (() => void)[] = [];
@@ -14,6 +14,7 @@ function setup() {
   const jobs: { at: number; fn: () => void }[] = [], calls: { method: string; params: Record<string, unknown> }[] = [];
   const later = (delay: number, fn: () => void) => { const job = { at: ms + delay, fn }; jobs.push(job); return () => { const i = jobs.indexOf(job); if (i >= 0) jobs.splice(i, 1); }; };
   const updates: HoloLiveUpdate[] = [];
+  let geometry:HoloWorld={provenance:null,areas:[],cells:[],solids:[]};
   let nextPollGate: Promise<void> | undefined;
   const data = (t: number, phase: "watching" | "disconnected" = "watching"): HoloLiveUpdate => ({
     since: { epoch: 1, v: 1, camera: 0, events: 0, gaps: 0 }, reset: false, more: false, meta: { ...meta, end: t, to: t },
@@ -27,7 +28,8 @@ function setup() {
       : method === "live.watch" ? { watch: `watch-${++id}` }
       : method === "live.poll" ? updates.shift() ?? data(101)
       : method === "session.open" ? { meta, v: [sample(100)], camera: [], events: [], gaps: [] }
-      : method === "world.around" && params.watch ? { version: 1, world: null, cold: false, pending: false }
+      : method === "world.around" && params.center ? geometry
+      : method === "world.around" && params.watch ? { version: 1, world: geometry, cold: false, pending: false }
       : { provenance: null, areas: [], cells: [] };
     if (method === "live.poll" && nextPollGate) { const gate = nextPollGate; nextPollGate = undefined; await gate; }
     return { ok: true, status: 200, data: { ok: true, result } };
@@ -40,7 +42,7 @@ function setup() {
     for (let n = 0; n < 100; n++) { jobs.sort((a, b) => a.at - b.at); if (!jobs.length || jobs[0].at > end) break; const job = jobs.shift()!; ms = job.at; job.fn(); await settle(); }
     ms = end; await settle();
   }
-  return { service, calls, updates, data, advance, recording: (v: boolean) => { recording = v; }, available: (v: boolean) => { available = v; },
+  return { service, calls, updates, data, advance, geometry:(world:HoloWorld)=>{geometry=world;}, recording: (v: boolean) => { recording = v; }, available: (v: boolean) => { available = v; },
     holdNextPoll() { let release!: () => void; nextPollGate = new Promise(resolve => { release = resolve; }); return release; } };
 }
 test("discovery is offered only while shown; Watch is disabled while recorder is off", async () => {
@@ -145,4 +147,21 @@ test("following is always 1x and replay restores the remembered speed when pause
  await f.service.dispatch({kind:"holo.play",on:false});expect(f.service.snapshot().speed).toBe(4);
  await f.service.dispatch({kind:"holo.speed",speed:16});await f.service.dispatch({kind:"holo.follow"});expect(f.service.snapshot().speed).toBe(1);
  await f.service.dispatch({kind:"holo.seek",t:100.5});expect(f.service.snapshot().speed).toBe(16);expect(f.service.snapshot().live.following).toBe(false);
+});
+
+
+test("last world-view lease releases live geometry while Details keeps polling, without refetching or republishing",async()=>{
+ const f=setup(),view=new AbortController();f.service.shown();await settle();await f.service.dispatch({kind:"holo.watch"});
+ const world:HoloWorld={provenance:null,areas:[],cells:[],solids:[{id:"live-solid",kind:"box",center:[0,0,0],size:[1,1,1],axes:[[1,0,0],[0,1,0],[0,0,1]]}]};
+ f.geometry(world);f.service.context(view.signal).want([0,0,0],true);await f.advance(250);
+ expect(f.service.snapshot().open!.world.solids).toHaveLength(1);
+ // An active lease also receives refreshed geometry through its owner.
+ await f.advance(1000);expect(f.calls.filter(call=>call.method==="world.around").length).toBeGreaterThan(1);
+ view.abort();expect(f.service.snapshot().open!.world.solids).toEqual([]);
+ const before=f.calls.filter(call=>call.method==="world.around").length, polls=f.calls.filter(call=>call.method==="live.poll").length;
+ f.updates.push(f.data(103));await f.advance(3000);
+ expect(f.calls.filter(call=>call.method==="live.poll").length).toBeGreaterThan(polls);
+ expect(f.service.snapshot().live.watching).toBe(true);expect(f.service.snapshot().open!.session.v.some(v=>v.t===103)).toBe(true);
+ expect(f.service.snapshot().open!.world.solids).toEqual([]);expect(f.calls.filter(call=>call.method==="world.around")).toHaveLength(before);
+ expect(f.calls.filter(call=>call.method==="world.around").every(call=>call.params.center)).toBe(true);
 });

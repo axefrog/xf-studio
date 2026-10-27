@@ -86,6 +86,8 @@ export function worldContexts(options: {
       return {want:(position,moved)=>want(row,position,moved)};
     },
     reset,
+    /** Live observations refresh only regions still wanted; a pan already pending keeps its own debounce. */
+    refresh() { for (const row of rows) if (row.position && !row.ctl) want(row, row.position, false, true); },
     active:()=>rows.size>0,
   };
 }

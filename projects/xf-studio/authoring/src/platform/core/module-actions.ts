@@ -8,15 +8,32 @@ export function moduleActionOwner(module: StudioModule, experiment?: string) {
     actions: asyncActionTable(Object.fromEntries(Object.entries(module.actions ?? {}).map(([kind, descriptor]) => [kind,
       { ...descriptor, async: true as const, cancellable: false }]))) } satisfies AsyncSystemFamily & { module: string; experiment?: string };
 }
-export function liveModuleActions(base: Registry<AnyOwner>, source: { registrationGeneration(): number; registrations(): readonly ExperimentRegistration[] }) {
+export function liveModuleActions(base: Registry<AnyOwner>, source: { registrationGeneration(): number; registrations(): readonly ExperimentRegistration[]; onRegistrationsChanged(listener: () => void): () => void }) {
+  let generation = -1, lifetimes = new Map<string, { registration: ExperimentRegistration; token: object }>();
+  const current = () => {
+    const next = source.registrationGeneration();
+    if (next !== generation) {
+      lifetimes = new Map(source.registrations().map(registration => {
+        const old = lifetimes.get(registration.module.id);
+        return [registration.module.id, old?.registration === registration ? old : { registration, token: {} }];
+      }));
+      generation = next;
+    }
+    return lifetimes;
+  };
+  // Observe every withdrawal, even when no captured facade is called while the module is off.
+  source.onRegistrationsChanged(current);
   const registry = base.withLiveOwners({ generation: () => source.registrationGeneration(),
     owners: () => source.registrations().filter(r => r.module?.actions).map(r => moduleActionOwner(r.module, r.module.id)) });
   const bind = <F extends ModuleService>(service: F): F => {
+    const lifetime = current().get(service.module)?.token;
     const allowed = (action: { kind: string }) => {
-      const current = source.registrations().find(r => r.module?.id === service.module && r.service === service);
+      const live = current().get(service.module);
       const route = registry.routeAsync(action.kind);
-      return current && route.ok && route.owner.id === service.module ? service.capability(action)
-        : { available: false as const, code: "unavailable" as const, reason: `${service.module} is switched off. Turn the experiment on to use it.` };
+      return lifetime && live?.token === lifetime && live.registration.service === service && route.ok && route.owner.id === service.module ? service.capability(action)
+        : { available: false as const, code: "unavailable" as const, reason: live
+          ? `This ${service.module} registration has ended. Reopen the view to use it.`
+          : `${service.module} is switched off. Turn the experiment on to use it.` };
     };
     return { ...service, capability: allowed, dispatch: async action => {
       const cap = allowed(action);
