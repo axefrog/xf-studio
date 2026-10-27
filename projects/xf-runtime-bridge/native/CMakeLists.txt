@@ -157,6 +157,7 @@ add_library(xfb_core STATIC
   src/core/OptionsExchange.cpp
   src/core/Params.cpp
   src/core/PipeServer.cpp
+  src/core/LuaSnapshot.cpp
   src/core/Recording.cpp
   src/core/Supervisor.cpp
   src/core/Probes.cpp

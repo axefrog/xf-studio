@@ -42,6 +42,7 @@ public:
     // Install before Start. Pure nonblocking notification; never game/file work on the kill route.
     void SetStopObserver(std::function<void()> aObserver) { m_stopObserver = std::move(aObserver); }
     void AddStopObserver(std::function<void()> fn) { auto previous = std::move(m_stopObserver); m_stopObserver = [previous, fn] { if (previous) previous(); fn(); }; }
+    void SetBackgroundTick(std::function<void()> fn) { m_backgroundTick = std::move(fn); } // install before Start; bookkeeping only
     void SetDisconnectObserver(std::function<void(uint64_t)> fn) { m_disconnectObserver = std::move(fn); }
     // Re-arm after the kill switch (the in-game panel's Reconnect), from the game thread between queue
     // drains. Refuses (false, aError) unless the bridge was killed and its listener has stopped; the
@@ -93,7 +94,7 @@ private:
     std::vector<std::unique_ptr<PipeServer>> m_readers;
 
     std::thread m_watcher;
-    std::function<void()> m_stopObserver;
+    std::function<void()> m_stopObserver, m_backgroundTick;
     std::function<void(uint64_t)> m_disconnectObserver;
     std::mutex m_watchMutex;
     std::condition_variable m_watchWake;

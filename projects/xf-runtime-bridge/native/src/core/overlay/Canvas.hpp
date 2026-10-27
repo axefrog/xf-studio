@@ -60,6 +60,7 @@ struct Batch
     size_t vertices = 0;
     std::vector<Item> items;
 };
+bool DrawInView(const Item&, unsigned view, bool worldMarkers);
 size_t SolidVertices(const Item&);
 size_t RadarExtraBudget(const std::vector<const Item*>&);
 json PersistKeys(const std::filesystem::path& config, const std::filesystem::path& backups,
@@ -144,7 +145,8 @@ public:
     void SetStateFile(std::filesystem::path path);
     json Feed(uint64_t connection, const std::string& raw, double now = Now(), bool cet = false);
     json Clear(uint64_t connection, const json&, double now = Now(), bool cet = false);
-    json View(const json&);
+    json View(const json&, double now = Now());
+    bool FlushView(double now = Now(), bool shutdown = false);
     json State(double now = Now());
     void Disconnect(uint64_t connection);
     void SetWorld(uint64_t world);
@@ -178,7 +180,7 @@ private:
     void VisibilityEvent(bool resend);
     json Refuse(const std::string&, const std::string&, const json&, double now);
     mutable std::mutex m_mutex;
-    std::mutex m_viewMutex; // serialize persistent view changes, never touched by game publication or rendering
+    std::mutex m_viewMutex; // serialize file writers only; CET view changes never wait for disk I/O
     std::atomic<bool> m_enabled{false}, m_visible{false};
     std::atomic<uint64_t> m_generation{0};
     std::atomic<uint64_t> m_admission{0};
@@ -189,6 +191,10 @@ private:
     RadarView m_radar;
     killkey::Chord m_toggle, m_mode;
     std::filesystem::path m_stateFile;
+    bool m_viewDirty = false;
+    uint64_t m_viewRevision = 0;
+    double m_viewDue = 0, m_viewLastSaved = -1;
+    std::string m_viewError;
     std::map<std::string, Producer> m_producers;
     // Independent of drawing and seq records; metadata bounds the union of layer keys to 1,024.
     std::map<std::pair<std::string,std::string>,std::deque<double>> m_layerRates;

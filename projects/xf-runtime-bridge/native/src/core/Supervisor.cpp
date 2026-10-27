@@ -190,6 +190,13 @@ json Service::StateAll() const
     for (const auto& [key, s] : m_slots) if (s.active) { entries.push_back(StateLocked(s)); ++active; }
     return {{"schema", "xfb/supervisor-state-2"}, {"active", active > 0}, {"count", active}, {"limit", kMaxEntries}, {"entries", entries}, {"event_drops", m_dropped}};
 }
+json Service::SnapshotHolds(uint64_t world) const
+{
+    std::unique_lock lock(m_mutex,std::try_to_lock);if(!lock.owns_lock())return nullptr;json out=json::array();
+    for(const auto& [key,s]:m_slots)if(s.active&&s.world==world)out.push_back({{"id",key},{"kind",s.entry.goal.kind},
+      {"radius_m",s.entry.goal.kind=="hold_position"?json(s.entry.goal.radius):json(nullptr)},{"pos",s.entry.goal.kind=="hold_position"?json(s.entry.goal.at):json(nullptr)}});
+    return out;
+}
 bool Service::Active() const { std::scoped_lock lock(m_mutex); for (const auto& [key, s] : m_slots) if (s.active) return true; return false; }
 bool Service::Active(const std::string& key) const { std::scoped_lock lock(m_mutex); const auto* s = Find(key); return s && s->active; }
 bool Service::Due(double now) const { std::scoped_lock lock(m_mutex); for (const auto& [key, s] : m_slots) if (s.active && now >= s.next) return true; return false; }

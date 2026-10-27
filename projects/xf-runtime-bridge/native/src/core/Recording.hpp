@@ -2,6 +2,7 @@
 #include "core/Dispatcher.hpp"
 #include <array>
 #include <map>
+#include <deque>
 #include <set>
 #include <memory>
 #include <vector>
@@ -44,6 +45,7 @@ public:
     json Read(const json& params, double now, bool acknowledge = true);
     // Observer discovery: copies guarded state, never applies pending stops or acknowledges records.
     json ObserverStatus(const std::string& session) const;
+    json SnapshotData(double now, uint64_t world) const; // bounded latest cached samples; no ack, stop or game call
     void Tick(double now, uint64_t world, uint64_t connection, bool live, uint64_t tick, const Ops& ops);
     bool Wants(const std::string& channel) const; // atomic fast gate, no game access
     // Who is recording: "r<run>.w<world>.c<connection>" while an active run wants the channel, else empty. A stop and a
@@ -72,7 +74,7 @@ private:
     uint64_t m_notReady = 0;
     std::string m_session, m_reason;
     json m_startSync;
-    std::set<std::string> m_actorIdentities; // this run/world only; bounded by kActorIdentityCap
+    std::map<std::string,json> m_actorIdentities; // this run/world only; bounded by kActorIdentityCap
     uint64_t m_identityOmitted = 0;
     uint64_t m_run = 0, m_world = 0, m_connection = 0, m_latest = 0, m_ack = 0;
     uint64_t m_dropped = 0, m_missed = 0, m_samples = 0, m_bytes = 0, m_cap = 0, m_invalid = 0;
@@ -84,6 +86,7 @@ private:
     std::atomic<uint64_t> m_ingressDropped{0};
     std::atomic<uint64_t> m_identityRun{0}, m_identityWorld{0}, m_identityConnection{0}; // set by Start; read without the lock
     double m_nextHeartbeat = 0, m_nextUiHeartbeat = 0;
+    std::deque<json> m_recentGaps;
     std::string m_lastUi; // the polled UI snapshot last recorded: unchanged snapshots wait for a heartbeat
     std::filesystem::path m_root, m_output;
     std::thread m_writer;

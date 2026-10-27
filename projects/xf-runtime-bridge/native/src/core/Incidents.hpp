@@ -319,6 +319,7 @@ public:
     SightOutcome Sight(const SightSample& aSample, double aWallS);
 
     json List(const ListQuery& aQuery) const;
+    json SnapshotData(uint64_t world, double now) const;
     // {open, kept, reports, ...} for the recorder's coverage heartbeat.
     json Coverage() const;
     Stats GetStats() const;
@@ -357,6 +358,7 @@ private:
         double score = 0;
         int observations = 0;
         double startSim = 0, lastSim = 0, startGame = -1, lastGame = -1;
+        double openedWall = 0, closedWall = 0;
         double firstPos[3] = {0, 0, 0}, lastPos[3] = {0, 0, 0}, sumPos[3] = {0, 0, 0};
         int posN = 0;
         std::string district;

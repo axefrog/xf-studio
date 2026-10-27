@@ -151,6 +151,14 @@ void Enqueue(const Work& w, const supervisor::Observation& o)
 }
 }
 #endif
+nlohmann::json SupervisorSnapshot(uint64_t world)
+{
+#ifdef XFB_AUTONOMOUS_TEST_HOOKS
+    return Owner().SnapshotHolds(world);
+#else
+    (void)world;return nlohmann::json::array();
+#endif
+}
 void RegisterSupervisor(Dispatcher& d)
 {
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS

@@ -631,6 +631,8 @@ void Unload()
         state.bridge->Stop("plugin_unload");
         state.bridge.reset();
     }
+    // Listener and background writer have stopped: this is the final accepted view revision.
+    state.canvas.FlushView(canvas::Now(),true);
     log::SetSink(nullptr);
     state.sink.reset();
 }

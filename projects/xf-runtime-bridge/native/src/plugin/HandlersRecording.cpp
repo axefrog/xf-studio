@@ -21,6 +21,7 @@ void Guard()
         throw MethodError("test_hooks_off", "Recorder owner or test gate closed.");
 }
 }
+nlohmann::json RecordingSnapshot(double now,uint64_t world) { return Recorder().SnapshotData(now,world); }
 bool RecordingWanted(const std::string& channel)
 {
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS

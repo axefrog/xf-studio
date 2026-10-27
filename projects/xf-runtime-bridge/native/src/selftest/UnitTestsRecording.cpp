@@ -20,6 +20,17 @@ int RecordingUnitTests()
 {
     using namespace xfb::recording;
     {
+        Service invalid;
+        invalid.Start({{"channels", {"actors"}}}, 10, 4, 2, "snapshot-invalid");
+        Ops sample; sample.guard = [] {};
+        sample.sample = [](const auto&, const auto&) -> json {
+            return {{"valid", false}, {"actors", json::array({{{"entity", "42"}, {"position", {1, 2, 3}}, {"valid", true}}})}};
+        };
+        invalid.Tick(10, 4, 2, true, 1, sample);
+        Check(invalid.SnapshotData(10.1, 4)["actors"][0]["valid"] == false,
+            "snapshot: invalid channel validity overrides a complete inner actor");
+    }
+    {
         Service identities;
         identities.Start({{"channels", {"v", "actors"}}, {"duration_s", 300}}, 10, 4, 2, "identity");
         Ops sample; sample.guard = [] {};
@@ -43,8 +54,13 @@ int RecordingUnitTests()
         page = identities.Read({{"run", 1}}, 220);
         Check(page["actor_identities"] == kActorIdentityCap && page["actor_identity_omitted"] == 2,
             "identity: run cap is bounded and counts omitted attempts across both channels");
+        entity="42";identities.Tick(219.5,4,2,true,3000,sample);
+        const auto ackBefore=identities.ObserverStatus("identity")["ack"];
+        const auto cached=identities.SnapshotData(219.6,4);
+        Check(cached["actors"][0]["identity"]["record"]=="Character.fixture"&&!cached["actors"][0]["identity"].contains("display_name"),"snapshot: identity survives ring rollover and excludes display text");
+        Check(identities.ObserverStatus("identity")["ack"]==ackBefore&&identities.SnapshotData(219.6,5)["actors"].empty(),"snapshot: source read neither acknowledges nor crosses worlds");
         identities.Stop("test", 220);
-        identities.Read({{"run", 1}, {"since", page["latest"]}}, 220);
+        identities.Read({{"run", 1}, {"since", identities.ObserverStatus("identity")["latest"]}}, 220);
         identities.Start({{"channels", {"v"}}}, 221, 5, 2, "identity");
         entity = "42"; identities.Tick(221, 5, 2, true, 1, sample);
         Check(identities.Read({{"run", 2}}, 221)["records"][0]["channel"] == "actor.identity", "identity: new run/world resets identity admission");

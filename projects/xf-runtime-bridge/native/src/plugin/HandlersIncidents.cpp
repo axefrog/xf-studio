@@ -122,6 +122,7 @@ bool IncidentTapOn()
 }
 
 // Whether the taps may build one more observation of this evidence from this entity (core Service::Admit); false when the taps are off.
+nlohmann::json IncidentsSnapshot(uint64_t world,double now) { return Incidents().SnapshotData(world,now); }
 bool IncidentAdmit(const std::string& aEvidence, const std::string& aKey)
 {
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS

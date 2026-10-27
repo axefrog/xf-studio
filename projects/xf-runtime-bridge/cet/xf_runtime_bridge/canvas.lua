@@ -42,7 +42,18 @@ function Canvas.ForModule(module)
     if not decoded then return { ok = false, error = { code = "unavailable", message = tostring(reply) } } end
     return reply
   end
+  local function snapshot()
+    local reply=call("snapshot")
+    if not reply.ok then return nil,reply.error end
+    local function nullable(value)
+      if json.null ~= nil and value == json.null then return nil end
+      if type(value)=="table" then for key,child in pairs(value) do value[key]=nullable(child) end end
+      return value
+    end
+    return nullable(reply.result)
+  end
   return {
+    Snapshot = snapshot,
     Feed = function(batch) return call("feed", batch) end,
     Clear = function(layer) return call("clear", layer ~= nil and { layer = layer } or {}) end,
     View = function(settings) return call("view", settings) end,

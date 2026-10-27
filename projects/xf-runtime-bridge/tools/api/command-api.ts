@@ -497,7 +497,7 @@ export class CommandApi {
     }
     let response: BridgeResponse;
     try {
-      const wait = this.pacer.take();
+      const wait = findCommand(method)?.permission === "display" ? 0 : this.pacer.take();
       if (wait > 0) await sleep(wait);
       // Checked again right before sending (the connection or the pace may have taken a moment).
       if (signal?.aborted) {
@@ -560,7 +560,7 @@ export class CommandApi {
       // with growing waits (RB-77): session 5's back-to-back frames were refused, and so was putting the camera back.
       const waits = rateLimitWaits(this.rateLimitPatienceMs);
       for (let attempt = 0; ; attempt++) {
-        const wait = this.pacer.take();
+        const wait = findCommand(method)?.permission === "display" ? 0 : this.pacer.take();
         if (wait > 0) await sleep(wait);
         if (signal?.aborted) {
           response = { v: 1, id: 0, cid, ok: false, error: { code: "interrupted", message: "Stopped before this step was sent to the game." } };

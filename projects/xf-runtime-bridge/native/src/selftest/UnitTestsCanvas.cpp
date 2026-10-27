@@ -4,6 +4,10 @@
 #include <Windows.h>
 #include "core/Dispatcher.hpp"
 #include "core/ScriptLayer.hpp"
+#include "core/LuaSnapshot.hpp"
+#include "core/Recording.hpp"
+#include "core/Incidents.hpp"
+#include "core/Supervisor.hpp"
 #include <cstdio>
 #include <fstream>
 #include <random>
@@ -221,6 +225,7 @@ void ObserverPacing()
         try{return service.Feed(c.connection,c.rawParams,canvasNow);}
         catch(const Refusal& e){MethodError error(e.detail.value("code","failed"),"canvas refusal");error.detail=e.detail;throw error;}
     }});
+    dispatcher.Register({"canvas.state",Access::Read,RunOn::BridgeThread,"",[&](const MethodContext&){return service.State(canvasNow);}});
     int catchups=0;
     for(const auto* method:{"bridge.info","test.record.read","session.events","game.digest"})
         dispatcher.Register({method,Access::Read,RunOn::BridgeThread,"",[&](const MethodContext&){++catchups;return json::object();}});
@@ -236,17 +241,115 @@ void ObserverPacing()
         // A one-page tool catch-up is three native calls, plus the optional current digest.
         for(const auto* method:{"bridge.info","test.record.read","session.events","game.digest"})
             allAccepted&=call(method,json::object(),budget).value("ok",false);
+        allAccepted&=call("canvas.state",json::object(),budget).value("ok",false);
     }
-    Check(allAccepted&&catchups==240,"observer sustains 16 feeds/s plus 1 Hz catch-up for sixty injected seconds");
+    Check(allAccepted&&catchups==240,"observer sustains 16 feeds/s plus catch-up and state at 1 Hz with read headroom");
     auto extra=BatchOf();extra["layer"]="0";extra["seq"]=100;
     Check(call("canvas.feed",extra,budget)["error"]["code"]=="rate","canvas producer rate still applies inside observer budget");
     ReaderRequestBudget other;
     Check(call("canvas.feed",extra,other,82)["error"]["code"]=="producer_in_use","paced dispatcher preserves connection identity, independently of PID");
     for(const auto* method:{"canvas.feed","canvas.clear","canvas.view"}){
         ReaderRequestBudget small(1);
-        call("canvas.view",json::object(),small);call("canvas.view",json::object(),small);
-        Check(call(method,json::object(),small)["error"]["code"]=="rate_limited","every display method consumes its observer connection budget before validation");
+        call("ping",json::object(),small);call("ping",json::object(),small);
+        Check(call(method,json::object(),small)["error"]["code"]!="rate_limited","display calls leave exhausted general budgets untouched");
     }
+    ReaderRequestBudget spam;
+    bool bounded=true;
+    for(int n=0;n<128;++n){auto reply=call("canvas.view",json::object(),spam);if(n>=24)bounded&=reply["error"]["code"]=="rate";}
+    int reads=0;for(int n=0;n<41;++n)reads+=call("ping",json::object(),spam).value("ok",false);
+    Check(bounded&&reads==40,"display spam is bounded independently and leaves all forty own-reader credits");
+    ReaderRequestBudget clean;
+    Check(call("ping",json::object(),clean).value("ok",false),"display spam leaves observer aggregate credit");
+    auto writer=json::parse(dispatcher.Handle(json{{"token",session.token},{"method","ping"}}.dump(),42).line);
+    Check(writer.value("ok",false),"display spam leaves writer tokens untouched");
+    auto tooDeep=std::string("{\"id\":17,\"token\":\"canvas-pacing\",\"method\":\"canvas.view\",\"params\":")+std::string(40,'[');
+    Check(json::parse(dispatcher.Handle(tooDeep,42,false,&spam,81).line)["error"]["code"]=="rate","display budget refuses before payload depth scan or DOM parsing");
+    const auto longId=std::string(300,'i');const auto echoed=json::parse(dispatcher.Handle(json{{"id",longId},{"token",session.token},{"method","canvas.view"}}.dump(),42,false,&spam,81).line);
+    Check(echoed["id"]==longId&&echoed["error"]["code"]=="rate","early display refusal preserves scalar request identity");
+    DisplayRequestBudget attempts;int admitted=0;auto at=std::chrono::steady_clock::time_point{};
+    for(int n=0;n<25;++n)admitted+=attempts.Take(at);
+    Check(admitted==24&&!attempts.Take(at)&&attempts.Take(at+std::chrono::milliseconds(63)),"display attempt allowance is burst24 with 16/s refill");
+    ModuleDisplayBudgets modules;for(int n=0;n<24;++n)Check(!modules.Admit("holo",at),"CET module receives its display burst");
+    Check(modules.Admit("holo",at).has_value()&&!modules.Admit("other",at),"CET module display buckets are independent");
+    for(int n=0;n<62;++n)modules.Admit(std::to_string(n),at);
+    Check(modules.Admit("overflow",at).has_value()&&!modules.Admit("overflow",at+std::chrono::seconds(2)),"CET module histories are bounded and retire after two idle seconds");
+}
+void FurnitureAndPersistence()
+{
+    auto label=Point();label["kind"]="label";label["text"]="legend";label["anchor"]={{"screen",{.1,.1}}};
+    auto panel=label;panel["kind"]="panel";panel.erase("text");panel["rect"]={.1,.1,.3,.3};panel["title"]="legend";panel["lines"]=json::array();
+    for(const auto& item:{label,panel})for(bool markers:{false,true}){
+        auto b=BatchOf(json::array({item}));auto parsed=Parse(b.dump(),{}).items[0];
+        Check(DrawInView(parsed,World,markers)&&!DrawInView(parsed,Radar,markers),"screen furniture draws once in both modes, outside radar clip");
+        b["views"]={"radar"};parsed=Parse(b.dump(),{}).items[0];Check(!DrawInView(parsed,World,markers),"layer view mask still hides screen furniture");
+    }
+    auto point=Parse(BatchOf().dump(),{}).items[0];Check(!DrawInView(point,World,false)&&DrawInView(point,World,true)&&DrawInView(point,Radar,false),"only projected world markers depend on mode");
+    const auto dir=std::filesystem::current_path()/("xfb-canvas-view-"+std::to_string(GetCurrentProcessId()));
+    std::filesystem::create_directory(dir);const auto path=dir/"view.json";
+    Service service;Ready(service);service.SetStateFile(path);
+    service.View({{"radar",{{"range_m",100}}}},10);Check(!std::filesystem::exists(path)&&!service.FlushView(11.99),"view setting is immediate but persistence waits two seconds");
+    service.View({{"radar",{{"range_m",200}}}},11);Check(service.State(11)["radar"]["range_m"]==200&&service.FlushView(12),"debounce writes the last value");
+    {std::ifstream file(path);json saved;file>>saved;Check(saved["radar"]["range_m"]==200,"persisted view is newest, not first request");}
+    service.View({{"radar",{{"range_m",300}}}},12.1);Check(!service.FlushView(13.9)&&service.FlushView(13.95,true),"shutdown flushes pending final setting");
+    std::filesystem::remove(path);
+    std::filesystem::create_directory(path); // an existing directory cannot be replaced by the atomic file writer
+    service.View({{"radar",{{"range_m",400}}}},15);
+    Check(!service.FlushView(17)&&service.State(17)["view_persistence"]["pending"]==true&&
+        !service.State(17)["view_persistence"]["error"].get<std::string>().empty(),"failed persistence retains pending state and reports the error");
+    std::filesystem::remove(path);
+    Check(!service.FlushView(18.99)&&service.FlushView(19)&&service.State(19)["view_persistence"]["pending"]==false&&
+        service.State(19)["view_persistence"]["error"]=="","failed persistence retries at the bounded cadence and clears the error");
+    std::filesystem::remove(path);std::filesystem::remove(dir);
+}
+void LuaSnapshots()
+{
+    using namespace xfb;
+    snapshot::Cache cache;snapshot::Lifecycle life{7,false,false};int reads=0;
+    snapshot::Inputs input;
+    input.recorder={{"world",7},{"active",true},{"run",1},{"channels",{"v","actors"}},
+      {"v",{{"entity","1"},{"position",{1,2,3}},{"yaw",10},{"game_time_s",1000},{"vehicle",{{"mounted",false}}},{"vitals",{{"in_combat",true}}}}},{"v_s",10},
+      {"actors",json::array({{{"entity","2"},{"position",{2,3,4}},{"yaw",20},{"identity",{{"record","Character.Test"},{"affiliation","Affiliations.Test"},{"crowd",false},{"display_name","secret story text"}}}}})},{"actors_s",10}};
+    const auto provider=[&]{++reads;return input;};
+    Check(!cache.Tick(life,10,provider)&&reads==0,"SN idle snapshot does no source work before any reader");
+    Check(cache.Read(life,10)["cleared"]=="load"&&reads==0,"SN first read copies explicit clear without rebuilding");
+    Check(cache.Tick(life,10,provider)&&!cache.Tick(life,10.249,provider)&&cache.Tick(life,10.25,provider)&&reads==2,"SN rebuild is bounded to four per second");
+    auto value=cache.Read(life,10.3);Check(value["schema"]=="snapshot@1"&&value["actors"][0]["plan"].is_null()&&value["sources"]["plan"]=="unavailable"&&value.dump().find("secret story")==std::string::npos,"SN strict structural projection omits story text and unavailable plans");
+    Check(value["actors"][0]["identity"]["record"]=="Character.Test"&&value["game_time_s"]==1000,"SN identities and game clock come from retained samples");
+    value=cache.Read(life,10.6);Check(value["actors"][0]["state"]=="stale"&&Near(value["actors"][0]["age_s"],.6),"SN stale actor always carries age even without rebuild");
+    snapshot::Cache invalid;invalid.Read(life,10.6);input.recorder["actors"][0]["valid"]=false;
+    invalid.Tick(life,10.6,provider);
+    Check(invalid.Read(life,10.6)["actors"][0]["state"]=="lost","SN invalid retained sample never becomes resolved");
+    input.recorder["actors"][0].erase("valid");
+    value=cache.Read(life,12.01);Check(value["actors"][0]["state"]=="lost","SN expired cached actor never looks current");
+    Check(!cache.Tick(life,14.01,provider),"SN rebuild stops exactly two seconds after last read");
+    life.handover=true;Check(cache.Read(life,14.02)["actors"][0]["state"]=="lost","SN handover explicitly invalidates actor state");
+    life={8,false,false};value=cache.Read(life,14.03);Check(value["cleared"]=="load"&&value["actors"].empty()&&value["v"].is_null(),"SN load clears before another worker tick");
+    input.recorder["active"]=false;cache.Tick(life,14.04,provider);value=cache.Read(life,14.05);Check(!value["recorder"]["active"].get<bool>()&&value["sources"]["actors"]=="recorder_stopped"&&value["cleared"]=="load","SN stopped recorder is explicit and cannot restore an old world");
+    life.killed=true;value=cache.Read(life,14.06);Check(value["cleared"]=="killed"&&!cache.Tick(life,14.1,provider),"SN kill clear prevents all provider work");
+    life={9,false,false};cache.Read(life,15);Check(!cache.Tick(life,15,[&]{cache.Read({10,false,false},15.1);return input;}),"SN in-flight build cannot overwrite a newer world clear");
+    snapshot::Cache cold;life={7,false,false};cold.Read(life,15);snapshot::Inputs nativeOnly;
+    nativeOnly.incidents.push_back({{"id","i"},{"kind","assault"},{"pos",{1,2,3}},{"opened_s",10},{"closed_s",14},{"perceived",true}});
+    cold.Tick(life,15,[&]{return nativeOnly;});Check(cold.Read(life,74)["incidents"].size()==1&&cold.Read(life,74.001)["incidents"].empty(),"SN closed incident horizon still applies to an idle cached read");
+    snapshot::Cache full;life={7,false,false};full.Read(life,20);input.recorder["active"]=true;input.recorder["actors"]=json::array();
+    for(int n=0;n<32;++n)input.recorder["actors"].push_back({{"entity",std::string(31,'1')+std::to_string(n)},{"position",{1,2,3}},{"identity",{{"record",std::string(200,'r')},{"affiliation",std::string(200,'a')},{"crowd",false}}}});
+    for(int n=0;n<32;++n)input.incidents.push_back({{"id",std::to_string(n)},{"kind","assault"},{"pos",{1,2,3}},{"participants",std::vector<std::string>(16,std::string(32,'2'))},{"opened_s",19},{"closed_s",nullptr},{"perceived",true}});
+    for(int n=0;n<10;++n)input.holds.push_back({{"id",std::to_string(n)},{"kind","hold_position"},{"radius_m",1},{"pos",{1,2,3}}});
+    input.recorder["gaps"]=json::array();for(int n=0;n<12;++n)input.recorder["gaps"].push_back({{"channel","v"},{"from_s",19},{"to_s",20},{"reason","invalid"}});
+    full.Tick(life,20,[&]{return input;});value=full.Read(life,20);
+    Check(value["actors"][0]["identity"]["record"]==std::string(200,'r'),"SN record identifiers retain their exact value rather than a clipped prefix");
+    Check(value.dump().size()<=16384&&value["actors"].size()<=16&&value["incidents"].size()<=16&&value["holds"].size()<=5&&value["recorder"]["gaps"].size()<=8,"SN serialized size and every list are bounded");
+    Check(value["truncated"]["actors"]>=16&&value["truncated"]["incidents"]>=16&&value["truncated"]["participants"]>0&&value["truncated"]["holds"]==5&&value["truncated"]["gaps"]==4,"SN all truncation is disclosed");
+    for(const auto& i:value["incidents"])Check(i["participants"].size()<=8,"SN participant cap");
+    Check(!full.Tick(life,20.3,[]{snapshot::Inputs unavailable;unavailable.recorder={{"available",false}};return unavailable;})&&full.Builds()==1,"SN busy source skips rebuild without discarding the old cache");
+    incidents::Service store;store.SetWorld(7);incidents::Observation observation;observation.evidence="gunshot";observation.simS=1;observation.hasPos=true;
+    incidents::Fact person;person.id="2";person.roles=incidents::kAggressor;person.inView=true;person.dist=1;person.los=incidents::Los::Clear;observation.who.push_back(person);
+    Check(store.Observe(observation,10).accepted,"SN incident fixture observes only existing native evidence");
+    auto incidents=store.SnapshotData(7,10);Check(incidents.size()==1&&incidents[0]["participants"][0]=="2"&&incidents[0]["opened_s"]==10&&incidents[0]["closed_s"].is_null(),"SN open incident snapshot contains ids and wall timestamps");
+    store.Tick(20,12);incidents=store.SnapshotData(7,72);Check(incidents.size()==1&&incidents[0]["closed_s"]==12&&store.SnapshotData(7,72.001).empty()&&store.SnapshotData(8,12).empty(),"SN closed incidents live sixty seconds and never cross worlds");
+    supervisor::Service supervisorOwner;supervisor::Observation observed;observed.valid=true;observed.entity="1";observed.phase="gameplay";
+    json entry={{"schema","xfb/supervisor-entry-1"},{"actor",{{"kind","player"},{"ref","V"}}},{"goal",{{"kind","hold_position"},{"at",{1,2,3}},{"radius_m",2}}},{"invariants",{"alive"}},{"policy",{{"goal","return_last_safe"},{"alive","handover"}}}};
+    supervisorOwner.Set(entry,observed,10,7,1);const auto holds=supervisorOwner.SnapshotHolds(7);Check(holds.size()==1&&holds[0]["kind"]=="hold_position"&&holds[0]["radius_m"]==2&&!holds[0].contains("policy")&&supervisorOwner.SnapshotHolds(8).empty(),"SN supervisor snapshot exposes scoped goals without policy text");
+    recording::Service recorder;auto stopped=recorder.SnapshotData(10,7);Check(!stopped["active"].get<bool>()&&stopped["actors"].empty(),"SN cached source read does not start the recorder");
 }
 void FuzzAndBench()
 {
@@ -268,7 +371,7 @@ int CanvasUnitTests()
     checks=failures=0;
     const char* stage = "fixtures";
     try {
-        Fixtures(); stage="parser"; Parser(); stage="lifecycle"; Lifecycle(); stage="rates/caps"; RatesAndCaps(); stage="clear rates/cap order"; ClearRatesAndCapOrder(); stage="key persistence"; KeyPersistence(); stage="anchors/projection"; AnchorsAndProjection(); stage="capture/fade"; CaptureAndFade(); stage="observer pacing"; ObserverPacing(); stage="fuzz/bench"; FuzzAndBench();
+        Fixtures(); stage="parser"; Parser(); stage="lifecycle"; Lifecycle(); stage="rates/caps"; RatesAndCaps(); stage="clear rates/cap order"; ClearRatesAndCapOrder(); stage="key persistence"; KeyPersistence(); stage="anchors/projection"; AnchorsAndProjection(); stage="capture/fade"; CaptureAndFade(); stage="observer pacing"; ObserverPacing(); stage="furniture/persistence"; FurnitureAndPersistence(); stage="Lua snapshot"; LuaSnapshots(); stage="fuzz/bench"; FuzzAndBench();
     } catch (const std::exception& e) { ++failures; std::printf("CANVAS EXCEPTION stage=%s %s\n",stage,e.what()); }
     std::printf("CANVAS %d checks, %d failures\n",checks,failures);return failures;
 }

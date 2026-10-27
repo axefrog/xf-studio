@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 163 tools, 92 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 164 tools, 92 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -25,7 +25,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (4)
-- [Other tools](#other-tools) (18)
+- [Other tools](#other-tools) (19)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -35,7 +35,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
 | `display` | Draw on the canvas | 3 | Yes | Changes only XF canvas drawing, without game writes; allowed on observer connections. | Draws only XF canvas primitives; allowed on observer connections and needs no game write gate. |
-| `read` | Look | 59 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 60 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 5 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -3231,9 +3231,21 @@ Tools not yet sorted into an area above.
 | `now` | boolean | `true`, `false` | Include current digest, default true; false avoids another game-thread read |
 | `replay_files` | boolean | `true`, `false` | Recover older history from the native private chunks, default true; bounded 8 MiB/1024 rows per call, more requests the next page |
 
+### `canvas_snapshot`
+
+**Read the cached Lua snapshot.** Copy snapshot@1 (at most 16 KiB) from the native cache: V and up to 16 selected actors from existing recorder samples and retained actor.identity, 16 open/recent incidents with up to eight participant ids, five supervisor holds, recorder status and eight recent gaps. No game calls, recorder start, lease or acknowledgement. Reads request a two-second cache lease; bridge background rebuilds at most 4 Hz. World/kill clears, ages and stale/lost states are explicit. Plan data remains unavailable until plan reports become session events. Source/offline; SN commissioning rows are unrun.
+
+- **Command:** `canvas.snapshot`, the bridge method `canvas.snapshot`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`bad_params`](#refusal-bad-params)
+
+No parameters.
+
 ### `canvas_feed`
 
-**Draw a canvas layer.** Replace one canvas@1 layer. Display class: allowed on observer connections without game writes. Hidden feeds are dropped; resend on canvas.visible. Whole-batch caps, connection ownership, world generation, rising seq and TTL apply. Heat is not supported in this candidate.
+**Draw a canvas layer.** Replace one canvas@1 layer. Display class: allowed on observer connections without game writes. Hidden feeds are dropped; resend on canvas.visible. Whole-batch caps, connection ownership, world generation, rising seq and TTL apply. Heat is not supported in this candidate. Display leaves general/read/writer budgets untouched; every attempt shares a separate connection 16/s burst-24 allowance before batch parsing. Per-layer 4/s and per-producer 16/s feed limits also apply.
 
 - **Command:** `canvas.feed`, the bridge method `canvas.feed`
 - **Permission:** Draw on the canvas (`display`)
@@ -3254,13 +3266,13 @@ Tools not yet sorted into an area above.
 
 ### `canvas_clear`
 
-**Clear a canvas layer.** Withdraw one layer, or all layers, owned by this connection's producer. Explicit clear releases the sequence record; expiry retains it.
+**Clear a canvas layer.** Withdraw one layer, or all layers, owned by this connection's producer. Explicit clear releases the sequence record; expiry retains it. Spends the separate display attempt allowance, not general read credit.
 
 - **Command:** `canvas.clear`, the bridge method `canvas.clear`
 - **Permission:** Draw on the canvas (`display`)
 - **Changes the game:** Yes
 - **Undo:** Feed the cleared layers again for the current world; clear releases their sequence records.
-- **Refusals:** [`bad_batch`](#refusal-bad-batch), [`producer_in_use`](#refusal-producer-in-use)
+- **Refusals:** [`bad_batch`](#refusal-bad-batch), [`producer_in_use`](#refusal-producer-in-use), [`rate`](#refusal-rate)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
@@ -3269,13 +3281,13 @@ Tools not yet sorted into an area above.
 
 ### `canvas_view`
 
-**Set the canvas radar.** Set and remember radar settings. Defaults: bottom_right, 240 pixels, 50 metres, heading_up, opacity 1. Does not show the canvas; Insert shows it and Delete changes mode.
+**Set the canvas radar.** Apply radar settings immediately; debounce persistence of the latest value to at most once per two seconds and flush on shutdown. Spends the separate display attempt allowance, not general read credit. Defaults: bottom_right, 240 pixels, 50 metres, heading_up, opacity 1. Does not show the canvas; Insert shows it and Delete changes mode.
 
 - **Command:** `canvas.view`, the bridge method `canvas.view`
 - **Permission:** Draw on the canvas (`display`)
 - **Changes the game:** Yes
 - **Undo:** Call canvas_view with the earlier radar settings returned by canvas_state.
-- **Refusals:** [`bad_batch`](#refusal-bad-batch)
+- **Refusals:** [`bad_batch`](#refusal-bad-batch), [`rate`](#refusal-rate)
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|

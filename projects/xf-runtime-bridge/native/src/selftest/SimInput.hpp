@@ -12,6 +12,8 @@ public:
              std::function<std::string()> aContext, std::function<uint64_t()> aWorld, std::function<bool()> aLive,
              std::function<uint64_t()> aConnection, const Session& aSession);
     void Tick();
+    nlohmann::json SnapshotData(double now, uint64_t world) const { return m_recording.SnapshotData(now,world); }
+    nlohmann::json SnapshotHolds(uint64_t world) const { return m_supervisor.SnapshotHolds(world); }
 private:
     input::Ops Ops();
     input::Service m_service;

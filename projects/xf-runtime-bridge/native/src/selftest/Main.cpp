@@ -25,6 +25,7 @@
 
 #include "core/Bridge.hpp"
 #include "core/overlay/Canvas.hpp"
+#include "core/LuaSnapshot.hpp"
 #include "core/BuildInfo.hpp"
 #include "core/Layers.hpp"
 #include "core/LivePose.hpp"
@@ -488,6 +489,7 @@ int wmain(int argc, wchar_t** argv)
     static xfb::ScriptLayer simLayer;
     static std::unique_ptr<xfb::canvas::Service> simCanvas;
     static std::atomic<bool> canvasKilled{false};
+    static xfb::snapshot::Cache luaSnapshot;
     static std::atomic<bool> detachBeforeNextTask{false};
     simLayer.OnAttach();
     simLayer.OnPlayerAttach();
@@ -2699,6 +2701,12 @@ int wmain(int argc, wchar_t** argv)
     simCanvas->Configure(true, config.canvasToggle, config.canvasMode, config.canvasAnchorHz, config.canvasAnchorsPerRead);
     simCanvas->SetStateFile(session.runtimeDir / "canvas-view.json");
     xfb::canvas::RegisterMethods(dispatcher, *simCanvas);
+    const auto snapshotLife=[&bridge]{return xfb::snapshot::Lifecycle{simLayer.WorldGeneration(),bridge.GetDispatcher().IsKilled(),bridge.GetDispatcher().HandedOver()};};
+    xfb::snapshot::Register(dispatcher,luaSnapshot,snapshotLife);
+    bridge.SetBackgroundTick([snapshotLife]{
+        simCanvas->FlushView();const auto life=snapshotLife();const auto now=xfb::recording::Now();
+        luaSnapshot.Tick(life,now,[life,now]{return xfb::snapshot::Inputs{simInput?simInput->SnapshotData(now,life.world):json::object(),json::array(),simInput?simInput->SnapshotHolds(life.world):json::array()};});
+    });
     bridge.SetDisconnectObserver([](uint64_t id) { simCanvas->Disconnect(id); });
     bridge.AddStopObserver([&bridge] {
         if (bridge.GetDispatcher().IsKilled() && !canvasKilled.exchange(true)) simLayer.InvalidateWorld();
@@ -3019,6 +3027,7 @@ int wmain(int argc, wchar_t** argv)
     queue.Close();
     simDm->Stop(); // the watchers' micro-action worker ends before the dispatcher goes
     bridge.Stop("selftest_exit");
+    simCanvas->FlushView(xfb::canvas::Now(),true);
     xfb::log::Info("selftest.exit", "requests=" + std::to_string(dispatcher.RequestCount()) +
                                         " late_game_tasks=" + std::to_string(queue.LateCompletions()));
     xfb::log::SetSink(nullptr);

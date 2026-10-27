@@ -180,6 +180,12 @@ std::string NumberText(double n)
     return (neg ? "-" : "") + out;
 }
 } // namespace
+bool DrawInView(const Item& item, unsigned view, bool worldMarkers)
+{
+    if (!(item.views & view)) return false;
+    if (item.anchor.kind == Anchor::Screen) return view == World;
+    return view != World || worldMarkers;
+}
 size_t SolidVertices(const Item& i)
 {
     // Two endpoints per solid segment, including shared circle/polygon corners.

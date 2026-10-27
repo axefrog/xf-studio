@@ -61,6 +61,7 @@ public:
     json Set(const json&, const Observation&, double now, uint64_t world, uint64_t connection, std::optional<uint64_t> expected = {}, uint32_t callerWriteClasses = 0);
     json State() const;                       // V's entry (the 0.8.15 shape)
     json State(const std::string& key) const; // one entry, "kind:ref"
+    json SnapshotHolds(uint64_t world) const;
     json StateAll() const;                    // every active entry
     json Clear(const std::string& reason);    // every entry
     json Clear(const std::string& reason, const std::string& key);

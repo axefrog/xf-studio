@@ -8,7 +8,8 @@
 //   {"v":1, "id":<same, or null>, "cid":"<cid>", "ok":true, "result":{...}}
 //   {"v":1, "id":<same, or null>, "cid":"<cid>", "ok":false, "error":{"code":"...", "message":"..."}}
 //
-// Order of checks: nesting pre-scan -> parse -> rate limit -> token -> version -> kill switch
+// Display attempt admission precedes DOM parsing (bounded envelope scan only); authenticated display skips general pacing.
+// Other checks: nesting pre-scan -> parse -> general rate -> token -> version -> kill switch
 // -> allowlist -> write gate -> run. The transport already bounded the line to 64 KiB.
 // Only registered methods exist (the allowlist); nothing evaluates code sent by a client.
 // Every refusal is logged. Malformed and unauthenticated requests are marked "rejected" so the
@@ -110,6 +111,26 @@ struct DispatchResult
     bool throttled = false;
 };
 
+// Every display attempt, including malformed batches, has its own connection/module allowance.
+class DisplayRequestBudget
+{
+public:
+    bool Take(std::chrono::steady_clock::time_point now);
+    int RetryAfterMs() const;
+private:
+    double m_tokens = 24;
+    std::optional<std::chrono::steady_clock::time_point> m_last;
+};
+
+class ModuleDisplayBudgets
+{
+public:
+    std::optional<int> Admit(const std::string&, std::chrono::steady_clock::time_point);
+private:
+    std::mutex m_mutex;
+    std::map<std::string,std::pair<std::chrono::steady_clock::time_point,DisplayRequestBudget>> m_budgets;
+};
+
 // One connection's pipe-thread request budget. Never shared by concurrent readers.
 // Clamp independently of writer tuning: at most eight slots, 20/s and a 40-request
 // burst each. The transport's endpoint backoff still survives reconnection.
@@ -117,6 +138,7 @@ class ReaderRequestBudget
 {
 public:
     static constexpr uint32_t kMaxRate = 20;
+    DisplayRequestBudget display;
     explicit ReaderRequestBudget(uint32_t rate = kMaxRate);
     bool Take(std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now());
 private:
@@ -155,7 +177,7 @@ public:
     // request came on the control pipe, which answers only IsControlRouteMethod's methods (refused not_on_control_route).
     // A non-null budget denotes a read-only connection; its owner is the pipe worker.
     DispatchResult Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute = false,
-                          ReaderRequestBudget* aReaderBudget = nullptr, uint64_t aConnection = 0) noexcept;
+                          ReaderRequestBudget* aReaderBudget = nullptr, uint64_t aConnection = 0, DisplayRequestBudget* aDisplayBudget = nullptr) noexcept;
     // Trusted in-process caller only. Propagates an execution-frame guard to every queued step;
     // never accepted from request data. Cleanup inside RestoreScope remains unconditional.
     using ExecutionGuard = std::function<void(bool changing)>;
@@ -225,6 +247,7 @@ private:
     DispatchResult HandleUnchecked(const std::string& aLine, uint32_t aClientPid, bool aControlRoute);
     bool TakeRateToken(bool aReadOnly);
     bool TakeReaderRequestToken();
+    DisplayRequestBudget m_directDisplay;
     static bool TakeReaderLogToken(std::atomic<int64_t>& next, int64_t now);
     std::string NextCid();
 

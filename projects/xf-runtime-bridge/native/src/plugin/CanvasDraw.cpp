@@ -79,7 +79,7 @@ void DrawCanvas(canvas::Service& service, xfb::overlay::OverlayHost& host, float
             anchor = Plus(state.position, i.anchor.offset); opacity *= state.opacity;
         }
         for (unsigned view : {canvas::World, canvas::Radar}) {
-            if (!(i.views & view) || (view == canvas::World && !frame.worldMarkers) || (view == canvas::Radar && i.anchor.kind == canvas::Anchor::Screen)) continue;
+            if (!canvas::DrawInView(i,view,frame.worldMarkers)) continue;
             const bool onRadar = view == canvas::Radar; const double alpha = opacity * (onRadar ? radar.opacity : 1);
             const ImU32 colour = palette.Colour(i.color, alpha); const float stroke = static_cast<float>(i.width) * scale;
             const auto position = [&](const Vec& world, XY& out) {

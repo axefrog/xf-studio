@@ -78,7 +78,9 @@ test.skipIf(!candidate)("real pipe registers recorder, samples at source, stops 
   if (page.ok) {
     const p = page.result as Json;
     expect(p.active).toBe(false); expect(p.sample_ticks).toBeGreaterThanOrEqual(2);
-    expect(p.records[0].data.simulated).toBe(true); expect(p.records[0].source_s).toBeGreaterThan(0);
-    expect(p.records[0].channel).toBe("v");
+    const sampled = p.records.find((row: Json) => row.channel === "v");
+    expect(sampled?.data.simulated).toBe(true); expect(sampled?.source_s).toBeGreaterThan(0);
+    expect(p.records[0].channel).toBe("actor.identity");
+    expect(p.records[0].data.entity).toBe(sampled?.data.entity);
   }
 });

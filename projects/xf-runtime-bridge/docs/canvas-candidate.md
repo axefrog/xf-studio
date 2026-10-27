@@ -1,6 +1,31 @@
 # Canvas candidate evidence
 
-The unversioned canvas candidate and all five independent-review corrections to `fc667085` pass targeted and full offline verification. No deployment, game session, visual approval or version change is claimed. The review corrections remain uncommitted for coordinator review.
+The earlier unversioned canvas candidate and all five independent-review corrections to `fc667085` passed the offline verification recorded below. The current A–C continuation (display attempt pacing/deferred view saves, the Lua snapshot, and screen furniture in radar-only mode) passes its recovery clean build and full offline checks, recorded separately below. Changes remain uncommitted for coordinator review. No deployment, game session, visual approval or version change is claimed.
+
+## A–C recovery checkpoint (28 October 2026)
+
+Re-read the surviving diff after power loss. Display attempts retain their separate 16/s, burst-24 allowance; view changes apply in memory and defer disk writes. The cached Lua snapshot reads existing owners only, and screen-anchored furniture draws once in either mode while respecting its layer view mask.
+
+Recovery corrections preserve invalid recorder-channel validity for every inner actor and flush the final view only after listener/background shutdown. Native regressions cover invalid snapshot actors and failed-save retry/error recovery. The Lua harness now exercises JSON-null sentinel conversion as well as separate table copies and a derived canvas feed.
+
+| Check after recovery | Result and limit |
+|---|---|
+| Targeted canvas/catalogue/recording tools tests | 33 passed, 0 failed; 4,704 assertions; 14.60 s; existing executable only, so this does not verify the latest C++ corrections |
+| Strengthened Lua snapshot harness | 1 passed, 0 failed; 21 assertions; 0.96 s; existing native snapshot with a null-clock crossing fixture |
+| Tools typecheck and capabilities | Passed; 169 capability items, 64 changelog lines; registry current |
+| Lua lint and generated MCP reference | Passed |
+| Root Markdown links | 0 broken links/source paths in 481 Markdown files |
+| Root private paths and diff whitespace | 0 private-path findings; `git diff --check` passed |
+| Clean native build | Release `--clean-first` passed; peak 1.3 GB; guard limit 6 GB and default floor 4 GB, no trip or floor override |
+| Native unit checks | 2,839 passed (1,265 named plus 1,574 grouped), including 869 canvas and 120 recording checks; 3,000 parser mutations; 8.27 s |
+| Client self-test | All 1,356 checks passed; 35.81 s; peak 0.3 GB |
+| Full tools suite on the clean executable | 1,128 passed / 4 opt-in screen skips / 0 failed; 1,132 tests across 70 files, 23,639 assertions; 329.77 s (330.34 s guarded job); peak 0.9 GB |
+| Redscript/native declarations | Fallback, Codeware, writes/probes, Equipment-EX/TweakXL and combined variants passed; all four native package sets passed. Existing redundant-cast and Codeware return-path warnings remain warnings. |
+| Theme/glyph and fact-preset generation | Current |
+
+Recovery offline budgets (256 samples): 64 KiB parsing/4,096-vertex expansion p99 **0.458 ms**, maximum **1.549 ms**; 16,384-vertex projection/culling p99 **0.484 ms**, maximum **0.991 ms**. These are offline CPU figures, not in-game render or frame-time evidence.
+
+Checks ran serially under the 6 GB memory guard with default floor 4 GB throughout, without a guard trip. The initial check-runner invocation failed to locate the relative native executable before any unit tests ran; using its absolute path corrected the runner, after which every check passed. Earlier native/full-suite figures below belong to the prior candidate. Runtime SN1–SN8 and visual approval remain unrun.
 
 ## Review corrections
 
@@ -141,6 +166,6 @@ Styling choices copied from the XF box: 8 px screen margin, 8 × 2 px chip paddi
 
 ## Open work
 
-No contract decision remains unanswered. Independent coordinator code review, game commissioning (CV1–CV9) and Studio visual approval remain outstanding. The runtime coordinator owns the capability-registry update and integration version; neither was changed here.
+No contract decision remains unanswered. Independent coordinator code review, game commissioning (CV1–CV9, SN1–SN8) and Studio visual approval remain outstanding. The runtime coordinator owns the capability-registry update and integration version; neither was changed here.
 
 Knowledge used: [runtime access](../../../knowledge/runtime-access.md), the [live-world-view proposal](../../../research/live-world-view/proposal.md), [glyph vocabulary](../../../research/live-world-view/glyphs.md) and [canvas contract](canvas.md). Camera/FOV and engine-bounds evidence remain incomplete as identified above. Canonicalization follows [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785).

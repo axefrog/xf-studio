@@ -64,7 +64,7 @@ void Service::SetStateFile(std::filesystem::path path)
         std::string raw(4097, '\0'); file.read(raw.data(), static_cast<std::streamsize>(raw.size())); raw.resize(static_cast<size_t>(file.gcount()));
         if (raw.size() <= 4096) { try { View(ParseJson(raw)); } catch (...) {} }
     }
-    std::scoped_lock lock(m_mutex); m_stateFile = std::move(path);
+    std::scoped_lock lock(m_mutex); m_stateFile = std::move(path); m_viewDirty = false;
 }
 void Service::Reset() { m_producers.clear(); m_anchors.clear(); m_refusals.clear(); m_refusalTimes.clear(); m_nextAnchorRead = -1; m_anchorRefresh = 1.0 / m_anchorHz; m_admission.fetch_add(1); m_generation.fetch_add(1); m_radarDowngraded.store(0); }
 void Service::SetWorld(uint64_t world) { if (m_knownWorld.load() == world) return; std::scoped_lock lock(m_mutex); if (m_world != world) { m_world = world; m_knownWorld.store(world); Reset(); } }
@@ -175,9 +175,8 @@ void Service::Disconnect(uint64_t connection)
     for (auto it = m_producers.begin(); it != m_producers.end();) if (it->second.connection == connection) { it = m_producers.erase(it); changed = true; } else ++it;
     if (changed) m_generation.fetch_add(1);
 }
-json Service::View(const json& v)
+json Service::View(const json& v, double now)
 {
-    std::scoped_lock persist(m_viewMutex);
     Fields(v, "$", {"radar"}); if (!v.contains("radar")) Bad("$.radar"); const auto& r = v["radar"];
     Fields(r, "$.radar", {"corner", "size_px", "range_m", "orientation", "opacity"}); std::filesystem::path path; json out;
     { std::scoped_lock lock(m_mutex); auto next = m_radar;
@@ -189,8 +188,20 @@ json Service::View(const json& v)
             if (!r[k].is_number() || !std::isfinite(r[k].get<double>()) || r[k].get<double>() < lo || r[k].get<double>() > hi) Bad(std::string("$.radar.") + k); target = r[k].get<double>(); };
         number("size_px", next.size, 120, 640); number("range_m", next.range, 1, 2000); number("opacity", next.opacity, 0, 1);
         m_radar = next; path = m_stateFile; out = {{"radar", RadarJson(next)}}; m_generation.fetch_add(1);
+        if (!path.empty() && !m_viewDirty) m_viewDue = std::max(now + 2.0,m_viewLastSaved + 2.0);
+        m_viewDirty = !path.empty(); ++m_viewRevision;
     }
-    if (!path.empty()) { std::string why; if (!win32::WriteFileAtomic(path, out.dump(), why)) { out["saved"] = false; out["save_error"] = why; } else out["saved"] = true; } return out;
+    out["pending"] = !path.empty(); out["saved"] = false; return out;
+}
+bool Service::FlushView(double now, bool shutdown)
+{
+    std::scoped_lock persist(m_viewMutex);
+    std::filesystem::path path; json value; uint64_t revision=0;
+    { std::scoped_lock lock(m_mutex);if(!m_viewDirty||(!shutdown&&now<m_viewDue))return false;
+      path=m_stateFile;value={{"radar",RadarJson(m_radar)}};revision=m_viewRevision;m_viewDue=now+2; }
+    std::string why;const bool saved=win32::WriteFileAtomic(path,value.dump(),why);
+    { std::scoped_lock lock(m_mutex);m_viewDirty=!saved||revision!=m_viewRevision;m_viewError=why;if(saved)m_viewLastSaved=now; }
+    return saved;
 }
 std::pair<killkey::Chord, killkey::Chord> Service::Keys() const { std::scoped_lock lock(m_mutex); return {m_toggle, m_mode}; }
 json Service::SetKeys(const json& v)
@@ -270,6 +281,7 @@ json Service::State(double now)
     size_t recentReads = 0; const auto reads = m_anchorReadCount.load();
     for (size_t n = 0; n < std::min(reads,m_anchorReadTimes.size()); ++n) { const auto at = m_anchorReadTimes[n].load(); if (at > now - 1 && at <= now) ++recentReads; }
     return {{"schemas", {"canvas@1"}}, {"features", json::array()}, {"enabled", m_enabled.load()}, {"visible", Visible()}, {"mode", m_worldMarkers ? "radar_world" : "radar"}, {"world", m_world}, {"radar", RadarJson(m_radar)},
+        {"view_persistence",{{"pending",m_viewDirty},{"last_saved_s",m_viewLastSaved<0?json(nullptr):json(m_viewLastSaved)},{"error",m_viewError}}},
         {"keys", {{"toggle", killkey::Spelling(m_toggle)}, {"mode", killkey::Spelling(m_mode)}}}, {"producers", producers}, {"last_refusals",refusals}, {"anchors", anchors}, {"unknown_glyphs", unknown}, {"radar_dash_downgraded", m_radarDowngraded.load()},
         {"anchor_reads", {{"configured_hz",m_anchorHz},{"per_read",m_anchorsPerRead},{"observed_hz",Visible()?recentReads:0},{"total",reads},{"expected_refresh_s",m_anchorRefresh},{"grace_s",.25}}},
         {"costs", {{"pipe", m_parse.State()}, {"camera", m_camera.State(Visible())}, {"anchors",m_anchor.State(Visible())}, {"publication",m_publication.State(Visible())}, {"render",m_render.State(Visible())}, {"hidden", {{"camera_ms", 0}, {"anchor_ms",0}, {"render_ms", 0}}}}}};

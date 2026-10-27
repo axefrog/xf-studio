@@ -212,7 +212,7 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
     ++m_run; m_world = world; m_connection = connection; m_session = session;
     m_latest = m_ack = m_dropped = m_missed = m_samples = m_bytes = m_invalid = 0;
     m_start = m_next = now; m_until = now + static_cast<double>(duration); m_last = m_gap = m_end = 0;
-    m_startSync = ClockSync(now); m_actorIdentities.clear(); m_identityOmitted = 0;
+    m_startSync = ClockSync(now); m_actorIdentities.clear(); m_recentGaps.clear(); m_identityOmitted = 0;
     m_ingressDropped.store(0); m_nextHeartbeat = now; m_nextUiHeartbeat = 0; m_lastUi.clear();
     // Identity first: a reader that sees the channel wanted must see this run's identity.
     m_identityRun.store(m_run); m_identityWorld.store(m_world); m_identityConnection.store(m_connection);
@@ -248,7 +248,9 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
     if (!live || world != m_world || connection != m_connection) { Stop(world != m_world ? "world_changed" : "owner_or_live_gate_closed", now); return; }
     if (now >= m_until) { Stop("duration", now); return; }
     if (now + 1e-9 < m_next) return;
+    const auto previousMissed=m_missed;
     m_missed += static_cast<uint64_t>(std::max(0.0, std::floor((now - m_next + 1e-9) / 0.1)));
+    if(m_missed!=previousMissed){if(m_recentGaps.size()==8)m_recentGaps.pop_front();m_recentGaps.push_back({{"channel","recorder"},{"from_s",m_samples?m_last:m_next},{"to_s",now},{"reason","missed_deadline"}});}
     m_next = m_start + (std::floor((now - m_start + 1e-9) / 0.1) + 1) * 0.1;
     if (m_samples) m_gap = std::max(m_gap, now - m_last);
     m_last = now; ++m_samples;
@@ -276,7 +278,7 @@ void Service::Tick(double now, uint64_t world, uint64_t connection, bool live, u
                 if (entity.empty() || entity.size() > 20 || entity.find_first_not_of("0123456789") != std::string::npos || m_actorIdentities.count(entity)) return;
                 if (m_actorIdentities.size() >= kActorIdentityCap) { ++m_identityOmitted; return; }
                 identity["event"] = "actor.identity"; identity["entity"] = entity;
-                if (Append("actor.identity", SerializeJson(identity), at, end, tick, true)) m_actorIdentities.insert(entity);
+                if (Append("actor.identity", SerializeJson(identity), at, end, tick, true)) m_actorIdentities[entity] = {{"record",identity.value("record",json())},{"affiliation",identity.value("affiliation",json()).is_object()?identity["affiliation"].value("record",json()):identity.value("affiliation",json())},{"crowd",identity.value("crowd",json())}};
             };
             if (channel == "v") identityOf(payload);
             else if (payload.contains("actors") && payload["actors"].is_array())
@@ -319,7 +321,7 @@ std::string Service::Identity(const std::string& channel) const
 bool Service::Append(const std::string& channel, const std::string& text, double at, double end, uint64_t tick, bool valid)
 {
     ++m_counts[channel][0]; if (valid) ++m_counts[channel][1];
-    if (!valid) ++m_invalid;
+    if (!valid) {++m_invalid; if(m_recentGaps.size()==8)m_recentGaps.pop_front();m_recentGaps.push_back({{"channel",channel},{"from_s",at},{"to_s",end},{"reason","invalid"}});}
     ++m_latest;
     if (text.size() >= kPayload) { ++m_dropped; return false; }
     const auto bytes = text.size() + 768;
@@ -348,6 +350,32 @@ bool Service::Ingress(const std::string& channel, const std::string& payload, do
     if (!parsed.is_object() || !parsed.contains("event") || !parsed["event"].is_string() ||
         (parsed.contains("valid") && !parsed["valid"].is_boolean())) { ++m_invalid; ++m_dropped; return false; }
     return Append(channel, payload, now, now, tick, parsed.value("valid", true));
+}
+json Service::SnapshotData(double now,uint64_t world) const
+{
+    std::optional<Record> v,actors;json result;
+    {std::unique_lock lock(m_mutex,std::try_to_lock);if(!lock.owns_lock())return {{"available",false}};
+     result={{"world",m_world},{"active",m_active&&m_startedGeneration.load()==CancellationGeneration()&&world==m_world},
+       {"run",m_run?json(m_run):json(nullptr)},{"channels",m_channels},{"gaps",m_recentGaps},{"v",nullptr},{"actors",json::array()}};
+     if(world!=m_world)return result;
+     for(uint64_t n=m_latest,seen=0;n>0&&seen<kCapacity&&(!v||!actors);--n,++seen){const auto& row=(*m_ring)[(n-1)%kCapacity];
+       if(row.seq!=n||row.run!=m_run)continue;
+       if(!v&&std::string_view(row.channel.data())=="v")v=row;
+       if(!actors&&std::string_view(row.channel.data())=="actors")actors=row;
+     }
+     if(m_ingressDropped.load()||m_dropped){if(result["gaps"].size()>=8)result["gaps"].erase(0);result["gaps"].push_back({{"channel","recorder"},{"from_s",m_last},{"to_s",now},{"reason","dropped"}});}
+    }
+    // At most two existing 8 KiB payloads; never encode/parse the whole recorder ring.
+    if(v){result["v"]=json::parse(v->payload.data(),nullptr,false);result["v_s"]=v->at;if(!result["v"].is_object())result["v"]=nullptr;else if(!v->valid)result["v"]["valid"]=false;}
+    if(actors){auto value=json::parse(actors->payload.data(),nullptr,false);if(value.is_object()&&value.contains("actors")&&value["actors"].is_array()){
+        result["actors"]=value["actors"];
+        // A failed channel sample cannot make an otherwise complete inner actor look resolved.
+        if(!actors->valid)for(auto& actor:result["actors"])if(actor.is_object())actor["valid"]=false;
+      }result["actors_s"]=actors->at;}
+    {std::unique_lock lock(m_mutex,std::try_to_lock);if(!lock.owns_lock())return {{"available",false}};if(world!=m_world||result["run"]!=m_run){result["active"]=false;return result;}
+     for(auto& actor:result["actors"]){if(!actor.is_object())continue;const auto id=actor.value("entity",std::string());if(const auto found=m_actorIdentities.find(id);found!=m_actorIdentities.end())actor["identity"]=found->second;}
+    }
+    return result;
 }
 json Service::Read(const json& p, double now, bool acknowledge)
 {

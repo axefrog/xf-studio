@@ -54,8 +54,9 @@ bool Bridge::Start(std::string& aError)
     for (auto& reader : m_readers) reader->SetDisconnectCallback(disconnected);
     if (!m_server.Start(
             m_session.pipeName, m_config.idleDisconnectSeconds,
-            [this](const std::string& aLine, uint32_t aPid) {
-                auto result = m_dispatcher.Handle(aLine, aPid, false, nullptr, m_server.ConnectionIdentity());
+            [this, generation=uint64_t{0}, budget=DisplayRequestBudget{}](const std::string& aLine, uint32_t aPid) mutable {
+                const auto connected=m_server.ConnectionsAccepted();if(generation!=connected){generation=connected;budget=DisplayRequestBudget{};}
+                auto result = m_dispatcher.Handle(aLine, aPid, false, nullptr, m_server.ConnectionIdentity(), &budget);
                 return PipeReply{std::move(result.line), result.rejected};
             },
             aError))
@@ -331,10 +332,14 @@ void Bridge::Watch()
     std::unique_lock lock(m_watchMutex);
     while (m_watching.load())
     {
-        m_watchWake.wait_for(lock, std::chrono::milliseconds(500));
+        m_watchWake.wait_for(lock, std::chrono::milliseconds(m_backgroundTick ? 250 : 500));
         if (!m_watching.load())
         {
             break;
+        }
+        if (m_backgroundTick && !m_dispatcher.IsKilled()) {
+            lock.unlock();try { m_backgroundTick(); } catch (const std::exception& e) { log::Warn("bridge.background_failed",e.what()); } catch (...) {}
+            lock.lock();
         }
         if (!m_dispatcher.IsKilled() && KillFilePresent(m_session))
         {

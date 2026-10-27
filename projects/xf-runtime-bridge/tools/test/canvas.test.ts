@@ -138,7 +138,7 @@ describe("canvas over a persistent read-only observer and MCP", () => {
 });
 
 
-test("16 feeds plus a one-page 1 Hz catch-up share one observer budget without retries",async()=>{
+test("16 feeds plus 1 Hz catch-up and canvas state retain general read headroom without retries",async()=>{
   requireAutonomousSelftest();
   const host=await startSelftestHost(["--allow-test-hooks"],60);
   const writer=new BridgeClient(host.session,5000);
@@ -156,9 +156,65 @@ test("16 feeds plus a one-page 1 Hz catch-up share one observer budget without r
       }
       const fedAt=performance.now();
       const caught=await reader.run("game.catchup",{run,...(cursor?{cursor}:{}),detail:true,now:second%2===1});
+      expect((await reader.run("canvas.state")).ok).toBe(true);
       expect(caught.ok).toBe(true);if(caught.ok){cursor=(caught.result as any).cursor;expect((caught.result as any).more).toBe(false);}
       // Allow timer quantisation at the one-second canvas rate boundary; the native test freezes/advances exact seconds.
       if(second<5)await sleep(Math.max(0,fedAt+1005-performance.now()));
     }
+    const spam=new BridgeClient(host.session,5000);await spam.connect({readOnly:true});
+    try{
+      let limited=0;
+      for(let n=0;n<128;++n){const reply=await spam.call(n%3===0?"canvas.feed":n%3===1?"canvas.clear":"canvas.view",{});if(reply.error?.code==="rate")limited++;
+        if(n%16===15){expect((await spam.call("ping")).ok).toBe(true);expect((await writer.call("ping")).ok).toBe(true);}}
+      expect(limited).toBeGreaterThan(50);expect((await spam.call("canvas.state")).ok).toBe(true);
+    }finally{spam.close();}
+  }finally{reader.close();writer.close();await host.stop();}
+},20000);
+
+
+test("SN cached native snapshot crosses Lua decoding and feeds a derived canvas batch",async()=>{
+  requireAutonomousSelftest();const host=await startSelftestHost(["--allow-test-hooks"],60);
+  const writer=new BridgeClient(host.session,5000),reader=new BridgeClient(host.session,5000);
+  try{
+    await writer.connect();await reader.connect({readOnly:true});await writer.call("selftest.canvas",{visible:true});
+    expect((await writer.call("test.record.start",{channels:["v","actors"],duration_s:15})).ok).toBe(true);
+    let snapshot:any;const deadline=performance.now()+3000;
+    do{const reply=await reader.call("canvas.snapshot");expect(reply.ok).toBe(true);snapshot=reply.result;if(snapshot?.v)break;await sleep(75);}while(performance.now()<deadline);
+    expect(snapshot.schema).toBe("snapshot@1");expect(snapshot.v?.id).toBe("1");expect(snapshot.sources.plan).toBe("unavailable");expect(JSON.stringify(snapshot).length).toBeLessThanOrEqual(16384);
+    const require=createRequire(import.meta.url),{lua,lauxlib,lualib,to_luastring}=require("fengari");
+    const L=lauxlib.luaL_newstate();lualib.luaL_openlibs(L);
+    lua.lua_newtable(L);const nullRef=lauxlib.luaL_ref(L,lua.LUA_REGISTRYINDEX);
+    const push=(value:any):void=>{if(value===null||value===undefined){lua.lua_rawgeti(L,lua.LUA_REGISTRYINDEX,nullRef);return;}
+      if(typeof value==="boolean"){lua.lua_pushboolean(L,value);return;}if(typeof value==="number"){lua.lua_pushnumber(L,value);return;}
+      if(typeof value==="string"){lua.lua_pushstring(L,to_luastring(value));return;}lua.lua_newtable(L);
+      for(const [key,child] of Object.entries(value)){push(child);if(Array.isArray(value))lua.lua_rawseti(L,-2,Number(key)+1);else lua.lua_setfield(L,-2,to_luastring(key));}};
+    const value=(index:number):any=>{const at=lua.lua_absindex(L,index);switch(lua.lua_type(L,at)){
+      case lua.LUA_TNIL:return null;case lua.LUA_TBOOLEAN:return lua.lua_toboolean(L,at);case lua.LUA_TNUMBER:return lua.lua_tonumber(L,at);case lua.LUA_TSTRING:return lua.lua_tojsstring(L,at);
+      case lua.LUA_TTABLE:{const out:any={};lua.lua_pushnil(L);while(lua.lua_next(L,at)){out[value(-2)]=value(-1);lua.lua_pop(L,1);}const keys=Object.keys(out);return keys.length&&keys.every(k=>Number.isInteger(Number(k))&&Number(k)>0)?keys.sort((a,b)=>Number(a)-Number(b)).map(k=>out[k]):out;}
+      default:throw Error("Unsupported Lua value");}};
+    lua.lua_newtable(L);
+    lua.lua_rawgeti(L,lua.LUA_REGISTRYINDEX,nullRef);lua.lua_setfield(L,-2,to_luastring("null"));
+    lua.lua_pushcfunction(L,()=>{push(JSON.stringify(value(1)));return 1;});lua.lua_setfield(L,-2,to_luastring("encode"));
+    lua.lua_pushcfunction(L,()=>{push(JSON.parse(lua.lua_tojsstring(L,1)));return 1;});lua.lua_setfield(L,-2,to_luastring("decode"));lua.lua_setglobal(L,to_luastring("json"));
+    let batch:any;const routes:string[]=[];lua.lua_newtable(L);
+    lua.lua_pushcfunction(L,()=>{const module=lua.lua_tojsstring(L,1),action=lua.lua_tojsstring(L,2);routes.push(module+":"+action);
+      const payload=JSON.parse(lua.lua_tojsstring(L,3));if(action==="feed")batch=payload;
+      push(JSON.stringify({ok:true,result:action==="snapshot"?{...snapshot,game_time_s:null}:{accepted:true}}));return 1;});
+    lua.lua_setfield(L,-2,to_luastring("XFBridge_Canvas"));lua.lua_setglobal(L,to_luastring("Game"));
+    const path=join(projectDir,"cet/xf_runtime_bridge/canvas.lua").replaceAll("\\","/");
+    const code=`local canvas=dofile(${JSON.stringify(path)}) local holo=canvas.ForModule("holotable")
+      local a=holo.Snapshot() local b=canvas.Snapshot() assert(a.schema=="snapshot@1" and b.world==a.world)
+      assert(a.sources.plan=="unavailable" and a.game_time_s==nil and a.recorder.run~=nil)
+      a.v.pos[1]=999 assert(b.v.pos[1]~=999)
+      return holo.Feed({schema="canvas@1",world=b.world,seq=1,layer="snapshot",views={"world"},items={{id=b.v.id,kind="point",anchor={world=b.v.pos}}}}).ok`;
+    try{expect(lauxlib.luaL_loadstring(L,to_luastring(code))).toBe(lua.LUA_OK);const status=lua.lua_pcall(L,0,1,0);expect(status,lua.lua_tojsstring(L,-1)).toBe(lua.LUA_OK);expect(lua.lua_toboolean(L,-1)).toBe(true);}finally{lua.lua_close(L);}
+    expect(routes).toEqual(["holotable:snapshot","xf_runtime_bridge:snapshot","holotable:feed"]);
+    const fed=await reader.call("canvas.feed",{...batch,producer:"snapshot_fixture"});expect(fed.ok).toBe(true);expect((fed.result as any).accepted).toBe(true);
+    expect((await writer.call("test.record.stop")).ok).toBe(true);
+    const stoppedBy=performance.now()+2000;
+    do{const reply=await reader.call("canvas.snapshot");snapshot=reply.result;if(!snapshot.recorder.active)break;await sleep(75);}while(performance.now()<stoppedBy);
+    expect(snapshot.sources.v).toBe("recorder_stopped");expect(snapshot.v).toBeNull();
+    const beforeWorld=snapshot.world;await writer.call("selftest.script_layer",{event:"detach"});
+    const cleared=await reader.call("canvas.snapshot");expect((cleared.result as any).world).toBeGreaterThan(beforeWorld);expect((cleared.result as any).cleared).toBe("load");expect((cleared.result as any).actors).toEqual([]);
   }finally{reader.close();writer.close();await host.stop();}
 },20000);

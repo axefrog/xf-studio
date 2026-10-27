@@ -6,9 +6,14 @@
 #include "plugin/GameHandlers.hpp"
 #include "core/Win32.hpp"
 #include <charconv>
+#include "core/Recording.hpp"
 
 namespace xfb::plugin
 {
+snapshot::Lifecycle SnapshotLife()
+{
+    auto& s=Get();return {s.scriptLayer.WorldGeneration(),s.bridge&&s.bridge->GetDispatcher().IsKilled(),s.bridge&&s.bridge->GetDispatcher().HandedOver()};
+}
 void RegisterCanvas(Dispatcher& d)
 {
     auto& s = Get();
@@ -16,6 +21,11 @@ void RegisterCanvas(Dispatcher& d)
                        s.config.canvasAnchorHz, s.config.canvasAnchorsPerRead);
     s.canvas.SetStateFile(s.session.runtimeDir / "canvas-view.json");
     canvas::RegisterMethods(d, s.canvas);
+    snapshot::Register(d,s.luaSnapshot,SnapshotLife);
+    s.bridge->SetBackgroundTick([]{
+        auto& state=Get();state.canvas.FlushView();const auto life=SnapshotLife();const auto now=recording::Now();
+        state.luaSnapshot.Tick(life,now,[life,now]{return snapshot::Inputs{RecordingSnapshot(now,life.world),IncidentsSnapshot(life.world,now),SupervisorSnapshot(life.world)};});
+    });
     s.bridge->SetDisconnectObserver([](uint64_t id) { Get().canvas.Disconnect(id); });
     s.bridge->AddStopObserver([] {
         auto& state = Get();
@@ -68,8 +78,13 @@ nlohmann::json CanvasLua(const std::string& module, const std::string& action, c
     auto& s = Get();
     if (module.empty() || module.size() > 24 || module.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-") != std::string::npos)
         return {{"ok", false}, {"error", {{"code", "bad_batch"}, {"path", "$.module"}}}};
+    if(action=="snapshot")return {{"ok",true},{"result",s.luaSnapshot.Read(SnapshotLife(),recording::Now())}};
     if (!s.bridge || s.bridge->GetDispatcher().IsKilled()) return {{"ok", false}, {"error", {{"code", "killed"}}}};
     try {
+        if(action=="feed"||action=="clear"||action=="view"){
+            static ModuleDisplayBudgets budgets;
+            if(const auto retry=budgets.Admit(module,canvas::Clock::now()))throw canvas::Refusal({{"code","rate"},{"retry_after_ms",*retry}});
+        }
         if (action == "feed" && !s.canvas.Visible()) return {{"ok", true}, {"result", {{"accepted",false},{"dropped","hidden"}}}};
         if (payload.size() > 65536) throw canvas::Refusal({{"code", "canvas_cap"}, {"cap", "bytes"}, {"limit", 65536}, {"got", payload.size()}});
         auto value = canvas::ParseJson(payload); json result;

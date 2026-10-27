@@ -98,6 +98,9 @@ void SimInput::Tick()
     recording::Ops recorderOps;
     recorderOps.guard = [this] { if (!m_live() || m_dispatcher.IsKilled()) throw MethodError("game_loading", "Simulation gate closed."); };
     recorderOps.sample = [](const std::string& channel, const std::vector<std::string>&) {
+        if(channel=="v")return input::json{{"simulated",true},{"valid",true},{"entity","1"},{"position",{0,0,0}},{"yaw",0},{"vehicle",{{"mounted",false}}},{"vitals",{{"in_combat",false}}},{"game_time_s",43200},
+            {"identity",{{"record","Character.SimV"},{"affiliation",nullptr},{"crowd",false}}}};
+        if(channel=="actors")return input::json{{"simulated",true},{"valid",true},{"actors",input::json::array()}};
         return input::json{{"simulated", true}, {"valid", true}, {"channel", channel}, {"position", {0, 0, 0}}};
     };
     m_recording.Tick(recording::Now(), m_world(), m_connection(), m_hooks && m_live() && !m_dispatcher.IsKilled(), ++m_recordTick, recorderOps);

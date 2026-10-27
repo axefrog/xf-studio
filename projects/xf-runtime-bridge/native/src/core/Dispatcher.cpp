@@ -3,6 +3,8 @@
 #include "core/Log.hpp"
 
 #include <set>
+#include <cmath>
+#include <cctype>
 #include <algorithm>
 #include <utility>
 
@@ -37,6 +39,33 @@ bool ConstantTimeEquals(const std::string& aLeft, const std::string& aRight)
         diff |= static_cast<unsigned char>(aLeft[i] ^ aRight[i]);
     }
     return diff == 0;
+}
+
+// A bounded envelope scan skips params without constructing its JSON tree. Only small scalar routing
+// fields are decoded. Duplicate routing fields use the last value, matching the existing DOM parser.
+// This is not validation: malformed envelopes still go through the normal refusal path after admission.
+json RoutingFields(const std::string& raw)
+{
+    json fields=json::object(); int depth=0; bool quoted=false,escaped=false; size_t begin=0;
+    for(size_t n=0;n<raw.size();++n){const char c=raw[n];
+        if(quoted){if(escaped){escaped=false;continue;}if(c=='\\'){escaped=true;continue;}
+            if(c!='"')continue;quoted=false;
+            if(depth!=1)continue;
+            size_t colon=n+1;while(colon<raw.size()&&std::isspace(static_cast<unsigned char>(raw[colon])))++colon;
+            if(colon>=raw.size()||raw[colon]!=':')continue;
+            if(n-begin>128)continue;
+            const auto key=json::parse(raw.substr(begin,n-begin+1),nullptr,false);
+            if(!key.is_string())continue;const auto name=key.get<std::string>();
+            if(name!="method"&&name!="token"&&name!="id"&&name!="cid")continue;
+            size_t start=colon+1;while(start<raw.size()&&std::isspace(static_cast<unsigned char>(raw[start])))++start;
+            size_t end=start;bool str=start<raw.size()&&raw[start]=='"',esc=false;
+            if(str){++end;for(;end<raw.size();++end){if(esc){esc=false;continue;}if(raw[end]=='\\'){esc=true;continue;}if(raw[end]=='"'){++end;break;}}}
+            else while(end<raw.size()&&raw[end]!=','&&raw[end]!='}'&&!std::isspace(static_cast<unsigned char>(raw[end])))++end;
+            fields[name]=nullptr;
+            if(end-start<=(name=="id"?65536u:256u)){auto value=json::parse(raw.substr(start,end-start),nullptr,false);if(!value.is_discarded()&&value.is_primitive())fields[name]=std::move(value);}
+        }else if(c=='"'){quoted=true;begin=n;}else if(c=='{'||c=='[')++depth;else if(c=='}'||c==']')--depth;
+    }
+    return fields;
 }
 
 // Only scalar ids are echoed; anything else (arrays, objects) is answered with id null.
@@ -714,6 +743,25 @@ bool Dispatcher::TakeRateToken(bool aReadOnly)
     return true;
 }
 
+bool DisplayRequestBudget::Take(std::chrono::steady_clock::time_point now)
+{
+    const auto previous=m_last.value_or(now);
+    m_tokens=std::min(24.0,m_tokens+std::max(0.0,std::chrono::duration<double>(now-previous).count())*16.0);
+    m_last=std::max(previous,now);if(m_tokens<1)return false;m_tokens-=1;return true;
+}
+int DisplayRequestBudget::RetryAfterMs() const { return static_cast<int>(std::ceil(std::max(0.0,1.0-m_tokens)*1000.0/16.0)); }
+
+std::optional<int> ModuleDisplayBudgets::Admit(const std::string& module,std::chrono::steady_clock::time_point now)
+{
+    std::scoped_lock lock(m_mutex);
+    for(auto it=m_budgets.begin();it!=m_budgets.end();)if(now-it->second.first>=std::chrono::seconds(2))it=m_budgets.erase(it);else ++it;
+    auto found=m_budgets.find(module);if(found==m_budgets.end()){
+        if(m_budgets.size()>=64)return 1000;
+        found=m_budgets.emplace(module,std::make_pair(now,DisplayRequestBudget{})).first;
+    }
+    found->second.first=now;if(!found->second.second.Take(now))return std::max(1,found->second.second.RetryAfterMs());return {};
+}
+
 ReaderRequestBudget::ReaderRequestBudget(uint32_t rate)
     : m_rate(std::clamp<uint32_t>(rate, 1, kMaxRate)), m_tokens(m_rate * 2.0)
 {
@@ -754,13 +802,36 @@ DispatchResult Dispatcher::HandleGuarded(const std::string& line, uint32_t pid, 
     return Handle(line, pid);
 }
 
-DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute, ReaderRequestBudget* aReaderBudget, uint64_t aConnection) noexcept
+DispatchResult Dispatcher::Handle(const std::string& aLine, uint32_t aClientPid, bool aControlRoute, ReaderRequestBudget* aReaderBudget, uint64_t aConnection, DisplayRequestBudget* aDisplayBudget) noexcept
 {
     ReaderScope readerScope(aReaderBudget, [this] { return TakeRateToken(true); });
     struct ConnectionScope { uint64_t previous = tConnection; ~ConnectionScope() { tConnection = previous; } } connectionScope;
     tConnection = aConnection;
     try
     {
+        // Authenticate and identify the class from the small envelope before parsing a batch DOM.
+        const auto fields=RoutingFields(aLine);
+        const auto method=fields.value("method",json());
+        const auto spec=method.is_string()?m_methods.find(method.get<std::string>()):m_methods.end();
+        if(spec!=m_methods.end()&&spec->second.access==Access::Display){
+            auto* budget=aReaderBudget?&aReaderBudget->display:aDisplayBudget;
+            bool admitted; int retry;
+            if(budget){admitted=budget->Take(m_pacingClock());retry=budget->RetryAfterMs();}
+            else {std::scoped_lock lock(m_mutex);admitted=m_directDisplay.Take(m_pacingClock());retry=m_directDisplay.RetryAfterMs();}
+            if(!admitted){
+                // No endpoint penalty: a refused display attempt must leave this reader's reads usable.
+                // Still authenticate without revealing methods or drawing state to an untrusted client.
+                const bool authenticated=fields.contains("token")&&fields["token"].is_string()&&ConstantTimeEquals(fields["token"].get<std::string>(),m_session.token);
+                const auto id=fields.value("id",json()); const auto cid=fields.value("cid",json());
+                const auto replyCid=cid.is_string()&&IsValidCid(cid.get<std::string>())?cid.get<std::string>():NextCid();
+                auto response=ErrorResponse(IsEchoableId(id)?id:json(nullptr),replyCid,authenticated?"rate":"unauthorized",authenticated?"Canvas display attempt budget exhausted":"missing or wrong session token");
+                if(authenticated)response["error"]["retry_after_ms"]=std::max(1,retry);
+                m_requests.fetch_add(1);
+                const auto logAt=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+                if(TakeReaderLogToken(m_nextReaderRefusalLogMs,logAt))log::Warn(authenticated?"canvas.rate":"bridge.unauthorized","scope=display_attempts",replyCid);
+                return {SerializeJson(response),!authenticated,!authenticated&&aReaderBudget?50u:0u,!authenticated&&aReaderBudget!=nullptr};
+            }
+        }
         return HandleUnchecked(aLine, aClientPid, aControlRoute);
     }
     catch (const std::exception& e)
@@ -848,7 +919,9 @@ DispatchResult Dispatcher::HandleUnchecked(const std::string& aLine, uint32_t aC
     const auto methodForPacing = request.value("method", json());
     const bool emergency = authenticated && methodForPacing.is_string() &&
         IsEmergencyMethod(methodForPacing.get<std::string>());
-    if (!emergency && !(tReadOnly ? TakeReaderRequestToken() : TakeRateToken(false)))
+    const auto pacingSpec = methodForPacing.is_string() ? m_methods.find(methodForPacing.get<std::string>()) : m_methods.end();
+    const bool display = authenticated && pacingSpec != m_methods.end() && pacingSpec->second.access == Access::Display;
+    if (!emergency && !display && !(tReadOnly ? TakeReaderRequestToken() : TakeRateToken(false)))
     {
         return refuse("bridge.rate_limited", id, cid, "rate_limited",
                       tReadOnly ? "observer request budget exhausted" :

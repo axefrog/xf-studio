@@ -32,6 +32,7 @@
 #include "core/Writes.hpp"
 #include "core/overlay/Host.hpp"
 #include "core/overlay/Canvas.hpp"
+#include "core/LuaSnapshot.hpp"
 
 namespace xfb::plugin
 {
@@ -96,6 +97,7 @@ struct State
     // (behave.*, ticked on the game thread from the Running update) and player.teleport's pacer (2 a second).
     EventLog events;
     canvas::Service canvas{&events};
+    snapshot::Cache luaSnapshot;
     killkey::Watch canvasToggleWatch, canvasModeWatch;
     std::atomic<bool> canvasKeysChanged{false}, canvasKilled{false};
     behave::Runner behaviours;

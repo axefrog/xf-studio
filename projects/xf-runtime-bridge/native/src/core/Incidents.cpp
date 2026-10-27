@@ -943,7 +943,7 @@ bool Service::Admit(const std::string& aEvidence, const std::string& aKey, doubl
 
 void Service::Close(Incident& aIncident, const std::string& aReason, std::vector<json>& aReports)
 {
-    aIncident.open = false;
+    aIncident.open = false; aIncident.closedWall = m_lastWall;
     aIncident.closeReason = aReason;
     ++m_stats.closed;
     // A declared incident is the engine's own: it is reported whatever its evidence score (a silent staging has none), and one V never
@@ -1575,7 +1575,7 @@ Outcome Service::Observe(const Observation& aObservation, double aWallS)
             return out;
         }
         Incident fresh;
-        fresh.number = m_next++;
+        fresh.number = m_next++; fresh.openedWall = aWallS;
         fresh.world = m_world;
         fresh.startSim = fresh.lastSim = aObservation.simS;
         fresh.startGame = fresh.lastGame = aObservation.gameS;
@@ -1689,7 +1689,7 @@ DeclareOutcome Service::Declare(const Declaration& aDeclaration, double aWallS)
         throw MethodError("incident_limit", "no room for another open incident");
     }
     Incident fresh;
-    fresh.number = m_next++;
+    fresh.number = m_next++; fresh.openedWall = aWallS;
     fresh.world = m_world;
     fresh.startSim = fresh.lastSim = m_haveSim ? m_lastSim : 0.0;
     fresh.startGame = fresh.lastGame = -1;
@@ -1999,6 +1999,19 @@ SightOutcome Service::Sight(const SightSample& aSample, double aWallS)
     return out;
 }
 
+json Service::SnapshotData(uint64_t world,double now) const
+{
+    std::unique_lock lock(m_mutex,std::try_to_lock);if(!lock.owns_lock())return nullptr;std::vector<const Incident*> items;
+    for(const auto& i:m_open)if(i.world==world)items.push_back(&i);
+    for(const auto& i:m_closed)if(i.world==world&&now-i.closedWall<=60)items.push_back(&i);
+    std::sort(items.begin(),items.end(),[this](auto a,auto b){if(a->open!=b->open)return a->open;if(Witnessed(*a)!=Witnessed(*b))return Witnessed(*a);return a->number>b->number;});
+    json out=json::array();
+    for(const auto* i:items){json ids=json::array();for(const auto& p:i->parts)ids.push_back(p.fact.id.empty()?p.fact.who:p.fact.id);
+      out.push_back({{"id",IdText(i->number)},{"kind",i->declared.on?i->declared.kind:KindName(Resolve(*i))},{"pos",i->posN>0?Pos(i->lastPos):json(nullptr)},
+       {"participants",ids},{"opened_s",i->openedWall},{"closed_s",i->open?json(nullptr):json(i->closedWall)},{"perceived",Witnessed(*i)}});
+    }
+    return out;
+}
 json Service::List(const ListQuery& aQuery) const
 {
     std::scoped_lock lock(m_mutex);
