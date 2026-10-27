@@ -2,6 +2,8 @@ import { hrec } from '../canon.ts';
 import { H, memberId, s } from '../id.ts';
 import { makeKabukiSlice, districtIdOf } from '../sim/slices.ts';
 import type { CellIndex } from '../sim/index-types.ts';
+import type { Per4 } from '../sim/data.ts';
+import { periodStart, periodSpans, spanOverlap, type PeriodRule } from './periods.ts';
 import { areaMm2 as area, cellAtMm as cellAt, centreMm as centre, clipMm as clip, footprintMm2 as footprint,
   overlapsXYMm as overlapsXY, squaredDistanceMm as squaredDistance, GRID_MM, quantiseVolume, quantiseXYZ, metresXYZ, metresVolume } from './geometry.ts';
 import { COVERAGE_KINDS, OTHER_KINDS, PLACE_NAMES, SERVICE_KINDS, VENDOR_SERVICE_TYPES } from './poi-kinds.ts';
@@ -14,8 +16,8 @@ export const stableJson = (value: unknown): string => JSON.stringify(value, (_ke
   return v;
 }, 2) + '\n';
 const digest = (value: object): string => H(s('world-index'), hrec(value as Record<string, unknown>));
-const count = (table: Record<string, number>, key: string) => {
-  Object.defineProperty(table, key, { value: (Object.hasOwn(table, key) ? table[key] : 0) + 1, writable: true, enumerable: true, configurable: true });
+const count = (table: Record<string, number>, key: string, amount = 1) => {
+  Object.defineProperty(table, key, { value: (Object.hasOwn(table, key) ? table[key] : 0) + amount, writable: true, enumerable: true, configurable: true });
 };
 const affiliation = (r: W1Content['records'][string]): string | undefined => {
   const name = r.affiliationName?.replace(/^Factions\./, '');
@@ -24,17 +26,19 @@ const affiliation = (r: W1Content['records'][string]): string | undefined => {
 export interface ImportReport {
   schema: 'xf.s1-world-import-report@1'; indexHash: string; lineage: string;
   cells: Array<{ id: string; key: string; name: string; area: number; residents: number; spots: number; personLinks: number;
-    presenceFloor: boolean; presenceTop3: Array<[string, number]>; services: number; market: boolean; host?: string; components: number;
+    presenceFloor: boolean; presenceTop3: Array<[string, number]>; pop: Per4; services: number; market: boolean; host?: string; components: number;
     droppedServices: number; coverage: Record<string, number>; standInTemplate: string }>;
   templates: { block: { name: string; id: string; rule: string }; venue: { name: string; id: string; rule: string } };
   geometry: { districtAreaM2: number; retainedBlockAreaM2: number; areaDeltaM2: number };
   population: { census: number; roundedHeadcount: number; roundingDelta: number };
   affiliations: { census: Array<{ aff: string; q: number }>; personEntries: Record<string, number>; personSpotLinks: Record<string, number> };
+  periods: { reader: string | null; names: Array<{ name: string; count: number; start: number | null; rule: PeriodRule }>;
+    unknownNames: Record<string, number>; quantities: { stated: number; absent: number; explicitZero: number };
+    phases: Array<{ community: string; entry: string; phase: string; ordinal: number; mode: 'all-day' | 'single-period' | 'multi-period'; allDay: boolean }> };
   counts: Record<string, number>; unknownPoiKinds: Record<string, number>; assumptions: Array<{ source: 'stand-in' | 'derived'; field: string; rule: string }>;
 }
 
-/** Reject malformed/unbounded input before any join. Fields from a future W1
- * revision are deliberately not interpreted until its quantities/periods land. */
+/** Reject malformed/unbounded input before any join, including period metadata. */
 export function validateInputs(pack: W1Pack, content: W1Content): void {
   const fail = (why: string): never => { throw Error(`W1 import refused: ${why}`); };
   if (pack?.schema !== 'xfh/world-pack-1' || !Array.isArray(pack.areas) || pack.areas.length > 10000) fail('world pack schema/areas');
@@ -55,6 +59,8 @@ export function validateInputs(pack: W1Pack, content: W1Content): void {
   for (const c of content.communities) {
     if (!c || typeof c.id !== 'string' || ids.has(c.id) || !Array.isArray(c.entries)) fail('invalid/duplicate community');
     ids.add(c.id); nested += c.entries.length;
+    if (c.registry !== undefined && (!c.registry || typeof c.registry.id !== 'string' || !c.registry.id ||
+      typeof c.registry.sourceObjectId !== 'string' || !c.registry.sourceObjectId)) fail('invalid registry');
     const entries = new Set<string>();
     for (const e of c.entries) {
       if (!e || typeof e.name !== 'string' || entries.has(e.name) || e.record !== undefined && typeof e.record !== 'string' || !Array.isArray(e.phases)) fail('invalid/duplicate entry');
@@ -62,6 +68,21 @@ export function validateInputs(pack: W1Pack, content: W1Content): void {
       for (const p of e.phases) {
         if (!p || typeof p.name !== 'string' || !Array.isArray(p.spots) || p.spots.some((id) => typeof id !== 'string')) fail('invalid phase');
         links += p.spots.length;
+        if (p.periods !== undefined) {
+          if (!Array.isArray(p.periods)) fail('invalid periods');
+          nested += p.periods.length;
+          if (nested > 100000) fail('nested cap');
+          for (const period of p.periods) {
+            if (!period || typeof period.name !== 'string' || !Array.isArray(period.spots) || period.spots.some((id) => typeof id !== 'string') ||
+              period.quantity !== undefined && (!Number.isInteger(period.quantity) || period.quantity < 0 || period.quantity > 65535)) fail('invalid period');
+            links += period.spots.length;
+            if (links > 200000) fail('link cap');
+          }
+          if (p.periods.length) {
+            const union = new Set(p.periods.flatMap((period) => period.spots)), phaseSpots = new Set(p.spots);
+            if (union.size !== phaseSpots.size || [...union].some((spot) => !phaseSpots.has(spot))) fail('period spots differ from phase union');
+          }
+        }
         if (links > 200000) fail('link cap');
       }
       if (nested > 100000) fail('nested cap');
@@ -129,6 +150,11 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
     fallbackCommunityIds: 0, fallbackSpotIds: 0, fallbackPoiIds: 0, floorBlocks: 0,
   };
   const weights = Object.fromEntries(cellIds.map((id) => [id, {} as Record<string, number>]));
+  const popWeights = Object.fromEntries(cellIds.map((id) => [id, [0,0,0,0] as Per4]));
+  const personLinkCounts: Record<string, number> = {};
+  const periodNames: Record<string, number> = {};
+  const periods: ImportReport['periods'] = { reader: sourceContent.source?.reader ?? null, names: [], unknownNames: {},
+    quantities: { stated: 0, absent: 0, explicitZero: 0 }, phases: [] };
   const bindings = Object.fromEntries(cellIds.map((id) => [id, [] as ImportedWorldIndex['worldImport']['bindings'][string]]));
   const spotCells = new Map<string, string>(), memberships = new Map<string, Set<string>>();
   const spotCounts: Record<string, number> = {};
@@ -152,28 +178,62 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
       const phaseLinks = entry.phases.reduce((n, p) => n + p.spots.length, 0);
       counts.phaseSpotLinks += phaseLinks; counts.duplicatePhaseSpotLinks += phaseLinks - spots.length;
       if (!spots.length) counts.entriesWithNoSpots++;
+      // Preserve v0's distinct-link fallback for legacy phases without periods.
+      // Explicit period rows (including zero quantity) never enter that fallback.
+      const legacySpots = new Set<string>();
+      for (const [ordinal, phase] of entry.phases.entries()) {
+        const spans = periodSpans(phase.periods ?? []);
+        periods.phases.push({ community: c.id, entry: entry.name, phase: phase.name, ordinal,
+          mode: !spans.length || spans.every((p) => periodStart(p.period.name).rule === 'unknown') ? 'all-day' : spans.length === 1 ? 'single-period' : 'multi-period',
+          allDay: !spans.length || spans.every((p) => p.minutes === 1440) });
+        if (!spans.length) phase.spots.forEach((spot) => legacySpots.add(spot));
+        for (const span of spans) {
+          const p = span.period;
+          count(periodNames, p.name);
+          if (periodStart(p.name).rule === 'unknown') count(periods.unknownNames, p.name);
+          if (p.quantity === undefined) periods.quantities.absent++;
+          else { periods.quantities.stated++; if (p.quantity === 0) periods.quantities.explicitZero++; }
+          if (!person || !aff) continue;
+          const overlap = spanOverlap(span), weight = p.quantity ?? 1;
+          for (const spot of [...new Set(p.spots)].sort(cmp)) {
+            const cell = spotCells.get(spot);
+            if (!cell) continue;
+            for (let i = 0; i < 4; i++) popWeights[cell][i] += weight * overlap[i];
+            // Presence is one duration/quantity-weighted share over all spans.
+            count(weights[cell], aff, weight * span.minutes / 1440);
+          }
+        }
+      }
+      for (const spot of [...legacySpots].sort(cmp)) {
+        const cell = spotCells.get(spot);
+        if (!cell || !person || !aff) continue;
+        for (let i = 0; i < 4; i++) popWeights[cell][i]++;
+        count(weights[cell], aff);
+      }
       for (const spot of spots) {
         const membership = memberships.get(spot);
         if (!membership) { counts.missingSpotLinks++; continue; }
         membership.add(c.id);
         const cell = spotCells.get(spot);
         if (!cell) continue;
-        bindings[cell].push({ community: c.id, entry: entry.name, spot }); counts.bindingTuples++;
+        bindings[cell].push({ community: c.id, ...(c.registry ? { registry: { ...c.registry } } : {}), entry: entry.name, spot }); counts.bindingTuples++;
         if (!person) { counts.nonPersonSpotLinks++; continue; }
         if (!aff) { counts.unknownPersonSpotLinks++; continue; }
-        count(weights[cell], aff); count(personSpotLinks, aff);
+        count(personLinkCounts, cell); count(personSpotLinks, aff);
       }
     }
   }
+  periods.names = Object.keys(periodNames).sort(cmp).map((name) => ({ name, count: periodNames[name], ...periodStart(name) }));
   for (const set of memberships.values()) { if (!set.size) counts.spotsInNoCommunity++; else if (set.size > 1) counts.spotsInMultipleCommunities++; }
   const sum = (v: Record<string, number>) => Object.values(v).reduce((a, b) => a + b, 0);
-  const raw = Object.fromEntries(cellIds.map((id) => [id, sum(weights[id])]));
+  const raw = Object.fromEntries(cellIds.map((id) => [id, popWeights[id].reduce((n,w) => n+w,0) / 4]));
   const floor = (blocks.reduce((n, g) => n + raw[cellIds[shapes.indexOf(g)]], 0) / blocks.length || 1) * meanFloor;
   const censusShares = Object.fromEntries(district.entry.byAff.map((a) => [a.aff, a.q / district.entry.total]));
   for (const id of cellIds) {
-    if (raw[id] === 0 && geometry[id].grid) { raw[id] = floor; counts.floorBlocks++; }
+    if (!personLinkCounts[id] && geometry[id].grid) { raw[id] = floor; popWeights[id] = [floor,floor,floor,floor]; counts.floorBlocks++; }
   }
   const totalWeight = sum(raw);
+  if (!(totalWeight > 0)) throw Error('W1 import refused: no positive population weight to normalise');
   const coverage = Object.fromEntries(cellIds.map((id) => [id, {} as Record<string, number>]));
   const candidates = Object.fromEntries(cellIds.map((id) => [id, [] as Array<{ id: string; type: string; distance: bigint }> ]));
   const unknownPoiKinds: Record<string, number> = {};
@@ -205,8 +265,7 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
       c.headShare = g === blocks[blocks.length - 1] ? 1 - allocatedHeadShare : g.area / retainedBlockArea;
       allocatedHeadShare += c.headShare;
     }
-    const pop = totalWeight ? district.entry.total * raw[id] / totalWeight : 0;
-    c.pop = [pop, pop, pop, pop];
+    c.pop = popWeights[id].map((weight) => totalWeight ? district.entry.total * weight / totalWeight : 0) as Per4;
     const n = sum(weights[id]);
     c.presence = n ? Object.fromEntries(Object.keys(weights[id]).sort(cmp).map((aff) => [aff, weights[id][aff] / n])) : { ...censusShares };
     c.adj1 = []; c.adj2 = [];
@@ -238,7 +297,7 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
     counts.servicesKept += c.services.length; counts.servicesDroppedCap += droppedServices;
     cells[id] = c;
     rows.push({ id, key: g.key, name: g.name, area: g.area / 1_000_000, residents: Math.round(district.rho * district.entry.total * c.headShare),
-      spots: spotCounts[id] ?? 0, personLinks: n, presenceFloor: !n && !!g.grid,
+      spots: spotCounts[id] ?? 0, personLinks: personLinkCounts[id] ?? 0, presenceFloor: !personLinkCounts[id] && !!g.grid, pop: [...c.pop],
       presenceTop3: Object.entries(c.presence).sort(([a, x], [b, y]) => y - x || cmp(a, b)).slice(0, 3),
       services: c.services.length, market: c.marketCell, ...(c.host ? {host:geometry[c.host].key}:{}), components:g.volumes.length,
       droppedServices, coverage: coverage[id], standInTemplate: template.id });
@@ -262,7 +321,7 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
   const report: ImportReport = {
     schema: 'xf.s1-world-import-report@1', indexHash: index.hash,
     lineage: 'Different input content or geometry creates a new lineage. Origin-anchored grid keys are stable; ordinal member ids can shift when earlier cells are inserted.',
-    cells: rows, templates,
+    cells: rows, templates, periods,
     geometry: { districtAreaM2: districtArea / 1_000_000, retainedBlockAreaM2: retainedBlockArea / 1_000_000,
       areaDeltaM2: (retainedBlockArea - districtArea) / 1_000_000 },
     population: { census: district.entry.total, roundedHeadcount, roundingDelta: roundedHeadcount - district.entry.total },
@@ -271,13 +330,14 @@ export function importW1(sourcePack: W1Pack, sourceContent: W1Content): { index:
       { source: 'derived', field: 'geometry', rule: 'Input coordinates quantised once by Math.round(metres * 1000); integer-mm geometry, exact 200000 mm grid, rounded integer-mm clip intersections and reused on-line endpoints. Disconnected simple components stay separate. Areas/orientations use BigInt; venue overlap requires exact intersection area >=1 mm2. Centres round once to mm; squared-distance comparisons use BigInt and id ties. Only the final index/report projection converts back to metres/m2. Venues first by place id, then (gx, gy); all venue volumes/Z bands retained. Venue precedence, then cell order on closed boundaries. Venue area is the XY footprint union; stacked volumes count once.' },
       { source: 'derived', field: 'neighbours', rule: 'Grid edge neighbours, diagonal second neighbours; venues intersect actual clipped block polygons in XY. Geometry only; traversability unknown. Venue host is the nearest genuinely overlapping block centre by fixed-order squared distance, then cell id.' },
       { source: 'derived', field: 'headShare', rule: 'Clipped block area / sum of retained block areas; final block absorbs floating-point share residue so shares sum to exactly 1 in cell order. Report retained-minus-district area separately from per-cell headcount rounding; no subtraction of venue footprints. Venues have zero residents. S1 rounds headcounts per cell and draws households unchanged; realised household membership can differ.' },
-      { source: 'derived', field: 'presence/pop', rule: 'One vote per distinct person-entry/spot link across phases, retaining cross-community tuples. Affiliation from records, civilian/Unaffiliated merged, NCPD normalized. Exclude vehicle/other/unresolved affiliation. Flat periods (06:00, 12:00, 18:00, 00:00): schedule unknown. Pop distributes the census scale over all cells by votes; empty blocks get 1% of mean block votes (mean 1 if all empty). Empty cells use census affiliation shares. No simultaneous occupancy claim.' },
+      { source: 'derived', field: 'presence/pop', rule: 'Each person-entry period/spot link contributes quantity times span overlap / six hours to S1 windows starting 06:00, 12:00, 18:00, 00:00. Absent quantity means an unexported class default, treated as one unit, not a verified game default; explicit zero contributes nothing. Normalise once so the district mean over four periods equals the stand-in census total. Presence has no per-period slot: one quantity/duration-weighted affiliation share over all spans. Exclude vehicle/other/unresolved affiliations; civilian/Unaffiliated merged, NCPD normalized. Alternative phases are summed as potential content, not asserted active. Legacy phases lacking periods use distinct all-day entry/spot links. Blocks without eligible person links get an all-day floor of 1% of mean block weight (mean 1 if all empty); explicit-zero links do not trigger a floor. Empty-weight presence uses census affiliation shares. No simultaneous occupancy claim.' },
+      { source: 'derived', field: 'period starts/spans', rule: 'periods.json is an assumption pending an in-game check: Morning 06:00, Day/Noon 12:00, Evening 18:00, Night 22:00, Midnight 00:00; valid _HH_MM labels use that clock time; H:MM AM/PM labels use a 12-hour clock (12:xx AM = 00:xx, 12:xx PM = 12:xx); all other labels run all day. Within each phase, known starts run to the next distinct start, wrapping midnight; duplicate starts share the span; a single start runs all day. Unknowns do not split known spans. Phase modes: absent/empty or all-unknown periods are all-day; otherwise single-period or multi-period by row count. allDay separately records whether every span is 24 hours.' },
       { source: 'derived', field: 'services', rule: 'One plain-kind table; nearest 15 by fixed-order squared 3D distance to footprint-weighted cell centre, ties by POI id. Market only when a retained POI service has a declared retail vendor type. Unknown kinds counted, never guessed. Evidence pins never become services.' },
-      { source: 'derived', field: 'binding', rule: 'All linked entry types retained; exact (community id, entry name, spot id), deduplicated only across phases of the same entry. Registry ids and ordinals unavailable; no runtime binding. Fallback ids counted by colon format.' },
+      { source: 'derived', field: 'binding', rule: 'All linked entry types retained; exact (community placement id, entry name, spot id), deduplicated only across phases of the same entry. Copy registry id and sourceObjectId alongside the placement id when supplied; absent legacy registry metadata is omitted, never invented. Ordinals unavailable; no runtime binding. Fallback ids counted by colon format.' },
       { source: 'derived', field: 'coverage evidence', rule: 'Static counts by original POI kind only, separate from S1 fractional coverage. Calibration remains open.' },
       { source: 'stand-in', field: 'census/recipe', rule: '2964, rho, age, role, income, affiliation, household, tenure and wealth marginals, trust and price anchor unchanged. W1 entry counts compare authored types, not quantities.' },
       { source: 'stand-in', field: 'opportunity/security', rule: 'One named template per kind: block g4, venue v5 (see templates selection rules). Public, A, F and pairs are identical within each kind. Coverage reductions are zero until calibrated; markets come only from POI vendor services. Re-sum district staticTotalA; stub and rest totals unchanged. No claim of measured police/security, propensity, pair hostility or opportunity. S1Data defaults unchanged.' },
-      { source: 'derived', field: 'future W1', rule: 'Quantities and period names await a versioned W1 revision. No census flag or schedule interpretation until that contract exists; records/spawners do not supply a census.' },
+      { source: 'derived', field: 'W1 limits', rule: 'Period names/quantities and registry ids are optional for legacy input. W1 w1.7.1 supports them; no census flag, activation/conditions, entry cap or runtime binding is inferred. Records/spawners do not supply a census.' },
     ],
   };
   return { index, report };

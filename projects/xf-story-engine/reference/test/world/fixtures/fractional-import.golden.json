@@ -3004,7 +3004,12 @@
       },
       {
         "field": "presence/pop",
-        "rule": "One vote per distinct person-entry/spot link across phases, retaining cross-community tuples. Affiliation from records, civilian/Unaffiliated merged, NCPD normalized. Exclude vehicle/other/unresolved affiliation. Flat periods (06:00, 12:00, 18:00, 00:00): schedule unknown. Pop distributes the census scale over all cells by votes; empty blocks get 1% of mean block votes (mean 1 if all empty). Empty cells use census affiliation shares. No simultaneous occupancy claim.",
+        "rule": "Each person-entry period/spot link contributes quantity times span overlap / six hours to S1 windows starting 06:00, 12:00, 18:00, 00:00. Absent quantity means an unexported class default, treated as one unit, not a verified game default; explicit zero contributes nothing. Normalise once so the district mean over four periods equals the stand-in census total. Presence has no per-period slot: one quantity/duration-weighted affiliation share over all spans. Exclude vehicle/other/unresolved affiliations; civilian/Unaffiliated merged, NCPD normalized. Alternative phases are summed as potential content, not asserted active. Legacy phases lacking periods use distinct all-day entry/spot links. Blocks without eligible person links get an all-day floor of 1% of mean block weight (mean 1 if all empty); explicit-zero links do not trigger a floor. Empty-weight presence uses census affiliation shares. No simultaneous occupancy claim.",
+        "source": "derived"
+      },
+      {
+        "field": "period starts/spans",
+        "rule": "periods.json is an assumption pending an in-game check: Morning 06:00, Day/Noon 12:00, Evening 18:00, Night 22:00, Midnight 00:00; valid _HH_MM labels use that clock time; H:MM AM/PM labels use a 12-hour clock (12:xx AM = 00:xx, 12:xx PM = 12:xx); all other labels run all day. Within each phase, known starts run to the next distinct start, wrapping midnight; duplicate starts share the span; a single start runs all day. Unknowns do not split known spans. Phase modes: absent/empty or all-unknown periods are all-day; otherwise single-period or multi-period by row count. allDay separately records whether every span is 24 hours.",
         "source": "derived"
       },
       {
@@ -3014,7 +3019,7 @@
       },
       {
         "field": "binding",
-        "rule": "All linked entry types retained; exact (community id, entry name, spot id), deduplicated only across phases of the same entry. Registry ids and ordinals unavailable; no runtime binding. Fallback ids counted by colon format.",
+        "rule": "All linked entry types retained; exact (community placement id, entry name, spot id), deduplicated only across phases of the same entry. Copy registry id and sourceObjectId alongside the placement id when supplied; absent legacy registry metadata is omitted, never invented. Ordinals unavailable; no runtime binding. Fallback ids counted by colon format.",
         "source": "derived"
       },
       {
@@ -3033,8 +3038,8 @@
         "source": "stand-in"
       },
       {
-        "field": "future W1",
-        "rule": "Quantities and period names await a versioned W1 revision. No census flag or schedule interpretation until that contract exists; records/spawners do not supply a census.",
+        "field": "W1 limits",
+        "rule": "Period names/quantities and registry ids are optional for legacy input. W1 w1.7.1 supports them; no census flag, activation/conditions, entry cap or runtime binding is inferred. Records/spawners do not supply a census.",
         "source": "derived"
       }
     ],
@@ -3050,6 +3055,12 @@
         "market": false,
         "name": "Test Hall",
         "personLinks": 0,
+        "pop": [
+          0,
+          0,
+          0,
+          0
+        ],
         "presenceFloor": false,
         "presenceTop3": [
           [
@@ -3080,6 +3091,12 @@
         "market": false,
         "name": "Kabuki, block 2",
         "personLinks": 0,
+        "pop": [
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741
+        ],
         "presenceFloor": true,
         "presenceTop3": [
           [
@@ -3110,6 +3127,12 @@
         "market": false,
         "name": "Kabuki, block 3",
         "personLinks": 0,
+        "pop": [
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741
+        ],
         "presenceFloor": true,
         "presenceTop3": [
           [
@@ -3140,6 +3163,12 @@
         "market": false,
         "name": "Kabuki, block 4",
         "personLinks": 0,
+        "pop": [
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741
+        ],
         "presenceFloor": true,
         "presenceTop3": [
           [
@@ -3170,6 +3199,12 @@
         "market": false,
         "name": "Kabuki, block 5",
         "personLinks": 0,
+        "pop": [
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741
+        ],
         "presenceFloor": true,
         "presenceTop3": [
           [
@@ -3200,6 +3235,12 @@
         "market": true,
         "name": "Kabuki, block 6",
         "personLinks": 1,
+        "pop": [
+          2937.8854625550666,
+          2937.8854625550666,
+          2937.8854625550666,
+          2937.8854625550666
+        ],
         "presenceFloor": false,
         "presenceTop3": [
           [
@@ -3222,6 +3263,12 @@
         "market": false,
         "name": "Kabuki, block 7",
         "personLinks": 0,
+        "pop": [
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741
+        ],
         "presenceFloor": true,
         "presenceTop3": [
           [
@@ -3252,6 +3299,12 @@
         "market": false,
         "name": "Kabuki, block 8",
         "personLinks": 0,
+        "pop": [
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741
+        ],
         "presenceFloor": true,
         "presenceTop3": [
           [
@@ -3282,6 +3335,12 @@
         "market": false,
         "name": "Kabuki, block 9",
         "personLinks": 0,
+        "pop": [
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741
+        ],
         "presenceFloor": true,
         "presenceTop3": [
           [
@@ -3312,6 +3371,12 @@
         "market": false,
         "name": "Kabuki, block 10",
         "personLinks": 0,
+        "pop": [
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741,
+          3.264317180616741
+        ],
         "presenceFloor": true,
         "presenceTop3": [
           [
@@ -3376,6 +3441,26 @@
     },
     "indexHash": "c5b8e9dbf9e94043e92ea5977f554ab6",
     "lineage": "Different input content or geometry creates a new lineage. Origin-anchored grid keys are stable; ordinal member ids can shift when earlier cells are inserted.",
+    "periods": {
+      "names": [],
+      "phases": [
+        {
+          "allDay": true,
+          "community": "fractional-community",
+          "entry": "resident",
+          "mode": "all-day",
+          "ordinal": 0,
+          "phase": "unknown"
+        }
+      ],
+      "quantities": {
+        "absent": 0,
+        "explicitZero": 0,
+        "stated": 0
+      },
+      "reader": null,
+      "unknownNames": {}
+    },
     "population": {
       "census": 2964,
       "roundedHeadcount": 2963,

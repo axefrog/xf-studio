@@ -489,7 +489,14 @@ the absent cell nor the schematic box is a measured navigable game surface.
 Evidence: [mapping tests](../projects/xf-story-engine/reference/test/shadow/shadow.test.ts)
 and [shadow host notes](../projects/xf-story-engine/reference/SHADOW.md).
 
-## S1 world import v0
+## S1 world import v0.1
+
+**S1 v0.1 checkpoint [offline, 28 October 2026].** Period-weighted population
+and registry metadata now use W1 w1.7.1; the integer-mm-derived geometry and
+residential shares compare exactly with v0 on the same input. The private
+imported day passes the read-only internals oracle and independent Holotable
+validator. Period starts/spans remain derived assumptions pending a game check;
+see [population knowledge](population-and-affiliations.md#s1-world-import-v01).
 
 **S1 import checkpoint [offline, 28 October 2026].** The optional Story Engine
 [world importer](../projects/xf-story-engine/reference/WORLD-IMPORT.md) clips an

@@ -1,0 +1,10 @@
+{
+  "named": { "Morning": 360, "Day": 720, "Noon": 720, "Evening": 1080, "Night": 1320, "Midnight": 0 },
+  "clockPattern": "^_([0-9]{2})_([0-9]{2})$",
+  "clock12Hour": {
+    "pattern": "^([0-9]{1,2}):([0-9]{2}) (AM|PM)$",
+    "hourCycle": 12,
+    "offsetMinutes": { "AM": 0, "PM": 720 }
+  },
+  "s1Starts": [360, 720, 1080, 0]
+}

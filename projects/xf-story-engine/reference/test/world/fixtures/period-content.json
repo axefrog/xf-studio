@@ -1,0 +1,21 @@
+{
+  "schema": "xfh/world-content-1",
+  "source": { "reader": "w1.7.1" },
+  "slice": { "id": "kabuki", "places": ["Districts.Kabuki", "Districts.JudysApartment"] },
+  "records": { "1": { "kind": "person", "affiliationName": "Factions.Civilian" }, "2": { "kind": "person", "affiliationName": "Factions.TygerClaws" } },
+  "communities": [
+    { "id": "c1", "registry": { "id": "9007199254740993", "sourceObjectId": "18446744073709551615" }, "entries": [
+      { "name": "civilian", "record": "1", "phases": [{ "name": "default", "spots": ["shared"], "periods": [
+        { "name": "Morning", "quantity": 2, "spots": ["shared"] },
+        { "name": "Day", "quantity": 0, "spots": ["shared"] },
+        { "name": "Evening", "spots": ["shared"] },
+        { "name": "Midnight", "quantity": 4, "spots": ["shared"] }
+      ] }] }
+    ] },
+    { "id": "sector:2", "registry": { "id": "registry:2", "sourceObjectId": "2222222222222222222" }, "entries": [
+      { "name": "gang", "record": "2", "phases": [{ "name": "default", "spots": ["shared"], "periods": [{ "name": "4:00 AM", "quantity": 3, "spots": ["shared"] }] }] }
+    ] }
+  ],
+  "spots": [{ "id": "shared", "at": [50,50,0], "communities": ["c1", "sector:2"] }],
+  "pois": [], "spawners": []
+}

@@ -2,3 +2,5 @@ import.golden.json -text
 import.golden.sha256 text eol=lf
 fractional-import.golden.json -text
 fractional-import.golden.sha256 text eol=lf
+period-import.golden.json -text
+period-import.golden.sha256 text eol=lf

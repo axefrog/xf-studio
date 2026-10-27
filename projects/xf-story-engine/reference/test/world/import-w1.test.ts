@@ -114,7 +114,7 @@ test('deterministic bytes, hashes, ordering, input immutability and JSON round t
 });
 
 test('the file tool writes byte-identical index and report on repeated imports', () => {
-  const dir = resolve(import.meta.dir,'../../../../../.scratch-w1',`cli-${randomUUID()}`);
+  const dir = resolve(import.meta.dir,'../../../../../.scratch-w1b',`cli-${randomUUID()}`);
   mkdirSync(dir,{recursive:true});
   const args = [resolve(import.meta.dir,'fixtures/world-pack.json'),resolve(import.meta.dir,'fixtures/content.json'),join(dir,'index.json')];
   try {

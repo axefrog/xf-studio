@@ -370,7 +370,7 @@ For a booked session on the [runtime bridge](../projects/xf-runtime-bridge/READM
 10. **Hostile pairs without a record.** What an attitude lookup returns when no `Attitude` links two groups.
 11. **The bridge reads** wanted by the population mirror: current district record, affiliation, entity template path and `savable` per NPC (row 16). Built in bridge 0.8.8 and checked in session 15: the district (`world.district`) and the affiliation with the type, rarity, archetype, attitude group and crowd flags (`scene.read` with `npc_detail`) [runtime]. Still open: the entity template path (a resource reference has no path or hash in script) and `savable`.
 
-## S1 world import v0
+## S1 world import v0.1
 
 **S1 import checkpoint [offline, 28 October 2026].** The optional
 [world importer](../projects/xf-story-engine/reference/WORLD-IMPORT.md) uses
@@ -387,10 +387,29 @@ separately from headcount rounding. The 20 m² narrow-triangle regression retain
 20.05 m² after clipping yet allocates 2,964 residents in both windings [offline].
 On real Kabuki, unchanged per-cell rounding
 yields 2,963 headcount units, with household membership still drawn from the
-existing recipe. Population periods are flat because the exported schedules
-remain unknown. Empty-link cells explicitly fall back to census affiliations;
-vehicles never supply affiliation votes. Evidence: synthetic import tests and
-the private real import report; no runtime count or new demographic claim.
+existing recipe. W1 w1.7.1 supplies 2,852 raw periods: 432 stated quantities (99 explicit
+zeros), 2,420 absent. The v0.1 importer integrates quantity-weighted person/spot
+links over four six-hour windows, normalising the district mean to 2,964.
+Absent quantity is an unexported class default, treated as one unit as a declared
+derived assumption, never a verified game default. Named starts (including
+`Noon` at 12:00), `_HH_MM` and `H:MM AM` / `H:MM PM` labels follow the
+importer’s data table, with 12:xx AM mapped to 00:xx and 12:xx PM to 12:xx.
+All 2,852 Kabuki periods now map: zero unknowns. Unrecognised names still run
+all day and are counted. Starts/spans await an in-game check. Alternative phases sum as potential
+content, not active occupancy. S1 has no per-period presence slot: its one
+affiliation share per cell integrates quantity and duration over all spans.
+Empty-weight cells fall back to census affiliations; vehicles never supply
+affiliation votes. Blocks without eligible links retain the all-day floor;
+explicit-zero links do not trigger it. Legacy input lacking periods retains
+v0’s distinct all-day links. Evidence: synthetic mapping/span/weight/normalisation
+tests, the private real import and one read-only S1 day with an independently
+validated Holotable spool [offline]. The venue-link audit finds Judy’s Apartment
+has 45 spots but no entry/person links; venue population correctly stays zero
+because only empty blocks receive the floor. Lizzie’s 490 person-entry/spot
+links previously all ran all day (286 unknown clock-label links and 204
+single-period `Day` links). Clock mapping leaves 459 all-day and 31 twelve-hour
+links, yielding a small morning/day versus evening/night difference [offline,
+private venue audit and importer report]. No runtime count or new demographic claim.
 
 ## Related pages
 

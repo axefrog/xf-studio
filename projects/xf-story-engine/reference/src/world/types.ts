@@ -9,10 +9,13 @@ export interface W1Record {
   kind: 'person' | 'vehicle' | 'other'; affiliationName?: string; affiliation?: string;
   role?: string; crowd?: boolean;
 }
+export interface W1Registry { id: string; sourceObjectId: string }
+export interface W1Period { name: string; quantity?: number; spots: string[] }
 export interface W1Content {
   schema: 'xfh/world-content-1'; slice: { id: string; places: string[] };
+  source?: { reader?: string };
   records: Record<string, W1Record>;
-  communities: Array<{ id: string; entries: Array<{ name: string; record?: string; phases: Array<{ name: string; spots: string[] }> }> }>;
+  communities: Array<{ id: string; registry?: W1Registry; entries: Array<{ name: string; record?: string; phases: Array<{ name: string; spots: string[]; periods?: W1Period[] }> }> }>;
   spots: Array<{ id: string; at: XYZ; communities: string[] }>;
   pois: Array<{ id: string; at: XYZ; kind: string }>;
   spawners: unknown[];
@@ -26,7 +29,7 @@ export interface CellGeometry {
   area: number;
   centre: XYZ;
 }
-export interface Binding { community: string; entry: string; spot: string }
+export interface Binding { community: string; registry?: W1Registry; entry: string; spot: string }
 export interface ImportedWorldIndex extends WorldIndex {
   worldImport: {
     schema: 'xf.s1-world-import@1'; gridMetres: 200; coordinateQuantisationMm: 1;

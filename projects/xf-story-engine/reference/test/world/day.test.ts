@@ -15,7 +15,7 @@ import { validateManifest, validateRecord } from '../../src/holotable/schema.ts'
 import { readable } from '../holotable/readability-oracle.ts';
 
 setDefaultTimeout(300_000);
-const scratch = resolve(import.meta.dir, '../../../../../.scratch-w1');
+const scratch = resolve(import.meta.dir, '../../../../../.scratch-w1b');
 
 /** Full mutable engine image, independent of save writer/digest abstractions. */
 function image(sim: Sim): Buffer {

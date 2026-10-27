@@ -83,11 +83,13 @@ events, silent restatement, nominal kind compatibility), the cores of S1 v0.6 an
 
 The model's runtime dependency is `@noble/hashes` (BLAKE3). The source audits use the pinned TypeScript dev dependency's compiler AST API.
 
-The optional [S1 world import v0](reference/WORLD-IMPORT.md) builds an additional
+The optional [S1 world import v0.1](reference/WORLD-IMPORT.md) builds an additional
 Kabuki index from the private world pack and Holotable W1 content: 25 clipped
 200 m blocks and three real venues. The observer publishes real polygon volumes
 for that index. Residential census/recipe priors remain declared stand-ins;
-entry/spot presence, services, binding tuples and coverage evidence use W1.
+period/quantity-weighted population and integrated presence, services, binding
+tuples with registry identities and coverage evidence use W1 w1.7.1. Missing
+quantity is treated as one unit; period starts/spans remain derived assumptions.
 The existing fixture and shadow-host defaults remain unchanged. This is offline
 validation, with no runtime body binding or game session claimed.
 
