@@ -17,7 +17,7 @@ test('first facets are plain captions, and every known cell fallback references 
   const expectedName = name?.s === 'resolved' && typeof name.value === 'string' ? name.value : 'not recorded';
   const event = k.events.mintEvent({ creator: actor, cause: actor, name: 'caption-event', kind: 'theft', time: 0, place: cell, outcome: 'done' });
   k.frames.open({ actor, origin: actor, cause: event, level: 'goal', status: 'active', weight: 1, focus: { nodes: [cell], tier: 3 } });
-  const graph = { retired: false, junctures: { next: { state: 'ready', readySince: 0 } } } as unknown as GraphState;
+  const graph = { retired: false, junctures: { first: { state: 'matched' }, second: { state: 'matched' }, next: { state: 'ready', readySince: 0 } } } as unknown as GraphState;
   const pool = [{ id: 'caption-story', pattern: 'caption-pattern', version: 1, bindings: { '?actor': actor, '?place': cell }, stages: [], complete: false, graph }] as unknown as PoolEntry[];
   const l3 = { state: { pool, evidence: [], buffer: [] }, threadView: [], log: [{ kind: 'sow', rule: 'gate-7', seq: 1, at: { game: 0 }, data: { entry: 'caption-story' }, chain: [] }], sifter: { patterns: new Map([['caption-pattern', { graph: { family: 'tension', junctures: { next: { fn: 'repay', args: { debtor: '?actor' } } } } }]]) } } as unknown as Layer3;
   const ed = { bands: {}, regimes: [{ scope: cell, kind: 'crackdown' }], refuge: { [cell]: 'yes' } } as unknown as EventsDigest;

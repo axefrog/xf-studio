@@ -243,10 +243,21 @@ refuses a mismatched record before promotion **[offline]**
 ([real-week notes](../projects/xf-story-engine/reference/HOLOTABLE.md#real-week),
 [regression](../projects/xf-story-engine/reference/test/holotable/m3-week.test.ts)).
 The complete `E-m3c-w2-restless-engage` week also matches its archived record,
-excluding only that wall-clock field, and its 12 Holotable spools pass the producer,
+excluding only that wall-clock field, and its 13 Holotable spools pass the producer,
 consumer and internals checks with zero refusals **[offline, 28 October 2026]**.
 Its observed timeline is game seconds 0–604,800; this is a simulated week, not a
 runtime recording or proof of game integration.
+
+Holotable's story projection distinguishes development from matching opportunity
+**[offline]**: two matched steps, an actual nonambient presentation receipt for an
+associated seed, or an outcome keeps an individual story on the map. Entry-only
+possibilities aggregate by their entry place. A sow log alone is not presentation.
+The fixture-week regression conserves every nonretired instance across the developed
+points and possible counts, without changing engine state
+([projection regressions](../projects/xf-story-engine/reference/test/holotable/possible-stories.test.ts)).
+The regenerated full week ends with 19 developed story points and 183 possible
+stories in eight place buckets; all 4,291 spool records pass the producer, consumer
+and internals checks **[offline, 28 October 2026]**.
 
 The M3 iteration-3 harness uses ordinary S2 offer/response routes and one declared event per accepted act. Its acceptance regression confirms that accepting emits that event and declining cannot emit it. Optional event roles also search for a cast unless their scope is empty. The M3 adapter leaves that scope empty and supplies only a fixed evidence identity from the matcher, so an unrelated event cannot become its cause. An optional, uncast cause must be omitted from the event declaration: naming an uncast role prevents the entire event from being emitted. These are **[offline] reference-model observations**, not proof of game integration ([adapter tests](../projects/xf-story-engine/reference/test/m3/adapters3.test.ts), [atomic adapters](../projects/xf-story-engine/reference/src/m3/atoms3.ts)).
 

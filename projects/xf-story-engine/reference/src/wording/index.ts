@@ -95,7 +95,7 @@ export function step(juncture: Juncture, mood: Mood, instance: Pick<PoolEntry, '
     if (referred) {
       const noun = (data.nouns as Record<string, Record<string, string>>)[shortPattern(instance.pattern)]?.[value];
       const past = step(referred, 'past', instance, pattern, resolve, depth + 1);
-      return [key, noun ?? (past ? `what happened when ${past[0].toLowerCase()}${past.slice(1)}` : undefined)];
+      return [key, noun ?? (past ? `what happened when ${/^(The|You|A|An) /.test(past) ? past[0].toLowerCase() + past.slice(1) : past}` : undefined)];
     }
     if (key === 'pattern') return [key, value === 'any' ? 'earlier' : (data.patterns as Record<string, { title: string }>)[shortPattern(value)]?.title.split(':')[0].toLowerCase()];
     if (value === 'any') return [key, key === 'outcome' ? 'it came to an end' : 'help'];

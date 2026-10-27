@@ -178,6 +178,7 @@ test('edge, frame and belief story fillers traverse their recorded cause events'
     const sim = quietSim(`review-filler-${kind}`, undefined, []), k = sim.k;
     const cause = k.events.mintEvent({ creator: sim.w.v, cause: sim.w.v, name: 'outage', kind: 'outage', time: 0 });
     const entry = { id: 'story', pattern: 'xf.composite:debt', bindings: { '?d': sim.w.v, '?c': k.mirrored('jun', 'xf:person') }, stages: [], complete: false, graph: { junctures: { owed: { state: 'matched', filler: { ref: { [kind]: 'synthetic' }, id: `${kind}:synthetic`, fn: 'obligate', at: 0, args: {}, causes: [cause] } } }, retired: false } } as unknown as PoolEntry;
+    entry.graph!.outcome = { name: 'paid', kind: 'resolved', at: 0, story: 'ending' };
     const l3 = { state: { pool: [entry], evidence: [], buffer: [] }, log: [], threadView: [], sifter: { patterns: new Map([['xf.composite:debt', { graph: wording.patternInfo('xf.composite:debt') }]]) } } as unknown as Layer3;
     expect(new HolotableObserver(sim, undefined, l3).sample().layers.get('stories')!.find((i) => i.id === 'story')?.detail).toContain('Day 1, 00:00: The power went out.');
   }

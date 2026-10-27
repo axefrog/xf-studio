@@ -170,7 +170,7 @@ test('a compatibility-mode overflow remains single-line and passes the current c
 test('story stepping ignores timestamps, pending bookkeeping and scores, and stops on a match', () => scratch((dir) => {
   const sim = quietSim('readability-stops', undefined, []), [a, b] = sim.people.residentsOfBlock(sim.w.districts[0].cellIds[0]);
   const entry = { id: 'story', pattern: 'xf.composite:debt', bindings: { '?d': a, '?c': b }, stages: [], complete: false,
-    graph: { junctures: { paid: { state: 'ready', readySince: 0 } }, retired: false } } as unknown as PoolEntry;
+    graph: { junctures: { owed: { state: 'matched' }, due: { state: 'matched' }, paid: { state: 'ready', readySince: 0 } }, retired: false } } as unknown as PoolEntry;
   const l3 = { state: { pool: [entry], evidence: [], buffer: [] }, log: [], threadView: [], sifter: { patterns: new Map([['xf.composite:debt', { graph: text.patternInfo('xf.composite:debt') }]]) } } as unknown as Layer3;
   const observer = new HolotableObserver(sim, undefined, l3), publisher = new RunPublisher(dir, { set: 'stops', title: 'Stops', from: observer.epoch, to: observer.epoch + 100 });
   publisher.publish(observer.sample());

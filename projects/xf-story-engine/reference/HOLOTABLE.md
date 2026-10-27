@@ -88,20 +88,24 @@ Verified on 28 October 2026 with Bun 1.4.4 and the private world pack: the defau
 run's regenerated record matches the archive (canonical SHA-256
 `503de19353e822e388de7c71168242d900370b8a9fc252c7dc437ae5a35eb828`).
 It published 1,009 observations over game seconds **0–604,800**: Day 1, 00:00 to
-Day 8, 00:00, with stories on all seven days. All 12 manifests and 5,647 records
+Day 8, 00:00, with stories on all seven days. All 13 manifests and 4,291 records
 passed producer checks, the independent internals scan and Holotable's validator,
-with zero refusals, truncations or unknown glyphs. There were no intention items.
+with zero refusals, truncations or unknown glyphs. At the end, 19 developed story
+points remain and 183 possible stories occupy eight place buckets. There were no
+intention items.
 
-Elapsed time was **19 min 24.4 s**: **18 min 17.4 s** in harness phases and
-**67.1 s** publishing overhead (**6.1 %** of harness time). The publishing profile
-attributes 50.4 s to the observer and 16.6 s to writing; copying, setup, identity
-verification and finalisation together took under 0.1 s. This subtraction measures
+Elapsed time was **19 min 33.4 s**: **18 min 37.7 s** in harness phases and
+**55.7 s** publishing overhead (**5.0 %** of harness time). The publishing profile
+attributes 43.3 s to the observer and 12.3 s to writing; copying, setup, identity
+verification and finalisation together took under 0.2 s. This subtraction measures
 direct publishing work in one execution, not a separately scheduled bare week.
 The archived bare run reports 18 min 32 s; machine load prevents treating that
 older wall time as a controlled overhead benchmark. Peak memory was **1.3 GB**
-under the 4 GB guard. Both fast publish/log regressions passed in **2.35 s**;
-the targeted Holotable set passed **19**, skipped **1** existing opt-in test and
-failed **0**. The full suite is left to the coordinator.
+under the 4 GB guard. The targeted Holotable/shadow set passed **100**, skipped
+**1** existing opt-in test and failed **0**, in **54.50 s**. The possible-story
+regressions include conservation throughout the full fixture week, and the audit
+regression checks manifest and record byte limits before trimming or parsing.
+The full suite is left to the coordinator.
 
 ### Default hooks and compatibility option
 
@@ -137,7 +141,8 @@ checked against Holotable's current validator, imported read only.
 | ties | Plain relation captions and weak/moderate/strong inspector strength; numeric strength retained for line weight |
 | events | One historical point per recorded event; a past-tense sentence, what happened, named participants, and a timed cause chain |
 | beliefs | Believes or is wrong about, with a sentence describing the belief; unknown claims are absent |
-| stories | The agreed title; now, so far, could go, kind, and a multi-story thread's first title; library summary and latest matched step's cause chain in detail |
+| stories | Developed stories only: at least two matched steps, a nonambient presentation receipt for an associated seed, or an outcome. Their role links appear with them. The agreed title; now, so far, could go, kind, thread, and cause chain |
+| possible-stories | One point per entry place for the remaining live stories; count, top three title prefixes with counts and others, then the explanation. Detail lists up to twenty complete titles newest first |
 | director | One historical target per decision or hold, with its sentence, story, checks for decisions where informative (omitted for holds), and relative low/medium/high score |
 | intentions | Watching, warned or hunting toward V; stage, warned, and the recorded act blamed on you |
 | placement | Scene set and the story title; phase in words and the authored logical kit's purpose. No physical staging is claimed |
@@ -150,6 +155,19 @@ not opened a name, a stable display-only assignment from its name pool is used.
 The observer keeps that first display name for the run so historical event labels,
 current people and cause chains agree. This assignment is not an engine draw and
 does not assert a value for the unresolved name slot.
+
+**Possible stories** uses the tension-family `story` glyph and its own Kinds/About
+facet titles. A sow decision alone does not count as presentation: an associated
+seed needs a presented or confirmed receipt. When a story develops, its individual
+point and role links appear, and its possible bucket decreases or retracts if empty.
+Buckets revise only when their count or kinds line changes; title/detail-only changes
+do not add stepping stops. Reappearance after an empty bucket starts a new stop.
+The [possible-story regressions](test/holotable/possible-stories.test.ts) check that
+developed plus possible conserves the live pool throughout the fixture week.
+
+The [spool audit regression](test/holotable/check-spool.test.ts) checks raw UTF-8
+line lengths, including manifests and LF bytes, before trimming or JSON parsing.
+Oversized trailing whitespace cannot evade the line bound.
 
 Crowds are estimates from the population recipe: whole household count times
 mean household size, rounded to a person, minus individually opened residents in

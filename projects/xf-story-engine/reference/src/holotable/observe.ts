@@ -21,7 +21,7 @@ import { ROLES, profileR, profileF } from '../sim/profile.ts';
 
 export const LAYERS: Record<string, Kind[]> = {
   places: ['zone'], detail: ['zone'], people: ['actor', 'point'], groups: ['actor'], items: ['point'], ties: ['relation'],
-  events: ['point', 'relation'], beliefs: ['relation'], stories: ['point', 'relation'],
+  events: ['point', 'relation'], beliefs: ['relation'], stories: ['point', 'relation'], 'possible-stories': ['point'],
   director: ['target'], intentions: ['relation'], placement: ['target'],
 };
 export interface ObserveOptions {
@@ -383,9 +383,27 @@ export class HolotableObserver {
       const now = outcome || e.complete ? `Settled${ending ? `: ${ending}` : ''}` : next[0];
       return { matched, open, past, next, now, outcome };
     };
+    const presentedSeeds = new Set([
+      ...(l2?.global.receipts ?? []), ...(l2?.all().flatMap(i => i.st.receipts) ?? []),
+    ].filter(receipt => receipt.grade !== 'ambient').map(receipt => receipt.seed));
+    const possible = new Map<string, PoolEntry[]>();
     for (const e of l3?.state.pool ?? []) {
       if (e.graph?.retired) continue;
       const pattern = storyPattern(e), info = wording.patternInfo(e.pattern), view = storyView(e);
+      const presented = e.seed && presentedSeeds.has(e.seed) || e.graph?.seeds?.some(seed => presentedSeeds.has(seed.seed));
+      const matchedSteps = e.graph ? view.matched.length : e.stages.length;
+      const hasOutcome = e.graph ? !!view.outcome : e.complete;
+      if (matchedSteps < 2 && !presented && !hasOutcome) {
+        // Entry-only stories have only their entry's location. State entries fall
+        // back to a bound actor's recorded region, then the simulated district.
+        const entryFillers = (pattern?.entry ?? view.matched.map(([key]) => key)).flatMap(key => e.graph?.junctures[key]?.filler ?? []).sort((a, b) => a.at - b.at);
+        const entryEvents = entryFillers.flatMap(f => f.ref && 'event' in f.ref ? [f.id] : f.causes ?? []);
+        const place = [...entryEvents, ...e.stages.slice(0, 1).map(stage => stage.event)].map(id => events.get(id)?.place).find(Boolean)
+          ?? Object.values(e.bindings).map(id => ownerRegion(id)).find(Boolean)
+          ?? sim.w.districts.find(d => d.simulated)?.id;
+        if (place) possible.set(place, [...(possible.get(place) ?? []), e]);
+        continue;
+      }
       const family = pattern?.family ?? info?.family;
       const kinds: Record<string, string> = { tension: 'a tension', turn: 'a turn', closure: 'a closure', shape: 'a larger shape' };
       const thread = l3?.threadView.find((th) => th.patterns?.includes(e.id) || th.instances.includes(e.id));
@@ -407,6 +425,25 @@ export class HolotableObserver {
         const type = note?.split(/[:;,]/)[0];
         if (type && !/[?`]/.test(type)) relation('stories', `role-${e.id}-${encodeURIComponent(role)}`, `story-engine/stories/${e.id}`, endpoint(id), type, `se:inst:${e.id}`);
       }
+    }
+    for (const [place, entries] of possible) {
+      const counts = new Map<string, number>();
+      for (const e of entries) {
+        const prefix = storyTitle(e).split(':')[0];
+        counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+      }
+      const ranked = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+      const others = ranked.slice(3).reduce((sum, [, n]) => sum + n, 0);
+      const kinds = [...ranked.slice(0, 3).map(([title, n]) => `${title} ${n}`), ...(others ? [`others ${others}`] : [])].join(' · ');
+      const label = `${entries.length} possible stories here`;
+      const titles = [...entries].sort((a, b) => b.firstTime - a.firstTime || b.seq - a.seq || a.id.localeCompare(b.id)).slice(0, 20).map(storyTitle);
+      const detail = [label];
+      for (const title of titles) { if (detail.join('\n').length + title.length + 1 > 4000) break; detail.push(title); }
+      put('possible-stories', place, 'point', placeAnchor(place), `se:node:${place}`, {
+        glyph: storyGlyph('tension'), label, detail: detail.join('\n'), facets: {
+          kinds, about: 'Stories that have only just begun. They show on the map once they develop.',
+        },
+      });
     }
     const directorLog = this.options.directorLog ?? l3?.log ?? [];
     // A drained sink restarts seq each window. Keep its recorded clock and local
@@ -468,12 +505,14 @@ export class HolotableObserver {
       put('placement', inst.id, 'target', placeAnchor(place), `se:seed:${inst.id}`, { label: wording.phrase('placement', { story: title }), facets: { stage: wording.words(deliveries.at(-1)?.what ?? inst.st.state)!, staging: inst.st.document.purpose.sentence } });
     }
     const truncations = new Map<string, Map<string, number>>();
+    const possibleIds = new Set(layers.get('possible-stories')!.map(item => `${branch ?? ''}/possible-stories/${item.id}`));
+    for (const id of this.stops.keys()) if (id.startsWith(`${branch ?? ''}/possible-stories/`) && !possibleIds.has(id)) this.stops.delete(id);
     for (const [layer, items] of layers) for (const item of items) {
       // Layer stepping follows story beats, not changing internal scores,
       // readiness timestamps or the arrival of a better name for an old event.
-      if (layer === 'stories' && item.kind === 'point' || layer === 'events' || layer === 'director') {
+      if (layer === 'stories' && item.kind === 'point' || layer === 'possible-stories' || layer === 'events' || layer === 'director') {
         const e = layer === 'stories' ? l3?.state.pool.find((e) => e.id === item.id) : undefined;
-        const key = e ? JSON.stringify({ matches: Object.entries(e.graph?.junctures ?? {}).filter(([, j]) => ['matched', 'refined'].includes(j.state)).map(([k, j]) => [k, j.filler?.id]).sort(), outcome: e.graph?.outcome?.name, complete: e.complete, next: storyView(e).open.map(([key]) => key).sort() }) : item.id;
+        const key = layer === 'possible-stories' ? JSON.stringify([item.label, item.facets?.kinds]) : e ? JSON.stringify({ matches: Object.entries(e.graph?.junctures ?? {}).filter(([, j]) => ['matched', 'refined'].includes(j.state)).map(([k, j]) => [k, j.filler?.id]).sort(), outcome: e.graph?.outcome?.name, complete: e.complete, next: storyView(e).open.map(([key]) => key).sort() }) : item.id;
         const id = `${branch ?? ''}/${layer}/${item.id}`, prior = this.stops.get(id);
         if (prior?.key === key) {
           for (const field of Object.keys(item) as Array<keyof Item>) delete (item as Partial<Item>)[field];

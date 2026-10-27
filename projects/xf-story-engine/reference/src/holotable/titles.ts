@@ -5,6 +5,7 @@ const keys: Record<string, string[]> = {
   groups: ['leaders', 'intends', 'keeping to its rules', 'wants'], items: ['holder'],
   ties: ['strength'], events: ['what happened', 'who', 'placement'], beliefs: ['belief'],
   stories: ['now', 'so far', 'could go', 'kind', 'thread'], director: ['decision', 'story', 'checks', 'score'],
+  'possible-stories': ['kinds', 'about'],
   intentions: ['stage', 'warned', 'why'], placement: ['stage', 'staging'],
 };
 export function facetTitles(layer: string): Record<string, string> {

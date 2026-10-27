@@ -127,7 +127,7 @@ test('coarse residents, explicit entity bindings, frame/place/event/item belief 
   expect(observation.layers.get('events')!.every((i) => i.kind === 'point')).toBe(true);
 });
 
-test('12 manifests, schema/citations/bounds, shared standalone span, deduplication and retractions', () => {
+test('13 manifests, schema/citations/bounds, shared standalone span, deduplication and retractions', () => {
   const dir = tempDir(), sim = quietSim('holo-spool', undefined, []);
   const observer = new HolotableObserver(sim), publisher = new RunPublisher(dir, { set: 'fixture-week', title: 'Fixture week', from: observer.epoch, to: observer.epoch + 1200 });
   const first = observer.sample(); publisher.publish(first);
@@ -136,7 +136,7 @@ test('12 manifests, schema/citations/bounds, shared standalone span, deduplicati
   const next = structuredClone(first); next.t += 600;
   next.layers.set('people', []); publisher.publish(next);
   expect(publisher.counts().people.live).toBe(0);
-  expect(readdirSync(dir).length).toBe(12);
+  expect(readdirSync(dir).length).toBe(13);
   for (const file of readdirSync(dir)) {
     const [m, ...records] = readFileSync(join(dir, file), 'utf8').trim().split('\n').map((s) => JSON.parse(s));
     validateManifest(m);

@@ -53,7 +53,7 @@ export class RunPublisher {
     const binding = this.run.mode === 'recording' ? { clock: 'recording' as const, session: this.run.session, run: this.run.run }
       : { clock: 'game' as const, standalone: { set: this.run.set, title: this.run.title, from: this.run.from, to: this.run.to, clock: 'game' as const } };
     const { clock, ...identity } = binding;
-    return { schema: 'xfh/layer-1', producer: 'story-engine', layer, title: layer.replaceAll('-', ' ') + (layer === 'places' && this.run.schematic ? ' (schematic layout)' : ''),
+    return { schema: 'xfh/layer-1', producer: 'story-engine', layer, title: layer === 'possible-stories' ? 'Possible stories' : layer.replaceAll('-', ' ') + (layer === 'places' && this.run.schematic ? ' (schematic layout)' : ''),
       ...(this.options.holotableHooks !== false ? { producer_title: 'Story Engine', facet_titles: facetTitles(layer) } : {}),
       ...(this.run.schematic ? { description: 'Districts use real place ids; synthetic cells and their contents use a schematic layout, not measured street geometry.' } : {}), content: 'full', clock, kinds,
       ...identity };

@@ -12,9 +12,17 @@ export async function checkSpool(directory: string) {
   const consumer = await import(resolve(import.meta.dir, '../../../../xf-holotable/src/layers.ts'));
   const errors: string[] = [];
   let manifests = 0, records = 0, items = 0;
-  for (const file of readdirSync(directory).filter(f => f.endsWith('.jsonl'))) {
+  const files = readdirSync(directory).filter(f => f.endsWith('.jsonl'));
+  for (const file of files) {
     const bytes = readFileSync(join(directory, file)), ids = new Set<string>();
     if (bytes.length > BOUNDS.bytes) errors.push(`${file} exceeds 16 MiB`);
+    let oversized = false;
+    for (let start = 0, line = 1; start < bytes.length; line++) {
+      const newline = bytes.indexOf(10, start), end = newline < 0 ? bytes.length : newline + 1;
+      if (end - start > BOUNDS.line) { errors.push(`${file}:${line} line exceeds 1 MiB`); oversized = true; }
+      start = end;
+    }
+    if (oversized) continue; // Refuse raw bytes before whitespace removal or JSON parsing.
     const lines = bytes.toString('utf8').trimEnd().split('\n');
     const manifest = JSON.parse(lines[0]!); manifests++;
     try { validateManifest(manifest); } catch (e) { errors.push(`${file}:1 producer: ${e}`); }
@@ -24,7 +32,6 @@ export async function checkSpool(directory: string) {
       const location = `${file}:${i + 1}`;
       try { validateRecord(record, manifest); } catch (e) { errors.push(`${location} producer: ${e}`); }
       const refusal = consumer.validateRecord(record, manifest); if (refusal) errors.push(`${location} consumer: ${refusal}`);
-      if (Buffer.byteLength(lines[i]!) + 1 > BOUNDS.line) errors.push(`${location} line exceeds 1 MiB`);
       if (record.t < manifest.standalone.from || record.t > manifest.standalone.to || record.until !== undefined && record.until > manifest.standalone.to) errors.push(`${location} outside standalone span`);
       if (!('id' in record)) continue;
       items++;
@@ -36,7 +43,7 @@ export async function checkSpool(directory: string) {
     }
     if (ids.size > BOUNDS.items) errors.push(`${file} exceeds 5,000 distinct item ids`);
   }
-  if (!manifests) errors.push('No spools found');
+  if (!files.length) errors.push('No spools found');
   return { manifests, records, items, refusals: errors.length, errors };
 }
 if (import.meta.main) {
