@@ -221,10 +221,6 @@ code.hash { font-size: var(--fs-2xs); color: var(--text-muted); }
 .control-label { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-4); font-size: var(--fs-sm); color: var(--text-muted); }
 /* A control's label with its help tip beside it (the tip is outside the label, so pressing it never works the control). */
 .control-line { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-/* Holotable playback layout: the jump hugs its text and truncates as one inline text flow at narrow widths. */
-.holotable-playback { flex: 0 0 auto; flex-wrap: nowrap; }
-.holotable-playback .holotable-quiet { display: block; flex: 0 1 auto; margin-inline-start: auto; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .control-label-text { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .section-head { display: flex; align-items: center; gap: var(--sp-2); }
 .readout { font: var(--fs-xs) var(--font-mono); color: var(--text); font-variant-numeric: tabular-nums; }
@@ -1625,6 +1621,11 @@ dialog::backdrop { background: oklch(.1 .01 255 / .45); }
 .poses-panel { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
 .poses-panel .poses-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
 /* The tree's height is its size bar's (20 rows by default). */
+
+/* Holotable playback bar (features/holotable/view): the jump hugs its text and truncates as one inline text flow at narrow widths. */
+.holotable-playback { flex: 0 0 auto; flex-wrap: nowrap; }
+.holotable-playback .holotable-quiet { display: block; flex: 0 1 auto; margin-inline-start: auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Layout tabs (U1) and the default/substitution patterns (U3–U4). */
 .layout-tabs { display:flex; height:var(--tab-h); min-width:0; align-items:stretch; background:var(--bg-panel); border-bottom:1px solid var(--line); }
