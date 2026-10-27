@@ -25,7 +25,6 @@ import { CHARACTER_KIND } from "../../platform/api/characters";
 import { targetPresent, type OwnerTargetStatus } from "../../platform/api/target-status";
 import type { LookRef } from "../../library/collection-documents";
 import type { PanelBinding, TabId } from "./profile-session";
-import { frozenData } from "./frozen-data";
 
 export type { PanelContext } from "../../platform/api/subjects";
 /** A partial context: the chain a resolution reached. */
@@ -65,13 +64,13 @@ const subjectName = (ref: SubjectRef | undefined) => ref?.kind === CHARACTER_KIN
 export function chainOfView(world: BindingWorld, view: ViewId): Target | undefined {
   const record = world.views[view], scene = record && world.scenes[record.scene];
   if (!record || !scene) return undefined;
-  return frozenData({ view, ...chainOfScene(world, record.scene) });
+  return { view, ...chainOfScene(world, record.scene) };
 }
 function chainOfScene(world: BindingWorld, id: string): Target | undefined {
   const scene = world.scenes[id];
   if (!scene) return undefined;
-  return { scene: id, sceneGen: scene.gen, ...(scene.subject && targetPresent(world.subject(scene.subject)) ? { subject: scene.subject } : {}),
-    ...(scene.look && targetPresent(world.look(scene.look)) ? { look: scene.look } : {}) };
+  return { scene: id, sceneGen: scene.gen, ...(scene.subject && targetPresent(world.subject(scene.subject)) ? { subject: { ...scene.subject } } : {}),
+    ...(scene.look && targetPresent(world.look(scene.look)) ? { look: { ...scene.look } } : {}) };
 }
 
 /** Whether a view can serve a panel of this context in this tab (§3.3 eligibility). */
@@ -117,8 +116,11 @@ export function bindingRules(world: BindingWorld, context: PanelContext, binding
   const { subject: assignedSubject, look: assignedLook, ...anchor } = target;
   const editable = { ...anchor, ...(assignedSubject && targetPresent(world.subject(assignedSubject)) ? { subject: assignedSubject } : {}),
     ...(assignedLook && targetPresent(world.look(assignedLook)) ? { look: assignedLook } : {}) };
-  for (const rule of rules) if (rule.applies(context)) result.push({ id: rule.id, capability: rule.check(editable) });
-  return frozenData(result);
+  for (const rule of rules) if (rule.applies(context)) {
+    const capability = rule.check(editable);
+    result.push({ id: rule.id, capability: { ...capability, ...(capability.issue ? { issue: { ...capability.issue } } : {}) } });
+  }
+  return result;
 }
 
 /** References as assigned, including removed documents omitted by the editable chain. */
@@ -129,8 +131,8 @@ export function bindingTarget(world: BindingWorld, binding: PanelBinding, resolv
   const record = scene ? world.scenes[scene] : undefined;
   const subject = resolved.subject ?? record?.subject ?? (pin && "subject" in pin ? pin.subject : undefined);
   const look = resolved.look ?? record?.look ?? (pin && "look" in pin ? pin.look : undefined);
-  return frozenData({ ...(view ? { view } : {}), ...(scene ? { scene } : {}), ...(record ? { sceneGen: record.gen } : {}),
-    ...(subject ? { subject } : {}), ...(look ? { look } : {}) });
+  return { ...(view ? { view } : {}), ...(scene ? { scene } : {}), ...(record ? { sceneGen: record.gen } : {}),
+    ...(subject ? { subject: { ...subject } } : {}), ...(look ? { look: { ...look } } : {}) };
 }
 const emptyTarget = (world: BindingWorld, context: PanelContext, target: Target): Resolution | undefined => {
   const scene = target.scene ? world.scenes[target.scene] : undefined;
@@ -151,9 +153,6 @@ const emptyTarget = (world: BindingWorld, context: PanelContext, target: Target)
  */
 export function resolveBinding(world: BindingWorld, request: { readonly tab: TabId; readonly binding?: PanelBinding; readonly context: PanelContext;
   readonly rules?: readonly ConstraintRule[] }): Resolution {
-  return frozenData(resolve(world, request));
-}
-function resolve(world: BindingWorld, request: Parameters<typeof resolveBinding>[1]): Resolution {
   const { tab, context } = request, rules = request.rules ?? [];
   if (context.kind === "profile") return { state: "resolved", target: {}, candidates: 0, named: false };
   const binding = request.binding ?? { policy: "follow-focus" as const };
@@ -173,9 +172,9 @@ function resolve(world: BindingWorld, request: Parameters<typeof resolveBinding>
   if ("view" in pin) { target = chainOfView(world, pin.view); missing = "view"; reason = "The 3D view this panel was pinned to was closed."; }
   else if ("scene" in pin) { target = chainOfScene(world, pin.scene); missing = "scene"; reason = "The scene this panel was pinned to is gone."; }
   else if ("subject" in pin) {
-    target = targetPresent(world.subject(pin.subject)) ? { subject: pin.subject } : undefined;
+    target = targetPresent(world.subject(pin.subject)) ? { subject: { ...pin.subject } } : undefined;
     missing = "subject"; reason = `The ${subjectName(pin.subject)} this panel was pinned to was deleted.`;
-  } else { target = targetPresent(world.look(pin.look)) ? { look: pin.look } : undefined; missing = "look"; reason = "The look this panel was pinned to was removed."; }
+  } else { target = targetPresent(world.look(pin.look)) ? { look: { ...pin.look } } : undefined; missing = "look"; reason = "The look this panel was pinned to was removed."; }
   if (!target) return { state: "dangling", missing, reason };
   const scene = target.scene && world.scenes[target.scene];
   if (scene && (context.scenes && !context.scenes.includes(scene.kind) || context.kind === "subject" &&

@@ -8,7 +8,7 @@ import { refusal, type Capability } from "../../platform/api/capability";
 import type { ViewId } from "../../platform/api/view-graph";
 import type { SubjectRef } from "../../platform/api/subjects";
 import { CHARACTER_KIND } from "../../platform/api/characters";
-import type { BoundTargetStatus } from "../../platform/api/target-status";
+import type { BoundTargetStatus, OwnerTargetStatus } from "../../platform/api/target-status";
 import type { FocusService } from "../../platform/core/focus";
 import { lookScope } from "../../platform/core/history-service";
 import { characterScope } from "../../character/character-history";
@@ -56,11 +56,20 @@ export type TargetResolverDeps = {
 /** Every panel of the session's tab resolves from the whole chain of the view it follows. */
 const WHOLE_CHAIN: PanelContext = { kind: "view" };
 
+/** Live reads project their small typed records; only captures pay for a deep, frozen owned graph. */
+function statusData(status: OwnerTargetStatus): OwnerTargetStatus {
+  const restore = status.restore;
+  return { ...status, owner: { ...status.owner }, ...(restore ? { restore: { ...restore,
+    ...(restore.issue ? { issue: { ...restore.issue } } : {}) } } : {}) };
+}
+
 export class TargetResolver {
   focusedInstance() { return this.deps.focus.focusedPanel(); }
   context(instance: string): PanelContext {
     const panel = this.deps.session.panel(instance);
-    return frozenData(panel ? this.deps.context(panel.type) : WHOLE_CHAIN);
+    const context = panel ? this.deps.context(panel.type) : WHOLE_CHAIN;
+    return { ...context, ...("subjects" in context ? { subjects: [...context.subjects] } : {}),
+      ...("scenes" in context && context.scenes ? { scenes: [...context.scenes] } : {}) };
   }
   available(instance: string): boolean {
     const panel = this.deps.session.panel(instance);
@@ -68,7 +77,7 @@ export class TargetResolver {
   }
   /** Choices obey the same declared kinds and constraints as resolution, again at dispatch. */
   accepts(instance: string, target: Target): Capability {
-    const context = this.context(instance), scene = target.scene ? this.world().scenes[target.scene] : undefined;
+    const context = this.context(instance), scene = target.scene ? this.readWorld().scenes[target.scene] : undefined;
     if (context.kind === "subject" && target.subject && !context.subjects.includes(target.subject.kind)
       || scene && "scenes" in context && context.scenes && !context.scenes.includes(scene.kind))
       return refusal("incompatible_mode", "This panel can't use that kind of target.");
@@ -83,6 +92,13 @@ export class TargetResolver {
 
   /** The session as resolution reads it, now. */
   world(): BindingWorld {
+    const world = this.readWorld();
+    return { ...world, scenes: Object.fromEntries(Object.entries(world.scenes).map(([id, scene]) => [id, { kind: scene.kind, gen: scene.gen,
+      ...(scene.subject ? { subject: { ...scene.subject } } : {}), ...(scene.look ? { look: { ...scene.look } } : {}) }])),
+    subject: ref => statusData(world.subject(ref)), look: ref => statusData(world.look(ref)) };
+  }
+  /** Call-scoped owner reads. Project references when they leave this resolver; captures take their own deep copy. */
+  private readWorld(): BindingWorld {
     const { session, focus, status } = this.deps, tab = session.tab();
     const views: Record<ViewId, { tab: TabId; scene: string }> = {}, scenes: BindingWorld["scenes"] = {};
     for (const view of session.views()) {
@@ -90,15 +106,14 @@ export class TargetResolver {
       const scene = session.scene(view.scene);
       if (scene) (scenes as Record<string, unknown>)[view.scene] = scene;
     }
-    return Object.freeze({ ...frozenData({ views, scenes, focus: focus.viewOrder() }),
-      subject: (ref: SubjectRef) => frozenData(status.subject(ref)), look: (ref: LookRef) => frozenData(status.look(ref)) });
+    return { views, scenes, focus: focus.viewOrder(), subject: ref => status.subject(ref), look: ref => status.look(ref) };
   }
   /**
    * What `instance` resolves to through its binding, among the views of its own tab; without one (a key binding or palette command outside
    * any panel), the whole chain of the most recently focused view in the shown tab.
    */
   resolve(instance?: string): Resolution {
-    return this.resolveIn(this.world(), instance);
+    return this.resolveIn(this.readWorld(), instance);
   }
   private resolveIn(world: BindingWorld, instance?: string): Resolution {
     const panel = instance === undefined ? undefined : this.deps.session.panel(instance);
@@ -110,7 +125,7 @@ export class TargetResolver {
   /** U5 seam: complete detached status facts, including references the editable chain cannot resolve. */
   describe(instance: string): { readonly instance: string; readonly resolution: Resolution; readonly target: Target;
     readonly statuses: Readonly<Record<"view" | "scene" | "subject" | "look", BoundTargetStatus>>; readonly available: boolean } {
-    const panel = this.deps.session.panel(instance), world = this.world(), resolution = this.resolveIn(world, instance);
+    const panel = this.deps.session.panel(instance), world = this.readWorld(), resolution = this.resolveIn(world, instance);
     const pin = panel?.binding?.policy === "pinned" ? panel.binding.target : undefined;
     const partial = resolution.target ?? {};
     const view = partial.view ?? (pin && "view" in pin ? pin.view : undefined);
@@ -122,15 +137,15 @@ export class TargetResolver {
     const slot = (kind: "view" | "scene", id: string | undefined, present: boolean): BoundTargetStatus => ({ instance,
       owner: { kind, id: id ?? instance }, state: !available ? "unavailable" : id === undefined ? "empty" : present ? "present" : "purged" });
     const statuses = { view: slot("view", view, !!(view && world.views[view])), scene: slot("scene", scene, !!record),
-      subject: subject ? { ...world.subject(subject), instance } : { instance, state: "empty" as const, owner: { kind: "subject", id: scene ?? instance } },
-      look: look ? { ...world.look(look), instance } : { instance, state: "empty" as const, owner: { kind: "look", id: scene ?? instance } } };
+      subject: subject ? { ...statusData(world.subject(subject)), instance } : { instance, state: "empty" as const, owner: { kind: "subject", id: scene ?? instance } },
+      look: look ? { ...statusData(world.look(look)), instance } : { instance, state: "empty" as const, owner: { kind: "look", id: scene ?? instance } } };
     const context = this.context(instance);
     if (resolution.state === "empty" && !resolution.missing && context.kind !== "profile")
       statuses[context.kind] = { ...statuses[context.kind], state: "unavailable", reason: resolution.reason, restore: undefined };
     if (!available) for (const key of ["view", "scene", "subject", "look"] as const) statuses[key] = { ...statuses[key], state: "unavailable",
       reason: "This panel's contribution is unavailable. Enable its experiment to use it again.", restore: undefined };
-    return structuredClone({ instance, resolution, available, statuses, target: { ...(view ? { view } : {}), ...(scene ? { scene } : {}),
-      ...(record ? { sceneGen: record.gen } : {}), ...(subject ? { subject } : {}), ...(look ? { look } : {}) } });
+    return { instance, resolution, available, statuses, target: { ...(view ? { view } : {}), ...(scene ? { scene } : {}),
+      ...(record ? { sceneGen: record.gen } : {}), ...(subject ? { subject: { ...subject } } : {}), ...(look ? { look: { ...look } } : {}) } };
   }
   /** The editing context Undo acts on now (§3.7): the newest that can act, if any. */
   editing(): string | undefined { return this.deps.acting(this.deps.focus.recent()); }
@@ -156,16 +171,16 @@ export class TargetResolver {
       instance === undefined ? undefined : this.deps.session.panel(instance)?.tab, instance === undefined);
   }
   /** The drawn compatibility input names a view explicitly, even before its pane exists. */
-  namedView(view: ViewId | undefined): NamedTargets { return this.namedOf(this.viewTarget(view), view === undefined ? undefined : this.world().views[view]?.tab, false); }
+  namedView(view: ViewId | undefined): NamedTargets { return this.namedOf(this.viewTarget(view), view === undefined ? undefined : this.readWorld().views[view]?.tab, false); }
   private viewTarget(view: ViewId | undefined): Target {
-    const world = this.world(), found = view === undefined ? undefined : world.views[view], scene = found && world.scenes[found.scene];
+    const world = this.readWorld(), found = view === undefined ? undefined : world.views[view], scene = found && world.scenes[found.scene];
     return found && scene ? { view, scene: found.scene, sceneGen: scene.gen, ...(scene.subject ? { subject: scene.subject } : {}), ...(scene.look ? { look: scene.look } : {}) } : {};
   }
   private namedOf(target: Target, tab?: TabId, fallback = true): NamedTargets {
     const scope = this.editing(), collection = target.look?.collection ?? (fallback ? this.deps.collection?.() : undefined);
-    return frozenData({ ...(target.view !== undefined ? { view: target.view } : {}), ...(target.scene !== undefined ? { scene: target.scene, sceneGen: target.sceneGen } : {}),
-      ...(target.subject?.kind === CHARACTER_KIND ? { character: target.subject.id } : {}), ...(target.look ? { look: target.look } : {}),
-      ...(collection ? { collection } : {}), ...(scope ? { scope } : {}), tab: tab ?? this.deps.session.tab() });
+    return { ...(target.view !== undefined ? { view: target.view } : {}), ...(target.scene !== undefined ? { scene: target.scene, sceneGen: target.sceneGen } : {}),
+      ...(target.subject?.kind === CHARACTER_KIND ? { character: target.subject.id } : {}), ...(target.look ? { look: { ...target.look } } : {}),
+      ...(collection ? { collection } : {}), ...(scope ? { scope } : {}), tab: tab ?? this.deps.session.tab() };
   }
   /** `action` with the targets its descriptor declares and it leaves out named: from a capture when given, else from `instance`'s resolution. */
   complete<A extends object>(action: A, descriptor: Pick<ActionDescriptor, "payload"> | undefined, from: { instance?: string; capture?: Capture } = {}): A {
@@ -186,7 +201,7 @@ export class TargetResolver {
       const structural = this.structural(instance);
       return () => signal.aborted ? refusal("missing_target", "That chooser was closed.") : structural();
     }
-    const world = this.world(), panel = this.deps.session.panel(instance);
+    const world = this.readWorld(), panel = this.deps.session.panel(instance);
     const resolution = resolveBinding(world, { tab: panel?.tab ?? this.deps.session.tab(), binding, context: this.context(instance), rules: this.deps.rules });
     const target = bindingTarget(world, binding, resolution.target), structural = this.structural(instance), capture = this.captureTarget(resolution.target ?? {}, signal, instance);
     // Owner versions move on local/external edits, never acknowledgement/progress. Recovery facts matter even without a live chain.
@@ -197,7 +212,7 @@ export class TargetResolver {
       if (signal.aborted) return refusal("missing_target", "That chooser was closed.");
       const origin = structural(); if (!origin.available) return origin;
       const current = this.current(capture);
-      return !current.available ? current : states(this.world()) !== before
+      return !current.available ? current : states(this.readWorld()) !== before
         ? refusal("missing_target", "That target changed. Open the chooser again.") : { available: true };
     };
   }
@@ -217,7 +232,7 @@ export class TargetResolver {
   }
   private captureTarget(source: Target, signal: AbortSignal, instance?: string): Capture {
     const target = frozenData(source);
-    const id = ++this.next, tab = instance ? this.deps.session.panel(instance)?.tab : target.view ? this.world().views[target.view]?.tab : this.deps.session.tab(),
+    const id = ++this.next, tab = instance ? this.deps.session.panel(instance)?.tab : target.view ? this.readWorld().views[target.view]?.tab : this.deps.session.tab(),
       origin = JSON.stringify(this.deps.origin?.(instance, tab));
     let released = signal.aborted;
     if (!released) {
@@ -225,13 +240,13 @@ export class TargetResolver {
       signal.addEventListener("abort", () => { released = true; this.captures.delete(id); }, { once: true });
     }
     return Object.freeze({ id, ...(instance !== undefined ? { instance } : {}), data: Object.freeze({ target, revisions: frozenData(this.deps.revisions?.(target) ?? {}) }),
-      named: this.namedOf(target, instance === undefined ? target.view === undefined ? undefined : this.world().views[target.view]?.tab
-        : this.deps.session.panel(instance)?.tab, instance === undefined), released: () => released || origin !== JSON.stringify(this.deps.origin?.(instance, tab)) });
+      named: frozenData(this.namedOf(target, instance === undefined ? target.view === undefined ? undefined : this.readWorld().views[target.view]?.tab
+        : this.deps.session.panel(instance)?.tab, instance === undefined)), released: () => released || origin !== JSON.stringify(this.deps.origin?.(instance, tab)) });
   }
   /** Whether a capture still names what it named (refused with `missing_target`, saying what changed), and was not released. */
   current(capture: Capture): Capability {
     if (capture.released()) return refusal("missing_target", "That menu was closed.");
-    return captureCurrent(this.world(), capture.data, key => this.deps.revision?.(key));
+    return captureCurrent(this.readWorld(), capture.data, key => this.deps.revision?.(key));
   }
   /**
    * Whether what an action names is still what it was resolved to (§3.3): its view still shows its scene, at the `gen` it names. The
@@ -240,7 +255,7 @@ export class TargetResolver {
   check(named: Pick<NamedTargets, "view" | "scene" | "sceneGen">): Capability {
     const target: Target = { ...(named.view !== undefined ? { view: named.view } : {}), ...(named.scene !== undefined ? { scene: named.scene } : {}),
       ...(named.sceneGen !== undefined ? { sceneGen: named.sceneGen } : {}) };
-    return captureCurrent(this.world(), { target, revisions: {} }, () => undefined);
+    return captureCurrent(this.readWorld(), { target, revisions: {} }, () => undefined);
   }
   /** How many captures are held (released ones are gone). */
   held(): number { return this.captures.size; }

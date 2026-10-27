@@ -7,11 +7,13 @@ import { targetStatus } from "./fixtures/target-status";
  */
 import { describe, expect, test } from "bun:test";
 import { FocusService, focusDataOf, topView } from "../src/platform/core/focus";
-import { type BindingWorld, captureCurrent, type ConstraintRule, requirementsMet, resolveBinding } from "../src/app/profiles/bindings";
+import { type BindingWorld, bindingRules, captureCurrent, type ConstraintRule, requirementsMet, resolveBinding } from "../src/app/profiles/bindings";
 import { TargetResolver } from "../src/app/profiles/targets";
 import { nameTargets } from "../src/app/action-targets";
 import { createHistoryService, lookScope } from "../src/platform/core/history-service";
-import { refusal } from "../src/platform/api/capability";
+import { refusal, type Capability } from "../src/platform/api/capability";
+import type { OwnerTargetStatus } from "../src/platform/api/target-status";
+import type { PanelContext } from "../src/platform/api/subjects";
 import type { PanelBinding } from "../src/app/profiles/profile-session";
 import type { LookRef } from "../src/library/collection-documents";
 import { createStudioViewGraph } from "../src/preview/preview-view-graph";
@@ -223,11 +225,37 @@ describe("the input layer's resolver", () => {
       ...snapshots.map(ref => () => Object.assign(ref, look("k", "l1"))));
   });
 
-  test("binding resolution returns an owned immutable target rather than its caller's direct pin", () => {
+  test("a live binding resolution and its caller's direct pin own separate target data", () => {
     const pin: PanelBinding = { policy: "pinned", target: { look: look("k", "l1") } };
     const resolved = resolveBinding(world(), { tab: "t1", context: { kind: "look" }, binding: pin });
-    expectCaptureStable(() => resolved, () => Object.assign((pin.target as { look: LookRef }).look, look("k", "l2")),
-      () => Object.assign(resolved.target!.look!, look("k", "l3")));
+    expectCaptureStable(() => resolved, () => Object.assign((pin.target as { look: LookRef }).look, look("k", "l2")));
+    expectCaptureStable(() => pin, () => Object.assign(resolved.target!.look!, look("k", "l3")));
+  });
+
+  test("live status projections detach owner, recovery and validation detail without caching stale facts", () => {
+    const status: OwnerTargetStatus = { state: "present", revision: 1, owner: { kind: "look", id: "l2" },
+      restore: { available: false, issue: { code: "required", field: "name", message: "Original" } } };
+    const { targets } = resolver({ world: world({ look: () => status }), revisions: {} });
+    const snapshots = [targets.world().look(look("k", "l2")), targets.describe("presets--p").statuses.look];
+    expectCaptureStable(() => status, ...snapshots.flatMap(snapshot => [
+      () => Object.assign(snapshot.owner, { id: "other" }),
+      () => Object.assign(snapshot.restore!, { available: true }),
+      () => Object.assign(snapshot.restore!.issue!, { message: "Changed" }),
+    ]));
+    Object.assign(status, { revision: 2 });
+    expect(targets.describe("presets--p").statuses.look.revision).toBe(2);
+  });
+
+  test("live context arrays and contributed rule issues are fresh data rather than frozen provider state", () => {
+    const context: PanelContext = { kind: "subject", subjects: ["character"], scenes: ["character"] };
+    const source = world(), targets = new TargetResolver({ session: { tab: () => "t1", views: () => [], scene: () => undefined,
+      panel: () => ({ type: "character" }) }, focus: new FocusService(), acting: () => undefined, status: source, context: () => context });
+    const projected = targets.context("panel");
+    if (projected.kind !== "subject") throw Error("Expected the declared subject context.");
+    expectCaptureStable(() => context, () => (projected.subjects as string[]).push("other"), () => (projected.scenes as string[]).push("other"));
+    const capability: Capability = { available: false, code: "invalid_value", issue: { code: "format", message: "Original" } };
+    const rules = bindingRules(source, { kind: "look" }, { policy: "follow-focus" }, {}, [{ id: "custom", applies: () => true, check: () => capability }]);
+    expectCaptureStable(() => capability, () => Object.assign(rules.find(rule => rule.id === "custom")!.capability.issue!, { message: "Changed" }));
   });
 
   test("capture revisions own the provider's map rather than sharing its later writes", () => {

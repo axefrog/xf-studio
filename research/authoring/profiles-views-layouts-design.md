@@ -328,6 +328,8 @@ flowchart TB
 
   Each constructor owns a deep copy of its inputs, including nested references and revision maps. Returned capture data is deeply frozen or separately detached from private validation state. A caller cannot change the named target or make a stale capture valid by mutating its input or a returned reference. The same ownership rule applies to bound editing/file contexts and context-menu targets; [047's capture ownership audit](../../experiments/047-profile-bindings/README.md#capture-and-snapshot-ownership-follow-up) records the checked paths and regressions.
 
+  Deep ownership belongs at capture and transport boundaries, where data leaves its owner and outlives the call. Live projections on focus, repaint and validation paths build fresh typed records with detached nested references, or reuse immutable data cached per owner revision. They do not deep-copy and freeze the world and every eligible chain on every read. Call-scoped resolver inputs can borrow owner facts; returned projections and retained captures cannot expose those borrowed references. The target-read ratio regression compares the real three-view fixture and lightweight thirty-view naming with a test-only pre-sweep cost reference.
+
   At dispatch the owner validates that the view still references that scene, the scene's `gen` is unchanged, and the subject and look still exist. If any check fails, the dispatch is refused with `missing_target`, for example "This view now shows another V". A capture never edits a replacement. Aborting the signal releases the capture.
 
 ### 3.4 Empty and dangling states
