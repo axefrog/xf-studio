@@ -1,4 +1,4 @@
-/** Registered compatibility publication/facade over the existing makeup editor. Controls move in CORE-03 slice 6. */
+/** Registered application/facade contribution. Mutation and publication belong to the registered editor. */
 import type { FeatureApplication } from "../feature-application";
 import type { EyeMakeupAction } from "../../legacy/eye-makeup/eye-makeup-model";
 import type { EyeMakeupSpec } from "../../legacy/eye-makeup/authoring-eye-makeup";
@@ -8,7 +8,7 @@ import type { RecipeAction } from "../../engines/layered-makeup/recipe-actions";
 
 export const MAKEUP_APPLICATION: FeatureApplication = {
   bind(read, registry, recorded) {
-    if (!read().eyeMakeup || !("withHistoryLabel" in read().document))
+    if (!read().eyeMakeup)
       throw Error("The makeup application needs its registered editor projection.");
     const resolve = (input: { kind: string }) => {
       const action = input as EyeMakeupAction, shapes = read().starterShapes;
@@ -28,8 +28,7 @@ export const MAKEUP_APPLICATION: FeatureApplication = {
       capability(input) { const { action, refused } = resolve(input); return refused ?? specOf(action).capability(read().eyeMakeup!.state(), action); },
       dispatch(input) {
         const { action } = resolve(input), s = read(), spec = specOf(action);
-        if (!("withHistoryLabel" in s.document)) throw Error("The makeup application needs its registered editor projection.");
-        s.document.withHistoryLabel(spec.label(action), () => s.eyeMakeup!.apply(spec, action, recorded(action)));
+        s.eyeMakeup!.apply(spec, action, recorded(action));
         return undefined;
       },
     };

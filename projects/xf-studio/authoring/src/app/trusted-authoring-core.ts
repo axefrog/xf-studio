@@ -10,11 +10,12 @@ import { StudioApplication } from "./studio-application";
 import type { Recipe } from "../engines/layered-makeup/recipe";
 import type { LayeredMakeupRegion } from "../engines/layered-makeup/region";
 import type { WorkspaceState } from "./workspace/makeup-workspace";
-import { createMakeupEditing, makeupEditingState } from "./authoring/makeup-editing";
+import { createMakeupView } from "./authoring/makeup-view";
+import { makeupEditingState, lookWorkspace } from "./workspace/makeup-workspace";
 
 /** The existing action and part registrations; editing does not require a primary feature or region. */
 export type EditingComposition = { readonly registry: Registry<AnyOwner>; readonly documents: DocumentModel };
-/** The application still requires the concrete product until slices 5–6. */
+/** The released geometry/view composition still requires the concrete product until the adapter slices. */
 export type StudioComposition = EditingComposition & { readonly documents: DocumentModel & { readonly live: string };
   readonly region: LayeredMakeupRegion; readonly modules?: ModuleRegistration };
 
@@ -23,6 +24,7 @@ export type AuthoringEditing = ReturnType<typeof createAuthoringEditing>;
 export function createAuthoringEditing(state: DocumentState, ports: {
   signal: AbortSignal; history: HistoryService; scope?: string; activate?: boolean;
   look?: { readonly collection: string; readonly look: string };
+  memory?: Readonly<Record<string, unknown>>; key?(): string; newId?(): string;
 }, composition: EditingComposition) {
   const life = new AbortController();
   const abort = () => life.abort();
@@ -38,7 +40,17 @@ export function createAuthoringEditing(state: DocumentState, ports: {
       const factory = composition.documents.parts.feature(id)!.createEditor;
       if (!factory) continue;
       const alive = () => { if (life.signal.aborted) throw Error("This look's editing context has ended."); };
+      const primary = features.document(id)!, owner = composition.registry.owner(id);
       const editor = factory({ look, scope: document.scopeId, signal: life.signal,
+        editing: {
+          state() { alive(); return primary.state(); }, set(part, editor) { alive(); primary.set(part, editor); },
+          changed() { alive(); document.changed([id]); }, get history() { alive(); return document.history; },
+          action(kind) { const route = composition.registry.route(kind); if (!route.ok || route.owner.id !== id) throw Error(`${kind} is not an action of ${id}.`); return route.spec; },
+          gestures: owner?.owner === "feature" ? owner.gestures : undefined,
+          memory: ports.memory?.[id], key: ports.key ?? (() => look.look), newId: ports.newId ?? (() => crypto.randomUUID()),
+          onReplacing(listener) { alive(); const off = document.onReplacing(listener); life.signal.addEventListener("abort", off, { once: true }); },
+          observeReplay(replay) { alive(); primary.observeReplay(replay, life.signal); },
+        },
         snapshot() { alive(); const state = features.document(id)!.export(); return { part: state.part, editor: state.editor }; },
         subscribe(listener) {
           alive();
@@ -53,16 +65,16 @@ export function createAuthoringEditing(state: DocumentState, ports: {
   } catch (error) { life.abort(); throw error; }
 }
 
-/** Trusted application composition. Its concrete bundle is a view over the neutral owner until slices 5–6. */
+/** Trusted application composition with the remaining geometry/view projection over registered editing services. */
 export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
   resetStack(previous: Recipe): void; selectedCollection(): string; newId?(): string;
   history?: HistoryService; scope?: string; activate?: boolean; views?: ViewGraph;
 }, composition: StudioComposition) {
   const history = ports.history ?? createHistoryService(), life = new AbortController();
   const editing = createAuthoringEditing(makeupEditingState(workspace, composition),
-    { ...ports, history, signal: life.signal }, composition);
+    { ...ports, history, signal: life.signal, memory: lookWorkspace(workspace, composition.documents).featureMemory, key: ports.selectedCollection }, composition);
   try {
-    const makeup = createMakeupEditing(editing, workspace, { ...ports, release: () => life.abort() }, composition);
+    const makeup = createMakeupView(editing, { ...ports, release: () => life.abort() }, composition);
     const { views, viewActions } = createViewServices(workspace.preview, workspace.views, composition.modules, history, ports.views);
     const app = new StudioApplication({ ...makeup, signal: editing.signal, history, views, viewActions,
       ...(ports.newId ? { newId: ports.newId } : {}) }, composition.registry);

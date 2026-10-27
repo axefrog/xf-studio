@@ -2,14 +2,14 @@ import { createTrustedAuthoringCore, type StudioComposition } from "../trusted-a
 import { authoringAttachment } from "../authoring/authoring-attachment";
 import { LookEditContexts, type LookEditHandle, type LookEditContextDeps } from "../../library/look-edit-contexts";
 import { NO_LOOK_SCOPE, REMOVED_LOOK } from "../../library/look-editor";
-import { createMakeupEditing } from "../authoring/makeup-editing";
+import { createMakeupView } from "../authoring/makeup-view";
 import { sameLook, type LookRef } from "../../library/collection-documents";
 import { emptyRecipe } from "../../engines/layered-makeup/recipe";
 import { emptyLookHistory } from "../../platform/core/look-history";
 
 type Factory = typeof createTrustedAuthoringCore;
 type Core = ReturnType<Factory>;
-type Attachment = ReturnType<typeof createMakeupEditing> & { app: Core["app"] };
+type Attachment = ReturnType<typeof createMakeupView> & { app: Core["app"] };
 export type ProfileLookEditContexts = LookEditContexts<Attachment>;
 
 /** The phase-2 root input now follows an explicitly drawn context; all editable documents live in the keyed owner. */
@@ -21,9 +21,9 @@ export function createProfileAuthoring(workspace: Parameters<Factory>[0], ports:
   let handle: LookEditHandle<Attachment> | undefined, life: AbortController | undefined;
   let current: Pick<Core, "document" | "geometry" | "presentation" | "recipe" | "eyeMakeup" | "gestures" | "controls" | "app"> = base;
   let compatibility: Core["app"] | undefined;
-  const contexts = new LookEditContexts<Attachment>({ ...deps, history: base.history, composition,
+  const contexts = new LookEditContexts<Attachment>({ ...deps, memory: { [composition.documents.live]: { choices: workspace.glitterChoices } }, newId: ports.newId, history: base.history, composition,
     attach: (editing, ref) => {
-      const makeup = createMakeupEditing(editing, workspace, { ...ports, selectedCollection: () => ref.look,
+      const makeup = createMakeupView(editing, { ...ports,
         resetStack: previous => { if (handle && sameLook(ref, handle.context.ref)) ports.resetStack(previous); } }, composition);
       const app = base.app.fork({ ...makeup, collection: undefined, files: undefined,
         characterContext: undefined, characterDetails: undefined, savedV: undefined });

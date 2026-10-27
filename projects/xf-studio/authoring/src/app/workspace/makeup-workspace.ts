@@ -1,3 +1,4 @@
+import { readRecipe } from "../../legacy/eye-makeup/recipe-schema";
 /** Transitional projection for the concrete makeup editor; the workspace owner stores registered feature data. */
 import { emptyRecipe, type Recipe } from "../../engines/layered-makeup/recipe";
 import type { FieldSelection } from "../../engines/layered-makeup/field-selection";
@@ -136,4 +137,10 @@ export function withLiveFeatures(look: Look, memory: LookMemory, states: Readonl
     if ((state.part !== undefined || next[feature]) && "editor" in state) next[feature] = { ...next[feature], editor: structuredClone(state.editor) };
   }
   return { parts, memory: next };
+}
+
+/** Released callers may still supply a portable recipe; normalize it at the workspace boundary. */
+export function makeupEditingState(workspace: WorkspaceState, composition: { documents: LookDocumentModel }) {
+  const state = lookWorkspace({ ...workspace, recipe: readRecipe(workspace.recipe) }, composition.documents);
+  return { features: state.liveFeatures, history: state.history, locked: state.liveLocked };
 }

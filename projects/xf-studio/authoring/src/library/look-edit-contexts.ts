@@ -13,6 +13,7 @@ type Entry<T extends object> = { context: LookEditContext<T>; wants: number; lif
 export type LookEditHandle<T extends object = object> = { readonly context: LookEditContext<T>; release(): void };
 export type LookEditContextDeps<T extends object = object> = {
   composition: EditingComposition; history: HistoryService;
+  memory?: Readonly<Record<string, unknown>>; newId?(): string;
   owner: CollectionOwner; sessions: LookSessions; outbox: DocumentOutbox;
   /** Temporary application projections attach to the same owner; the core never interprets them. */
   attach?(editing: AuthoringEditing, ref: LookRef): T;
@@ -44,7 +45,7 @@ export class LookEditContexts<T extends object = object> {
       let writer: LookEditor | undefined;
       try {
         const editing = createAuthoringEditing(state, { signal: life.signal, history: this.deps.history,
-          scope: key, look: ref, activate: false }, this.deps.composition);
+          scope: key, look: ref, activate: false, memory: this.deps.memory, newId: this.deps.newId }, this.deps.composition);
         const attachment = this.deps.attach?.(editing, ref);
         writer = new LookEditor({ model: this.deps.composition.documents, sessions: this.deps.sessions, document: editing.document,
           store: () => this.deps.outbox.store(), restoring: target => this.deps.outbox.recovering(lookRef(target)),

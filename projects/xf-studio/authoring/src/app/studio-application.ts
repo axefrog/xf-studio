@@ -34,7 +34,7 @@ import type { LookRef } from "../library/collection-documents";
 import { isLookScope as lookScoped, lookScope } from "../platform/core/history-service";
 import { plannedModules, type PlannedModule, type StudioModule, type ViewSummaryContribution, type ViewToolContribution, type ViewToolFilter } from "../platform/api";
 import type { Layer, Point, Recipe, WarpField } from "../engines/layered-makeup/recipe";
-import { RECIPE_ACTION_KINDS, type GestureEdit, type RecipeAction } from "../engines/layered-makeup/recipe-actions";
+import type { RecipeAction } from "../engines/layered-makeup/recipe-actions";
 import type { EyeMakeupPort } from "../legacy/eye-makeup/authoring-eye-makeup";
 import type { EyeMakeupAction } from "../legacy/eye-makeup/eye-makeup-model";
 import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "../character/saved-appearance-actions";
@@ -199,7 +199,7 @@ type Services = StudioApplicationServices;
 type CompleteInput = (action: StudioAction, named: NamedTargets) => StudioAction;
 /** All facades over one document share its in-progress edits, as well as its history and selection. */
 type EditingState = {
-  gesture?: { source: GestureSource; scope: string; layer: Layer; points: Point[]; fields: Map<string, WarpField> };
+  gesture?: { source: GestureSource };
   featureControl?: { feature: string; id: string; transaction: HistoryTransaction<HistoryEntryId> };
   ended: Set<string>;
   look?: { features: readonly string[] };
@@ -1142,7 +1142,7 @@ export class StudioApplication {
     if (this.gesture) return { ok: false, code: "busy", message: "Finish or cancel the current gesture first (Esc)." };
     if (this.ended.has(`control:${id}`)) return { ok: false, code: "missing_target", message: RUN_ENDED };
     // Form controls adjust recipe content through AuthoringControlEdits, which takes recipe actions only.
-    if (!RECIPE_ACTION_KINDS.has(action.kind) || this.routes.descriptor(action.kind)?.effect !== "content")
+    if (!this.services.controls.accepts(action.kind) || this.routes.descriptor(action.kind)?.effect !== "content")
       return { ok: false, code: "invalid_value", message: "That command cannot be adjusted by a form control." };
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
@@ -1311,7 +1311,7 @@ export class StudioApplication {
     if (this.gesture || this.look) return { available: false, code: "busy", reason: "Another gesture is active." };
     if (this.services.controls?.snapshot() && this.edits.controlOwner !== this || this.featureControl && this.edits.featureOwner !== this)
       return { available: false, code: "busy", reason: "Another requester owns this adjustment." };
-    return this.targetCapability({ kind: "layer", id: layerId });
+    return this.services.gestures?.hasLayer(layerId) ? { available: true } : missingTarget("That layer is no longer available.");
   }
   gestureCapability(source: GestureOrigin, target: { kind: "shape" | "path" } |
     { kind: "point"; index: number } | { kind: "field"; fieldId: string }): StudioCapability {
@@ -1319,29 +1319,16 @@ export class StudioApplication {
     const session = this.gesture;
     if (!session || session.source.view !== gestureSource(source).view) return { available: false, code: "not_ready",
       reason: "Begin a gesture on the target layer first." };
-    // The capture: the editor still shows the look the gesture began on.
-    if (this.lookDocument.scopeId !== session.scope) return missingTarget("This view now shows another look.");
-    if (!this.makeupDocument.recipe.layers.includes(session.layer))
-      return missingTarget("That gesture layer was replaced.");
-    if (target.kind === "point" && (!session.points[target.index] ||
-      session.layer.points[target.index] !== session.points[target.index]))
-      return missingTarget("That control point was replaced.");
-    if (target.kind === "field" && (!session.fields.has(target.fieldId) ||
-      session.layer.fields.find(field => field.id === target.fieldId) !==
-      session.fields.get(target.fieldId))) return missingTarget("That warp control was replaced.");
-    return { available: true };
+    return this.services.gestures?.capability(source, target) ?? missingTarget("This gesture editor is unavailable.");
   }
   beginGesture(source: GestureOrigin, layerId: string, look?: LookRef) {
     if (!this.canBeginGesture(source, layerId, look).available) return false;
-    const layer = this.makeupDocument.recipe.layers.find(item => item.id === layerId);
-    if (!layer) return false;
     // Finish an open form transaction first, so its later Escape cannot revert this gesture.
     const control = this.services.controls?.snapshot();
     if (control) this.controlCommit(control.id);
     if (this.featureControl) this.featureControlCommit(this.featureControl.id);
-    if (!this.services.gestures!.begin(source, layer)) return false;
-    this.gesture = { source: gestureSource(source), scope: this.lookDocument.scopeId, layer, points: [...layer.points],
-      fields: new Map(layer.fields.map(field => [field.id, field])) }; this.edits.gestureOwner = this; this.notify(); return true;
+    if (!this.services.gestures!.beginLayer(source, layerId)) return false;
+    this.gesture = { source: gestureSource(source) }; this.edits.gestureOwner = this; this.notify(); return true;
   }
   applyGesture(source: GestureOrigin, proposal: StudioGestureProposal) {
     const session = this.gesture;
@@ -1350,16 +1337,9 @@ export class StudioApplication {
       proposal.kind === "field.replace" ? { kind: "field" as const, fieldId: proposal.fieldId } :
       proposal.kind === "path.replacePoints" ? { kind: "path" as const } : { kind: "shape" as const };
     if (!this.gestureCapability(source, target).available) return false;
-    const base = { layerId: session.layer.id, expectedLayer: session.layer };
-    const action: GestureEdit = proposal.kind === "shape.replace" ? { ...base, ...proposal } :
-      proposal.kind === "point.replace" ? { ...base, ...proposal,
-        expectedPoint: session.points[proposal.index] } :
-      proposal.kind === "field.replace" ? { ...base, ...proposal,
-        expectedField: session.fields.get(proposal.fieldId)! } : { ...base, ...proposal };
-    if (proposal.kind === "point.replace" && !session.points[proposal.index] ||
-      proposal.kind === "field.replace" && !session.fields.has(proposal.fieldId)) return false;
-    return this.services.gestures!.apply(source, action);
+    return this.services.gestures!.propose(source, proposal);
   }
+
   endGesture(source: GestureOrigin, cancel = false) {
     if (this.edits.gestureOwner !== this) return;
     if (this.gesture?.source.view !== gestureSource(source).view) return;

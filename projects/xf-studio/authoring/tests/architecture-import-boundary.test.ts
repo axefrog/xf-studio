@@ -38,11 +38,11 @@ const probed = (probes: Readonly<Record<string, string>>): Tree =>
 /** A module's imports as src-relative module names (`platform/api`, `app/studio-application`), or bare package names. */
 const resolvedIn = (tree: Tree, name: string) => imports(tree.text(name)).map(path => resolveFrom(name, path));
 const resolved = (name: string) => resolvedIn(DISK, name);
-test("the temporary makeup editing bridge stays confined to profile and concrete application construction (CORE-03)", () => {
-  const bridge = "app/authoring/makeup-editing";
-  expect(DISK.names.filter(name => resolved(name).includes(bridge)).sort())
-    .toEqual(["app/profiles/profile-authoring", "app/trusted-authoring-core"]);
+test("the makeup construction bundle is removed (CORE-03 slice 6)", () => {
+  expect(DISK.names).not.toContain("app/authoring/makeup-editing");
+  expect(DISK.names.filter(name => resolved(name).includes("app/authoring/makeup-editing"))).toEqual([]);
 });
+
 test("registered makeup application publication is composed once, with no ID routing in the application (CORE-03)", () => {
   expect(DISK.names.filter(name => resolved(name).includes("app/authoring/makeup-application")).sort())
     .toEqual(["compose/studio-registry"]);

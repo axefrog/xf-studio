@@ -49,7 +49,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **The rest of [Small bugs and friction](#small-bugs-and-friction):** WebView2 security. *21 Oct*
 
 ### Next tracks (ranked)
-- **CORE-03: a feature-neutral editor** (the one open High). [Assessment and plan](../authoring/core-03-plan.md): 13 slices, 10–14 agent-days, Codex-suitable apart from the guidance and UI review. Starts after profiles phase 3. Slices 1–4 avoid phase 3's presentation files; slices 5, 7, 9 and 11 must not overlap with phase 3's presentation work. *27 Oct*
+- **CORE-03: a feature-neutral editor** (the one open High). [Assessment and plan](../authoring/core-03-plan.md): 13 slices, 10–14 agent-days, Codex-suitable apart from the guidance and UI review. Slices 1–6 are implemented (slice 6 awaiting review): registered editing owns gestures/controls and publication; the construction bundle is removed. Next is slice 7, context options and shell recipe reads. Slices 1–4 avoid phase 3's presentation files; slices 5, 7, 9 and 11 must not overlap with phase 3's presentation work. *27 Oct*
 1. **The rest of the job scheduler (F-2):** the facial, idle, pose, grading LUT, swatch, icon and preview-core hosts move onto the scheduler ([performance](performance.md)). *21 Oct*
 2. **Character detail completeness:** colours first, then every creator detail ([ranked tracks](#ranked-tracks), track 2). *25 Sep*
 3. **The eye-makeup editor and finish adapters** (track 6), and CORE-03's remaining steps (the [code-health ledger](../authoring/code-health.md)). *25 Sep*

@@ -1,3 +1,4 @@
+import type { MakeupPublication } from "../../engines/layered-makeup/editor";
 import { recipeHistory, type HistoryEntryId } from "../../legacy/eye-makeup/editor-actions";
 import { parseFieldSelection, type FieldSelection } from "../../engines/layered-makeup/field-selection";
 import { emptyRecipe, type Recipe } from "../../engines/layered-makeup/recipe";
@@ -51,7 +52,7 @@ export type DocumentHistoryOptions = { readonly history?: HistoryService; readon
   /** Attach the old API to the existing neutral owner, without loading or copying any state. */
   readonly look?: LookDocument; readonly signal?: AbortSignal; readonly release?: () => void;
   /** Opening/restoring an unseen context is not an editing interaction. Actual commands still activate their history. */
-  readonly activate?: boolean };
+  readonly activate?: boolean; readonly registered?: boolean };
 /** A look history from either form; throws on a damaged entry (checked before anything is published). */
 function lookHistory(value: DocumentHistory | undefined, trimmed: boolean, parts: DocumentParts): LookHistoryData {
   if (Array.isArray(value) || value === undefined) return recipeHistory(value ?? [], trimmed, parts).data();
@@ -95,7 +96,7 @@ export class AuthoringDocument {
       },
     };
     this.primary = options.look ? features.document(parts.feature)! : features.add(parts.module, replay);
-    if (options.look) this.primary.observeReplay(replay, this.life.signal);
+    if (options.look && !options.registered) this.primary.observeReplay(replay, this.life.signal);
     this.look = options.look ?? new LookDocument(this.seed(initial!), { features, parts: parts.parts }, { ...options, signal: this.life.signal });
     this.otherDocuments = {
       features: () => features.features().filter(feature => feature !== this.feature),
@@ -212,6 +213,17 @@ export class AuthoringDocument {
     this.changedGestureKind = kind;
     this.look.changed([this.feature]);
     this.notify("recipe"); if (layerIndex !== undefined) this.effect({ kind: "gesture", layerIndex });
+  }
+  /** Translate a registered editor publication into the released geometry/view notifications; never writes state. */
+  published({ effect, previous, gestureKind }: MakeupPublication) {
+    if (effect.kind !== "selection") {
+      this.geometryRevision++;
+      this.changedLayerIndex = "layerIndex" in effect && (effect.kind === "gesture" || effect.kind === "immediate") ? effect.layerIndex : undefined;
+      this.changedGestureKind = gestureKind;
+    }
+    this.notify(effect.kind === "selection" ? "selection" : "recipe");
+    if (effect.kind === "restore" || effect.kind === "structure") this.resetStack(previous!);
+    else this.effect(effect);
   }
   /** Publish one validated action result and its rendering intent together. */
   applyActionState(next: RecipeActionState, effect: RecipeActionEffect) {
