@@ -155,7 +155,7 @@ const GATES: Record<Permission, string> = {
   "write-save": "`allow_writes = true` and `save` listed by name (the test profile's build lists it).",
   "write-showroom": "`allow_writes = true` and `showroom` listed by name (the test profile's build lists it).",
   "write-player": "`allow_writes = true` and `player` listed by name (the test profile's build lists it).",
-  "act-player": "`allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet.",
+  "act-player": "`allow_writes = true` and `act` listed by name; current tools also require the autonomous test build and test hooks.",
   "write-npc": "`allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL).",
   "write-dm": "`allow_writes = true` and `dm` listed by name (the test profile's build lists it); bringing things in and the subtitle lines also need Codeware, and the toolkit's scripts ship in the -writes package only.",
 };

@@ -6,16 +6,21 @@
 namespace xfb::worldevents {
 using json = nlohmann::json;
 Feed::Feed(size_t capacity, unsigned rate) : m_capacity(std::clamp<size_t>(capacity, 1, 2048)), m_rate(std::clamp(rate, 1u, 20u)) {}
-std::optional<json> Feed::Push(const std::string& kind, json data, double s, uint64_t world, bool admitted) {
-    const auto it = std::find(Kinds.begin(), Kinds.end(), kind);
-    if (it == Kinds.end() || !data.is_object() || !std::isfinite(s) || s < 0 || data.dump().size() > 4096) return {};
-    auto& budget = m_budget[static_cast<size_t>(it - Kinds.begin())];
-    const auto drop = [&] { ++budget.pending; ++budget.total; };
+Epoch Feed::CaptureEpoch(const std::string& kind, const json& data, const std::function<uint64_t()>& world) {
+    std::scoped_lock lock(m_epochMutex);
+    const auto generation = world();
     if (kind == "session") {
         if (data.contains("codeware") && data["codeware"].is_boolean()) m_codeware = data["codeware"].get<bool>() ? 1 : 0;
         const auto phase = data.find("phase");
         if (phase != data.end() && phase->is_string() && ((m_codeware == 1 && *phase == "start") || (m_codeware == 0 && *phase == "attach"))) ++m_session;
     }
+    return {generation, m_session};
+}
+std::optional<json> Feed::Push(const std::string& kind, json data, double s, Epoch epoch, bool admitted) {
+    const auto it = std::find(Kinds.begin(), Kinds.end(), kind);
+    if (it == Kinds.end() || !data.is_object() || !std::isfinite(s) || s < 0 || data.dump().size() > 4096) return {};
+    auto& budget = m_budget[static_cast<size_t>(it - Kinds.begin())];
+    const auto drop = [&] { ++budget.pending; ++budget.total; };
     std::unique_lock lock(m_mutex, std::try_to_lock);
     if (!lock.owns_lock()) { drop(); return {}; }
     if (!admitted) {
@@ -27,8 +32,8 @@ std::optional<json> Feed::Push(const std::string& kind, json data, double s, uin
     json gameTime = nullptr;
     if (const auto t = data.find("game_time_s"); t != data.end() && t->is_number() && std::isfinite(t->get<double>()) && t->get<double>() >= 0) gameTime = *t;
     data.erase("game_time_s"); data.erase("world_feed");
-    json row{{"seq", m_next++}, {"kind", kind}, {"s", s}, {"game_time_s", gameTime}, {"world_generation", world},
-             {"session_counter", m_session.load()}, {"dropped", budget.pending.exchange(0)}, {"data", std::move(data)}};
+    json row{{"seq", m_next++}, {"kind", kind}, {"s", s}, {"game_time_s", gameTime}, {"world_generation", epoch.world},
+             {"session_counter", epoch.session}, {"dropped", budget.pending.exchange(0)}, {"data", std::move(data)}};
     m_rows.push_back(row);
     if (m_rows.size() > m_capacity) { m_rows.pop_front(); ++m_evicted; }
     return row;

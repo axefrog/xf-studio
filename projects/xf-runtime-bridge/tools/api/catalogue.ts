@@ -14,7 +14,7 @@
 //   write-save       makes a manual save or loads one
 //   write-showroom   spawns, turns and removes XF Finish Showroom's test heads and light rigs (the test profile only)
 //   write-player     moves and turns V, turns her view, crouches, draws or holsters, opens menus (0.6; the test profile only)
-//   act-player       irreversible actions in the world: using devices, dialogue, consuming (0.6; reserved, no command yet)
+//   act-player       explicit game actions without automatic undo; autonomous test commands only
 //   write-npc        brings in XF actors and directs NPCs near V: walking, lines, gaze, face, gestures, dialogue choices (0.8; the test profile only)
 //   write-dm         the live-direction toolkit: props, vehicles and lights brought in, doors and vehicles changed, sounds, the phone, the quest tracker, messages, in-game watchers (0.8.12; the test profile only)
 //   control          changes only the bridge itself (the kill switch)
@@ -109,7 +109,7 @@ export const PERMISSIONS: Record<Permission, { label: string; description: strin
   },
   "act-player": {
     label: "Act for V",
-    description: "Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile.",
+    description: "Explicit game actions for V without automatic undo, including tracking an existing journal quest in autonomous test builds. Off in the bridge's settings except in the XF test profile.",
   },
   control: {
     label: "Stop the bridge",

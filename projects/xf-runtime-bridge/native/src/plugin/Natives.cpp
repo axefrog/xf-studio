@@ -882,16 +882,18 @@ void ProbeEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut,
         {
             if (!state.config.bridgeEnabled || !state.bridge || state.bridge->GetDispatcher().IsKilled()) return;
             if (what != "session" && !state.scriptLayer.Ready()) return;
+            const auto epoch = state.worldEvents.CaptureEpoch(what, parsed, [&state] {
+                return state.scriptLayer.Describe().value("detaches", uint64_t{0});
+            });
             if (!state.scriptLayer.Ready()) parsed["game_time_s"] = nullptr;
             if (what == "death") {
                 const auto incident = TakeWorldIncident(parsed.value("incident_token", std::string()));
                 parsed.erase("incident_token"); parsed["incident_id"] = incident.empty() ? json(nullptr) : json(incident);
             }
-            const auto world = state.scriptLayer.Describe().value("detaches", uint64_t{0});
             const auto source = recording::Now();
-            const bool admitted = g_worldAdmission == what && source < g_worldAdmissionUntil && world == g_worldAdmissionWorld;
+            const bool admitted = g_worldAdmission == what && source < g_worldAdmissionUntil && epoch.world == g_worldAdmissionWorld;
             g_worldAdmission.clear();
-            if (auto event = state.worldEvents.Push(what, std::move(parsed), source, world, admitted))
+            if (auto event = state.worldEvents.Push(what, std::move(parsed), source, epoch, admitted))
             {
                 (*event)["event"] = "world." + what;
                 RecordingIngress("events", SerializeJson(*event));

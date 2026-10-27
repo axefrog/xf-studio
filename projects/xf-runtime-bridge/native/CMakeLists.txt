@@ -136,6 +136,7 @@ add_library(xfb_core STATIC
   src/core/Dm080.cpp
   src/core/DmMicro.cpp
   src/core/DmService.cpp
+  src/core/JournalTrack.cpp
   src/core/WorldEvents.cpp
   src/core/Events.cpp
   src/core/GameThreadQueue.cpp
@@ -191,6 +192,7 @@ add_library(XFRuntimeBridge SHARED
   src/plugin/Handlers070.cpp
   src/plugin/HandlersDm080.cpp
   src/plugin/HandlersNpc.cpp
+  src/plugin/HandlersJournal.cpp
   src/plugin/HandlersRecording.cpp
   src/plugin/HandlersInputChoices.cpp
   src/plugin/InputDispatch.cpp

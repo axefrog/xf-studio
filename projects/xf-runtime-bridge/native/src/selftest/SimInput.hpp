@@ -27,6 +27,7 @@ private:
     std::function<uint64_t()> m_connection;
     bool m_hooks;
     uint64_t m_recordTick = 0;
+    uint32_t m_trackedJournal = 0;
     bool m_changed = true, m_modal = true, m_confirmation = false, m_offered = false;
     int m_generation = 100;
 };

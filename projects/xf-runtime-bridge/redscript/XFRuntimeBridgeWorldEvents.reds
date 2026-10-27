@@ -137,19 +137,24 @@ public class XFWorldFeed extends ScriptableSystem {
     let fields = "\"what\":\"hubs\",\"partner\":null,\"partner_available\":false,\"count\":" + IntToString(count) + ",\"hubs\":[";
     let i = 0;
     while i < count && i < 2 {
-      let hub = Deref(data).choiceHubs[i];
-      fields += (i > 0 ? "," : "") + "{\"id\":" + IntToString(hub.id) + ",\"state\":" + IntToString(EnumInt(hub.activityState)) + ",\"count\":" + IntToString(ArraySize(hub.choices)) + ",\"choices\":[";
-      let j = 0;
-      while j < ArraySize(hub.choices) && j < 4 {
-        let text = hub.choices[j].localizedName;
-        fields += (j > 0 ? "," : "") + "{\"index\":" + IntToString(j) + ",\"text\":" + XFJson.Str(StrLeft(text, 48)) + ",\"truncated\":" + XFJson.Flag(StrLen(text) > 48) + "}";
-        j += 1;
-      }
-      fields += "],\"truncated\":" + XFJson.Flag(ArraySize(hub.choices) > 4) + "}";
+      fields += (i > 0 ? "," : "") + this.Hub(Deref(data).choiceHubs[i]);
       i += 1;
     }
     fields += "],\"truncated\":" + XFJson.Flag(count > 2);
     if NotEquals(fields, this.m_lastHubs) { this.m_lastHubs = fields; XFWorldOut.Emit("dialogue", fields); }
+  }
+  // Borrow the indexed hub for this synchronous callback; never assign its choices array by value.
+  private func Hub(const hub: script_ref<ListChoiceHubData>) -> String {
+    let count = ArraySize(Deref(hub).choices);
+    let fields = "{\"id\":" + IntToString(Deref(hub).id) + ",\"state\":" + IntToString(EnumInt(Deref(hub).activityState)) + ",\"count\":" + IntToString(count) + ",\"choices\":[";
+    let j = 0;
+    while j < count && j < 4 {
+      let text = StrLeft(Deref(hub).choices[j].localizedName, 48);
+      let truncated = StrLen(Deref(hub).choices[j].localizedName) > 48;
+      fields += (j > 0 ? "," : "") + "{\"index\":" + IntToString(j) + ",\"text\":" + XFJson.Str(text) + ",\"truncated\":" + XFJson.Flag(truncated) + "}";
+      j += 1;
+    }
+    return fields + "],\"truncated\":" + XFJson.Flag(count > 4) + "}";
   }
   private func Journal(what: String, hash: Uint32, className: CName, notify: JournalNotifyOption, change: JournalChangeType) -> Void {
     if !this.m_on || !XFWorldOut.On() || !XFBridge_Live() { return; }

@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 160 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 161 tools, 90 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -25,7 +25,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (4)
-- [Other tools](#other-tools) (14)
+- [Other tools](#other-tools) (15)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -45,7 +45,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | `write-player` | Move V | 8 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
 | `write-npc` | Direct NPCs | 15 | Yes | Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL). |
 | `write-dm` | Direct the scene | 21 | Yes | Brings props, vehicles and lights into the world near V and changes doors and vehicles; plays sounds and a vehicle's radio; shows message toasts and a real incoming call from a contact the player has, with subtitle lines; puts an XF quest in the HUD's tracker; shows the game's own banners and quest toasts; and arms watchers that run micro-actions inside the game without the agent. Nothing is saved: the answers' undos, the kill switch, the pause, a handover or loading a save take it all back, and saving waits until the spawned things and changed doors are gone. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `dm` listed by name (the test profile's build lists it); bringing things in and the subtitle lines also need Codeware, and the toolkit's scripts ship in the -writes package only. |
-| `act-player` | Act for V | 2 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
+| `act-player` | Act for V | 3 | Yes | Explicit game actions for V without automatic undo, including tracking an existing journal quest in autonomous test builds. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name; current tools also require the autonomous test build and test hooks. |
 | `control` | Stop the bridge | 7 | Only the bridge's own work: it stops or pauses it | Switches the game bridge off until it is reconnected from inside the game (test builds) or the game restarts. Always allowed. | Always allowed; every MCP configuration includes it. |
 
 ## Refusals any tool can give
@@ -3035,6 +3035,26 @@ Tools not yet sorted into an area above.
 | `diagnostics_open` | boolean | `true`, `false` | Open (true) or close (false) the DIAGNOSTICS header. |
 | `press` | string | `pause_changes`, `resume_changes` | Press the window's Pause changes or Resume changes button (test builds only). |
 | `undo` | integer | 1 to 9007199254740991 | Put back what that request (its id) changed; takes no other option. |
+
+### `test_journal_track`
+
+**Track an existing journal quest.** Autonomous -writes test build only, with allow_test_hooks and the act write class. Selects an existing active journal quest or objective, by unique journal path or unsigned 32-bit hash. Does not create entries or change quest state/counters. Choose an entry different from the current tracked one. Returns submitted plus requested_hash, previous_hash and the observed tracked_hash; verify the journal tracked event through world_events. State and Counter callbacks remain opportunistic during normal play. Normal builds and disabled test hooks refuse this command. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
+
+- **Command:** `test.journal.track`, the bridge method `test.journal.track`
+- **Permission:** Act for V (`act-player`)
+- **Changes the game:** Yes
+- **Undo:** Track previous_hash with this command if it is still active, or restore the previous tracked quest in the game journal. No automatic undo.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`bad_params`](#refusal-bad-params), [`precondition_failed`](#refusal-precondition-failed), [`game_loading`](#refusal-game-loading), [`game_not_ready`](#refusal-game-not-ready), [`precondition_unavailable`](#refusal-precondition-unavailable)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `entry` (required) | string or integer | 1 to 256 characters; or 0 to 4294967295 | Existing quest/objective journal path or Uint32 hash |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `supervisor_set`
 

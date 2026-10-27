@@ -186,6 +186,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "inventory.equip": [...INVENTORY, "timeout"],
   "inventory.list": ["unavailable", "game_not_ready"],
   "test.save.delay": ["test_hooks_off"],
+  "test.journal.track": ["test_hooks_off", "bad_params", "precondition_failed", "game_loading", "game_not_ready"],
   "test.events": ["test_hooks_off"],
   "test.save.identity": ["test_hooks_off", "game_not_ready"],
   "test.companion.probe": ["test_hooks_off", "not_in_this_package", "companion_running", "failed"],

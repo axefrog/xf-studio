@@ -22,11 +22,14 @@ private:
     std::string m_token, m_incident;
     uint64_t m_world = 0;
 };
+struct Epoch { uint64_t world = 0, session = 0; };
 class Feed {
 public:
     explicit Feed(size_t capacity = 2048, unsigned rate = 20);
-    // Native QPC seconds and world generation, never trusted to the script payload.
-    std::optional<nlohmann::json> Push(const std::string& kind, nlohmann::json data, double s, uint64_t world, bool admitted = false);
+    // Linearize the native world read and session transition together, before deferred ring work.
+    // This short producer-only lock is independent of readers and the ring's try-lock.
+    Epoch CaptureEpoch(const std::string& kind, const nlohmann::json& data, const std::function<uint64_t()>& world);
+    std::optional<nlohmann::json> Push(const std::string& kind, nlohmann::json data, double s, Epoch epoch, bool admitted = false);
     bool Admit(const std::string& kind, double s);
     void NoteDrop(const std::string& kind);
     nlohmann::json Read(const nlohmann::json& params) const;
@@ -38,7 +41,8 @@ private:
     size_t m_capacity;
     unsigned m_rate;
     uint64_t m_next = 1, m_evicted = 0;
-    std::atomic<uint64_t> m_session{0};
+    std::mutex m_epochMutex;
+    uint64_t m_session = 0;
     std::atomic<int> m_codeware{-1};
 };
 void Register(Dispatcher&, Feed&);

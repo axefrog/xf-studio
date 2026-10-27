@@ -18,6 +18,7 @@ namespace xfb::plugin
 // Bridge 0.6 (Handlers060.cpp): scene.read, the session event stream's handover, behaviours, player control phase 1 and
 // input.probe. Called by RegisterMethods.
 void RegisterRecording(Dispatcher&);
+void RegisterJournalTrack(Dispatcher&);
 // 0.8.20 (HandlersIncidents.cpp): incidents.list. 0.8.21: incidents.declare and incidents.close, the declared incidents' closes on a
 // kill (TickIncidents) and a handover (CloseDeclaredIncidents, called by bridge.handover), and the spawn link into the NPC service.
 void RegisterIncidents(Dispatcher&);

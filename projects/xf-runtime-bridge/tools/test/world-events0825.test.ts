@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { BridgeClient } from "../bridge-lib.ts";
+import { packageScripts } from "../redscript-natives.ts";
 import { CommandApi } from "../api/command-api.ts";
 import { recordingClock, replayRecording } from "../testing/recording-replay.ts";
 import { requireAutonomousSelftest, startSelftestHost, sleep } from "./helpers.ts";
@@ -71,7 +72,54 @@ test("shared producer signatures and fact subscriptions match the source contrac
   }
   expect(source).toContain("protected func UpdateDialogsData(const data: script_ref<DialogChoiceHubs>) -> Void");
   expect(source).not.toContain("DelayCallback");
+  expect(source).toContain("private func Hub(const hub: script_ref<ListChoiceHubData>) -> String");
+  expect(source).toContain("this.Hub(Deref(data).choiceHubs[i])");
+  expect(source).not.toMatch(/let\s+\w+\s*=\s*Deref\(data\)\.choiceHubs\[i\];/);
+  expect(source).not.toMatch(/let\s+\w+\s*=\s*Deref\(hub\)\.choices(?:;|\[j\];)/);
+  expect(source).toContain("while j < count && j < 4");
   const files = ["redscript/XFRuntimeBridgeWorldHooks.reds", "redscript-probes/XFRuntimeBridgeProbeEvents.reds", "redscript-probes/autonomous/XFRuntimeBridgeIncidents.reds"].map(f => readFileSync(join(root, f), "utf8")).join("\n");
   expect(files.match(/cb func OnDeath\(/g)).toHaveLength(1);
   expect(files.match(/cb func OnDefeated\(/g)).toHaveLength(1);
 });
+
+test("journal commissioning action is gated, act-only, and produces a tracked receipt", async () => {
+  requireAutonomousSelftest();
+  for (const scenario of [
+    { args: ["--allow-writes", "--write-classes", "act"], allowed: false },
+    { args: ["--allow-test-hooks", "--allow-writes", "--write-classes", "dm"], allowed: false },
+    { args: ["--allow-test-hooks", "--allow-writes", "--write-classes", "act"], allowed: true },
+  ]) {
+    const host = await startSelftestHost(scenario.args);
+    const writer = new BridgeClient(host.session, 5000), reader = new BridgeClient(host.session, 5000);
+    const api = new CommandApi({ runtimeDir: host.dir, auditDir: join(host.dir, "audit"), transport: async () => ({ call: (method, params, cid, timeoutMs, claims) => writer.call(method, params, cid, claims, timeoutMs), close: () => {} }) });
+    try {
+      await writer.connect(); await reader.connect({ readOnly: true });
+      if (!scenario.allowed) {
+        const result = await writer.call("test.journal.track", { entry: "quests/fixture/quest_a" });
+        expect(result.ok).toBe(false);
+        if (!scenario.args.includes("--allow-test-hooks")) expect(result.error?.code).toBe("test_hooks_off");
+        continue;
+      }
+      const result = await api.run("test.journal.track", { entry: "quests/fixture/quest_a" }, { allow: ["act-player"] });
+      expect(result.ok, JSON.stringify(result)).toBe(true); if (!result.ok) throw new Error(result.error.message);
+      expect((result.result as any).tracked_hash).toBe(1001);
+      expect((await writer.call("test.journal.track", { entry: 1001 })).ok).toBe(false);
+      expect((await reader.call("test.journal.track", { entry: 1002 })).ok).toBe(false);
+      for (const entry of [null, "", [], -1, 4294967296, 1.5, "missing/path"])
+        expect((await writer.call("test.journal.track", { entry })).ok).toBe(false);
+      expect((await writer.call("test.journal.track", { entry: 1002 })).ok).toBe(true);
+      const page = await reader.call("world.events", { kinds: ["journal"] });
+      expect(page.ok).toBe(true);
+      expect((page.result as any).events.map((r: any) => [r.data.what, r.data.hash])).toEqual([["tracked", 1001], ["tracked", 1002]]);
+      const tracked = (page.result as any).events[0].data;
+      expect(tracked.path).toBe("quests/fixture/quest_a");
+      expect(tracked.path_complete).toBe(true);
+    } finally { api.close(); writer.close(); reader.close(); await host.stop(); }
+  }
+  const root = resolve(import.meta.dir, "../..");
+  const normal = packageScripts(root, "writes", false).map(f => f.text).join("\n");
+  const autonomous = packageScripts(root, "writes", true).map(f => f.text).join("\n");
+  expect(normal).not.toContain("class XFJournalTest");
+  expect(autonomous).toContain("journal.TrackEntry(entry)");
+  expect(autonomous).toContain("entry as JournalQuest");
+}, 20000);
