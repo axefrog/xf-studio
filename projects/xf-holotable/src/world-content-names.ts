@@ -1,7 +1,7 @@
 /** Private, stamp-keyed REDmod name index. Compiled flats reuse the Studio's TweakDB owner. */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { opendirSync, readFileSync, statSync, type Dir } from "node:fs";
 import { join } from "node:path";
-import { tweakDbOf } from "../../xf-studio/authoring/src/character/host/clothing-host";
+import { tweakDbSourceOf } from "../../xf-studio/authoring/src/character/host/clothing-host";
 import { tweakDbId } from "../../xf-studio/authoring/src/game/tweakdb-flats";
 import { NativeBudgetError } from "../../xf-studio/authoring/src/native/native-errors";
 import type { SourceStamp } from "./sector-cache.ts";
@@ -30,18 +30,23 @@ export function reverseRecordNames(sources: Iterable<string>): ReadonlyMap<strin
   return map;
 }
 let memo:{key:string;names:ReadonlyMap<string,string|null>}|undefined;
-export function worldNameSources(root:string,ep1:boolean) {
+export const REDMOD_DISCOVERY_LIMITS:Readonly<{entries:number;directories:number;depth:number}>=Object.freeze({entries:20_000,directories:4_000,depth:32});
+export function worldNameSources(root:string,ep1:boolean,limits:Readonly<typeof REDMOD_DISCOVERY_LIMITS>=REDMOD_DISCOVERY_LIMITS) {
   const files:SourceStamp[]=[];
+  let entries=0,directories=0;
   const walk=(dir:string,depth=0)=>{
-    if(depth>32||files.length>20_000)throw new NativeBudgetError("REDmod source tree exceeds W1 bounds.");
-    if(!existsSync(dir))return;
-    for(const e of readdirSync(dir,{withFileTypes:true})) {const path=join(dir,e.name);if(e.isDirectory())walk(path,depth+1);else if(e.isFile()&&e.name.endsWith(".tweak")){if(files.length>=20_000)throw new NativeBudgetError("REDmod source tree exceeds W1 bounds.");const s=statSync(path);files.push({path,size:s.size,mtimeMs:s.mtimeMs});}}
+    if(depth>limits.depth||++directories>limits.directories)throw new NativeBudgetError("REDmod discovery exceeds its directory/depth limit.");
+    let handle:Dir;try{handle=opendirSync(dir);}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return;throw error;}
+    try {let e;while((e=handle.readSync())!==null){
+      if(++entries>limits.entries)throw new NativeBudgetError("REDmod discovery exceeds its total entry limit.");
+      const path=join(dir,e.name);if(e.isDirectory())walk(path,depth+1);else if(e.isFile()&&e.name.endsWith(".tweak")){const s=statSync(path);files.push({path,size:s.size,mtimeMs:s.mtimeMs});}
+    }}finally{handle.closeSync();}
   };
   walk(join(root,"tools","redmod","tweaks","base"));if(ep1)walk(join(root,"tools","redmod","tweaks","ep1"));
   files.sort((a,b)=>a.path.localeCompare(b.path));
-  // One locator/reader owns compiled TweakDB selection and caching for the Studio and W1.
-  const db=tweakDbOf(root,ep1),dbPath=db?join(root,...db.source.split("\\")):undefined,st=dbPath?statSync(dbPath):undefined;
-  return {files,db,sources:[...files,...(dbPath&&st?[{path:dbPath,size:st.size,mtimeMs:st.mtimeMs}]:[])]};
+  // The shared locator provides stamps without loading the compiled blob.
+  const db=tweakDbSourceOf(root,ep1);
+  return {files,sources:[...files,...(db?[{path:db.path,size:db.size,mtimeMs:db.mtimeMs}]:[])]};
 }
 export function worldRecordNames(files:readonly SourceStamp[]):ReadonlyMap<string,string|null> {
   const key=JSON.stringify(files);if(memo?.key===key)return memo.names;

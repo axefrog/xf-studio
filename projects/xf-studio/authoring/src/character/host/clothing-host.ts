@@ -19,13 +19,14 @@
  * - **Failures** are never silent: an unreadable TweakDB makes `records` answer null (each item then says the records couldn't be read).
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ClothingPorts, ItemRecord } from "../clothing-resolver";
 import { refFromPath } from "../../game/depot-path";
 import { NativeArchive } from "../../native/archive-reader";
 import type { NativeDecodeOutcome } from "../../native/native-decode";
 import type { NativeFailureKind } from "../../native/native-errors";
+import { NativeBudgetError } from "../../native/native-errors";
 import { openNativeDecoderAsync } from "../../native/native-fetch-port";
 import { openGameOodle } from "../../native/oodle";
 import { readResourceJson } from "../../native/resource-document";
@@ -34,19 +35,36 @@ import type { ResourceGraph } from "../../game/resource-graph";
 import { childId, TweakDbBlob, tweakDbId, type TweakId } from "../../game/tweakdb-flats";
 
 const blobs = new Map<string, { stamp: string; blob: TweakDbBlob }>();
-/** The TweakDB blob of a game folder (the Phantom Liberty one when installed), read once per file identity. */
-export function tweakDbOf(gameRoot: string, ep1: boolean): { blob: TweakDbBlob; source: string } | null {
+/** 96 MiB: >2x the largest measured 2.31 blob (48,192,743 bytes). */
+export const TWEAK_DB_FILE_CAP = 96 * 1024 * 1024;
+/** Shared selection and stamps only; no blob read/allocation, including on an assembled-cache hit. */
+export function tweakDbSourceOf(gameRoot: string, ep1: boolean): { path:string; source:string; size:number; mtimeMs:number } | null {
   const cache = join(gameRoot, "r6", "cache");
   const name = ep1 && existsSync(join(cache, "tweakdb_ep1.bin")) ? "tweakdb_ep1.bin" : "tweakdb.bin";
   const path = join(cache, name);
-  let stamp: string;
-  try { const stat = statSync(path); stamp = `${stat.size}|${stat.mtimeMs}`; } catch { return null; }
+  try {const stat=statSync(path);return {path,source:`r6\\cache\\${name}`,size:stat.size,mtimeMs:stat.mtimeMs};}catch{return null;}
+}
+/** The TweakDB blob of a game folder, read once per identity; oversized files refuse before allocation. */
+export function tweakDbOf(gameRoot: string, ep1: boolean): { blob: TweakDbBlob; source: string } | null {
+  const selected=tweakDbSourceOf(gameRoot,ep1);if(!selected)return null;
+  const {path,source,size,mtimeMs}=selected,stamp=`${size}|${mtimeMs}`;
+  const checkSize=(size:number)=>{if(size>TWEAK_DB_FILE_CAP)throw new NativeBudgetError("The game's TweakDB exceeds the 96 MiB read limit.");};
+  checkSize(size);
   const known = blobs.get(path);
-  if (known?.stamp === stamp) return { blob: known.blob, source: `r6\\cache\\${name}` };
-  const blob = new TweakDbBlob(new Uint8Array(readFileSync(path)));
+  if (known?.stamp === stamp) return { blob: known.blob, source };
+  const fd=openSync(path,"r");let bytes:Uint8Array;
+  try {
+    const before=fstatSync(fd);checkSize(before.size);
+    if(before.size!==size||before.mtimeMs!==mtimeMs)throw Error("The game's TweakDB changed during the read; try again.");
+    bytes=new Uint8Array(size);let offset=0;
+    while(offset<size){const n=readSync(fd,bytes,offset,size-offset,offset);if(!n)throw Error("The game's TweakDB was truncated during the read; try again.");offset+=n;}
+    const after=fstatSync(fd);checkSize(after.size);
+    if(after.size!==size||after.mtimeMs!==mtimeMs)throw Error("The game's TweakDB changed during the read; try again.");
+  }finally{closeSync(fd);}
+  const blob = new TweakDbBlob(bytes);
   blobs.clear();
   blobs.set(path, { stamp, blob });
-  return { blob, source: `r6\\cache\\${name}` };
+  return { blob, source };
 }
 
 /** The suffix records the resolver evaluates, by name (vanilla `itemsFactoryAppearanceSuffix.*`, and ArchiveXL's four). */

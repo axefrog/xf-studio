@@ -153,6 +153,16 @@ test("affiliation labels match cards, drawing and explicit selection; unknown st
  expect(baseCard(content,"base:communities:c")?.title).toBe("Community");
 });
 
+test("only verified technical prefixes are stripped, retaining personal/role prefixes and the final word",()=>{
+ const summary=(name:string)=>communityTypes([{name:"person",record:"1",recordName:`Character.${name}`,kind:"person",phases:[]}]);
+ expect(summary("Mr_Blue_Eyes")).toBe("1 type of person\nMr blue eyes");
+ expect(summary("vip_guard_ma")).toBe("1 type of person\nVip guard");
+ expect(summary("kab_guard_ma")).toBe("1 type of person\nGuard");
+ expect(summary("kab_ma")).toBe("1 type of person\nKab");
+ expect(summary("kab")).toBe("1 type of person\nKab");
+ expect(summary("ma")).toBe("1 type of person\nMa");
+});
+
 test("No Affiliation displays as Unaffiliated on cards and map labels while Technical keeps the raw text",()=>{
  const affiliation={record:"10",recordName:"Factions.Unit",title:"No Affiliation"};
  const named={...content,communities:[{...content.communities[0],affiliation}]};

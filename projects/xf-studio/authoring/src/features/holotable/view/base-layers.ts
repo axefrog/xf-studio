@@ -92,6 +92,12 @@ export function baseItem(content:HoloContent|undefined,key:string):AgentItem|und
 }
 
 export interface BaseCard { title:string; summary:string; when?:string; involved:{key:string;label:string}[]; more:number; furtherAway:number; technical:[string,string][] }
+/** Verified district/content prefixes in Kabuki's record census; never strip role/person words. */
+const COMMUNITY_TECHNICAL_PREFIXES=new Set([
+  "arr","cpz","gle","kab","lch","wat", // district codes
+  "cs","mws","ow","sa","sts", // content codes
+  "q000","q001","q004","q105","q305","mq019","mq024","mq025","mq026","mq028","mq038","mq057","sq017",
+]);
 /** Counts come from compiled record types. Name cleanup is display-only fallback. */
 export function communityTypes(entries:HoloContent["communities"][number]["entries"]):string {
   if(!entries.length)return "No entries";
@@ -100,13 +106,12 @@ export function communityTypes(entries:HoloContent["communities"][number]["entri
   const labelsOf=[...unique.values()],tails=labelsOf.map(e=>e.recordName?.split(".").at(-1)??"");
   const vocabulary=new Map<string,string>();
   for(const e of people)for(const token of e.affiliation?.title?.match(/[\p{L}\p{N}]+/gu)??[])if(/^[A-Z]{2,}$|[a-z][A-Z]/.test(token))vocabulary.set(token.toLowerCase(),token);
-  const prefixes=new Map<string,number>();
-  for(const t of tails){const prefix=/^([a-z]{2,3})[_-]/i.exec(t)?.[0];if(prefix)prefixes.set(prefix,(prefixes.get(prefix)??0)+1);}
   const labels=tails.map((t,i)=>{
     if(labelsOf[i].displayName)return labelsOf[i].displayName!;
-    const prefix=/^([a-z]{2,3})[_-]/i.exec(t)?.[0];
-    const trim=prefix&&(tails.length===1||(prefixes.get(prefix)??0)>1)?prefix:undefined;
-    const words=(trim?t.slice(trim.length):t).replace(/(?:^|[_-])(?:ma|wa|mb|wb|fa|fb|mc|wc)$/i,"").replace(/[_-]+/g," ").replace(/(\p{L})\d+\b/gu,"$1").trim().toLowerCase();
+    const tokens=t.split(/[_-]+/).filter(Boolean);
+    if(tokens.length>1&&/^(ma|wa|mb|wb|fa|fb|mc|wc)$/i.test(tokens.at(-1)!))tokens.pop();
+    if(tokens.length>1&&COMMUNITY_TECHNICAL_PREFIXES.has(tokens[0].toLowerCase()))tokens.shift();
+    const words=tokens.join(" ").replace(/(\p{L})\d+\b/gu,"$1").trim().toLowerCase();
     if(!words)return "Unnamed person type";
     return words.split(" ").map((word,i)=>vocabulary.get(word)??(i===0?word[0].toUpperCase()+word.slice(1):word)).join(" ");
   });

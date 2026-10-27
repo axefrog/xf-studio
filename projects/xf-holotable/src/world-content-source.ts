@@ -22,6 +22,7 @@ import { TextTable, gameTextPaths } from "../../xf-studio/authoring/src/game/gam
 import { worldNameSources, worldRecordNames } from "./world-content-names.ts";
 import { addWorldTexts, resolvePoiTitles } from "./world-content-titles.ts";
 import { resolveCommunityPeople } from "./world-content-people.ts";
+import { tweakDbOf } from "../../xf-studio/authoring/src/character/host/clothing-host";
 
 const BASE="base\\worlds\\03_night_city\\_compiled\\default\\";
 const BLOCKS=[BASE+"blocks\\all.streamingblock",BASE+"ep1\\blocks\\all.streamingblock"];
@@ -51,6 +52,7 @@ export async function buildWorldContent(options:{root:string;pack:WorldPack;slic
     if(digest(vanillaSources(root))!==digest(sources))throw Error("Vanilla mount list changed during the build; rerun.");
     if(digest(worldNameSources(root,ep1).sources)!==digest(names.sources))throw Error("TweakDB sources changed during the build; rerun.");};
   const result=await cachedWorldContent(join(directory,`${slice.id}.content.json`),key,async()=>{
+    const db=tweakDbOf(root,ep1);
     const oodle=loadGameOodle(root),pool=new NativeArchivePool(oodle.decompress),workers=new SectorWorkers(1,"content");
     const cache=createSectorCache(join(directory,"sectors"),workers.read,{version:CONTENT_SECTOR_VERSION,decode:decodeContentSector});
     cache.begin();
@@ -107,8 +109,8 @@ export async function buildWorldContent(options:{root:string;pack:WorldPack;slic
       for(const ext of ["mappins","poimappins"]) {const path=BASE+"03_night_city."+ext;mapMappins(decode(path),depotHash(path).toString(),journal,out);}
       const texts=new TextTable("en-us");
       for(const path of gameTextPaths("en-us",ep1))if(owner(path)>=0)addWorldTexts(texts,decode(path),path);
-      resolveCommunityPeople(out.communities,names.db?.blob??null,records,texts,out.counts);
-      resolvePoiTitles(out.pois,journal,names.db?.blob??null,texts,out.counts);
+      resolveCommunityPeople(out.communities,db?.blob??null,records,texts,out.counts);
+      resolvePoiTitles(out.pois,journal,db?.blob??null,texts,out.counts);
       for(const poi of out.pois)count(out.counts,"poi.record",poi.record?undefined:"linked record not stored");
       unchanged();signal.throwIfAborted();
       return {schema:"xfh/world-content-1",slice:{id:slice.id,title:slice.title,places:slice.places},

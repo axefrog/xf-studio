@@ -216,6 +216,8 @@ Each camera can use a different root appearance (`&FPP`/`&TPP`, `&camera=`), chu
 
 ## 6. How the Studio draws worn clothing
 
+The shared `tweakDbOf()` host owner selects the expansion blob when requested and installed, otherwise the base blob, and caches it by size/mtime. Its stamp-only `tweakDbSourceOf()` counterpart performs no blob read. Installed 2.31 files measured on 27 October 2026 are **42,028,033 bytes** (base) and **48,192,743 bytes** (expansion) [resource, offline]. The owner caps reads at **96 MiB (100,663,296 bytes)**, just over twice the larger measured file, with a typed `NativeBudgetError` before allocation. It reads only the opened file's checked size into one bounded buffer and rejects a changed/truncated file rather than caching a partial read. Synthetic `clothing-host.test.ts` verifies oversized-file refusal, normal selection and cache reuse; existing callers below the cap retain their behavior [offline].
+
 The [clothing render plan](../research/backlog/clothing-render.md)'s phases 1–4 are built (26 September 2026). What each step does, and what it doesn't yet:
 
 1. **What V wears** comes from the save (§2.6): per clothing area the item the game shows before other items' tags hide it (`GetVisualItemInSlot`: a wardrobe set's visual item while one is active, never for underwear, else the equipped item) and the saved hide flag (`wornAreas`).

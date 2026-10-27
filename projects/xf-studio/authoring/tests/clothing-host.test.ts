@@ -1,9 +1,10 @@
 // The clothing host's ports (PIPE-101): item records from a synthetic TweakDB blob (every value type the resolver reads), the save's
 // record IDs, the cooked preset's table, and the preset read's failure and cache paths (NATIVE-25, NATIVE-31, PIPE-100). Asset-free.
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, ftruncateSync, mkdirSync, openSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { clothingPorts, itemRecords, PRESET_PATHS, PRESET_RETRY_MS, presetOf, presetTable, resetPresetMemory, tweakIdOf } from "../src/character/host/clothing-host";
+import { clothingPorts, itemRecords, PRESET_PATHS, PRESET_RETRY_MS, presetOf, presetTable, resetPresetMemory, tweakIdOf, tweakDbOf, tweakDbSourceOf, TWEAK_DB_FILE_CAP } from "../src/character/host/clothing-host";
+import { NativeBudgetError } from "../src/native/native-errors";
 import { depotHash, fnv1a64 } from "../src/game/depot-path";
 import type { ResourceGraph } from "../src/game/resource-graph";
 import { TWEAKDB_MAGIC, TweakDbBlob, tweakDbId } from "../src/game/tweakdb-flats";
@@ -12,6 +13,22 @@ import { tempDir } from "./temp-dir";
 const root = tempDir("xfs-clothing-host-");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const utf8 = (text: string) => new TextEncoder().encode(text);
+
+test("shared TweakDB owner refuses oversized files before decoding and preserves ordinary selection/cache behavior",()=>{
+  const game=join(root,"bounded-tweakdb"),cache=join(game,"r6","cache");mkdirSync(cache,{recursive:true});
+  const base=join(cache,"tweakdb.bin"),ep1=join(cache,"tweakdb_ep1.bin");
+  writeFileSync(base,blob({cname:[["Example.label","Base"]]}));
+  const first=tweakDbOf(game,true)!;expect(first.source).toBe("r6\\cache\\tweakdb.bin");
+  expect(tweakDbOf(game,false)?.blob).toBe(first.blob);
+  writeFileSync(ep1,blob({cname:[["Example.label","Expansion"]]}));
+  const expansion=tweakDbOf(game,true)!;expect(expansion.source).toBe("r6\\cache\\tweakdb_ep1.bin");
+  expect(expansion.blob.lookup([tweakDbId("Example.label")]).get(tweakDbId("Example.label"))?.value).toBe("Expansion");
+  const fd=openSync(ep1,"r+");try{ftruncateSync(fd,TWEAK_DB_FILE_CAP+1);}finally{closeSync(fd);}
+  expect(tweakDbSourceOf(game,true)?.size).toBe(TWEAK_DB_FILE_CAP+1);
+  expect(()=>tweakDbOf(game,true)).toThrow(NativeBudgetError);
+  // The oversized expansion must not change a base-only caller's behavior.
+  expect(tweakDbOf(game,false)?.blob.lookup([tweakDbId("Example.label")]).get(tweakDbId("Example.label"))?.value).toBe("Base");
+});
 
 type Flats = { cname?: [string, string][]; ids?: [string, number][]; lists?: [string, number[]][]; int32?: [string, number][]; bool?: [string, number][];
   float?: [string, number][]; names?: [string, string[]][] };
