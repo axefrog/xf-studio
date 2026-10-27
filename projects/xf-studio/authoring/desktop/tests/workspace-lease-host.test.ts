@@ -70,7 +70,7 @@ test("a workspace write that stalls in transit is fenced again at the save: a ha
   const { rmSync } = await import("node:fs");
   const { join } = await import("node:path");
   const { DesktopWorkspaceStore, desktopWorkspaceRequest } = await import("../workspace-store");
-  const { serializeWorkspace } = await import("../../src/app/workspace/workspace-state");
+  const { serializeWorkspace } = await import("../../src/app/workspace/makeup-workspace");
   const { STUDIO_DOCUMENTS } = await import("../../src/compose/studio-registry");
   const { freshWorkspace } = await import("../../tests/fixtures/eye-region");
   const root = tempDir("xfs-fence-");

@@ -6,7 +6,7 @@ import { desktopVersionFromMetadata } from "../host";
 import { desktopPackageRequest } from "../package";
 import { LocalSettingsStore } from "../../src/setup/host/local-settings-store";
 import { collectionDraft } from "../../src/app/workspace/collection-workspace";
-import { loadWorkspace, serializeWorkspace } from "../../src/app/workspace/workspace-state";
+import { loadWorkspace, serializeWorkspace } from "../../src/app/workspace/makeup-workspace";
 import { freshWorkspace } from "../../tests/fixtures/eye-region";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { createPackageHandler, localPackageAdapter, localPackageTools } from "../../src/host/package-server";
