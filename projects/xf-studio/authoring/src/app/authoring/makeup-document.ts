@@ -48,6 +48,8 @@ export type DocumentParts = { readonly feature: string; readonly parts: HistoryP
  * the preview's layer resources (the trusted core's port).
  */
 export type DocumentHistoryOptions = { readonly history?: HistoryService; readonly scope?: string; readonly resetStack?: (previous: Recipe) => void;
+  /** Attach the old API to the existing neutral owner, without loading or copying any state. */
+  readonly look?: LookDocument; readonly signal?: AbortSignal; readonly release?: () => void;
   /** Opening/restoring an unseen context is not an editing interaction. Actual commands still activate their history. */
   readonly activate?: boolean };
 /** A look history from either form; throws on a damaged entry (checked before anything is published). */
@@ -74,11 +76,12 @@ export class AuthoringDocument {
   private changedGestureKind: string | undefined;
   private otherRevision = 0;
   private pendingLabel?: HistoryLabel;
-  constructor(initial: DocumentState, private readonly parts: DocumentParts, options: DocumentHistoryOptions = {}) {
+  constructor(initial: DocumentState | undefined, private readonly parts: DocumentParts, private readonly options: DocumentHistoryOptions = {}) {
     if (parts.module.id !== parts.feature) throw Error("The makeup document's module does not match its feature.");
     this.resetStack = options.resetStack ?? (() => {});
-    const features = parts.others ?? new LiveFeatures();
-    this.primary = features.add(parts.module, {
+    if (options.signal?.aborted) throw Error("This look's editing context has ended.");
+    const features = options.look?.features ?? parts.others ?? new LiveFeatures();
+    const replay: import("../../platform/core/live-features").FeatureRestore = {
       editor: (previous, value) => {
         const before = previous.part as Recipe | undefined, recipe = value as Recipe | undefined;
         const memory = previous.editor as { active: number; selected: number; fieldSelection?: FieldSelection };
@@ -90,8 +93,10 @@ export class AuthoringDocument {
         this.geometryRevision++; this.changedLayerIndex = undefined; this.changedGestureKind = undefined;
         this.notify("recipe"); this.resetStack(previous as Recipe);
       },
-    });
-    this.look = new LookDocument(this.seed(initial), { features, parts: parts.parts }, { ...options, signal: this.life.signal });
+    };
+    this.primary = options.look ? features.document(parts.feature)! : features.add(parts.module, replay);
+    if (options.look) this.primary.observeReplay(replay, this.life.signal);
+    this.look = options.look ?? new LookDocument(this.seed(initial!), { features, parts: parts.parts }, { ...options, signal: this.life.signal });
     this.otherDocuments = {
       features: () => features.features().filter(feature => feature !== this.feature),
       has: feature => feature !== this.feature && features.has(feature),
@@ -99,7 +104,7 @@ export class AuthoringDocument {
       read: feature => feature === this.feature ? undefined : features.read(feature),
       content: keys => features.content((keys ?? features.features()).filter(feature => feature !== this.feature)),
     };
-    this.look.subscribe((change, details) => {
+    const off = this.look.subscribe((change, details) => {
       if (change === "part") {
         if (details?.kind === "restore" && details.features.some(feature => feature !== this.feature)) { this.otherRevision++; this.notify("part"); }
       } else {
@@ -107,6 +112,10 @@ export class AuthoringDocument {
         this.notify(change);
       }
     });
+    const release = () => { this.life.abort(); off(); this.listeners.clear(); this.effectListeners.clear(); };
+    this.life.signal.addEventListener("abort", off, { once: true });
+    options.signal?.addEventListener("abort", release, { once: true });
+    this.life.signal.addEventListener("abort", () => options.signal?.removeEventListener("abort", release), { once: true });
   }
   private seed(value: DocumentState) {
     const recipe = parseRecipe(value.recipe), active = clamp(value.active, recipe.layers.length);
@@ -171,7 +180,7 @@ export class AuthoringDocument {
   }
   /** The final editable-context owner releases its history target and subscriptions. */
   dispose() {
-    this.life.abort(); this.listeners.clear(); this.effectListeners.clear();
+    this.options.release?.(); this.life.abort(); this.listeners.clear(); this.effectListeners.clear();
   }
   private notify(change: DocumentChange) { for (const listener of this.listeners) listener(change); }
   private effect(value: DocumentEffect) { for (const listener of this.effectListeners) listener(value); }

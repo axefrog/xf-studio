@@ -15,7 +15,7 @@ import { createHistoryService } from "../src/platform/core/history-service";
 import { StudioRuntime } from "../src/studio-ui/runtime";
 import type { Port } from "../src/studio-ui/runtime";
 import type { Feedback } from "../src/studio-ui/feedback";
-import { zeroFeatureComposition } from "./fixtures/editor-composition";
+import { zeroFeatureComposition, syntheticEditorComposition, FIXTURE_LOOK } from "./fixtures/editor-composition";
 
 function probe(run: () => unknown, expected: ErrorConstructor | string | null) {
   let failure: unknown = null;
@@ -43,18 +43,15 @@ describe("CORE-03 captured startup failures", () => {
     if (expected !== null) { expect(lookups).toEqual(["eye-makeup"]); expect(feature("eye-makeup")).toBeUndefined(); }
   });
 
-  test("slice 4 flips: preseeded workspace cannot construct editing services without eye makeup", () => {
-    const expected: ErrorConstructor | null = Error;
-    const composition = legacyZeroComposition(), lookups: string[] = [], history = createHistoryService();
-    const owner = composition.registry.owner.bind(composition.registry), scope = "look:probe/empty";
-    composition.registry.owner = id => { lookups.push(id); return owner(id); };
-    try {
-      probe(() => {
-        createAuthoringEditing(freshWorkspace(emptyRecipe()),
-          { history, scope, resetStack() {}, selectedCollection: () => "draft" }, composition);
-      }, expected);
-      if (expected !== null) { expect(lookups).toEqual(["eye-makeup"]); expect(owner("eye-makeup")).toBeUndefined(); }
-    } finally { history.close(scope); }
+  test("slice 4 resolved: preseeded neutral editing constructs without eye makeup or an application", () => {
+    const expected: ErrorConstructor | null = null;
+    for (const fixture of [zeroFeatureComposition(), syntheticEditorComposition()]) {
+      const history = createHistoryService(), life = new AbortController();
+      try {
+        probe(() => createAuthoringEditing({}, { history, signal: life.signal, look: FIXTURE_LOOK, scope: "look:probe/empty" },
+          { registry: fixture.registry, documents: { parts: fixture.parts } }), expected);
+      } finally { life.abort(); }
+    }
   });
 
   test("slice 5 flips: removing only eye makeup leaves an extra application handler", () => {

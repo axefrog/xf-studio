@@ -1,62 +1,58 @@
-/** Editable data lifetime over LookSessions. Panels share a document, selection, in-progress edits and writer by LookRef.
- * No inspector acquisition reaches a renderer, a head or a raster scheduler. The drawn input is a separate compatibility attachment.
- */
-import { createAuthoringEditing, type StudioComposition, type createTrustedAuthoringCore } from "../app/trusted-authoring-core";
-import type { StudioApplication } from "../app/studio-application";
-import type { WorkspaceState } from "../app/workspace/makeup-workspace";
+/** One editable look per key. Requesters share its state, registered editors, history and persistence writer. */
+import { createAuthoringEditing, type AuthoringEditing, type EditingComposition } from "../app/trusted-authoring-core";
 import type { DocumentOutbox } from "../platform/core/document-outbox";
-import { lookScope } from "../platform/core/history-service";
+import { lookScope, type HistoryService } from "../platform/core/history-service";
 import { lookRef, type LookRef } from "./collection-documents";
-import { LookEditor, lookContent } from "./makeup-look-editor";
+import { LookEditor, lookContent } from "./look-editor";
 import type { LookSessions } from "./look-sessions";
 import type { CollectionOwner } from "./collection-owner";
-import type { Recipe } from "../engines/layered-makeup/recipe";
 
-type Core = ReturnType<typeof createTrustedAuthoringCore>;
-export type LookEditContext = ReturnType<typeof createAuthoringEditing> & { readonly app: StudioApplication; readonly writer: LookEditor; readonly ref: LookRef };
-type Entry = { context: LookEditContext; wants: number };
-export type LookEditHandle = { readonly context: LookEditContext; release(): void };
+export type LookEditContext<T extends object = object> = Omit<AuthoringEditing, keyof T> & T & {
+  readonly lookDocument: AuthoringEditing["document"]; readonly writer: LookEditor; readonly ref: LookRef };
+type Entry<T extends object> = { context: LookEditContext<T>; wants: number; life: AbortController };
+export type LookEditHandle<T extends object = object> = { readonly context: LookEditContext<T>; release(): void };
+export type LookEditContextDeps<T extends object = object> = {
+  composition: EditingComposition; history: HistoryService;
+  owner: CollectionOwner; sessions: LookSessions; outbox: DocumentOutbox;
+  /** Temporary application projections attach to the same owner; the core never interprets them. */
+  attach?(editing: AuthoringEditing, ref: LookRef): T;
+  note?(text: string): void; report?(error: unknown): void; shown?(ref: LookRef): void;
+};
 
-export class LookEditContexts {
-  private readonly entries = new Map<string, Entry>();
+export class LookEditContexts<T extends object = object> {
+  private readonly entries = new Map<string, Entry<T>>();
   private readonly off: () => void;
-  constructor(private readonly deps: {
-    core: Core; composition: StudioComposition; workspace: Pick<WorkspaceState, "glitterChoices">;
-    owner: CollectionOwner; sessions: LookSessions; outbox: DocumentOutbox;
-    resetStack(ref: LookRef, previous: Recipe): void;
-    note?(text: string): void; report?(error: unknown): void; shown?(ref: LookRef): void;
-  }) {
-    // A failed write retains its sole document/writer even after the final requester leaves. Retry at the owner's next event.
+  private closed = false;
+  constructor(private readonly deps: LookEditContextDeps<T>) {
     this.off = deps.outbox.subscribe(() => {
-      for (const [key, entry] of this.entries) if (!entry.wants && entry.context.writer.dirty()) {
+      for (const [key, entry] of this.entries) if (!entry.wants) {
         queueMicrotask(() => { if (this.entries.get(key) === entry && !entry.wants) this.retire(key, entry); });
       }
     });
   }
-  acquire(ref: LookRef, signal: AbortSignal): LookEditHandle | undefined {
-    if (signal.aborted) return undefined;
+  acquire(ref: LookRef, signal: AbortSignal): LookEditHandle<T> | undefined {
+    if (this.closed || signal.aborted) return undefined;
     const key = lookScope(ref);
     let entry = this.entries.get(key);
     if (!entry) {
       const view = this.deps.owner.look(ref);
       if (!view || !this.deps.owner.collection(ref.collection)) return undefined;
-      let seed: ReturnType<typeof lookContent>["state"] | undefined;
-      try { seed = view.state === "live" ? lookContent(view, this.deps.composition.documents).state : undefined; }
+      let state: Parameters<typeof createAuthoringEditing>[0];
+      try { state = view.state === "live" ? lookContent(view, this.deps.composition.documents).state : {}; }
       catch (error) { this.deps.report?.(error); return undefined; }
-      // The empty document is only an input seed; LookEditor immediately displays the removed state and blocks it.
-      const state = seed ?? this.deps.core.document.export();
-      const editing = createAuthoringEditing({ ...this.deps.workspace, ...state }, {
-        history: this.deps.core.history, scope: key, activate: false, selectedCollection: () => ref.look,
-        resetStack: previous => this.deps.resetStack(ref, previous),
-      }, this.deps.composition);
-      const app = this.deps.core.app.fork({ ...editing, collection: undefined, files: undefined,
-        characterContext: undefined, characterDetails: undefined, savedV: undefined });
-      const writer = new LookEditor({ model: this.deps.composition.documents, sessions: this.deps.sessions, document: editing.document,
-        store: () => this.deps.outbox.store(), restoring: target => this.deps.outbox.recovering(lookRef(target)),
-        note: this.deps.note, report: this.deps.report, shown: () => this.deps.shown?.(ref) });
-      if (!writer.show(ref)) { writer.dispose(); app.dispose(); editing.document.dispose(); return undefined; }
-      entry = { wants: 0, context: { ...editing, app, writer, ref: { ...ref } } };
-      this.entries.set(key, entry);
+      const life = new AbortController();
+      let writer: LookEditor | undefined;
+      try {
+        const editing = createAuthoringEditing(state, { signal: life.signal, history: this.deps.history,
+          scope: key, look: ref, activate: false }, this.deps.composition);
+        const attachment = this.deps.attach?.(editing, ref);
+        writer = new LookEditor({ model: this.deps.composition.documents, sessions: this.deps.sessions, document: editing.document,
+          store: () => this.deps.outbox.store(), restoring: target => this.deps.outbox.recovering(lookRef(target)),
+          note: this.deps.note, report: this.deps.report, shown: () => this.deps.shown?.(ref) });
+        if (!writer.show(ref) || signal.aborted || this.closed) { writer.dispose(); life.abort(); return undefined; }
+        entry = { wants: 0, life, context: { ...editing, ...attachment, writer, ref: Object.freeze({ ...ref }) } as unknown as LookEditContext<T> };
+        this.entries.set(key, entry);
+      } catch (error) { try { writer?.dispose(); } finally { life.abort(); } throw error; }
     }
     entry.wants++;
     const held = entry;
@@ -64,26 +60,37 @@ export class LookEditContexts {
     const release = () => {
       if (released) return;
       released = true; signal.removeEventListener("abort", release);
-      if (!--held.wants) this.retire(key, held);
+      if (this.entries.get(key) === held && held.wants && !--held.wants) this.retire(key, held);
     };
     signal.addEventListener("abort", release, { once: true });
     return { context: held.context, release };
   }
-  private retire(key: string, entry: Entry) {
-    const { app, writer, document } = entry.context;
-    document.replacing();
+  private retire(key: string, entry: Entry<T>) {
+    if (this.entries.get(key) !== entry) return;
+    const { writer, lookDocument } = entry.context;
+    lookDocument.replacing();
     if (!writer.commit()) return;
     this.entries.delete(key);
-    writer.dispose(); app.dispose(); document.dispose();
+    try { writer.dispose(); } finally { entry.life.abort(); }
+    if (this.closed && !this.entries.size) this.off();
   }
   commit(): boolean {
     let ok = true;
-    for (const entry of this.entries.values()) if (!entry.context.writer.commit()) ok = false;
+    for (const [key, entry] of this.entries) {
+      if (!entry.context.writer.commit()) ok = false;
+      else if (!entry.wants) this.retire(key, entry);
+    }
     return ok;
   }
-  settleEdits() { for (const entry of this.entries.values()) entry.context.document.replacing(); }
+  settleEdits() { for (const entry of this.entries.values()) entry.context.lookDocument.replacing(); }
   held(): readonly { ref: LookRef; wants: number; dirty: boolean }[] {
     return [...this.entries.values()].map(({ context, wants }) => ({ ref: { ...context.ref }, wants, dirty: context.writer.dirty() }));
   }
-  dispose() { this.settleEdits(); this.commit(); this.off(); for (const [key, entry] of this.entries) { entry.wants = 0; this.retire(key, entry); } }
+  dispose() {
+    this.closed = true;
+    this.settleEdits();
+    for (const [key, entry] of this.entries) { entry.wants = 0; this.retire(key, entry); }
+    // Retained dirty contexts keep the retry subscription until their last successful write.
+    if (!this.entries.size) this.off();
+  }
 }

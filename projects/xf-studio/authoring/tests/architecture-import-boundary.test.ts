@@ -38,6 +38,11 @@ const probed = (probes: Readonly<Record<string, string>>): Tree =>
 /** A module's imports as src-relative module names (`platform/api`, `app/studio-application`), or bare package names. */
 const resolvedIn = (tree: Tree, name: string) => imports(tree.text(name)).map(path => resolveFrom(name, path));
 const resolved = (name: string) => resolvedIn(DISK, name);
+test("the temporary makeup editing bridge stays confined to profile and concrete application construction (CORE-03)", () => {
+  const bridge = "app/authoring/makeup-editing";
+  expect(DISK.names.filter(name => resolved(name).includes(bridge)).sort())
+    .toEqual(["app/profiles/profile-authoring", "app/trusted-authoring-core"]);
+});
 /** A module's imports with whether each is type-only, as src-relative module names. */
 const usesIn = (tree: Tree, name: string) => importUses(tree.text(name)).map(use => ({ path: resolveFrom(name, use.specifier), typeOnly: use.typeOnly }));
 /** A resolved import as the module it names (`x` or `x/index`), when it names one in the tree. */

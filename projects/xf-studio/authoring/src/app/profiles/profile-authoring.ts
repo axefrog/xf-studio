@@ -1,26 +1,36 @@
 import { createTrustedAuthoringCore, type StudioComposition } from "../trusted-authoring-core";
 import { authoringAttachment } from "../authoring/authoring-attachment";
-import { LookEditContexts, type LookEditHandle } from "../../library/look-edit-contexts";
-import { NO_LOOK_SCOPE, REMOVED_LOOK } from "../../library/makeup-look-editor";
+import { LookEditContexts, type LookEditHandle, type LookEditContextDeps } from "../../library/look-edit-contexts";
+import { NO_LOOK_SCOPE, REMOVED_LOOK } from "../../library/look-editor";
+import { createMakeupEditing } from "../authoring/makeup-editing";
 import { sameLook, type LookRef } from "../../library/collection-documents";
 import { emptyRecipe } from "../../engines/layered-makeup/recipe";
 import { emptyLookHistory } from "../../platform/core/look-history";
 
 type Factory = typeof createTrustedAuthoringCore;
 type Core = ReturnType<Factory>;
+type Attachment = ReturnType<typeof createMakeupEditing> & { app: Core["app"] };
+export type ProfileLookEditContexts = LookEditContexts<Attachment>;
 
 /** The phase-2 root input now follows an explicitly drawn context; all editable documents live in the keyed owner. */
 export function createProfileAuthoring(workspace: Parameters<Factory>[0], ports: Parameters<Factory>[1], composition: StudioComposition,
-  deps: Omit<ConstructorParameters<typeof LookEditContexts>[0], "core" | "workspace" | "composition" | "resetStack" | "shown"> & { shown?(): void }) {
+  deps: Omit<LookEditContextDeps<Attachment>, "history" | "composition" | "attach" | "shown"> & { shown?(): void }) {
   const base = createTrustedAuthoringCore({ ...workspace, recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {},
     history: emptyLookHistory(), liveFeatures: undefined, liveLocked: undefined }, { ...ports, scope: NO_LOOK_SCOPE, activate: false }, composition);
   base.document.setBlocked(REMOVED_LOOK);
-  let handle: LookEditHandle | undefined, life: AbortController | undefined;
+  let handle: LookEditHandle<Attachment> | undefined, life: AbortController | undefined;
   let current: Pick<Core, "document" | "geometry" | "presentation" | "recipe" | "eyeMakeup" | "gestures" | "controls" | "app"> = base;
   let compatibility: Core["app"] | undefined;
-  const contexts = new LookEditContexts({ ...deps, core: base, workspace, composition,
-    shown: ref => { if (handle && sameLook(ref, handle.context.ref)) deps.shown?.(); },
-    resetStack: (ref, previous) => { if (handle && sameLook(ref, handle.context.ref)) ports.resetStack(previous); } });
+  const contexts = new LookEditContexts<Attachment>({ ...deps, history: base.history, composition,
+    attach: (editing, ref) => {
+      const makeup = createMakeupEditing(editing, workspace, { ...ports, selectedCollection: () => ref.look,
+        resetStack: previous => { if (handle && sameLook(ref, handle.context.ref)) ports.resetStack(previous); } }, composition);
+      const app = base.app.fork({ ...makeup, collection: undefined, files: undefined,
+        characterContext: undefined, characterDetails: undefined, savedV: undefined });
+      editing.signal.addEventListener("abort", () => app.dispose(), { once: true });
+      return { ...makeup, app };
+    },
+    shown: ref => { if (handle && sameLook(ref, handle.context.ref)) deps.shown?.(); } });
   const document = authoringAttachment(() => current.document, { subscribe: ["restore"], subscribeEffects: undefined, onReplacing: undefined });
   const presentation = authoringAttachment(() => current.presentation, { subscribe: ["restore"] });
   const application = authoringAttachment(() => current.app, { subscribe: [] });
@@ -40,7 +50,7 @@ export function createProfileAuthoring(workspace: Parameters<Factory>[0], ports:
       if (ref && handle && sameLook(ref, handle.context.ref)) return true;
       if (!ref && !handle) return true;
       const nextLife = new AbortController();
-      let next: LookEditHandle | undefined;
+      let next: LookEditHandle<Attachment> | undefined;
       try { if (ref) next = contexts.acquire(ref, nextLife.signal); }
       catch (error) { nextLife.abort(); deps.report?.(error); return false; }
       if (ref && !next) { nextLife.abort(); return false; }

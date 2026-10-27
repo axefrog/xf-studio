@@ -15,6 +15,7 @@ import { gestureHistoryLabel, historyLabel } from "../../legacy/eye-makeup/histo
 import { EYE_MAKEUP_DESCRIPTORS, EYE_MAKEUP_GESTURE_DESCRIPTORS, type EyeMakeupScope } from "../../legacy/eye-makeup/eye-makeup-descriptors";
 import { applyEyeMakeup, assignEyeMakeupIds, eyeMakeupCapability, type EyeMakeupAction, type EyeMakeupEditorState,
   type EyeMakeupEffect } from "./core";
+import { createEyeMakeupEditor } from "./editor";
 import { eyeMakeupEditor, eyeMakeupMemory, eyeMakeupPart } from "./part";
 import { EYE_MAKEUP_LIMITS, EYE_MAKEUP_UNITS, eyeMakeupConsequence } from "./limits";
 import { EYE_MAKEUP_EXPORT } from "./export-info";
@@ -45,7 +46,7 @@ export type EyeMakeupGestureResult = { layerIndex: number; kind: GestureEdit["ki
 export const EYE_MAKEUP: FeatureModule<EyeMakeupAction, EyeMakeupScope, typeof EYE_MAKEUP_ID, Recipe, EyeMakeupEditorState,
   EyeMakeupEffect, GestureEdit, EyeMakeupGestureResult> = Object.freeze({
   owner: "feature", id: EYE_MAKEUP_ID, api: 1, label: "Eye makeup", stage: "stable",
-  part: eyeMakeupPart, editor: eyeMakeupEditor, memory: eyeMakeupMemory, exports: EYE_MAKEUP_EXPORT,
+  part: eyeMakeupPart, editor: eyeMakeupEditor, createEditor: createEyeMakeupEditor, memory: eyeMakeupMemory, exports: EYE_MAKEUP_EXPORT,
   // Gesture proposals are catalogued with the gestures; the platform owns the session's Undo transaction.
   gestures: { apply: (recipe: Recipe, edit: GestureEdit) => applyRecipeGesture(recipe, edit, EYE_MAKEUP_REGION.models),
     label: gestureHistoryLabel, descriptors: EYE_MAKEUP_GESTURE_DESCRIPTORS },

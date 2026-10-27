@@ -5,7 +5,7 @@ import type { StudioFileOperations, FileWriter, FileWriterCapture, InputCapture 
 import type { LookRef } from "../../library/collection-documents";
 import type { createTrustedAuthoringCore } from "../trusted-authoring-core";
 import type { CollectionScenePort } from "../../library/collection-service";
-import type { LookEditContexts } from "../../library/look-edit-contexts";
+import type { ProfileLookEditContexts } from "./profile-authoring";
 import { lookScope } from "../../platform/core/history-service";
 import { characterScope } from "../../character/character-history";
 import type { CharacterContextActions } from "../../character/character-context-actions";
@@ -27,7 +27,7 @@ export type PanelEditingPort<Slot> = {
 /** Instance-bound input routing. Resolution happens here; document/collection/character owners never read focus. */
 export class PanelEditingContexts<Slot> {
   constructor(private readonly deps: {
-    session: ProfileSessions; targets: TargetResolver; looks: LookEditContexts; empty: Core;
+    session: ProfileSessions; targets: TargetResolver; looks: ProfileLookEditContexts; empty: Core;
     context(type: string): PanelContext;
     available?(type: string): boolean;
     character(id: string): CharacterContextActions | undefined;

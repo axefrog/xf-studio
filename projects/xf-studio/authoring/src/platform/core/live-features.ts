@@ -18,13 +18,19 @@ export class FeatureDocument {
   private livePart: unknown;
   private liveEditor: unknown;
   constructor(readonly module: AnyFeatureModule, state: LiveFeatureState = {},
-    private readonly changed: (kind: LiveFeatureChange["kind"], partChanged: boolean) => void = () => {}, private readonly replay: FeatureRestore = {}) {
+    private readonly changed: (kind: LiveFeatureChange["kind"], partChanged: boolean) => void = () => {}, private replay: FeatureRestore = {}) {
     this.livePart = state.part; this.liveEditor = this.parseEditor(state.editor, state.part);
   }
   get feature() { return this.module.id as string; }
   /** The look's part, or undefined when the look does not have this feature. Read-only; never a copy. */
   get part() { return this.livePart; }
   get editor() { return this.liveEditor; }
+  /** A compatibility projection attaches to the existing document; it never adds another state owner. */
+  observeReplay(replay: FeatureRestore, signal: AbortSignal) {
+    if (signal.aborted) throw Error("This feature's editing context has ended.");
+    this.replay = replay;
+    signal.addEventListener("abort", () => { if (this.replay === replay) this.replay = {}; }, { once: true });
+  }
   /** What the feature's pure capability and apply read: an absent part reads as the codec's empty part. */
   state(): FeatureState<unknown, unknown> { return { part: this.livePart ?? this.module.part.empty(), editor: this.liveEditor }; }
   /** Publish an applied result; explicitly flag a part mutated in place. Editor-only writes keep the content version. */

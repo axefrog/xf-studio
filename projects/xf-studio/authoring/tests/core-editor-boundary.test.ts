@@ -15,6 +15,43 @@ import { smallWorkspaceV1, looseWorkspaceV1 } from "./fixtures/workspace-v1-fixt
 import { join } from "node:path";
 import { tempDir } from "./temp-dir";
 
+import { createAuthoringEditing } from "../src/app/trusted-authoring-core";
+import { LookEditContexts } from "../src/library/look-edit-contexts";
+import { CollectionOwner } from "../src/library/collection-owner";
+import { LookSessions } from "../src/library/look-sessions";
+import { DocumentOutbox } from "../src/platform/core/document-outbox";
+import { memoryOutboxStorage } from "./fixtures/platform-doubles";
+
+async function editableLooks(synthetic = true) {
+  const fixture = synthetic ? syntheticEditorComposition() : zeroFeatureComposition();
+  const composition = { registry: fixture.registry, documents: { parts: fixture.parts } };
+  const database = openLibraryDatabase(":memory:"), stores = libraryStores(database, fixture.parts);
+  const documents: import("../src/platform/api/document-store").DocumentStorePort = { list: async kind => stores.documents.list(kind),
+    read: async (refs: Parameters<typeof stores.documents.read>[0]) => stores.documents.read(refs),
+    revisions: async (refs: Parameters<typeof stores.documents.revisions>[0]) => stores.documents.revisions(refs),
+    transact: async (request: Parameters<typeof stores.documents.transact>[0]) => stores.documents.transact(request) };
+  const outbox = new DocumentOutbox(documents, memoryOutboxStorage(), { retryMs: 5 }); outbox.open();
+  const owner = new CollectionOwner({ documents, outbox }); await owner.load();
+  const first = editorCollection(synthetic).presets[0], second = { ...structuredClone(first), id: "00000000-0000-4000-8000-000000000003", name: "Other" };
+  const made = owner.dispatch({ kind: "collection.create", id: FIXTURE_LOOK.collection, name: "Editors", looks: [first, second] });
+  if (!made.ok) throw Error(made.reason);
+  await outbox.settle();
+  const sessions = new LookSessions(owner, outbox), history = createHistoryService();
+  const contexts = new LookEditContexts({ composition, history, owner, sessions, outbox });
+  return { contexts, history, owner, outbox, composition, other: { collection: FIXTURE_LOOK.collection, look: second.id },
+    async close() { contexts.dispose(); await outbox.settle(); outbox.stop(); database.close(); } };
+}
+function setSynthetic(editing: ReturnType<typeof createAuthoringEditing>, value: number, selected: string | null = "first") {
+  const document = editing.document.features.document(SYNTHETIC_ID)!;
+  const action = { kind: "synthetic.setValue" as const, id: "first", value }, spec = SYNTHETIC_LAYERED.actions[action.kind];
+  editing.document.history.checkpoint([SYNTHETIC_ID], spec.label(action));
+  const result = spec.apply({ part: document.part as SyntheticPart, editor: { selected } }, action);
+  document.set(result.part, result.editor);
+}
+function syntheticSnapshot(editing: ReturnType<typeof createAuthoringEditing>) {
+  return editing.editors.get(SYNTHETIC_ID)!.snapshot() as ReturnType<ReturnType<typeof createSyntheticEditor>["snapshot"]>;
+}
+
 test("asset-free compositions use the existing action, part and live-feature registries", () => {
   const zero = zeroFeatureComposition();
   expect(zero.registry.owners()).toEqual([]);
@@ -177,9 +214,134 @@ describe("CORE-03 later-slice construction gates (no shell-mount claim)", () => 
       }
     }
   });
-  test.todo("slice 4: zero-feature trusted editor construction opens and releases a look scope without constructing makeup", () => {});
-  test.todo("slice 4: a synthetic layered editor is constructed through its registered factory with no core feature-ID branch", () => {});
-  test.todo("slice 4: two requesters for one look share its editor/history; another look has independent selection and history", () => {});
-  test.todo("slice 4: releasing one requester preserves the other; final release aborts editors and closes their scope", () => {});
-  test.todo("slice 4: failed persistence retains the dirty editor until retry succeeds, then final release disposes it", () => {});
+  test("slice 4: zero-feature trusted editing opens and releases a look scope without constructing makeup", async () => {
+    const fixture = zeroFeatureComposition(), history = createHistoryService(), life = new AbortController(), scope = lookScope(FIXTURE_LOOK);
+    const editing = createAuthoringEditing({}, { history, signal: life.signal, look: FIXTURE_LOOK, scope, activate: false },
+      { registry: fixture.registry, documents: { parts: fixture.parts } });
+    expect(editing.editors.size).toBe(0);
+    expect(editing.document.export().features).toEqual({});
+    expect("recipe" in editing.document).toBe(false);
+    expect(history.scope(scope)).toBe(editing.document.history);
+    life.abort(); expect(editing.signal.aborted).toBe(true); expect(history.scope(scope)).toBeUndefined();
+    expect(() => editing.document.export()).toThrow();
+    const w = await editableLooks(false);
+    try {
+      const requester = new AbortController(), held = w.contexts.acquire(FIXTURE_LOOK, requester.signal)!;
+      expect(held.context.editors.size).toBe(0);
+      expect(held.context.document.export().features).toEqual({});
+      requester.abort(); expect(w.contexts.held()).toEqual([]);
+      expect(w.history.scope(scope)).toBeUndefined();
+    } finally { await w.close(); }
+  });
+  test("slice 4: synthetic construction uses its registered factory and observes edits, selection and replay", () => {
+    let constructions = 0;
+    const module = { ...SYNTHETIC_LAYERED, createEditor(host: FeatureEditorHost) { constructions++; return createSyntheticEditor(host); } };
+    const fixture = editorComposition([module]), history = createHistoryService(), life = new AbortController();
+    const editing = createAuthoringEditing({ features: { [SYNTHETIC_ID]: { part: module.part.starter() } } },
+      { history, signal: life.signal, look: FIXTURE_LOOK, scope: lookScope(FIXTURE_LOOK) },
+      { registry: fixture.registry, documents: { parts: fixture.parts } });
+    try {
+      expect(constructions).toBe(1);
+      expect(syntheticSnapshot(editing)).toMatchObject({ look: FIXTURE_LOOK, scope: lookScope(FIXTURE_LOOK), present: true, selected: null });
+      setSynthetic(editing, 7);
+      expect(syntheticSnapshot(editing).layers[0].value).toBe(7);
+      expect(syntheticSnapshot(editing).selected).toBe("first");
+      expect(editing.document.history.undo()).toBe(true); expect(syntheticSnapshot(editing).layers[0].value).toBe(1);
+      expect(editing.document.history.redo()).toBe(true); expect(syntheticSnapshot(editing).layers[0].value).toBe(7);
+      const snapshot = syntheticSnapshot(editing); Object.assign(snapshot.layers[0], { value: 99 });
+      expect(syntheticSnapshot(editing).layers[0].value).toBe(7);
+    } finally { life.abort(); }
+    expect(() => syntheticSnapshot(editing)).toThrow();
+  });
+  test("slice 4: a failed or aborted factory unwinds every constructed editor and history target", () => {
+    for (const abort of [false, true]) {
+      const life = new AbortController(), history = createHistoryService(), failure = Error("Factory unavailable.");
+      let retained: ReturnType<typeof createSyntheticEditor> | undefined;
+      const module = { ...SYNTHETIC_LAYERED, createEditor(host: FeatureEditorHost) {
+        retained = createSyntheticEditor(host);
+        if (abort) { life.abort(); return retained; }
+        throw failure;
+      } };
+      const fixture = editorComposition([module]);
+      const construct = () => createAuthoringEditing({}, { history, signal: life.signal, scope: lookScope(FIXTURE_LOOK), look: FIXTURE_LOOK },
+        { registry: fixture.registry, documents: { parts: fixture.parts } });
+      if (abort) expect(construct).toThrow(); else expect(construct).toThrow(failure);
+      expect(history.scope(lookScope(FIXTURE_LOOK))).toBeUndefined(); expect(() => retained!.snapshot()).toThrow();
+      life.abort();
+    }
+  });
+  test("slice 4: two requesters share one editor/history while another look keeps independent selection and history", async () => {
+    const w = await editableLooks(), a = new AbortController(), b = new AbortController(), c = new AbortController();
+    try {
+      const first = w.contexts.acquire(FIXTURE_LOOK, a.signal)!, again = w.contexts.acquire(FIXTURE_LOOK, b.signal)!;
+      const other = w.contexts.acquire(w.other, c.signal)!;
+      expect(again.context).toBe(first.context);
+      expect(other.context.document).not.toBe(first.context.document);
+      expect(other.context.editors.get(SYNTHETIC_ID)).not.toBe(first.context.editors.get(SYNTHETIC_ID));
+      setSynthetic(first.context, 7);
+      expect(syntheticSnapshot(again.context)).toMatchObject({ selected: "first", layers: [{ id: "first", value: 7 }, { id: "second", value: 2 }] });
+      expect(syntheticSnapshot(other.context).selected).toBeNull(); expect(other.context.document.history.state().depth).toBe(0);
+      setSynthetic(other.context, 9, "second");
+      expect(syntheticSnapshot(first.context).selected).toBe("first"); expect(syntheticSnapshot(other.context).selected).toBe("second");
+      expect(first.context.document.history.undo()).toBe(true);
+      expect(syntheticSnapshot(first.context).layers[0].value).toBe(1); expect(syntheticSnapshot(other.context).layers[0].value).toBe(9);
+      expect(w.history.scope(lookScope(FIXTURE_LOOK))).toBe(first.context.document.history);
+      expect(w.history.scope(lookScope(w.other))).toBe(other.context.document.history);
+    } finally { a.abort(); b.abort(); c.abort(); await w.close(); }
+  });
+  test("slice 4: releasing one requester preserves the other; final release aborts editors and closes the scope", async () => {
+    const w = await editableLooks(), a = new AbortController(), b = new AbortController();
+    try {
+      const first = w.contexts.acquire(FIXTURE_LOOK, a.signal)!, second = w.contexts.acquire(FIXTURE_LOOK, b.signal)!;
+      const editor = first.context.editors.get(SYNTHETIC_ID)!, history = first.context.document.history;
+      first.release(); first.release(); a.abort();
+      expect(w.contexts.held()).toEqual([{ ref: FIXTURE_LOOK, wants: 1, dirty: false }]);
+      expect(second.context.signal.aborted).toBe(false); setSynthetic(second.context, 7);
+      expect(syntheticSnapshot(second.context).layers[0].value).toBe(7);
+      b.abort(); expect(w.contexts.held()).toEqual([]); expect(second.context.signal.aborted).toBe(true);
+      expect(w.history.scope(lookScope(FIXTURE_LOOK))).toBeUndefined(); expect(() => editor.snapshot()).toThrow();
+      expect(history.undo()).toBe(false);
+      const cancelled = new AbortController(); cancelled.abort(); expect(w.contexts.acquire(FIXTURE_LOOK, cancelled.signal)).toBeUndefined();
+      const nextLife = new AbortController(), next = w.contexts.acquire(FIXTURE_LOOK, nextLife.signal)!;
+      expect(next.context).not.toBe(first.context); expect(syntheticSnapshot(next.context).layers[0].value).toBe(7);
+      expect(next.context.document.history.undo()).toBe(true); expect(syntheticSnapshot(next.context).layers[0].value).toBe(1); nextLife.abort();
+    } finally { a.abort(); b.abort(); await w.close(); }
+  });
+  test("slice 4: failed persistence retains the dirty editor through reacquire, then retry stores and releases it", async () => {
+    const w = await editableLooks(), a = new AbortController(), b = new AbortController();
+    const update = w.owner.updateLook.bind(w.owner); let fail = true;
+    w.owner.updateLook = (...args) => fail ? { ok: false, code: "unavailable", reason: "Persistence is unavailable." } : update(...args);
+    try {
+      const first = w.contexts.acquire(FIXTURE_LOOK, a.signal)!; setSynthetic(first.context, 7); a.abort();
+      expect(w.contexts.held()).toEqual([{ ref: FIXTURE_LOOK, wants: 0, dirty: true }]);
+      expect(first.context.signal.aborted).toBe(false);
+      expect(w.history.scope(lookScope(FIXTURE_LOOK))).toBe(first.context.document.history);
+      const again = w.contexts.acquire(FIXTURE_LOOK, b.signal)!;
+      expect(again.context).toBe(first.context); expect(syntheticSnapshot(again.context).layers[0].value).toBe(7); b.abort();
+      fail = false; expect(w.contexts.commit()).toBe(true); await w.outbox.settle();
+      expect(w.contexts.held()).toEqual([]); expect(first.context.signal.aborted).toBe(true);
+      expect(() => syntheticSnapshot(first.context)).toThrow(); expect(w.history.scope(lookScope(FIXTURE_LOOK))).toBeUndefined();
+      const nextLife = new AbortController(), next = w.contexts.acquire(FIXTURE_LOOK, nextLife.signal)!;
+      expect(syntheticSnapshot(next.context).layers[0].value).toBe(7);
+      expect(next.context.document.history.undo()).toBe(true); expect(syntheticSnapshot(next.context).layers[0].value).toBe(1); nextLife.abort();
+    } finally { fail = false; a.abort(); b.abort(); await w.close(); }
+  });
+  test("slice 4: shutdown retains a failed writer for an outbox-triggered retry and refuses new acquisition", async () => {
+    const w = await editableLooks(), life = new AbortController(), update = w.owner.updateLook.bind(w.owner);
+    let fail = true;
+    w.owner.updateLook = (...args) => fail ? { ok: false, code: "unavailable", reason: "Persistence is unavailable." } : update(...args);
+    try {
+      const held = w.contexts.acquire(FIXTURE_LOOK, life.signal)!; setSynthetic(held.context, 7);
+      w.contexts.dispose(); expect(held.context.signal.aborted).toBe(false);
+      expect(w.contexts.acquire(w.other, life.signal)).toBeUndefined();
+      fail = false;
+      // An unrelated successful owner command is the next real outbox event; no private retry hook.
+      expect(w.owner.dispatch({ kind: "collection.rename", collection: FIXTURE_LOOK.collection,
+        base: w.owner.collection(FIXTURE_LOOK.collection)!.revision, name: "Retry" }).ok).toBe(true);
+      await w.outbox.settle();
+      expect(w.contexts.held()).toEqual([]); expect(held.context.signal.aborted).toBe(true);
+      expect(w.history.scope(lookScope(FIXTURE_LOOK))).toBeUndefined();
+      life.abort(); expect(w.contexts.held()).toEqual([]);
+    } finally { fail = false; life.abort(); await w.close(); }
+  });
 });
