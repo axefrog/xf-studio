@@ -95,10 +95,47 @@ test("quantities reject other registry placements and ambiguous identities inclu
  expect(duplicatePeriod.communities[0].entries[0].phases[0].periods[1].quantity).toBeUndefined();expect(duplicatePeriod.counts.reasons["community.period.quantity"]["ambiguous registry period quantity"]).toBe(1);
 });
 
-test("w1.7 invalidates old files and rejects partial/corrupt period, quantity, condition and registry fields",async()=>{
+test("duplicate source-object rows require agreement including omitted quantities in either row order",()=>{
+ const known={id:node.sourceId,entries:[{name:"resident",quantities:[{phase:"normal",name:"Day",quantity:2}]}]};
+ const missing={id:node.sourceId,entries:[{name:"resident",quantities:[{phase:"normal",name:"Day"}]}]};
+ const different={id:node.sourceId,entries:[{name:"resident",quantities:[{phase:"normal",name:"Day",quantity:3}]}]};
+ const empty={id:node.sourceId,entries:[]};
+ for(const other of [missing,different,empty])for(const rows of [[known,other],[other,known]])for(const enriched of [false,true]) {
+  const out=new ContentAssembler(pack,selectSlice(pack,"test"));
+  out.addSector("sector",sector([node,{nodeIndex:2,type:"worldCommunityRegistryNode",registry:rows}],[place(0,0),place(1,2,"reg")]),[0]);
+  if(enriched)for(const row of rows)out.addRegistryQuantities([row],"reg");
+  out.finishCommunities();
+  expect(out.communities[0].entries[0].phases[0].periods[1].quantity).toBeUndefined();
+  expect(out.counts.reasons["community.period.quantity"]["ambiguous registry instance quantity"]).toBe(4);checkCounts(out.counts);
+ }
+ for(const quantity of [0,2]) {
+  const row={...known,entries:[{name:"resident",quantities:[{phase:"normal",name:"Day",quantity}]}]};
+  const out=new ContentAssembler(pack,selectSlice(pack,"test"));
+  out.addSector("sector",sector([node,{nodeIndex:2,type:"worldCommunityRegistryNode",registry:[row,row]}],[place(0,0),place(1,2,"reg")]),[0]);
+  out.addRegistryQuantities([row,row],"reg");out.finishCommunities();expect(out.communities[0].entries[0].phases[0].periods[1].quantity).toBe(quantity);
+ }
+ const partial=new ContentAssembler(pack,selectSlice(pack,"test"));
+ partial.addSector("sector",sector([node,{nodeIndex:2,type:"worldCommunityRegistryNode",registry:[known,missing]}],[place(0,0),place(1,2,"reg")]),[0]);
+ partial.addRegistryQuantities([known],"reg");partial.finishCommunities();expect(partial.communities[0].entries[0].phases[0].periods[1].quantity).toBeUndefined();
+});
+
+test("native duplicate phases retain ambiguity even when one phase has no periods",()=>{
+ for(const emptyFields of [{timePeriods:[]},{}])for(const reversed of [false,true]) {
+  const full=handle("communitySpawnPhase",{phaseName:name("normal"),timePeriods:[obj("communityPhaseTimePeriod",{hour:"Day",quantity:2})]});
+  const empty=handle("communitySpawnPhase",{phaseName:name("normal"),...emptyFields});
+  const root=obj("worldCommunityRegistryNode",{communitiesData:[obj("worldCommunityRegistryItem",{communityId:obj("gameCommunityID",{entityId:obj("entEntityID",{hash:node.sourceId})}),template:handle("communityCommunityTemplateData",{entries:[handle("communitySpawnEntry",{entryName:name("resident"),phases:reversed?[empty,full]:[full,empty]})]})})]});
+  const rows=mapRegistryQuantities(root,new Set([node.sourceId!]));expect(rows[0].entries[0].duplicatePhases).toEqual(["normal"]);
+  const out=new ContentAssembler(pack,selectSlice(pack,"test"));out.addSector("sector",sector([node,registry],[place(0,0),place(1,2,"reg")]),[0]);out.addRegistryQuantities(rows,"reg");out.finishCommunities();
+  expect(out.communities[0].entries[0].phases[0].periods.every(p=>p.quantity===undefined)).toBe(true);expect(out.counts.reasons["community.period.quantity"]["ambiguous registry phase"]).toBe(4);checkCounts(out.counts);
+  const transport=sector([{nodeIndex:2,type:"worldCommunityRegistryNode",registry:rows}],[]);expect(decodeContentSector(encodeContentSector(transport))).toEqual(transport);
+  rows[0].entries[0].duplicatePhases=[null as never];expect(()=>decodeContentSector(encodeContentSector(transport))).toThrow(NativeMalformedError);
+ }
+});
+
+test("w1.7.1 invalidates old files and rejects partial/corrupt period, quantity, condition and registry fields",async()=>{
  const file=join(tempDir("w1-periods-"),"test.content.json"),good=content(),signal=new AbortController().signal;
  expect(worldContentCacheKey([],pack,"test","w1.6")).not.toBe(worldContentCacheKey([],pack,"test"));
- for(const damage of [(v:WorldContent)=>{v.source.reader="w1.6";},(v:WorldContent)=>{delete (v.communities[0].entries[0].phases[0] as any).periods;},...[
+ for(const damage of [(v:WorldContent)=>{v.source.reader="w1.6";},(v:WorldContent)=>{v.source.reader="w1.7";},(v:WorldContent)=>{delete (v.communities[0].entries[0].phases[0] as any).periods;},...[
   {name:"Day",spots:[],quantity:-1},{name:"Day",spots:[],quantity:"1"},{name:"Day",spots:[],quantity:65536},{name:"Day",spots:[],condition:0},{name:"Day",spots:[null]},null,
  ].map(period=>(v:WorldContent)=>{v.communities[0].entries[0].phases[0].periods=[period as never];}),...[
   {id:"registry"},{id:1,sourceObjectId:"1"},{id:"registry",sourceObjectId:"0"},null,

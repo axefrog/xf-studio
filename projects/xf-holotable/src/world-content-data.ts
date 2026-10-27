@@ -22,7 +22,7 @@ export const vector = (v: unknown): Vec3 | undefined => {
 export interface SourcePhase { name?: string; periods: { name?: string; spots: string[] }[] }
 export interface SourceEntry { name?: string; record?: string; phases: SourcePhase[] }
 export interface RegistryQuantity { phase?: string; name?: string; quantity?: number }
-export interface RegistryItem { id?: string; entries: { name?: string; record?: string; quantities?: RegistryQuantity[] }[] }
+export interface RegistryItem { id?: string; entries: { name?: string; record?: string; quantities?: RegistryQuantity[]; duplicatePhases?:string[] }[] }
 export interface ContentNode {
   nodeIndex: number; type: string; refusal?: string; name?: string; sourceId?: string;
   entries?: SourceEntry[]; registry?: RegistryItem[]; workspot?: string; record?: string; onStart?: boolean;
@@ -47,7 +47,15 @@ export function mapRegistryQuantities(obj:RedObject, wanted:ReadonlySet<string>)
     for(const entry of list(object(f.template).entries)) {
       const e=object(entry),name=text(e.entryName),quantities:RegistryQuantity[]=[];
       budget.charge({nested:1,bytes:64+stringBytes(name)});
-      for(const p of list(e.phases))for(const t of list(object(p).timePeriods)) {
+      const phases=list(e.phases),phaseNames=new Set<string>(),duplicatePhases:string[]=[];
+      for(const p of phases) {
+        const phase=text(object(p).phaseName);
+        if(phase&&phaseNames.has(phase)&&!duplicatePhases.includes(phase)) {
+          budget.charge({links:1,bytes:8+stringBytes(phase)});duplicatePhases.push(phase);
+        }
+        if(phase)phaseNames.add(phase);
+      }
+      for(const p of phases)for(const t of list(object(p).timePeriods)) {
         const period=object(t);
         if(period.quantity!==undefined)integer(period.quantity,0,65535,"period quantity");
         // The verified communityTimePeriod constructor uses Day when hour is omitted.
@@ -55,10 +63,10 @@ export function mapRegistryQuantities(obj:RedObject, wanted:ReadonlySet<string>)
         budget.charge({nested:1,bytes:96+stringBytes(name)+stringBytes(phase)});
         quantities.push({phase,name,...(period.quantity!==undefined?{quantity:period.quantity}:{})});
       }
-      entries.push({name,...(quantities.length?{quantities}:{})});
+      entries.push({name,...(quantities.length?{quantities}:{}),...(duplicatePhases.length?{duplicatePhases}:{})});
     }
     const after=budget.snapshot();
-    if(template instanceof RedObject)shared.set(template,{entries,cost:{records:0,nested:after.nested-before.nested,links:0,bytes:after.bytes-before.bytes}});
+    if(template instanceof RedObject)shared.set(template,{entries,cost:{records:0,nested:after.nested-before.nested,links:after.links-before.links,bytes:after.bytes-before.bytes}});
     rows.push({id,entries});
   }
   return rows;
@@ -129,6 +137,7 @@ export function validateContentSector(s: unknown): asserts s is ContentSector {
         shape(r,"registry item");optionalString(r.id,"community source id");array(r.entries,"registry entries");budget.charge({nested:1,bytes:64+stringBytes(r.id as string|undefined)});
         for(const e of r.entries) {
           shape(e,"registry entry");optionalString(e.name,"entry name");optionalString(e.record,"entry record");budget.charge({nested:1,bytes:64+stringBytes(e.name as string|undefined)+stringBytes(e.record as string|undefined)});
+          if(e.duplicatePhases!==undefined)stringList(e.duplicatePhases,"duplicate registry phases",budget);
           if(e.quantities!==undefined) {
             array(e.quantities,"registry quantities");
             for(const q of e.quantities) {

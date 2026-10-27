@@ -7,7 +7,7 @@ import { ContentBudget, stringBytes, type ContentUsage } from "./world-content-b
 
 // The agreed Story Engine policies live here; none is inferred by an adapter.
 export const CONTENT_POLICY = Object.freeze({ files: "per-slice", workspots: "activity-and-tags", characters: "record-table", variants: "defaults" });
-export const WORLD_CONTENT_READER = "w1.7";
+export const WORLD_CONTENT_READER = "w1.7.1";
 /** Friendly slice ids mapped to source districts; prepared slices are discovered through the index. */
 export const WORLD_CONTENT_SLICES = [{ id: "kabuki", place: "Districts.Kabuki" }] as const;
 export const CONTENT_CAP = 50_000, CONTENT_FILE_CAP = 32 * 1024 * 1024;
@@ -98,10 +98,30 @@ export const POI_KINDS: Readonly<Record<string,string>> = Object.freeze({
 });
 export const poiKind = (variant: string) => Object.hasOwn(POI_KINDS,variant) ? POI_KINDS[variant] : variant;
 
+/** Each duplicate instance must independently resolve the same explicit quantity. */
+function registryQuantity(rows:readonly RegistryItem[],entry:string,phase:string,period:string,conflictingOwners=false):{quantity?:number;reason?:string} {
+  const unavailable="explicit registry period quantity unavailable",ambiguous="ambiguous registry instance quantity";
+  if(conflictingOwners)return {reason:ambiguous};
+  const resolve=(row:RegistryItem)=>{
+    const entries=row.entries.filter(e=>e.name===entry);
+    if(entries.length!==1)return {reason:entries.length>1?"ambiguous registry entry":unavailable};
+    if(entries[0].duplicatePhases?.includes(phase))return {reason:"ambiguous registry phase"};
+    const matches=entries[0].quantities?.filter(q=>q.phase===phase&&q.name===period)??[];
+    if(matches.length>1)return {reason:"ambiguous registry period quantity"};
+    return matches[0]?.quantity!==undefined?{quantity:matches[0].quantity}:{reason:unavailable};
+  };
+  if(!rows.length)return {reason:unavailable};
+  const first=resolve(rows[0]);
+  if(rows.length===1)return first;
+  if(first.quantity===undefined)return {reason:ambiguous};
+  for(let i=1;i<rows.length;i++)if(resolve(rows[i]).quantity!==first.quantity)return {reason:ambiguous};
+  return first;
+}
+
 export class ContentAssembler {
   readonly counts=coverage(); readonly communities:Community[]=[]; readonly spots:Spot[]=[]; readonly spawners:Spawner[]=[]; readonly pois:Poi[]=[];
-  private registries = new Map<string,{item:RegistryItem;id:string}>(); private communitySources:{ row:Community; node:ContentNode; key:string }[]=[];
-  private registryQuantities = new Map<string,RegistryItem>();
+  private registries = new Map<string,{item:RegistryItem;items:RegistryItem[];id:string;conflictingOwners:boolean}>(); private communitySources:{ row:Community; node:ContentNode; key:string }[]=[];
+  private registryQuantities = new Map<string,RegistryItem[]>();
   private ids = new Set<string>();
   constructor(readonly pack:WorldPack, readonly slice:ReturnType<typeof selectSlice>, readonly budget=new ContentBudget()) {
     for(const c of ["communities","spots","spawners","pois","workspots","registries"]) { this.counts.read[c]=this.counts.kept[c]=this.counts.dropped[c]=0; this.counts.reasons[c]={}; }
@@ -125,14 +145,17 @@ export class ContentAssembler {
       if(!defaultPlacement(p.index,s,ranges)) {count(this.counts,collection,"inactive variant");continue;}
       if(n.refusal) {this.budget.charge({bytes:64+stringBytes(n.refusal)});count(this.counts,collection,n.refusal);continue;}
       if(collection==="registries") {
-        for(const r of n.registry??[]) if(r.id&&!this.registries.has(r.id)) {
+        for(const r of n.registry??[]) if(r.id) {
           const id=placementId(hash,p);
           this.budget.charge({nested:1,bytes:64+stringBytes(r.id)+stringBytes(id)});
           for(const e of r.entries) {
             this.budget.charge({nested:1,bytes:64+stringBytes(e.name)+stringBytes(e.record)});
+            for(const phase of e.duplicatePhases??[])this.budget.charge({links:1,bytes:8+stringBytes(phase)});
             for(const q of e.quantities??[])this.budget.charge({nested:1,bytes:96+stringBytes(q.phase)+stringBytes(q.name)});
           }
-          this.registries.set(r.id,{item:r,id});
+          const existing=this.registries.get(r.id);
+          if(existing){existing.items.push(r);existing.conflictingOwners ||= existing.id!==id;}
+          else this.registries.set(r.id,{item:r,items:[r],id,conflictingOwners:false});
         }
         count(this.counts,collection);continue;
       }
@@ -147,13 +170,15 @@ export class ContentAssembler {
   registrySourceIds():ReadonlySet<string> { return new Set(this.communitySources.map(s=>s.node.sourceId).filter((id):id is string=>!!id)); }
   addRegistryQuantities(rows:readonly RegistryItem[],registryId:string) {
     for(const row of rows) {
-      if(!row.id||this.registries.get(row.id)?.id!==registryId||this.registryQuantities.has(row.id))continue;
+      if(!row.id||this.registries.get(row.id)?.id!==registryId)continue;
       this.budget.charge({nested:1,bytes:64+stringBytes(row.id)});
       for(const e of row.entries) {
         this.budget.charge({nested:1,bytes:64+stringBytes(e.name)});
+        for(const phase of e.duplicatePhases??[])this.budget.charge({links:1,bytes:8+stringBytes(phase)});
         for(const q of e.quantities??[])this.budget.charge({nested:1,bytes:96+stringBytes(q.phase)+stringBytes(q.name)});
       }
-      this.registryQuantities.set(row.id,row);
+      const existing=this.registryQuantities.get(row.id);
+      if(existing)existing.push(row);else this.registryQuantities.set(row.id,[row]);
     }
   }
   finishCommunities() {
@@ -165,8 +190,7 @@ export class ContentAssembler {
       for(const e of node.entries??[]) {
         if(!e.name) {count(counts,"community.entries","missing entryName");continue;}
         const sourceEntry=registry?.item.entries.find(r=>r.name===e.name),record=sourceEntry?.record;
-        const quantityEntries=(node.sourceId?this.registryQuantities.get(node.sourceId):undefined)?.entries??registry?.item.entries;
-        const matchingEntries=quantityEntries?.filter(r=>r.name===e.name)??[],quantities=matchingEntries.length===1?matchingEntries[0].quantities:undefined;
+        const quantityRows=(node.sourceId?this.registryQuantities.get(node.sourceId):undefined)??registry?.items??[];
         this.budget.charge({nested:1,bytes:64+stringBytes(e.name)+stringBytes(record)});
         count(counts,"community.record",record?undefined:"registry record unavailable");
         count(counts,"community.entry.quantity","separate entry quantity cap not verified");
@@ -195,9 +219,8 @@ export class ContentAssembler {
             }
             count(counts,"community.periods",t.name?undefined:"missing periodName");
             if(!t.name)continue;
-            const matches=quantities?.filter(q=>q.phase===p.name&&q.name===t.name)??[];
-            const quantity=matches.length===1?matches[0].quantity:undefined;
-            count(counts,"community.period.quantity",quantity!==undefined?undefined:matchingEntries.length>1?"ambiguous registry entry":matches.length>1?"ambiguous registry period quantity":"explicit registry period quantity unavailable");
+            const {quantity,reason}=registryQuantity(quantityRows,e.name,p.name,t.name,registry?.conflictingOwners||!!registry&&quantityRows.length!==registry.items.length);
+            count(counts,"community.period.quantity",reason);
             count(counts,"community.period.condition","period condition not verified");
             periods.push({name:t.name,...(quantity!==undefined?{quantity}:{}),spots:periodSpots});
           }
