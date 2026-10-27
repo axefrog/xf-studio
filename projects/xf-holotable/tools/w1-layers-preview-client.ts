@@ -15,6 +15,13 @@ const session:HoloSession={meta:{session:"w1-preview",run:0,start:0,end:100,from
 const agents:AgentAnswer={layers:[],here:[],specs:{schema:"xfh/projections-1",tones:{signal:"signal",muted:"text-muted"},kinds:{point:{style:"tone",draw:"ring",label:"{label}"},label:{style:"tone",draw:"text",label:"{label}"}}}};
 // Motion measurement keeps authored overlays in the scene, independently of base-detail density.
 if(q.has("motion"))agents.layers=[{id:"fixture/story",producer:"fixture",producer_title:"Story Engine fixture",layer:"story",title:"Observers",items:Array.from({length:12},(_,n)=>({id:String(n),key:`fixture/story/${n}`,kind:"point",glyph:"person",label:`Observer ${n+1}`,place:[center[0]+(n%4-1.5)*28,center[1]+(Math.floor(n/4)-1)*28,center[2]],anchor:{at:center},version:1})),notPlaced:[],otherBranches:[],refused:0,reason:"",changes:[0]}];
+if(q.has("dense")){
+ agents.specs={...agents.specs,kinds:{...agents.specs.kinds,field:{style:"tone",draw:"grid",label:""}}};
+ agents.layers=[...agents.layers,{id:"fixture/fields",producer:"fixture",producer_title:"Dense field fixture",layer:"fields",title:"Four 128 × 128 fields",items:Array.from({length:4},(_,i)=>{
+  const origin:Vec3=[center[0]-128+(i%2)*20,center[1]-128+Math.floor(i/2)*20,center[2]+i*.1];
+  return {id:`field-${i}`,key:`fixture/fields/${i}`,kind:"field",anchor:{grid:{origin,cell:4,rows:128,cols:128}},place:center,value:{scalars:Array.from({length:128*128},(_,n)=>(Math.sin(n%128/16+i)+Math.cos(Math.floor(n/128)/12+i)+2)/4)},version:1};
+ }),notPlaced:[],otherBranches:[],refused:0,reason:"",changes:[0]}];
+}
 const service=createHolotable({transport:async(method,p,signal)=>{
  let result:unknown={};if(method==="runs.list")result=[{dir:"preview",session:"w1-preview",run:0,start:0,end:100,bytes:0,complete:true,title:"Kabuki",standalone:true}];
  if(method==="session.open")result=session;if(method==="layers.watch")result={watch:"synthetic"};if(method==="layers.poll")result=agents;

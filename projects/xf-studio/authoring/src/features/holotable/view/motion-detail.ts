@@ -54,23 +54,32 @@ export function motionSpot(id: string): boolean {
 
 /** Only context detail fades. Agent pulse/retraction state is owned by playbackEffects. */
 export function detailFade(now: () => number) {
-  let moving = false, reduced = false, refining = false;
+  let moving = false, reduced = false, refining = false, partialPaint = false, revision = 0;
   let retained = new Set<string>(), painted = new Set<string>();
+  let restStart: number | undefined;
   const births = new Map<string, number>();
   return {
     begin(inMotion: boolean, reduce: boolean) {
-      if (inMotion) { refining = true; births.clear(); }
+      // The previous paint, rather than today's deadline, owns the final invalidation.
+      // This also repaints a cached partial frame when reduced motion is switched on.
+      if (partialPaint) revision++;
+      partialPaint = false;
+      if (inMotion) { refining = true; births.clear(); restStart=undefined; }
+      else if(moving)restStart=now();
       moving = inMotion; reduced = reduce; painted = new Set();
+      return revision;
     },
     opacity(key: string) {
       if (moving) { if(painted.size<4096)painted.add(key); return 1; }
       if (!refining || reduced || retained.has(key)) return 1;
       let birth = births.get(key);
-      if (birth === undefined) { if(births.size>=4096)return 1; birth = now(); births.set(key, birth); }
-      return Math.min(1, Math.max(0, (now() - birth) / DETAIL_FADE_MS));
+      if (birth === undefined) { if(births.size>=4096)return 1; birth = restStart??now(); births.set(key, birth); }
+      const opacity = Math.min(1, Math.max(0, (now() - birth) / DETAIL_FADE_MS));
+      partialPaint ||= opacity < 1;
+      return opacity;
     },
     end() { if (moving) retained = painted; },
     pending() { return !moving && !reduced && [...births.values()].some(birth => now() - birth < DETAIL_FADE_MS); },
-    reset() { moving = refining = false; retained.clear(); painted.clear(); births.clear(); },
+    reset() { moving = refining = partialPaint = false; restStart=undefined; retained.clear(); painted.clear(); births.clear(); },
   };
 }

@@ -3,20 +3,22 @@ import { agentCanvas } from "../src/features/holotable/view/agent-canvas";
 import type { AgentAnswer, AgentItem } from "../src/features/holotable/agent-types";
 import { camera, ORBITS } from "../src/features/holotable/view/projection";
 import { detailFade, motionSpot } from "../src/features/holotable/view/motion-detail";
+import { MOTION_FIELD_EDGE, fieldDetails } from "../src/features/holotable/view/field-detail";
+import { MOTION_AGENT_LIMIT } from "../src/features/holotable/view/agent-canvas";
 
-function withCanvas(run: (renderer: ReturnType<typeof agentCanvas>, arcs: number[][], strokes: () => number, names: string[], alphas: number[]) => void, options: { reduced?: boolean; now?: () => number } = {}) {
+function withCanvas(run: (renderer: ReturnType<typeof agentCanvas>, arcs: number[][], strokes: () => number, names: string[], alphas: number[]) => void, options: { reduced?: boolean; now?: () => number; workNow?:()=>number } = {}) {
   const keys=["document","window","MutationObserver","matchMedia","getComputedStyle"];
   const saved=new Map(keys.map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
   let strokes=0;const arcs:number[][]=[],names:string[]=[],alphas:number[]=[];
   const makeCanvas=()=>({width:0,height:0,style:{cssText:""},parentElement:{append(){}},after(){},remove(){},setAttribute(){},getContext:()=>({
-    globalAlpha:1,save(){},restore(){},rect(){},translate(){},scale(){},setTransform(){},clearRect(){},moveTo(){},lineTo(){},beginPath(){},closePath(){},stroke(){strokes++;alphas.push(this.globalAlpha);},fill(){},setLineDash(){},arc(...values:number[]){arcs.push(values);},fillText(value:string){names.push(value);},strokeText(){},measureText:(text:string)=>({width:text.length*7}),
+    globalAlpha:1,drawImage(){},save(){},restore(){},rect(){},translate(){},scale(){},setTransform(){},clearRect(){},moveTo(){},lineTo(){},beginPath(){},closePath(){},stroke(){strokes++;alphas.push(this.globalAlpha);},fill(){alphas.push(this.globalAlpha);},setLineDash(){},arc(...values:number[]){arcs.push(values);},fillText(value:string){names.push(value);},strokeText(){},measureText:(text:string)=>({width:text.length*7}),
   })}) as unknown as HTMLCanvasElement;
   const install=(key:string,value:unknown)=>Object.defineProperty(globalThis,key,{value,configurable:true,writable:true});
   try {
     install("document",{documentElement:{},body:{},createElement:makeCanvas});install("window",{devicePixelRatio:1});
     install("MutationObserver",class {observe(){}disconnect(){}});install("matchMedia",()=>({matches:options.reduced,addEventListener(){},removeEventListener(){}}));
     install("getComputedStyle",()=>({getPropertyValue:()=>"monospace",backgroundColor:"black"}));
-    const renderer=agentCanvas(makeCanvas(),()=>{},options.now);
+    const renderer=agentCanvas(makeCanvas(),()=>{},options.now,options.workNow);
     try { run(renderer,arcs,()=>strokes,names,alphas); } finally { renderer.dispose(); }
   } finally { for(const key of keys){const descriptor=saved.get(key);if(descriptor)Object.defineProperty(globalThis,key,descriptor);else Reflect.deleteProperty(globalThis,key);} }
 }
@@ -56,6 +58,92 @@ test("known plates retain kind geometry, selection is 22px and badges 6px; unkno
 const point=(id="a",version=0):AgentItem=>({id,key:`p/a/${id}`,version,kind:"point",anchor:{at:[10,0,0]},place:[10,0,0]});
 const answer=(items:readonly AgentItem[]):AgentAnswer=>({specs:{schema:"xfh/projections-1",kinds:{point:{style:"tone",label:"{label}",draw:"ring"},actor:{style:"tone",label:"{name}",draw:"diamond"},path:{style:"tone",label:"{label}",draw:"polyline"},zone:{style:"tone",label:"{label}",draw:"volume"},field:{style:"tone",label:"",draw:"grid"}}},here:[],layers:[{id:"p/a",title:"A",producer:"p",layer:"a",notPlaced:[],otherBranches:[],refused:0,reason:"",items}]});
 
+test("cached spot paint reaches opacity one across the fade deadline and a reduced-motion switch",()=>{
+ for(const switchReduced of [false,true])withCanvas((renderer,_arcs,_strokes,_names,alphas)=>{
+  let time=0;const fade=detailFade(()=>time),data=answer([]),enabled={},C=camera([0,0,0],ORBITS.top,850,500);
+  const id=Array.from({length:20},(_,n)=>String(n)).find(id=>!motionSpot(id))!;
+  const base={content:{available:true,slices:[],pois:[],communities:[],spots:[{id,place:"test",at:[0,0,0] as const,yaw:0,communities:[]}]},on:{pois:false,spots:true,communities:false}};
+  const draw=(moving:boolean,reduced=false)=>{
+    const revision=fade.begin(moving,reduced);
+    const result=renderer.draw(data,enabled,C,null,4,null,[],350,{playing:false,epoch:"fade"},base,{moving,revision,opacity:key=>fade.opacity(key)});
+    fade.end();if(!moving&&!result?.pending&&!fade.pending())fade.reset();
+    return result;
+  };
+  expect(draw(true)?.pending).toBe(false);alphas.length=0;
+  expect(draw(false)?.pending).toBe(false);expect(alphas.at(-1)).toBe(0);
+  time=75;draw(false);expect(alphas.at(-1)).toBe(.5);
+  time=switchReduced?80:160;const before=alphas.length;
+  expect(draw(false,switchReduced)?.pending).toBe(false);
+  expect(alphas.length).toBeGreaterThan(before);expect(alphas.at(-1)).toBe(1);
+  expect(renderer.pick(...C.point([0,0,0])!)).toBe(`base:spots:${id}`);
+ },{workNow:()=>0});
+});
+
+const denseFields=():AgentItem[]=>Array.from({length:4},(_,i)=>({...point(`field-${i}`),kind:"field",place:[0,0,0],anchor:{grid:{origin:[-128,-128,0],cols:128,rows:128,cell:2}},value:{scalars:Array.from({length:128*128},(_,n)=>n%17)}}));
+
+test("four 128-square fields keep finite preparation and motion paint bounds, then restore all cells",()=>{
+ let clock=0;
+ withCanvas(renderer=>{
+  const data=answer(denseFields()),enabled={};let C=camera([0,0,0],{...ORBITS.top,distance:200},850,500);
+  const draw=(moving:boolean,budget=4)=>renderer.draw(data,enabled,C,null,budget,null,[],350,{playing:false,epoch:"fields"},undefined,{moving,revision:0,opacity:()=>1});
+  expect(draw(true,-1)?.pending).toBe(true);expect(renderer.accounting().fieldCells).toBe(0);
+  const unboundedStart=clock;expect(draw(true,Infinity)?.pending).toBe(true);
+  expect(clock-unboundedStart).toBeLessThan(8.1); // A bad caller cannot disable the guard.
+  // Injected work clock charges each preparation/16-cell yield, independent of CPU speed.
+  let slices=0,result:ReturnType<typeof draw>;
+  do{const before=clock;result=draw(true);expect(clock-before).toBeLessThan(4.1);slices++;}while(result?.pending&&slices<1000);
+  expect(slices).toBeGreaterThan(0);expect(slices).toBeLessThan(1000);
+  expect(renderer.items()).toHaveLength(4);expect(renderer.accounting().fieldCells).toBe(4*MOTION_FIELD_EDGE**2);
+  expect(renderer.accounting().omitted).toBe(0);
+  for(const yaw of [.1,.2,.3]){
+   C=camera([0,0,0],{...ORBITS.top,distance:200,yaw},850,500);
+   const before=clock;expect(draw(true)?.pending).toBe(false);expect(clock-before).toBeLessThan(4);
+   expect(renderer.accounting()).toMatchObject({drawn:4,omitted:0,fieldCells:4*MOTION_FIELD_EDGE**2});
+  }
+  const source=data.layers[0].items;
+  const aggregate=fieldDetails(),steps=aggregate(source[0]);let step=steps.next();while(!step.done)step=steps.next();
+  const block=128/MOTION_FIELD_EDGE;
+  expect(step.value?.scalars?.[0]).toBeCloseTo(Array.from({length:block},(_,y)=>Array.from({length:block},(_,x)=>(y*128+x)%17)).flat().reduce((a,b)=>a+b)/block**2);
+  slices=0;while(draw(false)?.pending&&++slices<1000){}
+  expect(slices).toBeLessThan(1000);expect(renderer.accounting().fieldCells).toBe(4*128**2);
+ },{workNow:()=>clock+=.01});
+});
+
+test("extreme motion item counts prefer selection then nearest and disclose omitted items",()=>withCanvas(renderer=>{
+ const data=answer(Array.from({length:600},(_,n)=>({...point(String(n)),place:[n/10,0,0] as const})));
+ const selected="p/a/599",C=camera([0,0,0],ORBITS.top,850,500);
+ renderer.draw(data,{},C,selected,4,null,[],350,{playing:false,epoch:"crowded"},undefined,{moving:true,revision:0,opacity:()=>1});
+ expect(renderer.items()).toHaveLength(MOTION_AGENT_LIMIT);
+ expect(renderer.items().slice(0,3).map(i=>i.key)).toEqual([selected,"p/a/0","p/a/1"]);
+ expect(renderer.accounting()).toMatchObject({eligible:600,drawn:MOTION_AGENT_LIMIT,omitted:600-MOTION_AGENT_LIMIT,priority:"selected, then nearest to target"});
+},{workNow:()=>0}));
+
+test("finite full-resolution field paint resumes across fade revisions and cached repaints reread no cells",()=>{
+ let clock=0,reads=0;
+ const fields=denseFields().map(item=>({...item,value:{scalars:new Proxy(item.value!.scalars!,{get(target,key,receiver){if(typeof key==="string"&&/^\d+$/.test(key))reads++;return Reflect.get(target,key,receiver);}})}}));
+ withCanvas(renderer=>{
+  const data=answer(fields),enabled={},C=camera([0,0,0],{...ORBITS.top,distance:200},850,500);
+  let revision=0;
+  const draw=(moving:boolean)=>renderer.draw(data,enabled,C,null,4,null,[],350,{playing:false,epoch:"fade-fields"},undefined,{moving,revision:moving?0:++revision,opacity:()=>1});
+  let slices=0;while(draw(true)?.pending&&++slices<100){}
+  expect(slices).toBeLessThan(100);
+  slices=0;while(draw(false)?.pending&&++slices<100){}
+  expect(slices).toBeGreaterThan(1);expect(slices).toBeLessThan(100);
+  expect(renderer.accounting().fieldCells).toBe(4*128**2);
+  expect(reads).toBe(2*4*128**2);const before=reads;
+  expect(draw(false)?.pending).toBe(false);expect(reads).toBe(before);
+ },{workNow:()=>clock+=.01});
+});
+
+test("motion keeps the complete point, path, zone, label and relation item geometry",()=>withCanvas((renderer,_arcs,_strokes,names)=>{
+ const items:AgentItem[]=[point(),{...point("path"),kind:"path",anchor:{path:[[-120,50,0],[0,70,0],[120,50,0]]}},{...point("zone"),kind:"zone",anchor:{box:{min:[-20,-20,0],max:[20,20,10]}}},{...point("label"),kind:"label",label:"Authored label",place:[-80,0,0]},{...point("relation"),kind:"relation",place:[40,0,0],to:[120,0,0],value:{type:"knows"}}];
+ const base=answer(items),data={...base,specs:{...base.specs,kinds:{...base.specs.kinds,label:{draw:"text",label:"{label}",style:"tone"},relation:{draw:"curve",label:"{type}",style:"tone"}}}};
+ expect(renderer.draw(data,{},camera([0,0,0],ORBITS.top,850,500),null,4,null,[],350,{playing:false,epoch:"geometry"},undefined,{moving:true,revision:0,opacity:()=>1})?.pending).toBe(false);
+ expect(renderer.items().map(i=>i.key).sort()).toEqual(items.map(i=>i.key).sort());
+ expect(renderer.items().find(i=>i.kind==="path")?.anchor).toBe(items[1].anchor);expect(names).toContain("Authored label");
+ expect(renderer.accounting().omitted).toBe(0);
+},{workNow:()=>0}));
+
 test("motion completes every enabled agent layer; context detail never dims agents or changes effect age",()=>{
  let now=0;
  withCanvas((renderer,arcs,_strokes,_names,alphas)=>{
@@ -63,13 +151,13 @@ test("motion completes every enabled agent layer; context detail never dims agen
   const enabled={},C=camera([0,0,0],{...ORBITS.top,distance:200},850,500),playback={playing:true,epoch:"continuous"};
   const fade=detailFade(()=>now);fade.begin(true,false);
   const detail={moving:true,revision:0,opacity:(key:string)=>fade.opacity(key)};
-  const first=renderer.draw(answer(items),enabled,C,null,Infinity,null,[],350,playback,undefined,detail);
+  const first=renderer.draw(answer(items),enabled,C,null,1000,null,[],350,playback,undefined,detail);
   expect(first?.pending).toBe(false);expect(renderer.items()).toHaveLength(80);
   const changed=items.map((item,n)=>n===0?{...item,version:1}:item);
-  const second=renderer.draw(answer(changed),enabled,C,null,Infinity,null,[],350,playback,undefined,detail);
+  const second=renderer.draw(answer(changed),enabled,C,null,1000,null,[],350,playback,undefined,detail);
   expect(second?.pending).toBe(false);expect(second?.total).toBe(80);expect(renderer.animate()).toBe(true);
   fade.end();fade.begin(false,false);now=150;arcs.length=0;alphas.length=0;
-  renderer.draw(answer(changed),enabled,camera([0,0,0],{...ORBITS.top,distance:200,yaw:.05},850,500),null,Infinity,null,[],350,playback,undefined,{...detail,moving:false,revision:150});
+  renderer.draw(answer(changed),enabled,camera([0,0,0],{...ORBITS.top,distance:200,yaw:.05},850,500),null,1000,null,[],350,playback,undefined,{...detail,moving:false,revision:150});
   expect(renderer.animate()).toBe(true);expect(alphas).toContain(.5);
   now=300;expect(renderer.animate()).toBe(false);
  },{now:()=>now});
@@ -301,7 +389,7 @@ test("Show and legend count full map membership equally at rest and in motion",(
  for(const width of [300,850]){
   const C=camera([0,0,0],{...ORBITS.top,distance:300},width,500);
   for(const moving of [false,true,false,true]){
-   const result=renderer.draw(data,enabled,C,null,Infinity,null,[],350,{playing:false,epoch:"counts"},{content,on},{moving,revision:0,opacity:()=>1});
+   const result=renderer.draw(data,enabled,C,null,1000,null,[],350,{playing:false,epoch:"counts"},{content,on},{moving,revision:0,opacity:()=>1});
    expect(result?.pending).toBe(false);
    expect(renderer.baseCounts()).toEqual({pois:1,spots:2000,communities:1});
    expect(renderer.legend().map(e=>[e.family,e.count])).toEqual([["place",1],["spots",2000]]);
@@ -311,6 +399,6 @@ test("Show and legend count full map membership equally at rest and in motion",(
  }
  // Even a full set whose single dot is omitted by the stable hash keeps its legend row.
  const id=Array.from({length:20},(_,n)=>String(n)).find(id=>!motionSpot(id))!;
- renderer.draw(data,enabled,camera([0,0,0],ORBITS.top,850,500),null,Infinity,null,[],350,{playing:false,epoch:"one"},{content:{...content,pois:[],communities:[],spots:[{...content.spots[0],id}]},on},{moving:true,revision:0,opacity:()=>1});
+ renderer.draw(data,enabled,camera([0,0,0],ORBITS.top,850,500),null,1000,null,[],350,{playing:false,epoch:"one"},{content:{...content,pois:[],communities:[],spots:[{...content.spots[0],id}]},on},{moving:true,revision:0,opacity:()=>1});
  expect(renderer.items()).toHaveLength(0);expect(renderer.baseCounts().spots).toBe(1);expect(renderer.legend().find(e=>e.family==="spots")?.count).toBe(1);
 }));
