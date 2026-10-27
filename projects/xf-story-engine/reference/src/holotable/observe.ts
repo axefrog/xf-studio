@@ -435,7 +435,7 @@ export class HolotableObserver {
       const ranked = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
       const others = ranked.slice(3).reduce((sum, [, n]) => sum + n, 0);
       const kinds = [...ranked.slice(0, 3).map(([title, n]) => `${title} ${n}`), ...(others ? [`others ${others}`] : [])].join(' · ');
-      const label = `${entries.length} possible stories here`;
+      const label = entries.length === 1 ? "1 possible story here" : `${entries.length} possible stories here`;
       const titles = [...entries].sort((a, b) => b.firstTime - a.firstTime || b.seq - a.seq || a.id.localeCompare(b.id)).slice(0, 20).map(storyTitle);
       const detail = [label];
       for (const title of titles) { if (detail.join('\n').length + title.length + 1 > 4000) break; detail.push(title); }

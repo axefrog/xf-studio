@@ -29,7 +29,7 @@ test('an entry-only story moves from a possible bucket into stories, including i
     const first = observer.sample();
     expect(first.layers.get('stories')).toHaveLength(0);
     expect(first.layers.get('possible-stories')).toHaveLength(1);
-    expect(first.layers.get('possible-stories')![0].label).toBe('1 possible stories here');
+    expect(first.layers.get('possible-stories')![0].label).toBe('1 possible story here');
     expect(first.layers.get('possible-stories')![0].facets!.kinds).toBe('Debt 1');
     expect(first.layers.get('possible-stories')![0].anchor).toEqual({ item: `story-engine/places/${cell}` });
     publisher.publish(first);
@@ -70,7 +70,7 @@ test('graph development counts matched steps, not historical events or a complet
   entry.complete = true;
   const observation = new HolotableObserver(sim, undefined, l3).sample();
   expect(observation.layers.get('stories')).toHaveLength(0);
-  expect(observation.layers.get('possible-stories')![0].label).toBe('1 possible stories here');
+  expect(observation.layers.get('possible-stories')![0].label).toBe('1 possible story here');
 });
 
 test('possible buckets keep their detail until count or kinds changes, and reappearance has a fresh timestamp', () => {
