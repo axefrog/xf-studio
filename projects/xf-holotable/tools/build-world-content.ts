@@ -23,5 +23,5 @@ const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(Error("World-cont
 const stop=()=>ctl.abort(Error("World-content build cancelled."));process.once("SIGINT",stop);
 try {
   const start=performance.now(),{content,cached}=await buildWorldContent({root,pack,slice,directory,signal:ctl.signal});
-  console.log(JSON.stringify({cached,ms:Math.round(performance.now()-start),counts:content.counts},null,2));
+  console.log(JSON.stringify({reader:content.source.reader,cached,ms:Math.round(performance.now()-start),counts:content.counts},null,2));
 }finally{clearTimeout(timer);process.removeListener("SIGINT",stop);}

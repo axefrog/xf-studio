@@ -5,7 +5,7 @@ import type { readStreamingSectorContent } from "../../xf-studio/authoring/src/n
 import type { Vec3 } from "./model.ts";
 import { ContentBudget, shape, array, optionalString, string, finiteTuple, integer, stringList, stringBytes } from "./world-content-budget.ts";
 
-export const CONTENT_SECTOR_VERSION = 102;
+export const CONTENT_SECTOR_VERSION = 103;
 export const CONTENT_BYTES_LIMIT = 32 * 1024 * 1024;
 export const object = (v: unknown): Record<string, unknown> => v instanceof RedHandle ? object(v.target) : v instanceof RedObject ? v.fields : {};
 export const list = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
@@ -21,13 +21,48 @@ export const vector = (v: unknown): Vec3 | undefined => {
 };
 export interface SourcePhase { name?: string; periods: { name?: string; spots: string[] }[] }
 export interface SourceEntry { name?: string; record?: string; phases: SourcePhase[] }
-export interface RegistryItem { id?: string; entries: { name?: string; record?: string }[] }
+export interface RegistryQuantity { phase?: string; name?: string; quantity?: number }
+export interface RegistryItem { id?: string; entries: { name?: string; record?: string; quantities?: RegistryQuantity[] }[] }
 export interface ContentNode {
   nodeIndex: number; type: string; refusal?: string; name?: string; sourceId?: string;
   entries?: SourceEntry[]; registry?: RegistryItem[]; workspot?: string; record?: string; onStart?: boolean;
 }
 export interface ContentPlacement { index: number; nodeIndex: number; at: Vec3; orientation: [number, number, number, number]; ref: string }
 export interface ContentSector { version: number; nodes: ContentNode[]; placements: ContentPlacement[]; variantIndices: number[]; persistentNodeIndex: number }
+
+/** Select before expanding: the always-loaded registry alone has 91k schedule periods.
+ * Keep this optional enrichment out of the shared, slice-independent sector transport. */
+export function mapRegistryQuantities(obj:RedObject, wanted:ReadonlySet<string>):RegistryItem[] {
+  const rows:RegistryItem[]=[],budget=new ContentBudget();
+  const shared=new Map<RedObject,{entries:RegistryItem["entries"];cost:ReturnType<ContentBudget["snapshot"]>}>();
+  for(const item of list(object(obj).communitiesData)) {
+    const f=object(item),id=hash(object(f.communityId).entityId);
+    if(!id||!wanted.has(id))continue;
+    budget.charge({nested:1,bytes:64+stringBytes(id)});
+    const template=f.template instanceof RedHandle?f.template.target:f.template;
+    const cached=template instanceof RedObject?shared.get(template):undefined;
+    if(cached){budget.charge(cached.cost);rows.push({id,entries:cached.entries});continue;}
+    const before=budget.snapshot();
+    const entries:RegistryItem["entries"]=[];
+    for(const entry of list(object(f.template).entries)) {
+      const e=object(entry),name=text(e.entryName),quantities:RegistryQuantity[]=[];
+      budget.charge({nested:1,bytes:64+stringBytes(name)});
+      for(const p of list(e.phases))for(const t of list(object(p).timePeriods)) {
+        const period=object(t);
+        if(period.quantity!==undefined)integer(period.quantity,0,65535,"period quantity");
+        // The verified communityTimePeriod constructor uses Day when hour is omitted.
+        const name=period.hour===undefined&&t instanceof RedObject&&t.type==="communityPhaseTimePeriod"?"Day":text(period.hour),phase=text(object(p).phaseName);
+        budget.charge({nested:1,bytes:96+stringBytes(name)+stringBytes(phase)});
+        quantities.push({phase,name,...(period.quantity!==undefined?{quantity:period.quantity}:{})});
+      }
+      entries.push({name,...(quantities.length?{quantities}:{})});
+    }
+    const after=budget.snapshot();
+    if(template instanceof RedObject)shared.set(template,{entries,cost:{records:0,nested:after.nested-before.nested,links:0,bytes:after.bytes-before.bytes}});
+    rows.push({id,entries});
+  }
+  return rows;
+}
 
 export function mapContentNode(nodeIndex: number, type: string, obj?: RedObject, refusal?: string): ContentNode {
   const f = object(obj), row: ContentNode = { nodeIndex, type, refusal, name: text(f.debugName) };
@@ -91,8 +126,17 @@ export function validateContentSector(s: unknown): asserts s is ContentSector {
     if(n.type==="worldCommunityRegistryNode"&&!n.refusal || n.registry!==undefined) {
       array(n.registry,"registry items");
       for(const r of n.registry) {
-        shape(r,"registry item");optionalString(r.id,"registry id");array(r.entries,"registry entries");budget.charge({nested:1,bytes:64});
-        for(const e of r.entries) {shape(e,"registry entry");optionalString(e.name,"entry name");optionalString(e.record,"entry record");budget.charge({nested:1,bytes:64+stringBytes(e.name as string|undefined)+stringBytes(e.record as string|undefined)});}
+        shape(r,"registry item");optionalString(r.id,"community source id");array(r.entries,"registry entries");budget.charge({nested:1,bytes:64+stringBytes(r.id as string|undefined)});
+        for(const e of r.entries) {
+          shape(e,"registry entry");optionalString(e.name,"entry name");optionalString(e.record,"entry record");budget.charge({nested:1,bytes:64+stringBytes(e.name as string|undefined)+stringBytes(e.record as string|undefined)});
+          if(e.quantities!==undefined) {
+            array(e.quantities,"registry quantities");
+            for(const q of e.quantities) {
+              shape(q,"registry quantity");optionalString(q.phase,"quantity phase");optionalString(q.name,"quantity period");if(q.quantity!==undefined)integer(q.quantity,0,65535,"period quantity");
+              budget.charge({nested:1,bytes:96+stringBytes(q.phase as string|undefined)+stringBytes(q.name as string|undefined)});
+            }
+          }
+        }
       }
     }
     if((n.type==="worldCompiledCommunityAreaNode"||n.type==="worldCompiledCommunityAreaNode_Streamable")&&!n.refusal || n.entries!==undefined) {

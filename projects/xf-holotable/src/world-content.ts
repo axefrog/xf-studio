@@ -7,13 +7,14 @@ import { ContentBudget, stringBytes, type ContentUsage } from "./world-content-b
 
 // The agreed Story Engine policies live here; none is inferred by an adapter.
 export const CONTENT_POLICY = Object.freeze({ files: "per-slice", workspots: "activity-and-tags", characters: "record-table", variants: "defaults" });
-export const WORLD_CONTENT_READER = "w1.6";
+export const WORLD_CONTENT_READER = "w1.7";
 /** Friendly slice ids mapped to source districts; prepared slices are discovered through the index. */
 export const WORLD_CONTENT_SLICES = [{ id: "kabuki", place: "Districts.Kabuki" }] as const;
 export const CONTENT_CAP = 50_000, CONTENT_FILE_CAP = 32 * 1024 * 1024;
 export interface Affiliation { record:string; recordName?:string; title?:string }
 export interface ContentRecord { name?:string; displayName?:string; kind:"person"|"vehicle"|"other"; affiliation?:string; affiliationTitle?:string; affiliationName?:string; role?:string; crowd?:boolean; gender?:string }
-export interface Community { id: string; place: string; name?: string; affiliation?:Affiliation; entries: { name: string; record?: string; phases: { name: string; time?: [number, number]; spots: string[] }[] }[] }
+export interface CommunityPeriod { name: string; quantity?: number; condition?: string; spots: string[] }
+export interface Community { id: string; place: string; name?: string; registry?: { id:string; sourceObjectId:string }; affiliation?:Affiliation; entries: { name: string; record?: string; phases: { name: string; time?: [number, number]; periods:CommunityPeriod[]; spots: string[] }[] }[] }
 export interface Spot { id: string; place: string; at: Vec3; yaw: number; workspot?: { path: string; activity?: string; tags: string[] }; communities: string[] }
 export interface Spawner { id: string; place: string; at: Vec3; yaw: number; record: string; onStart?: boolean }
 export interface Poi { id: string; place: string; at: Vec3; kind: string; variant?: string; title?: string; record?: string; journal?: string }
@@ -99,7 +100,8 @@ export const poiKind = (variant: string) => Object.hasOwn(POI_KINDS,variant) ? P
 
 export class ContentAssembler {
   readonly counts=coverage(); readonly communities:Community[]=[]; readonly spots:Spot[]=[]; readonly spawners:Spawner[]=[]; readonly pois:Poi[]=[];
-  private registries = new Map<string,RegistryItem>(); private communitySources:{ row:Community; node:ContentNode; key:string }[]=[];
+  private registries = new Map<string,{item:RegistryItem;id:string}>(); private communitySources:{ row:Community; node:ContentNode; key:string }[]=[];
+  private registryQuantities = new Map<string,RegistryItem>();
   private ids = new Set<string>();
   constructor(readonly pack:WorldPack, readonly slice:ReturnType<typeof selectSlice>, readonly budget=new ContentBudget()) {
     for(const c of ["communities","spots","spawners","pois","workspots","registries"]) { this.counts.read[c]=this.counts.kept[c]=this.counts.dropped[c]=0; this.counts.reasons[c]={}; }
@@ -124,9 +126,13 @@ export class ContentAssembler {
       if(n.refusal) {this.budget.charge({bytes:64+stringBytes(n.refusal)});count(this.counts,collection,n.refusal);continue;}
       if(collection==="registries") {
         for(const r of n.registry??[]) if(r.id&&!this.registries.has(r.id)) {
-          this.budget.charge({nested:1,bytes:64+stringBytes(r.id)});
-          for(const e of r.entries)this.budget.charge({nested:1,bytes:64+stringBytes(e.name)+stringBytes(e.record)});
-          this.registries.set(r.id,r);
+          const id=placementId(hash,p);
+          this.budget.charge({nested:1,bytes:64+stringBytes(r.id)+stringBytes(id)});
+          for(const e of r.entries) {
+            this.budget.charge({nested:1,bytes:64+stringBytes(e.name)+stringBytes(e.record)});
+            for(const q of e.quantities??[])this.budget.charge({nested:1,bytes:96+stringBytes(q.phase)+stringBytes(q.name)});
+          }
+          this.registries.set(r.id,{item:r,id});
         }
         count(this.counts,collection);continue;
       }
@@ -138,6 +144,18 @@ export class ContentAssembler {
       else {this.budget.charge({bytes:stringBytes(n.name)});const row:Community={id,place,name:n.name,entries:[]};this.communities.push(row);this.communitySources.push({row,node:n,key:`${hash}:${n.nodeIndex}`});}
     }
   }
+  registrySourceIds():ReadonlySet<string> { return new Set(this.communitySources.map(s=>s.node.sourceId).filter((id):id is string=>!!id)); }
+  addRegistryQuantities(rows:readonly RegistryItem[],registryId:string) {
+    for(const row of rows) {
+      if(!row.id||this.registries.get(row.id)?.id!==registryId||this.registryQuantities.has(row.id))continue;
+      this.budget.charge({nested:1,bytes:64+stringBytes(row.id)});
+      for(const e of row.entries) {
+        this.budget.charge({nested:1,bytes:64+stringBytes(e.name)});
+        for(const q of e.quantities??[])this.budget.charge({nested:1,bytes:96+stringBytes(q.phase)+stringBytes(q.name)});
+      }
+      this.registryQuantities.set(row.id,row);
+    }
+  }
   finishCommunities() {
     const spots=new Map(this.spots.map(s=>[s.id,s]));
     const expanded=new Map<string,{entries:Community["entries"];linked:Spot[];counts:Coverage;cost:ContentUsage}>();
@@ -146,23 +164,44 @@ export class ContentAssembler {
       const registry=node.sourceId?this.registries.get(node.sourceId):undefined;
       for(const e of node.entries??[]) {
         if(!e.name) {count(counts,"community.entries","missing entryName");continue;}
-        const record=registry?.entries.find(r=>r.name===e.name)?.record;
+        const sourceEntry=registry?.item.entries.find(r=>r.name===e.name),record=sourceEntry?.record;
+        const quantityEntries=(node.sourceId?this.registryQuantities.get(node.sourceId):undefined)?.entries??registry?.item.entries;
+        const matchingEntries=quantityEntries?.filter(r=>r.name===e.name)??[],quantities=matchingEntries.length===1?matchingEntries[0].quantities:undefined;
         this.budget.charge({nested:1,bytes:64+stringBytes(e.name)+stringBytes(record)});
         count(counts,"community.record",record?undefined:"registry record unavailable");
+        count(counts,"community.entry.quantity","separate entry quantity cap not verified");
         const phases:Community["entries"][number]["phases"]=[];
         for(const p of e.phases) {
           if(!p.name) {count(counts,"community.phases","missing entryPhaseName");continue;}
           this.budget.charge({nested:1,bytes:64+stringBytes(p.name)});
-          // The format has one phase interval; compiled periods do not supply a verified end.
+          // Compiled period labels do not supply a verified interval end.
           count(counts,"community.time","compiled period end not verified");
-          const ids:string[]=[],seen=new Set<string>();
-          for(const t of p.periods)for(const id of t.spots) {
-            if(seen.has(id))continue;
-            this.budget.charge({links:1,bytes:48+stringBytes(id)});seen.add(id);
-            const spot=spots.get(id);count(counts,"community.spotLinks",spot?undefined:"spot outside slice, inactive or unavailable");
-            if(spot) {ids.push(id);if(!linked.has(spot)){this.budget.charge({bytes:32});linked.add(spot);}}
+          const ids:string[]=[],seen=new Set<string>(),periods:CommunityPeriod[]=[];
+          for(const t of p.periods) {
+            // Keep the legacy phase union even when a period lacks its mandatory name.
+            const periodSpots:string[]=[],periodSeen=new Set<string>();
+            if(t.name)this.budget.charge({nested:1,bytes:96+stringBytes(t.name)});
+            for(const id of t.spots) {
+              if(!seen.has(id)) {
+                this.budget.charge({links:1,bytes:48+stringBytes(id)});seen.add(id);
+                const spot=spots.get(id);count(counts,"community.spotLinks",spot?undefined:"spot outside slice, inactive or unavailable");
+                if(spot) {ids.push(id);if(!linked.has(spot)){this.budget.charge({bytes:32});linked.add(spot);}}
+              }
+              if(t.name&&!periodSeen.has(id)) {
+                this.budget.charge({links:1,bytes:8+stringBytes(id)});periodSeen.add(id);
+                const spot=spots.get(id);count(counts,"community.period.spotLinks",spot?undefined:"spot outside slice, inactive or unavailable");
+                if(spot)periodSpots.push(id);
+              }
+            }
+            count(counts,"community.periods",t.name?undefined:"missing periodName");
+            if(!t.name)continue;
+            const matches=quantities?.filter(q=>q.phase===p.name&&q.name===t.name)??[];
+            const quantity=matches.length===1?matches[0].quantity:undefined;
+            count(counts,"community.period.quantity",quantity!==undefined?undefined:matchingEntries.length>1?"ambiguous registry entry":matches.length>1?"ambiguous registry period quantity":"explicit registry period quantity unavailable");
+            count(counts,"community.period.condition","period condition not verified");
+            periods.push({name:t.name,...(quantity!==undefined?{quantity}:{}),spots:periodSpots});
           }
-          phases.push({name:p.name,spots:ids});count(counts,"community.phases");
+          phases.push({name:p.name,periods,spots:ids});count(counts,"community.phases");
         }
         entries.push({name:e.name,...(record?{record}:{}),phases});count(counts,"community.entries");
       }
@@ -174,6 +213,12 @@ export class ContentAssembler {
       if(!data){data=expand(node);expanded.set(key,data);}
       else this.budget.charge(data.cost); // Shared in memory, but every serialized placement still consumes the output budget.
       row.entries=data.entries;
+      const registry=node.sourceId?this.registries.get(node.sourceId):undefined;
+      count(this.counts,"community.registry",registry?undefined:node.sourceId?"registry instance unavailable":"sourceObjectId not stored");
+      if(registry) {
+        this.budget.charge({nested:1,bytes:64+stringBytes(registry.id)+stringBytes(node.sourceId)});
+        row.registry={id:registry.id,sourceObjectId:node.sourceId!};
+      }
       count(this.counts,"community.area","not stored by communityArea (spot bindings only)");
       for(const key of Object.keys(data.counts.read)) {
         for(const field of ["read","kept","dropped"] as const)this.counts[field][key]=(this.counts[field][key]??0)+data.counts[field][key];
@@ -186,6 +231,7 @@ export class ContentAssembler {
       }
     }
     this.communitySources=[];
+    this.registryQuantities.clear();
   }
   addPoi(p: Omit<Poi,"place"|"kind"> & {variant?:string}) {
     if(!p.variant) {count(this.counts,"pois","journal variant unavailable");return;}

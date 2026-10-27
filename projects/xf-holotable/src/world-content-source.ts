@@ -8,12 +8,12 @@ import { NativeArchivePool } from "../../xf-studio/authoring/src/native/archive-
 import { loadGameOodle } from "../../xf-studio/authoring/src/native/oodle";
 import { NativeBudgetError, NativeMalformedError, classifyNativeFailure } from "../../xf-studio/authoring/src/native/native-errors";
 import { NATIVE_READER_VERSION } from "../../xf-studio/authoring/src/native/resource-document";
-import { SECTOR_READER_VERSION } from "../../xf-studio/authoring/src/native/streaming-sector";
+import { SECTOR_READER_VERSION, readStreamingSectorContent } from "../../xf-studio/authoring/src/native/streaming-sector";
 import { depotHash } from "../../xf-studio/authoring/src/game/depot-path";
 import { vanillaSources } from "./solid-source.ts";
 import { createSectorCache, SectorWorkers, type SourceStamp } from "./sector-cache.ts";
-import { CONTENT_SECTOR_VERSION, decodeContentSector, list, object, reference, vector } from "./world-content-data.ts";
-import { ContentAssembler, CONTENT_POLICY, WORLD_CONTENT_READER, boxOverlapsPlace, count, selectSlice, type WorldContent } from "./world-content.ts";
+import { CONTENT_SECTOR_VERSION, decodeContentSector, mapRegistryQuantities, list, object, reference, vector } from "./world-content-data.ts";
+import { ContentAssembler, CONTENT_POLICY, WORLD_CONTENT_READER, boxOverlapsPlace, count, defaultPlacement, selectSlice, type WorldContent } from "./world-content.ts";
 import { validateContent } from "./world-content-validation.ts";
 export { validateContent } from "./world-content-validation.ts";
 import { indexJournal, mapMappins, mapWorkspot, type JournalIndex } from "./world-content-resources.ts";
@@ -68,10 +68,26 @@ export async function buildWorldContent(options:{root:string;pack:WorldPack;slic
       if(descriptors.length>40_000)throw new NativeBudgetError("Too many sectors for a content slice.");
       descriptors.sort((a,b)=>a.level-b.level||a.resource.localeCompare(b.resource));
       const out=new ContentAssembler(pack,slice);
+      const registryResources:Descriptor[]=[];
       for(const d of descriptors) {
         signal.throwIfAborted();
         const sector=await cache.read({root,resource:d.resource,source:sources[d.source]},signal);
+        if(sector.nodes.some(n=>n.type==="worldCommunityRegistryNode"&&!n.refusal))registryResources.push(d);
         out.addSector(depotHash(d.resource).toString(),sector,d.ranges);count(out.counts,"sectors");
+      }
+      // Native schedules are enriched only for admitted source ids. Reusing the full
+      // registry's phases in every sector cache would exceed the existing nested cap.
+      const wanted=out.registrySourceIds();
+      if(wanted.size)for(const d of registryResources) {
+        signal.throwIfAborted();
+        const sector=readStreamingSectorContent(read(d.resource),oodle.decompress);
+        for(const n of sector.nodes)if(n.type==="worldCommunityRegistryNode"&&n.object&&sector.placements.some((p,index)=>p.nodeIndex===n.nodeIndex&&defaultPlacement(index,sector,d.ranges))) {
+          const rows=mapRegistryQuantities(n.object,wanted);
+          for(const [index,p] of sector.placements.entries())if(p.nodeIndex===n.nodeIndex&&defaultPlacement(index,sector,d.ranges)) {
+            const id=p.questPrefabRefHash!=="0"?p.questPrefabRefHash:`${depotHash(d.resource)}:${index}`;
+            out.addRegistryQuantities(rows,id);
+          }
+        }
       }
       out.finishCommunities();
       const records=worldRecordNames(names.files);

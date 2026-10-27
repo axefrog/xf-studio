@@ -46,6 +46,11 @@ export function validateContent(value: unknown, key: string): asserts value is W
       for(const field of ["name","record","title","journal","variant"]) {optionalString(row[field],field);budget.charge({bytes:stringBytes(row[field] as string|undefined)});}
       if(collection==="communities") {
         affiliation(row.affiliation);
+        if(row.registry!==undefined) {
+          shape(row.registry,"community registry");string(row.registry.id,"registry placement id");string(row.registry.sourceObjectId,"community source object id");
+          if(!/^[1-9][0-9]{0,19}$/.test(row.registry.sourceObjectId))throw new NativeMalformedError("Invalid community source object id.");
+          budget.charge({nested:1,bytes:64+stringBytes(row.registry.id)+stringBytes(row.registry.sourceObjectId)});
+        }
         array(row.entries,"community entries");
         for(const e of row.entries) {
           shape(e,"community entry");string(e.name,"entry name");optionalString(e.record,"entry record");array(e.phases,"entry phases");
@@ -56,6 +61,13 @@ export function validateContent(value: unknown, key: string): asserts value is W
             shape(phase,"community phase");string(phase.name,"phase name");
             if(phase.time!==undefined)finiteTuple(phase.time,2,"phase time");
             budget.charge({nested:1,bytes:64+stringBytes(phase.name)});stringList(phase.spots,"phase spots",budget);
+            array(phase.periods,"phase periods");
+            for(const period of phase.periods) {
+              shape(period,"community period");string(period.name,"period name");optionalString(period.condition,"period condition");
+              if(period.quantity!==undefined)integer(period.quantity,0,65535,"period quantity");
+              budget.charge({nested:1,bytes:96+stringBytes(period.name)+stringBytes(period.condition as string|undefined)});
+              stringList(period.spots,"period spots",budget);
+            }
           }
         }
       } else {

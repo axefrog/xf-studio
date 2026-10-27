@@ -96,10 +96,10 @@ test("an unrenewed lease lasts two poll intervals, then the full thirty-second i
 test("indexed slice responses carry exactly their community record metadata",async()=>{
  const dir=tempDir("w1-record-response-"),value=fixture();
  value.records={"1":{kind:"person",name:"Character.guard",displayName:"Guard",affiliation:"2",affiliationTitle:"Unit"},"9":{kind:"vehicle"}};
- value.communities=[{id:"c",place:"Districts.Kabuki",entries:[{name:"guard",record:"1",phases:[{name:"day",spots:["s"]}]}]}];value.spots=[{id:"s",place:"Districts.Kabuki",at:[10,10,0],yaw:0,communities:["c"]}];
+ value.communities=[{id:"c",place:"Districts.Kabuki",registry:{id:"registry",sourceObjectId:"42"},entries:[{name:"guard",record:"1",phases:[{name:"day",periods:[{name:"Morning",quantity:2,spots:["s"]}],spots:["s"]}]}]}];value.spots=[{id:"s",place:"Districts.Kabuki",at:[10,10,0],yaw:0,communities:["c"]}];
  for(const key of ["communities","spots"]){value.counts.read[key]=value.counts.kept[key]=1;}
  await save(join(dir,"kabuki.content.json"),value);const owner=worldContentFiles(dir);
- try{const response=owner.around(pack,[[10,10,0]],20,true,new AbortController().signal);expect(response.records).toEqual({"1":value.records["1"]});expect(response.communities[0].entries[0]).not.toHaveProperty("recordName");}
+ try{const response=owner.around(pack,[[10,10,0]],20,true,new AbortController().signal);expect(response.records).toEqual({"1":value.records["1"]});expect(response.communities).toEqual(value.communities);expect(response.communities[0].entries[0]).not.toHaveProperty("recordName");}
  finally{owner.close();}
 });
 
