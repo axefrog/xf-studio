@@ -224,7 +224,20 @@ export class Sifter {
       causes: e.stages.map((s) => s.event),
       effects: [],
       witnesses: [],
+      // S3 2.2b / 6.6: the stage chain has one resolved outcome and no story
+      // fillers. Keep the frozen v0.5 record when no typed story kind is loaded.
+      ...(this.k.eventKinds.eventKind('meta:story')?.dataFields ? {
+        data: { pattern: e.pattern, instance: e.id, outcome: 'complete', kind: 'resolved', depth: 1 },
+      } : {}),
     });
+    // As with graph outcomes, make the story available in this boundary's
+    // chronological buffer; later relevance delivery is deduplicated by matching.
+    for (const target of this.patterns.values())
+      if (target.graph && Object.values(target.graph.junctures).some((j) => j.fn === 'story')) {
+        const event = this.view.event(e.story)!;
+        if (!this.state().buffer.some((b) => b.pattern === target.id && b.event.id === event.id))
+          this.state().buffer.push({ pattern: target.id, version: target.version, event });
+      }
     this.tombstone(p, e, e.lastTime + this.data.sifter.tombstoneSpans * this.within(p));
     this.log(
       'match',

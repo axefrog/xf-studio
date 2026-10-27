@@ -53,6 +53,12 @@ export class GraphLedger {
   }
   aware(e: PoolEntry): boolean {
     const p = this.host.sifter.patterns.get(e.pattern)?.graph, g = e.graph;
+    if (!g) {
+      // S3 2.2b: show only the final juncture of a completed stage chain.
+      const last = e.complete && e.stages.at(-1);
+      const exposure = last ? this.host.l2.exposure(last.event) : undefined;
+      return !!exposure && exposure.grade !== 'ambient';
+    }
     return !!p && !!g && p.show.junctures.every((k) => g.junctures[k]?.perceived)
       && p.edges.filter((_, i) => this.shown(e, i)).length >= p.show.edges;
   }
@@ -74,7 +80,7 @@ export class GraphLedger {
     h.invalidatePool();
     const gained = new Set<string>();
     const byStory = new Map<string, PoolEntry[]>();
-    for (const e of pool) if (e.story) {
+    for (const e of h.state.pool) if (e.story && (!e.graph || !e.graph.retired && e.graph.state !== 'lapsed')) {
       if (!byStory.has(e.story)) byStory.set(e.story, []);
       byStory.get(e.story)!.push(e);
     }
@@ -86,7 +92,9 @@ export class GraphLedger {
         let exposure = h.l2.exposure(j.filler.id);
         if (j.filler.fn === 'story') {
           const child = byStory.get(j.filler.id)?.[0];
-          if (child && this.aware(child)) exposure = { grade: 'presented', at: Math.max(...Object.values(child.graph!.junctures).flatMap((x) => x.perceived ? [x.perceived.at] : [])) };
+          if (child && this.aware(child)) exposure = { grade: 'presented', at: child.graph
+            ? Math.max(...Object.values(child.graph.junctures).flatMap((x) => x.perceived ? [x.perceived.at] : []))
+            : h.l2.exposure(child.stages.at(-1)!.event)!.at };
         } else if (!('event' in j.filler.ref)) {
           exposure = (j.filler.causes ?? []).map((n) => h.l2.exposure(n)).filter((x) => x && x.grade !== 'ambient').sort((a, b) => a!.at - b!.at)[0];
         }
@@ -119,13 +127,20 @@ export class GraphLedger {
     const root = (id: string): string => { if (!parents.has(id)) parents.set(id, id); let r = id; while (parents.get(r) !== r) r = parents.get(r)!; return r; };
     const union = (a: string, b: string) => { a = root(a); b = root(b); parents.set(cmp(a, b) < 0 ? b : a, cmp(a, b) < 0 ? a : b); };
     for (const t of base) for (const id of t.instances) union(t.id, id);
+    const stageChildren = new Map<string, PoolEntry>();
     for (const e of pool) {
       root(e.id);
       for (const seed of e.graph!.seeds) if (byId.has(seed.seed)) union(e.id, seed.seed);
       for (const id of grown.get(e.id) ?? []) union(e.id, id);
       for (const layer of e.graph!.layers) if (layer.cross && poolIds.has(layer.with)) union(e.id, layer.with);
       for (const j of Object.values(e.graph!.junctures)) if (j.filler)
-        for (const child of byStory.get(j.filler.id) ?? []) if (child.id !== e.id) union(e.id, child.id);
+        for (const child of byStory.get(j.filler.id) ?? []) if (child.id !== e.id) {
+          union(e.id, child.id);
+          if (!child.graph) {
+            stageChildren.set(child.id, child);
+            if (child.seed && byId.has(child.seed)) union(child.id, child.seed);
+          }
+        }
     }
     const groups = new Map<string, { seeds: string[]; members: InstanceView[]; entries: PoolEntry[] }>();
     for (const i of all) { const r = root(i.id); if (!groups.has(r)) groups.set(r, { seeds: [], members: [], entries: [] }); groups.get(r)!.seeds.push(i.id); groups.get(r)!.members.push(i); }
@@ -143,7 +158,8 @@ export class GraphLedger {
         const st = h.l2.instance(i.id)!.st;
         return st.deliveries.filter((d) => d.pull).flatMap((d) => st.receipts.filter((r) => r.delivery === d.id && r.grade !== 'ambient').map((r) => r.presentedAt ?? r.at));
       }), ...[...nodes].map((node) => history.actTimes.get(node) ?? -Infinity));
-      const t: Thread = { id, instances: group.seeds, patterns: group.entries.map((e) => e.id), aware, lastPresented, pullAt,
+      const t: Thread = { id, instances: group.seeds, patterns: [...group.entries.map((e) => e.id),
+        ...[...stageChildren.values()].filter((e) => root(e.id) === id).map((e) => e.id)], aware, lastPresented, pullAt,
         engineSown: members.some((i) => !closing.has(i.id)) && members.filter((i) => !closing.has(i.id)).every((i) => i.source.by === 'director'),
         active: members.some((i) => !terminal(i.state)) || group.entries.some((e) => ['live', 'forming', 'aftermath'].includes(e.graph!.state)),
         live: bs.some((t) => t.live),
