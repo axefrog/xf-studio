@@ -210,7 +210,7 @@ test('director uses the known entry pattern and marks absent pattern, candidate 
   const items = new HolotableObserver(sim, undefined, layer3(pool, [log(1, { entry: 'entry' }), log(2, {}), log(3, { pattern: 'explicit' })])).sample().layers.get('director')!;
   expect(items[0].facets!.story).toBe('A story');
   expect(items[1].facets!.story).toBeUndefined(); expect(items[2].facets!.story).toBeUndefined();
-  for (const i of items) { expect(i.facets!.score).toBeUndefined(); expect(i.label).toContain('Told you about'); expect(i.facets!.checks).toBe('passed'); }
+  for (const i of items) { expect(i.facets!.score).toBeUndefined(); expect(i.label).toContain('Told you: '); expect(i.facets!.checks).toBe('passed'); }
   expect(snapshot(sim).equals(before)).toBe(true);
 });
 

@@ -9,7 +9,7 @@ The shared, pure [wording renderer](src/wording/index.ts) reads copied record vi
 Its [wording data](src/wording/wording.json) contains the coordinator's 27 function
 mood tables and 29 pattern titles, event sentences, community and participant role
 words, group names, intention phrases and noun overrides. The composite library is
-read only. M3's thread renderer is a future second consumer; `src/m3/` is unchanged.
+read only. M3's thread renderer is a future second consumer.
 
 ## Publish the fixture
 
@@ -21,16 +21,87 @@ bun tools/holotable/publish-run.ts <fresh-output-directory> --world-pack <world-
 
 The default world pack is the repository's private `local/holotable/world-pack.json`.
 It is read only. Output must be a fresh directory; existing spools are refused.
-The CLI still uses the SF3-60 scripted Kabuki fixture: the opening, followed by
+This CLI uses the SF3-60 scripted Kabuki fixture: the opening, followed by
 1,002 ten-minute windows, with the nominal seven-day timeline. Its action remains
-concentrated in the opening. Replacing this with the coordinator's named M3 engine
-week is **step 2**, waiting for that branch; it is not part of this pass.
+concentrated in the opening. It remains a test fixture; use the real-week CLI below
+for the full simulation.
 
 For an existing host run, construct a [HolotableObserver](src/holotable/observe.ts)
 and a [RunPublisher](tools/holotable/publish-run.ts), and call `publishBoundary` after
 each completed boundary. The host supplies the timeline extent and any explicit
 entity bindings. [Shadow mode](SHADOW.md) uses the same observer and wording with
 recording-clock bindings; it issues no game writes.
+
+## Real week
+
+From this directory, under the repository memory guard:
+
+```powershell
+bun tools/holotable/publish-m3-week.ts <fresh-out-dir> [--run <run-id>] [--world-pack <world-pack.json>] [--no-holotable-hooks]
+```
+
+The default is `E-m3c-w2-restless-engage`: the reviewed M3 run-3 engine arm,
+the busiest Kabuki world, and a simulated player who accepts offers. It uses
+the [same week harness](src/m3/week3.ts) as `tools/m3/run3-week.ts` and the
+[run-3 matrix](../m3/run3/protocol.md): squeezed state, eightfold incident rates,
+walking, 1,008 ten-minute game windows, 100 play seconds per window, daily controls
+and observation-time snapshots. Stories and decisions unfold during the week.
+Places and cells retain the declared schematic placement; this is offline model
+evidence, not a recording of the game.
+
+The observer samples the opening and every completed window, before the thread
+archive drains the diagnostic log. The publisher keeps a copied history of director
+and hold entries; their recorded game/play clock and local sequence distinguish
+decisions when the drained sink restarts its sequence. Cross-window hold clearances
+retain their original start. No engine log is resequenced or restored.
+Output stays in a
+private `<fresh-out-dir>.pending` sibling until the regenerated record matches
+the archive, loaded through the [run-record reader](src/m3/run-record.ts). SHA-256 covers canonical JSON
+with sorted object keys and unchanged array order, excluding only
+`diagnostics.seconds` (wall-clock duration). A mismatch reports the first differing
+field and leaves the candidate unpromoted. Existing outputs or staging directories
+are refused. The fixture command is unchanged.
+
+The standalone title is **Kabuki week (simulated)**. Its `from` is the actual start
+and its `to` is the final simulation clock reading, including the observer's game
+epoch. The staging bound is replaced and every record's times checked before
+promotion. The regenerated gzip record and timing/count/identity summary sit
+beside the spool as `<fresh-out-dir>.run.json.gz` and `.summary.json`.
+
+Allow tens of minutes: archived weeks took roughly 20–40 minutes, with machine load
+affecting wall time. The summary profiles log copies, observer sampling, writing,
+identity verification and finalisation, and reports publishing overhead relative
+to the remaining harness time in the same execution; it is not a second bare-run
+benchmark. Run the independent complete-spool audit with:
+
+```powershell
+bun tools/holotable/check-spool.ts <spool-directory>
+```
+
+It checks every manifest and line against producer bounds and Holotable's current
+validator, scans every readable item field for internals, and checks actual timeline
+bounds. The short [publish regression](test/holotable/m3-week.test.ts) runs a small
+run-3-style Kabuki world, compares observer-on/off records, checks the actual bounds
+and validates every output line. It also proves a mismatched record cannot promote.
+
+Verified on 28 October 2026 with Bun 1.4.4 and the private world pack: the default
+run's regenerated record matches the archive (canonical SHA-256
+`503de19353e822e388de7c71168242d900370b8a9fc252c7dc437ae5a35eb828`).
+It published 1,009 observations over game seconds **0–604,800**: Day 1, 00:00 to
+Day 8, 00:00, with stories on all seven days. All 12 manifests and 5,647 records
+passed producer checks, the independent internals scan and Holotable's validator,
+with zero refusals, truncations or unknown glyphs. There were no intention items.
+
+Elapsed time was **19 min 24.4 s**: **18 min 17.4 s** in harness phases and
+**67.1 s** publishing overhead (**6.1 %** of harness time). The publishing profile
+attributes 50.4 s to the observer and 16.6 s to writing; copying, setup, identity
+verification and finalisation together took under 0.1 s. This subtraction measures
+direct publishing work in one execution, not a separately scheduled bare week.
+The archived bare run reports 18 min 32 s; machine load prevents treating that
+older wall time as a controlled overhead benchmark. Peak memory was **1.3 GB**
+under the 4 GB guard. Both fast publish/log regressions passed in **2.35 s**;
+the targeted Holotable set passed **19**, skipped **1** existing opt-in test and
+failed **0**. The full suite is left to the coordinator.
 
 ### Default hooks and compatibility option
 
@@ -43,13 +114,14 @@ The writer now enables them by default for standalone and shadow output:
 - multiline detail, whose first line is a self-contained hover summary. Only LF
   line breaks are permitted: at most 40 lines and 4,000 characters.
 
-For older Holotable builds, pass `--no-holotable-hooks` to either CLI, or use
+For older Holotable builds, pass `--no-holotable-hooks` to the fixture, real-week
+or shadow CLI, or use
 `{ holotableHooks: false }` as the third `RunPublisher` constructor argument.
 `ShadowHost` accepts the same writer options as its final constructor argument.
 Compatibility output omits the manifest hooks and uses one detail line:
 `<summary> Why: <cause> → <cause>`. A summary without causes stays on its own;
-current-story text stays with the summary. `--holotable-hooks` remains a no-op
-alias; the negative flag takes precedence if both are supplied.
+current-story text stays with the summary. The fixture's `--holotable-hooks` remains
+a no-op alias; its negative flag takes precedence if both are supplied.
 
 The producer's bounds apply in both modes. Both complete fixture outputs are
 checked against Holotable's current validator, imported read only.

@@ -192,8 +192,11 @@ export function checkItemBounds(records: readonly RecordLine[], layer: string): 
 }
 
 /** Attach to an existing run: its host calls this after each complete window. */
-export function publishBoundary(observer: HolotableObserver, publisher: RunPublisher): void {
-  publisher.publish(observer.sample());
+export function publishBoundary(observer: HolotableObserver, publisher: RunPublisher, timing?: (observerMs: number, writerMs: number) => void): void {
+  const start = timing ? performance.now() : 0;
+  const observation = observer.sample(), sampled = timing ? performance.now() : 0;
+  publisher.publish(observation);
+  timing?.(sampled - start, performance.now() - sampled);
 }
 
 if (import.meta.main) {

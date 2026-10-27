@@ -32,6 +32,8 @@ export interface ObserveOptions {
   /** Optional explicit game entity bindings, supplied by the host rather than guessed. */
   entities?: ReadonlyMap<string, string>;
   layout?: PlaceLayout;
+  /** Copied complete history when the host drains L3's diagnostic sink. */
+  directorLog?: readonly LogEntry[];
 }
 export interface Observation { t: number; branch?: string; layers: Map<string, Item[]>; truncations?: Map<string, Map<string, number>>; retractions?: Map<string, Retraction[]> }
 const active = (v: { from?: number; to?: number }, t: number) => (v.from === undefined || v.from <= t) && (v.to === undefined || t < v.to);
@@ -406,7 +408,11 @@ export class HolotableObserver {
         if (type && !/[?`]/.test(type)) relation('stories', `role-${e.id}-${encodeURIComponent(role)}`, `story-engine/stories/${e.id}`, endpoint(id), type, `se:inst:${e.id}`);
       }
     }
-    for (const log of l3?.log ?? []) {
+    const directorLog = this.options.directorLog ?? l3?.log ?? [];
+    // A drained sink restarts seq each window. Keep its recorded clock and local
+    // sequence together; never mutate/resequence the engine's diagnostic entries.
+    const logId = (log: LogEntry) => this.options.directorLog ? `${log.at.game}-${log.at.playTotal}-${log.seq}` : String(log.seq);
+    for (const log of directorLog) {
       if (log.kind !== 'sow') continue;
       const data = log.data, scores = (Array.isArray(data.scores) ? data.scores : []) as Array<Candidate & { score?: number }>;
       const request = data.request as { localName?: string } | undefined;
@@ -418,34 +424,34 @@ export class HolotableObserver {
       const decision = held ? wording.phrase('director-held', { reason: wording.reason(log.rule) }) : c?.kind === 'surface' ? wording.phrase('director-surface', { story: title ?? 'a story' }) : c?.kind === 'realise' ? wording.phrase('director-realise', { step: current ?? title ?? 'a story step' }) : c?.kind === 'explain' ? wording.phrase('director-explain', { story: title ?? 'a story' }) : wording.phrase('director-told', { story: title ?? 'a story' });
       const values = scores.flatMap((c) => typeof c.score === 'number' ? [c.score] : []), lo = Math.min(...values), hi = Math.max(...values);
       const score = typeof c?.score === 'number' ? hi === lo ? 'medium' : c.score < lo + (hi - lo) / 3 ? 'low' : c.score < lo + (hi - lo) * 2 / 3 ? 'medium' : 'high' : undefined;
-      put('director', String(log.seq), 'target', placeAnchor(c?.place ?? (e ? entryPlace(e) : events.get(log.chain[0])?.place)), `se:sow:${log.seq}`, {
+      put('director', logId(log), 'target', placeAnchor(c?.place ?? (e ? entryPlace(e) : events.get(log.chain[0])?.place)), `se:sow:${logId(log)}`, {
         glyph: decisionGlyph(c?.kind, held), t: log.at.game + this.epoch, label: decision, detail: proseDetail(decision, log.chain.at(-1)), facets: {
           decision, ...(title ? { story: title } : {}), ...(!held ? { checks: 'passed' } : {}), ...(score ? { score } : {}),
         },
       });
     }
-    const holds = new Map<number, { log: LogEntry; until?: number }>(), activeHolds = new Map<string, number>(), cleared: Retraction[] = [];
-    for (const log of l3?.log ?? []) if (log.kind === 'hold' && typeof log.data.delivery === 'string') {
+    const holds = new Map<string, { log: LogEntry; until?: number }>(), activeHolds = new Map<string, string>(), cleared: Retraction[] = [];
+    for (const log of directorLog) if (log.kind === 'hold' && typeof log.data.delivery === 'string') {
       const delivery = log.data.delivery;
       if (log.rule === 'hold-cleared') {
         const seq = activeHolds.get(delivery), held = seq !== undefined ? holds.get(seq) : undefined;
         if (held) {
           held.until = log.at.game + this.epoch;
-          cleared.push({ retract: `hold-${held.log.seq}`, t: held.until });
+          cleared.push({ retract: `hold-${logId(held.log)}`, t: held.until });
         }
         activeHolds.delete(delivery);
-      } else { holds.set(log.seq, { log }); activeHolds.set(delivery, log.seq); }
+      } else { holds.set(logId(log), { log }); activeHolds.set(delivery, logId(log)); }
     }
     for (const { log, until } of holds.values()) {
       // A previously shown hold ends through its explicit retraction. Only an
       // unseen, already-closed hold needs a historical bounded appearance.
-      if (until !== undefined && (this.stops.has(`${branch ?? ''}/director/hold-${log.seq}`) || this.stops.has(`/director/hold-${log.seq}`))) continue;
+      if (until !== undefined && (this.stops.has(`${branch ?? ''}/director/hold-${logId(log)}`) || this.stops.has(`/director/hold-${logId(log)}`))) continue;
       const delivery = log.data.delivery as string;
       const inst = l2?.all().find((i) => i.st.deliveries.some((d) => d.id === delivery));
       const entry = inst && l3?.state.pool.find((e) => e.seed === inst.id);
       const place = entry ? entryPlace(entry) : inst && [...inst.st.receipts].reverse().find((r) => r.cue.place)?.cue.place;
       const decision = wording.phrase('director-held', { reason: wording.reason(String(log.data.reason ?? log.rule)) });
-      put('director', `hold-${log.seq}`, 'target', placeAnchor(place), `se:sow:${log.seq}`, { glyph: 'held', t: log.at.game + this.epoch, ...(until !== undefined ? { until } : {}), label: decision, detail: proseDetail(decision, log.chain.at(-1)), facets: { decision, ...(entry ? { story: storyTitle(entry) } : {}) } });
+      put('director', `hold-${logId(log)}`, 'target', placeAnchor(place), `se:sow:${logId(log)}`, { glyph: 'held', t: log.at.game + this.epoch, ...(until !== undefined ? { until } : {}), label: decision, detail: proseDetail(decision, log.chain.at(-1)), facets: { decision, ...(entry ? { story: storyTitle(entry) } : {}) } });
     }
     for (const [group, against] of Object.entries(gd?.against ?? {})) if (against) {
       const type = against.rung === 'hunt' ? 'hunting' : against.rung === 'price' ? 'warned' : 'watching';

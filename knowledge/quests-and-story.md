@@ -229,6 +229,25 @@ Under MO2, a hot-reloaded archive lands in MO2's overwrite folder, because the m
 
 ## 9. Offline Story Engine evaluation boundary
 
+The real-week Holotable publisher shares M3 run 3's reviewed-v5 week harness,
+including thread captures, daily controls and observation-time snapshots. It stages
+the observer's output privately and promotes it only after a canonical comparison
+with the archived run record; only wall-clock `diagnostics.seconds` is excluded.
+The archive drains L3's diagnostic sink each window, so the observer samples before
+that drain and keeps a copied director/hold history. Recorded game/play clocks and
+local sequences distinguish entries after the sink's sequence restarts; hold
+clearances still refer to their original start. The standalone timeline ends at
+the final simulation clock reading. The short
+run-3-style publish regression confirms identical observer-on/off run records and
+refuses a mismatched record before promotion **[offline]**
+([real-week notes](../projects/xf-story-engine/reference/HOLOTABLE.md#real-week),
+[regression](../projects/xf-story-engine/reference/test/holotable/m3-week.test.ts)).
+The complete `E-m3c-w2-restless-engage` week also matches its archived record,
+excluding only that wall-clock field, and its 12 Holotable spools pass the producer,
+consumer and internals checks with zero refusals **[offline, 28 October 2026]**.
+Its observed timeline is game seconds 0–604,800; this is a simulated week, not a
+runtime recording or proof of game integration.
+
 The M3 iteration-3 harness uses ordinary S2 offer/response routes and one declared event per accepted act. Its acceptance regression confirms that accepting emits that event and declining cannot emit it. Optional event roles also search for a cast unless their scope is empty. The M3 adapter leaves that scope empty and supplies only a fixed evidence identity from the matcher, so an unrelated event cannot become its cause. An optional, uncast cause must be omitted from the event declaration: naming an uncast role prevents the entire event from being emitted. These are **[offline] reference-model observations**, not proof of game integration ([adapter tests](../projects/xf-story-engine/reference/test/m3/adapters3.test.ts), [atomic adapters](../projects/xf-story-engine/reference/src/m3/atoms3.ts)).
 
 The coordinator-authorised `core:actor` schema category classifies people and groups nominally, including compatible residents. It permits typed actor casts without making generic queries nominal. The same structural person query returns an unchanged set before and after this data addition **[offline]** ([regression](../projects/xf-story-engine/reference/test/actor-kind.test.ts)).

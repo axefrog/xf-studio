@@ -91,12 +91,14 @@ Shadow mode maps V and unidentified actors through Holotable's reader and S1's
 mirror port; typed witness reports and their incidents enter as evidence-only raw
 events, with channel and incident coverage in its summary. It never acts in game.
 It publishes existing simulation, seeding and procedural state as full-content
-diagnostic layers on one standalone game-time timeline. A shared SF3-60-style
-Kabuki week is the first output fixture. Observation never opens detail or evaluates
+diagnostic layers on one standalone game-time timeline. The SF3-60-style Kabuki
+week stays as a test fixture; the [real-week CLI](reference/HOLOTABLE.md#real-week)
+publishes an M3 run-3 week after proving its record matches the archive, with bounds
+from the actual simulation clock. Observation never opens detail or evaluates
 a draw; tests compare records, digests, draw transcripts and saves with and without
 it. Real district ids come from Holotable's world pack; synthetic cells use an
 explicitly labelled schematic grid within the real bounds. This is an offline
-reference-model fixture. Shadow mode's live reader has simulated-source offline
+reference-model output. Shadow mode's live reader has simulated-source offline
 tests; no live game session is claimed.
 
 From `projects/xf-story-engine/reference/`:
