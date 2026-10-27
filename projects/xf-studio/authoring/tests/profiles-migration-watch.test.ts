@@ -3,7 +3,7 @@ import { watchProfilesMigration } from "../src/app/browser/profiles-migration-de
 import { storedProfilesReady } from "../src/app/profiles/profiles-migration";
 import { sessionOfWorkspace, workspaceProfiles } from "../src/app/profiles/profiles-migration-data";
 import { PROFILES_MIGRATION } from "../src/app/profiles/profile-session";
-import { serializeWorkspace, workspaceKeys } from "../src/app/workspace/workspace-state";
+import { serializeWorkspace, workspaceKeys } from "../src/app/workspace/makeup-workspace";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { seededRandom } from "./fixtures/profile-sessions";

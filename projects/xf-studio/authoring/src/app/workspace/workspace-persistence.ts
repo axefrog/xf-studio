@@ -1,6 +1,8 @@
 import type { DocumentModel } from "./collection-workspace";
 import { fitWorkspace, WORKSPACE_STORAGE_BUDGET, type WorkspacePlan } from "./workspace-budget";
-import type { WorkspaceState } from "./workspace-state";
+import type { WorkspaceState as LookWorkspaceState } from "./workspace-state";
+import type { WorkspaceState as MakeupWorkspaceState } from "./makeup-workspace";
+type WorkspaceState = LookWorkspaceState | MakeupWorkspaceState;
 
 /**
  * Browser autosave state for the presentation.

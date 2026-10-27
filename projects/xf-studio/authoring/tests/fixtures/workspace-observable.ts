@@ -7,7 +7,7 @@
 import { createHash } from "node:crypto";
 import { LegacyDraftActions as CollectionActions, type EditorSnapshot } from "./legacy-draft";
 import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
-import { loadWorkspace, type WorkspaceState } from "../../src/app/workspace/workspace-state";
+import { loadWorkspace, type WorkspaceState } from "../../src/app/workspace/makeup-workspace";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { historyRecipes } from "./looks";
 import { DEFAULT_STUDIO_LIGHTS, sameStudioLights } from "../../src/preview/studio-lighting";

@@ -179,7 +179,7 @@ test("a stored pose waits for the Poses module and can be dropped; without a mot
 });
 
 test("the held pose is view state in the workspace: stored with its label, restored, and dropped when unreadable", async () => {
-  const { parseWorkspace, serializeWorkspace } = await import("../src/app/workspace/workspace-state");
+  const { parseWorkspace, serializeWorkspace } = await import("../src/app/workspace/makeup-workspace");
   const { STUDIO_DOCUMENTS } = await import("../src/compose/studio-registry");
   const state = freshWorkspace();
   state.preview.pose = { id: "PhotoModePoses.idle_stand_01", label: "Standing" };

@@ -8,7 +8,7 @@ import { expect, test } from "bun:test";
 import { restore } from "./fixtures/workspace-observable";
 import { largeWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
 import { profileStudio } from "./fixtures/profile-studio";
-import { livePart } from "../src/app/workspace/collection-workspace";
+import { livePart } from "../src/app/workspace/makeup-workspace";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
 const p95 = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length * 0.95)]!;

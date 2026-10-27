@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { profileWorkspaceLease, openProfileSession, type ProfileServices } from "../src/app/profiles/profile-window";
 import { dockPanels } from "../src/app/profiles/profiles-migration-data";
 import { UIPreferenceActions, type DockLayout } from "../src/app/ui-preferences";
-import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
 import { WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
 import { STUDIO_INITIAL_LAYOUT } from "../src/compose/layout-defaults";
@@ -130,7 +130,7 @@ for (const verification of [false, true]) for (const phase of ["unsupported", "d
   for (const kind of ["fresh", "legacy", "migrated"] as const) test(`${phase}: ${kind} workspace opens read-only (${verification ? "verify" : "normal"})`, async () => {
     const { freshWorkspace } = await import("./fixtures/eye-region");
     const { loadBrowserWorkspace } = await import("../src/app/browser/browser-workspace-device");
-    const { workspaceKeys } = await import("../src/app/workspace/workspace-state");
+    const { workspaceKeys } = await import("../src/app/workspace/makeup-workspace");
     const { leaseSnapshot, LEASE_MESSAGES } = await import("../src/app/workspace/workspace-lease");
     const original = kind === "migrated" ? phaseOneWorkspace({ layout: custom }) : kind === "legacy"
       ? serializeWorkspace({ ...freshWorkspace(), uiPreferences: { ...freshWorkspace().uiPreferences, layout: custom } }, STUDIO_DOCUMENTS) : null;

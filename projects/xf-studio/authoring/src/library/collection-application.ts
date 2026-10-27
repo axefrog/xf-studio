@@ -1,4 +1,4 @@
-import type { AuthoringDocument } from "../app/authoring/makeup-document";
+import type { AuthoringDocument } from "../app/authoring/authoring-document";
 import type { CollectionAction } from "./collection-actions";
 import type { Unnamed } from "../app/action-targets";
 import { CollectionService, type CollectionOutcome, type CollectionRequest, type CollectionServiceDeps,
@@ -31,12 +31,12 @@ export type CollectionViewPort = {
 export class CollectionApplication implements CollectionViewPort {
   /** The trusted service (the composition root and tests); views get only `CollectionViewPort`. */
   readonly service: CollectionService;
-  constructor(deps: Omit<CollectionServiceDeps, "readRecipe">, private document: AuthoringDocument, private app: StudioApplication,
+  private readonly model: CollectionServiceDeps["model"];
+  constructor(deps: Omit<CollectionServiceDeps, "readRecipe">, private document: Pick<AuthoringDocument, "features" | "version">, private app: StudioApplication,
     private files: StudioFileOperations) {
-    this.service = new CollectionService({ ...deps, readRecipe: () => {
-      const others = document.otherParts();
-      return { recipe: document.recipe, revision: document.geometryVersion.revision, ...(others ? { others } : {}) };
-    } });
+    this.model = deps.model;
+    this.service = new CollectionService({ ...deps, readParts: () => ({ revision: document.version,
+      parts: Object.fromEntries(document.features.features().map(feature => [feature, document.features.read(feature)])) }) });
     // Library requests and file workflows route through the application's registry (CORE-36).
     app.attach({ collection: this.service, files });
     files.attachCollection(this.service);
@@ -45,14 +45,17 @@ export class CollectionApplication implements CollectionViewPort {
   summary() {
     const summary = this.service.summary(), selected = summary.draft?.selected;
     for (const preset of summary.draft?.presets ?? [])
-      if (preset.id === selected) preset.layers = this.document.recipe.layers.length;
+      if (preset.id === selected) preset.layers = this.currentLayerCount();
     return summary;
   }
   subscribe(listener: () => void) { return this.files.subscribe(listener); }
   /** The shown preset's ID; undefined while loading or with no preset shown. */
   selectedPresetId() { return this.service.selectedPreset().id; }
   persistence() { return this.service.persistence(); }
-  currentLayerCount() { return this.document.recipe.layers.length; }
+  currentLayerCount() {
+    const feature = this.model.live, document = feature ? this.document.features.document(feature) : undefined;
+    return document?.part === undefined ? 0 : Number(document.module.part.summary(document.part).layers ?? 0);
+  }
   capability(action: Unnamed<CollectionAction>) { return this.app.capability(action as CollectionAction); }
   dispatch(action: Unnamed<CollectionAction>) { return this.app.dispatch(action as CollectionAction); }
   fileCapability(action: StudioFileAction) { return this.app.fileCapability(action); }

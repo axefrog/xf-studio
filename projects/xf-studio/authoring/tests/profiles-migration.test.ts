@@ -13,7 +13,7 @@ import { ProfilesMigration } from "../src/app/profiles/profiles-migration";
 import { decodedSaveId } from "../src/character/character-document";
 import { STUDIO_PARTS } from "../src/compose/studio-registry";
 import { type ModPackagePlan, PACKAGE_PLAN_1 } from "../src/platform/api/export";
-import { serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { formatFence, WORKSPACE_FENCE_HEADER } from "../src/platform/api/document-store";
 import { LibraryBackups } from "../src/platform/persistence/backups";
 import { DocumentStoreError } from "../src/platform/persistence/document-store";

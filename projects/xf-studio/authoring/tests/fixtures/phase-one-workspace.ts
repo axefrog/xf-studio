@@ -7,7 +7,7 @@
 import type { DockLayout } from "../../src/app/ui-preferences";
 import type { ProfileSessionData } from "../../src/app/profiles/profile-session";
 import { dockPanels, rewriteDock, viewOfPanel } from "../../src/app/profiles/profiles-migration-data";
-import { serializeWorkspace } from "../../src/app/workspace/workspace-state";
+import { serializeWorkspace } from "../../src/app/workspace/makeup-workspace";
 import { createStudioViewGraph, sessionViewGraph } from "../../src/preview/preview-view-graph";
 import { STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { freshWorkspace } from "./eye-region";

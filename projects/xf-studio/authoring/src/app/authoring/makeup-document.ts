@@ -121,6 +121,10 @@ export class AuthoringDocument {
   private set state(value: Omit<DocumentState, "history" | "historyTrimmed">) {
     this.primary.set(value.recipe, { active: value.active, selected: value.selected, fieldSelection: value.fieldSelection });
   }
+  /** The same feature-neutral owner, used by workspace/library adapters until registered construction lands. */
+  get lookDocument() { return this.look; }
+  get features() { return this.look.features; }
+  get version() { return this.look.version; }
   get history(): HistoryScope { return this.look.history; }
   get scopeId() { return this.look.scopeId; }
   get locked() { return this.look.locked; }
@@ -175,7 +179,7 @@ export class AuthoringDocument {
   /** Lets detached geometry readers refresh on edits without cloning on render frames. */
   get geometryVersion() { return { revision: this.geometryRevision, layerIndex: this.changedLayerIndex,
     gestureKind: this.changedGestureKind }; }
-  set recipe(value: Recipe) { this.primary.set(value, this.primary.editor); this.geometryRevision++; this.changedLayerIndex = undefined;
+  set recipe(value: Recipe) { this.primary.set(value, this.primary.editor, true); this.geometryRevision++; this.changedLayerIndex = undefined;
     this.changedGestureKind = undefined; this.notify("recipe"); }
   /** Atomically replace a stack or Undo result, keeping a surviving point selected. */
   replaceRecipe(value: Recipe, nextActive = 0) {

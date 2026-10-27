@@ -8,7 +8,7 @@ import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { createStudioViewGraph, DEFAULT_RENDERING, previewMirror, STUDIO_VIEW_GRAPH_RULES } from "../src/preview/preview-view-graph";
 import { parseViewGraph } from "../src/platform/core/view-graph";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
-import { parseWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace } from "../src/app/workspace/makeup-workspace";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { storedWorkspace } from "./fixtures/looks";
 import { freshWorkspace } from "./fixtures/eye-region";

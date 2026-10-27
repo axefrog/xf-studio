@@ -10,7 +10,7 @@ import { PreviewActions, type LightingStatus, type PreviewPort } from "../src/pr
 import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
-import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { createStudioViewGraph, sessionViewGraph } from "../src/preview/preview-view-graph";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { storedWorkspace } from "./fixtures/looks";

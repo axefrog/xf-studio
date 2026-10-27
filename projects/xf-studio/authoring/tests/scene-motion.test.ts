@@ -12,7 +12,7 @@ import { IDLE_MASCULINE, MotionActions, RELEASED, type MotionPort } from "../src
 import { DEFAULT_MOTION, previewMotion, recoverSceneMotion, sceneMotionOf, type SceneMotion } from "../src/animation/scene-motion";
 import { graphMotionScene, createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
-import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/app/workspace/workspace-state";
+import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/app/workspace/makeup-workspace";
 import { openSession } from "./fixtures/profile-sessions";
 import { sessionOfWorkspace, workspaceProfiles } from "../src/app/profiles/profiles-migration-data";
 import { PROFILES_MIGRATION } from "../src/app/profiles/profile-session";

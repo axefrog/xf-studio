@@ -6,7 +6,7 @@
  */
 import { expect, test } from "bun:test";
 import type { CollectionVersionsPort } from "../src/library/collection-owner";
-import { collectionDraft, parseCollectionWorkspace, writeCollectionWorkspace, type DocumentModel } from "../src/app/workspace/collection-workspace";
+import { collectionDraft, parseCollectionWorkspace, writeCollectionWorkspace, type DocumentModel } from "../src/app/workspace/makeup-workspace";
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { EYE_MAKEUP } from "../src/features/eye-makeup";
 import { PartRegistry } from "../src/platform/core/document";

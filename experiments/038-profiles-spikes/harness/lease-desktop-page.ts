@@ -8,7 +8,7 @@
 import { desktopWorkspaceLease } from "../../../projects/xf-studio/authoring/src/app/browser/workspace-lease-device";
 import { browserDocuments } from "../../../projects/xf-studio/authoring/src/app/browser/browser-documents-device";
 import { formatFence, WORKSPACE_FENCE_HEADER } from "../../../projects/xf-studio/authoring/src/platform/api/document-store";
-import { serializeWorkspace } from "../../../projects/xf-studio/authoring/src/app/workspace/workspace-state";
+import { serializeWorkspace } from "../../../projects/xf-studio/authoring/src/app/workspace/makeup-workspace";
 import { STUDIO_DOCUMENTS } from "../../../projects/xf-studio/authoring/src/compose/studio-registry";
 import { freshWorkspace } from "../../../projects/xf-studio/authoring/tests/fixtures/eye-region";
 import { latePut, runPage } from "./lease-page";

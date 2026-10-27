@@ -8,7 +8,7 @@ import { eyeMakeupCollection, parseCollection } from "../src/legacy/eye-makeup/e
 import { restore } from "./fixtures/workspace-observable";
 import { largeWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";
 import { profileStudio } from "./fixtures/profile-studio";
-import { livePart } from "../src/app/workspace/collection-workspace";
+import { livePart } from "../src/app/workspace/makeup-workspace";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { COLLECTION_2 } from "../src/platform/api";
 
@@ -58,5 +58,18 @@ test("an edit, a preset change or a rename makes the result stale; a new Check m
   expect(f.files.snapshot().package?.freshness).toBe("stale");
   await f.files.execute({ kind: "package.check" });
   f.service.dispatch({ kind: "collection.rename", collection: f.shown()!, name: "Renamed" });
+  expect(f.files.snapshot().package?.freshness).toBe("stale");
+});
+
+test("editor selection keeps a package result current; a published in-place part edit makes it stale", async () => {
+  const f = await fixture();
+  await f.files.execute({ kind: "package.check" });
+  const revision = f.document.version;
+  f.document.active = 1; f.document.selected = 1;
+  expect(f.document.version).toBe(revision);
+  expect(f.files.snapshot().package?.freshness).toBe("current");
+  f.document.recipe.layers[1].opacity = 0.17;
+  f.document.gestureChanged(1);
+  expect(f.document.version).toBeGreaterThan(revision);
   expect(f.files.snapshot().package?.freshness).toBe("stale");
 });

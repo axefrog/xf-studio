@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { HISTORY_START_ID } from "../src/platform/api/history";
-import { collectionDraft, parseCollectionWorkspace, withLiveMemory } from "../src/app/workspace/collection-workspace";
+import { collectionDraft, parseCollectionWorkspace, withLiveMemory } from "../src/app/workspace/makeup-workspace";
 import { memoryOf } from "./fixtures/looks";
 import { RECIPE_HISTORY_LIMIT, recipeHistory } from "../src/legacy/eye-makeup/editor-actions";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { encodeWorkspaceForStorage, PERSISTED_BACKGROUND_HISTORY } from "../src/app/workspace/workspace-budget";
-import { parseWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace } from "../src/app/workspace/makeup-workspace";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 

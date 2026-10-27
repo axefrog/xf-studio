@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { MAX_LAYERS } from "../src/engines/layered-makeup/recipe";
 import { RECIPE_HISTORY, recipeHistory } from "../src/legacy/eye-makeup/editor-actions";
-import { parseWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace } from "../src/app/workspace/makeup-workspace";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { coverage, initialRecipe, editLayers, compileFlatPreset, freshWorkspace } from "./fixtures/eye-region";

@@ -8,7 +8,7 @@ import { LIBRARY_MIGRATIONS } from "../src/library/host/library-migrations";
 import { hostClock } from "../src/platform/core/clock";
 import { LibraryDatabase } from "../src/platform/persistence/library-database";
 import { openTestLibrary, type TestLibrary } from "./fixtures/library-file";
-import { emptyRecipe } from "../src/app/workspace/collection-workspace";
+import { emptyRecipe } from "../src/app/workspace/makeup-workspace";
 import { parseCollection, planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe } from "./fixtures/eye-region";

@@ -13,7 +13,7 @@ import type { MigrationAnswer, MigrationRequest } from "../../src/app/profiles/p
 import { DocumentStore } from "../../src/platform/persistence/document-store";
 import type { LibraryBackups } from "../../src/platform/persistence/backups";
 import type { LibraryDatabase } from "../../src/platform/persistence/library-database";
-import type { WorkspaceState } from "../../src/app/workspace/workspace-state";
+import type { WorkspaceState } from "../../src/app/workspace/makeup-workspace";
 import { canonicalJson } from "../../src/platform/api";
 import { documentRows, MODEL, readStored, storedText } from "./profiles-migration-fixtures";
 

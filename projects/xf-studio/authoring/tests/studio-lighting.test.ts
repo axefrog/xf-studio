@@ -7,7 +7,7 @@ import { DEFAULT_KEY_ANGLE, DEFAULT_KEY_ELEVATION, DEFAULT_STUDIO_EXPOSURE, DEFA
   STUDIO_SETUP_IDS, STUDIO_SETUPS, validStudioLights } from "../src/preview/studio-lighting";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
-import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { storedWorkspace } from "./fixtures/looks";
 import { freshWorkspace } from "./fixtures/eye-region";
 

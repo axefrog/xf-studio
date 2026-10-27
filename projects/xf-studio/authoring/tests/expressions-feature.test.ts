@@ -9,7 +9,7 @@ import { applyExpression, expressionCapability, pairLinked, type ExpressionActio
 import type { ExpressionPart } from "../src/features/expressions/part";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
-import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { f32 } from "../src/engines/facial-rig/vector";
 import { freshWorkspace } from "./fixtures/eye-region";
 

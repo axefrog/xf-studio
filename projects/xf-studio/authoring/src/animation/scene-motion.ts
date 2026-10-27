@@ -11,7 +11,7 @@
  * - **Stored as normalised**, by the rules the workspace reader always applied: while the idle plays the blink is open and still; while it
  *   doesn't, it isn't paused. The chosen idle is stored only when it isn't the default (the close-up).
  */
-import type { PreviewState } from "../app/workspace/workspace-state";
+import type { PreviewState } from "../app/workspace/makeup-workspace";
 import { DEFAULT_IDLE } from "./idle-catalogue";
 
 /** The photo-mode pose a scene holds: its TweakDB record and label (pose-library-design.md Q9). */

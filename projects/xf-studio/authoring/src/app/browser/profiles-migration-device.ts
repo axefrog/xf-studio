@@ -3,8 +3,8 @@ import { formatFence, WORKSPACE_FENCE_HEADER, type WorkspaceFence } from "../../
 import type { MigrationAnswer, MigrationRequest, MigrationResult } from "../profiles/profiles-migration-data";
 import { migrated, storedProfilesReady, ProfilesMigration, type ProfilesMigrationOutcome } from "../profiles/profiles-migration";
 import type { MigrationMark, WorkspaceProfiles } from "../profiles/profile-session";
-import type { DocumentModel } from "../workspace/collection-workspace";
-import type { WorkspaceState } from "../workspace/workspace-state";
+import type { DocumentModel } from "../workspace/makeup-workspace";
+import type { WorkspaceState } from "../workspace/makeup-workspace";
 
 /**
  * The page's transport for the profiles migration (`/api/profiles/migrate`, or `/api/verification/profiles/migrate`; profiles design

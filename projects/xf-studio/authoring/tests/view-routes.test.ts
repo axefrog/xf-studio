@@ -13,7 +13,7 @@ import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions
 import { graphMotionScene } from "../src/app/trusted-preview-services";
 import { previewFields } from "../src/preview/preview-view-graph";
 import { VIEW_HIDDEN, VIEW_LOADING, type ViewReach } from "../src/preview/view-routes";
-import type { CameraState } from "../src/app/workspace/workspace-state";
+import type { CameraState } from "../src/app/workspace/makeup-workspace";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { namedCore } from "./fixtures/named-targets";
 

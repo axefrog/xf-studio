@@ -3,11 +3,11 @@
  */
 import { createAuthoringEditing, type StudioComposition, type createTrustedAuthoringCore } from "../app/trusted-authoring-core";
 import type { StudioApplication } from "../app/studio-application";
-import type { WorkspaceState } from "../app/workspace/workspace-state";
+import type { WorkspaceState } from "../app/workspace/makeup-workspace";
 import type { DocumentOutbox } from "../platform/core/document-outbox";
 import { lookScope } from "../platform/core/history-service";
 import { lookRef, type LookRef } from "./collection-documents";
-import { LookEditor, lookContent } from "./look-editor";
+import { LookEditor, lookContent } from "./makeup-look-editor";
 import type { LookSessions } from "./look-sessions";
 import type { CollectionOwner } from "./collection-owner";
 import type { Recipe } from "../engines/layered-makeup/recipe";

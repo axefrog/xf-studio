@@ -19,7 +19,7 @@ import { starterParts } from "../src/app/workspace/collection-workspace";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { profileStudio } from "./fixtures/profile-studio";
-import { lookContent } from "../src/library/look-editor";
+import { lookContent } from "../src/library/makeup-look-editor";
 import { tabDefaults } from "../src/app/profiles/profile-window";
 import { STUDIO_FRAGMENT_KNOWLEDGE, STUDIO_LAYOUT_DEFAULTS } from "../src/compose/layout-defaults";
 import { withEmptyChoices } from "../src/studio-ui/panels/empty-choices";

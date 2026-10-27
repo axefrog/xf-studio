@@ -24,7 +24,7 @@ import { PROFILES_MIGRATION } from "../src/app/profiles/profile-session";
 import { type ProfileSessions, type TabContent } from "../src/app/profiles/profile-sessions";
 import { UIPreferenceActions, type DockLayout } from "../src/app/ui-preferences";
 import { drawnView } from "../src/app/profiles/profile-window";
-import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_SLOTS, type StoredNode, type ViewRecord } from "../src/platform/api/view-graph";

@@ -13,7 +13,7 @@ import { DEFAULT_CREATOR_LIGHTING } from "../../src/preview/creator-lighting";
 import { builtInSetup, rigKindOf, type SetupLibrary } from "../../src/preview/lighting-setups";
 import { defaultViewGraph, lightsNodeState } from "../../src/preview/preview-view-graph";
 import type { SavedV } from "../../src/saves/save-reader";
-import { serializeWorkspace, type WorkspaceState } from "../../src/app/workspace/workspace-state";
+import { serializeWorkspace, type WorkspaceState } from "../../src/app/workspace/makeup-workspace";
 import type { DockLayout } from "../../src/app/ui-preferences";
 import { closePanel, type DockTree, group, parkPanels, split } from "../../src/studio-ui/dock/layout";
 import { serializeDockState } from "../../src/studio-ui/dock/persist";

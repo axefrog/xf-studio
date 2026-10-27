@@ -19,7 +19,7 @@ import { DEFAULT_KEY_ANGLE, DEFAULT_STUDIO_STAGE, STUDIO_LIGHT_COLOURS, STUDIO_S
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
-import { parseWorkspace, serializeWorkspace, type WorkspaceState } from "../src/app/workspace/workspace-state";
+import { parseWorkspace, serializeWorkspace, type WorkspaceState } from "../src/app/workspace/makeup-workspace";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

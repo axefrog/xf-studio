@@ -49,7 +49,7 @@ export const STUDIO_PARTS = new PartRegistry(STUDIO_OWNERS.filter(owner => owner
  */
 export const LIVE_FEATURE = EYE_MAKEUP_ID;
 /** The document model the collection, library and workspace code is given. */
-export const STUDIO_DOCUMENTS: DocumentModel = Object.freeze({ parts: STUDIO_PARTS, live: LIVE_FEATURE });
+export const STUDIO_DOCUMENTS: DocumentModel & { readonly live: string } = Object.freeze({ parts: STUDIO_PARTS, live: LIVE_FEATURE });
 /** The live feature's layered-makeup region: eye makeup's plate, mirror, fine-Glitter scope, textures and wording. */
 export const LIVE_REGION = EYE_MAKEUP_REGION;
 /** Everything the trusted core needs from the composition. */

@@ -15,14 +15,14 @@ import type { ViewGraph } from "../platform/core/view-graph";
 import { StudioApplication } from "./studio-application";
 import type { Recipe } from "../engines/layered-makeup/recipe";
 import type { LayeredMakeupRegion } from "../engines/layered-makeup/region";
-import type { WorkspaceState } from "./workspace/workspace-state";
+import type { WorkspaceState } from "./workspace/makeup-workspace";
 
 /**
  * What the composition roots hand the trusted core (feature-module platform §4, CORE-29): the
  * action registry and the document model. Built once in `compose/` and passed in by the startup
  * and server roots; nothing below the roots imports the composition.
  */
-export type StudioComposition = { readonly registry: Registry<AnyOwner>; readonly documents: DocumentModel;
+export type StudioComposition = { readonly registry: Registry<AnyOwner>; readonly documents: DocumentModel & { readonly live: string };
   /** The live feature's layered-makeup region (eye makeup's), which its port, catalogues and edits use. */
   readonly region: LayeredMakeupRegion;
   /** The Studio modules and every view tool (view-graph-design.md §3.9); absent in fixtures (only the platform's tools). */

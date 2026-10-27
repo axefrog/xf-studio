@@ -1,6 +1,6 @@
 import type { DocumentState } from "../authoring/makeup-document";
 import type { PreviewActions } from "../../preview/preview-actions";
-import type { WorkspaceState } from "./workspace-state";
+import type { WorkspaceState } from "./makeup-workspace";
 import { parseUIPreferences } from "../ui-preferences";
 
 export type WorkspaceCapturePorts = {

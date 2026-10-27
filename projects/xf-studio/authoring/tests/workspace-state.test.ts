@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/app/workspace/workspace-state";
+import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/app/workspace/makeup-workspace";
 import { readSavedV } from "../src/saves/save-reader";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";

@@ -9,7 +9,7 @@ import { CC_PANEL_SCHEMA } from "../src/character/cc-panel";
 import { renderCoverage, UNDER_COVER, type CoverageInput } from "../src/character/cc-render-coverage";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
-import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 const port = (withBody = true) => ({ cameraState: () => ({ position: [0, 0, 1], target: [0, 0, 0], fov: 30 }), front: () => false, setFov: () => false,

@@ -1,7 +1,7 @@
 /** A profile session opened as a window opens it (`studio-startup.ts`): the Studio's view graph over its views, recording through it. */
 import { ProfileSessions } from "../../src/app/profiles/profile-sessions";
 import type { ProfileSessionData } from "../../src/app/profiles/profile-session";
-import type { PreviewState } from "../../src/app/workspace/workspace-state";
+import type { PreviewState } from "../../src/app/workspace/makeup-workspace";
 import { createHistoryService, type HistoryService } from "../../src/platform/core/history-service";
 import { createStudioViewGraph, sessionViewGraph } from "../../src/preview/preview-view-graph";
 import { freshWorkspace } from "./eye-region";

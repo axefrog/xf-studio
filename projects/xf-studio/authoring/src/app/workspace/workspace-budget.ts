@@ -1,8 +1,10 @@
 import type { CollectionDraft, CollectionWorkspace, DocumentModel } from "./collection-workspace";
-import { holdsLocked, withLiveMemory } from "./collection-workspace";
+import { holdsLocked } from "./collection-workspace";
 import { KEPT_MEMORY, LOOK_MEMORY, type LookMemory } from "../../platform/api";
 import { trimLookHistory } from "../../platform/core/look-history";
 import { serializeWorkspace, type WorkspaceState } from "./workspace-state";
+import { lookWorkspace, type WorkspaceState as MakeupWorkspaceState } from "./makeup-workspace";
+type WorkspaceInput = WorkspaceState | MakeupWorkspaceState;
 
 /**
  * Size policy for the persisted workspace (feature-module platform §3, CORE-02). Browsers give an
@@ -55,16 +57,18 @@ export type EncodedWorkspace = {
 };
 
 /** The workspace stored with one fixed level's plan. Nothing here changes the live session. */
-export function encodeWorkspaceAt(state: WorkspaceState, level: number, model: DocumentModel,
+export function encodeWorkspaceAt(input: WorkspaceInput, level: number, model: DocumentModel,
   budget = WORKSPACE_STORAGE_BUDGET): EncodedWorkspace {
+  const state = lookWorkspace(input, model);
   const index = Math.max(0, Math.min(level, LEVELS.length - 1));
   const encoded = encodePlan(state, LEVELS[index], model);
   return { encoded, size: encoded.length, level, overBudget: encoded.length > budget };
 }
 
 /** The first fixed level that fits the budget (or the smallest one when none fits). */
-export function encodeWorkspaceForStorage(state: WorkspaceState, model: DocumentModel,
+export function encodeWorkspaceForStorage(input: WorkspaceInput, model: DocumentModel,
   budget = WORKSPACE_STORAGE_BUDGET): EncodedWorkspace {
+  const state = lookWorkspace(input, model);
   for (let level = 0; ; level++) {
     const candidate = encodeWorkspaceAt(state, level, model, budget);
     if (!candidate.overBudget || level === LEVELS.length - 1) return candidate;
@@ -108,8 +112,9 @@ export type FittedWorkspace = {
  * that fits where the last one did encodes a few candidates instead of bisecting every stage (CORE-41).
  * The result is the same with or without it.
  */
-export function fitWorkspace(state: WorkspaceState, model: DocumentModel, budget = WORKSPACE_STORAGE_BUDGET,
+export function fitWorkspace(input: WorkspaceInput, model: DocumentModel, budget = WORKSPACE_STORAGE_BUDGET,
   from?: WorkspacePlan): FittedWorkspace {
+  const state = lookWorkspace(input, model);
   const result = (plan: WorkspacePlan, encoded: string, minimal = false): FittedWorkspace => ({ encoded, size: encoded.length, plan,
     trimmed: dropsMore(plan), overBudget: encoded.length > budget, minimal });
   // Every candidate is encoded at most once.
@@ -215,8 +220,8 @@ function measure(state: WorkspaceState): Omit<WorkspacePlan, "kept"> & { kept: b
 }
 
 /** The workspace stored with one plan (for tools and tests; autosave uses `fitWorkspace`). */
-export function encodeWorkspacePlan(state: WorkspaceState, plan: WorkspacePlan, model: DocumentModel): string {
-  return encodePlan(state, plan, model);
+export function encodeWorkspacePlan(state: WorkspaceInput, plan: WorkspacePlan, model: DocumentModel): string {
+  return encodePlan(lookWorkspace(state, model), plan, model);
 }
 function encodePlan(state: WorkspaceState, plan: WorkspacePlan, model: DocumentModel): string {
   return JSON.stringify(serializeWorkspace(compactWorkspace(state, plan, model), model, { lookLevel: plan.lookLevel === true }));
@@ -226,8 +231,7 @@ function compactWorkspace(state: WorkspaceState, plan: WorkspacePlan, model: Doc
   const collections = state.collections;
   if (!collections) {
     if (plan.selected === Infinity) return state;
-    const memory = trimLook(withLiveMemory(undefined, { active: 0, selected: 0, history: state.history,
-      ...(state.historyTrimmed ? { historyTrimmed: true } : {}) }, model), plan.selected, model);
+    const memory = trimLook(model.parts.withLookHistory({}, state.history), plan.selected, model);
     const history = model.parts.lookHistory(memory);
     return { ...state, history, ...(history.trimmed ? { historyTrimmed: true } : {}) };
   }

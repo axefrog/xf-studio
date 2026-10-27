@@ -15,7 +15,7 @@ import * as catalogue from "../../src/engines/layered-makeup/finish-catalogue";
 import { finishDescription as describeFinish, type Finish } from "../../src/engines/layered-makeup/finish";
 import { rasterRegion } from "../../src/engines/layered-makeup/region";
 import { readRecipe } from "../../src/legacy/eye-makeup/recipe-schema";
-import { freshWorkspace as fresh } from "../../src/app/workspace/workspace-state";
+import { freshWorkspace as fresh } from "../../src/app/workspace/makeup-workspace";
 import type { IrregularFlakes } from "../../src/engines/layered-makeup/flake-field";
 import type { ReadonlyDeep } from "../../src/platform/api/read-only";
 import type { GlitterChoices } from "../../src/engines/layered-makeup/glitter-model";

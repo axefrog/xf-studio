@@ -35,7 +35,7 @@ import type { PreviewActions } from "../preview-actions";
 import type { SavedAppearanceActions } from "../../character/saved-appearance-actions";
 import { bindStageTheme, type SystemColourScheme } from "./stage-theme-binding";
 import { createTrustedPreviewServices } from "../../app/trusted-preview-services";
-import type { WorkspaceState } from "../../app/workspace/workspace-state";
+import type { WorkspaceState } from "../../app/workspace/makeup-workspace";
 import type { ViewGraph } from "../../platform/core/view-graph";
 import type { LayeredMakeupSurface } from "../../engines/layered-makeup/render/makeup-stack";
 import type { SurfaceOutline } from "../../engines/layered-makeup/surface-edge";

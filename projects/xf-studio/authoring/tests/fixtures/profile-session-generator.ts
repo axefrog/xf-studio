@@ -10,7 +10,7 @@ import { VIEW_GRAPH_1, VIEW_SLOTS, SLOT_COLLECTIONS, type ViewGraphData, type Vi
 import { ViewGraph } from "../../src/platform/core/view-graph";
 import { PanelActions } from "../../src/app/profiles/panel-actions";
 import type { Recipe } from "../../src/engines/layered-makeup/recipe";
-import { livePart } from "../../src/app/workspace/collection-workspace";
+import { livePart } from "../../src/app/workspace/makeup-workspace";
 import { AsyncContextModel, EditContextModel, RecoveryModel, SessionModel, sessionAccount } from "./profile-session-model";
 import { seededRandom } from "./profile-sessions";
 

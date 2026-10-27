@@ -182,6 +182,18 @@ test("slice 2: an in-place part change publishes its snapshot and invalidates Re
   } finally { f.life.abort(); }
 });
 
+test("slice 3: content versions ignore editor selection and count explicit in-place edits", () => {
+  const f = fixture();
+  try {
+    const version = f.document.version;
+    f.layers.set(f.layers.part, { selected: "first" });
+    expect(f.document.version).toBe(version);
+    (f.layers.part as SyntheticPart).layers[0].value = 7;
+    f.document.changed([SYNTHETIC_ID]);
+    expect(f.document.version).toBeGreaterThan(version);
+  } finally { f.life.abort(); }
+});
+
 test.each(["document subscriber", "feature subscriber", "replay hook"])("slice 2: a throwing %s cannot roll back a committed history move", source => {
   const composition = editorComposition([marker]), live = new LiveFeatures(), history = createHistoryService(), life = new AbortController();
   const failure = Error("Observer failed"), fail = () => { throw failure; };

@@ -5,7 +5,7 @@ import {defaultDirectGlintFlakes,defaultClusteredGlintFlakes,defaultFineSpeckleF
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
 import {assessPreviewQuality} from "../src/legacy/eye-makeup/preview/preview-quality";
 import { UnsupportedMaterialError } from "../src/engines/layered-makeup/preset-compiler";
-import { parseWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace } from "../src/app/workspace/makeup-workspace";
 import {parseCollection} from "../src/legacy/eye-makeup/export/preset-collection";
 import {openTestLibrary} from "./fixtures/library-file";
 import { storedWorkspace } from "./fixtures/looks";

@@ -9,7 +9,7 @@ import type { createSurfaceEditor } from "../../src/legacy/eye-makeup/browser/su
 import { CharacterContextActions } from "../../src/character/character-context-actions";
 import type { CharacterHistoryHome } from "../../src/character/character-history";
 import { createStudioViewGraph } from "../../src/preview/preview-view-graph";
-import type { CameraState } from "../../src/app/workspace/workspace-state";
+import type { CameraState } from "../../src/app/workspace/makeup-workspace";
 import { freshWorkspace, EYE_REGION } from "./eye-region";
 
 /** The creator catalogue host never answers here: a context stays loading. */

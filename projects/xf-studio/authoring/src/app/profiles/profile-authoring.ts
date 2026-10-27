@@ -1,7 +1,7 @@
 import { createTrustedAuthoringCore, type StudioComposition } from "../trusted-authoring-core";
 import { authoringAttachment } from "../authoring/authoring-attachment";
 import { LookEditContexts, type LookEditHandle } from "../../library/look-edit-contexts";
-import { NO_LOOK_SCOPE, REMOVED_LOOK } from "../../library/look-editor";
+import { NO_LOOK_SCOPE, REMOVED_LOOK } from "../../library/makeup-look-editor";
 import { sameLook, type LookRef } from "../../library/collection-documents";
 import { emptyRecipe } from "../../engines/layered-makeup/recipe";
 import { emptyLookHistory } from "../../platform/core/look-history";

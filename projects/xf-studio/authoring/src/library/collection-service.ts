@@ -28,7 +28,7 @@ import { packageBuildLine, packageCheckLine } from "../legacy/eye-makeup/export/
 import { packageBuildStageLine } from "../legacy/eye-makeup/export/package-action";
 import { hostClock, type Clock } from "../platform/core/clock";
 import { collectionProducts, copyPackagePlan, editPackagePlan, packagePlanEditIssue, type PlannedProduct } from "../platform/core/package-plan";
-import { emptyMemory, NEWER_LOOKS_LIBRARY_MESSAGE, newPresetName, starterLook, withLiveMemory, withLivePart, type DocumentModel } from "../app/workspace/collection-workspace";
+import { emptyMemory, NEWER_LOOKS_LIBRARY_MESSAGE, newPresetName, starterLook, withLiveMemory, withLivePart, type DocumentModel } from "../app/workspace/makeup-workspace";
 import { type CollectionAction, type CodedCapability, type CollectionConflict, CONFLICT_FIRST, type CollectionDraftSummary, packagePlanEdit, type PackageProductSummary, type ReadonlyDeep,
   type CollectionSummary, type StoredCollection, PACKAGE_PLAN_KINDS, type PackagePlanAction } from "./collection-actions";
 import { type CollectionSnapshot, type CollectionView, type CollectionOwner, type LookInput, MAX_LOOKS_AT_CREATE } from "./collection-owner";
@@ -130,6 +130,8 @@ export type CollectionServiceDeps = {
   /** Writes the shown look's edits now (`LookEditor.commit`); false when they couldn't be recorded. */
   readonly flushLook?: () => boolean;
   /** Cheap live read of the shown look as the editor holds it (dirty checks, freshness); absent: the working copy's. */
+  readonly readParts?: () => { revision: number; parts: Record<string, unknown | undefined> };
+  /** Transitional callers of the concrete makeup editor; production reads the neutral owner. */
   readonly readRecipe?: () => { recipe: Recipe; revision: number; others?: { revision: number; parts: Record<string, unknown | undefined> } };
   /** The profile's membership edit for a collection made, imported or opened here (null: already listed), written in the same command. */
   readonly membership?: (collection: string) => OutboxEdit | null;
@@ -268,7 +270,7 @@ export class CollectionService {
     const recovery = this.recent(view.id).map(other => ({ id: other.id, name: other.name, presets: other.looks.length, saved: "never" as const }));
     return { id: view.id, name: view.name, ...(view.saved ? { revision: view.saved.revision } : {}), selected: this.selectedId(),
       presets: collection.presets.map(look => ({ id: look.id, name: look.name, revision: look.revision,
-        layers: Number(this.deps.model.parts.summary(look, live)?.layers ?? 0), ...(look.locked ? { locked: true as const } : {}) })),
+        layers: Number(live ? this.deps.model.parts.summary(look, live)?.layers ?? 0 : 0), ...(look.locked ? { locked: true as const } : {}) })),
       removed, ...(previousView ? { previous: { id: previousView.id, name: previousView.name, ...(previousView.saved ? { revision: previousView.saved.revision } : {}) } } : {}),
       recovery, conflicts: this.conflictsOf(view.id) };
   }
@@ -291,7 +293,7 @@ export class CollectionService {
   private products(collection: LookCollection): PlannedProduct[] {
     // The shown look counts as holding the live feature: its editor may not have written it yet.
     const selected = this.selectedId(), live = this.deps.model.live;
-    const looks = collection.presets.map(look => look.id === selected && !look.parts[live] ? { parts: { ...look.parts, [live]: {} } } : look);
+    const looks = collection.presets.map(look => live && look.id === selected && !look.parts[live] ? { parts: { ...look.parts, [live]: {} } } : look);
     try { return collectionProducts({ ...collection, presets: looks } as LookCollection, this.deps.model.parts.exporting()); }
     catch { return []; }
   }
@@ -325,8 +327,8 @@ export class CollectionService {
   persistence(): DraftPersistence | undefined {
     const view = this.shown(), collection = this.collection();
     if (!view || !collection) return undefined;
-    const live = this.deps.readRecipe?.(), selected = this.selectedId(), revision = view.saved?.revision;
-    const key = JSON.stringify([this.content, this.versions(view), revision, live?.revision, live?.others?.revision, [...this.baselineReads], [...this.baselineFailed]]);
+    const live = this.readLive(), selected = this.selectedId(), revision = view.saved?.revision;
+    const key = JSON.stringify([this.content, this.versions(view), revision, live?.revision, (live && "others" in live ? live.others?.revision : undefined), [...this.baselineReads], [...this.baselineFailed]]);
     if (this.persistenceCache?.key === key) return structuredClone(this.persistenceCache.value);
     const ids = collection.presets.map(preset => preset.id), base = revision === undefined ? undefined : this.baselines.get(`${view.id}@${revision}`);
     let value: DraftPersistence;
@@ -338,7 +340,7 @@ export class CollectionService {
       const dirtyPresets = collection.presets.filter(preset => {
         const saved = base.presets.get(preset.id);
         if (!saved || saved.name !== preset.name) return true;
-        const parts = preset.id === selected && live ? liveParts(preset, live.recipe, this.deps.model, live.others?.parts) : preset.parts;
+        const parts = preset.id === selected && live ? liveParts(preset, live, this.deps.model) : preset.parts;
         if (JSON.stringify(parts) === saved.raw) return false;
         try { return this.deps.model.parts.canonicalParts(parts) !== saved.canonical; } catch { return true; }
       }).map(preset => preset.id);
@@ -372,14 +374,15 @@ export class CollectionService {
    * editor's revision (CORE-28). An edit later undone still counts as a change (the result reads stale until the next Check).
    */
   lastPackageIsCurrent(): boolean { return !!this.packageKey && this.packageKey === this.draftKey(); }
+  private readLive() { return this.deps.readParts?.() ?? this.deps.readRecipe?.(); }
   private draftKey(): string | undefined {
     const view = this.shown();
     if (!view) return undefined;
-    const live = this.deps.readRecipe?.();
+    const live = this.readLive();
     // The original document may retire after completion. Its look's recorded parts still change on every edit,
     // including edits through a newly acquired context; memory/selection-only writes do not change those parts.
     const selected = this.selectedId(), parts = selected && this.deps.owner.look({ collection: view.id, look: selected })?.parts;
-    return JSON.stringify([this.content, this.versions(view), view.saved?.revision, live?.revision, live?.others?.revision, parts]);
+    return JSON.stringify([this.content, this.versions(view), view.saved?.revision, live?.revision, (live && "others" in live ? live.others?.revision : undefined), parts]);
   }
   /** The versions of the shown collection's looks other than the shown one (whose content is the editor's revision). */
   private versions(view: CollectionView) {
@@ -388,9 +391,9 @@ export class CollectionService {
   }
   /** Why the collection has no look to package, or undefined when it has one (CORE-34, PIPE-44). */
   private unpackageable(collection: LookCollection): string | undefined {
-    const selected = this.selectedId(), live = this.deps.model.live, looks = collection.presets;
-    if (looks.some(look => !look.locked && (look.id === selected
-      ? !!look.parts[live] || (this.deps.readRecipe?.().recipe.layers.length ?? 0) > 0 : !!look.parts[live]))) return undefined;
+    const selected = this.selectedId(), feature = this.deps.model.live, looks = collection.presets, current = this.readLive();
+    if (feature && looks.some(look => !look.locked && !!(look.id === selected && current
+      ? liveParts(look, current, this.deps.model) : look.parts)[feature])) return undefined;
     if (looks.length && looks.every(look => look.locked)) return EVERY_LOOK_NEWER_MESSAGE;
     return looks.some(look => look.locked) ? NO_EDITABLE_EYE_MAKEUP_MESSAGE
       : "None of these presets has eye makeup yet, so there is nothing to put in a mod.";
@@ -955,14 +958,17 @@ export function uniqueCollectionName(name: string, taken: readonly string[]): st
   }
 }
 
-/** A look's parts with the live editor's recipe as its live-feature part (no parse; for dirty checks). */
-function liveParts(look: Readonly<Look>, recipe: Recipe, model: DocumentModel, others?: Readonly<Record<string, unknown | undefined>>): Look["parts"] {
+/** Current registered parts, without parsing or cloning their bodies (dirty checks). */
+function liveParts(look: Readonly<Look>, live: NonNullable<ReturnType<NonNullable<CollectionServiceDeps["readParts"]>>> |
+  NonNullable<ReturnType<NonNullable<CollectionServiceDeps["readRecipe"]>>>, model: DocumentModel): Look["parts"] {
   if (look.locked) return look.parts;
-  let parts = look.parts;
-  if (look.parts[model.live] || recipe.layers.length) parts = { ...parts, [model.live]: model.parts.envelope(model.live, recipe) };
-  if (!others) return parts;
-  parts = { ...parts };
-  for (const [feature, part] of Object.entries(others))
+  let values: Readonly<Record<string, unknown | undefined>>;
+  if ("recipe" in live) {
+    const feature = model.live;
+    values = { ...live.others?.parts, ...(feature && (look.parts[feature] || live.recipe.layers.length) ? { [feature]: live.recipe } : {}) };
+  } else values = live.parts;
+  const parts = { ...look.parts };
+  for (const [feature, part] of Object.entries(values))
     if (part === undefined) delete parts[feature]; else parts[feature] = model.parts.envelope(feature, part);
   return parts;
 }

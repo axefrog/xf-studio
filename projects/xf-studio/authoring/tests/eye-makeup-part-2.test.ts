@@ -21,7 +21,7 @@ import { eyeMakeupCollection } from "../src/legacy/eye-makeup/export/preset-coll
 import { type Layer, type Recipe } from "../src/engines/layered-makeup/recipe";
 import { type RecipeAction } from "../src/engines/layered-makeup/recipe-actions";
 import { EYE_MAKEUP_FEATURE, portableRecipe, readPortableRecipe, recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
-import { loadWorkspace } from "../src/app/workspace/workspace-state";
+import { loadWorkspace } from "../src/app/workspace/makeup-workspace";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";
 import { recipeOf, storedWorkspace } from "./fixtures/looks";
 import { glitterFixtures, part2Observation, recipeSchemaFixtures } from "./fixtures/part-2-parity";

@@ -18,7 +18,7 @@ import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import { EYE_MAKEUP_PART_1, parseEyeMakeupPart, recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import { WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
 import { loadWorkspace, NEWER_WORKSPACE_MESSAGE, parseWorkspace, serializeWorkspace, workspaceKeys,
-  type WorkspaceState } from "../src/app/workspace/workspace-state";
+  type WorkspaceState } from "../src/app/workspace/makeup-workspace";
 import { restore } from "./fixtures/workspace-observable";
 import { historyRecipes } from "./fixtures/looks";
 import { fixedId, smallWorkspaceV1 } from "./fixtures/workspace-v1-fixtures";

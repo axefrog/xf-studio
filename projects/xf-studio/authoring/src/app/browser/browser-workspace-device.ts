@@ -1,7 +1,7 @@
 import { WorkspaceComposer, type WorkspaceCapturePorts } from "../workspace/workspace-composer";
 import { WorkspacePersistence, type WorkspaceSaveStatus } from "../workspace/workspace-persistence";
-import type { DocumentModel } from "../workspace/collection-workspace";
-import { loadWorkspace, workspaceKeys, type WorkspaceState } from "../workspace/workspace-state";
+import type { DocumentModel } from "../workspace/makeup-workspace";
+import { loadWorkspace, workspaceKeys, type WorkspaceState } from "../workspace/makeup-workspace";
 
 type Observable = { subscribe(listener: () => void): () => void };
 type EventSource = { addEventListener(type: string, listener: EventListener): void };

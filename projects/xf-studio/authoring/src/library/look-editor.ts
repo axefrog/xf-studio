@@ -14,9 +14,8 @@
  * - **Elsewhere.** A change of the look taken from another window (or a resolution that took theirs) replaces what the document shows, and
  *   its Undo starts there. While the look is being restored from the last session, the document can't be edited (the recovery gate).
  */
-import type { AuthoringDocument, DocumentState } from "../app/authoring/makeup-document";
-import { liveFeatureStates, liveMemory, livePart, withLiveFeatures, withLiveMemory, withLivePart, type DocumentModel } from "../app/workspace/collection-workspace";
-import { emptyRecipe } from "../engines/layered-makeup/recipe";
+import type { AuthoringDocument, DocumentState } from "../app/authoring/authoring-document";
+import { liveFeatureStates, withLiveFeatures, type DocumentModel } from "../app/workspace/collection-workspace";
 import { COLLECTION_2, isNewerData, type Look, type LookMemory } from "../platform/api";
 import { lookScope } from "../platform/core/history-service";
 import { emptyLookHistory } from "../platform/core/look-history";
@@ -45,10 +44,8 @@ export function lookContent(working: Pick<LookWorking, "id" | "name" | "parts" |
     look = model.parts.keepLook(stored, COLLECTION_2);
     memory = model.parts.readMemory(working.memory, look);
   }
-  const recipe = livePart(look, model), others = liveFeatureStates(look, memory, model);
-  const state: DocumentState = { recipe: recipe ? structuredClone(recipe) : emptyRecipe(), ...structuredClone(liveMemory(memory, model)),
-    fieldSelection: structuredClone(liveMemory(memory, model).fieldSelection ?? {}),
-    ...(others ? { liveFeatures: others } : {}), ...(look.locked ? { liveLocked: look.locked } : {}) };
+  const state: DocumentState = { features: liveFeatureStates(look, memory, model), history: structuredClone(model.parts.lookHistory(memory)),
+    ...(look.locked ? { locked: look.locked } : {}) };
   return { look, memory, state };
 }
 
@@ -56,10 +53,8 @@ export function lookContent(working: Pick<LookWorking, "id" | "name" | "parts" |
 export function lookStored(content: Pick<LookContent, "look" | "memory">, editor: DocumentState, model: DocumentModel):
   { parts: Record<string, unknown>; memory: unknown; look: Look; lookMemory: LookMemory } | null {
   if (content.look.locked) return null;
-  const { recipe, liveFeatures, liveLocked: _locked, ...memory } = editor;
-  const look: Look = { ...content.look, parts: withLivePart(content.look, recipe, model) };
-  const written = withLiveFeatures(look, withLiveMemory(content.memory, structuredClone(memory), model), liveFeatures, model);
-  const next: Look = { ...look, parts: written.parts };
+  const written = withLiveFeatures(content.look, model.parts.withLookHistory(content.memory, editor.history ?? emptyLookHistory()), editor.features, model);
+  const next: Look = { ...content.look, parts: written.parts };
   return { parts: model.parts.minimalLook(next, false).parts, memory: model.parts.writeMemory(written.memory, { lookLevel: true }), look: next, lookMemory: written.memory };
 }
 
@@ -127,7 +122,7 @@ export class LookEditor {
     this.empty = !ref;
     if (!ref) {
       // No look shown: the document is empty (edits are refused while no preset owns it).
-      this.display({ recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() }, NO_LOOK_SCOPE);
+      this.display({ history: emptyLookHistory() }, NO_LOOK_SCOPE);
       this.blocked(); this.changed();
       return true;
     }
@@ -160,7 +155,7 @@ export class LookEditor {
     const view = shown.session.look();
     if (view?.state !== "live") {
       shown.content = null;
-      this.display({ recipe: emptyRecipe(), active: 0, selected: 0, fieldSelection: {}, history: emptyLookHistory() }, lookScope(shown.ref));
+      this.display({ history: emptyLookHistory() }, lookScope(shown.ref));
       return;
     }
     let content: LookContent;

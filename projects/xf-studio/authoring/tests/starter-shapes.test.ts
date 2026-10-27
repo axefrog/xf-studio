@@ -22,7 +22,7 @@ import { editLayers } from "../src/engines/layered-makeup/layer-stack";
 import { EYE_MAKEUP_REGION, newLayerTemplate, starterRecipe } from "../src/features/eye-makeup/region";
 import { EYE_DEFAULT_STARTER, EYE_LANDMARKS, EYE_STARTERS } from "../src/features/eye-makeup/starters";
 import { eyeMakeupMemory } from "../src/features/eye-makeup/part";
-import { freshWorkspace, loadWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { freshWorkspace, loadWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { memoryOutboxStorage, storeDocuments } from "./fixtures/platform-doubles";
 import { profileStudio, type StudioLookInput } from "./fixtures/profile-studio";

@@ -26,7 +26,7 @@ import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-regi
 import { createStudioSubjects } from "../src/compose/subjects";
 import { STUDIO_CATALOGUE } from "../src/compose/views";
 import { lookRef, type LookRef } from "../src/library/collection-documents";
-import { LookEditor, lookContent } from "../src/library/look-editor";
+import { LookEditor, lookContent } from "../src/library/makeup-look-editor";
 import { characterRef } from "../src/platform/api/characters";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";

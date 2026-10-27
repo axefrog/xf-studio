@@ -7,7 +7,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { livePart } from "../../../projects/xf-studio/authoring/src/app/workspace/collection-workspace";
+import { livePart } from "../../../projects/xf-studio/authoring/src/app/workspace/makeup-workspace";
 import { STUDIO_DOCUMENTS } from "../../../projects/xf-studio/authoring/src/compose/studio-registry";
 import { lookRef } from "../../../projects/xf-studio/authoring/src/library/collection-documents";
 import { documentKey } from "../../../projects/xf-studio/authoring/src/platform/api/document-commands";

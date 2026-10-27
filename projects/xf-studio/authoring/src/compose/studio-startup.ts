@@ -84,7 +84,7 @@ import { pageFailure, setPageDiagnostics } from "../diagnostics/page-sink";
 import type { WorkspaceLease } from "../app/workspace/workspace-lease";
 import type { StartedOutbox } from "../app/browser/document-outbox-device";
 import { PROFILES_MIGRATION_ENABLED, startProfilesMigration, watchProfilesMigration } from "../app/browser/profiles-migration-device";
-import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-state";
+import { workspaceKeys, type WorkspaceState } from "../app/workspace/makeup-workspace";
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";

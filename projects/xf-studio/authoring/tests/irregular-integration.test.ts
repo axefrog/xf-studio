@@ -4,7 +4,7 @@ import {defaultFlakes,type FlakeMaps} from "../src/engines/layered-makeup/finish
 import {defaultIrregularFlakes,defaultStudioIrregularFlakes} from "../src/engines/layered-makeup/flake-field";
 import {createRasterProcessor,type RasterResponse} from "../src/engines/layered-makeup/raster-processor";
 import {assessPreviewQuality} from "../src/legacy/eye-makeup/preview/preview-quality";
-import { parseWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace } from "../src/app/workspace/makeup-workspace";
 import {parseCollection} from "../src/legacy/eye-makeup/export/preset-collection";
 import {openTestLibrary} from "./fixtures/library-file";
 import { UnsupportedMaterialError } from "../src/engines/layered-makeup/preset-compiler";

@@ -10,7 +10,7 @@ import { createHistoryService, LOCAL_VIEW_SCOPE } from "../src/platform/core/his
 import { createStudioViewGraph, defaultViewGraph, previewMirror, sessionViewGraph, STUDIO_VIEW_GRAPH_RULES,
   workspaceViewGraph } from "../src/preview/preview-view-graph";
 import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
-import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { DEFAULT_CREATOR_LIGHTING } from "../src/preview/creator-lighting";

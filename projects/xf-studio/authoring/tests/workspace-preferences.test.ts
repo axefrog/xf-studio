@@ -6,7 +6,7 @@ import { expect, test } from "bun:test";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { parseUIPreferences } from "../src/app/ui-preferences";
 import { encodeWorkspaceAt, WORKSPACE_LEVELS } from "../src/app/workspace/workspace-budget";
-import { parseWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace } from "../src/app/workspace/makeup-workspace";
 import { restore } from "./fixtures/workspace-observable";
 import { looseWorkspaceV1, smallWorkspaceV1, withPreferences } from "./fixtures/workspace-v1-fixtures";
 

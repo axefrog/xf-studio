@@ -18,7 +18,7 @@ export class FeatureDocument {
   private livePart: unknown;
   private liveEditor: unknown;
   constructor(readonly module: AnyFeatureModule, state: LiveFeatureState = {},
-    private readonly changed: (kind: LiveFeatureChange["kind"]) => void = () => {}, private readonly replay: FeatureRestore = {}) {
+    private readonly changed: (kind: LiveFeatureChange["kind"], partChanged: boolean) => void = () => {}, private readonly replay: FeatureRestore = {}) {
     this.livePart = state.part; this.liveEditor = this.parseEditor(state.editor, state.part);
   }
   get feature() { return this.module.id as string; }
@@ -27,8 +27,10 @@ export class FeatureDocument {
   get editor() { return this.liveEditor; }
   /** What the feature's pure capability and apply read: an absent part reads as the codec's empty part. */
   state(): FeatureState<unknown, unknown> { return { part: this.livePart ?? this.module.part.empty(), editor: this.liveEditor }; }
-  /** Publish an applied result. */
-  set(part: unknown, editor: unknown) { this.livePart = part; this.liveEditor = editor; this.changed("set"); }
+  /** Publish an applied result; explicitly flag a part mutated in place. Editor-only writes keep the content version. */
+  set(part: unknown, editor: unknown, partChanged = part !== this.livePart) {
+    this.livePart = part; this.liveEditor = editor; this.changed("set", partChanged);
+  }
   /** Validate the whole proposed state before publishing any of it. */
   prepare(state: LiveFeatureState = {}): LiveFeatureState {
     const part = state.part === undefined ? undefined : this.module.part.parse(this.module.part.serialize(state.part));
@@ -42,8 +44,9 @@ export class FeatureDocument {
   }
   /** Commit a prevalidated state; LiveFeatures batches the notification. */
   commit(state: LiveFeatureState, kind: LiveFeatureChange["kind"]) {
+    const partChanged = this.livePart !== state.part;
     this.livePart = state.part; this.liveEditor = state.editor;
-    this.changed(kind);
+    this.changed(kind, partChanged);
   }
   restored(previous: unknown) { this.replay.restored?.(previous); }
   /** The part an Undo, Redo or cancelled transaction restores (undefined: the look lacked it); the editor state is re-read against it. */
@@ -71,13 +74,19 @@ export class LiveFeatures {
   private readonly documents = new Map<string, FeatureDocument>();
   private readonly listeners = new Set<(change: LiveFeatureChange) => void>();
   private batching = false;
+  private partRevision = 0;
+  /** Content changes only; changing a feature's editor selection does not stale package results. */
+  get partVersion() { return this.partRevision; }
   constructor(modules: readonly AnyFeatureModule[] = []) {
     for (const module of modules) this.add(module);
   }
   /** Composition-time assembly, including the transitional makeup adapter's registered part. */
   add(module: AnyFeatureModule, replay?: FeatureRestore): FeatureDocument {
     if (this.documents.has(module.id)) throw Error(`Feature ${module.id} has two live documents.`);
-    const document = new FeatureDocument(module, {}, kind => this.notify({ kind, features: [module.id] }), replay);
+    const document = new FeatureDocument(module, {}, (kind, partChanged) => {
+      if (partChanged) this.partRevision++;
+      this.notify({ kind, features: [module.id] });
+    }, replay);
     this.documents.set(module.id, document);
     return document;
   }

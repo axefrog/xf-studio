@@ -7,7 +7,7 @@ import { AuthoringGestures } from "../src/app/authoring/authoring-gestures";
 import { CollectionApplication } from "../src/library/collection-application";
 import type { CollectionTransport } from "../src/library/collection-service";
 import { CollectionOwner } from "../src/library/collection-owner";
-import { LookEditor } from "../src/library/look-editor";
+import { LookEditor } from "../src/library/makeup-look-editor";
 import { LookSessions } from "../src/library/look-sessions";
 import { DocumentOutbox } from "../src/platform/core/document-outbox";
 import { openTestLibrary } from "./fixtures/library-file";

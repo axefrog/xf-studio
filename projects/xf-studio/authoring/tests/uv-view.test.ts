@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { defaultUVView, fitUVView, parseUVView, pixelToUV, reflectUV, uvRegion, uvToPixel, uvViewRegion } from "../src/legacy/eye-makeup/uv-view";
-import { parseWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace } from "../src/app/workspace/makeup-workspace";
 import { storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe, freshWorkspace, EYE_MIRROR } from "./fixtures/eye-region";

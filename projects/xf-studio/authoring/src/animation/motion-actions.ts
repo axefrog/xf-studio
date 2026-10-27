@@ -1,5 +1,5 @@
 import type { ViewId } from "../platform/api/view-graph";
-import type { PreviewState } from "../app/workspace/workspace-state";
+import type { PreviewState } from "../app/workspace/makeup-workspace";
 import { localMotionScene, withMotion, type MotionScene, type SceneMotion } from "./scene-motion";
 import { refusal, type Capability } from "../platform/api";
 import { BLINK_REPEAT_SECONDS, GAME_BLINK_MISSING, IDLE_FACE_MISSING, IDLE_MASCULINE } from "./game-blink-messages";

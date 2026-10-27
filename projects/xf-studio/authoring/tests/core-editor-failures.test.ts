@@ -6,7 +6,8 @@
 import { describe, expect, test } from "bun:test";
 import { createAuthoringEditing, createTrustedAuthoringCore, type StudioComposition } from "../src/app/trusted-authoring-core";
 import { StudioApplication } from "../src/app/studio-application";
-import { freshWorkspace, loadWorkspace } from "../src/app/workspace/workspace-state";
+import { loadWorkspace } from "../src/app/workspace/workspace-state";
+import { freshWorkspace } from "../src/app/workspace/makeup-workspace";
 import { STUDIO_COMPOSITION, STUDIO_OWNERS } from "../src/compose/studio-registry";
 import { emptyRecipe } from "../src/engines/layered-makeup/recipe";
 import { Registry } from "../src/platform/core/registry";
@@ -33,8 +34,8 @@ function legacyZeroComposition(): StudioComposition {
 }
 
 describe("CORE-03 captured startup failures", () => {
-  test("slice 3 flips: cold workspace load dereferences the absent live feature's part", () => {
-    const expected: ErrorConstructor | null = TypeError;
+  test("slice 3 resolved: cold workspace load succeeds with an empty feature registry", () => {
+    const expected: ErrorConstructor | null = null;
     const { documents } = legacyZeroComposition(), lookups: string[] = [];
     const feature = documents.parts.feature.bind(documents.parts);
     documents.parts.feature = id => { lookups.push(id); return feature(id); };

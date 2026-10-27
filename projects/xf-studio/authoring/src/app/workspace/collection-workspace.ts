@@ -4,38 +4,23 @@
  * part and editor codecs come from the `DocumentModel` its host passes in (the composition roots
  * build it from the registered features; nothing here imports the composition).
  *
- * The one live editor document edits the model's `live` feature (eye makeup) until the look
- * history lands (migration step 4), so `EditorMemory` below is that document's memory for one
- * look; every other part and feature memory of a look is carried unchanged.
+ * Every registered feature's part and editor memory participate; unknown entries are carried unchanged.
  */
-import type { DocumentHistory } from "../authoring/makeup-document";
-import type { FieldSelection } from "../../engines/layered-makeup/field-selection";
-import { COLLECTION_1, COLLECTION_2, isNewerData, storedPackagePlan, type Look, type LookCollection, type LookMemory,
-  type PartMemory } from "../../platform/api";
+import { COLLECTION_1, COLLECTION_2, isNewerData, storedPackagePlan, type Look, type LookCollection, type LookMemory } from "../../platform/api";
 import type { NewerPolicy, PartRegistry } from "../../platform/core/document";
 import type { LiveFeatureState } from "../../platform/core/live-features";
-import { emptyRecipe, type Recipe } from "../../engines/layered-makeup/recipe";
 
 /**
  * What the collection and workspace code needs from the composition: the registered features'
- * codecs and the feature the one live editor document edits. Injected by the startup and server
- * roots (feature-module platform §4, CORE-29).
+ * codecs, plus an optional starting feature for existing product defaults. A composition need not
+ * name a live feature. Injected by the composition roots (feature-module platform §4, CORE-29).
  */
-export type DocumentModel = { readonly parts: PartRegistry; readonly live: string };
+export type DocumentModel = { readonly parts: PartRegistry; readonly live?: string };
 
-export { emptyRecipe } from "../../engines/layered-makeup/recipe";
 /** Why a collection holding a look from a newer XF Studio is not saved to the library (the look is kept in the draft and in exports). */
 export const NEWER_LOOKS_LIBRARY_MESSAGE = "This collection has a look made with a newer version of XF Studio, so this version doesn't " +
   "save it to your library. Use Export collection to keep a copy, or update XF Studio to save it.";
 export type Preset = Look;
-/**
- * The live editor document's memory for one look: its selection and the look's Undo history. The
- * history is `LookHistoryData` in everything this build makes; eye makeup's whole recipes, oldest
- * first, are still accepted (how older in-memory forms and tests hold one).
- */
-export type EditorMemory = { active: number; selected: number; fieldSelection?: FieldSelection; history: DocumentHistory;
-  /** Present (true) only when older Undo entries than the oldest kept one were dropped; lets the UI say so. */
-  historyTrimmed?: boolean };
 export type CollectionDraft = {
   collection: LookCollection; revision?: number; selected?: string;
   /** Editor memory of each look, by feature, with the look's Undo history (`LOOK_MEMORY`). */
@@ -45,46 +30,12 @@ export type CollectionDraft = {
 /** Browser-only recovery drafts, most recent first. SQLite collections never contain these. */
 export const COLLECTION_RECOVERY_LIMIT = 4;
 export type CollectionWorkspace = CollectionDraft & { previous?: CollectionDraft; older?: CollectionDraft[] };
-export const emptyMemory = (): EditorMemory => ({ active: 0, selected: 0, history: [] });
-
-/** The live document's memory in a look's memory (defaults when the look has none); its history is the look's. */
-export function liveMemory(memory: LookMemory | undefined, model: DocumentModel): EditorMemory {
-  const entry = memory?.[model.live] as PartMemory<{ active: number; selected: number; fieldSelection?: FieldSelection }> | undefined;
-  const history = model.parts.lookHistory(memory);
-  return { active: entry?.editor.active ?? 0, selected: entry?.editor.selected ?? 0, history,
-    ...(history.trimmed ? { historyTrimmed: true } : {}),
-    ...(entry?.editor.fieldSelection ? { fieldSelection: entry.editor.fieldSelection } : {}) };
-}
 /**
- * A look's memory with the live document's memory and the look's Undo history replaced; other
- * features' memory is kept. Whole recipes (the older form) become the look history here.
- */
-export function withLiveMemory(memory: LookMemory | undefined, editor: EditorMemory, model: DocumentModel): LookMemory {
-  const { active, selected, fieldSelection, history, historyTrimmed } = editor;
-  const data = Array.isArray(history)
-    ? model.parts.lookHistory({ [model.live]: { editor: {}, history, ...(historyTrimmed ? { historyTrimmed: true as const } : {}) } })
-    : historyTrimmed && !history.trimmed ? { ...history, trimmed: true as const } : history;
-  return model.parts.withLookHistory({ ...memory, [model.live]: { editor: { active, selected, ...(fieldSelection ? { fieldSelection } : {}) } } },
-    data);
-}
-/** The live document's part of a look, or undefined when the look does not have one (or is locked: this build cannot read it). */
-export function livePart(look: Pick<Look, "parts" | "locked"> | undefined, model: DocumentModel): Recipe | undefined {
-  return look?.locked ? undefined : look?.parts[model.live]?.body as Recipe | undefined;
-}
-/** A look's parts with the live document's part set; an empty recipe is not added to a look that had none. */
-export function withLivePart(look: Look, recipe: Recipe, model: DocumentModel): Look["parts"] {
-  const { parts, live } = model;
-  if (!look.parts[live] && !recipe.layers.length) return look.parts;
-  return { ...look.parts, [live]: parts.readPart(live, parts.envelope(live, recipe), false) };
-}
-/**
- * The look's other registered features as live documents (feature-module platform §1, step 5): each
- * registered feature other than the live one, with its parsed part (absent when the look lacks it) and
- * its editor memory for the look. Empty while the live feature is the only one registered.
+ * Every registered feature's parsed part (absent when the look lacks it) and per-look editor memory.
  */
 export function liveFeatureStates(look: Pick<Look, "parts"> | undefined, memory: LookMemory | undefined,
   model: DocumentModel): Record<string, LiveFeatureState> | undefined {
-  const others = model.parts.features().filter(feature => feature !== model.live);
+  const others = model.parts.features();
   if (!others.length) return undefined;
   // Sparse: a feature the look lacks and has no memory of adds nothing, so a workspace that never used a second feature reads
   // exactly as it did while eye makeup was alone.
@@ -97,28 +48,30 @@ export function liveFeatureStates(look: Pick<Look, "parts"> | undefined, memory:
   return states.length ? Object.fromEntries(states) : undefined;
 }
 /**
- * `look` and its memory with the other live features' state written back: a part is set (or removed
+ * `look` and its memory with the live features' state written back: a part is set (or removed
  * when the feature's document has none), and its editor memory replaces the stored one; a feature whose
  * document is empty and that the look never had stays absent (looks are sparse).
  */
 export function withLiveFeatures(look: Look, memory: LookMemory, states: Readonly<Record<string, LiveFeatureState>> | undefined,
   model: DocumentModel): { parts: Look["parts"]; memory: LookMemory } {
   // Live states are sparse (`LiveFeatures.export`): a registered feature missing from them is blank, so a part Undo removed goes too.
-  const registered = model.parts.features().filter(feature => feature !== model.live);
+  const registered = model.parts.features();
   if (!states && !registered.length) return { parts: look.parts, memory };
   const parts = { ...look.parts }, next = { ...memory };
   for (const feature of new Set([...registered, ...Object.keys(states ?? {})])) {
     const state: LiveFeatureState = states?.[feature] ?? {};
-    if (feature === model.live || !model.parts.feature(feature)) continue;
+    if (!model.parts.feature(feature)) continue;
     if (state.part !== undefined) parts[feature] = model.parts.readPart(feature, model.parts.envelope(feature, state.part), false);
     else delete parts[feature];
-    if ((state.part !== undefined || next[feature]) && "editor" in state) next[feature] = { ...next[feature], editor: structuredClone(state.editor) };
+    if ("editor" in state) next[feature] = { ...next[feature], editor: structuredClone(state.editor) };
+    else delete next[feature];
   }
   return { parts, memory: next };
 }
-/** A new look: the live feature's empty part, as new presets have always had. */
+/** A new sparse look, with the optional starting feature's own empty part. */
 export function newLook(id: string, name: string, model: DocumentModel): Look {
-  return { id, name, revision: 1, parts: { [model.live]: model.parts.envelope(model.live, emptyRecipe()) } };
+  const module = model.live ? model.parts.feature(model.live) : undefined;
+  return { id, name, revision: 1, parts: module ? { [module.id]: model.parts.envelope(module.id, module.part.empty()) } : {} };
 }
 /**
  * A look for **Add preset**: the live feature's starter part (eye makeup: one layer, as the first preset starts), so a new look is
@@ -129,9 +82,9 @@ export function starterLook(id: string, name: string, model: DocumentModel, part
 }
 /** The contributed starting content, shared by every route that creates a starter look: `part` (the person's chosen starter's), else the feature's own. */
 export function starterParts(model: DocumentModel, part?: unknown): Look["parts"] {
-  const starter = part ?? model.parts.feature(model.live)?.part.starter();
-  return starter === undefined ? newLook("", "", model).parts
-    : { [model.live]: model.parts.envelope(model.live, structuredClone(starter)) };
+  const module = model.live ? model.parts.feature(model.live) : undefined;
+  const starter = part ?? module?.part.starter() ?? module?.part.empty();
+  return !module || starter === undefined ? {} : { [module.id]: model.parts.envelope(module.id, structuredClone(starter)) };
 }
 
 /**
@@ -203,11 +156,12 @@ function readDraft(value: unknown, format: DraftFormat, policy: ReadPolicy): Col
   }
   return result;
 }
-/** Every look has the live document's memory (defaults when none was stored), as every preset always had; a locked look's is kept as stored. */
+/** Preserve the optional starting feature's editor defaults; no starting feature means no fabricated memory. */
 function withLiveDefault(memory: LookMemory, look: Look, model: DocumentModel): LookMemory {
   const { parts, live } = model;
-  if (memory[live] || look.locked) return memory;
-  const module = parts.feature(live)!;
+  if (!live || memory[live] || look.locked) return memory;
+  const module = parts.feature(live);
+  if (!module) return memory;
   return { ...memory, [live]: { editor: module.editor.parse(undefined, parts.part(look, live) ?? module.part.empty()) } };
 }
 /** The stored collection's own schema with the draft's identity, to read one removed preset the same way. */

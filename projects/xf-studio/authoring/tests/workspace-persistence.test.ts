@@ -1,14 +1,14 @@
 import { afterEach, expect, jest, test } from "bun:test";
 import { createBrowserWorkspaceSession } from "../src/app/browser/browser-workspace-device";
 import { COLLECTION_RECOVERY_LIMIT, collectionDraft, REMOVED_PRESET_LIMIT, withLiveMemory, type CollectionDraft,
-  type CollectionWorkspace } from "../src/app/workspace/collection-workspace";
+  type CollectionWorkspace } from "../src/app/workspace/makeup-workspace";
 import { RECIPE_HISTORY_LIMIT } from "../src/legacy/eye-makeup/editor-actions";
 import { PresentationStatusSource, emptyPresentationStatus } from "../src/app/presentation-status";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { encodeWorkspaceForStorage, fitWorkspace, PERSISTED_BACKGROUND_HISTORY, WORKSPACE_STORAGE_BUDGET } from "../src/app/workspace/workspace-budget";
 import { SAVE_MESSAGES, WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
-import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/app/workspace/workspace-state";
+import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/app/workspace/makeup-workspace";
 import { historyRecipes, looks, memoryOf, recipeOf, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { editLayers, initialRecipe, freshWorkspace } from "./fixtures/eye-region";

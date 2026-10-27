@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { buildBrowserHead, type LayeredSurfaceWiring } from "../src/preview/browser/browser-head-attachment";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
-import type { CameraState } from "../src/app/workspace/workspace-state";
+import type { CameraState } from "../src/app/workspace/makeup-workspace";
 import { contextOf, harness } from "./fixtures/fake-heads";
 import * as THREE from "three";
 import { AuthoringDocument } from "./fixtures/makeup-document";

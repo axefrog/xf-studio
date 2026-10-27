@@ -14,7 +14,7 @@ import type { HistorySnapshot } from "../../src/platform/api/history";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
 import { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
 import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
-import type { WorkspaceState } from "../../src/app/workspace/workspace-state";
+import type { WorkspaceState } from "../../src/app/workspace/makeup-workspace";
 import { digest, restore } from "./workspace-observable";
 
 import { namedCore, type NamedTrustedCore } from "./named-targets";

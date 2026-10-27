@@ -20,6 +20,7 @@ export class AuthoringDocument {
   private readonly listeners = new Set<(change: DocumentChange, features?: LiveFeatureChange) => void>();
   private readonly replacingListeners = new Set<() => void>();
   private revision = 0;
+  private inPlaceRevision = 0;
   private restoring = false;
   private lockedReason?: string;
   private blockedReason?: string;
@@ -78,12 +79,14 @@ export class AuthoringDocument {
     }, { stack, changed: () => { if (!this.options.signal.aborted && !this.restoring) this.notify("history"); } });
   }
   get history(): HistoryScope { this.alive(); return this.scope; }
+  get version() { return this.features.partVersion + this.inPlaceRevision; }
   get scopeId() { return this.scope.id; }
   get locked() { return this.options.signal.aborted ? ENDED : this.lockedReason ?? this.blockedReason; }
   setBlocked(reason: string | undefined) { this.alive(); if (reason !== this.blockedReason) { this.blockedReason = reason; this.notify("access"); } }
   /** In-place feature edits announce their content change explicitly, just as applied results do. */
   changed(features: readonly string[] = this.features.features()) {
-    this.alive(); this.revision++; this.notify("part", { kind: "set", features: [...features] });
+    this.alive(); this.revision++; if (features.length) this.inPlaceRevision++;
+    this.notify("part", { kind: "set", features: [...features] });
   }
   subscribe(listener: (change: DocumentChange, features?: LiveFeatureChange) => void) { this.alive(); this.listeners.add(listener); return () => this.listeners.delete(listener); }
   onReplacing(listener: () => void) { this.alive(); this.replacingListeners.add(listener); return () => this.replacingListeners.delete(listener); }

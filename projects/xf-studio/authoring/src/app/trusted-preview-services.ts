@@ -1,7 +1,7 @@
 import { MotionActions, type MotionPort } from "../animation/motion-actions";
 import { PreviewActions, type PreviewPort } from "../preview/preview-actions";
 import { SavedAppearanceActions, type SavedAppearancePort } from "../character/saved-appearance-actions";
-import type { WorkspaceState } from "./workspace/workspace-state";
+import type { WorkspaceState } from "./workspace/makeup-workspace";
 import type { ViewGraph } from "../platform/core/view-graph";
 import type { ViewId } from "../platform/api/view-graph";
 import { createStudioViewGraph, previewLights, previewMirror, type SceneState } from "../preview/preview-view-graph";

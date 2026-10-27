@@ -30,7 +30,7 @@ import { LOOK_WORKING, lookRef as lookDocument } from "../../library/collection-
 import type { PanelContext, ConstraintRule } from "./bindings";
 import { TargetResolver } from "./targets";
 import { SceneCommands } from "./scene-commands";
-import type { WorkspaceState } from "../workspace/workspace-state";
+import type { WorkspaceState } from "../workspace/makeup-workspace";
 import { ProfileService } from "./profile-service";
 import { ProfileSessions } from "./profile-sessions";
 import type { ProfileSessionData } from "./profile-session";

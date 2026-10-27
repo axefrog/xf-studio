@@ -16,7 +16,7 @@ import { COLLECTION_2, isNewerData, NEWER_LOOK_MESSAGE, type LookCollection } fr
 import { eyeMakeupCollection, NEWER_LOOK_REASON, planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { createStudioPresentation } from "../src/app/studio-presentation";
 import { fitWorkspace } from "../src/app/workspace/workspace-budget";
-import { loadWorkspace, serializeWorkspace, workspaceKeys } from "../src/app/workspace/workspace-state";
+import { loadWorkspace, serializeWorkspace, workspaceKeys } from "../src/app/workspace/makeup-workspace";
 import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { profileStudio } from "./fixtures/profile-studio";

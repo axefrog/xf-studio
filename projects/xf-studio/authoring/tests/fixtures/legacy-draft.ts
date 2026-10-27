@@ -6,7 +6,7 @@
  */
 import { COLLECTION_RECOVERY_LIMIT, collectionDraft, emptyMemory, emptyRecipe, holdsLocked, liveFeatureStates, liveMemory, livePart, newPresetName,
   starterLook, withLiveFeatures, withLiveMemory, withLivePart, type CollectionDraft, type CollectionWorkspace, type DocumentModel, type EditorMemory,
-  type Preset, type PresetCommand, REMOVED_PRESET_LIMIT } from "../../src/app/workspace/collection-workspace";
+  type Preset, type PresetCommand, REMOVED_PRESET_LIMIT } from "../../src/app/workspace/makeup-workspace";
 import type { Recipe } from "../../src/engines/layered-makeup/recipe";
 import type { LiveFeatureState } from "../../src/platform/core/live-features";
 import type { Look, LookCollection } from "../../src/platform/api";

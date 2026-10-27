@@ -23,8 +23,8 @@ import { LAYOUT_FRAGMENT_SCHEMA, type LayoutFragment } from "../../platform/api/
 import { workspaceViewGraph } from "../../preview/preview-view-graph";
 import type { SavedV } from "../../saves/save-reader";
 import type { DockLayout, JsonValue, UIPreferences } from "../ui-preferences";
-import type { DocumentModel } from "../workspace/collection-workspace";
-import { serializeWorkspace, type WorkspaceState } from "../workspace/workspace-state";
+import type { DocumentModel } from "../workspace/makeup-workspace";
+import { serializeWorkspace, type WorkspaceState } from "../workspace/makeup-workspace";
 import { type LayoutTab, type PanelInstance, PROFILE_SESSION_SCHEMA, type ProfileSessionData, PROFILES_MIGRATION, type SessionScene, type SessionView,
   WORKSPACE_PROFILES_SCHEMA, type WorkspaceProfiles } from "./profile-session";
 

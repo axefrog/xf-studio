@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { convertToBezier, moveTangent, setPointMode, splitBezierSegment, tangentEndpoint } from "../src/engines/layered-makeup/bezier-path";
-import { parseWorkspace } from "../src/app/workspace/workspace-state";
+import { parseWorkspace } from "../src/app/workspace/makeup-workspace";
 import { historyRecipes, storedWorkspace } from "./fixtures/looks";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { initialRecipe, raster, freshWorkspace, editLayers } from "./fixtures/eye-region";

@@ -16,8 +16,8 @@
  * Until the Studio moves onto the profile services (phase 1d-ii) nothing reads the session; the legacy fields stay the Studio's own, and
  * migrating changes nothing it shows.
  */
-import type { DocumentModel } from "../workspace/collection-workspace";
-import { parseWorkspace, type WorkspaceState } from "../workspace/workspace-state";
+import type { DocumentModel } from "../workspace/makeup-workspace";
+import { parseWorkspace, type WorkspaceState } from "../workspace/makeup-workspace";
 import { parseViewGraph } from "../../platform/core/view-graph";
 import { STUDIO_VIEW_GRAPH_RULES } from "../../preview/preview-view-graph";
 import { type MigrationMark, PROFILES_MIGRATION, type WorkspaceProfiles } from "./profile-session";

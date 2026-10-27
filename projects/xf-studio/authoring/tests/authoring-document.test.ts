@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { AuthoringDocument } from "./fixtures/makeup-document";
 import { WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
-import { workspaceKeys } from "../src/app/workspace/workspace-state";
+import { workspaceKeys } from "../src/app/workspace/makeup-workspace";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 
