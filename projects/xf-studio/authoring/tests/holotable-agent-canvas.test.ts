@@ -81,6 +81,61 @@ test("cached spot paint reaches opacity one across the fade deadline and a reduc
 
 const denseFields=():AgentItem[]=>Array.from({length:4},(_,i)=>({...point(`field-${i}`),kind:"field",place:[0,0,0],anchor:{grid:{origin:[-128,-128,0],cols:128,rows:128,cell:2}},value:{scalars:Array.from({length:128*128},(_,n)=>n%17)}}));
 
+test("partial coarse field slices paint every cell once and reset with canvas, projection and LOD",()=>{
+ let clock=0;
+ withCanvas((renderer,_arcs,_strokes,_names,alphas)=>{
+  const data=answer([{...point("coarse"),kind:"field",place:[0,0,0],anchor:{grid:{origin:[-8,-8,0],cols:8,rows:8,cell:2}},value:{scalars:Array.from({length:64},(_,i)=>i+1)}}]),enabled={};
+  let C=camera([0,0,0],{...ORBITS.top,distance:200},850,500);
+  const paint=(moving=true)=>renderer.draw(data,enabled,C,null,4,null,[],350,{playing:false,epoch:"slices"},undefined,{moving,revision:0,opacity:()=>1});
+  const complete=()=>{
+   alphas.length=0;let slices=0,partialPaints=0,pending=false;
+   do{const before=alphas.length;pending=!!paint()?.pending;if(pending&&alphas.length>before)partialPaints++;}while(pending&&++slices<100);
+   expect(pending).toBe(false);expect(partialPaints).toBeGreaterThan(0);
+   expect(alphas).toHaveLength(64);expect(new Set(alphas).size).toBe(64);
+   expect(paint()?.pending).toBe(false);expect(alphas).toHaveLength(64);
+  };
+  complete();renderer.clear(850,500);complete();
+  C=camera([0,0,0],{...ORBITS.top,distance:200,yaw:.2},850,500);complete();
+  // Full resolution may have the same dimensions; changing LOD still starts another generation.
+  let slices=0;while(paint(false)?.pending&&++slices<100){}
+  expect(slices).toBeLessThan(100);complete();
+ },{workNow:()=>clock++});
+});
+
+test("offscreen points cannot displace a farther visible point from the motion cap",()=>withCanvas(renderer=>{
+ const C=camera([0,0,0],{...ORBITS.top,distance:40},300,500),enabled={};
+ const hidden=Array.from({length:MOTION_AGENT_LIMIT},(_,i)=>({...point(`off-${i}`),place:[14+i/1000,0,0] as const}));
+ const visible={...point("visible"),place:[0,0,-60] as const},data=answer([...hidden,visible]);
+ const paint=(selected:string|null)=>renderer.draw(data,enabled,C,selected,4,null,[],350,{playing:false,epoch:"viewport"},undefined,{moving:true,revision:0,opacity:()=>1});
+ expect(paint(null)?.pending).toBe(false);expect(renderer.items().map(i=>i.key)).toEqual([visible.key]);
+ expect(renderer.pick(...C.point(visible.place)!)).toBe(visible.key);
+ expect(renderer.accounting()).toMatchObject({eligible:1,drawn:1,omitted:0});
+ expect(paint(hidden[0].key)?.pending).toBe(false);
+ expect(renderer.items().map(i=>i.key)).toEqual([hidden[0].key,visible.key]);
+ const behind=answer([...hidden.map((item,i)=>({...item,place:[i/10000,0,45] as const})),visible]);
+ expect(renderer.draw(behind,enabled,C,null,4,null,[],350,{playing:false,epoch:"viewport"},undefined,{moving:true,revision:0,opacity:()=>1})?.pending).toBe(false);
+ expect(renderer.items().map(i=>i.key)).toEqual([visible.key]);
+},{workNow:()=>0}));
+
+test("motion viewport culling retains crossing extended geometry and rejects disjoint bounds",()=>withCanvas(renderer=>{
+ const C=camera([0,0,0],{...ORBITS.top,distance:40},300,500);
+ const items:AgentItem[]=[
+  {...point("path"),kind:"path",place:[-1000,0,0],anchor:{path:[[-1000,0,0],[1000,0,0]]}},
+  {...point("box"),kind:"zone",place:[-1000,0,0],anchor:{box:{min:[-100,-100,-10],max:[100,100,10]}}},
+  {...point("sphere"),kind:"zone",place:[1000,0,0],anchor:{sphere:{at:[0,0,0],r:100}}},
+  {...point("zone"),kind:"zone",place:[1000,0,0],anchor:{zone:{poly:[[-100,-100],[100,-100],[100,100],[-100,100]],zlo:0,zhi:10}}},
+  {...point("field"),kind:"field",place:[1000,0,0],anchor:{grid:{origin:[-100,-100,0],rows:8,cols:8,cell:25}},value:{scalars:Array(64).fill(1)}},
+  {...point("vector"),kind:"field",place:[200,0,0],anchor:{grid:{origin:[200,0,0],rows:1,cols:1,cell:2}},value:{vectors:[[-220,0]]}},
+  {...point("relation"),kind:"relation",place:[-1000,0,0],to:[1000,0,0]},
+  {...point("near-plane"),kind:"path",place:C.position.map(n=>n*2) as [number,number,number],anchor:{path:[C.position.map(n=>n*2) as [number,number,number],[0,0,-50]]}},
+  {...point("away"),kind:"zone",place:[300,0,0],anchor:{box:{min:[290,-5,0],max:[310,5,10]}}},
+ ];
+ const base=answer(items),data={...base,specs:{...base.specs,kinds:{...base.specs.kinds,relation:{draw:"curve",style:"tone",label:""}}}};
+ expect(renderer.draw(data,{},C,null,4,null,[],1500,{playing:false,epoch:"bounds"},undefined,{moving:true,revision:0,opacity:()=>1})?.pending).toBe(false);
+ expect(renderer.items().map(i=>i.id).sort()).toEqual(items.filter(i=>i.id!=="away").map(i=>i.id).sort());
+ expect(renderer.pick(...C.point([0,0,-25])!)).not.toBeNull();
+},{workNow:()=>0}));
+
 test("four 128-square fields keep finite preparation and motion paint bounds, then restore all cells",()=>{
  let clock=0;
  withCanvas(renderer=>{

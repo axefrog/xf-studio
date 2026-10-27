@@ -7,14 +7,21 @@ import type { FieldDetail } from "./field-detail";
 export function fieldCanvas(now:()=>number) {
   type Surface={key:string;canvas:HTMLCanvasElement;ctx:CanvasRenderingContext2D;cursor:number};
   const surfaces=new Map<AgentItem,Surface>();
+  // Direct paints resume only while the owning canvas has not been cleared.
+  const coarse=new Map<AgentItem,Surface>();
   const release=(surface:Surface)=>{surface.canvas.width=surface.canvas.height=0;};
   return {
-    clear(){for(const surface of surfaces.values())release(surface);surfaces.clear();},
+    canvasCleared(){coarse.clear();},
+    clear(){for(const surface of surfaces.values())release(surface);surfaces.clear();coarse.clear();},
     draw(item:AgentItem,detail:FieldDetail,C:ReturnType<typeof camera>,moving:boolean,colour:string,alpha:number,deadline:number,target:CanvasRenderingContext2D){
       const a=item.resolvedAnchor??item.anchor;if(!("grid" in a))return true;
       const g=a.grid,cols=moving?detail.cols:g.cols,rows=moving?detail.rows:g.rows,dpr=window.devicePixelRatio||1;
-      const key=JSON.stringify([C.position,C.target,C.scale(C.target),C.width,C.height,cols,rows,dpr,colour,alpha]);
-      let surface=moving?{key,canvas:target.canvas,ctx:target,cursor:0}:surfaces.get(item);
+      const key=JSON.stringify([C.position,C.target,C.scale(C.target),C.width,C.height,moving,cols,rows,dpr,colour,alpha]);
+      if(!moving)coarse.delete(item);
+      let surface=moving?coarse.get(item):surfaces.get(item);
+      if(moving&&(!surface||surface.key!==key||surface.ctx!==target)){
+        surface={key,canvas:target.canvas,ctx:target,cursor:0};coarse.set(item,surface);
+      }
       if(!surface){
         if(surfaces.size===8){const oldest=surfaces.keys().next().value!;release(surfaces.get(oldest)!);surfaces.delete(oldest);}
         const canvas=document.createElement("canvas");surface={key:"",canvas,ctx:canvas.getContext("2d")!,cursor:0};surfaces.set(item,surface);

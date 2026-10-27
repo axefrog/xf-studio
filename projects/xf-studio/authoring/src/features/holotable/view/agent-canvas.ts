@@ -12,7 +12,7 @@ import { BADGE_TONES, glyphIcon } from "./glyphs";
 import { playbackEffects, EFFECT_MARKERS, type PaintedMarker } from "./playback-effects";
 import { icon, isIconName } from "../../../studio-ui/icons";
 import { fieldCanvas } from "./field-canvas";
-import { agentInRange } from "./agent-bounds";
+import { agentInRange, agentVisibility } from "./agent-bounds";
 import { fieldDetails, MOTION_FIELD_EDGE, type FieldDetail } from "./field-detail";
 
 type Camera = ReturnType<typeof camera>;
@@ -36,6 +36,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
   let preparation:ReturnType<typeof prepare>|undefined,prepared:ReturnType<ReturnType<typeof prepare>["next"]>["value"]|undefined,clusterCursor=0,clusterMember=0;
   const spotOrder=createSpotOrder();
   const fieldDetail=fieldDetails(),fields=fieldCanvas(workNow);
+  const visible=agentVisibility();
   let movingDetail=false,fieldCells=0,paintedAgents=0;
   function* prepare(answer:AgentAnswer,enabled:Readonly<Record<string,boolean>>,C:Camera,radius:number,selected:string|null,hovered:string|null,base?:{content?:HoloContent;on:BaseSwitches},moving=false){
     const items:AgentItem[]=[],layerIds=new Map<string,string>(),missing=new Set(effects.keys());let work=0,communityCount=0,agentCount=0;
@@ -45,6 +46,12 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       const notPlaced=new Set(layer.notPlaced);
       for(const item of layer.items){if(work++%64===0)yield;missing.delete(item.key);if(item.place&&!notPlaced.has(item.id)){
         if(moving&&!agentInRange(item,C.target,radius))continue;
+        if(moving&&item.key!==selected){
+          const rule=answer.specs.kinds[item.kind];if(!rule)continue;
+          const marker=glyphIcon(item.glyph,isIconName).known||["ring","diamond","crosshair","text"].includes(rule.draw)||!!rule.label;
+          const label=!!rule.label||rule.draw==="diamond"&&!!(item.facets||item.value?.facets);
+          if(!(yield* visible(item,C,rule.draw,marker,label,radius)))continue;
+        }
         agentCount++;
         if(moving){
           const distance=item.key===selected?-1:(item.place[0]-C.target[0])**2+(item.place[1]-C.target[1])**2+(item.place[2]-C.target[2])**2;
@@ -155,6 +162,7 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
   let previous: AgentAnswer | undefined, previousEnabled: Readonly<Record<string, boolean>> | undefined, previousCamera = "", previousSelection: string | null = null, cursor = 0;
   const path = (ctx: CanvasRenderingContext2D, ps: readonly XY[], closed = false) => { if (!ps.length) return; ctx.moveTo(...ps[0]); for (let i = 1; i < ps.length; i++) ctx.lineTo(...ps[i]); if (closed) ctx.closePath(); };
   function clear(width: number, height: number) {
+    fields.canvasCleared();
     painted = new Map(); paintFailed = false;legend.clear();baseCounts.pois=baseCounts.spots=baseCounts.communities=0;screenClusters=[];currentCollapsed=new Set();preparation=undefined;prepared=undefined;clusterCursor=0;clusterMember=0;
     previous = undefined; cursor = 0; fieldCells = paintedAgents = 0; candidates = []; communityCandidates=0;labelPreparation=undefined;labelsPainted = false; badges = []; plates = createPlateObstacles(); overlayLabels = [];
     const dpr = window.devicePixelRatio || 1;
