@@ -588,10 +588,14 @@ test("a mod file without a reviewed hash, written while it is read, is refused (
   const stat = statSync(file);
   const reviewed = { path: file, bytes: stat.size, modified: new Date(stat.mtimeMs).toISOString(), sha256: null };
   expect(new TextDecoder().decode(readReviewedFile(reviewed)!)).toBe("reviewed bytes");
+  // Windows stamps file times at its clock tick (15.6 ms by default, as on GitHub's runners), so each rewrite below comes more than
+  // a tick after the write before it, as a rewrite after a report was reviewed always does.
+  const tick = () => new Promise(resolve => setTimeout(resolve, 40));
+  await tick();
   // Rewritten during the read with bytes of the same size.
   expect(readReviewedFile(reviewed, () => writeFileSync(file, "REVIEWED BYTES"))).toBeNull();
   // ... and with its modification time put back: its change time still tells.
   writeFileSync(file, "reviewed bytes"); utimesSync(file, stat.atime, stat.mtime);
-  await new Promise(resolve => setTimeout(resolve, 20));
+  await tick();
   expect(readReviewedFile(reviewed, () => { writeFileSync(file, "REVIEWED BYTES"); utimesSync(file, stat.atime, stat.mtime); })).toBeNull();
 });

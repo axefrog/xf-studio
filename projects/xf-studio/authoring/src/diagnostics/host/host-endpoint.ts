@@ -215,7 +215,8 @@ export function createDiagnosticsHandler(diagnostics: HostDiagnostics, options: 
  * A mod's file exactly as the review showed it (DIAG-06): read through one open handle, only while its size and modification time are
  * the ones recorded when the report was prepared, never past that size (so the report's limits hold for what is read), and, when the
  * review showed its SHA-256, only when the bytes still hash to it. Without a hash, the handle's identity (size, modification and change
- * times, file id) is read again after the bytes, so a file written while it was read is refused too. Null when the file has changed
+ * times, file id) is read again after the bytes, so a file written while it was read is refused too (to the file system's time
+ * resolution: on Windows, a clock tick after the write before it). Null when the file has changed
  * since; throws when it can't be read. `afterRead` is a test seam.
  */
 export function readReviewedFile(file: Pick<ReviewedFile, "path" | "bytes" | "modified" | "sha256">, afterRead: () => void = () => {}): Uint8Array | null {
