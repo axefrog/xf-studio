@@ -134,20 +134,20 @@ test('explicit item branches win and global replacements invalidate branch signa
   expect(rows(publisher).slice(-3)).toEqual([{ retract: 'actor', t: 40, branch: 'save-a' }, expect.objectContaining({ id: 'actor', t: 50 }), { retract: 'actor', t: 60, branch: 'save-a' }]);
 });
 
-test('previously emitted district people layers remain present when empty and retract their actors', () => {
+test('cold district crowds survive removing unmaterialised resident headers', () => {
   const sim = quietSim('holo-empty-district', undefined, []), cell = sim.w.districts[0].cellIds[0];
   const ids = Array.from({ length: 4001 }, (_, i) => H(s(`district-actor-${i}`)));
   for (const id of ids) sim.k.store.addHeader({ id, kind: 'xf:resident', origin: { by: 'value', owner: cell, slot: id } });
-  const observer = new HolotableObserver(sim), first = observer.sample(), layer = [...first.layers].find(([key, items]) => key.startsWith('people-') && items.some((i) => i.label === '4001 people in the background'))![0];
+  const observer = new HolotableObserver(sim), first = observer.sample(), layer = [...first.layers].find(([key, items]) => key.startsWith('people-') && items.some((i) => i.id === `crowd-${cell}`))![0];
   const publisher = new RunPublisher(tempDir(), { set: 'empty-district', title: 'Empty district', from: observer.epoch, to: observer.epoch + 100 });
   publisher.publish(first);
   for (const id of ids) sim.k.store.removeHeader(id);
   forbidResolution(sim); const before = snapshot(sim), next = observer.sample();
-  expect(next.layers.get(layer)).toEqual([]);
+  expect(next.layers.get(layer)).toEqual(first.layers.get(layer));
   expect(snapshot(sim).equals(before)).toBe(true);
   publisher.publish({ ...next, t: next.t + 10 });
-  expect(publisher.counts()[layer].live).toBe(0);
-  expect(rows(publisher, layer).filter((i) => i.retract)).toHaveLength(1);
+  expect(publisher.counts()[layer].live).toBe(first.layers.get(layer)!.length);
+  expect(rows(publisher, layer).filter((i) => i.retract)).toHaveLength(0);
 });
 
 test('missing event digest is coarse, but an omitted sparse band in a present digest is quiet', () => {

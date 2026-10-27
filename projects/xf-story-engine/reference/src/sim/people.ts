@@ -229,6 +229,17 @@ export class People {
     return p[p.length - 1]!;
   }
 
+  /** Expected residents, without addressing households or resolving any slot.
+   * The population recipe rounds up to whole households, each of meanHH size.
+   * This is an estimate, not a census of the materialised headers. */
+  populationSnapshot(): ReadonlyMap<Id, number> {
+    return new Map(Object.values(this.w.index.cells).map((c) => {
+      const d = this.w.index.districts[c.district], mean = this.w.fits.get(c.district)?.meanHH;
+      const heads = Math.round(d.rho * d.entry.total * c.headShare);
+      return [c.id, mean ? Math.round(Math.ceil(heads / mean) * mean) : heads];
+    }));
+  }
+
   /** The household index by binary search over the prefix sums, and the member position inside it. */
   locate(cell: Id, n: number): { h: number; j: number } {
     const p = this.blockInfo(cell).prefix;

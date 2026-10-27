@@ -200,7 +200,7 @@ test('people split above 4000 keeps cross-layer relation references consistent',
   for (let i = 0; i < 4001; i++) sim.k.store.addHeader({ id: H(s(`holo-person-${i}`)), kind: 'xf:resident', origin: { by: 'value', owner: cell, slot: `fixture-${i}` } });
   const observation = new HolotableObserver(sim).sample();
   expect(observation.layers.get('people')).toEqual([]);
-  expect([...observation.layers].filter(([l]) => l.startsWith('people-')).flatMap(([, a]) => a).length).toBe(2); // one crowd plus V
+  expect([...observation.layers].filter(([l]) => l.startsWith('people-')).flatMap(([, a]) => a).length).toBe([...sim.people.populationSnapshot().values()].filter((n) => n > 0).length + 1); // cold-cell crowds plus V
 });
 
 test('a save branch retracts inherited prefix items only on that branch, once', () => {

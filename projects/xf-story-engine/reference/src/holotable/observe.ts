@@ -68,6 +68,10 @@ export class HolotableObserver {
       const item: Item = { schema: 'xfh/item-1', id, kind, t, anchor, cite, glyph, ...rest };
       if (layer === 'places' && this.options.layout?.cells.has(id))
         item.facets = { ...item.facets, about: wording.phrase('schematic-block-about') };
+      item.label = wording.displayText(item.label);
+      item.detail = wording.displayText(item.detail, true);
+      if (item.facets) item.facets = Object.fromEntries(Object.entries(item.facets).filter(([key, value]) => wording.displayText(key) && wording.displayText(value)));
+      if (item.value) for (const key of ['name', 'role', 'type'] as const) if (key in item.value) item.value[key] = wording.displayText(item.value[key]);
       if (!layers.has(layer)) layers.set(layer, []);
       layers.get(layer)!.push(item);
     };
@@ -102,7 +106,7 @@ export class HolotableObserver {
     const recordedNameOld = (id?: string): string | undefined => {
       if (id === sim.w.v) return 'V';
       const value = isId(id) ? cached(ownedId(id, 'name'), 'display') : undefined;
-      return typeof value === 'string' ? value : undefined;
+      return wording.displayText(value);
     };
     const placeName = (id?: string): string | undefined => {
       if (!id) return undefined;
@@ -170,7 +174,7 @@ export class HolotableObserver {
       if (name) nameRecords.set(h.id, name === 'NCPD' ? 'the NCPD' : `the ${name}`);
     }
     for (const id of Object.keys(sim.w.index.cells)) { const name = placeName(id); if (name) nameRecords.set(id, name); }
-    for (const id of heldItems) { const label = cached(id, 'label'); nameRecords.set(id, typeof label === 'string' ? label : 'the item'); }
+    for (const id of heldItems) { nameRecords.set(id, wording.itemName(cached(id, 'label'), headers.get(id)?.kind.split(':').at(-1))); }
     for (const ev of events.values()) nameRecords.set(ev.id, wording.eventNoun(ev.kind));
     const names = wording.names(nameRecords, sim.w.v);
     const resolve: wording.Names = (id, prose = true) => {
@@ -180,8 +184,8 @@ export class HolotableObserver {
     };
     const name = (id?: string) => resolve(id, false);
     const eventSentence = (ev: EventView) => wording.event(ev, resolve);
-    const why = (id?: string) => id ? wording.why(id, 5, events, resolve, this.options.runStartSeconds ?? 0) : [];
-    const proseDetail = (summary: string, cause?: string, current?: string) => [summary, ...(current ? [current] : []), ...(cause && why(cause).length ? ['', ...why(cause)] : [])].join('\n');
+    const why = (id?: string | readonly string[]) => id ? wording.why(id, 5, events, resolve, this.options.runStartSeconds ?? 0) : [];
+    const proseDetail = (summary: string, cause?: string | readonly string[], current?: string) => [summary, ...(current ? [current] : []), ...(cause && why(cause).length ? ['', ...why(cause)] : [])].join('\n');
     const profile = (id: string) => {
       const h = headers.get(id);
       const value = cached(id, 'profile') ?? (h?.origin.by === 'value' && /^m[0-5]$/.test(h.origin.slot) ? cached(h.origin.owner, `p${h.origin.slot.slice(1)}`) : undefined);
@@ -194,13 +198,13 @@ export class HolotableObserver {
     };
     const opened = new Set<string>([sim.w.v]);
     for (const h of actors) {
-      const slots = k.store.nodes.get(h.id)?.slots;
-      if (h.kind === 'xf:person' || h.origin.by === 'mirrored' || recordedNameOld(h.id) !== undefined ||
-        [...(slots ?? [])].some(([slot, v]) => v.s === 'resolved' && (k.schema.slotInfo(h.kind, slot)?.def.tier ?? 0) >= 3)) opened.add(h.id);
+      const named = headers.has(ownedId(h.id, 'name')) || k.persistence.savedHeader(ownedId(h.id, 'name')) !== undefined;
+      const detailed = k.store.pinsOfNode(h.id).some((p) => (k.schema.slotInfo(h.kind, p.slot.split('@')[0])?.def.tier ?? 0) >= 3);
+      if (h.kind === 'xf:person' || h.origin.by === 'mirrored' || named || detailed) opened.add(h.id);
     }
     for (const ev of events.values()) for (const p of ev.participants) if (actorLayers.has(p.who)) opened.add(p.who);
     for (const e of l3?.state.pool ?? []) for (const id of Object.values(e.bindings)) if (actorLayers.has(id)) opened.add(id);
-    for (const f of frames) if (f.status === 'active' && actorLayers.has(f.actor)) opened.add(f.actor);
+    for (const f of frames) if (actorLayers.has(f.actor)) opened.add(f.actor);
     const crowdId = (cell: string) => `crowd-${cell}`;
     const crowdLayer = (cell: string) => this.splitPeople ? `people-${districtSlug(sim.w.index.cells[cell]?.district ?? '')}` : 'people';
     const endpoint = (id: string, seen = new Set<string>()): string => {
@@ -254,21 +258,7 @@ export class HolotableObserver {
         return key && target ? [wording.phrase(key, { target })] : [];
       });
     });
-    const claim = (b: typeof beliefs[number]): string | undefined => {
-      const subject = events.get(b.subject), who = resolve(b.subject), frame = frames.find((f) => f.id === b.subject);
-      if (subject) {
-        const outcome = b.path === 'outcome' && ['done', 'failed', 'prevented'].includes(String(b.value)) ? b.value as EventView['outcome'] : undefined;
-        return eventSentence({ ...subject, outcome }) + '.';
-      }
-      if (frame && b.path === 'status' && b.value === 'active') { const actor = resolve(frame.actor); return actor ? wording.phrase('claim-goal', { who: wording.sentence(actor) }) : undefined; }
-      if (!who) return undefined;
-      if (b.path === 'alive' && typeof b.value === 'boolean') return wording.phrase(b.value ? 'claim-alive' : 'claim-dead', { who: wording.sentence(who) });
-      if (b.path === 'role' && typeof b.value === 'string') { const role = wording.roleWord(b.value); return role ? wording.phrase('claim-role', { who: wording.sentence(who), role }) : undefined; }
-      if (b.path === 'affiliation') { const value = b.value ?? (b.region?.r === 'set' && b.region.values.length === 1 ? b.region.values[0] : undefined); const aff = typeof value === 'string' && wording.groupName(value); return aff ? wording.phrase('claim-with', { who: wording.sentence(who), affiliation: aff }) : undefined; }
-      if (b.path === 'public' && ['public', 'semi', 'private'].includes(String(b.value))) return wording.phrase('claim-public', { who, access: b.value === 'semi' ? 'partly public' : String(b.value) });
-      if (b.path === 'label' && typeof b.value === 'string' && /^[a-zA-Z ]+$/.test(b.value)) return wording.phrase('claim-label', { label: b.value });
-      return undefined;
-    };
+    const claim = (b: typeof beliefs[number]) => wording.belief(b, resolve, events, this.options.runStartSeconds ?? 0, frames.find((f) => f.id === b.subject)?.actor);
     for (const h of actors.filter((h) => opened.has(h.id))) {
       const mine = goals.filter((g) => g.owner === h.id && g.state === 'active');
       const role = roleOf(h.id), affiliation = wording.groupName(affOf(h.id));
@@ -289,14 +279,13 @@ export class HolotableObserver {
         glyph: personGlyph(role), label: text.label, value: { name: name(h.id)!, ...(wording.roleWord(role) ? { role: wording.roleWord(role) } : {}) }, facets: text.facets,
       });
     }
-    for (const c of Object.values(sim.w.index.cells)) {
-      const background = actors.filter((h) => !opened.has(h.id) && ownerRegion(h.id) === c.id);
-      if (!background.length) continue;
-      const shares: Record<string, number> = {};
-      for (const h of background) { const a = affOf(h.id); if (a) shares[a] = (shares[a] ?? 0) + 1; }
-      const who = Object.values(shares).reduce((n, q) => n + q, 0) === background.length ? wording.share(shares) : undefined;
-      const layer = crowdLayer(c.id); this.peopleLayers.add(layer);
-      put(layer, crowdId(c.id), 'point', cellFallback(c.id), `se:node:${c.id}`, { glyph: 'crowd', label: wording.phrase('crowd', { count: String(background.length) }), facets: {
+    for (const [cell, population] of sim.people.populationSnapshot()) {
+      const known = actors.filter((h) => /^xf:resident(?:-[0-5])?$/.test(h.kind) && opened.has(h.id) && ownerRegion(h.id) === cell).length;
+      const background = Math.max(0, population - known);
+      if (!background) continue;
+      const who = wording.share(sim.w.index.cells[cell].presence);
+      const layer = crowdLayer(cell); this.peopleLayers.add(layer);
+      put(layer, crowdId(cell), 'point', cellFallback(cell), `se:node:${cell}`, { glyph: 'crowd', label: wording.phrase('crowd', { count: String(background) }), facets: {
         ...(who ? { who } : {}), about: wording.phrase('crowd-about'),
       } });
     }
@@ -304,7 +293,7 @@ export class HolotableObserver {
       const holder = edges.find((e) => e.type === 'xf:held-by' && e.from === id)?.to, holderName = resolve(holder);
       const label = cached(id, 'label');
       const entity = holder && this.options.entities?.get(holder);
-      put('items', id, 'point', entity ? { entity } : placeAnchor(ownerRegion(holder ?? id)), `se:node:${id}`, { label: typeof label === 'string' ? label : 'An item', facets: { ...(holderName ? { holder: holderName } : {}) } });
+      put('items', id, 'point', entity ? { entity } : placeAnchor(ownerRegion(holder ?? id)), `se:node:${id}`, { label: wording.sentence(wording.itemName(label, headers.get(id)?.kind.split(':').at(-1))), facets: { ...(holderName ? { holder: holderName } : {}) } });
     }
     for (const h of groups) {
       const g = gd?.groups[h.id], state = gs?.groups[h.id], d = districtOf(h.id);
@@ -322,8 +311,7 @@ export class HolotableObserver {
       } });
     }
     for (const e of edges) {
-      const types: Record<string, string> = { debt: 'owes', friend: 'friends with', friendship: 'friends with', rival: 'rivals', rivalry: 'rivals', kin: 'family with', family: 'family with', colleague: 'works with' };
-      const type = e.type === 'xf:tie' ? types[String(e.attrs.kind)] : e.type === 'core:member-of' ? 'member of' : e.type === 'xf:leads' ? 'leads' : e.type === 'xf:held-by' ? 'holds' : undefined;
+      const type = e.type === 'xf:tie' ? wording.tieType(String(e.attrs.kind ?? 'neighbour')) : e.type === 'core:member-of' ? 'member of' : e.type === 'xf:leads' ? 'leads' : e.type === 'xf:held-by' ? 'holds' : undefined;
       if (!type) continue;
       const holds = e.type === 'xf:held-by';
       const strength = e.type === 'xf:tie' ? recordedTieStrength(sim.record.tieHistory[e.id], sim.data.ties.strength, now) : typeof e.attrs.strength === 'number' ? e.attrs.strength : 1;
@@ -363,7 +351,7 @@ export class HolotableObserver {
       relation('beliefs', b.id, endpoint(b.believer), endpoint(b.subject), wrong ? 'is wrong about' : 'believes', `se:belief:${b.id}`, { belief: text });
     }
     const entryPlace = (e: PoolEntry): string | undefined => {
-      const latest = [...e.stages, ...Object.values(e.graph?.junctures ?? {}).flatMap((j) => j.filler ? [{ event: j.filler.id, time: j.filler.at }] : [])].sort((a, b) => b.time - a.time);
+      const latest = [...e.stages, ...Object.values(e.graph?.junctures ?? {}).flatMap((j) => j.filler ? (j.filler.ref && 'event' in j.filler.ref ? [j.filler.id] : j.filler.causes ?? []).map((event) => ({ event, time: j.filler!.at })) : [])].sort((a, b) => b.time - a.time);
       for (const f of latest) { const p = events.get(f.event)?.place; if (p) return p; }
       return Object.values(e.bindings).find((id) => sim.w.index.cells[id] || sim.w.index.districts[id]);
     };
@@ -396,7 +384,8 @@ export class HolotableObserver {
       const kinds: Record<string, string> = { tension: 'a tension', turn: 'a turn', closure: 'a closure', shape: 'a larger shape' };
       const thread = l3?.threadView.find((th) => th.patterns?.includes(e.id) || th.instances.includes(e.id));
       const threadEntries = thread && [...new Set([...(thread.patterns ?? []), ...thread.instances])].flatMap((id) => l3?.state.pool.find((e) => e.id === id) ?? []).sort((a, b) => a.firstTime - b.firstTime || a.seq - b.seq);
-      const latest = view.matched.at(-1)?.[1].filler?.id;
+      const filler = view.matched.at(-1)?.[1].filler;
+      const latest = filler && (filler.ref && 'event' in filler.ref ? filler.id : filler.causes ?? []);
       const title = storyTitle(e), summary = pattern?.summary ?? info?.summary ?? title;
       put('stories', e.id, 'point', placeAnchor(entryPlace(e)), `se:inst:${e.id}`, {
         glyph: storyGlyph(family), ...(view.outcome || e.complete ? { badge: 'done' } : view.open.length ? { badge: 'ready' } : view.matched.length ? { badge: 'matched' } : {}),

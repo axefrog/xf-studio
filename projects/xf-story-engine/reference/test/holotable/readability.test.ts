@@ -21,7 +21,7 @@ import { defaultReader, type Batch, type WorldPack } from '../../src/shadow/feed
 
 const internals = /\b[a-f\d]{32}\b|se:|xf[.:]|\?[a-z]|\b\d+\.\d+\b|[{}\[\]]|not recorded|not opened|\bcoarse\b/i;
 export function readable(item: Item) {
-  for (const value of [item.label, item.detail, ...Object.values(item.facets ?? {}), item.value?.name, item.value?.role, item.value?.type]) if (value) expect(value).not.toMatch(internals);
+  for (const value of [item.label, item.detail, ...Object.keys(item.facets ?? {}), ...Object.values(item.facets ?? {}), item.value?.name, item.value?.role, item.value?.type]) if (value) expect(value).not.toMatch(internals);
 }
 function scratch<T>(run: (dir: string) => T): T {
   const dir = resolve(import.meta.dir, '../../../../../.scratch-holo1', randomUUID());
@@ -62,10 +62,12 @@ test('shares show three named affiliations, whole percentages and the remaining 
 });
 test('a named opening moves one resident out of the crowd without resolving during observation', () => {
   const sim = quietSim('readability-crowd', undefined, []), cell = sim.w.districts[0].cellIds[0];
-  const residents = sim.people.residentsOfBlock(cell), observer = new HolotableObserver(sim);
-  const count = (items: Item[]) => items.filter((i) => i.kind === 'point').reduce((n, i) => n + Number(i.label!.split(' ')[0]), 0);
+  const expected = sim.people.populationSnapshot().get(cell)!, observer = new HolotableObserver(sim);
+  const count = (items: Item[]) => Number(items.find((i) => i.id === `crowd-${cell}`)?.label?.match(/About (\d+)/)?.[1] ?? 0);
   const before = observer.sample().layers.get('people')!;
-  expect(count(before) + before.filter((i) => i.kind === 'actor' && residents.includes(i.id)).length).toBe(residents.length);
+  expect(count(before)).toBe(expected); // genuinely cold: no resident enumeration
+  const residents = sim.people.residentsOfBlock(cell);
+  expect(count(observer.sample().layers.get('people')!)).toBe(expected);
   const person = residents.find((id) => !before.some((i) => i.id === id))!;
   sim.k.value(sim.k.address(person, 'name'), 'display');
   const display = sim.k.store.nodes.get(ownedId(person, 'name'))!.slots.get('display')!;
@@ -163,8 +165,22 @@ test('shadow mode publishes the same readable wording through the shared observe
     areas: ['Kabuki', 'Northside', 'LittleChina'].map((name, i) => ({ id: `Districts.${name}`, name, kind: 'district', poly: [[i * 100, 0], [i * 100 + 90, 0], [i * 100 + 90, 90], [i * 100, 90]], zlo: -20, zhi: 200 })) };
   const meta: Batch['meta'] = { schema: 'xfh/session-1', session: 'wording', run: 1, worldGeneration: 1, pluginVersion: 'test', start: 100, end: 260, from: 100, to: 260, channels: [], complete: true, dropped: 0, missedDeadlines: 0, largestGapS: 0, coverage: 'synthetic', problems: [] };
   const host = new ShadowHost(defaultReader, world, meta, dir);
+  expect([...host.sim.k.store.headers.values()].filter((h) => /^xf:resident/.test(h.kind))).toHaveLength(0);
+  const cold = host.observer.sample(), expected = host.sim.people.populationSnapshot();
+  for (const [cell, count] of expected) if (count) {
+    const row = [...cold.layers.values()].flat().find((item) => item.id === `crowd-${cell}`);
+    expect(row?.label).toBe(`About ${count} people in the background`);
+    expect(row?.facets?.about).toContain('Numbers are estimates until people are simulated individually.');
+  }
+
   host.consume({ meta, v: [100, 180, 260].map((t, seq) => ({ t, seq, position: [20, 20, 0], yaw: 0, speed: 0, health: 100, healthMax: 100, inCombat: false, vehicle: false, busy: '' })), actors: [{ t: 101, who: 'a1', valid: true, entity: 'entity-1', position: [21, 20, 0] }], camera: [], events: [], gaps: [] });
   for (const file of readdirSync(dir).filter((f) => f.endsWith('.jsonl'))) for (const line of readFileSync(join(dir, file), 'utf8').trim().split('\n').slice(1)) {
     const record = JSON.parse(line); if ('id' in record) readable(record);
   }
 }));
+
+test('the internals checker covers facet keys as well as values', () => {
+  const item: Item = { schema: 'xfh/item-1', id: 'one', kind: 'point', t: 0, anchor: { region: 'r' }, cite: 'se:node:one', facets: { 'xf.item:hidden': 'A key' } };
+  expect(() => readable(item)).toThrow();
+  expect(() => readable({ ...item, facets: { holder: 'Mara' } })).not.toThrow();
+});

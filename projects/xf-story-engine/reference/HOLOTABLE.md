@@ -77,14 +77,28 @@ The observer keeps that first display name for the run so historical event label
 current people and cause chains agree. This assignment is not an engine draw and
 does not assert a value for the unresolved name slot.
 
-Crowds count existing resident headers by their home cell. An opening replaces
-that resident's contribution with an individual actor; it does not add another
-person to the total. Affiliation shares use recorded profile/affiliation values;
-a crowd with incomplete affiliation data omits the share facet. Shares show the
-three largest named affiliations as whole percentages, followed by others.
+Crowds are estimates from the population recipe: whole household count times
+mean household size, rounded to a person, minus individually opened residents in
+that home cell (never below zero). They say "About N people in the background"
+and "Numbers are estimates until people are simulated individually." The estimate
+reads only the index and existing fit; ordinary reads and cold resident headers
+cannot change it. Crowd affiliation shares come from the cell's presence model.
+An opening requires durable evidence: a name header, a detailed-slot pin, recorded
+event participation, a story binding or a frame record, including ended frames.
+Cache-only reads do not open a resident; replacement loads preserve openings.
+Shares show the three largest named affiliations as whole percentages, then others.
+
+Death events name their victim, with "Someone died" when no victim is known.
+Beliefs describe the asserted path/value or each finite-region alternative,
+including effects, news, causes, reasons and grievances. They never substitute the
+true event for a mistaken claim. Unsupported claims are omitted. Crew ties say
+"in a crew with"; neighbour ties say "neighbours with". One wording display-text
+guard rejects unsafe externally sourced text before interpolation/publication,
+including facet keys; unnamed items use a plain kind noun. Subject agreement and
+protagonist possessives come from wording data ("you owe", "your delivery").
 
 Detail shows the summary, the current story step when available, a blank line,
-then one timed sentence per cause, oldest first. Known event causes are followed
+then one timed sentence per cause, oldest first. Non-event story fillers start from their recorded cause events. Known event causes are followed
 up to five events, including the subject; clipped chains end with
 `(earlier causes not shown)`. Cycles terminate. Times are game time from the run's
 start. Missing cause records never become invented prose.
@@ -137,9 +151,9 @@ observation, and raw-state images include ephemeral caches. Both frozen kernel
 digests are unchanged by this work.
 
 Offline verification on 27 October 2026 (Bun 1.4.4): `bun run check` passed;
-the guarded default suite passed **1,753 tests**, with **46 skipped**, **0 failed**
-and **1.4 GB** peak memory (1,799 tests across 129 files). The real-world-pack
-fixture CLI published 1,010 observations in 14.9 seconds, using 0.5 GB peak memory;
+the guarded default suite passed **1,763 tests**, with **46 skipped**, **0 failed**
+and **1.4 GB** peak memory (1,809 tests across 130 files). The real-world-pack
+fixture CLI published 1,010 observations in 12.6 seconds, using 0.5 GB peak memory;
 its 12 spools have zero truncations and unknown glyphs, and Holotable's standalone
 validator reported **Valid: no refusals**. This measures offline fixture publishing,
 not interactive playback or game responsiveness. The v3 digest remains
