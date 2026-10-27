@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { agentCanvas } from "../src/features/holotable/view/agent-canvas";
 import type { AgentAnswer, AgentItem } from "../src/features/holotable/agent-types";
 import { camera, ORBITS } from "../src/features/holotable/view/projection";
+import { detailFade, motionSpot } from "../src/features/holotable/view/motion-detail";
 
 function withCanvas(run: (renderer: ReturnType<typeof agentCanvas>, arcs: number[][], strokes: () => number, names: string[], alphas: number[]) => void, options: { reduced?: boolean; now?: () => number } = {}) {
   const keys=["document","window","MutationObserver","matchMedia","getComputedStyle"];
@@ -54,6 +55,25 @@ test("known plates retain kind geometry, selection is 22px and badges 6px; unkno
 
 const point=(id="a",version=0):AgentItem=>({id,key:`p/a/${id}`,version,kind:"point",anchor:{at:[10,0,0]},place:[10,0,0]});
 const answer=(items:readonly AgentItem[]):AgentAnswer=>({specs:{schema:"xfh/projections-1",kinds:{point:{style:"tone",label:"{label}",draw:"ring"},actor:{style:"tone",label:"{name}",draw:"diamond"},path:{style:"tone",label:"{label}",draw:"polyline"},zone:{style:"tone",label:"{label}",draw:"volume"},field:{style:"tone",label:"",draw:"grid"}}},here:[],layers:[{id:"p/a",title:"A",producer:"p",layer:"a",notPlaced:[],otherBranches:[],refused:0,reason:"",items}]});
+
+test("motion completes every enabled agent layer; context detail never dims agents or changes effect age",()=>{
+ let now=0;
+ withCanvas((renderer,arcs,_strokes,_names,alphas)=>{
+  const items=Array.from({length:80},(_,n)=>({...point(String(n)),place:[(n%10-5)*15,(Math.floor(n/10)-4)*15,0] as const}));
+  const enabled={},C=camera([0,0,0],{...ORBITS.top,distance:200},850,500),playback={playing:true,epoch:"continuous"};
+  const fade=detailFade(()=>now);fade.begin(true,false);
+  const detail={moving:true,revision:0,opacity:(key:string)=>fade.opacity(key)};
+  const first=renderer.draw(answer(items),enabled,C,null,Infinity,null,[],350,playback,undefined,detail);
+  expect(first?.pending).toBe(false);expect(renderer.items()).toHaveLength(80);
+  const changed=items.map((item,n)=>n===0?{...item,version:1}:item);
+  const second=renderer.draw(answer(changed),enabled,C,null,Infinity,null,[],350,playback,undefined,detail);
+  expect(second?.pending).toBe(false);expect(second?.total).toBe(80);expect(renderer.animate()).toBe(true);
+  fade.end();fade.begin(false,false);now=150;arcs.length=0;alphas.length=0;
+  renderer.draw(answer(changed),enabled,camera([0,0,0],{...ORBITS.top,distance:200,yaw:.05},850,500),null,Infinity,null,[],350,playback,undefined,{...detail,moving:false,revision:150});
+  expect(renderer.animate()).toBe(true);expect(alphas).toContain(.5);
+  now=300;expect(renderer.animate()).toBe(false);
+ },{now:()=>now});
+});
 
 
 test("only marker snapshots fade for 300 ms, with an opacity ramp and reduced-motion refusal",async()=>{
@@ -273,4 +293,24 @@ test("selecting an item retains complete view counts through a budgeted redraw a
    expect(draw(selected,1000)?.pending).toBe(false);expect(renderer.baseCounts()).toEqual(before);
  }
  renderer.clear(850,500);expect(renderer.baseCounts()).toEqual({pois:0,spots:0,communities:0});
+}));
+
+test("Show and legend count full map membership equally at rest and in motion",()=>withCanvas(renderer=>{
+ const enabled={},data=answer([]),on={pois:true,spots:true,communities:true};
+ const content={available:true,slices:["test"],pois:[{id:"p",place:"test",kind:"Ripperdoc",at:[-20,0,0] as const}],communities:[{id:"c",place:"test",entries:[]}],spots:Array.from({length:2500},(_,n)=>({id:`spot-${n}`,place:"test",at:[n/50,0,0] as const,yaw:0,communities:["c"]}))};
+ for(const width of [300,850]){
+  const C=camera([0,0,0],{...ORBITS.top,distance:300},width,500);
+  for(const moving of [false,true,false,true]){
+   const result=renderer.draw(data,enabled,C,null,Infinity,null,[],350,{playing:false,epoch:"counts"},{content,on},{moving,revision:0,opacity:()=>1});
+   expect(result?.pending).toBe(false);
+   expect(renderer.baseCounts()).toEqual({pois:1,spots:2000,communities:1});
+   expect(renderer.legend().map(e=>[e.family,e.count])).toEqual([["place",1],["spots",2000]]);
+   const drawn=renderer.items().filter(i=>i.base==="spots").length;
+   if(moving){expect(drawn).toBeGreaterThan(400);expect(drawn).toBeLessThan(600);}else expect(drawn).toBe(2000);
+  }
+ }
+ // Even a full set whose single dot is omitted by the stable hash keeps its legend row.
+ const id=Array.from({length:20},(_,n)=>String(n)).find(id=>!motionSpot(id))!;
+ renderer.draw(data,enabled,camera([0,0,0],ORBITS.top,850,500),null,Infinity,null,[],350,{playing:false,epoch:"one"},{content:{...content,pois:[],communities:[],spots:[{...content.spots[0],id}]},on},{moving:true,revision:0,opacity:()=>1});
+ expect(renderer.items()).toHaveLength(0);expect(renderer.baseCounts().spots).toBe(1);expect(renderer.legend().find(e=>e.family==="spots")?.count).toBe(1);
 }));

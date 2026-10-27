@@ -15,7 +15,7 @@ export function solidCanvas(canvas: HTMLCanvasElement, changed: () => void) {
   let palette: { edge: string; face: string } | null = null;
   let last: readonly SolidInstance[] | undefined, lastDpr = 0;
   let next = 0;
-  const invalidate = () => { palette = null; changed(); }, theme = new MutationObserver(invalidate);
+  const invalidate = () => { palette = null; last = undefined; changed(); }, theme = new MutationObserver(invalidate);
   for (const root of [document.documentElement, document.body]) theme.observe(root, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
   const media = matchMedia("(prefers-color-scheme: dark)"); media.addEventListener("change", invalidate);
   const xy = new Float64Array(16), depths = new Float64Array(8), front = new Uint8Array(6);
@@ -24,22 +24,28 @@ export function solidCanvas(canvas: HTMLCanvasElement, changed: () => void) {
     if (!points.length) return; ctx.moveTo(points[0][0], points[0][1]);
     for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]); if (close) ctx.closePath();
   };
+  const colours = () => {
+    if (!palette) { const style = getComputedStyle(canvas); palette = { edge: style.color, face: style.borderTopColor }; }
+    return palette;
+  };
   function clear(width: number, height: number) {
     last = undefined;
     next = 0;
     const dpr = window.devicePixelRatio || 1, w = Math.round(width * dpr), h = Math.round(height * dpr);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-    if (!palette) { const style = getComputedStyle(canvas); palette = { edge: style.color, face: style.borderTopColor }; }
+    colours();
     ctx!.setTransform(dpr, 0, 0, dpr, 0, 0); ctx!.clearRect(0, 0, width, height);
   }
   return {
     clear,
+    costKey(width:number,height:number) { const p=colours();return JSON.stringify([p.edge,p.face,width,height,window.devicePixelRatio||1]); },
     draw(solids: readonly SolidInstance[], C: Camera, deadline = Infinity) {
       const dpr = window.devicePixelRatio || 1;
       if (!(palette && last === solids && lastDpr === dpr && canvas.width === Math.round(C.width * dpr) && canvas.height === Math.round(C.height * dpr))) clear(C.width, C.height);
       ctx.lineWidth = 1; ctx.strokeStyle = palette!.edge; ctx.fillStyle = palette!.face; ctx.setLineDash([]);
       last = solids; lastDpr = dpr;
-      while (next < solids.length && performance.now() < deadline) {
+      const before = next;
+      while (next < solids.length && (deadline === Infinity || performance.now() < deadline)) {
         const instance = solids[next++];
         const s = instance.source, fillFaces = instance.extentPx >= 12;
         if (s.kind !== "box") {
@@ -79,7 +85,7 @@ export function solidCanvas(canvas: HTMLCanvasElement, changed: () => void) {
         ctx.globalAlpha = instance.opacity * EDGE_OPACITY; ctx.stroke();
       }
       ctx.globalAlpha = 1;
-      return { pending: next < solids.length, drawn: next };
+      return { pending: next < solids.length, drawn: next, painted: next - before };
     },
     dispose() { theme.disconnect(); media.removeEventListener("change", invalidate); },
   };

@@ -66,6 +66,25 @@ A restart is measured by `tools/measure-warm-restart.ts <folder> [port] [runs]` 
 
 ## Known costs and candidate work (27 September 2026)
 
+### Holotable: complete scenes during camera motion
+
+**Candidate implemented, 28 October 2026; independent code/UI review remains with the coordinator.** Each motion frame completes a coarser context set, then refines at rest. Agent layers stay full and precede solid drawing. The adaptive solid count (32–900, ranked by projected extent) targets **5.5 ms total drawing cost**. Up to four cost models separate resolved theme colours, canvas dimensions and device pixel ratio; measured raster cost includes clearing, fills and strokes, with other frame costs deducted before allocating solids. New contexts start conservatively. Spot-distance order is reused for a stationary target; moving targets retain bounded heap selection. Community labels retain the 64-attempt/12-label limits. The 125 ms motion hold plus 150 ms detail fade fits the stop-to-full-detail budget; reduced motion skips the fade.
+
+**Counts are independent of level of detail.** Show and the legend report the full eligible nearest-dot set before its stable hash quarter is drawn. In the Kabuki fixture both surfaces remain at 2,000 through every motion frame and at rest, including narrow views. Actual visibility and layer switches still determine membership. Synthetic tests cover empty drawn subsets, repeated motion/rest transitions, both widths, independent theme/canvas calibration and theme repaint after cost-key resolution.
+
+Measured by `projects/xf-holotable/tools/capture-motion.ts`: isolated headless Chrome/software Canvas, Bun 1.4.4, shared Windows machine, real Kabuki W1 data, 12,000 cached W0 primitives (8,285 within the fixture's 350 m centre radius) and twelve synthetic agent markers, all base layers on. There are 180 camera inputs/frames per case. Frame cost includes projection, Canvas/legend and SVG writes, excluding browser composition. Page timestamps measure the first complete, nonmoving, fully faded frame; a further resting interval verifies that completion stays stable. Caches are read-only.
+
+| Theme | Panel | Complete motion frames | Median | P95 | Full detail after stop |
+|---|---:|---:|---:|---:|---:|
+| Light | 300 px | 180/180 | 4.4 ms | 5.4 ms | 296 ms |
+| Dark | 300 px | 180/180 | 4.2 ms | 5.3 ms | 283 ms |
+| Light | 850 px | 180/180 | 4.9 ms | 6.1 ms | 296 ms |
+| Dark | 850 px | 180/180 | 5.2 ms | 6.1 ms | 282 ms |
+
+All four measured cases meet 100% completion, ≤8 ms p95 and ≤300 ms stop-to-full-detail targets. The previous candidate's light-850 p95 was 8.4 ms; it is now 6.1 ms. The original `ed5581a3` view completes 0/180 motion frames and draws no solids on the identical 850 px trajectory (median 4.9 ms, p95 5.5/5.3 ms light/dark). Its lower cost is unfinished work, not equivalent scene quality. Current motion draws 32–798/32–784 solids at 850 px and restores 900 solids/2,000 dots at rest. Full enabled agent content is never thinned; these shared-machine measurements are not a hard timing guarantee for arbitrary content.
+
+Private evidence: `local/holotable/evidence/motion/` contains `before.json`, `after.json`, `after-300.json`, the handoff and refreshed light/dark 300/850 px orbit/rest captures beside library patterns. The browser asserts both Show/legend counts equal 2,000 at rest and throughout every orbit. All 175 requested Studio/architecture tests, 152 headless tests and both typechecks pass, run sequentially under 4 GB guards. Owned browsers/servers close after each run; no game, runtime bridge, active Studio draft or W0 cache mutation is involved. Remaining R&D targets are W1 preparation/projection and cold W0 preparation.
+
 ### Profiles phase 2: tab-switch budgets (G4)
 
 Results are from G4 on real game-derived head data (24 October 2026, `aed74de9`; warm cache, then a fresh Chrome profile; all eight rows pass). The [isolated headless harness](../../experiments/044-profile-tabs/README.md#15-p2-vii-as-built) runs a primed browser cache, then a fresh Chrome profile; a shell-only smoke never satisfies these gates. These are browser-preview budgets, not game-rendering evidence.

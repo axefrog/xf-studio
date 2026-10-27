@@ -1,6 +1,7 @@
 /** Static world content projected into the existing marker/cluster vocabulary. No timeline or effects. */
 import type { HoloContent, HoloPoi, Vec3 } from "../types";
 import { communityAffiliation } from "./content-selectors";
+import { motionSpot } from "./motion-detail";
 import type { AgentItem } from "../agent-types";
 import type { camera } from "./projection";
 
@@ -31,6 +32,32 @@ const marker = (type: "pois"|"spots"|"communities", id: string, at: Vec3, label:
   id, key:`base:${type}:${id}`, base:type, kind:type==="communities"?"label":"point", anchor:{at}, place:at, label, tone:"muted",
 });
 const communityOrders=new WeakMap<HoloContent,readonly HoloContent["communities"][number][]>();
+/** Per-view nearest order. Orbiting changes visibility, but never the target-distance ranking.
+ * Moving targets keep the bounded heap; only a repeated target pays for a reusable sort. */
+export function createSpotOrder() {
+  let source:HoloContent|undefined,key="",ordered:readonly HoloContent["spots"][number][]|undefined;
+  return function* (content:HoloContent|undefined,target:Vec3):Generator<void,typeof ordered> {
+    if(!content)return;
+    const next=JSON.stringify(target);
+    if(source!==content||key!==next){source=content;key=next;ordered=undefined;return;}
+    if(ordered)return ordered;
+    let work=0,rows:{spot:HoloContent["spots"][number];d:number}[]=[];
+    for(const spot of content.spots){if(work++%64===0)yield;const p=spot.at;rows.push({spot,d:(p[0]-target[0])**2+(p[1]-target[1])**2+(p[2]-target[2])**2});}
+    for(let span=1;span<rows.length;span*=2){
+      const merged:typeof rows=[];
+      for(let start=0;start<rows.length;start+=2*span){
+        const mid=Math.min(start+span,rows.length),end=Math.min(start+span*2,rows.length);let a=start,b=mid;
+        while(a<mid||b<end){if(work++%64===0)yield;const left=rows[a],right=rows[b];
+          if(b>=end||a<mid&&(left.d<right.d||left.d===right.d&&left.spot.id.localeCompare(right.spot.id)<=0))merged.push(rows[a++]);else merged.push(rows[b++]);
+        }
+      }
+      rows=merged;
+    }
+    // The generator may have been superseded while yielding.
+    if(source!==content||key!==next)return;
+    ordered=rows.map(row=>row.spot);return ordered;
+  };
+}
 /** Stable source-size order belongs to a content response, not to a camera frame. */
 function* communityOrder(content:HoloContent):Generator<void,readonly HoloContent["communities"][number][]> {
   const cached=communityOrders.get(content);if(cached)return cached;
@@ -58,13 +85,18 @@ function* communityOrder(content:HoloContent):Generator<void,readonly HoloConten
   const ordered:HoloContent["communities"][number][]=[];for(const row of rows){if(work++%64===0)yield;ordered.push(row.community);}communityOrders.set(content,ordered);affiliationLabels.set(content,labels);return ordered;
 }
 /** Every source traversal and initial community ordering yields after 64 records. */
-export function* baseLayerSteps(content: HoloContent | undefined, on: BaseSwitches, C?: ReturnType<typeof camera>): Generator<void, AgentItem[]> {
+export function* baseLayerSteps(content: HoloContent | undefined, on: BaseSwitches, C?: ReturnType<typeof camera>, moving = false, orderedSpots?:readonly HoloContent["spots"][number][], counts?:{spots:number}): Generator<void, AgentItem[]> {
+  if(counts)counts.spots=0;
   if(!content)return [];
   let work=0;const items:AgentItem[]=[],spots:typeof content.spots[number][]=[];
-  const visible=(at:Vec3)=>{if(!C)return true;const p=C.point(at);return !!p&&Math.hypot(at[0]-C.target[0],at[1]-C.target[1],at[2]-C.target[2])<=350&&p[0]>=0&&p[0]<=C.width&&p[1]>=0&&p[1]<=C.height;};
+  const visible=(at:Vec3)=>!C||(at[0]-C.target[0])**2+(at[1]-C.target[1])**2+(at[2]-C.target[2])**2<=350**2&&C.inView(at);
   if(on.pois)for(const p of content.pois){if(work++%64===0)yield;if(visible(p.at))items.push({...marker("pois",p.id,p.at,poiTitle(p)),glyph:poiGlyph(p),tone:"signal"});}
-  if(on.spots||on.communities)for(const s of content.spots){if(work++%64===0)yield;if(visible(s.at))spots.push(s);}
-  if(on.spots){
+  if(on.spots||on.communities)for(const s of orderedSpots??content.spots){if(work++%64===0)yield;if(visible(s.at))spots.push(s);}
+  // Semantic map membership is counted before the renderer chooses a motion subset.
+  if(counts&&on.spots)counts.spots=Math.min(SPOT_DOT_CAP,spots.length);
+  if(on.spots&&orderedSpots){
+    for(let i=0;i<Math.min(SPOT_DOT_CAP,spots.length);i++){if(work++%64===0)yield;const s=spots[i];if(!moving||motionSpot(s.id))items.push(marker("spots",s.id,s.at,""));}
+  }else if(on.spots){
     const center=C?.target??[0,0,0],distance=(at:Vec3)=>(at[0]-center[0])**2+(at[1]-center[1])**2+(at[2]-center[2])**2;
     // Max heap keeps the nearest 2,000 without an unyielding sort of the whole source.
     const heap:{spot:typeof spots[number];distance:number}[]=[],compare=(a:typeof heap[number],b:typeof heap[number])=>a.distance-b.distance||a.spot.id.localeCompare(b.spot.id);
@@ -73,8 +105,8 @@ export function* baseLayerSteps(content: HoloContent | undefined, on: BaseSwitch
       if(heap.length<SPOT_DOT_CAP){heap.push(row);let i=heap.length-1;while(i){const parent=(i-1)>>1;if(compare(heap[parent],heap[i])>=0)break;[heap[parent],heap[i]]=[heap[i],heap[parent]];i=parent;}}
       else if(compare(row,heap[0])<0){heap[0]=row;let i=0;while(i*2+1<heap.length){let child=i*2+1;if(child+1<heap.length&&compare(heap[child+1],heap[child])>0)child++;if(compare(heap[i],heap[child])>=0)break;[heap[i],heap[child]]=[heap[child],heap[i]];i=child;}}
     }
-    heap.sort(compare);
-    for(const {spot:s} of heap){if(work++%64===0)yield;items.push(marker("spots",s.id,s.at,""));}
+    if(!moving)heap.sort(compare); // Dots have no painter ordering; membership alone must stay stable.
+    for(const {spot:s} of heap){if(work++%64===0)yield;if(!moving||motionSpot(s.id))items.push(marker("spots",s.id,s.at,""));}
   }
   if(on.communities){
     const alpha=C?communityOpacity(Math.hypot(...C.position.map((n,i)=>n-C.target[i]))):1;

@@ -26,6 +26,8 @@ import { scopeChip,SCOPE_MIN_WIDTH } from "./scope-chip";
 import { agentCanvas } from "./agent-canvas";
 import { pickPlace } from "./place-picking";
 import { createSolidSelection } from "./solid-selection";
+import { adaptiveSolids, cameraMotion, detailFade } from "./motion-detail";
+import type { SolidInstance } from "./solid-projection";
 import type { AgentLabel } from "./agent-labels";
 import type { Vec3 } from "../types";
 
@@ -43,11 +45,14 @@ const DASH: Partial<Record<Style, string>> = { gap: "2 5", area: "10 4 2 4", cam
 /** Each dash pattern's length (an odd-length list repeats twice), so a line cut at the edge continues its pattern in phase. */
 const DASH_PERIOD = Object.fromEntries(Object.entries(DASH).map(([style, d]) => { const xs = d!.split(" ").map(Number), sum = xs.reduce((a, b) => a + b, 0); return [style, xs.length % 2 ? sum * 2 : sum]; })) as Partial<Record<Style, number>>;
 
-export interface HolotableFrame { ms: number; projectMs: number; drawMs: number; width: number; height: number; target: Vec3; orbit: Orbit; viewpoints: number; solids: number; cut: number; pending?: boolean; preparationFrames?: number; preparationMs?: number; clusters?: readonly {x:number;y:number;count:number}[] }
+export interface HolotableFrame { ms: number; projectMs: number; drawMs: number; agentMs?: number; solidSelectionMs?: number; solidDrawMs?: number; spots?:number; legendSpots?:number; width: number; height: number; target: Vec3; orbit: Orbit; viewpoints: number; solids: number; cut: number; pending?: boolean; moving?: boolean; fading?: boolean; preparationFrames?: number; preparationMs?: number; clusters?: readonly {x:number;y:number;count:number}[] }
 export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => void, motionClock?: () => number): PanelController {
   const facade = ctx.facade;
   const viewId=ctx.instance?.("holotable.view")??"holotable.view";
   const nav=navigation(motionClock??(()=>performance.now()));
+  const now=motionClock??(()=>performance.now()),motion=cameraMotion(now),density=adaptiveSolids(),fade=detailFade(now);
+  let refining=false,detailRevision=0;
+  let fadedSource:readonly SolidInstance[]|undefined,fadedSolids:readonly SolidInstance[]|undefined;
   let centerOverride:Vec3|undefined;
   let navigationAdapter:HoloNavigation|undefined,navigationLifetime:AbortController|undefined;
   let keyOpen=facade.preference("key",viewId);
@@ -272,9 +277,14 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
       const extent = open.session.meta.standalone?.extent;
       orbit = extent ? fitOrbit(extent, ORBITS.tilt, width, height) : { ...ORBITS.tilt };
       nav.reset();centerOverride=undefined;back.hidden=true;
+      motion.reset();fade.reset();refining=false;detailRevision=0;fadedSource=fadedSolids=undefined;
       zoomLimit = Math.max(1500, orbit.distance * 4); fittedDir = fitKey; contextMoved=true;
     }
     const frame=nav.frame({center:viewCenter(state),orbit});paintedOrbit=frame.orbit;
+    const moving=motion.frame(JSON.stringify([frame.center,frame.orbit,width,height]),nav.moving);
+    if(moving)refining=true;
+    const fadingBefore=fade.pending();fade.begin(moving,reducedMotion());
+    if(fadingBefore)detailRevision++;
     syncNavigation();
     const scene = project(open.session, open.world, state.t, state.layers, frame.orbit, width, height, state.selected, frame.center, { instances: [], cut: 0 });
     currentScene = scene;
@@ -287,7 +297,11 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     extraLabels.push({ key: "scale", text: `${scene.metresPerBar} m`, x: bx + scene.barPx, y: by - 8, priority: 4, colour: "", alpha: 1, overlay: true, align: "end" });
     const extent = open.session.meta.standalone?.extent;
     const radius = extent ? Math.max(350, Math.hypot(...extent.max.map((n, axis) => n - extent.min[axis]))) : 350;
-    const agentProgress = layersCanvas.draw(state.agents, state.agentEnabled, scene.solidCamera, state.selected, Math.max(0, Math.min(4, started + 6 - performance.now())), hovered, extraLabels, radius, { playing: state.playing || state.live.following, epoch: JSON.stringify([open.dir,state.motionEpoch,navigationEpoch,orbit,width,height]) }, {content:open.world.content,on:state.layers});
+    const agentsAt=performance.now();
+    const agentProgress = layersCanvas.draw(state.agents, state.agentEnabled, scene.solidCamera, state.selected, moving||refining?Infinity:Math.max(0, Math.min(4, started + 6 - performance.now())), hovered, extraLabels, radius, { playing: state.playing || state.live.following, epoch: JSON.stringify([open.dir,state.motionEpoch,navigationEpoch,orbit,width,height]) }, {content:open.world.content,on:state.layers}, {moving,revision:detailRevision,opacity:key=>fade.opacity(key)});
+    const agentMs=performance.now()-agentsAt;
+    // A cached canvas still contributes its retained dots to this complete motion frame.
+    if(moving)for(const item of layersCanvas.items())if(item.base==="spots")fade.opacity(item.key);
     const dpr=window.devicePixelRatio||1;if(keyCanvas.width!==Math.round(width*dpr)||keyCanvas.height!==Math.round(height*dpr)){keyCanvas.width=Math.round(width*dpr);keyCanvas.height=Math.round(height*dpr);}keyContext.setTransform(dpr,0,0,dpr,0,0);keyContext.clearRect(0,0,width,height);
     if(keyOpen)layersCanvas.drawLegend(keyContext,width,height);
     keyButton.setAttribute("aria-expanded",String(keyOpen));keyButton.title=keyOpen?"Fold map key":"Show map key";
@@ -296,10 +310,18 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     animate();
     const target = scene.solidCamera.target;
     const solidStarted = performance.now();
-    const prepared = solidSelection.step(state.layers.solids ? open.world.solids ?? emptySolids : emptySolids, target, scene.solidCamera, Math.min(started + 3.5, solidStarted + 1.5));
-    const solidProgress = solidsCanvas.draw(prepared.instances, scene.solidCamera, started + 5.5);
-    scene.solids = prepared.instances.slice(0, solidProgress.drawn); scene.solidsDrawn = solidProgress.drawn; scene.solidsCut = prepared.cut;
-    const pending = nav.moving || prepared.pending || solidProgress.pending || !!agentProgress?.pending;
+    const solidCostKey=solidsCanvas.costKey(width,height);
+    const prepared = solidSelection.step(state.layers.solids ? open.world.solids ?? emptySolids : emptySolids, target, scene.solidCamera, moving?Infinity:refining?solidStarted+1.5:Math.min(started + 3.5, solidStarted + 1.5),moving?density.limit(solidCostKey):undefined);
+    // Preserve the fully faded canvas on the next ordinary state/count update.
+    const instances = moving||refining ? prepared.instances.map(instance=>({...instance,opacity:instance.opacity*fade.opacity(`solid:${instance.id}`)})) : fadedSource===prepared.instances?fadedSolids!:prepared.instances;
+    if(moving||refining){fadedSource=prepared.instances;fadedSolids=instances;}
+    const drawingAt=performance.now();
+    const solidProgress = solidsCanvas.draw(instances, scene.solidCamera, moving||refining?Infinity:started + 5.5);
+    const drawingMs=performance.now()-drawingAt;
+    scene.solids = instances.slice(0, solidProgress.drawn); scene.solidsDrawn = solidProgress.drawn; scene.solidsCut = prepared.cut;
+    const pending = prepared.pending || solidProgress.pending || !!agentProgress?.pending;
+    fade.end();const fading=fade.pending();
+    if(!moving&&!pending&&!fading){refining=false;fade.reset();}
     preparationFrames++; preparationMs += performance.now() - solidStarted;
     const paintedAt = performance.now();
     if (chromeSize !== `${width}x${height}`) {
@@ -321,8 +343,10 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     trim(textLayer, textList.length);
     // Markers are few (V and the placed events): rebuilt each frame.
     marksLayer.replaceChildren(...scene.primitives.filter(p => p.kind === "marker").map(p => marker(p as Extract<Primitive, { kind: "marker" }>)));
-    measured?.({ ms: performance.now() - started, projectMs: projectedAt - started, drawMs: paintedAt - projectedAt, width, height, target, orbit:{...frame.orbit,pan:frame.orbit.pan?[...frame.orbit.pan]:undefined}, viewpoints:nav.depth, solids: scene.solidsDrawn, cut: scene.solidsCut, pending, preparationFrames, preparationMs,clusters:layersCanvas.clusters().map(c=>({x:c.x,y:c.y,count:c.items.length})) });
-    if (pending && !disposed) resumeFrame = requestAnimationFrame(() => {
+    const totalMs=performance.now()-started;
+    if(moving||!pending&&solidProgress.painted>0)density.observe(totalMs,drawingMs,solidProgress.painted,solidCostKey);
+    measured?.({ ms: totalMs, projectMs: projectedAt - started, drawMs: paintedAt - projectedAt,agentMs,solidSelectionMs:drawingAt-solidStarted,solidDrawMs:drawingMs,spots:layersCanvas.baseCounts().spots,legendSpots:layersCanvas.legend().find(e=>e.family==="spots")?.count??0, width, height, target, orbit:{...frame.orbit,pan:frame.orbit.pan?[...frame.orbit.pan]:undefined}, viewpoints:nav.depth, solids: scene.solidsDrawn, cut: scene.solidsCut, pending,moving,fading, preparationFrames, preparationMs,clusters:layersCanvas.clusters().map(c=>({x:c.x,y:c.y,count:c.items.length})) });
+    if ((pending||moving||fading) && !disposed) resumeFrame = requestAnimationFrame(() => {
       resumeFrame = undefined;
       if (!disposed && element.isConnected && element.getClientRects().length) { drawnKey = ""; draw(facade.snapshot()); }
       else solidSelection.cancel();

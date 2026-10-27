@@ -67,6 +67,11 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
   const view = (p: Vec3) => { const x = p[0] - c[0], y = p[1] - c[1], z = p[2] - c[2]; return [x * r[0] + y * r[1] + z * r[2], x * u[0] + y * u[1] + z * u[2], x * f[0] + y * f[1] + z * f[2]]; };
   const screen = (q: number[]): [number, number] => [width / 2 + focal * q[0] / q[2], height / 2 - focal * q[1] / q[2]];
   const point = (p: Vec3) => { const q = view(p); return q[2] < NEAR ? null : screen(q); };
+  /** Point visibility without allocating projection vectors for every static world spot. */
+  const inView = (p:Vec3) => {
+    const x=p[0]-c[0],y=p[1]-c[1],z=p[2]-c[2],depth=x*f[0]+y*f[1]+z*f[2];
+    return depth>=NEAR&&Math.abs(x*r[0]+y*r[1]+z*r[2])*focal<=width/2*depth&&Math.abs(x*u[0]+y*u[1]+z*u[2])*focal<=height/2*depth;
+  };
   const ray = (x: number, y: number) => ({ origin: c, direction: f.map((n, i) => n + r[i] * (x - width / 2) / focal - u[i] * (y - height / 2) / focal) as unknown as Vec3 });
   /**
    * A polyline clipped against the near plane, then against the drawing (plus a margin): only what can be seen, as separate runs.
@@ -137,7 +142,7 @@ export function camera(target: Vec3, o: Orbit, width: number, height: number) {
     const across = Math.max(radius, Math.abs(horizontal), Math.abs(vertical));
     return 2 * radius * focal * (depth + across) / (depth * depth - radius * radius);
   };
-  return { point, line, polygon, clipPolygon, extent, boundExtent, projectInto, scale, ray, position: c, target, width, height };
+  return { point, inView, line, polygon, clipPolygon, extent, boundExtent, projectInto, scale, ray, position: c, target, width, height };
 }
 
 export interface Scene { primitives: Primitive[]; solids: readonly SolidInstance[]; solidCamera: ReturnType<typeof camera>; v?: HoloVSample; cam?: HoloCameraSample; camStale: boolean; vStale: boolean; recent: HoloEvent[]; inGap: boolean; metresPerBar: number; barPx: number; solidsDrawn: number; solidsCut: number }
