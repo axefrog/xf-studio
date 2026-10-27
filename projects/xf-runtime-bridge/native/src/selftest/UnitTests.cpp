@@ -5528,6 +5528,7 @@ int DmUnitTests();
 
 int InputUnitTests();
 int RecordingUnitTests();
+int WorldEventsUnitTests();
 int SupervisorUnitTests();
 // UnitTestsIncidents.cpp: what V witnessed (0.8.20); answers the number of failed checks.
 int IncidentUnitTests();
@@ -5840,6 +5841,7 @@ int RunUnitTests()
     gFailures += SensesUnitTests();
     gFailures += DmUnitTests();
     gFailures += InputUnitTests();
+    gFailures += WorldEventsUnitTests();
     gFailures += RecordingUnitTests();
     gFailures += IncidentUnitTests();
     gFailures += OverlayUnitTests();

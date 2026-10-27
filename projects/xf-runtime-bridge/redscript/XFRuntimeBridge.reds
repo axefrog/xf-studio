@@ -59,9 +59,11 @@ public abstract class XFBridgeQuery {
 // anything else, so a call queued meanwhile is refused instead of reaching a session being torn down.
 public class XFBridgeSystem extends ScriptableSystem {
   private let m_playerAttachCount: Int32;
+  private let m_worldFeed: ref<XFWorldFeed>;
 
   private func OnAttach() -> Void {
     XFBridge_ScriptLayer("attach");
+    XFWorldOut.Session("attach", "");
     XFBridgeLog.Info("rs-attach", "XFBridgeSystem.OnAttach");
     let reply = XFBridge_Ping("redscript", "rs-attach");
     XFBridgeLog.Debug("rs-attach", s"native ping reply: \(reply)");
@@ -76,6 +78,9 @@ public class XFBridgeSystem extends ScriptableSystem {
 
   private func OnDetach() -> Void {
     XFBridge_ScriptLayer("detach");
+    XFWorldOut.Session("detach", "");
+    if IsDefined(this.m_worldFeed) { this.m_worldFeed.Detach(); }
+    this.m_worldFeed = null;
     XFBridgeLog.Info("rs-detach", "XFBridgeSystem.OnDetach");
   }
 
@@ -83,6 +88,9 @@ public class XFBridgeSystem extends ScriptableSystem {
     this.m_playerAttachCount += 1;
     XFBridgeLog.Info("rs-player", s"XFBridgeSystem.OnPlayerAttach count=\(this.m_playerAttachCount)");
     XFBridge_ScriptLayer("player_attach");
+    XFWorldOut.Session("player_ready", "");
+    this.m_worldFeed = XFWorldOut.System();
+    if IsDefined(this.m_worldFeed) { this.m_worldFeed.Attach(); }
   }
 
   public static func GetInstance(game: GameInstance) -> ref<XFBridgeSystem> {

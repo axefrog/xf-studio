@@ -328,11 +328,21 @@ A blackboard listener costs one script call per change of a value that changes r
 
 | Event family | Bridge today | Gap |
 |---|---|---|
-| Session lifecycle | `PlayerPuppet.OnGameAttached` wrap and `XFBridgeSystem.OnAttach/OnDetach/OnPlayerAttach`, reported to the plugin through `XFBridge_ScriptLayer` [runtime] | None for the gate. A `session.ready` event for the feed is missing |
-| Saves | `OnSavingComplete` for its own `game.save`; `OnSavesForLoadReady`, `OnSaveMetadataReady` for the list [runtime] | `Session/BeforeSave` and `AfterSave`; autosaves; the player's own saves |
-| Deaths, combat, crimes, districts, vehicles, journal, dialogue, calls, time | Reads only, on request: `player.state` (`in_combat`, `in_vehicle`, `tier`), `ui.state` (dialogue hubs, menus), `world.state` (clock, up to 16 facts), `scene.read` (people nearby) [runtime]; offline in bridge 0.8.8: `world.district`, `world.facts` (up to 128 facts) and `player.status` (heat stage and star state, vehicle, health, money) [source] | Every hook in sections 3 to 8 |
-| Notes into the ring | `XFBridge_Note(level, text)` [source]; 0.8.7, for the test probe only: `XFBridge_Event(kind, json)` into a ring of its own (512 records, a per-kind rate guard), read by `test.events` | The feed's own native and ring outside the test hooks, with `world.events` |
-| Keys and axes | Codeware `Input/Key` and `Input/Axis` registered; `Input/Axis` seen working [runtime] | None |
+| Session lifecycle and saves | 0.8.25 `XFWorldSessions` Codeware service: BeforeStart/Start/Ready/BeforeSave/AfterSave/BeforeEnd/End; native stamps/counter, no pre-gate game read [source/offline] | Without Codeware only script attach/player-ready/detach; `world.events.coverage` explicitly reports the missing early load/start/save coverage |
+| Death and knockdown | One shared `ScriptedPuppet.OnDeath/OnDefeated/OnStatusEffectApplied` producer feeds incidents, the old probe and `world.events`; exact world-scoped accepted-death receipt joins `incident_id`, otherwise null [source/offline] | Runtime commissioning; knockdown is not a kill |
+| Combat | Shared `PlayerPuppet.OnCombatStateChanged` wrap [source/offline] | Runtime commissioning |
+| Heat | One subscription each for wanted_level/wanted_chase_active, fan-out to old probe; scripted ChangeHeatStage reason wrap [source/offline] | Runtime commissioning |
+| Dialogue | Scripted `dialogWidgetGameController.UpdateDialogsData` wrapper plus SelectedIndex listener; native QPC admission before bounded copy, no new polling [source/offline] | Partner entity unavailable in the checked hub schema: explicit null. Pick is inferred. Runtime commissioning |
+| Journal | State/Tracked/Counter callbacks, hash, state/counter and bounded parent-id path reconstruction [source/offline] | `path_complete` exposes missing/clipped paths; runtime path round-trip pending |
+| Fact | All 93 curated main-story fact listeners, attached at player attach and removed at detach [source/offline] | Only watched names, not every fact; runtime commissioning |
+| Call | UI_ComDevice.PhoneCallInformation listener, engine phase and contact id, unchanged snapshots coalesced [source/offline] | Runtime commissioning |
+| Feed and recorder | One existing XFBridge_Event ingress, dedicated 2,048-entry world ring, read-class world.events in every build; fixed eight families, 20 admissions/family/QPC second, drops carried forward; optional recorder events channel/replay/catchup [source/offline] | No absence proof after loss; recorder retains its autonomous/test gate and load stops |
+| District, vehicle, vehicle.acquired and time skips | Existing probe/on-request reads and 0.8.24 game_time_s [source/offline] | These feed families are deferred to the next cut |
+| Keys and axes | Codeware Input/Key and Input/Axis registered; Input/Axis seen working [runtime] | None |
+
+**0.8.25 producer source check [source/offline]:** the checked 2.31 bundle (same SHA-256 as §1) defines `dialogWidgetGameController.UpdateDialogsData(const data: script_ref<DialogChoiceHubs>) -> Void` at `cyberpunk/UI/interactions/dialogUI.script:57`; `InteractionUIBase.OnDialogsData(value: Variant) -> Bool` forwards to it at `interactionUIBase.script:62-68`. This is a scripted consumer, not a native producer. `orphans.script:54489-54520` defines `ListChoiceData` (localizedName/type/inputActionName/captionParts/timeProvider) and `ListChoiceHubData` (id/activityState/flags/isPhoneLockActive/title/choices/timeProvider), with **no speaker entity**. The wrapper copies at most two hubs/four choices/48 characters and marks omissions; native admission bounds construction before strings are made. The separate index listener is lifecycle-scoped; no dialogue poll was added. The delayed hub listener alone failed in session 16 (questions row 13), so it is not the new feed's producer. `PhoneCallInformation` is `orphans.script:41573-41591`, with `questPhoneCallPhase` IncomingCall/StartCall/EndCall at `:10721-10726`. Journal callbacks use the source signatures in §2; `core/systems/journalManager.script:34-46,66-68` provides GetParentEntry/GetEntry/GetEntryState and objective counters; JournalEntry.GetId is `orphans.script:32961`. The path is reconstructed, capped at 16 ancestors/24 characters per segment, and exposes completeness. Shared death/defeat signatures remain `scriptedPuppet.script:2130-2136`; prevention is §4. See [the candidate and WE rows](../projects/xf-runtime-bridge/docs/world-events-0825.md).
+
+**Offline evidence (0.8.25, 28 October 2026):** the guarded serial Release build and five game-bundle script variants pass. Twenty-five [native feed checks](../projects/xf-runtime-bridge/native/src/selftest/UnitTestsWorldEvents.cpp) cover fixed-time pacing/refill, retention/filter/wire bounds, native stamps, lifecycle coverage and exact one-shot incident receipts, including token reuse in a different world. [Real-pipe and replay checks](../projects/xf-runtime-bridge/tools/test/world-events0825.test.ts) deliver all eight simulated families through a read-only client, catch-up and native chunks with their ids/stamps intact. Full native/client/Bun counts and the unrun WE commissioning rows are in the [candidate record](../projects/xf-runtime-bridge/docs/world-events-0825.md). These are source/offline results, not game callback or performance evidence.
 
 The branch with `npc.*` events (`npc.spawned`, `npc.arrived`, `npc.said`, `npc.choice`, `npc.died` and others, [NPC direction](npc-direction.md)) covers NPCs the bridge spawned, not the world. Bridge 0.8.12 (built offline, not run in game) adds watchers (`watch_arm`: enter, leave, gaze, weapon, combat, vehicle, interact, choice, timer, clock; the kinds S1 of the [runtime requirements](../research/story-engine/runtime-requirements.md) names) that are **polled** on the game thread's tick, not hooked: V's position, the targeting system's look-at, weapon and combat state, the vehicle, the clock, and the interaction blackboard (`LastAttemptedChoice`) and dialogue hub blackboard (`DialogChoiceHubs`, `SelectedIndex`), the last two listened to only while a watcher wants them and unregistered at detach. A dialogue pick is inferred when the hub that was up goes away: the choice highlighted at that moment [hypothesis; no script callback names a pick]. See [channels to the player §5](player-channels.md#5-the-bridges-live-direction-toolkit-0812-what-each-command-drives-and-what-was-left-out).
 
@@ -342,7 +352,7 @@ Twelve kinds, chosen so each is one public registration or one small wrap, none 
 
 | # | Kind | Hook | Attach | Why this one |
 |---|---|---|---|---|
-| 1 | `session` | `Session/Start`, `Session/Ready`, `Session/BeforeSave`, `Session/AfterSave`, `Session/End`; `OnPlayerAttach` as the gate | Codeware `RegisterCallback` from the bridge's `ScriptableSystem` | Generic and stable; carries `restored` and `pre_game` |
+| 1 | `session` | `Session/Start`, `Session/Ready`, `Session/BeforeSave`, `Session/AfterSave`, `Session/End`; `OnPlayerAttach` as the gate | Early Codeware `ScriptableService` callback (session notifications only) | Generic and stable; carries `restored` and `pre_game` |
 | 2 | `death` | `ScriptedPuppet.OnDeath` and `OnDefeated` | `@wrapMethod` | The only world-wide kill signal; carry victim id, record after the cast, `crowd`, `civilian`, `by_v`, `instigator` id |
 | 3 | `combat` | `PlayerPuppet.OnCombatStateChanged` | `@wrapMethod` | V's combat edges in one wrap |
 | 4 | `heat` | Facts `wanted_level` and `wanted_chase_active` | `QuestsSystem.RegisterListener` | Public API, no private wrap |
@@ -351,19 +361,19 @@ Twelve kinds, chosen so each is one public registration or one small wrap, none 
 | 7 | `vehicle.acquired` | `VehiclePurchaseData.PurchasedVehicleRecordID` | `RegisterListenerVariant` | One listener for the engine's own signal; the web shop's ownership fact comes later |
 | 8 | `journal` | `State`, `Tracked` and `Counter` callbacks | `JournalManager.RegisterScriptCallback` | Quests and gigs, texts and calls' phone entries; resolve the entry's path with `GetEntry` |
 | 9 | `fact` | A watch list of the [main-story facts](../research/story-engine/main-story-facts.json) | `QuestsSystem.RegisterListener` per fact | Story windows ([main story state](main-story-state.md)); grows by configuration |
-| 10 | `dialogue` | `DialogChoiceHubs` (shown and hidden) and `SelectedIndex` | `RegisterDelayedListenerVariant`, `RegisterListenerInt` | What was offered and what was highlighted last; the pick is inferred |
+| 10 | `dialogue` | `DialogChoiceHubs` (shown and hidden) and `SelectedIndex` | Scripted `dialogWidgetGameController.UpdateDialogsData` wrap plus `RegisterListenerInt` | Session 16: delayed hub listener delivered no game hubs; use the bounded consumer wrapper without polling. Highlight is observed; pick inferred |
 | 11 | `call` | `UI_ComDevice.PhoneCallInformation` | `RegisterListenerVariant` | Incoming, answered (with the `phonecall_*` fact), ended |
 | 12 | `time` | A poll of game time against sim time, each second; `GameTimeUtils.FastForwardPlayerState` wrap | `ScriptableSystem` delay | Skips of any cause and the menu's one |
 
-`vehicle.acquired` and `fact` are the two the first build may defer.
+0.8.25 implements `fact`; district, vehicle, vehicle.acquired and time-skip events are deferred to the next cut. The existing recorder game_time_s read remains available.
 
-**Plumbing the feed needs**
+**Feed plumbing (implemented in 0.8.25 for session/death/combat/heat/dialogue/journal/fact/call; source/offline)**
 
 1. **A native `XFBridge_Event(kind: String, json: String) -> Bool`,** beside `XFBridge_Note`, that writes to a **separate ring** with its own cursor (a `world.events {since, kinds, limit}` method), so a firefight cannot evict an answer. Size the ring in kinds: `death` bursts, `dialogue` and `journal` do not.
-2. **Every event stamps** game time, sim time and the session counter (from `session` events), so a consumer can order events across a load.
+2. **Every 0.8.25 event stamps** recorder QPC `s`, nullable total `game_time_s`, native `world_generation` and session counter, so a consumer can order events across a load.
 3. **Ids, not names.** Entity id (as a string), TweakDB record id, district enum name. Text only for the dialogue choice labels and journal entry titles, and these stay local.
 4. **Register in the `ScriptableSystem`'s `OnPlayerAttach` and unregister in `OnDetach`,** as the Night City Allies and the game's own controllers do for blackboard listeners; a listener left on a dead blackboard after a load is a crash risk.
-5. **Add a rate guard in the native:** at most N events of a kind per second, with a `dropped` counter in the next event, instead of back-pressure into the game.
+5. **Add a rate guard in the native:** at most 20 admissions of each of the fixed eight kinds per QPC second, with a `dropped` counter in the next event, instead of back-pressure into the game.
 
 **Left out of the first build:** stim tap (needs the rate test), `OnHit`, item and money events, spoken lines, weather, interior polling (wait for the district test), the world-wide perception feed.
 

@@ -432,6 +432,8 @@ const nested = (depth: number) => "[".repeat(depth) + "]".repeat(depth);
   const writer = new BridgeClient(host.session, 5000), reader = new BridgeClient(host.session, 5000);
   try {
     await writer.connect(); await reader.connect({ readOnly: true });
+    const worldFeed = await reader.call("world.events", {});
+    check("world.events: ordinary read-only observer in a normal host", worldFeed.ok && Array.isArray((worldFeed.result as any)?.events));
     for (const method of ["world.probe", "scene.read", "world.district"]) {
       const response = await writer.call(method, method === "world.probe" ? { around_v: true, count: 1 } : {}, "observe-selftest");
       check(`${method}: writer observation completes`, response.ok, response.error);

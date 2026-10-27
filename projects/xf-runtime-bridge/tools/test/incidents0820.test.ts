@@ -31,20 +31,20 @@ describe("0.8.20 the command and the recorder channel", () => {
   });
   test("the recorder takes incidents as a tenth, optional channel and the capture arm can wait for it", () => {
     const start = findCommand("test.record.start")!.input;
-    const all = ["v", "actors", "camera", "subtitles", "voice", "face", "ui", "contacts", "supervisor", "incidents"];
+    const all = ["v", "actors", "camera", "subtitles", "voice", "face", "ui", "contacts", "supervisor", "incidents", "events"];
     expect(validate(start, { channels: all })).toEqual([]);
     expect(validate(start, { channels: [...all, "v"] }).length).toBeGreaterThan(0);
     expect(validate(findCommand("capture.arm")!.input, { run: 1, event: "witness.report", channel: "incidents", capture: "screenshot" })).toEqual([]);
     const recording = read("native", "src", "core", "Recording.cpp");
     expect(recording).toContain('c != "incidents"');
     expect(recording).toContain("channel == \"incidents\" ? 64");
-    expect(recording).toContain("channels.size() > 10");
+    expect(recording).toContain("channels.size() > 11");
     // never a default channel: the default run is unchanged
     expect(recording).toContain('json::array({"v", "actors", "camera", "contacts", "supervisor"})');
   });
   test("the build and the tools carry the 0.8.20 incident work (0.8.21 and 0.8.22 added to it)", () => {
-    expect(read("native", "CMakeLists.txt")).toMatch(/VERSION 0\.8\.24/);
-    expect(JSON.parse(read("package.json")).version).toBe("0.8.24");
+    expect(read("native", "CMakeLists.txt")).toMatch(/VERSION 0\.8\.25/);
+    expect(JSON.parse(read("package.json")).version).toBe("0.8.25");
     expect(natives).toContain("natives=37");
   });
 });
@@ -81,7 +81,8 @@ describe("0.8.20 the taps: autonomous only, wired to a registered native, passiv
   test("only the autonomous package carries the taps and their native", () => {
     for (const variant of ["default", "diagnostic", "writes"]) {
       const text = packageScripts(projectDir, variant, false).map(s => s.text).join("\n");
-      expect(text).not.toContain("XFIncidentTap");
+      expect(text).not.toContain("public abstract class XFIncidentTap");
+      expect(text).toContain('@if(ModuleExists("XFRuntimeBridge.Autonomous"))');
       expect(text).not.toContain("XFBridge_IncidentSeen");
     }
     expect(writes).not.toContain("XFIncidentSystem");
@@ -96,7 +97,7 @@ describe("0.8.20 the taps: autonomous only, wired to a registered native, passiv
   });
   test("every wrap calls the game's own method first, then reads", () => {
     const wraps = [...taps.matchAll(/@wrapMethod\((\w+)\)\n[^\n]*\n([\s\S]*?)\n}\n/g)];
-    expect(wraps.map(w => w[1]).sort()).toEqual(["AICombatTargetHelper", "GameObject", "ReactionManagerComponent", "ScriptedPuppet", "ScriptedPuppet", "StimBroadcasterComponent", "VehicleObject"]);
+    expect(wraps.map(w => w[1]).sort()).toEqual(["AICombatTargetHelper", "GameObject", "ReactionManagerComponent", "StimBroadcasterComponent", "VehicleObject"]);
     for (const wrap of wraps) {
       const body = wrap[2]!;
       expect(body.indexOf("wrappedMethod("), wrap[1]).toBeGreaterThanOrEqual(0);

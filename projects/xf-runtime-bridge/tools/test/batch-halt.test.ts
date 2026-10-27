@@ -39,7 +39,7 @@ describe("batch: telemetry, always on", () => {
     const result = await go(script(rows), api, host, clock, dir, { fixtures: { staged_mod: mod, game_dir: log.game, mo2: { exe: "mo2.exe", profile: "p", executable: "g" } } });
     const starts = api.calls.filter((c) => c.name === "test.record.start");
     expect(starts.length).toBe(2);
-    expect(starts[0].input.channels.length).toBe(10);
+    expect(starts[0].input.channels.length).toBe(11);
     for (const row of result.rows) {
       const t = row.telemetry!;
       expect(t.dir).toContain(join("telemetry", "a1", row.id));

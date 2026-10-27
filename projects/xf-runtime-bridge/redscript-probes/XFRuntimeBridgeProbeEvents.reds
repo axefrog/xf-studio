@@ -95,8 +95,6 @@ public class XFEventProbe extends ScriptableSystem {
     }
     let game = this.GetGameInstance();
     let quests = GameInstance.GetQuestsSystem(game);
-    this.m_wanted = quests.RegisterListener(n"wanted_level", this, n"OnXFWanted");
-    this.m_chase = quests.RegisterListener(n"wanted_chase_active", this, n"OnXFChase");
     this.m_zone = quests.RegisterListener(n"CityAreaType", this, n"OnXFZone");
     let boards = GameInstance.GetBlackboardSystem(game);
     let defs = GetAllBlackboardDefs();
@@ -133,8 +131,6 @@ public class XFEventProbe extends ScriptableSystem {
     let game = this.GetGameInstance();
     let quests = GameInstance.GetQuestsSystem(game);
     if IsDefined(quests) {
-      quests.UnregisterListener(n"wanted_level", this.m_wanted);
-      quests.UnregisterListener(n"wanted_chase_active", this.m_chase);
       quests.UnregisterListener(n"CityAreaType", this.m_zone);
     }
     let boards = GameInstance.GetBlackboardSystem(game);
@@ -389,54 +385,9 @@ public class XFEventProbePoll extends DelayCallback {
 
 // ---- deaths, defeats, knockdowns ---------------------------------------------------------------------------------------------
 
-@wrapMethod(ScriptedPuppet)
-protected cb func OnDeath(evt: ref<gameDeathEvent>) -> Bool {
-  let result = wrappedMethod(evt);
-  if XFProbeOut.On() {
-    let instigator = IsDefined(evt) ? evt.instigator : null;
-    let byV = IsDefined(instigator) && IsDefined(instigator as PlayerPuppet);
-    XFProbeOut.Emit("death", "\"victim\":" + XFJson.Str(XFProbeOut.Id(this.GetEntityID())) + ",\"record\":" + XFJson.Str(TDBID.ToStringDEBUG(this.GetRecordID()))
-      + ",\"crowd\":" + XFJson.Flag(this.IsCrowd()) + ",\"civilian\":" + XFJson.Flag(this.IsCharacterCivilian()) + ",\"attitude\":" + XFJson.Str(XFProbeOut.Attitude(this)) + ",\"by_v\":" + XFJson.Flag(byV)
-      + ",\"instigator\":" + XFJson.Str(IsDefined(instigator) ? XFProbeOut.Id(instigator.GetEntityID()) : ""));
-  }
-  return result;
-}
-
-@wrapMethod(ScriptedPuppet)
-protected cb func OnDefeated(evt: ref<DefeatedEvent>) -> Bool {
-  let result = wrappedMethod(evt);
-  if XFProbeOut.On() {
-    XFProbeOut.Emit("defeated", "\"victim\":" + XFJson.Str(XFProbeOut.Id(this.GetEntityID())) + ",\"record\":" + XFJson.Str(TDBID.ToStringDEBUG(this.GetRecordID()))
-      + ",\"crowd\":" + XFJson.Flag(this.IsCrowd()) + ",\"civilian\":" + XFJson.Flag(this.IsCharacterCivilian()) + ",\"attitude\":" + XFJson.Str(XFProbeOut.Attitude(this)));
-  }
-  return result;
-}
-
-// Every status effect on every puppet: counted; a new knockdown is also recorded.
-@wrapMethod(ScriptedPuppet)
-protected cb func OnStatusEffectApplied(evt: ref<ApplyStatusEffectEvent>) -> Bool {
-  let result = wrappedMethod(evt);
-  if XFProbeOut.On() && IsDefined(evt) {
-    let probe = XFProbeOut.Probe();
-    if IsDefined(probe) {
-      probe.CountStatus();
-    }
-    if evt.isNewApplication && IsDefined(evt.staticData) && IsDefined(evt.staticData.StatusEffectType())
-      && Equals(evt.staticData.StatusEffectType().Type(), gamedataStatusEffectType.Knockdown) {
-      XFProbeOut.Emit("knockdown", "\"victim\":" + XFJson.Str(XFProbeOut.Id(this.GetEntityID())) + ",\"instigator\":" + XFJson.Str(XFProbeOut.Id(evt.instigatorEntityID)));
-    }
-  }
-  return result;
-}
-
 // ---- V: combat, vehicles ----------------------------------------------------------------------------------------------------
 
-@wrapMethod(PlayerPuppet)
-protected cb func OnCombatStateChanged(newState: Int32) -> Bool {
-  let result = wrappedMethod(newState);
-  XFProbeOut.Emit("combat", "\"state\":" + IntToString(newState));
-  return result;
-}
+
 
 @wrapMethod(PlayerPuppet)
 protected cb func OnMountingEvent(evt: ref<MountingEvent>) -> Bool {

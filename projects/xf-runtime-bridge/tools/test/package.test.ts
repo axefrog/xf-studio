@@ -37,6 +37,7 @@ describe("packages", () => {
     expect(probeFiles("writes").sort()).toEqual(
       [
         `${PLUGIN_DIR}/Scripts/XFRuntimeBridgeProbeEvents.reds`,
+        `${PLUGIN_DIR}/Scripts/XFRuntimeBridgeProbeModule.reds`,
         `${PLUGIN_DIR}/Scripts/XFRuntimeBridgeProbePersist.reds`,
         `${PLUGIN_DIR}/Scripts/XFRuntimeBridgeProbeSave.reds`,
         `${PLUGIN_DIR}/xfb_companion_probe.exe`,

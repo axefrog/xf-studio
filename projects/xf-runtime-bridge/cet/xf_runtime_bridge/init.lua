@@ -858,7 +858,7 @@ registerForEvent("onDraw", function()
 end)
 
 return {
-  version = "0.8.24",
+  version = "0.8.25",
   -- For other CET mods: GetMod("XF_Runtime_Bridge").info()
   info = function() return state.info end,
 }

@@ -53,6 +53,14 @@ Typical uses: preparing a photo-mode shot and comparing it with an XF Studio pre
 
 ## Installing it
 
+### Passive world events (0.8.25)
+
+`world_events` / `world.events {since?, kinds?, limit?}` is read class in every package, independent of recorder/test-hook gates and available during loads. Resume at the returned inclusive `next` cursor; filtering advances past skipped entries. Each row carries `seq`, `kind`, QPC `s`, nullable total `game_time_s`, native `world_generation`, `session_counter`, `dropped` and producer `data`. Retention is 2,048 rows, 20 admissions per family per QPC second; a page is at most 100 rows and 48 KiB. `missed`, `evicted` and per-kind `dropped` expose loss. Sequence cursors belong to one bridge process/session.
+
+Kinds are `session`, `death` (death, defeat, knockdown), `combat`, `heat`, `dialogue`, `journal`, `fact`, `call`. Codeware supplies early load/start/ready/save/end notifications. Without it, `coverage.session_callbacks: "script_layer_only"` explicitly means no early load/start or save coverage. Before the live script gate, `game_time_s` is null and callbacks use native bookkeeping only. Dialogue offers at most two hubs/four choices/48 characters per choice, with truncation flags; the hub schema supplies no interlocutor entity, so `partner` is null. Journal paths are reconstructed through at most 16 parents and expose `path_complete`. The 93 main-story facts use subscriptions, not polling. See [producer sources, limitations and WE commissioning rows](world-events-0825.md).
+
+The autonomous recorder's optional `events` channel copies accepted envelopes into native chunks, with one coverage heartbeat per second; it adds no game poll and is not a default channel. `game.catchup` lists them under `channels.events` and replay preserves their source stamps and ids. Recorder gating, overflow, load stops and run lifetime remain as before; use the independent feed to observe lifecycle edges outside a recording run. Offline coverage is not in-game commissioning.
+
 ### Source recorder (0.8.14)
 
 Only the explicit autonomous `-writes` build with `allow_test_hooks=true` exposes `test_record_start`, `test_record_read` and `test_record_stop`. Start selects up to ten channels: `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts`, `supervisor` and `incidents`, up to 16 returned actor handles, a 10 Hz target, a duration (at most 1800 s) and a byte cap (at most 512 MiB). It reads the source on 100 ms game-update deadlines, independently of the 4 Hz NPC status cache. Actual/valid per-channel rates, age, largest gap, missed deadlines and drops are reported. A late update takes one fresh sample and counts missed deadlines; it never invents catch-up samples.

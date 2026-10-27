@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 159 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 160 tools, 89 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -18,7 +18,7 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Player](#player) (8)
 - [Behaviours](#behaviours) (6)
 - [Live direction](#live-direction) (26)
-- [World](#world) (9)
+- [World](#world) (10)
 - [Wardrobe, clothing and cyberware](#wardrobe-clothing-and-cyberware) (8)
 - [XF Finish Showroom](#xf-finish-showroom) (5)
 - [NPC direction](#npc-direction) (17)
@@ -34,7 +34,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
-| `read` | Look | 58 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 59 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 5 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -825,7 +825,7 @@ No parameters.
 
 ### `test_record_start`
 
-**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Default channels include supervisor interventions and contacts: V car-hit entry plus landing/wall controller reports (ground included, other identity unknown), with partial uncommissioned coverage; absence is never full no-contact proof. Optional face (F) submissions and ui (U) consumer snapshots observe intent and actual widget state, never evaluated facial output. Optional incidents (0.8.20) records each witness.report (an incident V saw or heard, with its people, place, time and perception) as it closes, plus a one-second coverage heartbeat of the incident counters; passive, never a default channel. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. V carries game_time_s (total TimeSystem seconds, unavailable if the clock cannot be read). First samples emit actor.identity records with entity, character record, affiliation, crowd and the record display-name key, once per entity per run/world, capped at 2048; actor_identity_omitted counts attempts beyond the cap. Manifest start_at/start_sync and each chunk sync map QPC to UTC, with uncertainty_ms. Stop and drain before another start.
+**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Default channels include supervisor interventions and contacts: V car-hit entry plus landing/wall controller reports (ground included, other identity unknown), with partial uncommissioned coverage; absence is never full no-contact proof. Optional face (F) submissions and ui (U) consumer snapshots observe intent and actual widget state, never evaluated facial output. Optional incidents (0.8.20) records each witness.report (an incident V saw or heard, with its people, place, time and perception) as it closes, plus a one-second coverage heartbeat of the incident counters; passive, never a default channel. Optional events (0.8.25) copies each retained world.events envelope at ingress, plus a coverage heartbeat; no polling, no default channel. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. V carries game_time_s (total TimeSystem seconds, unavailable if the clock cannot be read). First samples emit actor.identity records with entity, character record, affiliation, crowd and the record display-name key, once per entity per run/world, capped at 2048; actor_identity_omitted counts attempts beyond the cap. Manifest start_at/start_sync and each chunk sync map QPC to UTC, with uncertainty_ms. Stop and drain before another start.
 
 - **Command:** `test.record.start`, the bridge method `test.record.start`
 - **Permission:** Look (`read`)
@@ -835,7 +835,7 @@ No parameters.
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `channels` | array of string | 1 to 10 items; each `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts`, `supervisor`, `incidents` | Source channels to sample |
+| `channels` | array of string | 1 to 11 items; each `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts`, `supervisor`, `incidents`, `events` | Source channels to sample |
 | `actors` | array of string | at most 16 items; each matches `^[ap][0-9]{1,15}$` | Selected returned actor or pick handles |
 | `rate_hz` | integer | exactly 10 | Source target (10 only) |
 | `duration_s` | integer | 1 to 1800 | Maximum recording lifetime |
@@ -1970,6 +1970,22 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 | `name` | string | at most 96 characters; matches `^[A-Za-z0-9_.-]+$` | The weather state, such as 24h_weather_rain. |
 | `blend_s` | number | 0 to 60 | Blend time, 0 to 60 seconds. Default 2. |
 | `cycle` | boolean | `true`, `false` | Give the weather back to the game's own cycle (after setting name, if given). |
+
+### `world_events`
+
+**Read the passive world event feed.** Bounded read-only feed in every build, also during loads. since is an inclusive sequence cursor; resume at next, including across filtered rows. Kinds: session, death (including defeated and knockdown), combat, heat, dialogue, journal, fact, call. Each carries QPC s, nullable game_time_s, world_generation, session_counter and dropped since its kind's last kept event. 2048 entries, 20 admissions per kind per QPC second; 100 records and 48 KiB per page. missed and evicted expose retention loss; dropped counts rate and contention loss. Codeware supplies early session/load/save callbacks. Without it coverage.session_callbacks is script_layer_only, with no early load/start or save notifications. Dialogue copies at most two hubs/four choices/48 characters and marks truncation; partner is unavailable because the checked hub schema provides no entity. Journal paths cap at 16 segments and mark path_complete. Source/offline until commissioned. Optional recorder events channel carries these same envelopes; game.catchup includes them in channels.events. Cursors restart with the bridge process/session.
+
+- **Command:** `world.events`, the bridge method `world.events`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`bad_params`](#refusal-bad-params)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `since` | integer | 0 to 1000000000000 | Inclusive cursor returned as next |
+| `limit` | integer | 1 to 100 | Page size, also bounded to 48 KiB |
+| `kinds` | array of string | at most 8 items; each `session`, `death`, `combat`, `heat`, `dialogue`, `journal`, `fact`, `call` | Filter to these event families |
 
 ### `world_facts`
 

@@ -27,7 +27,7 @@ import type { CommandApi } from "../api/command-api.ts";
 import type { Host } from "./host.ts";
 import type { PlanClock } from "./plan.ts";
 
-export const ALL_CHANNELS = ["v", "actors", "camera", "subtitles", "voice", "face", "ui", "contacts", "supervisor", "incidents"];
+export const ALL_CHANNELS = ["v", "actors", "camera", "subtitles", "voice", "face", "ui", "contacts", "supervisor", "incidents", "events"];
 /** Plugin log lines that mean a significant bug (the batch's draw_call halt). Fixtures halt_patterns add more. */
 export const DEFAULT_HALT_PATTERNS = ["draw call failed", "evt=overlay\\.stopped", "lvl=fatal"];
 /** The recorder's longest lifetime is 1800 s; it is started again a little before that. */

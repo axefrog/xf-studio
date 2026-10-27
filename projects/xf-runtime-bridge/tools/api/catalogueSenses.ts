@@ -10,7 +10,7 @@
 
 import type { CommandDef } from "./catalogue.ts";
 import { FINAL_BOARDS_FACTS, MAIN_STORY_FACTS } from "./fact-presets.ts";
-import { obj, oneOf, str } from "./schema.ts";
+import { int, obj, oneOf, str } from "./schema.ts";
 
 type Json = Record<string, any>;
 
@@ -63,6 +63,10 @@ export const STATUS_PARTS = ["vitals", "progress", "money", "heat", "vehicle", "
 const NOT_READY = " With no world to read it is refused game_loading (the bridge's gate, on the main menu, between sessions and during a load) or, if the gate is open but the game has no world yet, game_not_ready.";
 
 export const SENSES_COMMANDS: CommandDef[] = [
+  { name: "world.events", title: "Read the passive world event feed", permission: "read",
+    description: "Bounded read-only feed in every build, also during loads. since is an inclusive sequence cursor; resume at next, including across filtered rows. Kinds: session, death (including defeated and knockdown), combat, heat, dialogue, journal, fact, call. Each carries QPC s, nullable game_time_s, world_generation, session_counter and dropped since its kind's last kept event. 2048 entries, 20 admissions per kind per QPC second; 100 records and 48 KiB per page. missed and evicted expose retention loss; dropped counts rate and contention loss. Codeware supplies early session/load/save callbacks. Without it coverage.session_callbacks is script_layer_only, with no early load/start or save notifications. Dialogue copies at most two hubs/four choices/48 characters and marks truncation; partner is unavailable because the checked hub schema provides no entity. Journal paths cap at 16 segments and mark path_complete. Source/offline until commissioned. Optional recorder events channel carries these same envelopes; game.catchup includes them in channels.events. Cursors restart with the bridge process/session.",
+    input: obj({ since: int("Inclusive cursor returned as next", 0, 1e12), limit: int("Page size, also bounded to 48 KiB", 1, 100), kinds: { type: "array", description: "Filter to these event families", maxItems: 8, items: oneOf("Event family", ["session", "death", "combat", "heat", "dialogue", "journal", "fact", "call"]) } }),
+    bridge: { method: "world.events" }, refusals: ["bad_params"] },
   {
     name: "world.facts",
     title: "Read quest facts in a batch",

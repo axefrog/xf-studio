@@ -18,6 +18,7 @@
 #include "core/PinViews.hpp"
 #include "core/Bridge.hpp"
 #include "core/Events.hpp"
+#include "core/WorldEvents.hpp"
 #include "core/Player.hpp"
 #include "core/Config.hpp"
 #include "core/GameThreadQueue.hpp"
@@ -165,6 +166,7 @@ struct State
 
     // 0.8.7, test probes ([bridge] allow_test_hooks; core/Probes.hpp): the game-events and save-identity probes' ring
     // (XFBridge_Event, test.events), and their switches (XFBridge_ProbeFlags: 2 the stim tap, 4 the BeforeSave write armed).
+    worldevents::Feed worldEvents;
     probes::ProbeRing probeEvents;
     std::atomic<int32_t> probeSwitches{0};
 

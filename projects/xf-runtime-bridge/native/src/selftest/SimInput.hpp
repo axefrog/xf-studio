@@ -1,6 +1,7 @@
 #pragma once
 #include "core/InputChoices.hpp"
 #include "core/Recording.hpp"
+#include "core/WorldEvents.hpp"
 #include "core/Supervisor.hpp"
 #include "selftest/SimNpc.hpp"
 namespace xfb::selftest
@@ -16,6 +17,7 @@ private:
     input::Ops Ops();
     input::Service m_service;
     recording::Service m_recording;
+    worldevents::Feed m_worldEvents;
     supervisor::Service m_supervisor;
     Dispatcher& m_dispatcher;
     SimNpc& m_npc;

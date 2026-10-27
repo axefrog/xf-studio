@@ -342,7 +342,7 @@ public abstract class XFIncidentTap {
   }
 
   // The observation itself, to the plugin. who is a comma list of Fact strings (at most four).
-  public static func Send(view: ref<XFIncidentView>, evidence: String, type: String, radius: Float, at: Vector4, who: String) -> Void {
+  public static func Send(view: ref<XFIncidentView>, evidence: String, type: String, radius: Float, at: Vector4, who: String, opt worldEvent: String) -> Void {
     let game = GetGameInstance();
     let clock = GameInstance.GetTimeSystem(game);
     let gameStamp = IsDefined(clock) ? clock.GetGameTimeStamp() : -1.0;
@@ -359,6 +359,7 @@ public abstract class XFIncidentTap {
     let text = "{\"ev\":" + XFJson.Str(evidence) + ",\"type\":" + XFJson.Str(type) + ",\"radius\":" + XFJson.Num(radius) + ",\"pos\":" + XFScene.Arr(at)
       + ",\"vd\":" + XFJson.Num(Vector4.Distance(view.vPos, at)) + ",\"sim\":" + XFJson.Num(sim) + ",\"game\":" + XFJson.Num(gameStamp)
       + ",\"dist\":" + XFJson.Str(district) + ",\"view\":" + XFJson.Str(view.photo ? "photo" : "gameplay") + ",\"who\":[" + who + "]}";
+    if StrLen(worldEvent) > 0 { text = StrLeft(text, StrLen(text) - 1) + ",\"world_event\":" + XFJson.Str(worldEvent) + "}"; }
     XFBridge_IncidentSeen(text);
   }
 
@@ -502,7 +503,7 @@ public abstract class XFIncidentTap {
   }
 
   // A death or a defeat: the victim and, when the game names one, who did it.
-  public static func Death(victim: ref<GameObject>, killer: ref<GameObject>) -> Void {
+  public static func Death(victim: ref<GameObject>, killer: ref<GameObject>, opt worldEvent: String) -> Void {
     if !IsDefined(victim) {
       return;
     }
@@ -515,7 +516,7 @@ public abstract class XFIncidentTap {
     if IsDefined(killer) && killer != victim {
       who = XFIncidentTap.Join(XFIncidentTap.Fact(view, killer, "aggressor"), who);
     }
-    XFIncidentTap.Send(view, "death", "Death", 0.0, at, who);
+    XFIncidentTap.Send(view, "death", "Death", 0.0, at, who, worldEvent);
   }
 
   // X now targets Y: a fight begins. No sound of its own.
@@ -604,23 +605,7 @@ public final func TriggerSingleBroadcast(contextOwner: wref<GameObject>, gdStimT
   }
 }
 
-@wrapMethod(ScriptedPuppet)
-protected cb func OnDeath(evt: ref<gameDeathEvent>) -> Bool {
-  let result = wrappedMethod(evt);
-  if XFIncidentTap.On() {
-    XFIncidentTap.Death(this, IsDefined(evt) ? evt.instigator as GameObject : null);
-  }
-  return result;
-}
 
-@wrapMethod(ScriptedPuppet)
-protected cb func OnDefeated(evt: ref<DefeatedEvent>) -> Bool {
-  let result = wrappedMethod(evt);
-  if XFIncidentTap.On() {
-    XFIncidentTap.Death(this, this.GetKiller() as GameObject);
-  }
-  return result;
-}
 
 @wrapMethod(AICombatTargetHelper)
 public final static func SetNewCombatTarget(context: ScriptExecutionContext, target: ref<GameObject>) -> Bool {
