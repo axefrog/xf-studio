@@ -1,5 +1,6 @@
 /** Private, stamp-keyed REDmod name index. Compiled flats reuse the Studio's TweakDB owner. */
-import { opendirSync, readFileSync, statSync, type Dir } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
+import { metadataReader, type DiscoveryStats } from "./world-content-directory.ts";
 import { join } from "node:path";
 import { tweakDbSourceOf } from "../../xf-studio/authoring/src/character/host/clothing-host";
 import { tweakDbId } from "../../xf-studio/authoring/src/game/tweakdb-flats";
@@ -31,22 +32,32 @@ export function reverseRecordNames(sources: Iterable<string>): ReadonlyMap<strin
 }
 let memo:{key:string;names:ReadonlyMap<string,string|null>}|undefined;
 export const REDMOD_DISCOVERY_LIMITS:Readonly<{entries:number;directories:number;depth:number}>=Object.freeze({entries:20_000,directories:4_000,depth:32});
-export function worldNameSources(root:string,ep1:boolean,limits:Readonly<typeof REDMOD_DISCOVERY_LIMITS>=REDMOD_DISCOVERY_LIMITS) {
-  const files:SourceStamp[]=[];
-  let entries=0,directories=0;
-  const walk=(dir:string,depth=0)=>{
-    if(depth>limits.depth||++directories>limits.directories)throw new NativeBudgetError("REDmod discovery exceeds its directory/depth limit.");
-    let handle:Dir;try{handle=opendirSync(dir);}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return;throw error;}
-    try {let e;while((e=handle.readSync())!==null){
-      if(++entries>limits.entries)throw new NativeBudgetError("REDmod discovery exceeds its total entry limit.");
-      const path=join(dir,e.name);if(e.isDirectory())walk(path,depth+1);else if(e.isFile()&&e.name.endsWith(".tweak")){const s=statSync(path);files.push({path,size:s.size,mtimeMs:s.mtimeMs});}
-    }}finally{handle.closeSync();}
+export function worldNameSources(root:string,ep1:boolean,limits:Readonly<typeof REDMOD_DISCOVERY_LIMITS>=REDMOD_DISCOVERY_LIMITS,options:{portable?:boolean;stats?:DiscoveryStats}={}) {
+  const files:SourceStamp[]=[],directories:SourceStamp[]=[],missingDirectories=new Set<string>(),stats=options.stats??{entries:0,directories:0,fileStats:0,native:false},reader=metadataReader(stats,options.portable);
+  const walk=(dir:string,depth=0,stamp?:SourceStamp)=>{
+    if(depth>limits.depth||++stats.directories>limits.directories)throw new NativeBudgetError("REDmod discovery exceeds its directory/depth limit.");
+    if(!stamp){try{const s=statSync(dir);stamp={path:dir,size:s.size,mtimeMs:s.mtimeMs};}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;missingDirectories.add(dir);stamp={path:dir,size:0,mtimeMs:0};}}
+    directories.push(stamp);
+    for(const e of reader.entries(dir)){
+      if(++stats.entries>limits.entries)throw new NativeBudgetError("REDmod discovery exceeds its total entry limit.");
+      const path=join(dir,e.name),s={path,size:e.size,mtimeMs:e.mtimeMs};
+      if(e.directory)walk(path,depth+1,s);else if(e.file&&e.name.endsWith(".tweak"))files.push(s);
+    }
   };
-  walk(join(root,"tools","redmod","tweaks","base"));if(ep1)walk(join(root,"tools","redmod","tweaks","ep1"));
-  files.sort((a,b)=>a.path.localeCompare(b.path));
-  // The shared locator provides stamps without loading the compiled blob.
-  const db=tweakDbSourceOf(root,ep1);
-  return {files,sources:[...files,...(db?[{path:db.path,size:db.size,mtimeMs:db.mtimeMs}]:[])]};
+  try{walk(join(root,"tools","redmod","tweaks","base"));if(ep1)walk(join(root,"tools","redmod","tweaks","ep1"));}finally{reader.close();}
+  files.sort((a,b)=>a.path.localeCompare(b.path));directories.sort((a,b)=>a.path.localeCompare(b.path));
+  const db=tweakDbSourceOf(root,ep1),sources=[...files,...(db?[{path:db.path,size:db.size,mtimeMs:db.mtimeMs}]:[])];
+  return {files,sources,directories,missingDirectories,stats};
+}
+/** Rebuild-only publication check: reuse the captured list instead of rediscovering the tree. */
+export function checkWorldNameSources(snapshot:ReturnType<typeof worldNameSources>) {
+  const directoryPaths=new Set(snapshot.directories.map(s=>s.path));
+  for(const s of [...snapshot.directories,...snapshot.sources]) {
+    try {const now=statSync(s.path),directory=directoryPaths.has(s.path);
+      if(snapshot.missingDirectories.has(s.path))throw Error("TweakDB source directory appeared during the build; rerun.");
+      if((!directory&&now.size!==s.size)||Math.abs(now.mtimeMs-s.mtimeMs)>0.01)throw Error("TweakDB sources changed during the build; rerun.");
+    }catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT"&&snapshot.missingDirectories.has(s.path))continue;throw error;}
+  }
 }
 export function worldRecordNames(files:readonly SourceStamp[]):ReadonlyMap<string,string|null> {
   const key=JSON.stringify(files);if(memo?.key===key)return memo.names;

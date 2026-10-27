@@ -19,7 +19,7 @@ export { validateContent } from "./world-content-validation.ts";
 import { indexJournal, mapMappins, mapWorkspot, type JournalIndex } from "./world-content-resources.ts";
 import type { WorldPack, Vec3 } from "./model.ts";
 import { TextTable, gameTextPaths } from "../../xf-studio/authoring/src/game/game-text";
-import { worldNameSources, worldRecordNames } from "./world-content-names.ts";
+import { worldNameSources, worldRecordNames, checkWorldNameSources } from "./world-content-names.ts";
 import { addWorldTexts, resolvePoiTitles } from "./world-content-titles.ts";
 import { resolveContentRecords } from "./world-content-people.ts";
 import { tweakDbOf } from "../../xf-studio/authoring/src/character/host/clothing-host";
@@ -29,30 +29,33 @@ import { updateWorldIndex } from "./world-content-index.ts";
 const BASE="base\\worlds\\03_night_city\\_compiled\\default\\";
 const BLOCKS=[BASE+"blocks\\all.streamingblock",BASE+"ep1\\blocks\\all.streamingblock"];
 const digest=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
+export function worldContentSourceFingerprint(sources:readonly SourceStamp[],pack:WorldPack,reader=WORLD_CONTENT_READER,names:readonly SourceStamp[]=[]) {
+  return digest({sources,names,pack,reader,native:NATIVE_READER_VERSION,sector:SECTOR_READER_VERSION,contentSector:CONTENT_SECTOR_VERSION,policy:CONTENT_POLICY,localisation:gameTextPaths("en-us",sources.some(s=>/[\\/]ep1[\\/]/.test(s.path)))});
+}
 export function worldContentCacheKey(sources:readonly SourceStamp[],pack:WorldPack,slice:string,reader=WORLD_CONTENT_READER,names:readonly SourceStamp[]=[]) {
-  return digest({sources,names,pack,slice,reader,native:NATIVE_READER_VERSION,sector:SECTOR_READER_VERSION,contentSector:CONTENT_SECTOR_VERSION,policy:CONTENT_POLICY});
+  return digest({fingerprint:worldContentSourceFingerprint(sources,pack,reader,names),slice});
 }
 /** Probe the small assembled file before opening archive indexes. Damaged entries rebuild atomically. */
 export async function cachedWorldContent(file:string,key:string,build:()=>Promise<WorldContent>,signal:AbortSignal) {
   signal.throwIfAborted();
   try {
     const size=statSync(file).size;
-    if(size>0&&size<=CONTENT_FILE_CAP) {const content=JSON.parse(readFileSync(file,"utf8")) as WorldContent;validateContent(content,key);return {content,cached:true};}
+    if(size>0&&size<=CONTENT_FILE_CAP) {const content=JSON.parse(readFileSync(file,"utf8")) as WorldContent;validateContent(content,key);return {content,cached:true,bytes:size};}
   } catch { /* A miss, changed key or damaged file is regenerated. */ }
   const content=await build();signal.throwIfAborted();validateContent(content,key);
   const json=JSON.stringify(content);
   if(Buffer.byteLength(json)>CONTENT_FILE_CAP)throw new NativeBudgetError("Slice exceeds 32 MiB; use a smaller slice.");
   mkdirSync(dirname(file),{recursive:true});const tmp=join(dirname(file),`.${randomUUID()}.tmp`);
   try {writeFileSync(tmp,json,{flag:"wx"});signal.throwIfAborted();renameSync(tmp,file);}finally{rmSync(tmp,{force:true});}
-  return {content,cached:false};
+  return {content,cached:false,bytes:Buffer.byteLength(json)};
 }
 interface Descriptor { resource:string; min:Vec3; max:Vec3; ranges:number[]; source:number; level:number }
 export async function buildWorldContent(options:{root:string;pack:WorldPack;slice:string;directory:string;signal:AbortSignal;now?:()=>string}) {
   const {root,pack,directory,signal}=options,slice=selectSlice(pack,options.slice),sources=vanillaSources(root),ep1=sources.some(s=>/[\\/]ep1[\\/]/.test(s.path));
-  const names=worldNameSources(root,ep1),key=worldContentCacheKey(sources,pack,slice.id,WORLD_CONTENT_READER,names.sources);
+  const names=worldNameSources(root,ep1),fingerprint=worldContentSourceFingerprint(sources,pack,WORLD_CONTENT_READER,names.sources),key=digest({fingerprint,slice:slice.id});
   const unchanged=()=>{for(const s of sources){const now=statSync(s.path);if(now.size!==s.size||now.mtimeMs!==s.mtimeMs)throw Error("Vanilla archives changed during the build; rerun.");}
     if(digest(vanillaSources(root))!==digest(sources))throw Error("Vanilla mount list changed during the build; rerun.");
-    if(digest(worldNameSources(root,ep1).sources)!==digest(names.sources))throw Error("TweakDB sources changed during the build; rerun.");};
+    checkWorldNameSources(names);};
   const result=await cachedWorldContent(join(directory,`${slice.id}.content.json`),key,async()=>{
     const db=tweakDbOf(root,ep1);
     const oodle=loadGameOodle(root),pool=new NativeArchivePool(oodle.decompress),workers=new SectorWorkers(1,"content");
@@ -117,5 +120,5 @@ export async function buildWorldContent(options:{root:string;pack:WorldPack;slic
         records:recordTable,communities:out.communities,spots:out.spots,spawners:out.spawners,pois:out.pois,counts:out.counts};
     } finally {try {await workers.shutdown();cache.trim();}finally{cache.end();pool.close();oodle.close();}}
   },signal);
-  unchanged();updateWorldIndex(directory,result.content,slice,signal);return result;
+  await updateWorldIndex(directory,result.content,slice,signal,{fingerprint,bytes:result.bytes});return result;
 }

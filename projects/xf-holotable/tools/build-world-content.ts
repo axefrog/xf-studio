@@ -4,7 +4,7 @@ import { LocalSettingsStore } from "../../xf-studio/authoring/src/setup/host/loc
 import { loadWorldPack } from "../src/world.ts";
 import { buildWorldContent } from "../src/world-content-source.ts";
 
-import { readWorldIndex } from "../src/world-content-index.ts";
+import { listWorldIndex } from "../src/world-content-index.ts";
 
 const args=process.argv.slice(2),options=new Map<string,string>();
 for(let i=0;i<args.length;i++) {
@@ -13,7 +13,7 @@ for(let i=0;i<args.length;i++) {
   options.set(args[i],args[++i]);
 }
 const directory=options.get("--out")??resolve(import.meta.dir,"../../../local/holotable/world");
-if(options.has("--list")){console.log(JSON.stringify(readWorldIndex(directory)??{schema:"xfh/world-index-1",source:null,slices:[]},null,2));process.exit(0);}
+if(options.has("--list")){console.log(JSON.stringify(listWorldIndex(directory)??{schema:"xfh/world-index-1",source:null,slices:[]},null,2));process.exit(0);}
 const slice=options.get("--slice");if(!slice)throw Error("--slice is required.");
 const local=resolve(import.meta.dir,"../../../local/holotable"),pack=loadWorldPack(options.get("--pack")??resolve(local,"world-pack.json"));
 if(!pack)throw Error("Build the world pack first, or provide --pack.");

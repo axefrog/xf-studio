@@ -207,7 +207,7 @@ export function createService(options: ServiceOptions) {
       signal.throwIfAborted();
       // A child may have restarted since the explicit acquire; a region read restores its demand.
       if(p.content===true)renewContent(p,signal);
-      return { ...(w ? region(w, boxOf(path), margin) : { schema: "xfh/world-pack-1", provenance: null, areas: [], cells: [] }), ...geometry, content: content.around(w ?? undefined, path, margin, p.content === true, signal) };
+      return { ...(w ? region(w, boxOf(path), margin) : { schema: "xfh/world-pack-1", provenance: null, areas: [], cells: [] }), ...geometry, content: content.around(w ?? undefined, path, margin, p.content === true, signal, typeof p.contentConsumer==="string"?p.contentConsumer:undefined) };
     },
     "session.report": async (p, signal) => {
       if (typeof p.t !== "number") throw coded("bad_request", "No moment given");

@@ -1,11 +1,12 @@
-import { expect, test } from "bun:test";
+import { expect, test, spyOn } from "bun:test";
 import { join } from "node:path";
 import { mkdirSync, rmSync, writeFileSync, statSync, utimesSync } from "node:fs";
 import { tempDir } from "../../xf-studio/authoring/tests/temp-dir";
 import { tweakDbId, type TweakValue } from "../../xf-studio/authoring/src/game/tweakdb-flats";
 import { TextTable } from "../../xf-studio/authoring/src/game/game-text";
 import { RedHandle, RedObject } from "../../xf-studio/authoring/src/native/red-model";
-import { reverseRecordNames, tweakRecordNames, worldRecordNames, worldNameSources, REDMOD_DISCOVERY_LIMITS } from "../src/world-content-names";
+import * as discovery from "../src/world-content-names";
+import { reverseRecordNames, tweakRecordNames, worldRecordNames, worldNameSources, checkWorldNameSources, REDMOD_DISCOVERY_LIMITS } from "../src/world-content-names";
 import { NativeBudgetError } from "../../xf-studio/authoring/src/native/native-errors";
 import { addWorldTexts, resolvePoiTitles } from "../src/world-content-titles";
 import { indexJournal } from "../src/world-content-resources";
@@ -36,7 +37,8 @@ test("assembled cache hits inspect only stamps; only a miss loads the TweakDB bl
  const content:WorldContent={schema:"xfh/world-content-1",slice:{id:"test",title:"Test",places:["Districts.Test"]},source:{game:"fixture",archives:"fixture",reader:WORLD_CONTENT_READER,built:"fixture",key},records:{},communities:[],spots:[],spawners:[],pois:[],counts};
  const file=join(directory,"test.content.json");writeFileSync(file,JSON.stringify(content));
  const options={root,pack,directory,slice:"test",signal:new AbortController().signal};
- expect((await buildWorldContent(options)).cached).toBe(true);
+ const scan=spyOn(discovery,"worldNameSources");
+ try{expect((await buildWorldContent(options)).cached).toBe(true);expect(scan).toHaveBeenCalledTimes(1);}finally{scan.mockRestore();}
  rmSync(file);await expect(buildWorldContent(options)).rejects.toThrow("not a TweakDB blob");
 });
 
@@ -96,4 +98,20 @@ test("offer and race records resolve the game's fields; ambiguous and missing lo
  const pois:Poi[]=["race","offer0","offer1","ambiguous"].map(journal=>({id:journal,place:"fixture",at:[0,0,0],kind:"Kind",journal}));
  resolvePoiTitles(pois,journal,{lookup:()=>values},texts,coverage());
  expect(pois.map(p=>p.title)).toEqual(["Circuit","Brand City car","City apartment",undefined]);
+});
+
+test("enumeration metadata detects in-place edits that root directory mtimes and counts miss",()=>{
+ const root=tempDir("w1-source-metadata-"),base=join(root,"tools/redmod/tweaks/base"),nested=join(base,"nested");mkdirSync(nested,{recursive:true});
+ const file=join(nested,"one.tweak");writeFileSync(file,"package Test\none {}\n");const beforeRoot=statSync(base).mtimeMs,beforeDir=statSync(nested).mtimeMs;
+ const nativeStats={entries:0,directories:0,fileStats:0,native:false},a=worldNameSources(root,false,REDMOD_DISCOVERY_LIMITS,{stats:nativeStats});
+ const portable=worldNameSources(root,false,REDMOD_DISCOVERY_LIMITS,{portable:true});expect(a.files.map(f=>[f.path,f.size])).toEqual(portable.files.map(f=>[f.path,f.size]));expect(a.files[0].mtimeMs).toBeCloseTo(portable.files[0].mtimeMs,2);
+ if(process.platform==="win32"&&process.arch==="x64"){expect(nativeStats.native).toBe(true);expect(nativeStats.fileStats).toBe(0);}
+ writeFileSync(file,"package Test\ntwo {}\n");utimesSync(file,new Date(),new Date(a.files[0].mtimeMs+2000));utimesSync(base,new Date(),new Date(beforeRoot));utimesSync(nested,new Date(),new Date(beforeDir));
+ const b=worldNameSources(root,false);expect(b.files).toHaveLength(a.files.length);expect(b.sources).not.toEqual(a.sources);expect(()=>checkWorldNameSources(a)).toThrow();
+});
+test("a captured discovery list detects additions, removals and the appearance of a formerly absent root before publication",()=>{
+ const root=tempDir("w1-source-changes-"),base=join(root,"tools/redmod/tweaks/base");mkdirSync(base,{recursive:true});
+ const absent=worldNameSources(root,true);mkdirSync(join(root,"tools/redmod/tweaks/ep1"));expect(()=>checkWorldNameSources(absent)).toThrow();
+ const initial=worldNameSources(root,false);writeFileSync(join(base,"one.tweak"),"package Test\none {}");utimesSync(base,new Date(),new Date(initial.directories[0].mtimeMs+2000));expect(()=>checkWorldNameSources(initial)).toThrow();
+ const present=worldNameSources(root,false);rmSync(join(base,"one.tweak"));expect(()=>checkWorldNameSources(present)).toThrow();
 });
