@@ -1,24 +1,28 @@
 /**
  * The four assessment probes at main 4dec2131. These intentionally assert the present failures,
- * not xfail/skip. The fixing slice changes only the corresponding expected message to null;
+ * not xfail/skip. The fixing slice changes only the corresponding expected failure to null;
  * its positive construction gate supplies the behavior assertions. No placeholder facade counts.
  */
 import { describe, expect, test } from "bun:test";
-import { createTrustedAuthoringCore, type StudioComposition } from "../src/app/trusted-authoring-core";
+import { createAuthoringEditing, createTrustedAuthoringCore, type StudioComposition } from "../src/app/trusted-authoring-core";
 import { StudioApplication } from "../src/app/studio-application";
 import { freshWorkspace, loadWorkspace } from "../src/app/workspace/workspace-state";
 import { STUDIO_COMPOSITION, STUDIO_OWNERS } from "../src/compose/studio-registry";
 import { emptyRecipe } from "../src/engines/layered-makeup/recipe";
 import { Registry } from "../src/platform/core/registry";
+import { createHistoryService } from "../src/platform/core/history-service";
 import { StudioRuntime } from "../src/studio-ui/runtime";
 import type { Port } from "../src/studio-ui/runtime";
 import type { Feedback } from "../src/studio-ui/feedback";
 import { zeroFeatureComposition } from "./fixtures/editor-composition";
 
-function probe(run: () => unknown, expected: string | null) {
-  let failure: string | null = null;
-  try { run(); } catch (error) { failure = error instanceof Error ? error.message : String(error); }
-  expect(failure).toBe(expected);
+function probe(run: () => unknown, expected: ErrorConstructor | string | null) {
+  let failure: unknown = null;
+  try { run(); } catch (error) { failure = error; }
+  // Only application-authored diagnostics name their coupling in text; never match VM-generated TypeErrors.
+  if (typeof expected === "string") expect(failure).toMatchObject({ message: expected });
+  else if (expected) expect(failure).toBeInstanceOf(expected);
+  else expect(failure).toBeNull();
 }
 
 // The current input still mandates `live` and `region`. Only these negative probes bridge that
@@ -30,15 +34,26 @@ function legacyZeroComposition(): StudioComposition {
 
 describe("CORE-03 captured startup failures", () => {
   test("slice 3 flips: cold workspace load dereferences the absent live feature's part", () => {
-    probe(() => loadWorkspace({ getItem: () => null }, true, legacyZeroComposition().documents),
-      "undefined is not an object (evaluating 'model.parts.feature(model.live).part')");
+    const expected: ErrorConstructor | null = TypeError;
+    const { documents } = legacyZeroComposition(), lookups: string[] = [];
+    const feature = documents.parts.feature.bind(documents.parts);
+    documents.parts.feature = id => { lookups.push(id); return feature(id); };
+    probe(() => loadWorkspace({ getItem: () => null }, true, documents), expected);
+    if (expected !== null) { expect(lookups).toEqual(["eye-makeup"]); expect(feature("eye-makeup")).toBeUndefined(); }
   });
 
-  test("slice 4 flips: preseeded workspace cannot construct the trusted core without eye makeup", () => {
-    probe(() => {
-      const core = createTrustedAuthoringCore(freshWorkspace(emptyRecipe()), { resetStack() {}, selectedCollection: () => "draft" }, legacyZeroComposition());
-      core.app.dispose(); core.document.dispose();
-    }, "The live feature eye-makeup is not a registered feature with gestures.");
+  test("slice 4 flips: preseeded workspace cannot construct editing services without eye makeup", () => {
+    const expected: ErrorConstructor | null = Error;
+    const composition = legacyZeroComposition(), lookups: string[] = [], history = createHistoryService();
+    const owner = composition.registry.owner.bind(composition.registry), scope = "look:probe/empty";
+    composition.registry.owner = id => { lookups.push(id); return owner(id); };
+    try {
+      probe(() => {
+        createAuthoringEditing(freshWorkspace(emptyRecipe()),
+          { history, scope, resetStack() {}, selectedCollection: () => "draft" }, composition);
+      }, expected);
+      if (expected !== null) { expect(lookups).toEqual(["eye-makeup"]); expect(owner("eye-makeup")).toBeUndefined(); }
+    } finally { history.close(scope); }
   });
 
   test("slice 5 flips: removing only eye makeup leaves an extra application handler", () => {
@@ -54,8 +69,9 @@ describe("CORE-03 captured startup failures", () => {
 
   test("slice 7 flips: shell runtime reads finishCatalogue from an absent makeup facade", () => {
     // Honest missing feature. The constructor must not need any other port member to reach this probe.
-    const port = { authoring: { actionDescriptors: () => ({}) }, feature: () => undefined } as unknown as Port;
-    probe(() => new StudioRuntime(port, {} as Feedback),
-      "undefined is not an object (evaluating 'this.eyeMakeup.finishCatalogue')");
+    const expected: ErrorConstructor | null = TypeError, lookups: string[] = [];
+    const port = { authoring: { actionDescriptors: () => ({}) }, feature: (id: string) => { lookups.push(id); return undefined; } } as unknown as Port;
+    probe(() => new StudioRuntime(port, {} as Feedback), expected);
+    if (expected !== null) expect(lookups).toEqual(["eye-makeup"]);
   });
 });
