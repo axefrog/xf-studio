@@ -131,6 +131,24 @@ test("G3 seed 1875: dragging a peer on a partial Redo branch keeps the retained 
   ]);
 });
 
+test("G3 seed 679: a split peer captured while hidden returns to one complete floating window", () => {
+  run(679, [
+    { op: "close", tab: 5, panel: 14, value: 7737 }, { op: "new", tab: 4, panel: 11, value: 2779 },
+    { op: "addView", tab: 14, panel: 13, value: 7073 }, { op: "split", tab: 6, panel: 8, value: 3204 },
+    { op: "follow", tab: 14, panel: 7, value: 6431 }, { op: "hide", tab: 10, panel: 8, value: 2059 },
+    { op: "undo", tab: 9, panel: 15, value: 2456 }, { op: "duplicate", tab: 12, panel: 11, value: 8053 },
+  ]);
+});
+
+test("G3 seed 664: Show on a partial branch keeps its chosen floating-window order", () => {
+  run(664, [
+    { op: "add", tab: 11, panel: 8, value: 6879 }, { op: "park", tab: 4, panel: 5, value: 9266 },
+    { op: "addView", tab: 13, panel: 4, value: 7393 }, { op: "add", tab: 1, panel: 15, value: 9986 },
+    { op: "split", tab: 14, panel: 5, value: 4165 }, { op: "point", tab: 7, panel: 7, value: 8103 },
+    { op: "show", tab: 3, panel: 8, value: 7433 },
+  ]);
+});
+
 
 test("P3-vi generator: tombstone, restore, detach, expiry, purge and restart match the independent retention model", async () => {
   const { generateRecoverySeeds } = await import("./fixtures/profile-session-generator");

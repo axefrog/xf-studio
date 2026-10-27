@@ -20,7 +20,7 @@ import type { CreatorCatalogue } from "../../character/creator-catalogue";
 import { CollectionOwner, type CollectionVersionsPort } from "../../library/collection-owner";
 import { LookSessions } from "../../library/look-sessions";
 import type { LookRef } from "../../library/collection-documents";
-import type { ViewGraphData } from "../../platform/api/view-graph";
+import { viewTitles, type ViewGraphData } from "../../platform/api/view-graph";
 import { documentKey } from "../../platform/api/document-commands";
 import { CHARACTER_KIND } from "../../platform/api/characters";
 import { targetPresent } from "../../platform/api/target-status";
@@ -39,6 +39,8 @@ import { LayoutDefaults, type ContributedDefaultsSource, type ContributedLayoutD
 import type { FragmentKnowledge, SceneCandidate, SubstitutionContext } from "./layout-fragment";
 import { TabDefaults } from "./tab-defaults";
 import { upgradePhaseOneSession } from "./profile-session-upgrade";
+import type { BindingTargetOption } from "./panel-bindings";
+import { bindingKey } from "./bindings";
 
 export type ProfileServices = {
   readonly profiles: ProfileService;
@@ -100,6 +102,39 @@ export function openProfileSession(workspace: WorkspaceState, services: Pick<Pro
 export function tabDefaults(state: ProfileSessions, services: Pick<ProfileServices, "profiles" | "collections" | "characters" | "defaults">,
   build: { keepsState?(type: string): boolean; known?: FragmentKnowledge } = {}): TabDefaults {
   return new TabDefaults({ sessions: state, defaults: services.defaults, ...build, candidates: () => substitutionContext(state, services) });
+}
+
+/** Candidate identities and names only. The binding world supplies owner status; no candidate acquires an editor or preview. */
+export function panelBindingTargets(state: ProfileSessions, services: Pick<ProfileServices, "profiles" | "collections">,
+  world: import("./bindings").BindingWorld): readonly BindingTargetOption[] {
+  const data = state.session(), profile = services.profiles.profile(state.profile), options: BindingTargetOption[] = [], known = new Set<string>();
+  const add = (option: BindingTargetOption) => { const key = bindingKey(option.binding); if (!known.has(key)) { known.add(key); options.push(option); } };
+  for (const tab of data.tabs) {
+    const views = data.views.views.filter(view => view.tab === tab.id), titles = viewTitles(views);
+    views.forEach((view, index) => add({ binding: { policy: "pinned", target: { view: view.id } }, name: titles[index]!, tabs: [{ id: tab.id, name: tab.name }] }));
+  }
+  for (const scene of data.views.scenes) {
+    const views = data.views.views.filter(view => view.scene === scene.id), tabs = data.tabs.filter(tab => views.some(view => view.tab === tab.id)).map(tab => ({ id: tab.id, name: tab.name }));
+    const viewName = options.find(option => "view" in option.binding.target && option.binding.target.view === views[0]?.id)?.name;
+    add({ binding: { policy: "pinned", target: { scene: scene.id } }, name: viewName ? `Scene of ${viewName}` : "Scene", tabs });
+  }
+  // Detached membership keeps resolving through existing scenes/pins, but is not a new direct choice (§1.4).
+  const subjects = profile?.subjects ?? [];
+  const looks = (profile?.collections ?? []).flatMap(collection => {
+    const view = services.collections.collection(collection);
+    return [...view?.looks ?? [], ...(view?.removed ?? []).map(removed => removed.look)].map(look => ({ collection, look }));
+  });
+  for (const tab of data.tabs) for (const panel of tab.panels) if (panel.binding?.policy === "pinned") {
+    const pin = panel.binding.target;
+    if ("view" in pin && !world.views[pin.view]) add({ binding: panel.binding, name: "Closed 3D view" });
+    if ("scene" in pin && !world.scenes[pin.scene]) add({ binding: panel.binding, name: "Removed scene" });
+  }
+  const tabsShowing = (matches: (scene: typeof data.views.scenes[number]) => boolean) => data.tabs.filter(tab => data.views.views.some(view => view.tab === tab.id && data.views.scenes.some(scene => scene.id === view.scene && matches(scene)))).map(tab => ({ id: tab.id, name: tab.name }));
+  for (const ref of subjects) add({ binding: { policy: "pinned", target: { subject: ref } }, name: world.subject(ref).label ?? `Unavailable ${ref.kind}`,
+    parent: ref.kind, tabs: tabsShowing(scene => scene.subject?.kind === ref.kind && scene.subject.id === ref.id) });
+  for (const ref of looks) add({ binding: { policy: "pinned", target: { look: ref } }, name: world.look(ref).label ?? "Unavailable look",
+    parent: services.collections.collection(ref.collection)?.name ?? "Collection", tabs: tabsShowing(scene => scene.look?.collection === ref.collection && scene.look.look === ref.look) });
+  return options;
 }
 /**
  * What a new tab can be filled from: the profile's subjects that still exist (a deleted V stays a member, design §1.4, but is never

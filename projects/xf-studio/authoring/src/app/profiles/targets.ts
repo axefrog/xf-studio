@@ -16,7 +16,7 @@ import type { LookRef } from "../../library/collection-documents";
 import { nameTargets, type NamedTargets } from "../action-targets";
 import type { ActionDescriptor } from "../../platform/api/actions";
 import { type BindingWorld, type CaptureData, captureCurrent, type ConstraintRule, type PanelContext, type Resolution, resolveBinding,
-  type Target } from "./bindings";
+  type Target, bindingTarget } from "./bindings";
 import type { PanelBinding, TabId } from "./profile-session";
 
 /** One frozen resolution (§3.3): what it named, until its signal is aborted. */
@@ -175,6 +175,28 @@ export class TargetResolver {
     const panel = this.deps.session.panel(instance), tab = panel?.tab, origin = JSON.stringify(this.deps.origin?.(instance, tab));
     return () => !panel || !this.deps.session.panel(instance) || origin !== JSON.stringify(this.deps.origin?.(instance, tab))
       ? refusal("missing_target", "That panel changed. Open the command again.") : { available: true };
+  }
+
+  /** A binding choice validates the old structural destination and the chosen new chain, never the old dangling document. */
+  bindingCapture(instance: string, binding: PanelBinding, signal: AbortSignal): () => Capability {
+    if (binding.policy === "follow-focus") {
+      const structural = this.structural(instance);
+      return () => signal.aborted ? refusal("missing_target", "That chooser was closed.") : structural();
+    }
+    const world = this.world(), panel = this.deps.session.panel(instance);
+    const resolution = resolveBinding(world, { tab: panel?.tab ?? this.deps.session.tab(), binding, context: this.context(instance), rules: this.deps.rules });
+    const target = bindingTarget(world, binding, resolution.target), structural = this.structural(instance), capture = this.captureTarget(resolution.target ?? {}, signal, instance);
+    // Owner versions move on local/external edits, never acknowledgement/progress. Recovery facts matter even without a live chain.
+    const states = (now: BindingWorld) => JSON.stringify([target.subject ? state(now.subject(target.subject)) : null, target.look ? state(now.look(target.look)) : null]);
+    const state = (status: import("../../platform/api/target-status").OwnerTargetStatus) => [status.state, status.content, status.revision];
+    const before = states(world);
+    return () => {
+      if (signal.aborted) return refusal("missing_target", "That chooser was closed.");
+      const origin = structural(); if (!origin.available) return origin;
+      const current = this.current(capture);
+      return !current.available ? current : states(this.world()) !== before
+        ? refusal("missing_target", "That target changed. Open the chooser again.") : { available: true };
+    };
   }
   // ----- Captures -----
   /** Freeze what `instance` resolves to now (§3.3) until `signal` is aborted. */

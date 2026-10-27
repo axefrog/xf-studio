@@ -74,7 +74,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   panelInstance?: (panel: string, tab?: string) => string;
   capturePort?: (signal: AbortSignal) => StudioPresentationPort<Slot>;
   panelViewport?: (input: { core: Core; named: NamedTargets; instance: string; signal: AbortSignal; check(): Capability }) => ViewportAttachment<Slot>;
-  panelTargets?: Pick<StudioPresentationPort<Slot>["panels"], "target" | "tabTarget" | "capture">;
+  panelTargets?: Pick<StudioPresentationPort<Slot>["panels"], "target" | "tabTarget" | "capture" | "bindings">;
   tabs?: import("./profiles/tab-presentation").LayoutTabsPort;
   starters?: import("./starters/starter-actions").StartersPort;
   emptyChoices?: import("./profiles/empty-choices").EmptyChoicesPort;

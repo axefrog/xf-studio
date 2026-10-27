@@ -12,7 +12,7 @@ import { readStarterShape } from "../../src/engines/layered-makeup/starter-shape
 import type { DiagnosticsActions } from "../../src/diagnostics/actions";
 import type { Recipe } from "../../src/engines/layered-makeup/recipe";
 import { createProfileAuthoring } from "../../src/app/profiles/profile-authoring";
-import { createProfileServices, createTargetResolver, sceneCommands, historyScopeDetails, historyScopeName } from "../../src/app/profiles/profile-window";
+import { createProfileServices, createTargetResolver, sceneCommands, historyScopeDetails, historyScopeName, panelBindingTargets } from "../../src/app/profiles/profile-window";
 import { sessionOfWorkspace } from "../../src/app/profiles/profiles-migration-data";
 import { profileSessionOf, type ProfileSessionData } from "../../src/app/profiles/profile-session";
 import { createTrustedStudioBootstrap } from "../../src/app/trusted-studio-bootstrap";
@@ -41,7 +41,7 @@ import { openTestLibrary, type TestLibrary } from "./library-file";
 import { libraryPort, libraryVersions, storedLook } from "./profile-studio";
 
 export type ContextRestart = { library: TestLibrary; session: ProfileSessionData; profile: string; looks: LookRef[]; vs: string[] };
-export async function profileContextStudio(options: { clock?: Clock; now?: () => number; restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"]; diagnostics?: DiagnosticsActions; starters?: boolean; recipe?: () => Recipe; modInstall?: ModInstallActions; presets?: PartPresetService; modules?: readonly ModuleService[]; viewPanels?: boolean; available?: (type: string) => boolean; panelViewport?: Parameters<typeof createTrustedStudioBootstrap<HTMLElement>>[0]["panelViewport"] } = {}) {
+export async function profileContextStudio(options: { clock?: Clock; now?: () => number; restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"]; diagnostics?: DiagnosticsActions; starters?: boolean; recipe?: () => Recipe; modInstall?: ModInstallActions; presets?: PartPresetService; modules?: readonly ModuleService[]; viewPanels?: boolean; available?: (type: string) => boolean; generation?: (type: string) => number; panelViewport?: Parameters<typeof createTrustedStudioBootstrap<HTMLElement>>[0]["panelViewport"] } = {}) {
   const library = options.restart?.library ?? openTestLibrary(undefined, { clock: options.clock }), transport = libraryPort(library), storage = memoryOutboxStorage();
   const outbox = new DocumentOutbox(transport, storage, { retryMs: 5 }); outbox.open();
   const history = createHistoryService(), workspace = freshWorkspace(), host = await fixtureHost();
@@ -59,10 +59,12 @@ export async function profileContextStudio(options: { clock?: Clock; now?: () =>
       const answer = services.collections.dispatch({ kind: "collection.create", id: collection, name: `Collection ${n}`, looks: inputs });
       if (!answer.ok) throw Error(answer.reason);
       looks.push(...inputs.map(look => ({ collection, look: look.id })));
+      const member = await services.profiles.dispatch({ kind: "profile.addCollection", profile, base: services.profiles.profile(profile)!.revision, collection });
+      if (!member.ok) throw Error(member.reason);
     }
     vs = [];
     for (const body of ["female", "male", "female"] as const) {
-      const answer = await services.characters.create({ source: { kind: "default", bodyGender: body } });
+      const answer = await services.characters.create({ source: { kind: "default", bodyGender: body }, profile: { id: profile, base: services.profiles.profile(profile)!.revision } });
       if (!answer.ok) throw Error(answer.reason); vs.push(answer.character);
     }
     const seed = sessionOfWorkspace(workspace, { tab: "Contexts", character: vs[0], look: looks[0] }, seededRandom(27));
@@ -85,9 +87,11 @@ export async function profileContextStudio(options: { clock?: Clock; now?: () =>
   let resets = 0, shows = 0;
   const authoring = createProfileAuthoring(workspace, { history, views: session.graph, selectedCollection: () => "fixture", resetStack: () => { resets++; } },
     STUDIO_COMPOSITION, { owner: services.collections, sessions: services.looks, outbox, note: text => notes.push(text), report: error => failures.push(error), shown: () => { shows++; } });
-  const core = authoring.core, targets = createTargetResolver({ state: session, history, services, available: options.available, contexts: type => STUDIO_CATALOGUE.context(type) });
+  const core = authoring.core, targets = createTargetResolver({ state: session, history, services, available: options.available, generation: options.generation, contexts: type => STUDIO_CATALOGUE.context(type) });
   if (options.presets) core.app.attach({ presets: options.presets });
-  core.app.attach({ scenes: sceneCommands(session, services), panels: panelCommands(session, targets), targetCheck: targets,
+  const panelActions = panelCommands(session, targets, undefined, { bindingTargets: () => panelBindingTargets(session, services, targets.world()) });
+  const layoutDefaults = tabDefaults(session, services);
+  core.app.attach({ scenes: sceneCommands(session, services), panels: panelActions, tabs: layoutDefaults, targetCheck: targets,
     historyScopeDetails: scope => historyScopeDetails(scope, { services, history }) });
   let drawn = session.session().views.views[0]!.id;
   const scene = session.graph.node(drawn, "scene").id, sceneOf = () => session.graph.viewIds().includes(drawn) ? session.graph.node(drawn, "scene").id : undefined;
@@ -107,7 +111,7 @@ export async function profileContextStudio(options: { clock?: Clock; now?: () =>
   const viewport = new ViewportAttachment<HTMLElement>({ moveHost: () => {}, measure: () => ({ width: 300, height: 600 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => false,
     hitAt: () => undefined, queryContext: hit => core.app.contextQuery(hit) });
-  const emptyChoices = emptyChoicesPort({ session, resolver: targets, services, panels: panelCommands(session, targets),
+  const emptyChoices = emptyChoicesPort({ session, resolver: targets, services, panels: panelActions,
     ownerType: (instance, route) => route === "look" ? "presets" : route === "subject" ? "view" : STUDIO_CATALOGUE.primary(session.panel(instance)?.type ?? "")?.id,
     starter: () => starterParts(core.documents), createLookCapability: () => ({ available: true }), access: () => ({ available: true }),
     baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) });
@@ -121,8 +125,8 @@ export async function profileContextStudio(options: { clock?: Clock; now?: () =>
     focus: session.focus, starters: starterActions?.port(),
     scopeName: scope => historyScopeName(scope, { services, history }),
     panelInstance: (panel, tab) => session.instance(panel, tab),
-    panelTargets: { target: id => session.panelTarget(id), tabTarget: id => session.panelTabTarget(id), capture: id => targets.structural(id) },
-    tabs: layoutTabsPort(session, tabDefaults(session, services), services),
+    panelTargets: { bindings: panelActions.bindings(), target: id => session.panelTarget(id), tabTarget: id => session.panelTabTarget(id), capture: id => targets.structural(id) },
+    tabs: layoutTabsPort(session, layoutDefaults, services),
     targets, bound: { available: options.available, session, targets, looks: authoring.contexts, empty: authoring.empty, context: type => STUDIO_CATALOGUE.context(type), character: id => {
       if (!services.characters.character(id)) return undefined;
       const context = services.characters.context(id, { showSave: () => {} }); context.start(); return context;
@@ -138,6 +142,6 @@ export async function profileContextStudio(options: { clock?: Clock; now?: () =>
   let disposed = false;
   const dispose = async () => { if (disposed) return; disposed = true; for (const life of lives) life.abort(); off(); await settle(); boot.dispose(); authoring.drawn.dispose();
     for (const id of vs) await services.characters.release(id); outbox.stop(); };
-  return { emptyChoices, library, transport, outbox, storage, services, history, session, authoring, core, port, targets, looks, vs, get drawn() { return drawn; }, draw, scene, bind, collectionTransport, fileDevice, starters, settle, stored, dispose,
+  return { emptyChoices, panelActions, library, transport, outbox, storage, services, history, session, authoring, core, port, targets, looks, vs, get drawn() { return drawn; }, draw, scene, bind, collectionTransport, fileDevice, starters, settle, stored, dispose,
     failures, notes, counters: () => ({ resets, shows }) };
 }

@@ -95,8 +95,8 @@ Gesture proposals (sent inside a gesture session; the session owns the Undo step
 | `tabs.arrange` | workspace | workspace | none | tab: string, layout?: object |  |
 | `tabs.new` | workspace | workspace | none | default: string, choice?: object |  |
 | `tabs.reset` | workspace | workspace | none | tab: string, default?: string, choice?: object |  |
-| `tabs.saveAsDefault` | workspace | library | none | tab: string, name: string |  |
-| `tabs.updateDefault` | workspace | library | none | tab: string |  |
+| `tabs.saveAsDefault` | workspace | library | none | tab: string, name: string, baseline?: string |  |
+| `tabs.updateDefault` | workspace | library | none | tab: string, baseline?: string |  |
 | `defaults.rename` | workspace | library | none | default: string, name: string |  |
 | `defaults.delete` | workspace | library | recovery | default: string |  |
 | `defaults.restore` | workspace | library | recovery | default: string |  |
@@ -108,7 +108,7 @@ Gesture proposals (sent inside a gesture session; the session owns the Undo step
 | `panels.add` | workspace | workspace | transaction | destination: object, type: string, binding?: object, source?: object |  |
 | `panels.show` | workspace | workspace | transaction | destination: object |  |
 | `panels.remove` | workspace | workspace | transaction | destination: object |  |
-| `panels.setBinding` | workspace | workspace | transaction | destination: object, binding: object |  |
+| `panels.setBinding` | workspace | workspace | transaction | destination: object, binding: object, choice?: number |  |
 | `panels.reveal` | workspace | workspace | none | destination: object |  |
 | `panels.setTypeVisible` | workspace | workspace | transaction | destination: object, type: string, visible: boolean, instances: object |  |
 

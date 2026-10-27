@@ -18,6 +18,7 @@ export type LayoutTabsPort = {
   capture?(tab?: string): () => Capability;
   defaults(): readonly LayoutDefaultView[];
   substitution(id: string, choice?: SubstitutionChoice): ReturnType<TabDefaults["substitution"]>;
+  defaultSave?(tab: string): ReturnType<TabDefaults["defaultSave"]>;
   subject(ref: SubjectRef): string;
   look(ref: LookRef): string;
   collection(id: string): string;
@@ -41,6 +42,7 @@ export function layoutTabsPort(session: ProfileSessions, defaults: TabDefaults,
     },
     dock: (tab?: string) => session.dock(tab), defaults: () => services.defaults.list(),
     substitution: (id: string, choice?: SubstitutionChoice) => defaults.substitution(id, choice),
+    defaultSave: (tab: string) => defaults.defaultSave(tab),
     subject: (ref: SubjectRef) => ref.kind === "character" ? services.characters.character(ref.id)?.label ?? "Unnamed V" : ref.kind,
     look: (ref: LookRef) => services.collections.look(ref)?.name ?? "Unnamed look",
     collection: (id: string) => services.collections.collection(id)?.name ?? "Collection",

@@ -88,7 +88,7 @@ import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-s
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
-import { createProfileServices, createTargetResolver, drawnView as drawnViewOf, historyScopeName, historyScopeDetails, openProfileSession,
+import { createProfileServices, createTargetResolver, drawnView as drawnViewOf, historyScopeName, historyScopeDetails, panelBindingTargets, openProfileSession,
   sceneHeadTargets, sceneCommands, tabDefaults } from "../app/profiles/profile-window";
 import { starterParts } from "../app/workspace/collection-workspace";
 import { printDefault } from "../app/profiles/layout-fragment";
@@ -332,7 +332,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, generation: type => type === "view" || STUDIO_CATALOGUE.ids.includes(type) ? 0 : experiments.registrationGeneration(), available: type => type === "view" || layouts.catalogue().ids.includes(type), contexts: type => layouts.catalogue().context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
-  const panelActions = panelCommands(sessionState, targets, layouts.catalogue);
+  const panelActions = panelCommands(sessionState, targets, layouts.catalogue,
+    { bindingTargets: () => panelBindingTargets(sessionState, services, targets.world()), access: () => lease?.refusal() ?? { available: true } });
   core.app.attach({ targetCheck: targets, panels: panelActions,
     historyScopeDetails: scope => historyScopeDetails(scope, { services, history: historyService }) });
   const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
@@ -530,7 +531,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     },
     fileDevice: workspaceFiles, diagnostics, modules: moduleServices, experiments, lease, outbox: documents.outbox,
     panelInstance: (panel, tab) => sessionState.instance(panel, tab),
-    panelTargets: { target: id => sessionState.panelTarget(id), tabTarget: id => sessionState.panelTabTarget(id), capture: id => {
+    panelTargets: { bindings: panelActions.bindings(), target: id => sessionState.panelTarget(id), tabTarget: id => sessionState.panelTabTarget(id), capture: id => {
       const structural = targets.structural(id), destination = sessionState.panelTarget(id);
       return () => { const current = structural(); return current.available ? core.app.capability({ kind: "panels.show", destination }) : current; };
     } },

@@ -244,6 +244,19 @@ function fragmentBinding(binding: PanelBinding | undefined, keys: { view(id: str
   return { policy: "pinned", look: keys.look(target.look) };
 }
 
+/** U8 seam: only the saved default changes policy. The live tab and its external pins are untouched. */
+export function defaultBindingChanges(session: ProfileSessionData, tab: TabId) {
+  const source = session.tabs.find(item => item.id === tab), views = session.views.views.filter(view => view.tab === tab && view.kind === "3d" && VIEW_SLOTS.every(slot => typeof view[slot] === "string"));
+  return (source?.panels ?? []).flatMap(panel => {
+    const binding = panel.binding;
+    if (binding?.policy !== "pinned") return [];
+    const pin = binding.target;
+    const reason = "view" in pin && !views.some(view => view.id === pin.view) ? "external-view" as const
+      : "scene" in pin && !views.some(view => view.scene === pin.scene) ? "external-scene" as const : undefined;
+    return reason ? [{ instance: panel.id, type: panel.type, from: clone(binding), to: { policy: "follow-focus" as const }, reason }] : [];
+  });
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // Into a tab
 
@@ -353,6 +366,9 @@ export type Substitution = {
   readonly scenes: readonly { readonly key: string; readonly viewTitles: readonly string[]; readonly subject?: string; readonly look?: string; readonly shares: readonly SceneCandidate[];
     readonly chosen?: string }[];
   readonly oneClick: boolean;
+  /** U8 seam: direct pins whose chosen substitution is Leave empty become follow-focus in the new tab. */
+  readonly bindingChanges: readonly { readonly panel: string; readonly type: string; readonly from: FragmentBinding;
+    readonly to: { readonly policy: "follow-focus" }; readonly reason: "empty-subject" | "empty-look"; readonly slot: string }[];
 };
 const sameLook = (a: LookRef, b: LookRef) => a.collection === b.collection && a.look === b.look;
 
@@ -393,7 +409,15 @@ export function substitutionOf(fragment: LayoutFragment, context: SubstitutionCo
   }
   const oneClick = subjects.every(slot => slot.candidates.length <= 1) && looks.every(slot => !slot.needed || slot.candidates.length <= 1)
     && sceneChoices.every(scene => scene.shares.length <= 1);
-  return { subjects, looks, scenes: sceneChoices, oneClick };
+  const bindingChanges: Substitution["bindingChanges"][number][] = fragment.panels.flatMap(panel => {
+    const binding = panel.binding;
+    if (binding?.policy !== "pinned") return [];
+    const subject = binding.subject, look = binding.look;
+    const reason = subject && !subjects.find(slot => slot.key === subject)?.chosen ? "empty-subject" as const
+      : look && !looks.find(slot => slot.key === look)?.chosen ? "empty-look" as const : undefined;
+    return reason ? [{ panel: panel.key, type: panel.type, from: clone(binding), to: { policy: "follow-focus" as const }, reason, slot: (subject ?? look)! }] : [];
+  });
+  return { subjects, looks, scenes: sceneChoices, oneClick, bindingChanges };
 }
 /** The fill a substitution gives `instantiateFragment`. */
 export function fillOf(substitution: Substitution): FragmentFill {

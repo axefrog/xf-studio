@@ -86,6 +86,51 @@ function eligible(world: BindingWorld, view: ViewId, tab: TabId, context: PanelC
 }
 const passes = (context: PanelContext, target: Target, rules: readonly ConstraintRule[]) =>
   rules.every(rule => !rule.applies(context) || rule.check(target).available);
+
+export type BindingRuleResult = { readonly id: string; readonly capability: Capability };
+/** Semantic identity, independent of object/key order. Used only for transient choices, never a stored binding format. */
+export function bindingKey(binding: PanelBinding): string {
+  if (binding.policy === "follow-focus") return JSON.stringify([binding.policy]);
+  const pin = binding.target;
+  return JSON.stringify("view" in pin ? ["view", pin.view] : "scene" in pin ? ["scene", pin.scene]
+    : "subject" in pin ? ["subject", pin.subject.kind, pin.subject.id] : ["look", pin.look.collection, pin.look.look]);
+}
+/** Pin kinds are a context contract shared by the resolver, candidate projection and command validation. */
+export function bindingKindCompatible(context: PanelContext, pin: "view" | "scene" | "subject" | "look"): boolean {
+  return context.kind === "view" ? pin === "view" : context.kind === "scene" ? pin === "view" || pin === "scene"
+    : context.kind === "subject" ? pin !== "look" : context.kind === "look" ? pin !== "subject" : false;
+}
+/** Named constraint results; owners recheck these at dispatch rather than inferring a reason from resolution text. */
+export function bindingRules(world: BindingWorld, context: PanelContext, binding: PanelBinding, target: Target,
+  rules: readonly ConstraintRule[] = []): readonly BindingRuleResult[] {
+  const pin = binding.policy === "pinned" ? binding.target : undefined, kind = pin && ("view" in pin ? "view" : "scene" in pin ? "scene" : "subject" in pin ? "subject" : "look");
+  const scene = target.scene ? world.scenes[target.scene] : undefined;
+  const subject = target.subject ?? (pin && "subject" in pin ? pin.subject : undefined);
+  const result: BindingRuleResult[] = [{ id: "binding.target-kind", capability: !kind || bindingKindCompatible(context, kind)
+    ? { available: true } : refusal("incompatible_mode", "This panel can't use that kind of target.") }];
+  if (context.kind !== "profile") result.push({ id: "binding.scene-kind", capability: !scene || !context.scenes || context.scenes.includes(scene.kind)
+    ? { available: true } : refusal("incompatible_mode", "This panel can't use that kind of scene.") });
+  if (context.kind === "subject") result.push({ id: "binding.subject-kind", capability: subject ? context.subjects.includes(subject.kind)
+    ? { available: true } : refusal("incompatible_mode", "This panel can't use that kind of subject.") : !scene || context.subjects.includes(scene.kind)
+      ? { available: true } : refusal("incompatible_mode", "This panel can't use the subject kind of that scene.") });
+  const { subject: assignedSubject, look: assignedLook, ...anchor } = target;
+  const editable = { ...anchor, ...(assignedSubject && targetPresent(world.subject(assignedSubject)) ? { subject: assignedSubject } : {}),
+    ...(assignedLook && targetPresent(world.look(assignedLook)) ? { look: assignedLook } : {}) };
+  for (const rule of rules) if (rule.applies(context)) result.push({ id: rule.id, capability: rule.check(editable) });
+  return result;
+}
+
+/** References as assigned, including removed documents omitted by the editable chain. */
+export function bindingTarget(world: BindingWorld, binding: PanelBinding, resolved: Target = {}): Target {
+  const pin = binding.policy === "pinned" ? binding.target : undefined;
+  const view = resolved.view ?? (pin && "view" in pin ? pin.view : undefined);
+  const scene = resolved.scene ?? (view ? world.views[view]?.scene : undefined) ?? (pin && "scene" in pin ? pin.scene : undefined);
+  const record = scene ? world.scenes[scene] : undefined;
+  const subject = resolved.subject ?? record?.subject ?? (pin && "subject" in pin ? pin.subject : undefined);
+  const look = resolved.look ?? record?.look ?? (pin && "look" in pin ? pin.look : undefined);
+  return { ...(view ? { view } : {}), ...(scene ? { scene } : {}), ...(record ? { sceneGen: record.gen } : {}),
+    ...(subject ? { subject } : {}), ...(look ? { look } : {}) };
+}
 const emptyTarget = (world: BindingWorld, context: PanelContext, target: Target): Resolution | undefined => {
   const scene = target.scene ? world.scenes[target.scene] : undefined;
   if ((context.kind === "subject" || context.kind === "view") && scene?.subject && !target.subject)
@@ -117,8 +162,7 @@ export function resolveBinding(world: BindingWorld, request: { readonly tab: Tab
   }
   const pin = binding.target;
   const kind = "view" in pin ? "view" : "scene" in pin ? "scene" : "subject" in pin ? "subject" : "look";
-  const compatible = context.kind === "view" ? kind === "view" : context.kind === "scene" ? kind === "view" || kind === "scene"
-    : context.kind === "subject" ? kind !== "look" : kind !== "subject";
+  const compatible = bindingKindCompatible(context, kind);
   if (!compatible || "subject" in pin && context.kind === "subject" && !context.subjects.includes(pin.subject.kind))
     return { state: "empty", reason: "What this panel is pinned to can't be shown here." };
   let target: Target | undefined, missing: Requirement, reason: string;

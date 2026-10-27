@@ -104,6 +104,10 @@ export class SessionModel {
     this.shown = id;
   }
   setBinding(tab: Tab, id: string, binding: PanelBinding) { this.panels(tab).find(panel => panel.id === id)!.binding = copy(binding); }
+  /** Independent semantics for chooser/pin/follow commands; never copy the service's result or selected candidate. */
+  bindingCommand(tab: Tab, id: string, operation: "choose" | "pin" | "follow", target?: Extract<PanelBinding, { policy: "pinned" }>["target"]) {
+    this.setBinding(tab, id, operation === "follow" ? { policy: "follow-focus" } : { policy: "pinned", target: copy(target!) });
+  }
   account() {
     const panels = (tab: Tab) => this.panels(tab).map(panel => ({ id: panel.id, type: panel.type, state: panel.state ?? null, binding: panel.binding ?? null, open: panel.open })).sort((a, b) => a.id.localeCompare(b.id));
     const tab = (item: Tab) => ({ id: item.id, name: item.name, panels: panels(item) });

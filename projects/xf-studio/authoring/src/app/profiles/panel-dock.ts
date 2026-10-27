@@ -60,7 +60,12 @@ export function replayPanelsDock(layout: DockLayout | null, members: readonly { 
     for (const member of ordered) state[size].closed.splice(member.closedIndex[size], 0, member.instance);
     const returning = members.filter(member => member.open[size] && !locate(state[size], member.instance));
     for (const { instance, recordedPlace, places, latest } of returning) {
-      const place = recordedPlace ? places[size] ?? state[size].lastPlace?.[instance] : latest?.[size] ?? state[size].lastPlace?.[instance] ?? places[size];
+      let place = recordedPlace ? places[size] ?? state[size].lastPlace?.[instance] : latest?.[size] ?? state[size].lastPlace?.[instance] ?? places[size];
+      const complete = latest?.[size];
+      // A snapshot taken while its split peer was closed sees only the surviving window.
+      // The unchanged arrangement still owns the complete topology, needed when both return.
+      if (place && !("closed" in place) && complete && !("closed" in complete) && !place.anchor && complete.anchor
+        && place.groupId === complete.groupId && place.windowId && place.windowId === complete.windowId) place = complete;
       state[size] = detachPanel(state[size], instance);
       if (state[size].parked) { delete state[size].parked[instance]; if (!Object.keys(state[size].parked).length) delete state[size].parked; }
       if (place && !("closed" in place)) state[size].parked = { ...state[size].parked, [instance]: place };

@@ -14,7 +14,7 @@
 import { refusal, type Capability } from "../../platform/api/capability";
 import type { DefaultLayoutContribution } from "../../platform/api/layout-fragment";
 import { ViewGraphError } from "../../platform/core/view-graph";
-import { buildIssues, fillOf, fragmentIssues, fragmentOfTab, instantiateFragment, substitutionOf, type FragmentKnowledge, type Substitution,
+import { buildIssues, fillOf, fragmentIssues, fragmentOfTab, defaultBindingChanges, instantiateFragment, substitutionOf, type FragmentKnowledge, type Substitution,
   type SubstitutionChoice, type SubstitutionContext } from "./layout-fragment";
 import type { LayoutDefaults, LayoutDefaultView } from "./layout-defaults";
 import type { TabId } from "./profile-session";
@@ -24,8 +24,8 @@ import { TabRefusal, type ProfileSessions, type TabAction } from "./profile-sess
 export type DefaultsAction =
   | { kind: "tabs.new"; default: string; choice?: SubstitutionChoice }
   | { kind: "tabs.reset"; tab: TabId; default?: string; choice?: SubstitutionChoice }
-  | { kind: "tabs.saveAsDefault"; tab: TabId; name: string }
-  | { kind: "tabs.updateDefault"; tab: TabId }
+  | { kind: "tabs.saveAsDefault"; tab: TabId; name: string; baseline?: string }
+  | { kind: "tabs.updateDefault"; tab: TabId; baseline?: string }
   | { kind: "defaults.rename"; default: string; name: string }
   | { kind: "defaults.delete"; default: string }
   | { kind: "defaults.restore"; default: string };
@@ -52,6 +52,20 @@ type Plan = { readonly view: LayoutDefaultView; readonly substitution: Substitut
 
 export class TabDefaults {
   constructor(private readonly deps: TabDefaultsDeps) {}
+
+  /** U8 seam. A form keeps this tab/baseline and discloses these changes before dispatch; it adds no confirmation. */
+  defaultSave(tab: TabId): { readonly tab: string; readonly baseline?: string; readonly bindingChanges: ReturnType<typeof defaultBindingChanges>; readonly capability: Capability } {
+    try {
+      this.existing(tab);
+      const baseline = this.saveBaseline(tab);
+      return { tab, baseline, bindingChanges: defaultBindingChanges(this.deps.sessions.session(), tab),
+        capability: this.capability({ kind: "tabs.saveAsDefault", tab, name: this.deps.sessions.tab(tab)!.name, baseline }) };
+    } catch (error) { return { tab, bindingChanges: [], capability: refusalOf(error) }; }
+  }
+  private saveBaseline(tab: TabId) {
+    return JSON.stringify([this.deps.sessions.panelTabTarget(tab), this.deps.sessions.tab(tab)!.panels.map(panel => this.deps.sessions.panelTarget(panel.id)),
+      defaultBindingChanges(this.deps.sessions.session(), tab)]);
+  }
 
   /** The substitution New tab ▸ (or Reset to default ▸) offers for a default, with `choice` applied, as data (P2-iv presents it). */
   substitution(defaultId: string, choice?: SubstitutionChoice): Substitution | Capability {
@@ -80,13 +94,13 @@ export class TabDefaults {
         break;
       }
       case "tabs.saveAsDefault": {
-        const made = defaults.dispatch({ kind: "create", name: act.name, fragment: this.fragment(act.tab, act.name) });
+        const made = defaults.dispatch({ kind: "create", name: act.name, fragment: this.fragment(act.tab, act.name, act.baseline) });
         if (!made.ok) throw refused(made.code, made.reason);
         sessions.setOrigin(act.tab, made.id);
         break;
       }
       case "tabs.updateDefault": {
-        const origin = this.ownOrigin(act.tab), done = defaults.dispatch({ kind: "update", id: origin.id, fragment: this.fragment(act.tab, origin.name) });
+        const origin = this.ownOrigin(act.tab), done = defaults.dispatch({ kind: "update", id: origin.id, fragment: this.fragment(act.tab, origin.name, act.baseline) });
         if (!done.ok) throw refused(done.code, done.reason);
         break;
       }
@@ -103,8 +117,8 @@ export class TabDefaults {
     switch (action.kind) {
       case "tabs.new": this.plan(action.default, action.choice); return;
       case "tabs.reset": sessions.checkClosable(this.existing(action.tab)); this.plan(this.resetDefault(action.tab, action.default), action.choice); return;
-      case "tabs.saveAsDefault": throwIf(defaults.capability({ kind: "create", name: action.name, fragment: this.fragment(action.tab, action.name) })); return;
-      case "tabs.updateDefault": { const origin = this.ownOrigin(action.tab); throwIf(defaults.capability({ kind: "update", id: origin.id, fragment: this.fragment(action.tab, origin.name) })); return; }
+      case "tabs.saveAsDefault": throwIf(defaults.capability({ kind: "create", name: action.name, fragment: this.fragment(action.tab, action.name, action.baseline) })); return;
+      case "tabs.updateDefault": { const origin = this.ownOrigin(action.tab); throwIf(defaults.capability({ kind: "update", id: origin.id, fragment: this.fragment(action.tab, origin.name, action.baseline) })); return; }
       case "defaults.rename": throwIf(defaults.capability({ kind: "rename", id: action.default, name: action.name })); return;
       case "defaults.delete": throwIf(defaults.capability({ kind: "delete", id: action.default })); return;
       case "defaults.restore": throwIf(defaults.capability({ kind: "restore", id: action.default })); return;
@@ -145,8 +159,10 @@ export class TabDefaults {
     return { view, substitution };
   }
   /** A tab as a fragment named `name` (refused when it can't be one). */
-  private fragment(tab: TabId, name: string) {
+  private fragment(tab: TabId, name: string, baseline?: string) {
     const { sessions } = this.deps;
+    this.existing(tab);
+    if (baseline !== undefined && baseline !== this.saveBaseline(tab)) throw new TabRefusal("missing_target", "This tab's panels or bindings changed. Review the default-save changes again.");
     const fragment = fragmentOfTab(sessions.session(), this.existing(tab), { name: typeof name === "string" ? name.trim() : "", ...(this.deps.keepsState ? { keepsState: this.deps.keepsState } : {}) });
     // Its name and what it holds are checked by the default it makes (`LayoutDefaults`), which says which is wrong.
     if (!fragment) throw new TabRefusal("invalid_value", "This tab can't be saved as a default.");

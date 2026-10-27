@@ -50,7 +50,6 @@ export async function createExperiments<T extends ExperimentRegistration>(option
   // Each document's history is a scope of the session's history service; the documents an experiment offers reach global Undo.
   const service = options.history ?? createHistoryService(), history = service.documents;
   const registered = () => [...loads.values()].flatMap(task => { const state = task.state(); return state.phase === "done" ? [state.result] : []; });
-  signal.addEventListener("abort", service.participants(() => registered().flatMap(item => item.histories?.() ?? [])), { once: true });
   const contextFor = (lifetime: AbortSignal): ExperimentContext => ({ history, signal: lifetime, newId: () => options.random.uuid(),
     task: () => createTask({ signal: lifetime }),
     document: (kind, id, initial, stored) => owners.open(kind, id, initial, stored),
@@ -113,6 +112,12 @@ export async function createExperiments<T extends ExperimentRegistration>(option
       });
     }
   };
+  // Publishing invokes history subscribers immediately. Everything the provider can reach must already exist, including `loads`.
+  // Install cleanup before publishing too: a history subscriber may abort this lifetime during the registration notification.
+  let unregisterHistories: (() => void) | undefined;
+  signal.addEventListener("abort", () => unregisterHistories?.(), { once: true });
+  unregisterHistories = service.participants(() => registered().flatMap(item => item.histories?.() ?? []));
+  if (signal.aborted) unregisterHistories();
   reconcile();
 
   return {

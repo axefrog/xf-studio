@@ -315,6 +315,7 @@ export type StudioPresentationPort<Slot> = {
   readonly starters?: StartersPort;
   readonly emptyChoices?: EmptyChoicesPort;
   readonly panels: {
+    readonly bindings?: import("./profiles/panel-bindings").PanelBindingsPort;
     capture?(instance: string): () => StudioCapability;
     target?(instance: string): import("./profiles/profile-sessions").PanelTarget;
     tabTarget?(tab: string): import("./profiles/profile-sessions").PanelTabTarget;
@@ -433,7 +434,7 @@ export function createStudioPresentation<Slot>(sources: {
   /** A panel's instance in the tab shown (the session's); without it (fixtures, tools) each panel is one instance, `<panel>--local`. */
   panelInstance?: (panel: string, tab?: string) => string;
   capturePort?: (signal: AbortSignal) => StudioPresentationPort<Slot>;
-  panelTargets?: Pick<StudioPresentationPort<Slot>["panels"], "target" | "tabTarget" | "capture">;
+  panelTargets?: Pick<StudioPresentationPort<Slot>["panels"], "target" | "tabTarget" | "capture" | "bindings">;
   tabs?: LayoutTabsPort;
   starters?: StartersPort;
   emptyChoices?: EmptyChoicesPort;

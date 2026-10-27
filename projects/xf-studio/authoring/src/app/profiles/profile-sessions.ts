@@ -37,7 +37,7 @@
  *   state. An unlinked scene copies its source's target; an otherwise unknown scene shows what the first populated scene shows.
  * - **The dock** uses instance IDs, as stored. Named phase-2 input/output adapters retain the existing one-controller UI until P3-iii/viii.
  */
-import type { Capability } from "../../platform/api/capability";
+import type { Capability, ReasonCode } from "../../platform/api/capability";
 import { refusal } from "../../platform/api/capability";
 import type { HistoryTarget, HistoryEntryId } from "../../platform/api/history";
 import type { SubjectRef } from "../../platform/api/subjects";
@@ -87,7 +87,7 @@ export const viewPanel = (view: string) => view === MAIN_VIEW ? "head" : `view.$
 
 /** A refused operation, with the reason a person reads. */
 export class TabRefusal extends Error {
-  constructor(readonly code: "missing_target" | "invalid_value" | "incompatible_mode" | "unavailable", message: string) { super(message); }
+  constructor(readonly code: ReasonCode, message: string) { super(message); }
 }
 /**
  * A tab as the session holds it: with its content's identity (`@content`), which goes with the arrangement and instances when the tab
@@ -415,6 +415,9 @@ export class ProfileSessions {
       for (const id of changing) {
         this.tabs[at] = { ...this.tabs[at]!, dock: changePanelDock(this.tabs[at]!.dock, id, "show", fallbacks.get(id)) };
       }
+      // Explicit Show can choose a new home on a partial history branch. Its current
+      // arrangement/order, like a later drag, must survive replay of older membership.
+      this.arranged(this.tabs[at]!);
     });
   }
   setPanelBinding(tab: TabId, instance: string, binding: PanelBinding) {

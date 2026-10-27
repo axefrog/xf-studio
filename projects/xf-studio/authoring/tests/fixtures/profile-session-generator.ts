@@ -14,7 +14,7 @@ import { livePart } from "../../src/app/workspace/collection-workspace";
 import { AsyncContextModel, EditContextModel, RecoveryModel, SessionModel, sessionAccount } from "./profile-session-model";
 import { seededRandom } from "./profile-sessions";
 
-const KINDS = ["add", "show", "park", "bind", "drag", "new", "reset", "close", "reopen", "duplicate", "undo", "redo", "start", "end", "point", "switch", "focus", "scene", "addView", "closeView", "link", "hide", "collapse", "resize", "split", "activate", "readonly", "withdraw"] as const;
+const KINDS = ["add", "show", "park", "bind", "drag", "new", "reset", "close", "reopen", "duplicate", "undo", "redo", "start", "end", "point", "switch", "focus", "scene", "addView", "closeView", "link", "hide", "collapse", "resize", "split", "activate", "readonly", "withdraw", "choose", "pin", "follow"] as const;
 export type Command = { op: typeof KINDS[number]; tab: number; panel: number; value: number };
 // Exercise the real graph/history owners with small valid node payloads; Studio codecs and full rendering state have their own model tests.
 const rules: ViewGraphRules = { codecs: {
@@ -83,7 +83,10 @@ export function run(seed: number, commands: readonly Command[]) {
     graph: (data, owner) => new ViewGraph(data, rules, owner) }), scope = history.scope(viewScope(s.profile))!, m = new SessionModel(initial);
   let available = true, readonly = false;
   const actions = new PanelActions(s, { types: () => available ? [{ id: "presets", context: { kind: "look" } }] : [], factory: () => null,
-    world: () => ({ views: {}, scenes: {}, focus: {}, ...statusWorld() }), access: () => readonly ? { available: false, reason: "Read only" } : { available: true } });
+    world: () => { const data = s.session(); return { views: Object.fromEntries((data.views.views as readonly (ViewRecord & { tab: string })[]).map(view => [view.id, { tab: view.tab, scene: view.scene }])),
+      scenes: Object.fromEntries(data.views.scenes.map(scene => [scene.id, { ...scene, kind: scene.kind ?? "", gen: scene.gen }])), focus: data.focus.views, ...statusWorld() }; },
+    bindingTargets: () => Array.from({ length: 5 }, (_, n) => ({ binding: { policy: "pinned" as const, target: { look: look(n) } }, name: `Look ${n}` })),
+    access: () => readonly ? { available: false, reason: "Read only" } : { available: true } });
   check(s, m);
   for (const cmd of commands) {
     if (["undo", "redo", "start", "end", "point"].includes(cmd.op)) {
@@ -92,13 +95,13 @@ export function run(seed: number, commands: readonly Command[]) {
       passage(s, scope, m, to, cmd.op === "undo" || cmd.op === "redo" ? cmd.op : undefined); probe(s, scope, m); continue;
     }
     // Only panel operations compare content fields. Other steps still snapshot structure for the independent history/refusal oracle.
-    const before = serial(s), timeline = scope.timeline(), modelBefore = m.begin(["add", "show", "park", "bind", "hide", "addView"].includes(cmd.op));
+    const before = serial(s), timeline = scope.timeline(), modelBefore = m.begin(["add", "show", "park", "bind", "hide", "addView", "choose", "pin", "follow"].includes(cmd.op));
     const tab = m.state.tabs[cmd.tab % Math.max(1, m.state.tabs.length)], id = tab?.id ?? "missing-tab";
     const panels = tab ? m.panels(tab).filter(panel => panel.type !== "view") : [], p = panels[cmd.panel % Math.max(1, panels.length)], panel = p?.id ?? "missing-panel";
     const views = m.state.views, view = views[cmd.panel % Math.max(1, views.length)], size = cmd.value % 2 ? "wide" : "compact";
     let recorded = false, panelEdit = false;
     const expectedRefusal = ["add", "close", "duplicate", "reset", "switch", "hide"].includes(cmd.op) && !tab
-      || ["bind", "park", "show"].includes(cmd.op) && (!tab || !p)
+      || ["bind", "park", "show", "choose", "pin", "follow"].includes(cmd.op) && (!tab || !p)
       || cmd.op === "reopen" && !m.state.closed.length
       || (cmd.op === "readonly" || cmd.op === "withdraw") && !!tab;
     try {
@@ -114,6 +117,23 @@ export function run(seed: number, commands: readonly Command[]) {
           recorded = panelEdit = true; break;
         }
         case "bind": s.setPanelBinding(id, panel, binding(cmd.value)); m.setBinding(tab!, panel, binding(cmd.value)); recorded = panelEdit = true; break;
+        case "choose": {
+          const life = new AbortController();
+          try {
+            const ref = look(cmd.value), snapshot = actions.bindings().capture(panel, life.signal);
+            const chosen = snapshot.candidates.find(candidate => "look" in candidate.binding.target && candidate.binding.target.look.look === ref.look);
+            // The reference account chooses from the command, independently of what the service offered.
+            if (!p || !tab) s.panelTarget(panel);
+            if (!chosen?.action) throw new LawFailure("binding choice", "known compatible look was not offered");
+            actions.dispatch(chosen.action); m.bindingCommand(tab!, panel, "choose", { look: ref }); recorded = panelEdit = true;
+          } finally { life.abort(); }
+          break;
+        }
+        case "pin": case "follow": {
+          const target = cmd.value % 3 === 0 && view ? { view: view.id } : cmd.value % 3 === 1 && view ? { scene: view.scene } : { look: look(cmd.value) };
+          actions.dispatch({ kind: "panels.setBinding", destination: s.panelTarget(panel), binding: cmd.op === "follow" ? { policy: "follow-focus" } : { policy: "pinned", target } });
+          m.bindingCommand(tab!, panel, cmd.op, target); recorded = panelEdit = true; break;
+        }
         case "switch": s.show(id); m.shown = id; break;
         case "focus": if (p && (p.open.wide || p.open.compact)) s.focus.focusPanel(panel); if (view) s.focus.focusView(view.id); break;
         case "scene": if (view) {
@@ -400,11 +420,7 @@ export async function generateRecoverySeeds(first: number, last: number) {
   for (let seed = first; seed <= last; seed++) {
     const clock = new ManualClock(), random = seededRandom(seed + 61000), model = new RecoveryModel(), trace: unknown[] = [];
     let w = await profileContextStudio({ clock });
-    for (const id of w.vs) {
-      const p = w.services.profiles.profile(w.session.profile)!;
-      const added = await w.services.profiles.dispatch({ kind: "profile.addSubject", profile: p.id, base: p.revision, subject: { kind: "character", id } });
-      equal(added.ok, true, "retention fixture membership");
-    }
+    equal(w.vs.every(id => w.services.profiles.profile(w.session.profile)!.subjects.some(ref => ref.kind === "character" && ref.id === id)), true, "retention fixture membership");
     const subjects = [...w.vs], looks = structuredClone(w.looks), initialScenes = structuredClone(w.session.session().views.scenes);
     const pins = subjects.map((id, index) => ({ instance: `character--target${index}`, subject: { kind: "character", id } }));
     const startup = async () => {

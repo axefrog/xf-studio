@@ -5,9 +5,43 @@ import { EXPERIMENT_FLAGS } from "../src/platform/api/experiments";
 import type { DocumentStorePort } from "../src/platform/api/document-store";
 import { seededRandom } from "../src/platform/core/random";
 import { memoryOutbox, storeDocuments } from "./fixtures/platform-doubles";
+import { createHistoryService } from "../src/platform/core/history-service";
+import { FocusService } from "../src/platform/core/focus";
 /** The random source, and an outbox over `documents` (every write goes through it). */
 const sources = (documents: DocumentStorePort = storeDocuments()) => ({ random: seededRandom(29), documents, outbox: memoryOutbox(documents).outbox });
 const definition = { id: "sample", label: "Sample", description: "Test", load: async () => { throw Error("must stay off"); } };
+
+test("restored document focus cannot reach an experiment history provider before its state is initialized", async () => {
+  const history = createHistoryService({ focus: new FocusService({ seq: 0, views: {}, editing: "doc:hair:g" }) }), life = new AbortController(), src = sources();
+  let reads = 0;
+  const off = history.subscribe(() => { reads++; history.acting(history.focus.recent()); });
+  const loaded = { ...definition, load: async () => ({ create: () => ({ service: { subscribe: () => () => {} },
+    histories: () => [{ id: "hair:g", dispatch: () => true }] }) as never }) };
+  try {
+    const experiments = await createExperiments({ definitions: [loaded], overrides: { sample: true }, ...src, history, signal: life.signal });
+    const deadline = Date.now() + 1000;
+    while (!experiments.registrations().length && Date.now() < deadline) await Bun.sleep(1);
+    expect(experiments.registrations()).toHaveLength(1); expect(reads).toBeGreaterThan(0);
+    expect(history.acting(history.focus.recent())?.id).toBe("doc:hair:g");
+    life.abort(); expect(history.acting(history.focus.recent())).toBeNull();
+  } finally { off(); life.abort(); src.outbox.stop(); }
+});
+
+test("aborting from the initial history publication still removes the experiment's provider", async () => {
+  const history = createHistoryService(), life = new AbortController(), src = sources();
+  let providers = 0;
+  const original = history.participants.bind(history);
+  history.participants = provider => {
+    providers++;
+    const off = original(provider);
+    return () => { providers--; off(); };
+  };
+  const off = history.subscribe(() => life.abort());
+  try {
+    await createExperiments({ definitions: [definition], overrides: {}, ...src, history, signal: life.signal });
+    expect(providers).toBe(0);
+  } finally { off(); life.abort(); src.outbox.stop(); }
+});
 
 test("experimental store failure never blocks synchronous all-off startup", async () => {
   const unavailable = async () => { throw Error("store unavailable"); };

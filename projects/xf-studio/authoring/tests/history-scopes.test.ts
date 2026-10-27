@@ -72,6 +72,34 @@ test("retiring a target keeps metadata only; selecting never recreates its scope
   expect(h.selectScope(a.scope.id)).toBe(false); expect(h.scope(a.scope.id)).toBeUndefined();
 });
 
+test("closing untouched scopes does not evict a retired scope still in recent history", () => {
+  const h = createHistoryService(), a = changed(h, "look:c/a");
+  h.close(a.scope.id);
+  for (let i = 0; i < 8; i++) { const id = `look:c/untouched-${i}`; h.open(id, { read: () => 0, apply: () => true }); h.close(id); }
+  expect(h.focus.recent()).toEqual([a.scope.id]);
+  expect(h.recentScopes()).toMatchObject([{ scope: a.scope.id, hasHistory: true }]);
+  // Retirement follows the actual recent list, so falling out of that list really does release the metadata.
+  for (let i = 0; i < 8; i++) { const edited = changed(h, `look:c/edited-${i}`); h.close(edited.scope.id); }
+  expect(h.recentScopes()).toHaveLength(8);
+  h.focus.edited(a.scope.id);
+  expect(h.recentScopes().some(row => row.scope === a.scope.id)).toBe(false);
+});
+
+test("retiring an externally cleared scope preserves its row without claiming history remains", () => {
+  const h = createHistoryService(), a = changed(h, "look:c/a");
+  a.scope.clear();
+  expect(h.recentScopes()[0]).toMatchObject({ scope: a.scope.id, hasHistory: false });
+  h.close(a.scope.id);
+  expect(h.recentScopes()[0]).toMatchObject({ scope: a.scope.id, hasHistory: false, capability: { available: false } });
+});
+
+test("a failed participant publication rolls back its registration instead of leaking a provider", () => {
+  const h = createHistoryService(); h.documents.focus("hair:g");
+  const off = h.subscribe(() => { throw Error("subscriber failed"); });
+  expect(() => h.participants(() => [{ id: "hair:g", dispatch: () => true }])).toThrow("subscriber failed");
+  off(); expect(h.acting(h.focus.recent())).toBeNull();
+});
+
 test("empty histories are not offered or selectable; a view's existing history can be selected without moving it", () => {
   const h = createHistoryService();
   h.open("look:c/empty", { read: () => 0, apply: () => true }); h.focus.edited("look:c/empty");

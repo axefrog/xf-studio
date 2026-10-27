@@ -141,7 +141,7 @@ export interface HistoryService {
   selectScope(id: string, details?: HistoryScopeDetails): boolean;
   /** The experiments' document histories: the existing API over `doc:*` scopes. */
   readonly documents: DocumentHistory;
-  /** The documents an experiment currently offers to global Undo (`HistoryParticipant`); returns the unregister. */
+  /** The documents a fully initialized experiment offers to global Undo; publishes synchronously and returns the unregister. */
   participants(provider: () => readonly HistoryParticipant[]): () => void;
   /** Calls `listener` after every change to any scope or the focus. */
   subscribe(listener: () => void): () => void;
@@ -345,6 +345,10 @@ export function createHistoryService(options: { focus?: FocusService } = {}): Hi
   const scopes = new Map<HistoryScopeId, Scope>();
   // Metadata only for recently retired targets; never retain their stack, document or apply callbacks.
   const retired = new Map<string, { label?: string; hasHistory: boolean; trimmed: boolean }>();
+  const pruneRetired = () => {
+    const recent = new Set(focus.recent());
+    for (const id of retired.keys()) if (!recent.has(id)) retired.delete(id);
+  };
   const listeners = new Set<() => void>(), documentListeners = new Set<() => void>();
   const providers = new Set<() => readonly HistoryParticipant[]>();
   const emit = (set: Set<() => void>) => notifyAll(set);
@@ -367,7 +371,7 @@ export function createHistoryService(options: { focus?: FocusService } = {}): Hi
   };
   // A change of the editing context is a change of what Undo would do: every listener hears it.
   let editingNow = focus.editing();
-  focus.subscribe(() => { if (focus.editing() !== editingNow) { editingNow = focus.editing(); notify(true); } });
+  focus.subscribe(() => { pruneRetired(); if (focus.editing() !== editingNow) { editingNow = focus.editing(); notify(true); } });
   const hub = { changed(scope: Scope, kept: boolean) {
     // A step kept in a look's or a V's history (an edit, an Undo, a look shown again) makes it the editing context.
     if (kept && editing(scope.id)) focus.edited(scope.id);
@@ -468,8 +472,9 @@ export function createHistoryService(options: { focus?: FocusService } = {}): Hi
       const scope = scopes.get(id);
       if (!scope) return;
       const t = scope.timeline();
-      retired.set(id, { label: t.documentLabel, hasHistory: scope.remembered, trimmed: t.trimmed });
-      while (retired.size > RECENT_EDITING_LIMIT) retired.delete(retired.keys().next().value!);
+      pruneRetired();
+      // Membership supplies the eight-row bound. Closing an untouched target must not evict another scope's recent metadata.
+      if (scope.remembered && focus.recent().includes(id)) retired.set(id, { label: t.documentLabel, hasHistory: t.steps.length > 0, trimmed: t.trimmed });
       scopes.delete(id); notify(id.startsWith(DOCUMENT_PREFIX));
     },
     scope: id => scopes.get(id),
@@ -478,7 +483,7 @@ export function createHistoryService(options: { focus?: FocusService } = {}): Hi
       const current = focus.recent().find(id => scopes.has(id) && (!id.startsWith(DOCUMENT_PREFIX) || !!participant(id.slice(DOCUMENT_PREFIX.length))));
       return focus.recent().slice(0, RECENT_EDITING_LIMIT).flatMap(id => {
         const scope = scopes.get(id), old = retired.get(id), t = scope?.timeline(), details = describe?.(id) ?? {}, owner = ownerOf(id);
-        if (!scope?.remembered && !old?.hasHistory) return [];
+        if (!scope?.remembered && !old) return [];
         if (!scope && !old) return [];
         const label = details.label ?? t?.documentLabel ?? old?.label ?? (owner.kind === "look" ? "Look" : owner.kind === "character" ? "V" : owner.kind === "view" ? "View and lighting" : "Document");
         return [structuredClone({ scope: id, label, owner, current: current === id, hasHistory: !!t?.steps.length || !!old?.hasHistory,
@@ -500,7 +505,12 @@ export function createHistoryService(options: { focus?: FocusService } = {}): Hi
       return null;
     },
     documents,
-    participants(provider) { providers.add(provider); notify(true); return () => { if (providers.delete(provider)) notify(true); }; },
+    participants(provider) {
+      providers.add(provider);
+      // Publication is synchronous: callers supply a fully initialized provider, and a failed notification cannot leak its registration.
+      try { notify(true); } catch (error) { providers.delete(provider); throw error; }
+      return () => { if (providers.delete(provider)) notify(true); };
+    },
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
 }
