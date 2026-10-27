@@ -21,16 +21,22 @@ This page answers requirement S1 of the [runtime requirements](../research/story
 
 **Bridge 0.8.20 incidents [source/offline, 26 October 2026]:** the autonomous build groups the producers below (stimulus broadcasts, deaths and defeats, combat targets, reprimands, vehicle thefts, combat barks) into **incidents** with a stable id, a kind (theft, assault, accident, street fight, police stop, gunfire, other), the people in them, a place and a time, and reports the ones V saw or heard as `witness.report` (`test.events`, `session.events`, the recorder's `incidents` channel; `incidents.list`). Passive: nothing is sent into the game and nobody's ties or beliefs change. Sources, rules and bounds: [section 13](#13-incidents-what-v-witnessed-bridge-0820).
 
-**Recorder feed boundary [source/offline, 27 October 2026]:** hook availability
+**Recorder feed boundary [source/offline]:** hook availability
 does not imply a recorded channel. The current recorder's channel catalogue has
 no death, combat or crime event channel; actors carry handles/entity/position,
-not record, affiliation or crowd. Holotable's current model carries V and actors
-but not typed incident reports or per-channel omitted-row counts. The Story
-Engine's [shadow host](../projects/xf-story-engine/reference/SHADOW.md) therefore
-mirrors V and unidentified actors only, lists those absent fields explicitly and
-reports the remaining source channels as unquantified. The two private recordings
-inspected for that host contain zero actor samples; synthetic offline fixtures
-exercise actor mapping and live-log replay. This is a feed-coverage limit, not
+not record, affiliation or crowd. Holotable preserves typed incident receipts and
+per-channel read/kept/dropped counts with reasons. The Story Engine's
+[shadow host](../projects/xf-story-engine/reference/SHADOW.md) mirrors V and
+unidentified actors, maps `witness.report` to raw `game.witness.report` and its
+incident to raw `game.incident` once per native incident id, with no effects or
+fills, and carries per-channel coverage into its summary. Unmapped channels and
+`witness.gap`, `witness.unwitnessed` and `incident.coverage` receipts are counted
+and listed; native coverage values are retained per receipt. The absent actor
+identity fields and separate death/combat/crime event channels remain explicit
+limits; the V combat flag is not a combat event. The named private street recording
+contains zero actor observations and witness reports, but 619 incident coverage
+receipts; synthetic offline fixtures exercise actor and raw-incident mapping,
+gap scopes and live-log replay. This is a feed-coverage limit, not
 evidence that no actors or incidents existed in the game. Sources:
 [recorder catalogue](../projects/xf-runtime-bridge/native/src/core/Recording.cpp),
 [Holotable model](../projects/xf-holotable/src/model.ts) and

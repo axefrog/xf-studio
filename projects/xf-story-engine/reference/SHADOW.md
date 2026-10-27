@@ -36,8 +36,11 @@ immediately removes a previously published actor from the people snapshot, letti
 the existing writer retract it at the break's QPC time on the current branch.
 Later windows suppress it until a valid position reobserves it. Historical game
 readings remain evidence: S1 does not permit withdrawing them. Failed whole-channel
-actor reads and shared recorder gaps break every known actor; actor-only gaps
-leave V's track and the clock untouched, including batches with no V sample.
+actor reads and shared recorder gaps break every known actor at the gap's start,
+before any window inside a missing interval can republish an old position.
+An actor sample at the left endpoint remains historical, not a reobservation.
+The end of a gap does not restore an actor without a valid reobservation.
+Actor-only gaps leave V's track and the clock untouched, including batches with no V sample.
 
 Typed `witness.report` receipts submit raw `game.witness.report` events through
 ReplayPort, plus one raw `game.incident` per native incident id across the run.
@@ -166,7 +169,7 @@ The live safety regression traverses the real shadow adapter and `CommandApi.run
 with an injected native transport that requires reader selection and rejects
 every method outside the retained-data read allowlist. Transport-log failure tests
 cover both discovery and catch-up receipts, with budget and disk failures.
-Validation: 21 shadow tests pass; the guarded default suite has 1,733 passes,
+Validation: 23 shadow tests pass; the guarded default suite has 1,735 passes,
 46 skips and no failures. The frozen v3 digest remains
 `746601727380a3fdff647f873c91c971`, and v4 remains
 `8fce55b19462a1e02f03ca5336bd8c16`. Typechecking, Markdown links and the

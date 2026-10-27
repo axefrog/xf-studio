@@ -30,6 +30,7 @@ export class ShadowHost {
   private entities = new Map<string, string>();
   private actorFacts = new Map<string, Actor>();
   private brokenActors = new Set<string>();
+  private actorGapUntil = -Infinity;
   private publishedActors = new Set<string>();
   private incidents = new Set<string>();
   private mapped: Record<string, number> = {};
@@ -108,8 +109,9 @@ export class ShadowHost {
   private breakActors(ids: Iterable<string>, qpc: number) {
     let published = false;
     for (const id of ids) {
+      this.entities.delete(id);
       if (this.brokenActors.has(id)) continue;
-      this.brokenActors.add(id); this.entities.delete(id);
+      this.brokenActors.add(id);
       published ||= this.publishedActors.has(id);
     }
     if (published) this.publish(qpc, this.publishedDerived, true);
@@ -158,7 +160,9 @@ export class ShadowHost {
     this.count('V non-position fields (yaw, speed, health, combat flag, vehicle, busy)', batch.v.length);
     this.session.gaps.push(...batch.gaps);
     const entries = [
-      ...batch.gaps.map(g => ({ t: g.to, rank: 0, value: g, type: 'gap' as const })),
+      // Revoke actors before any window inside the known missing interval can
+      // publish their old readings. The end of a gap is not a reobservation.
+      ...batch.gaps.map(g => ({ t: g.from, rank: 0, value: g, type: 'gap' as const })),
       ...batch.v.map(v => ({ t: v.t, rank: 1, value: v, type: 'v' as const })),
       ...batch.actors.map(a => ({ t: a.t, rank: 2, value: a, type: 'actor' as const })),
       ...batch.events.filter(e => e.kind === 'incident').map(e => ({ t: e.t, rank: 3, value: e, type: 'incident' as const })),
@@ -170,7 +174,10 @@ export class ShadowHost {
       // Live polls can deliver breaks before the affected delta, without V.
       // A gap alone changes neither the V track nor the simulation clock.
       for (const entry of group) {
-        if (entry.type === 'gap') this.breakActors(this.actorFacts.keys(), qpc);
+        if (entry.type === 'gap') {
+          this.actorGapUntil = Math.max(this.actorGapUntil, entry.value.to);
+          this.breakActors(this.actorFacts.keys(), qpc);
+        }
         else if (entry.type === 'actor' && !entry.value.valid) {
           const id = this.port.node(this.key(entry.value.who));
           this.actorFacts.set(id, entry.value); this.breakActors([id], qpc);
@@ -215,7 +222,10 @@ export class ShadowHost {
           this.actorFacts.set(id, actor);
           if (actor.entity) this.entities.set(id, actor.entity); else this.entities.delete(id);
           if (vec(actor.position)) {
-            this.brokenActors.delete(id);
+            // A valid sample at the left endpoint belongs to the old trail;
+            // only a reobservation at/after the gap's end restores visibility.
+            if (qpc < this.actorGapUntil) this.breakActors([id], qpc);
+            else this.brokenActors.delete(id);
             this.submit([{ t: stamp, op: 'person', key, slots: { position: actor.position } }]);
           } else { this.breakActors([id], qpc); this.count('actor position absent'); }
         } else if (entry.type === 'incident') {

@@ -71,6 +71,31 @@ test('actor-only gap batches revoke all people without V, clock advancement or s
   expect(defaultReader.snapshotAt({ ...host.session, v: [v(180), v(182)] }, 182, 'full', world).trail).toHaveLength(1);
 });
 
+for (const channel of ['actors', undefined] as const) test(`${channel ?? 'shared'} interval gap retracts at its start, including an actor sample at that endpoint`, () => {
+  const host = new ShadowHost(defaultReader, world, meta, temp());
+  host.consume({ ...batch(), v: [v(100), v(180)] });
+  const actor = mirroredId(host.key('a1')), before = peopleRows(host).length;
+  expect(peopleRows(host).some(row => row.id === actor)).toBe(true);
+  const gap = { from: 181, to: 261, fromSeq: 5, toSeq: 8, reason: 'sequence' as const, ...(channel ? { channel } : {}) };
+  // The V sample closes a simulation window strictly inside the known interval.
+  host.consume({ ...emptyBatch(), gaps: [gap], actors: [{ ...batch().actors[0], t: gap.from }], v: [v(250, 7, [30, 20, 0])] });
+  expect(host.summary().windows).toBe(2);
+  const changed = peopleRows(host).slice(before).filter(row => row.id === actor || row.retract === actor);
+  expect(changed).toEqual([{ retract: actor, t: 181 }]);
+  for (const t of [181, 250, 260]) {
+    const last = peopleRows(host).filter(row => row.t <= t && (row.id === actor || row.retract === actor)).at(-1);
+    expect(last?.retract).toBe(actor);
+  }
+  const source = { ...host.session, v: [v(180), v(250, 7), v(261, 8)] };
+  expect(defaultReader.snapshotAt(source, 250, 'full', world).inGap).toBe(!channel);
+  expect(defaultReader.snapshotAt(source, 261, 'full', world).trail).toHaveLength(channel ? 1 : 2);
+  // The gap ending does not itself restore the old actor position.
+  host.consume({ ...emptyBatch(), v: [v(330)] });
+  expect(peopleRows(host).slice(before).filter(row => row.id === actor)).toEqual([]);
+  host.consume({ ...emptyBatch(), actors: [{ t: 331, who: 'a1', valid: true, position: [25, 20, 0] }], v: [v(410)] });
+  expect(peopleRows(host).filter(row => row.id === actor).at(-1)).toMatchObject({ t: 410, anchor: { at: [25, 20, 0] } });
+});
+
 test('channel coverage carries read/kept/dropped/reasons, sorted, including unmapped channels', () => {
   const host = new ShadowHost(defaultReader, world, meta, temp());
   const channels: Batch['meta']['channels'] = [
