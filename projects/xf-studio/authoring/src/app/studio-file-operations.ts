@@ -142,10 +142,6 @@ export class StudioFileOperations {
   }
   private notify() { for (const listener of this.listeners) listener(); }
   private running(): AcceptedStudioOperation[] { if (this.executionOwner !== this) return this.executionOwner.running(); return [...this.operations.keys()].filter(operation => operation.isRunning()); }
-  private progressOwner() {
-    const running = this.running();
-    return running.find(operation => operation.kind === "package.build") ?? running.find(operation => operation.snapshot().collectionBusy) ?? this.busy ?? this.last;
-  }
   private runningCollection() {
     const operation = this.running().find(operation => operation.snapshot().collectionBusy);
     return operation && { capability: (request: CollectionRequest) => operation.collectionCapability(request)! };
