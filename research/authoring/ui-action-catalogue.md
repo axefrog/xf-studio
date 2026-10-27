@@ -325,11 +325,11 @@ Gesture proposals (sent inside a gesture session; the session owns the Undo step
 | `holo.play` | holotable | workspace | no | on: boolean |
 | `holo.speed` | holotable | workspace | no | speed: enum |
 | `holo.change.previous` | holotable | workspace | no |  |
-| `holo.change.next` | holotable | workspace | no |  |
+| `holo.change.next` | holotable | workspace | no | allVisible?: boolean |
 | `holo.change.scope` | holotable | workspace | no | layer?: string |
 | `holo.layer` | holotable | workspace | no | id: string, on: boolean |
 | `holo.level` | holotable | workspace | no | level: enum |
-| `holo.select` | holotable | workspace | no | id?: string |
+| `holo.select` | holotable | workspace | no | id?: string, members?: object |
 | `holo.place` | holotable | workspace | no | position: object |
 | `holo.agentLayer` | holotable | workspace | no | id: string, on: boolean |
 | `holo.producer` | holotable | workspace | no | producer: string, on: boolean |

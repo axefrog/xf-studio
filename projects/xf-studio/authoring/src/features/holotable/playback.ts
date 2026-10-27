@@ -11,10 +11,10 @@ export function playbackMemory(value?: Partial<PlaybackMemory>): PlaybackMemory 
     game: SPEEDS.game.some(s => s.value === value?.game) ? value!.game! : 600 };
 }
 /** Binary search each visible history; no sorting or scanning all item times per button update. */
-export function changeMoment(state: Pick<HoloState, "agents" | "agentEnabled" | "t"> & {changeScope?:string|null}, direction: -1 | 1): number | undefined {
+export function changeMoment(state: Pick<HoloState, "agents" | "agentEnabled" | "t"> & {changeScope?:string|null}, direction: -1 | 1, allVisible = false): number | undefined {
   let result: number | undefined;
   for (const layer of state.agents.layers) {
-    if (state.agentEnabled[layer.id] === false || state.changeScope&&layer.id!==state.changeScope) continue;
+    if (state.agentEnabled[layer.id] === false || !allVisible&&state.changeScope&&layer.id!==state.changeScope) continue;
     const times = layer.changes ?? []; let lo = 0, hi = times.length;
     while (lo < hi) { const mid = (lo+hi) >>> 1, value = times[mid]; if (value < state.t || direction === 1 && value === state.t) lo = mid+1; else hi = mid; }
     const candidate = times[direction === 1 ? lo : lo-1];

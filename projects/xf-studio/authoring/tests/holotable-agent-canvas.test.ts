@@ -213,3 +213,26 @@ test("clustering a relation's plate preserves the curve's world endpoints",()=>w
  const from=C.point([0,0,0])!,to=C.point([100,0,0])!,dx=to[0]-from[0],dy=to[1]-from[1],len=Math.hypot(dx,dy),bend=Math.min(24,len*.16),mid=[(from[0]+to[0])/2-dy/len*bend,(from[1]+to[1])/2+dx/len*bend],k=.25;
  expect(renderer.pick((1-k)**2*from[0]+2*(1-k)*k*mid[0]+k*k*to[0],(1-k)**2*from[1]+2*(1-k)*k*mid[1]+k*k*to[1])).toBe(relation.key);
 }));
+
+
+test("clustered target keeps its from-line and picking without labels or effects",()=>withCanvas((renderer,_arcs,strokes,names)=>{
+ const target:AgentItem={...point("target"),kind:"target",glyph:"goal",place:[0,0,0],anchor:{at:[0,0,0]},to:[100,0,0],label:"Hidden target"};
+ const neighbour:AgentItem={...point("neighbour"),place:[0.001,0,0],glyph:"goal"};
+ const base=answer([target,neighbour]),data={...base,specs:{...base.specs,kinds:{...base.specs.kinds,target:{style:"tone",label:"{label}",draw:"crosshair"}}}};
+ const C=camera([50,0,0],ORBITS.top,800,500),mid=C.point([50,0,0])!;
+ renderer.draw(data,{},C,null,1000,null,[],350,{playing:true,epoch:"cluster"});
+ expect(renderer.clusters()).toHaveLength(1);expect(strokes()).toBeGreaterThan(0);expect(renderer.pick(...mid)).toBe(target.key);expect(names).not.toContain("Hidden target");
+ renderer.draw(answer([]),{},C,null,1000,null,[],350,{playing:true,epoch:"cluster"});expect(renderer.animate()).toBe(false);
+}));
+
+test("clustered actor keeps its volume outline and picking",()=>withCanvas((renderer)=>{
+ const actor:AgentItem={...point("actor"),kind:"actor",glyph:"person",place:[0,0,0],anchor:{box:{min:[-30,-30,0],max:[30,30,10]}}};
+ const C=camera([0,0,0],ORBITS.top,800,500);
+ renderer.draw(answer([actor,{...point("near"),place:[0.001,0,0],glyph:"goal"}]),{},C,null,1000);
+ expect(renderer.clusters()).toHaveLength(1);expect(renderer.pick(...C.point([30,0,0])!)).toBe(actor.key);
+}));
+
+test("legend retains its family tone through selection and hover",()=>withCanvas(renderer=>{
+ const data=answer([{...point(),kind:"actor",glyph:"fixer",tone:"accent"}]),C=camera([0,0,0],ORBITS.top,300,500);
+ for(const [selected,hovered] of [[null,null],["p/a/a",null],[null,"p/a/a"]] as const){renderer.draw(data,{},C,selected,1000,hovered);expect(renderer.legend()[0].tone).toBe("signal");}
+}));

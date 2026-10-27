@@ -34,11 +34,11 @@ export type HoloAction =
   | { kind: "holo.play"; on: boolean }
   | { kind: "holo.speed"; speed: number }
   | { kind: "holo.change.previous" }
-  | { kind: "holo.change.next" }
+  | { kind: "holo.change.next"; allVisible?: boolean }
   | { kind: "holo.change.scope"; layer: string | null }
   | { kind: "holo.layer"; id: HoloLayer; on: boolean }
   | { kind: "holo.level"; level: ContentLevel }
-  | { kind: "holo.select"; id: string | null }
+  | { kind: "holo.select"; id: string | null; members?: readonly string[] }
   | { kind: "holo.place"; position: Vec3 }
   | { kind: "holo.agentLayer"; id: string; on: boolean }
   | { kind: "holo.producer"; producer: string; on: boolean }
@@ -66,6 +66,8 @@ export interface HoloState {
   readonly layers: Readonly<Record<HoloLayer, boolean>>;
   /** "v", or an event's id. */
   readonly selected: string | null;
+  /** Exact membership of an inseparable screen-space cluster, distinct from a co-located place. */
+  readonly selectedCluster?: readonly string[];
   readonly revision: number;
   readonly live: HoloLiveState;
   readonly agents: AgentAnswer;
@@ -101,7 +103,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
   const set = (patch: Partial<HoloState>) => {
     let changeScope=patch.changeScope===undefined?state.changeScope:patch.changeScope;
     if(changeScope&&(!(patch.agents??state.agents).layers.some(l=>l.id===changeScope)||(patch.agentEnabled??state.agentEnabled)[changeScope]===false))changeScope=null;
-    state = { ...state, ...patch, changeScope, revision: state.revision + 1 }; for (const l of listeners) l();
+    state = { ...state, ...patch, selectedCluster: Object.hasOwn(patch,"selectedCluster") || patch.selected !== undefined && patch.selected !== state.selected ? patch.selectedCluster : state.selectedCluster, changeScope, revision: state.revision + 1 }; for (const l of listeners) l();
   };
   let loading: AbortController | null = null;
   let contextCtl: AbortController | null = null, contextCentre: { dir: string; position: Vec3 } | null = null;
@@ -356,10 +358,12 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       case "holo.follow": return state.live.watching ? { available: true } : refusal("not_ready", "Watch the live game first.");
       case "holo.speed": return state.open && !state.live.following && SPEEDS[clockFamily(state)].some(s => s.value === action.speed)
         ? { available: true } : refusal("not_ready", state.live.following ? "Live always plays at 1×. Pause to replay at another speed." : "Open a recording and choose one of its speeds.");
-      case "holo.change.previous": case "holo.change.next": return state.open && changeMoment(state, action.kind === "holo.change.previous" ? -1 : 1) !== undefined
+      case "holo.change.previous": case "holo.change.next": return state.open && changeMoment(state, action.kind === "holo.change.previous" ? -1 : 1, action.kind === "holo.change.next" && action.allVisible === true) !== undefined
         ? { available: true } : refusal("not_ready", action.kind === "holo.change.previous" ? "No earlier change in visible layers." : "No later change in visible layers.");
       case "holo.change.scope": return action.layer===null||state.agents.layers.some(l=>l.id===action.layer&&state.agentEnabled[l.id]!==false) ? {available:true} : refusal("missing_target","That layer is hidden or no longer available.");
-      case "holo.seek": case "holo.play": case "holo.select": return state.open ? { available: true } : refusal("not_ready", "Open a recording first.");
+      case "holo.select":
+        if(action.members!==undefined&&(!action.id?.startsWith("cluster:")||!Array.isArray(action.members)||!action.members.every(k=>typeof k==="string")))return refusal("invalid_value","Cluster members must be item keys.");
+      case "holo.seek": case "holo.play": return state.open ? { available: true } : refusal("not_ready", "Open a recording first.");
       case "holo.view.focus": if([action.id,action.layer,action.position].filter(v=>v!==undefined).length!==1||action.position&&(!Array.isArray(action.position)||action.position.length!==3||!action.position.every(Number.isFinite)))return refusal("invalid_value","Name one item, layer or valid position to focus.");
         return views.get(action.view)?.available() ? {available:true} : refusal("missing_target","That Holotable view is not visible.");
       case "holo.view.back": return views.get(action.view)?.available() && views.get(action.view)?.canBack() ? {available:true} : refusal("not_ready","No earlier viewpoint in this view.");
@@ -391,7 +395,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       }
       case "holo.change.scope": set({changeScope:action.layer});break;
       case "holo.change.previous": case "holo.change.next": {
-        const t = changeMoment(state, action.kind === "holo.change.previous" ? -1 : 1)!;
+        const t = changeMoment(state, action.kind === "holo.change.previous" ? -1 : 1, action.kind === "holo.change.next" && action.allVisible === true)!;
         pause(); set({ t, motionEpoch: state.motionEpoch + 1, live: { ...state.live, following: false }, speed: memory[clockFamily(state)] }); break;
       }
       case "holo.seek": {
@@ -407,7 +411,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       case "holo.layer": set({ layers: { ...state.layers, [action.id]: action.on },
         selected: !action.on && action.id === "people" && state.selected?.startsWith("person:") ? null : state.selected }); break;
       case "holo.level": await setLevel(action.level); break;
-      case "holo.select": set({ selected: action.id, position: null }); break;
+      case "holo.select": set({ selected: action.id, selectedCluster: action.members ? [...action.members] : undefined, position: null }); break;
       case "holo.place": set({ position: action.position, selected: null }); break;
       case "holo.agentLayer": set({ motionEpoch: state.motionEpoch + 1, agentEnabled: { ...state.agentEnabled, [action.id]: action.on } }); break;
       case "holo.producer": set({ motionEpoch: state.motionEpoch + 1, agentEnabled: { ...state.agentEnabled, ...Object.fromEntries(state.agents.layers.filter(l => l.producer === action.producer).map(l => [l.id, action.on])) } }); break;

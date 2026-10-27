@@ -14,10 +14,10 @@ export const HOLOTABLE_ACTIONS = {
   "holo.view.focus": action({ view: input("string"), id: {...input("string"),required:false}, layer: {...input("string"),required:false}, position: {...input("object"),required:false} }),
   "holo.view.back": action({ view: input("string") }),
   "holo.watch": action(), "holo.follow": action(), "holo.seek": action({ t: input("number") }), "holo.play": action({ on: input("boolean") }),
-  "holo.speed": action({ speed: input("enum", [1, 4, 16, 60, 600, 3600]) }), "holo.change.previous": action(), "holo.change.next": action(),
+  "holo.speed": action({ speed: input("enum", [1, 4, 16, 60, 600, 3600]) }), "holo.change.previous": action(), "holo.change.next": action({ allVisible: { ...input("boolean"), required: false } }),
   "holo.change.scope": action({layer:{...input("string"),required:false}}),
   "holo.layer": action({ id: input("string"), on: input("boolean") }), "holo.level": action({ level: input("enum", ["structure", "full"]) }),
-  "holo.select": action({ id: { ...input("string"), required: false } }), "holo.place": action({ position: input("object") }),
+  "holo.select": action({ id: { ...input("string"), required: false }, members: { ...input("object"), required: false } }), "holo.place": action({ position: input("object") }),
   "holo.agentLayer": action({ id: input("string"), on: input("boolean") }), "holo.producer": action({ producer: input("string"), on: input("boolean") }),
   "holo.branch": action({ branch: input("string") }),
 } satisfies Record<HoloAction["kind"], ActionDescriptor>;

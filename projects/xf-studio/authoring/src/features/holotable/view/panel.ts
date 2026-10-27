@@ -7,7 +7,7 @@
 import { applyCapability, closeMenus, openMenu, iconButton, button, emptyState, Segmented, setButtonLabel, SliderWithValue } from "../../../studio-ui/components";
 import { holotablePointerBinding, pointerInputOf, keyBinding } from "../../../app/input-bindings";
 import { navigation, type Viewpoint } from "./navigation";
-import { clusterPlates } from "./clusters";
+import { clusterFallback, clusterPlates } from "./clusters";
 import { humanMoment, quietUntil } from "./friendly";
 import { camera } from "./projection";
 import { h, isTextInput, reducedMotion, setText } from "../../../studio-ui/dom";
@@ -113,7 +113,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   const time = new SliderWithValue({ label: "Moment", min: 0, max: 1, step: 0.1, format: v => `${f1(v)} s`,
     transaction: { edit: v => { const s = facade.snapshot().open?.session; if (s) void ctx.dispatch({ kind: "holo.seek", t: s.meta.from + v }, { quiet: true }); } } });
   const readout = h("span", { class: "note muted mono", role: "status", style: "flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" });
-  const quiet=button({label:"",small:true,variant:"quiet",onClick:()=>{void ctx.dispatch({kind:"holo.change.next"},{quiet:true});}});quiet.style.cssText="flex:0 1 auto;margin-inline-start:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";quiet.hidden=true;
+  const quiet=button({label:"",small:true,variant:"quiet",onClick:()=>{void ctx.dispatch({kind:"holo.change.next",allVisible:true},{quiet:true});}});quiet.style.cssText="flex:0 1 auto;margin-inline-start:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";quiet.hidden=true;
   const quietLabel=quiet.querySelector("span")!;quietLabel.style.cssText="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
   const backToLive = button({ label: "Back to live", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.follow" }, { quiet: true }); } });
   const branches = new Segmented<string>({ label: "Branch", options: [], onSelect: branch => { void ctx.dispatch({ kind: "holo.branch", branch }); } });
@@ -371,7 +371,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
         }
       }
       zoomLimit=Math.max(zoomLimit,next.distance*4);
-      if(cluster&&next.distance===40){void ctx.dispatch({kind:"holo.select",id:`cluster:${JSON.stringify(cluster.items[0].place)}`},{quiet:true});}
+      if(cluster&&next.distance===40){void ctx.dispatch({kind:"holo.select",...clusterFallback(cluster)},{quiet:true});}
       else if(target.id&&!cluster)void ctx.dispatch({kind:"holo.select",id:target.id},{quiet:true});
       applyPoint(nav.focus(viewpoint(),{center,orbit:next},reducedMotion()));return true;
     },

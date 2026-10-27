@@ -33,7 +33,7 @@ export function addLegend(counts: Map<string,LegendEntry>,item:AgentItem) {
   const family=item.glyph&&Object.hasOwn(GLYPHS,item.glyph)?GLYPHS[item.glyph].family:Object.hasOwn(KIND_FAMILIES,item.kind)?KIND_FAMILIES[item.kind]:undefined;
   if(!family)return;
   const old=counts.get(family);
-  if(old)old.count++;else counts.set(family,{family,count:1,glyph:item.glyph,kind:item.kind,tone:item.tone??"signal"});
+  if(old)old.count++;else counts.set(family,{family,count:1,glyph:item.glyph,kind:item.kind,tone:"signal"});
 }
 export function plainCounts(layer:AgentLayer,on=true) {
   const missing=new Set(layer.notPlaced),count=on?layer.items.filter(i=>i.place&&!missing.has(i.id)).length:0,total=layer.total??layer.items.length;
@@ -41,7 +41,7 @@ export function plainCounts(layer:AgentLayer,on=true) {
 }
 export function quietUntil(state:HoloState):number|undefined {
   if(!state.open||state.live.following)return;
-  const next=changeMoment(state,1),threshold=state.open.session.meta.standalone?.clock==="game"?300:10;
+  const next=changeMoment(state,1,true),threshold=state.open.session.meta.standalone?.clock==="game"?300:10;
   if(next===undefined||next>state.open.session.meta.to||next-state.t<threshold)return;
   const session=state.open.session;
   for(const rows of [state.layers.v?session.v:[],state.layers.camera?session.camera:[],state.layers.people?session.actors??[]:[],state.layers.events?session.events:[]]){

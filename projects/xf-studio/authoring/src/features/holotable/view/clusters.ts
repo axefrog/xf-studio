@@ -43,3 +43,8 @@ export function clearSelectedPlate(cluster:PlateCluster,selected:readonly[number
   const x=distance?dx/distance:-1,y=distance?dy/distance:0;
   return {...cluster,x:selected[0]+x*minimum,y:selected[1]+y*minimum};
 }
+
+/** Minimum-zoom fallback keeps the screen cluster's exact members, regardless of world position. */
+export function clusterFallback(cluster:PlateCluster):{id:string;members:readonly string[]} {
+  return {id:"cluster:members",members:cluster.items.map(item=>item.key)};
+}

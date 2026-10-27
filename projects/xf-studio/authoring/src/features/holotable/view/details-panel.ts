@@ -84,7 +84,8 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
       return body;
     }
     if (state.selected?.startsWith("cluster:")) {
-      const items=visible(state).flatMap(l=>l.items.filter(i=>!l.notPlaced.includes(i.id))).filter(i=>["point","target","label","actor","influence"].includes(i.kind)&&(JSON.stringify(i.place)===state.selected!.slice(8)||JSON.stringify(i.to)===state.selected!.slice(8)));
+      const members=state.selectedCluster ? new Set(state.selectedCluster) : undefined;
+      const items=visible(state).flatMap(l=>l.items.filter(i=>!l.notPlaced.includes(i.id))).filter(i=>members ? members.has(i.key) : ["point","target","label","actor","influence"].includes(i.kind)&&(JSON.stringify(i.place)===state.selected!.slice(8)||JSON.stringify(i.to)===state.selected!.slice(8)));
       return h("div",{},h("h4",{text:`${items.length} at this spot`}),...items.map(item=>button({label:title(item,state),small:true,variant:"quiet",onClick:()=>focusItem(item.key)})));
     }
     if (state.selected && state.selected !== "v") {
@@ -155,7 +156,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
     updateAgents(state);
     setText(limits, s ? `${s.meta.standalone ? "Layers only; no recorded observations. Solid shapes are drawn within 350 m of where you're looking. " : `${s.meta.dropped} dropped, ${s.meta.missedDeadlines} missed, largest gap ${f1(s.meta.largestGapS)} s. `}Districts and solid shapes are offline estimates of the live world.` : "");
     inspector.element.hidden = !s;
-    const k = JSON.stringify([state.open?.dir, state.selected, state.position, state.level, state.layers.people, state.agents, state.agentEnabled, state.selected&&find(state,state.selected)?null:Math.round(state.t * 10)]);
+    const k = JSON.stringify([state.open?.dir, state.selected, state.selectedCluster, state.position, state.level, state.layers.people, state.agents, state.agentEnabled, state.selected&&find(state,state.selected)?null:Math.round(state.t * 10)]);
     if (k !== inspectKey) { inspectKey = k; inspect.replaceChildren(rows(state)); }
   } };
 }

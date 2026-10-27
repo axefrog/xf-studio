@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { installLightDom, uninstallLightDom, lightEvent, type LightElement } from "./light-dom";
-import { clusterPlates, clusterPlateSteps } from "../src/features/holotable/view/clusters";
+import { clusterFallback, clusterPlates, clusterPlateSteps } from "../src/features/holotable/view/clusters";
 import { navigation, type Viewpoint } from "../src/features/holotable/view/navigation";
-import { ORBITS, project } from "../src/features/holotable/view/projection";
+import { camera, ORBITS, project } from "../src/features/holotable/view/projection";
 import { addLegend, orderedLegend, FAMILY_TITLES, cardDetail, facetTitle, humanMoment, humanSpan, plainCounts, quietUntil, type LegendEntry } from "../src/features/holotable/view/friendly";
 import { createHolotable, type HoloAction } from "../src/features/holotable/service";
 import { holotableFacade } from "../src/features/holotable/facade";
@@ -25,8 +25,8 @@ test("legend groups glyphs and kind fallbacks into stable families, leaving unma
  expect(counts.get("person")?.count).toBe(3);expect(counts.get("marker")?.count).toBe(3);expect(counts.has("relation")).toBe(false);expect(counts.has("influence")).toBe(false);
  const sparse=new Map<string,LegendEntry>();addLegend(sparse,{...item("only"),glyph:undefined});expect(orderedLegend(sparse).map(e=>FAMILY_TITLES[e.family])).toEqual(["People"]);
 });
-async function fixture(){
- const ctl=new AbortController();const service=createHolotable({later:()=>()=>{},transport:async(method)=>({ok:true,status:200,data:{ok:true,result:method==="runs.list"?[{dir:"synthetic",session:"s",run:1,start:0,end:864000,bytes:0,complete:true}]:method==="session.open"?session:method==="world.around"?{provenance:null,areas:[],cells:[]}:method==="layers.watch"?{watch:"test"}:method==="layers.poll"?answer:{}}})},ctl.signal);
+async function fixture(layers:AgentAnswer=answer){
+ const ctl=new AbortController();const service=createHolotable({later:()=>()=>{},transport:async(method)=>({ok:true,status:200,data:{ok:true,result:method==="runs.list"?[{dir:"synthetic",session:"s",run:1,start:0,end:864000,bytes:0,complete:true}]:method==="session.open"?session:method==="world.around"?{provenance:null,areas:[],cells:[]}:method==="layers.watch"?{watch:"test"}:method==="layers.poll"?layers:{}}})},ctl.signal);
  service.shown();await service.dispatch({kind:"holo.refresh"});await service.dispatch({kind:"holo.open",dir:"synthetic"});return {ctl,service};
 }
 
@@ -106,4 +106,40 @@ test("inspector card sections, Technical default and remembered state, producer 
  expect(menu.items.find((i:any)=>i.label==="Focus on this layer").action).toEqual({kind:"holo.view.focus",view:"bound-view",layer:"p/a"});
  facade.remember("key",false,"bound-view");expect(facade.preference("key","bound-view")).toBe(false);expect(facade.preference("key","other-view")).toBe(true);
  }finally{panel.dispose?.();ctl.abort();}
+});
+
+
+test("minimum-zoom nearby distinct plates retain both exact members in Details",async()=>{
+ const items=[item("Near A"),item("Near B",0.001)],C=camera([0,0,0],{...ORBITS.top,distance:40},300,400);
+ const clusters=clusterPlates(items.map(i=>{const [x,y]=C.point(i.place!)!;return {item:i,x,y};}),true).clusters;
+ expect(clusters).toHaveLength(1);expect(clusters[0].items).toHaveLength(2);
+ const selection=clusterFallback(clusters[0]);expect(selection.members).toEqual(items.map(i=>i.key));
+ const {service,ctl}=await fixture({...answer,layers:[{...answer.layers[0],items:[...items,item("Unrelated",10)]}]}),facade=holotableFacade(service);
+ const panel=holotableDetailsPanel({facade,changed(){},dispatch:(action:HoloAction)=>service.dispatch(action)} as unknown as ModuleViewContext<HolotableFacade>),root=panel.spec.element as unknown as LightElement;
+ try{
+ await service.dispatch({kind:"holo.select",...selection});panel.update(undefined as never);
+ expect(root.textContent).toContain("2 at this spot");expect(root.querySelectorAll("button").filter(b=>b.textContent==="Near A"||b.textContent==="Near B")).toHaveLength(2);expect(root.textContent).not.toContain("Unrelated");
+ const colocated=clusterFallback({...clusters[0],items:[items[0],{...items[1],place:items[0].place}]});
+ expect(colocated.members).toEqual(items.map(i=>i.key));
+ await service.dispatch({kind:"holo.select",id:"cluster:[0,0,0]"});panel.update(undefined as never);expect(root.textContent).toContain("1 at this spot");
+ await service.dispatch({kind:"holo.select",id:"p/a/Near A"});expect(service.snapshot().selectedCluster).toBeUndefined();
+ }finally{panel.dispose?.();ctl.abort();}
+});
+
+test("Quiet until and its jump ignore step scope while step buttons keep it",async()=>{
+ const {service,ctl}=await fixture({...answer,layers:[answer.layers[0],{...answer.layers[0],id:"p/b",layer:"b",changes:[0,450,1200,9000],items:[]}]});
+ try{
+ await service.dispatch({kind:"holo.change.scope",layer:"p/a"});expect(quietUntil(service.snapshot())).toBe(450);
+ await service.dispatch({kind:"holo.change.next"});expect(service.snapshot().t).toBe(900);
+ await service.dispatch({kind:"holo.seek",t:0});await service.dispatch({kind:"holo.change.next",allVisible:true});expect(service.snapshot().t).toBe(450);expect(service.snapshot().changeScope).toBe("p/a");expect(service.snapshot().playing).toBe(false);
+ await service.dispatch({kind:"holo.change.previous"});expect(service.snapshot().t).toBe(0);
+ await service.dispatch({kind:"holo.agentLayer",id:"p/b",on:false});expect(quietUntil(service.snapshot())).toBe(900);
+ await service.dispatch({kind:"holo.agentLayer",id:"p/b",on:true});await service.dispatch({kind:"holo.seek",t:7200});
+ expect(service.capability({kind:"holo.change.next"}).available).toBe(false);expect(quietUntil(service.snapshot())).toBe(9000);expect(service.capability({kind:"holo.change.next",allVisible:true}).available).toBe(true);
+ await service.dispatch({kind:"holo.change.next",allVisible:true});expect(service.snapshot().t).toBe(9000);
+ }finally{ctl.abort();}
+});
+
+test("legend family tone is independent of representative item tone",()=>{
+ for(const tone of ["accent","warning","good"]){const counts=new Map<string,LegendEntry>();addLegend(counts,{...item("Fixer"),tone});expect(counts.get("person")?.tone).toBe("signal");}
 });

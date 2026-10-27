@@ -282,7 +282,6 @@ export function agentCanvas(canvas: HTMLCanvasElement, changed: () => void, now:
       for (; cursor < items.length; cursor++) {
         const item = items[cursor];
         if (performance.now() > deadline) { paintFailed=true; effects.clear(); break; }
-        if (currentCollapsed.has(item.key) && ["point","actor","target","label"].includes(item.kind)) continue;
         const result=paintItem(item,layerIds.get(item.key)!,C,selected,hovered,positions,important,radius,deadline,ctx);
         if(result==="pending"){paintFailed=true;effects.clear();return {pending:true,drawn,total:items.length};}
         if(result==="drawn"){drawn++;if(!currentCollapsed.has(item.key))addLegend(legend,item);}
