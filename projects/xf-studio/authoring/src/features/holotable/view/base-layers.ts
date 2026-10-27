@@ -18,7 +18,9 @@ export const poiTitle = (p: HoloPoi) => Object.hasOwn(POI_GLYPHS,p.kind) ? p.kin
 export const poiGlyph = (p: HoloPoi) => Object.hasOwn(POI_GLYPHS,p.kind) ? POI_GLYPHS[p.kind] : "place";
 export const readable = (s: string) => { const text=s.replace(/[-_]+/g," ").trim();return text ? text[0].toUpperCase()+text.slice(1) : text; };
 export const communityOpacity = (distance: number) => Math.max(0, Math.min(1, (distance-100)/100));
-const communityLabel = (n:number) => `Community · ${n} ${n===1?"spot":"spots"}`;
+const AFFILIATION_TITLES:Readonly<Record<string,string>>=Object.freeze({"No Affiliation":"Unaffiliated"});
+const affiliationTitle = (title:string) => Object.hasOwn(AFFILIATION_TITLES,title)?AFFILIATION_TITLES[title]:title;
+const communityLabel = (c:HoloContent["communities"][number],n:number) => `${c.affiliation?.title?affiliationTitle(c.affiliation.title):"Community"} · ${n} ${n===1?"spot":"spots"}`;
 export type BaseSwitches = Readonly<{ pois: boolean; spots: boolean; communities: boolean }>;
 const marker = (type: "pois"|"spots"|"communities", id: string, at: Vec3, label: string): AgentItem => ({
   id, key:`base:${type}:${id}`, base:type, kind:type==="communities"?"label":"point", anchor:{at}, place:at, label, tone:"muted",
@@ -71,7 +73,7 @@ export function* baseLayerSteps(content: HoloContent | undefined, on: BaseSwitch
       const sums=new Map<string,{at:[number,number,number];n:number}>();
       for(const s of spots){if(work++%64===0)yield;for(const id of s.communities){if(work++%64===0)yield;const sum=sums.get(id)??{at:[0,0,0],n:0};sum.n++;for(let i=0;i<3;i++)sum.at[i]+=s.at[i];sums.set(id,sum);}}
       // Keep presence independent of label opacity: the Show count includes close communities.
-      for(const c of yield* communityOrder(content)){if(work++%64===0)yield;const sum=sums.get(c.id);if(sum)items.push({...marker("communities",c.id,sum.at.map(n=>n/sum.n) as [number,number,number],communityLabel(sum.n)),opacity:alpha,communitySpots:sum.n});}
+      for(const c of yield* communityOrder(content)){if(work++%64===0)yield;const sum=sums.get(c.id);if(sum)items.push({...marker("communities",c.id,sum.at.map(n=>n/sum.n) as [number,number,number],communityLabel(c,sum.n)),opacity:alpha,communitySpots:sum.n});}
   }
   return items;
 }
@@ -86,29 +88,56 @@ export function baseItem(content:HoloContent|undefined,key:string):AgentItem|und
   if(s)return marker("spots",s.id,s.at,"");
   const c=content.communities.find(c=>`base:communities:${c.id}`===key);
   if(c){const spots=content.spots.filter(s=>s.communities.includes(c.id));if(!spots.length)return;
-    return {...marker("communities",c.id,[0,1,2].map(axis=>spots.reduce((sum,s)=>sum+s.at[axis],0)/spots.length) as [number,number,number],communityLabel(spots.length)),communitySpots:spots.length};}
+    return {...marker("communities",c.id,[0,1,2].map(axis=>spots.reduce((sum,s)=>sum+s.at[axis],0)/spots.length) as [number,number,number],communityLabel(c,spots.length)),communitySpots:spots.length};}
 }
 
 export interface BaseCard { title:string; summary:string; when?:string; involved:{key:string;label:string}[]; more:number; furtherAway:number; technical:[string,string][] }
+/** Counts come from compiled record types. Name cleanup is display-only fallback. */
+export function communityTypes(entries:HoloContent["communities"][number]["entries"]):string {
+  if(!entries.length)return "No entries";
+  const people=entries.filter(e=>e.kind==="person"),vehicles=entries.filter(e=>e.kind==="vehicle").length,unknown=entries.length-people.length-vehicles;
+  const unique=new Map(people.map(e=>[e.record??e.name,e]));
+  const labelsOf=[...unique.values()],tails=labelsOf.map(e=>e.recordName?.split(".").at(-1)??"");
+  const vocabulary=new Map<string,string>();
+  for(const e of people)for(const token of e.affiliation?.title?.match(/[\p{L}\p{N}]+/gu)??[])if(/^[A-Z]{2,}$|[a-z][A-Z]/.test(token))vocabulary.set(token.toLowerCase(),token);
+  const prefixes=new Map<string,number>();
+  for(const t of tails){const prefix=/^([a-z]{2,3})[_-]/i.exec(t)?.[0];if(prefix)prefixes.set(prefix,(prefixes.get(prefix)??0)+1);}
+  const labels=tails.map((t,i)=>{
+    if(labelsOf[i].displayName)return labelsOf[i].displayName!;
+    const prefix=/^([a-z]{2,3})[_-]/i.exec(t)?.[0];
+    const trim=prefix&&(tails.length===1||(prefixes.get(prefix)??0)>1)?prefix:undefined;
+    const words=(trim?t.slice(trim.length):t).replace(/(?:^|[_-])(?:ma|wa|mb|wb|fa|fb|mc|wc)$/i,"").replace(/[_-]+/g," ").replace(/(\p{L})\d+\b/gu,"$1").trim().toLowerCase();
+    if(!words)return "Unnamed person type";
+    return words.split(" ").map((word,i)=>vocabulary.get(word)??(i===0?word[0].toUpperCase()+word.slice(1):word)).join(" ");
+  });
+  const distinct=[...new Set(labels)],shown=distinct.slice(0,4),more=distinct.length-shown.length;
+  if(more)shown.push(`+${more} more`);
+  const counts=[...(unique.size?[unique.size===1?"1 type of person":`${unique.size} types of people`]:[]),...(vehicles?[`${vehicles} ${vehicles===1?"vehicle":"vehicles"}`]:[]),...(unknown?[`${unknown} unknown ${unknown===1?"entry":"entries"}`]:[])];
+  return [counts.join(" · "),...shown].join("\n");
+}
 export function baseCard(content:HoloContent|undefined,key:string):BaseCard|undefined {
   if(!content)return;
   const card:BaseCard={title:"",summary:"",involved:[],more:0,furtherAway:0,technical:[]};
   const p=content.pois.find(p=>`base:pois:${p.id}`===key);
-  if(p){card.title=poiTitle(p);card.summary=card.title==="Place"?"Map pin":"Point of interest";card.technical=[["Id",p.id],["Variant",p.variant??p.kind],...(p.record?[["Record",p.record] as [string,string]]:[]),...(p.journal?[["Journal",p.journal] as [string,string]]:[])];return card;}
+  if(p){card.title=p.title??p.kind;card.summary=p.title?poiTitle(p):poiTitle(p)==="Place"?"Map pin":"Point of interest";card.technical=[["Id",p.id],["Variant",p.variant??p.kind],...(p.record?[["Record",p.record] as [string,string]]:[]),...(p.journal?[["Journal",p.journal] as [string,string]]:[])];return card;}
   const s=content.spots.find(s=>`base:spots:${s.id}`===key);
   if(s){card.title="Spot";card.summary=s.workspot?.tags.map(readable).filter(Boolean).join(", ")||"No activity recorded";card.involved=s.communities.map(id=>({key:`base:communities:${id}`,label:"Community"}));card.technical=[["Id",s.id],["Yaw",`${s.yaw}°`],...(s.workspot?[["Workspot",s.workspot.path] as [string,string]]:[])];return card;}
   const c=content.communities.find(c=>`base:communities:${c.id}`===key);
   if(c){
-    card.title="Community";const records=new Map<string,number>(),phases=new Set<string>(),spots=new Set<string>();
-    for(const e of c.entries){const name=e.record?readable(e.record.split(".").at(-1)!):"Character record unavailable";records.set(name,(records.get(name)??0)+1);for(const p of e.phases){phases.add(p.name);for(const id of p.spots)spots.add(id);}}
+    card.title="Community";const phases=new Set<string>(),spots=new Set<string>();
+    for(const e of c.entries)for(const p of e.phases){phases.add(p.name);for(const id of p.spots)spots.add(id);}
+    if(c.affiliation?.title)card.title=communityLabel(c,spots.size);
     const raw=[...new Set(c.entries.flatMap(e=>e.record?[e.record]:[]))];
-    card.summary=raw.some(r=>/^\d+$/.test(r))?`${raw.length} character ${raw.length===1?"type":"types"}`:[...records].map(([name,n])=>`${name} · ${n}`).join("\n")||"No entries";
+    card.summary=communityTypes(c.entries);
+    const names=[...new Set(c.entries.flatMap(e=>e.recordName?[e.recordName]:[]))];
+    const affiliations=[...new Set(c.entries.flatMap(e=>e.affiliation?[`${e.affiliation.recordName??e.affiliation.record} (${e.affiliation.record})`]:[]))];
+    const affiliationNames=[...new Set([c.affiliation?.title,...c.entries.map(e=>e.affiliation?.title)].filter((title):title is string=>!!title))];
     // Names containing code punctuation/digits, or <=3 characters, aren't presented as times.
     const coded=[...phases].some(name=>name.trim().length<=3||!/^\p{L}+(?:[ '\u2019-]\p{L}+)*$/u.test(name));
     card.when=coded?`${phases.size} time ${phases.size===1?"phase":"phases"}`:[...phases].join(", ");
     const byId=new Map(content.spots.map(s=>[s.id,s]));
     const nearby=[...spots].filter(id=>byId.has(id));
     card.involved=nearby.slice(0,12).map((id,index)=>{const tag=byId.get(id)?.workspot?.tags[0]?.replace(/[-_]+/g," ").trim();return {key:`base:spots:${id}`,label:`Spot · ${tag||index+1}`};});
-    card.more=Math.max(0,nearby.length-12);card.furtherAway=spots.size-nearby.length;card.technical=[["Id",c.id],...(raw.length?[["Character records",raw.join(", ")] as [string,string]]:[]),...(coded?[["Time phases",[...phases].join(", ")] as [string,string]]:[])];return card;
+    card.more=Math.max(0,nearby.length-12);card.furtherAway=spots.size-nearby.length;card.technical=[["Id",c.id],...(raw.length?[["Character records",raw.join(", ")] as [string,string]]:[]),...(names.length?[["Record names",names.join(", ")] as [string,string]]:[]),...(affiliations.length?[["Affiliation records",affiliations.join(", ")] as [string,string]]:[]),...(affiliationNames.length?[["Affiliation names",affiliationNames.join(", ")] as [string,string]]:[]),...(coded?[["Time phases",[...phases].join(", ")] as [string,string]]:[])];return card;
   }
 }

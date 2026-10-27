@@ -15,25 +15,40 @@ export function journalHash(path: string): number {
   h^=bytes.length;h^=h>>>16;h=Math.imul(h,0x85ebca6b);h^=h>>>13;h=Math.imul(h,0xc2b2ae35);h^=h>>>16;
   return h>>>0;
 }
-export interface JournalPin { path: string; variant?: string; record?: string }
+export interface JournalPin { path: string; variant?: string; record?: string; titleKey?: string; questPath?: string; displayRecord?: string; titleField?: string; titlePrefix?: string; brand?: boolean }
 export type JournalIndex = Map<number,JournalPin | null>;
 export function indexJournal(root: RedObject, index:JournalIndex=new Map()): JournalIndex {
   let visited=0;const active=new Set<RedObject>();
-  const walk=(value:unknown,parent:string,depth:number) => {
+  const walk=(value:unknown,parent:string,depth:number,questTitle?:string) => {
     const node=value instanceof RedHandle?value.target:value;
     if(!(node instanceof RedObject))return;
     if(++visited>200_000||depth>256)throw new NativeBudgetError("Journal tree exceeds W1 traversal bounds.");
     if(active.has(node))throw new NativeBudgetError("Cyclic journal tree.");active.add(node);
     const f=node.fields,id=text(f.id),path=id?(parent?parent+"/":"")+id:parent;
+    if(node.type==="gameJournalQuest")questTitle=typeof f.title==="object"&&f.title?text((f.title as {value?:unknown}).value):undefined;
     if(path) {
       const data=object(f.mappinData), variant=text(object(data.typedVariant).variant)??text(data.variant)
         ??(node.type==="gameJournalQuestMapPin"?"DefaultQuestVariant":undefined);
       // recommendedLevelID is a content-assignment record, not an NPC or vendor record.
-      const row:JournalPin={path,variant,record:text(f.recommendedLevelID)},hash=journalHash(path),old=index.get(hash);
+      const row:JournalPin={path,variant,record:text(f.recommendedLevelID)};
+      if(node.type==="gameJournalQuestMapPin"&&questTitle)row.titleKey=questTitle;
+      if(node.type==="gameJournalQuest"&&questTitle)row.titleKey=questTitle;
+      if(node.type==="gameJournalPointOfInterestMappin") {
+        row.questPath=text(object(f.questPath).realPath);
+        if(variant==="ServicePointRipperdocVariant"||variant==="Zzz18_RacingVariant") {
+          row.displayRecord=`Mappins.${id}`;row.titleField=variant==="ServicePointRipperdocVariant"?"localizedName":"title";
+          if(variant==="ServicePointRipperdocVariant")row.titlePrefix="UI-MappinTypes-RipperdocServicePoint";
+        }
+        const slot=text(f.slotName);
+        if(slot&&(variant==="Zzz01_CarForPurchaseVariant"||variant==="Zzz02_MotorcycleForPurchaseVariant"||variant==="Zzz05_ApartmentToPurchaseVariant")) {
+          row.displayRecord=`${variant==="Zzz05_ApartmentToPurchaseVariant"?"Apartment":"Vehicle"}.${slot}_offer`;row.titleField="name";row.brand=variant!=="Zzz05_ApartmentToPurchaseVariant";
+        }
+      }
+      const hash=journalHash(path),old=index.get(hash);
       if(old===undefined)index.set(hash,row);
-      else if(old===null||old.path!==path||old.variant!==variant||old.record!==row.record)index.set(hash,null);
+      else if(old===null||JSON.stringify(old)!==JSON.stringify(row))index.set(hash,null);
     }
-    for(const child of list(f.entries))walk(child,path,depth+1);
+    for(const child of list(f.entries))walk(child,path,depth+1,questTitle);
     active.delete(node);
   };
   walk(root.fields.entry,"",0);return index;

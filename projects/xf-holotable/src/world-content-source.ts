@@ -18,12 +18,16 @@ import { validateContent } from "./world-content-validation.ts";
 export { validateContent } from "./world-content-validation.ts";
 import { indexJournal, mapMappins, mapWorkspot, type JournalIndex } from "./world-content-resources.ts";
 import type { WorldPack, Vec3 } from "./model.ts";
+import { TextTable, gameTextPaths } from "../../xf-studio/authoring/src/game/game-text";
+import { worldNameSources, worldRecordNames } from "./world-content-names.ts";
+import { addWorldTexts, resolvePoiTitles } from "./world-content-titles.ts";
+import { resolveCommunityPeople } from "./world-content-people.ts";
 
 const BASE="base\\worlds\\03_night_city\\_compiled\\default\\";
 const BLOCKS=[BASE+"blocks\\all.streamingblock",BASE+"ep1\\blocks\\all.streamingblock"];
 const digest=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
-export function worldContentCacheKey(sources:readonly SourceStamp[],pack:WorldPack,slice:string,reader=WORLD_CONTENT_READER) {
-  return digest({sources,pack,slice,reader,native:NATIVE_READER_VERSION,sector:SECTOR_READER_VERSION,contentSector:CONTENT_SECTOR_VERSION,policy:CONTENT_POLICY});
+export function worldContentCacheKey(sources:readonly SourceStamp[],pack:WorldPack,slice:string,reader=WORLD_CONTENT_READER,names:readonly SourceStamp[]=[]) {
+  return digest({sources,names,pack,slice,reader,native:NATIVE_READER_VERSION,sector:SECTOR_READER_VERSION,contentSector:CONTENT_SECTOR_VERSION,policy:CONTENT_POLICY});
 }
 /** Probe the small assembled file before opening archive indexes. Damaged entries rebuild atomically. */
 export async function cachedWorldContent(file:string,key:string,build:()=>Promise<WorldContent>,signal:AbortSignal) {
@@ -41,9 +45,11 @@ export async function cachedWorldContent(file:string,key:string,build:()=>Promis
 }
 interface Descriptor { resource:string; min:Vec3; max:Vec3; ranges:number[]; source:number; level:number }
 export async function buildWorldContent(options:{root:string;pack:WorldPack;slice:string;directory:string;signal:AbortSignal;now?:()=>string}) {
-  const {root,pack,directory,signal}=options,slice=selectSlice(pack,options.slice),sources=vanillaSources(root),key=worldContentCacheKey(sources,pack,slice.id);
+  const {root,pack,directory,signal}=options,slice=selectSlice(pack,options.slice),sources=vanillaSources(root),ep1=sources.some(s=>/[\\/]ep1[\\/]/.test(s.path));
+  const names=worldNameSources(root,ep1),key=worldContentCacheKey(sources,pack,slice.id,WORLD_CONTENT_READER,names.sources);
   const unchanged=()=>{for(const s of sources){const now=statSync(s.path);if(now.size!==s.size||now.mtimeMs!==s.mtimeMs)throw Error("Vanilla archives changed during the build; rerun.");}
-    if(digest(vanillaSources(root))!==digest(sources))throw Error("Vanilla mount list changed during the build; rerun.");};
+    if(digest(vanillaSources(root))!==digest(sources))throw Error("Vanilla mount list changed during the build; rerun.");
+    if(digest(worldNameSources(root,ep1).sources)!==digest(names.sources))throw Error("TweakDB sources changed during the build; rerun.");};
   const result=await cachedWorldContent(join(directory,`${slice.id}.content.json`),key,async()=>{
     const oodle=loadGameOodle(root),pool=new NativeArchivePool(oodle.decompress),workers=new SectorWorkers(1,"content");
     const cache=createSectorCache(join(directory,"sectors"),workers.read,{version:CONTENT_SECTOR_VERSION,decode:decodeContentSector});
@@ -74,6 +80,11 @@ export async function buildWorldContent(options:{root:string;pack:WorldPack;slic
         out.addSector(depotHash(d.resource).toString(),sector,d.ranges);count(out.counts,"sectors");
       }
       out.finishCommunities();
+      const records=worldRecordNames(names.files);
+      for(const c of out.communities)for(const e of c.entries) {
+        const name=e.record?records.get(e.record):undefined;if(name)e.recordName=name;
+        count(out.counts,"community.recordName",name?undefined:"record name absent from REDmod sources");
+      }
       const workspots=new Map<string,ReturnType<typeof mapWorkspot>|null>();
       for(const spot of out.spots) {
         const path=spot.workspot?.path;
@@ -94,8 +105,11 @@ export async function buildWorldContent(options:{root:string;pack:WorldPack;slic
       const journal:JournalIndex=new Map();
       for(const path of ["base\\journal\\cooked_journal.journal","ep1\\journal\\cooked_journal.journal"])if(owner(path)>=0)indexJournal(decode(path),journal);
       for(const ext of ["mappins","poimappins"]) {const path=BASE+"03_night_city."+ext;mapMappins(decode(path),depotHash(path).toString(),journal,out);}
-      // These optional display fields have no proven direct source in the compiled pins.
-      for(const poi of out.pois) {count(out.counts,"poi.title","localized title not resolved");count(out.counts,"poi.record",poi.record?undefined:"linked record not stored");}
+      const texts=new TextTable("en-us");
+      for(const path of gameTextPaths("en-us",ep1))if(owner(path)>=0)addWorldTexts(texts,decode(path),path);
+      resolveCommunityPeople(out.communities,names.db?.blob??null,records,texts,out.counts);
+      resolvePoiTitles(out.pois,journal,names.db?.blob??null,texts,out.counts);
+      for(const poi of out.pois)count(out.counts,"poi.record",poi.record?undefined:"linked record not stored");
       unchanged();signal.throwIfAborted();
       return {schema:"xfh/world-content-1",slice:{id:slice.id,title:slice.title,places:slice.places},
         source:{game:pack.provenance.game,archives:digest(sources),reader:WORLD_CONTENT_READER,built:(options.now??(()=>new Date().toISOString()))(),key},

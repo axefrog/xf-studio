@@ -9,6 +9,7 @@ export function validateContent(value: unknown, key: string): asserts value is W
   for(const field of ["game","archives","reader","built","key"])string(value.source[field],`source ${field}`);
   string(value.slice.id,"slice id");string(value.slice.title,"slice title");
   const budget=new ContentBudget();stringList(value.slice.places,"slice places",budget);
+  const affiliation=(value:unknown)=>{if(value===undefined)return;shape(value,"affiliation");string(value.record,"affiliation record");optionalString(value.recordName,"affiliation record name");optionalString(value.title,"affiliation title");budget.charge({nested:1,bytes:64+stringBytes(value.record)+stringBytes(value.recordName as string|undefined)+stringBytes(value.title as string|undefined)});};
   let total=0;
   for(const field of ["communities","spots","spawners","pois"]) {array(value[field],field);total+=value[field].length;}
   if(total>CONTENT_CAP)throw new NativeBudgetError("Slice exceeds 50,000 records; use a smaller slice.");
@@ -33,10 +34,13 @@ export function validateContent(value: unknown, key: string): asserts value is W
       budget.charge({records:1,bytes:256+stringBytes(row.id)+stringBytes(row.place)});ids.add(row.id);
       for(const field of ["name","record","title","journal","variant"]) {optionalString(row[field],field);budget.charge({bytes:stringBytes(row[field] as string|undefined)});}
       if(collection==="communities") {
+        affiliation(row.affiliation);
         array(row.entries,"community entries");
         for(const e of row.entries) {
-          shape(e,"community entry");string(e.name,"entry name");optionalString(e.record,"entry record");array(e.phases,"entry phases");
-          budget.charge({nested:1,bytes:64+stringBytes(e.name)+stringBytes(e.record as string|undefined)});
+          shape(e,"community entry");string(e.name,"entry name");optionalString(e.record,"entry record");optionalString(e.recordName,"entry record name");array(e.phases,"entry phases");
+          optionalString(e.displayName,"entry display name");affiliation(e.affiliation);
+          if(e.kind!==undefined&&e.kind!=="person"&&e.kind!=="vehicle")throw new NativeMalformedError("Invalid community entry kind.");
+          budget.charge({nested:1,bytes:64+stringBytes(e.name)+stringBytes(e.record as string|undefined)+stringBytes(e.recordName as string|undefined)+stringBytes(e.displayName as string|undefined)+stringBytes(e.kind as string|undefined)});
           for(const phase of e.phases) {
             shape(phase,"community phase");string(phase.name,"phase name");
             if(phase.time!==undefined)finiteTuple(phase.time,2,"phase time");

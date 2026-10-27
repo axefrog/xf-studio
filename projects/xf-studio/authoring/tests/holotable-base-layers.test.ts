@@ -1,17 +1,33 @@
 import { expect, test } from "bun:test";
-import { baseCard, baseItem, baseLayerItems, baseLayerSteps, communityOpacity, poiGlyph, poiTitle } from "../src/features/holotable/view/base-layers";
+import { baseCard, baseItem, baseLayerItems, baseLayerSteps, communityTypes, communityOpacity, poiGlyph, poiTitle } from "../src/features/holotable/view/base-layers";
 import { camera, ORBITS } from "../src/features/holotable/view/projection";
 import { createHolotable } from "../src/features/holotable/service";
 import { worldContexts } from "../src/features/holotable/world-context";
 import type { HoloContent } from "../src/features/holotable/types";
 const on={pois:true,spots:true,communities:true};
+test("people summaries use data kinds, strip body codes/digits, preserve affiliation acronyms and collapse labels",()=>{
+ const entries=["kab_ncpd_police_ranged2_ma","kab_ncpd_police_ranged1_wa","kab_guard_mb","kab_sitter_wb","kab_runner_fa","kab_vendor_fb","kab_child_mc","kab_child_wc"].map((n,i)=>({name:String(i),record:String(i),recordName:`Character.${n}`,kind:"person" as const,affiliation:{record:"aff",title:"NCPD"},phases:[]}));
+ expect(communityTypes(entries)).toBe("8 types of people\nNCPD police ranged\nGuard\nSitter\nRunner\n+2 more");
+ expect(communityTypes([{...entries[0],displayName:"Police officer"},{...entries[1],kind:"vehicle"}])).toBe("1 type of person · 1 vehicle\nPolice officer");
+ expect(communityTypes([{...entries[0],recordName:"Character.kab_maxtac_ranged2_ma",affiliation:{record:"aff",title:"MaxTac"}}])).toBe("1 type of person\nMaxTac ranged");
+ expect(communityTypes([{...entries[0],kind:undefined}])).toBe("1 unknown entry");
+ expect(communityTypes([])).toBe("No entries");
+});
 const content:HoloContent={available:true,slices:["kabuki"],pois:[{id:"p",place:"test",at:[0,0,0],kind:"Ripperdoc",variant:"ServicePointRipperdocVariant",record:"1",journal:"journal/p"}],spots:[
  {id:"s1",place:"test",at:[-10,0,0],yaw:90,workspot:{path:"test.workspot",tags:["stand-around","talk_to_friend"]},communities:["c"]},
  {id:"s2",place:"test",at:[10,0,0],yaw:0,communities:["c"]},
- {id:"far",place:"test",at:[900,0,0],yaw:0,communities:["c"]}],communities:[{id:"c",place:"test",entries:[{name:"resident",record:"Character.street_vendor",phases:[{name:"day_shift",spots:["s1","s2","far"]}]}]}]};
+ {id:"far",place:"test",at:[900,0,0],yaw:0,communities:["c"]}],communities:[{id:"c",place:"test",entries:[{name:"resident",record:"1234",recordName:"Character.street_vendor",kind:"person",phases:[{name:"day_shift",spots:["s1","s2","far"]}]}]}]};
 test("POIs map only to Places glyphs and unknown raw variants say Place",()=>{
  expect(poiGlyph(content.pois[0])).toBe("clinic");expect(poiTitle(content.pois[0])).toBe("Ripperdoc");
  expect(poiGlyph({...content.pois[0],kind:"Food vendor"})).toBe("market");expect(poiGlyph({...content.pois[0],kind:"FutureVariant"})).toBe("place");expect(poiTitle({...content.pois[0],kind:"FutureVariant"})).toBe("Place");
+});
+test("POI selection shows a resolved title, while the map keeps its kind label",()=>{
+ const named={...content,pois:[{...content.pois[0],title:"A local doctor"}]};
+ expect(baseCard(named,"base:pois:p")).toMatchObject({title:"A local doctor",summary:"Ripperdoc"});
+ expect(baseLayerItems(named,on).find(i=>i.base==="pois")?.label).toBe("Ripperdoc");
+ expect(baseCard({...named,pois:[{...named.pois[0],title:undefined,kind:"FutureVariant"}]},"base:pois:p")?.title).toBe("FutureVariant");
+ const card=baseCard(content,"base:communities:c")!;
+ expect(card.summary).not.toContain("1234");expect(card.technical).toContainEqual(["Character records","1234"]);expect(card.technical).toContainEqual(["Record names","Character.street_vendor"]);
 });
 test("visible linked spots determine a community centroid and the overview fade",()=>{
  const C=camera([0,0,0],{...ORBITS.top,distance:300},850,500),items=baseLayerItems(content,on,C),community=items.find(i=>i.base==="communities")!;
@@ -27,9 +43,9 @@ test("dot work is capped nearest first, with cooperative source traversal",()=>{
 test("base cards keep raw values in Technical and expose phases and bounded chips",()=>{
  expect(baseCard(content,"base:pois:p")).toMatchObject({title:"Ripperdoc",summary:"Point of interest",technical:[["Id","p"],["Variant","ServicePointRipperdocVariant"],["Record","1"],["Journal","journal/p"]]});
  expect(baseCard(content,"base:spots:s1")).toMatchObject({title:"Spot",summary:"Stand around, Talk to friend",involved:[{key:"base:communities:c",label:"Community"}]});
- expect(baseCard(content,"base:communities:c")).toMatchObject({summary:"Street vendor · 1",when:"1 time phase",more:0,involved:[{key:"base:spots:s1",label:"Spot · stand around"},{key:"base:spots:s2",label:"Spot · 2"},{key:"base:spots:far",label:"Spot · 3"}]});
+ expect(baseCard(content,"base:communities:c")).toMatchObject({summary:"1 type of person\nStreet vendor",when:"1 time phase",more:0,involved:[{key:"base:spots:s1",label:"Spot · stand around"},{key:"base:spots:s2",label:"Spot · 2"},{key:"base:spots:far",label:"Spot · 3"}]});
  const many={...content,spots:Array.from({length:20},(_,i)=>({...content.spots[0],id:String(i)})),communities:[{...content.communities[0],entries:[{name:"resident",record:"12345",phases:[{name:"night",spots:Array.from({length:20},(_,i)=>String(i))}]}]}]};
- expect(baseCard(many,"base:communities:c")).toMatchObject({summary:"1 character type",more:8});expect(baseCard(many,"base:communities:c")?.involved).toHaveLength(12);
+ expect(baseCard(many,"base:communities:c")).toMatchObject({summary:"1 unknown entry",more:8});expect(baseCard(many,"base:communities:c")?.involved).toHaveLength(12);
 });
 
 test("community chips resolve only nearby response spots and count distant links separately",()=>{
@@ -127,4 +143,23 @@ test("short or coded phases use a count and raw Technical names; words retain th
  expect(baseCard(content,"base:spots:s2")?.summary).toBe("No activity recorded");
  const one={...content,spots:[content.spots[0]],communities:content.communities};
  expect(baseLayerItems(one,on).find(i=>i.base==="communities")?.label).toBe("Community · 1 spot");
+});
+
+test("affiliation labels match cards, drawing and explicit selection; unknown stays Community",()=>{
+ const c={...content.communities[0],affiliation:{record:"10",title:"NCPD"}},named={...content,communities:[c]};
+ expect(baseCard(named,"base:communities:c")?.title).toBe("NCPD · 3 spots");
+ expect(baseLayerItems(named,on).find(i=>i.base==="communities")?.label).toBe("NCPD · 3 spots");
+ expect(baseItem(named,"base:communities:c")?.label).toBe("NCPD · 3 spots");
+ expect(baseCard(content,"base:communities:c")?.title).toBe("Community");
+});
+
+test("No Affiliation displays as Unaffiliated on cards and map labels while Technical keeps the raw text",()=>{
+ const affiliation={record:"10",recordName:"Factions.Unit",title:"No Affiliation"};
+ const named={...content,communities:[{...content.communities[0],affiliation}]};
+ const card=baseCard(named,"base:communities:c")!;
+ expect(card.title).toBe("Unaffiliated · 3 spots");
+ expect(baseLayerItems(named,on).find(i=>i.base==="communities")?.label).toBe("Unaffiliated · 3 spots");
+ expect(baseItem(named,"base:communities:c")?.label).toBe("Unaffiliated · 3 spots");
+ expect(card.technical).toContainEqual(["Affiliation names","No Affiliation"]);
+ expect(affiliation.title).toBe("No Affiliation");
 });

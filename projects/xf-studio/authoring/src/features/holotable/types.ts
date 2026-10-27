@@ -44,9 +44,10 @@ export interface HoloSolid {
   readonly id: string; readonly kind: "box" | "sphere" | "capsule"; readonly center: Vec3;
   readonly axes: readonly [Vec3, Vec3, Vec3]; readonly size: Vec3;
 }
-export interface HoloPoi { readonly id: string; readonly place: string; readonly at: Vec3; readonly kind: string; readonly variant?: string; readonly record?: string; readonly journal?: string }
+export interface HoloPoi { readonly id: string; readonly place: string; readonly at: Vec3; readonly kind: string; readonly variant?: string; readonly title?: string; readonly record?: string; readonly journal?: string }
 export interface HoloSpot { readonly id: string; readonly place: string; readonly at: Vec3; readonly yaw: number; readonly workspot?: { readonly path: string; readonly activity?: string; readonly tags: readonly string[] }; readonly communities: readonly string[] }
-export interface HoloCommunity { readonly id: string; readonly place: string; readonly name?: string; readonly entries: readonly { readonly name: string; readonly record?: string; readonly phases: readonly { readonly name: string; readonly spots: readonly string[] }[] }[] }
+export interface HoloAffiliation { readonly record:string; readonly recordName?:string; readonly title?:string }
+export interface HoloCommunity { readonly id: string; readonly place: string; readonly name?: string; readonly affiliation?:HoloAffiliation; readonly entries: readonly { readonly name: string; readonly record?: string; readonly recordName?: string; readonly kind?:"person"|"vehicle"; readonly displayName?:string; readonly affiliation?:HoloAffiliation; readonly phases: readonly { readonly name: string; readonly spots: readonly string[] }[] }[] }
 export interface HoloContent { readonly available: boolean; readonly slices: readonly string[]; readonly pois: readonly HoloPoi[]; readonly spots: readonly HoloSpot[]; readonly communities: readonly HoloCommunity[] }
 export interface HoloWorld {
   readonly content?: HoloContent;

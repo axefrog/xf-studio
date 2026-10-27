@@ -1,7 +1,7 @@
 /**
  * Read-only lookups in the game's compiled TweakDB blob (`r6/cache/tweakdb.bin`, or `tweakdb_ep1.bin` with Phantom
- * Liberty). Pure: the host passes the file's bytes. Only flats (record fields) of a few value types are decoded, and only
- * the IDs asked for, so the 40–50 MB blob is scanned without building an index of millions of keys.
+ * Liberty). Pure: the host passes the file's bytes. Only requested flats (record fields) and record type hashes are decoded,
+ * so the 40–50 MB blob is scanned without building an index of millions of keys.
  *
  * Format [source: WolvenKit `WolvenKit.RED4/TweakDB/TweakDBReader.cs` and `Header.cs` at commit 11720772]: magic
  * `0x0BB1DB47`, a 28-byte header (blob version 8, parser version 4, record checksum, then the offsets of the flats,
@@ -196,6 +196,15 @@ export class TweakDbBlob {
     flat.valueStarts = starts;
     flat.keyTable = pos;
     return starts;
+  }
+
+  /** Requested record IDs and their stored type hashes. WolvenKit ReadRecords: u32 count, (u64 id, u32 type) rows. */
+  recordTypes(ids: Iterable<TweakId>): Map<TweakId, number> {
+    const wanted=new Set(ids),found=new Map<TweakId,number>();if(!wanted.size)return found;
+    const start=this.view.getInt32(20,true),count=this.u32(start);
+    this.within(start+4,count*12);
+    for(let i=0,pos=start+4;i<count;i++,pos+=12){const id=this.id(pos);if(wanted.has(id))found.set(id,this.u32(pos+8));}
+    return found;
   }
 
   /** The flats among `ids` this blob defines (IDs it lacks are simply absent from the result). */

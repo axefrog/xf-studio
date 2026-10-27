@@ -7,11 +7,12 @@ import { ContentBudget, stringBytes, type ContentUsage } from "./world-content-b
 
 // The four provisional Story Engine decisions live here; none is inferred by an adapter.
 export const CONTENT_POLICY = Object.freeze({ files: "per-slice", workspots: "activity-and-tags", characters: "record-ids", variants: "defaults" });
-export const WORLD_CONTENT_READER = "w1.3";
+export const WORLD_CONTENT_READER = "w1.5";
 /** Prepared slices, shared by the reader and the demand-driven service. */
 export const WORLD_CONTENT_SLICES = [{ id: "kabuki", place: "Districts.Kabuki" }] as const;
 export const CONTENT_CAP = 50_000, CONTENT_FILE_CAP = 32 * 1024 * 1024;
-export interface Community { id: string; place: string; name?: string; entries: { name: string; record?: string; phases: { name: string; time?: [number, number]; spots: string[] }[] }[] }
+export interface Affiliation { record:string; recordName?:string; title?:string }
+export interface Community { id: string; place: string; name?: string; affiliation?:Affiliation; entries: { name: string; record?: string; recordName?: string; kind?:"person"|"vehicle"; displayName?:string; affiliation?:Affiliation; phases: { name: string; time?: [number, number]; spots: string[] }[] }[] }
 export interface Spot { id: string; place: string; at: Vec3; yaw: number; workspot?: { path: string; activity?: string; tags: string[] }; communities: string[] }
 export interface Spawner { id: string; place: string; at: Vec3; yaw: number; record: string; onStart?: boolean }
 export interface Poi { id: string; place: string; at: Vec3; kind: string; variant?: string; title?: string; record?: string; journal?: string }

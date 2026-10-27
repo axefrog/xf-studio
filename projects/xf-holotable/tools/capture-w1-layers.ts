@@ -6,7 +6,8 @@ import { loadWorldPack, region, boxOf } from "../src/world";
 import { worldContentFiles } from "../src/world-content-files";
 import { createSolidWorkerPort } from "../src/solid-worker-port";
 import type { Vec3 } from "../src/model";
-const root=resolve(import.meta.dir,"../../.."),output=join(root,"local/holotable/evidence/w1-layers"),authoring=join(root,"projects/xf-studio/authoring");mkdirSync(output,{recursive:true});
+const affiliationReview=Bun.argv.includes("--affiliations"),names=Bun.argv.includes("--names")||affiliationReview;
+const root=resolve(import.meta.dir,"../../.."),output=join(root,`local/holotable/evidence/${names?"w1-names":"w1-layers"}`),authoring=join(root,"projects/xf-studio/authoring");mkdirSync(output,{recursive:true});
 const pack=loadWorldPack(join(root,"local/holotable/world-pack.json"));if(!pack)throw Error("Prepared world pack required");
 const content=await Bun.file(join(root,"local/holotable/world/kabuki.content.json")).json();
 const center:Vec3=(content.pois.find((p:any)=>p.kind==="Ripperdoc")??content.spots[0]).at,owner=worldContentFiles(join(root,"local/holotable/world"));
@@ -28,10 +29,20 @@ let page:Session|undefined;const results:unknown[]=[];
 try{
  page=await launch(`http://127.0.0.1:${server.port}/?verify=1`,{width:2050,height:850,motion:"reduce",args:["--disable-gpu","--no-sandbox"]});
  for(const theme of (selectionCounts?["light"]:["light","dark"]))for(const width of (selectionCounts?[850]:[300,850])){
-  await page.viewport(width*2+340,850);await page.send("Page.navigate",{url:`http://127.0.0.1:${server.port}/?verify=1&theme=${theme}&width=${width}`});
+  await page.viewport(width*2+340,850);await page.send("Page.navigate",{url:`http://127.0.0.1:${server.port}/?verify=1&theme=${theme}&width=${width}${names?"&names=1":""}`});
   await page.waitFor('document.body.dataset.ready==="true"&&globalThis.w1.service.snapshot().open?.world.content?.spots.length>0',15000);
   await page.waitFor('globalThis.w1.frames.length>0&&!globalThis.w1.frames.at(-1).pending&&globalThis.w1.frames.at(-1).solids>0',15000);
   const prefix=`${theme}-${width}`;
+  if(affiliationReview&&theme==="light"&&width===850){await page.screenshot(join(output,"affiliation-overview.png"));}
+  if(names){
+   for(const type of (affiliationReview?["communities"]:["communities","pois"])){
+    await page.evaluate(`globalThis.w1.focus('${type}')`);await page.waitFor('!globalThis.w1.frames.at(-1).pending',10000);
+    const card=await page.evaluate('(()=>{const c=document.querySelector("[data-holo-card]"),d=document.querySelector(".holotable-details");return {text:c?.textContent,overflow:d.scrollWidth>d.clientWidth+1};})()');
+    if(card.overflow||!card.text||card.text.includes("unnamed character"))throw Error(JSON.stringify(card));
+    await page.screenshot(join(output,`${prefix}-${type}-card.png`));results.push({theme,width,type,...card});
+   }
+   continue;
+  }
   if(baseline){await page.evaluate('(async()=>{for(const id of ["pois","spots","communities"])await globalThis.w1.service.dispatch({kind:"holo.layer",id,on:false})})()');await page.waitFor('!globalThis.w1.frames.at(-1).pending',15000);}
   else if(!selectionCounts)await page.screenshot(join(output,`${prefix}-overview.png`));
   if(selectionCounts){

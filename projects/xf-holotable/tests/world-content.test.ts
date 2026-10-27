@@ -178,8 +178,10 @@ test("valid-JSON damage in every assembled collection and nested structure rebui
     ["spots",{id:"s",place:area.id,at:[1,2,3],yaw:0,communities:[],workspot:{path:"x",tags:[null]}}],
     ["communities",{id:"c",place:area.id,entries:[null]}],
     ["communities",{id:"c",place:area.id,entries:[{name:"e",phases:[{name:"p",spots:[null]}]}]}],
+    ["communities",{id:"c",place:area.id,entries:[{name:"e",record:"1",recordName:123,phases:[]}]}],
     ["spawners",{id:"sp",place:area.id,at:[1,2,3],yaw:0}],
     ["pois",{id:"poi",place:area.id,at:[1,2,3]}],
+    ["pois",{id:"poi",place:area.id,at:[1,2,3],kind:"Kind",title:123}],
   ];
   let rebuilds=0;
   for(const [collection,row] of invalid) {
