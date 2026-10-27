@@ -243,6 +243,24 @@ test("a local owner revision also invalidates a choice without treating acknowle
   } finally { life.abort(); await w.dispose(); }
 });
 
+for (const field of ["binding", "target"] as const) test(`captured candidate ${field} data cannot redirect the private revision validation`, async () => {
+  const w = await profileContextStudio(); const life = new AbortController();
+  try {
+    const ref = w.looks[2]!, peer = w.looks[0]!;
+    expect(w.services.collections.targetStatus(peer).revision).toBe(w.services.collections.targetStatus(ref).revision);
+    const snapshot = w.port.panels.bindings!.capture("presets--shared", life.signal), row = candidate(snapshot, pinned({ look: ref })), action = row.action!;
+    expect(w.port.authoring.capability(action).available).toBe(true);
+    expect(w.services.collections.updateLook(ref, { name: "Changed after capture" }).ok).toBe(true);
+    expect(w.port.authoring.capability(action)).toMatchObject({ available: false, code: "missing_target" });
+    const exposed = field === "binding" ? (row.binding.target as { look: typeof ref }).look : row.target.look!;
+    Object.assign(exposed, peer);
+    const before = state(w);
+    expect(action.binding).toEqual(pinned({ look: ref }));
+    expect(w.port.authoring.capability(action)).toMatchObject({ available: false, code: "missing_target" });
+    expect(w.port.authoring.dispatch(action)).toMatchObject({ ok: false, code: "missing_target" }); expect(state(w)).toBe(before);
+  } finally { life.abort(); expect(w.targets.held()).toBe(0); expect(w.panelActions.heldBindingChoices()).toBe(0); await w.dispose(); }
+});
+
 test("withdrawal/return invalidates old choices and abort releases all choice and resolver captures", async () => {
   let available = true, generation = 0;
   const w = await profileContextStudio({ available: () => available, generation: () => generation });
@@ -308,6 +326,25 @@ test("U8 Leave empty substitution reports exactly the direct subject/look pins t
     const content = instantiateFragment(fragment, fillOf(substitution), { freshId: kind => `${kind}-${++id}`, freshInstance: type => `${type}--fresh${++id}` }, { name: "Empty" });
     for (const change of substitution.bindingChanges) expect(content.panels[fragment.panels.findIndex(panel => panel.key === change.panel)]!.binding).toBeUndefined();
     expect(JSON.stringify(fragment)).toBe(before);
+  } finally { await w.dispose(); }
+});
+
+test("U8 default-save disclosure excludes omitted view panes and matches the saved fragment", async () => {
+  const w = await profileContextStudio({ viewPanels: true });
+  try {
+    const tab = w.session.panel("view--scene0")!.tab;
+    w.session.closeView("main");
+    const source = w.session.tab(tab)!, disclosure = w.port.tabs!.defaultSave!(tab);
+    expect(source.panels.some(panel => panel.id === "view--scene0")).toBe(true);
+    expect(w.port.authoring.dispatch({ kind: "tabs.saveAsDefault", tab, name: "After closing main", baseline: disclosure.baseline }).ok).toBe(true);
+    const fragment = w.services.defaults.list().find(item => item.name === "After closing main")!.fragment;
+    expect(fragment.views).toHaveLength(2); expect(fragment.panels.some(panel => panel.type === "view")).toBe(false);
+    const changed = source.panels.filter(panel => panel.type !== "view").flatMap((panel, index) =>
+      panel.binding?.policy === "pinned" && fragment.panels[index]!.binding?.policy !== "pinned" ? [panel.id] : []);
+    expect(changed).toContain("presets--scene0");
+    expect(disclosure.bindingChanges.map(change => change.instance)).toEqual(changed);
+    expect(disclosure.bindingChanges.some(change => change.instance === "view--scene0")).toBe(false);
+    expect(w.session.tab(tab)!.panels).toEqual(source.panels);
   } finally { await w.dispose(); }
 });
 

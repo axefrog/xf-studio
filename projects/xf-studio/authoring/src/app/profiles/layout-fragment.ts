@@ -249,7 +249,8 @@ export function defaultBindingChanges(session: ProfileSessionData, tab: TabId) {
   const source = session.tabs.find(item => item.id === tab), views = session.views.views.filter(view => view.tab === tab && view.kind === "3d" && VIEW_SLOTS.every(slot => typeof view[slot] === "string"));
   return (source?.panels ?? []).flatMap(panel => {
     const binding = panel.binding;
-    if (binding?.policy !== "pinned") return [];
+    // View panes are represented by the fragment's retained views, not its panel bindings; omitted panes change no saved policy.
+    if (panel.type === "view" || binding?.policy !== "pinned") return [];
     const pin = binding.target;
     const reason = "view" in pin && !views.some(view => view.id === pin.view) ? "external-view" as const
       : "scene" in pin && !views.some(view => view.scene === pin.scene) ? "external-scene" as const : undefined;

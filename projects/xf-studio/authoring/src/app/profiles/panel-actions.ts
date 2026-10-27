@@ -83,7 +83,9 @@ export class PanelActions {
     if (!destination) return snapshot;
     const capture = (binding: PanelBinding): Extract<PanelAction, { kind: "panels.setBinding" }> => {
       const choice = ++this.nextChoice, action = structuredClone({ kind: "panels.setBinding" as const, destination, binding, choice });
-      const target = bindingTarget(this.deps.world(), binding), current = this.deps.captureBinding?.(instance, binding, signal)
+      // Neither the returned candidate nor its action may share nested references with private validation state.
+      const validationBinding = structuredClone(binding);
+      const target = bindingTarget(this.deps.world(), validationBinding), current = this.deps.captureBinding?.(instance, validationBinding, signal)
         ?? (() => signal.aborted ? refusal("missing_target", "That chooser was closed.") : captureCurrent(this.deps.world(), { target, revisions: {} }, () => undefined));
       if (!signal.aborted) {
         this.choices.set(choice, { action: structuredClone(action), current });
