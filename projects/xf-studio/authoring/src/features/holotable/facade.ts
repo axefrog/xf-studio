@@ -7,7 +7,7 @@ import { HOLOTABLE_MODULE } from "./module";
 import type { HolotableService } from "./service";
 
 export type HolotableFacade = { readonly module: ModuleService["module"] } &
-  Pick<HolotableService, "capability" | "dispatch" | "snapshot" | "subscribe" | "speedOptions" | "context" | "navigation" | "focusView" | "resolveView" | "preference" | "remember">;
+  Pick<HolotableService, "capability" | "dispatch" | "snapshot" | "subscribe" | "speedOptions" | "context" | "navigation" | "nextVisibleChange" | "preference" | "remember">;
 
 export function holotableFacade(service: HolotableService): HolotableFacade {
   return Object.freeze({
@@ -18,8 +18,7 @@ export function holotableFacade(service: HolotableService): HolotableFacade {
     speedOptions: () => service.speedOptions(),
     context: signal => service.context(signal),
     navigation: (view,adapter,signal) => service.navigation(view,adapter,signal),
-    focusView: view => service.focusView(view),
-    resolveView: binding => service.resolveView(binding),
+    nextVisibleChange: () => service.nextVisibleChange(),
     preference: (key,view) => service.preference(key,view),
     remember: (key,value,view) => service.remember(key,value,view),
     subscribe: listener => service.subscribe(listener),

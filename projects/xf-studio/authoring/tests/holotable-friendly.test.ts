@@ -49,11 +49,17 @@ test("focus stores eight detached viewpoints; back animates for 300 ms and reduc
  expect(nav.back(current,true)).toBeUndefined();nav.reset();expect(nav.depth).toBe(0);
 });
 
-test("navigation actions resolve explicit registered views, preserve pinned bindings, and refuse after release",async()=>{
+test("navigation actions require the named registered view and refuse missing bindings and released views",async()=>{
  const {service,ctl}=await fixture();const viewCtl=new AbortController();let focused="",backs=1;
  try{
  service.navigation("view-a",{available:()=>true,focus:t=>{focused=t.layer??t.id??"";return true;},back:()=>{backs--;return true;},canBack:()=>backs>0},viewCtl.signal);
- service.focusView("view-a");expect(service.resolveView()).toBe("view-a");expect(service.resolveView("pinned-view")).toBe("pinned-view");
+ const facade=holotableFacade(service);
+ for(const kind of ["holo.view.focus","holo.view.back"] as const){
+   const action=kind==="holo.view.focus"?{kind,view:"",id:"p/a/Courier"}:{kind,view:""};
+   expect(facade.capability(action)).toMatchObject({available:false,code:"missing_target",reason:"Open a Holotable view first"});
+   expect((await facade.dispatch(action)).ok).toBe(false);expect(focused).toBe("");expect(backs).toBe(1);
+ }
+ expect(facade.nextVisibleChange()).toBe(900);
  expect((await service.dispatch({kind:"holo.view.focus",view:"view-a",layer:"p/a"})).ok).toBe(true);expect(focused).toBe("p/a");
  await service.dispatch({kind:"holo.view.back",view:"view-a"});expect(service.capability({kind:"holo.view.back",view:"view-a"}).available).toBe(false);
  viewCtl.abort();expect((await service.dispatch({kind:"holo.view.focus",view:"view-a",id:"a"})).ok).toBe(false);
@@ -78,8 +84,8 @@ test("human recording and game times, spans, producer facet titles and cause lin
 
 test("quiet stretches follow visible changes and jumping pauses at the next one",async()=>{
  const {service,ctl}=await fixture();try{
- expect(quietUntil(service.snapshot())).toBe(900);await service.dispatch({kind:"holo.change.next"});expect(service.snapshot().t).toBe(900);expect(service.snapshot().playing).toBe(false);
- await service.dispatch({kind:"holo.agentLayer",id:"p/a",on:false});expect(quietUntil(service.snapshot())).toBeUndefined();
+ expect(quietUntil(service.snapshot(),service.nextVisibleChange())).toBe(900);await service.dispatch({kind:"holo.change.next"});expect(service.snapshot().t).toBe(900);expect(service.snapshot().playing).toBe(false);
+ await service.dispatch({kind:"holo.agentLayer",id:"p/a",on:false});expect(quietUntil(service.snapshot(),service.nextVisibleChange())).toBeUndefined();
  }finally{ctl.abort();}
 });
 
@@ -129,17 +135,35 @@ test("minimum-zoom nearby distinct plates retain both exact members in Details",
 test("Quiet until and its jump ignore step scope while step buttons keep it",async()=>{
  const {service,ctl}=await fixture({...answer,layers:[answer.layers[0],{...answer.layers[0],id:"p/b",layer:"b",changes:[0,450,1200,9000],items:[]}]});
  try{
- await service.dispatch({kind:"holo.change.scope",layer:"p/a"});expect(quietUntil(service.snapshot())).toBe(450);
+ await service.dispatch({kind:"holo.change.scope",layer:"p/a"});expect(quietUntil(service.snapshot(),service.nextVisibleChange())).toBe(450);
  await service.dispatch({kind:"holo.change.next"});expect(service.snapshot().t).toBe(900);
  await service.dispatch({kind:"holo.seek",t:0});await service.dispatch({kind:"holo.change.next",allVisible:true});expect(service.snapshot().t).toBe(450);expect(service.snapshot().changeScope).toBe("p/a");expect(service.snapshot().playing).toBe(false);
  await service.dispatch({kind:"holo.change.previous"});expect(service.snapshot().t).toBe(0);
- await service.dispatch({kind:"holo.agentLayer",id:"p/b",on:false});expect(quietUntil(service.snapshot())).toBe(900);
+ await service.dispatch({kind:"holo.agentLayer",id:"p/b",on:false});expect(quietUntil(service.snapshot(),service.nextVisibleChange())).toBe(900);
  await service.dispatch({kind:"holo.agentLayer",id:"p/b",on:true});await service.dispatch({kind:"holo.seek",t:7200});
- expect(service.capability({kind:"holo.change.next"}).available).toBe(false);expect(quietUntil(service.snapshot())).toBe(9000);expect(service.capability({kind:"holo.change.next",allVisible:true}).available).toBe(true);
+ expect(service.capability({kind:"holo.change.next"}).available).toBe(false);expect(quietUntil(service.snapshot(),service.nextVisibleChange())).toBe(9000);expect(service.capability({kind:"holo.change.next",allVisible:true}).available).toBe(true);
  await service.dispatch({kind:"holo.change.next",allVisible:true});expect(service.snapshot().t).toBe(9000);
  }finally{ctl.abort();}
 });
 
 test("legend family tone is independent of representative item tone",()=>{
  for(const tone of ["accent","warning","good"]){const counts=new Map<string,LegendEntry>();addLegend(counts,{...item("Fixer"),tone});expect(counts.get("person")?.tone).toBe("signal");}
+});
+
+
+test("Details routes pinned and follow-focus bindings as supplied by the platform, and never substitutes an unbound view",async()=>{
+ const {service,ctl}=await fixture(),facade=holotableFacade(service),calls:string[]=[];let bound:string|undefined="pinned",menu:any;
+ for(const view of ["pinned","follow"])service.navigation(view,{available:()=>true,focus:()=>{calls.push(view);return true;},back:()=>true,canBack:()=>true},ctl.signal);
+ const panel=holotableDetailsPanel({facade,changed(){},targets:()=>({view:bound}),targetMenu:(m:unknown)=>{menu=m;},dispatch:(action:HoloAction)=>service.dispatch(action)} as unknown as ModuleViewContext<HolotableFacade>),root=panel.spec.element as unknown as LightElement;
+ try{
+ for(const view of ["pinned","follow",undefined]){
+   bound=view;await service.dispatch({kind:"holo.select",id:"p/a/Courier"});panel.update(undefined as never);
+   root.querySelectorAll("button").find(b=>b.textContent.includes("Fixer"))!.dispatchEvent(lightEvent("click"));
+   expect(service.snapshot().selected).toBe("p/a/Fixer");expect(calls).toEqual(view==="pinned"?["pinned"]:["pinned","follow"]);
+   root.querySelectorAll(".toggle-row").find(e=>e.dataset.holotableLayer==="p/a")!.dispatchEvent(lightEvent("contextmenu"));
+   const focus=menu.items.find((i:any)=>i.label==="Focus on this layer").action;
+   expect(focus.view).toBe(view??"");
+   if(!view)expect(facade.capability(focus)).toMatchObject({available:false,reason:"Open a Holotable view first"});
+ }
+ }finally{panel.dispose?.();ctl.abort();}
 });

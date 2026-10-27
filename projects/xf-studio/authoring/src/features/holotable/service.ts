@@ -98,7 +98,7 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     layers: { v: true, camera: true, people: false, events: true, gaps: true, areas: true, cells: false, solids: true }, selected: null, revision: 0,
     live: { available: false, recording: false, watching: false, following: false, phase: "idle", behindS: 0, more: false, droppedBatches: 0, message: "" } };
   const views = new Map<string,HoloNavigation>();
-  let focusedView: string | undefined, preferences: HoloPreferences = { ...device.preferences, keys: { ...device.preferences?.keys } };
+  let preferences: HoloPreferences = { ...device.preferences, keys: { ...device.preferences?.keys } };
   const listeners = new Set<() => void>();
   const set = (patch: Partial<HoloState>) => {
     let changeScope=patch.changeScope===undefined?state.changeScope:patch.changeScope;
@@ -364,9 +364,13 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
       case "holo.select":
         if(action.members!==undefined&&(!action.id?.startsWith("cluster:")||!Array.isArray(action.members)||!action.members.every(k=>typeof k==="string")))return refusal("invalid_value","Cluster members must be item keys.");
       case "holo.seek": case "holo.play": return state.open ? { available: true } : refusal("not_ready", "Open a recording first.");
-      case "holo.view.focus": if([action.id,action.layer,action.position].filter(v=>v!==undefined).length!==1||action.position&&(!Array.isArray(action.position)||action.position.length!==3||!action.position.every(Number.isFinite)))return refusal("invalid_value","Name one item, layer or valid position to focus.");
-        return views.get(action.view)?.available() ? {available:true} : refusal("missing_target","That Holotable view is not visible.");
-      case "holo.view.back": return views.get(action.view)?.available() && views.get(action.view)?.canBack() ? {available:true} : refusal("not_ready","No earlier viewpoint in this view.");
+      case "holo.view.focus":
+        if(!views.get(action.view)?.available())return refusal("missing_target","Open a Holotable view first");
+        if([action.id,action.layer,action.position].filter(v=>v!==undefined).length!==1||action.position&&(!Array.isArray(action.position)||action.position.length!==3||!action.position.every(Number.isFinite)))return refusal("invalid_value","Name one item, layer or valid position to focus.");
+        return {available:true};
+      case "holo.view.back":
+        if(!views.get(action.view)?.available())return refusal("missing_target","Open a Holotable view first");
+        return views.get(action.view)!.canBack() ? {available:true} : refusal("not_ready","No earlier viewpoint in this view.");
       case "holo.focus": return state.open?.session.meta.standalone && action.position.length === 3 && action.position.every(Number.isFinite) ? { available: true } : refusal("not_ready", "Open a layers-only set first.");
       case "holo.place": return state.open && action.position.length === 3 && action.position.every(Number.isFinite) ? { available: true } : refusal("invalid_value", "Select a place in an open view.");
       case "holo.agentLayer": return state.agents.layers.some(l => l.id === action.id) ? { available: true } : refusal("missing_target", "That layer is no longer here.");
@@ -426,11 +430,9 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     navigation(view: string, adapter: HoloNavigation, lifetime: AbortSignal) {
       if(signal.aborted||lifetime.aborted)return;
       views.set(view,adapter);
-      const release=()=>{if(views.get(view)===adapter)views.delete(view);if(focusedView===view)focusedView=undefined;};
+      const release=()=>{if(views.get(view)===adapter)views.delete(view);};
       if(lifetime.aborted)release();else lifetime.addEventListener("abort",release,{once:true});
     },
-    focusView(view: string) { if(views.has(view))focusedView=view; },
-    resolveView(binding?: string) { return binding ?? (focusedView && views.get(focusedView)?.available() ? focusedView : [...views].reverse().find(([,v])=>v.available())?.[0]); },
     preference(key: "technical" | "key", view?: string): boolean { return key==="technical" ? preferences.technical??false : preferences.keys?.[view??""]??true; },
     remember(key: "technical" | "key", value: boolean, view?: string) {
       preferences=key==="technical"?{...preferences,technical:value}:{...preferences,keys:{...preferences.keys,[view??""]:value}};
@@ -440,6 +442,8 @@ export function createHolotable(device: HoloDevice, signal: AbortSignal) {
     /** Read-only asset demand for one visible view. Its AbortSignal owns the lease, never the shared clock. */
     context(lifetime:AbortSignal) { stopContext(); return contexts.lease(lifetime); },
     speedOptions: () => SPEEDS[clockFamily(state)],
+    /** The next change in any visible layer, independent of the temporary stepping scope. */
+    nextVisibleChange: () => changeMoment(state,1,true),
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     /** The module was hidden: playback stops (nothing runs for a view no one sees). */
     withdraw() { set({ motionEpoch: state.motionEpoch + 1 }); resumeWatch = state.live.watching; visible = false; stopContext(); contexts.reset(); dropSolids(); stopLayers(); stopStatusTimer?.(); statusCtl?.abort(); pause(); stopWatching(true, resumeWatch); },

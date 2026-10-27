@@ -1,7 +1,6 @@
 /** Presentation data, shared by the canvas and inspector. No story text is invented here. */
 import type { AgentItem, AgentLayer } from "../agent-types";
 import type { HoloState } from "../service";
-import { changeMoment } from "../playback";
 import { GLYPHS } from "./glyphs";
 
 export const facetTitle = (key: string, titles?: Readonly<Record<string, string>>) => titles&&Object.hasOwn(titles,key)?titles[key]:key.replace(/[_-]+/g, " ").replace(/^./, c => c.toUpperCase());
@@ -39,9 +38,9 @@ export function plainCounts(layer:AgentLayer,on=true) {
   const missing=new Set(layer.notPlaced),count=on?layer.items.filter(i=>i.place&&!missing.has(i.id)).length:0,total=layer.total??layer.items.length;
   return `${count} on the map now${count!==total?` · of ${total} in this set`:""}`;
 }
-export function quietUntil(state:HoloState):number|undefined {
+export function quietUntil(state:HoloState,next:number|undefined):number|undefined {
   if(!state.open||state.live.following)return;
-  const next=changeMoment(state,1,true),threshold=state.open.session.meta.standalone?.clock==="game"?300:10;
+  const threshold=state.open.session.meta.standalone?.clock==="game"?300:10;
   if(next===undefined||next>state.open.session.meta.to||next-state.t<threshold)return;
   const session=state.open.session;
   for(const rows of [state.layers.v?session.v:[],state.layers.camera?session.camera:[],state.layers.people?session.actors??[]:[],state.layers.events?session.events:[]]){

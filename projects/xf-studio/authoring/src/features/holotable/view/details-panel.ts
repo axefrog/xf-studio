@@ -1,11 +1,10 @@
-import { expander, expanderLabel, setExpanded } from "../../../studio-ui/expander";
 import { uid } from "../../../studio-ui/dom";
 import { icon, isIconName } from "../../../studio-ui/icons";
 import { cardDetail, facetTitle, humanSpan, plainCounts } from "./friendly";
 import { glyphIcon } from "./glyphs";
 import { unknownGlyphs } from "./glyphs";
 /** Details composes existing switches, groups and property lists over the application snapshot. */
-import { GroupSection, note, propertyList, Toggle, button, type Property } from "../../../studio-ui/components";
+import { expander, expanderLabel, setExpanded, GroupSection, note, propertyList, Toggle, button, type Property } from "../../../studio-ui/components";
 import { h, setText } from "../../../studio-ui/dom";
 import type { PanelController } from "../../../studio-ui/panels/collection";
 import type { ModuleViewContext } from "../../../studio-ui/views/feature-view";
@@ -29,7 +28,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
   const agentRows = new Map<string, Toggle>();
   const producerNotes = new Map<string, HTMLElement>();
   function focusItem(id:string) {
-    const view=facade.resolveView(ctx.targets?.().view);
+    const view=ctx.targets().view;
     void ctx.dispatch({kind:"holo.select",id});
     if(view)void ctx.dispatch({kind:"holo.view.focus",view,id});
   }
@@ -129,7 +128,7 @@ export function holotableDetailsPanel(ctx: Ctx): PanelController {
           toggle = new Toggle({ label: l.title, onChange: on => { void ctx.dispatch({ kind: "holo.agentLayer", id: l.id, on }); } });
           const row=toggle.element;
           row.dataset.holotableLayer=l.id;
-          const menu=(anchor:HTMLElement|{x:number;y:number})=>ctx.targetMenu({title:`${l.title} layer actions`,label:l.title,items:[{label:"Step through this layer",action:{kind:"holo.change.scope",layer:l.id}},{label:"Focus on this layer",action:{kind:"holo.view.focus",view:facade.resolveView(ctx.targets?.().view)??"",layer:l.id}}]},anchor,row.querySelector("button,input")??row);
+          const menu=(anchor:HTMLElement|{x:number;y:number})=>ctx.targetMenu({title:`${l.title} layer actions`,label:l.title,items:[{label:"Step through this layer",action:{kind:"holo.change.scope",layer:l.id}},{label:"Focus on this layer",action:{kind:"holo.view.focus",view:ctx.targets().view??"",layer:l.id}}]},anchor,row.querySelector("button,input")??row);
           row.addEventListener("contextmenu",event=>{event.preventDefault();event.stopPropagation();menu(event.clientX||event.clientY?{x:event.clientX,y:event.clientY}:row);});
           row.addEventListener("keydown",event=>{if(event.key==="ContextMenu"||event.key==="F10"&&event.shiftKey){event.preventDefault();event.stopPropagation();menu(row);}});
           agentRows.set(l.id, toggle);const notes=h("div",{});producerNotes.set(l.id,notes);producer.body.append(row,notes);

@@ -113,14 +113,13 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
   const time = new SliderWithValue({ label: "Moment", min: 0, max: 1, step: 0.1, format: v => `${f1(v)} s`,
     transaction: { edit: v => { const s = facade.snapshot().open?.session; if (s) void ctx.dispatch({ kind: "holo.seek", t: s.meta.from + v }, { quiet: true }); } } });
   const readout = h("span", { class: "note muted mono", role: "status", style: "flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" });
-  const quiet=button({label:"",small:true,variant:"quiet",onClick:()=>{void ctx.dispatch({kind:"holo.change.next",allVisible:true},{quiet:true});}});quiet.style.cssText="flex:0 1 auto;margin-inline-start:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";quiet.hidden=true;
-  const quietLabel=quiet.querySelector("span")!;quietLabel.style.cssText="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+  const quiet=button({label:"",small:true,variant:"quiet",className:"holotable-quiet",onClick:()=>{void ctx.dispatch({kind:"holo.change.next",allVisible:true},{quiet:true});}});quiet.hidden=true;
   const backToLive = button({ label: "Back to live", small: true, variant: "quiet", onClick: () => { void ctx.dispatch({ kind: "holo.follow" }, { quiet: true }); } });
   const branches = new Segmented<string>({ label: "Branch", options: [], onSelect: branch => { void ctx.dispatch({ kind: "holo.branch", branch }); } });
   branches.element.style.flex = "0 0 auto";
 
   for (const control of [play, speed.element, speedMenu, previous, next, view.element, viewMenu, backToLive]) control.style.flex = "0 0 auto";
-  const controls = h("div", { class: "control-line", style: "flex:0 0 auto;flex-wrap:nowrap" }, play, speed.element, speedMenu, previous, next, scopeSlot, view.element, viewMenu, readout, quiet, backToLive);
+  const controls = h("div", { class: "control-line holotable-playback" }, play, speed.element, speedMenu, previous, next, scopeSlot, view.element, viewMenu, readout, quiet, backToLive);
   resized.observe(controls);
   let barStage: BarStage = 0, barMeasureKey = "", barWidths = { full: 0, viewCollapsed: 0 };
   const intrinsicWidth = (control: HTMLElement) => {
@@ -182,7 +181,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
     const binding=holotablePointerBinding(pointerInputOf(event));
     if (drag || !binding || (binding.effect==="zoom"||binding.effect==="focus")) return;
     event.preventDefault();
-    stopNavigation();facade.focusView(viewId);
+    stopNavigation();
     svg.focus({ preventScroll: true });
     const bounds = svg.getBoundingClientRect();
     const mode = binding.effect, state=facade.snapshot();
@@ -474,7 +473,7 @@ export function holotablePanel(ctx: Ctx, measured?: (frame: HolotableFrame) => v
         const reconnecting = state.live.watching && state.live.phase === "disconnected";
         setText(readout, s.meta.standalone ? momentItems(state) : `${reconnecting ? "Reconnecting · " : state.live.following ? "Live · " : ""}${f1(state.t - s.meta.from)} s${state.live.following ? "" : ` of ${f1(s.meta.to - s.meta.from)} s`}${v ? ` · V ${heading(v.yaw)} · ${f1(v.speed)} m/s` : ""}${state.live.following && !reconnecting && state.live.behindS > 2 ? ` · ${f1(state.live.behindS)} s behind` : ""}`);
       } else setText(readout, "");
-      const until=quietUntil(state);quiet.hidden=until===undefined;readout.hidden=until!==undefined;
+      const until=quietUntil(state,facade.nextVisibleChange());quiet.hidden=until===undefined;readout.hidden=until!==undefined;
       if(until!==undefined){const game=s?.meta.standalone?.clock==="game",full=humanMoment(until,game,s?.meta.from),sameDay=game&&Math.floor(until/86400)===Math.floor(state.t/86400),label=`Quiet until ${full}. Jump there`;
         setButtonLabel(quiet,`Quiet until ${sameDay?full.split(" · ")[1]:full}`);quiet.title=label;quiet.dataset.title=label;quiet.setAttribute("aria-label",label);
       }
