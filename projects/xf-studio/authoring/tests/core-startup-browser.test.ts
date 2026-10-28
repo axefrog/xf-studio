@@ -3,6 +3,7 @@ import { expect } from "bun:test";
 import { launch, startServer } from "../tools/cdp";
 import { CHROME, chromeInstalled } from "./webgl-harness";
 import { oracleTest } from "./optional-oracles";
+import { assertStartupPaint, type StartupPaintLayout } from "./fixtures/startup-paint";
 
 const browserTest = oracleTest(chromeInstalled(), `Chrome is unavailable at ${CHROME} (set CHROME)`);
 for (const composition of ["normal", "empty"] as const) browserTest(`real start(host) mounts and paints ${composition} composition in verification`, async () => {
@@ -20,11 +21,7 @@ for (const composition of ["normal", "empty"] as const) browserTest(`real start(
         window.fetch = (input, init) => { window.startupRequests.push(String(input)); return originalFetch(input, init); };
       ` });
     await page.waitFor(`document.querySelector("#studio.studio-ready") && window.xfStudioLifetime`, 90_000);
-    // Two real frames settle layout and paint. Capture a composited image through CDP; DOM construction alone is insufficient.
-    await page.evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
-    const paint = await page.send<{ data: string }>("Page.captureScreenshot", { format: "png" });
-    expect(Buffer.from(paint.data, "base64").subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
-    expect(paint.data.length).toBeGreaterThan(1000);
+    await verifyShellPaint(page);
     const result = await page.evaluate(`(() => {
       const root = document.getElementById("studio"), box = root.getBoundingClientRect(), p = window.xfStudioPresentation;
       return { ready: root.classList.contains("studio-ready"), error: !!document.querySelector(".boot-error"),
@@ -50,3 +47,59 @@ for (const composition of ["normal", "empty"] as const) browserTest(`real start(
     expect(await page.evaluate(`window.xfStudioLifetime.abort(); window.xfStudioLifetime.signal.aborted`) as boolean).toBe(true);
   } finally { await page?.close(); host.server.kill(); await host.server.exited; }
 }, 180_000);
+
+async function verifyShellPaint(page: Awaited<ReturnType<typeof launch>>): Promise<void> {
+  const settle = () => page.evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+  const capture = async () => Buffer.from((await page.send<{ data: string }>("Page.captureScreenshot", { format: "png" })).data, "base64");
+  const hide = () => page.evaluate(`(() => {
+    const style = document.createElement("style"); style.id = "startup-paint-hidden";
+    style.textContent = "#studio.studio-ready { opacity: 0 !important; transition: none !important; }";
+    document.head.append(style);
+  })()`);
+  const restore = () => page.evaluate(`document.getElementById("startup-paint-hidden").remove()`);
+
+  // Capture the real page background without changing layout or retaining the boot message.
+  await hide();
+  let background: Buffer;
+  try { await settle(); background = await capture(); } finally { await restore(); }
+  await settle();
+  const layout = await page.evaluate(`(() => {
+    const shown = element => {
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height || rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight) return false;
+      for (let node = element; node; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (style.display === "none" || style.visibility !== "visible" || Number(style.opacity) <= .05) return false;
+      }
+      return true;
+    };
+    const measure = (selector, control = false) => {
+      const nodes = [...document.querySelectorAll(selector)];
+      const visible = node => {
+        if (!shown(node)) return false;
+        if (!control) return true;
+        const rect = node.getBoundingClientRect();
+        const hit = document.elementFromPoint(Math.max(0, Math.min(innerWidth - 1, rect.x + rect.width / 2)), Math.max(0, Math.min(innerHeight - 1, rect.y + rect.height / 2)));
+        return !!hit && node.contains(hit);
+      };
+      const node = nodes.find(visible);
+      if (!node) return { x: 0, y: 0, width: 0, height: 0, visible: false };
+      const { x, y, width, height } = node.getBoundingClientRect();
+      return { x, y, width, height, visible: true };
+    };
+    return { width: innerWidth, height: innerHeight,
+      regions: { header: measure("#studio .shell-header"), workspace: measure("#layout-dock"), status: measure("#studio .status-bar") },
+      controls: { commands: measure("#studio button.header-commands", true), newTab: measure("#studio .layout-tabs > button", true), panelMenu: measure("#layout-dock button.dock-menu-btn", true) } };
+  })()`) as StartupPaintLayout;
+  assertStartupPaint(await capture(), background, layout);
+
+  // Negative control: an independently captured transparent mounted shell must fail the same pixel gate,
+  // even with the original, still-populated DOM/geometry/visible-control observations.
+  await hide();
+  try {
+    await settle();
+    const transparent = await capture();
+    expect(() => assertStartupPaint(transparent, background, layout)).toThrow("insufficient non-background pixels");
+  } finally { await restore(); }
+  await settle();
+}

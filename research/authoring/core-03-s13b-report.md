@@ -82,7 +82,7 @@ $env:XFS_REQUIRE_ORACLES = '1'
 & "$env:LOCALAPPDATA/Python/pythoncore-3.14-64/python.exe" ../../../tools/memory_guard.py --limit 4 -- bun test --timeout 180000 tests/core-startup-browser.test.ts
 ```
 
-The test allocates a transient port, starts the real server through the existing CDP harness with disposable empty settings/library/cache paths, and launches the real public entry twice, each on its own isolated host/profile. It waits for real startup completion, two animation frames and a CDP-composited PNG; checks dimensions/content/paint timing, feature/module/starter availability, isolated storage/routes and console errors; then checks the signal handle. It closes its own browser/server. It does not claim resource-count-baseline disposal proof. It skips without Chrome and fails for missing Chrome under `XFS_REQUIRE_ORACLES=1`.
+The test allocates a transient port, starts the real server through the existing CDP harness with disposable empty settings/library/cache paths, and launches the real public entry twice, each on its own isolated host/profile. It waits for real startup completion and two animation frames, decodes the CDP-composited PNG and compares header/workspace/status and control pixels against a hidden-shell background. Commands, New tab and a dock menu must be visible and unobscured. An independent capture with `.studio-ready` transparent must fail the same pixel gate even with the original DOM observations. It also checks paint timing, feature/module/starter availability, isolated storage/routes and console errors, then the signal handle. It closes its own browser/server. It does not claim resource-count-baseline disposal proof. It skips without Chrome and fails for missing Chrome under `XFS_REQUIRE_ORACLES=1`.
 
 For manual comparison on the coordinator's worktree server (substitute its transient port):
 
@@ -95,7 +95,7 @@ In normal `?verify=1`, compare light/dark narrow/wide layouts and restored curre
 
 ## Changed files and footprint
 
-28 changed/new files, with paths below `projects/xf-studio/authoring` unless stated:
+The initial slice-13b checkpoint had 28 changed/new files, with paths below `projects/xf-studio/authoring` unless stated:
 
 | Area | Files |
 |---|---|
@@ -109,6 +109,20 @@ In normal `?verify=1`, compare light/dark narrow/wide layouts and restored curre
 
 The checkpoint footprint reported **214.2 GB free on C**; wrap-up reports **211.2 GB free** (the guarded footprint job peaked at 0.0 GB). This task retains no payload above 5 GB. All owned scratch was removed: **31 files, 371,349 bytes and 2 empty directories**, with **zero reparse points and zero remaining owned targets**. These were `local/core-03-s13b/`, its six sibling task scripts, `projects/xf-studio/authoring/local/core-03-s13b/` and eight sibling task logs/manifests. No junction was created or removed. Unique parity evidence and gate accounting remain in the candidate snapshot, plan and this report; no owned gate child process remains.
 
-Work is uncommitted; the maintainer commits after review. Main's separately announced `[...list].sort()` Linux ordering fix to the slice-13a boundary assertion is left for the coordinator's rebase. No `.toSorted()` was introduced; new multi-item name-list comparisons do not rely on readdir order.
+The maintainer committed that checkpoint as `b3edc0cf` on `claude/core-03`, rebased onto main `d40e5563`, including main's `[...list].sort()` Linux ordering fix. No `.toSorted()` was introduced; new multi-item name-list comparisons do not rely on readdir order.
+
+## Review corrections (29 October 2026)
+
+Both Medium findings are corrected in the uncommitted follow-up. `initialLayout()` only aliases an existing first view to `head`; a viewless first default retains its own dock and origin. The Save Explorer-first regression reproduced the reported `views[0].key` exception before the fix, then passed with its exact default and successful session construction. Normal and empty composition policy, P3-v wiring, stored IDs and all parity snapshots are unchanged.
+
+The browser gate now uses the existing PNG decoder and a hidden-shell reference, requiring at least 0.5% of each measured area with an RGB difference above 12. The minimum is 24 pixels for a region and 8 for a control, scaled by device pixel area so the real dock menu's sparse three-square icon can pass. DOM checks include ancestor display/visibility/opacity, viewport intersection and control hit testing. Its automated negative control hides the mounted shell with `opacity: 0 !important`, captures it independently, and expects the same pixel assertion to fail while retaining the original DOM/geometry observations. The injected style is removed in `finally` after each hidden capture. This live browser proof is prepared for the coordinator, **not run in the sandbox**.
+
+Targeted validation, one guarded Bun process at a time: the pre-fix composition run had **5 pass, 1 expected regression failure**. After the fix, **10 pass, 0 skip, 0 fail across two files**, 55 assertions; guard peak rounded to 0.0 GB. The four decoded-image tests cover device scaling, the sparse real menu icon, a blank capture, a boot message alone, missing region pixels, hidden controls and missing control pixels.
+
+```powershell
+& "C:/Users/Nathan/AppData/Local/Python/pythoncore-3.14-64/python.exe" D:/Dev/cp2077-modding-hq/tools/memory_guard.py --limit 4 -- bun test tests/core-startup-composition.test.ts tests/core-startup-paint.test.ts
+```
+
+Review changes: `src/compose/layout-defaults.ts`, `tests/core-startup-composition.test.ts`, `tests/core-startup-browser.test.ts`, new `tests/core-startup-paint.test.ts` and `tests/fixtures/startup-paint.ts`, plus this report and the plan. The coordinator owns the browser run (command above in Browser and GPU handoff), authoring check, batches, desktop and 038 gates under the new handle-investigation restriction; none of those were run for this follow-up. The read-only footprint report has **209.8 GB free on C** (0.0 GB guard peak under 1 GB), with no new task payload above 5 GB. No scratch or capture files were created; all guarded jobs have exited.
 
 **Knowledge used:** knowledge index; CORE-03 plan and all as-built notes, slice-13a report and retained-consumer context; architecture contract and UI architecture boundary; view-graph design, editor invariants and developer orientation/test helpers; project status/backlog and project README. No game-engine knowledge page was contradicted or new runtime finding observed. The current construction/startup proof table and boundary record are updated; browser mount/paint/dispose remains explicitly unproven here.

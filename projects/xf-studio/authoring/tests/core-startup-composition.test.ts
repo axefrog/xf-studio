@@ -49,6 +49,20 @@ test("empty startup uses neutral workspace, shell catalogue and shell layout onl
   expect(migration.drafts.every(draft => draft.looks.every(look => Object.keys(look.parts).length === 0))).toBe(true);
 });
 
+test("Save Explorer first keeps its viewless default during startup layout construction", () => {
+  const saveExplorer = NORMAL.modules.modules.find(module => module.id === "save-explorer")!;
+  expect(saveExplorer.defaults![0]!.fragment.views).toEqual([]);
+  const modules = { ...NORMAL.modules, modules: [saveExplorer, ...NORMAL.modules.modules.filter(module => module !== saveExplorer)] };
+  const layouts = studioLayoutDefaults(OFF_EXPERIMENTS, undefined, { modules, views: NORMAL.views, catalogue: NORMAL.view.catalogue });
+  expect(layouts.initial.origin).toBe("save-explorer/default");
+  expect(layouts.initial.dock).toEqual(saveExplorer.defaults![0]!.fragment.tab.dock);
+  expect(dockPanels(layouts.initial.dock)).not.toContain("head");
+  const { state: workspace } = loadCompositionWorkspace({ getItem: () => null }, true, NORMAL);
+  const session = sessionOfWorkspace(workspace, { tab: "Save Explorer" }, () => .2, layouts.initial);
+  expect(session.tabs[0]!.origin).toBe("save-explorer/default");
+  expect(session.tabs[0]!.panels.some(panel => panel.type === "save-explorer.explorer")).toBe(true);
+});
+
 test("neutral session flush keeps workspace and normal storage isolated", () => {
   const stored = new Map([["xfas.workspace.v1", "normal-sentinel"]]);
   const storage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => { stored.set(key, value); } };

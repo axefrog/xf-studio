@@ -118,8 +118,9 @@ export const STUDIO_INITIAL_LAYOUT = initialLayout(STUDIO_LAYOUT_COMPOSITION);
 
 export function initialLayout(composition: LayoutComposition): InitialProfileLayout {
   const first = contributedDefaults(composition.modules.modules)[0];
+  const firstView = first?.fragment.views[0]?.key;
   return { origin: first?.id ?? "shell/default", dock: first ? rewriteDock(first.fragment.tab.dock as DockLayout,
-    key => key === `view:${first.fragment.views[0]!.key}` ? "head" : first.fragment.panels.find(panel => panel.key === key)?.type ?? key)!
+    key => firstView !== undefined && key === `view:${firstView}` ? "head" : first.fragment.panels.find(panel => panel.key === key)?.type ?? key)!
     : serializeDockState(defaultDockState(composition.catalogue)),
     legacyDock: (dock, preferences) => legacyDock(dock, preferences, composition) };
 }
