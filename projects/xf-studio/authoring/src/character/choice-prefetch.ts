@@ -40,7 +40,7 @@
  *   person's own change, a poll and every other request are answered while a row's choices are checked.
  */
 import type { CharacterRequest } from "./character-detail-request";
-import { canonicalJson } from "../legacy/eye-makeup/plate/eye-plate-recipe";
+import { canonicalJson } from "../platform/api/canonical-json";
 import { hostClock, type Clock } from "../platform/core/clock";
 import { lease, type JobContext, type JobScheduler, type RunOutcome } from "../platform/core/jobs";
 

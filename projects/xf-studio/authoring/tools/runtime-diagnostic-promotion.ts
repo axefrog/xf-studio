@@ -1,3 +1,4 @@
+import { STUDIO_PRODUCT } from "../src/compose/studio-registry";
 /** Read-only preview by default; writes to real MO2 require an explicit verb. */
 import { planRuntimePromotion, promoteRuntimeDiagnostic, recoverRuntimePromotion,
   rollbackRuntimePromotion, type PromotionOptions } from "../src/installation/host/runtime-diagnostic-promotion";
@@ -18,7 +19,7 @@ for (let i = 0; i < args.length; i++) {
 }
 const allowed = ["--candidate-store", "--candidate-id", "--game-root", "--mo2-root", "--profile", "--staging-root", "--new-profile"];
 if (values.size !== allowed.length || [...values.keys()].some(key => !allowed.includes(key))) usage();
-const options: PromotionOptions = {
+const options: PromotionOptions = { defaults: STUDIO_PRODUCT,
   candidateStore: values.get("--candidate-store")!, candidateId: values.get("--candidate-id")!,
   gameRoot: values.get("--game-root")!, mo2Root: values.get("--mo2-root")!,
   profileId: values.get("--profile")!, stagingRoot: values.get("--staging-root")!,

@@ -59,4 +59,16 @@ export function isEyeMakeupModFolder(name: string): boolean {
 }
 
 /** What a mod's name is used for, said once wherever a mod is renamed (Mod package, Expression sets; UI-143). */
-export const MOD_NAME_HINT = "The name your mod manager shows for this mod.";
+export { MOD_NAME_HINT } from "../../platform/api/product";
+
+import type { FrameworkRequirement } from "../../platform/api/product";
+/** Pinned minimums for the eye-makeup package. TweakXL, Codeware and CET are not needed by it. */
+export const EYE_ARTISTRY_REQUIREMENTS: readonly FrameworkRequirement[] = Object.freeze([
+  { framework: "archivexl", minimum: "1.27.3", reason: "The package's selector, appearance and material wiring was designed and verified against the ArchiveXL 1.27.3 source; no earlier release has been checked." },
+  { framework: "red4ext", minimum: "1.29.0", reason: "ArchiveXL 1.27.3 lists RED4ext 1.29.0 or newer as its installation requirement." },
+  { framework: "redscript", minimum: "0.5.31", reason: "ArchiveXL 1.27.3 lists redscript 0.5.31 or newer for its bundled scripts." },
+]);
+export const XBOX_UNSUPPORTED_MESSAGE = `This looks like the Xbox app copy of Cyberpunk 2077. ${EYE_MAKEUP_MOD.modName} ` +
+  "needs ArchiveXL, which installs into the Windows PC edition of the game sold on Steam, GOG and the Epic Games Store. " +
+  "The Xbox store sells Cyberpunk 2077 for Xbox consoles and cloud play. " +
+  "Install Cyberpunk 2077 from Steam, GOG or Epic Games, then choose that folder.";

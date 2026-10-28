@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { InstallDetectionActions, type InstallDetectionTransport } from "../src/installation/install-detection-actions";
-import { createInstallDetectionHandler } from "../src/installation/host/install-detection-server";
+import { createInstallDetectionHandler } from "./fixtures/product-defaults";
 import type { DetectionHostPort } from "../src/installation/install-detection";
 import { DETECTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import type { FrameworkHostPort, FrameworkVersionCheck } from "../src/installation/framework-versions";

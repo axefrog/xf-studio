@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { planRuntimeDiagnostic, stageRuntimeDiagnostic } from "../src/installation/host/runtime-diagnostic-stage";
+import { planRuntimeDiagnostic, stageRuntimeDiagnostic } from "./fixtures/product-defaults";
 import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 import { tempDir } from "./temp-dir";
 

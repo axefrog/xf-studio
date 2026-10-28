@@ -5,11 +5,12 @@ import { USER_FACING_JARGON } from "../src/app/alpha-availability";
 import { HeadLoadError, headLoadFailureCode } from "../src/preview/head-load-error";
 import { PolledHostState } from "../src/app/host-state-poller";
 import type { InstallDetectionActions } from "../src/installation/install-detection-actions";
-import { XBOX_UNSUPPORTED_MESSAGE } from "../src/installation/install-detection";
+import { XBOX_UNSUPPORTED_MESSAGE } from "./fixtures/product-defaults";
 import type { LocalSetupFields, LocalSetupView } from "../src/setup/local-settings";
 import { LocalSetupActions } from "../src/setup/local-setup-actions";
 import { PreviewPreparationActions, type PreviewState } from "../src/preview/preview-preparation";
-import { PreviewSetupActions, type PreviewSetupSnapshot } from "../src/preview/preview-setup";
+import { type PreviewSetupSnapshot } from "../src/preview/preview-setup";
+import { PreviewSetupActions } from "./fixtures/product-defaults";
 import { PREVIEW_SETUP_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { WolvenKitSetupActions, type WolvenKitSetupState } from "../src/setup/wolvenkit-setup";
 

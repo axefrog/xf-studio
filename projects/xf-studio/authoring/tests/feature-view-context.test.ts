@@ -4,7 +4,7 @@
  * rendered by the shell with the same entries, labels, order, icons, checked states and availability.
  */
 import { expect, test } from "bun:test";
-import type { EyeMakeupAction } from "../src/legacy/eye-makeup/eye-makeup-model";
+import type { EyeMakeupAction } from "../src/engines/layered-makeup/eye-makeup-model";
 import { EYE_MAKEUP_VIEW_BINDING } from "../src/features/eye-makeup/view";
 import { layerSections } from "../src/features/eye-makeup/view/layer-menu";
 import { chordLabel, keyBindingById, shortcutLabel } from "../src/app/input-bindings";

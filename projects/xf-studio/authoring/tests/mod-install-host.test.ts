@@ -7,8 +7,9 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { defaultLocalSettings, type LocalSettings } from "../src/setup/local-settings";
-import { createModInstallHandler, installIssue, ModInstallError, ModInstallHost, READ_ONLY_VERIFICATION, windowsProcessImages, windowsRunningApps,
+import { createModInstallHandler, installIssue, ModInstallError, READ_ONLY_VERIFICATION, windowsProcessImages, windowsRunningApps,
   type RunningApps } from "../src/installation/host/mod-install-host";
+import { ModInstallHost } from "./fixtures/product-defaults";
 import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 import { tempDir } from "./temp-dir";
 

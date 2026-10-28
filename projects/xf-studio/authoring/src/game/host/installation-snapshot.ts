@@ -17,7 +17,7 @@ import { createHash } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { canonicalJson } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
+import { canonicalJson } from "../../platform/api/canonical-json";
 import { writeFileAtomic } from "../../host/derived-cache";
 import { pathStamp, readListingStamp, type SourceDiscovery, type WatchedPath } from "./source-discovery";
 

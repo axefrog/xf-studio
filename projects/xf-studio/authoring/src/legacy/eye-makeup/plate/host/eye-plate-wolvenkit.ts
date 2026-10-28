@@ -1,3 +1,4 @@
+import { depotPathRegex } from "../../../../game/depot-path-regex";
 import { existsSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { EyePlateTools } from "./eye-plate-service";
@@ -19,12 +20,6 @@ export async function runTool(command: string, args: string[], signal?: AbortSig
     throw new ToolRunError("plate_tool_failed", error.code === "runtime_missing"
       ? WOLVENKIT_RUNTIME_MISSING_MESSAGE : error.message, error.output);
   }
-}
-
-/** WolvenKit's regex engine is .NET; depot paths use backslashes, matched literally. */
-export function depotPathRegex(paths: readonly string[]): string {
-  const literal = (path: string) => path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return `^(?:${paths.map(literal).join("|")})$`;
 }
 
 export function createWolvenKitEyePlateTools(cli: string, timeoutMs = defaultTimeoutMs): EyePlateTools {

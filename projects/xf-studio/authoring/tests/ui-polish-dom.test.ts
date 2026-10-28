@@ -3,6 +3,7 @@
 // XF Studio found and saves each choice at once (the saves folder too), and the failure card offers a report instead of a log path.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { STUDIO_CATALOGUE } from "../src/compose/views";
+import { STUDIO_PRODUCT } from "../src/compose/studio-registry";
 import { InstallDetectionActions } from "../src/installation/install-detection-actions";
 import { LocalSetupActions, type LocalSetupTransport } from "../src/setup/local-setup-actions";
 import { ModInstallActions, type ModInstallPlan } from "../src/installation/mod-install-actions";
@@ -144,6 +145,7 @@ async function panelHarness<P extends { spec: { element: HTMLElement }; update(f
   const updates = options.updateActions ?? new UpdateCheckActions(options.updates ?? null);
   const files: Record<string, unknown> & { activity: { kind: string; cancellable: boolean }[] } = { activity: [], ...options.files ?? { package: BUILD } };
   const port = {
+    product: STUDIO_PRODUCT,
     files: { capability: (action?: { kind: string }) => ({ available: action?.kind !== "package.stop" || files.activity.some(entry => entry.kind === "package.build" && entry.cancellable), reason: "Waiting for the host to finish stopping or completing the Build." }), snapshot: () => files },
     library: { capability: () => ({ available: true }), summary: () => ({ busy: files.collectionBusy ?? false, progress: files.progress, products: [], draft: { presets: [{ id: "look1", name: "Night market" }] } }) },
     authoring: { capability: () => ({ available: true }), requestCapability: () => ({ available: true }),

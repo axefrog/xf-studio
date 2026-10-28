@@ -92,6 +92,7 @@ export type PreviewSetupSnapshot = {
 };
 
 export type PreviewSetupPort = {
+  modName?: string;
   preparation: PreviewPreparationActions;
   wolvenKit: WolvenKitSetupActions;
   detection: Pick<InstallDetectionActions, "dispatch" | "snapshot">;
@@ -197,7 +198,7 @@ export class PreviewSetupActions {
       links: view?.links ?? [], canDismiss: !working, busy: this.busy,
       route: !looking && view?.primary?.action === "use-game" ? this.routeQuestion() : null,
     };
-    const consentView = this.consentOpen && wolvenKit ? wolvenKitConsent(wolvenKit) : null;
+    const consentView = this.consentOpen && wolvenKit ? wolvenKitConsent(wolvenKit, this.port.modName) : null;
     const consent: PreviewSetupConsent | null = consentView && wolvenKit ? {
       title: consentView.title, intro: consentView.intro, facts: consentView.facts, runtimeNote: consentView.runtimeNote, links: consentView.links,
       confirm: { label: consentView.confirm, action: { kind: "previewSetup.installWolvenKit", version: wolvenKit.offer.version } },

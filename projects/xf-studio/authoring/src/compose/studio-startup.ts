@@ -62,7 +62,7 @@ import { mountStudio } from "../studio-ui/app";
 import { createProfileAuthoring } from "../app/profiles/profile-authoring";
 import { createTrustedStudioBootstrap } from "../app/trusted-studio-bootstrap";
 // The composition root: the one browser module that imports the composition list (CORE-29).
-import { STUDIO_COMPOSITION } from "./studio-registry";
+import { STUDIO_COMPOSITION, STUDIO_PRODUCT } from "./studio-registry";
 import { ShapeStarters } from "../app/starters/shape-starters";
 import { StarterActions } from "../app/starters/starter-actions";
 import { readStarterShape } from "../engines/layered-makeup/starter-shape";
@@ -467,7 +467,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // Camera, preview and motion actions go to the runtime holding the view they name (view-routes.ts).
   core.app.attach({ runtimes: heads.runtimes });
   // 3D preview setup: follows the host's preparation and WolvenKit setup, then loads the head.
-  const previewSetup = new PreviewSetupActions({
+  const previewSetup = new PreviewSetupActions({ modName: STUDIO_PRODUCT.modName,
     preparation: host.previewPreparation, wolvenKit: host.wolvenKitSetup, detection: installDetection, localSetup,
     openLink: host.openLink ?? (link => openInNewTab(host.wolvenKitSetup, link)),
     openHostSetup: host.openSetup, setupPlace: host.setupPlace,
@@ -487,6 +487,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     panelViewport: input => panelUV!.acquire(input),
     bound: { available: type => type === "view" || layouts.catalogue().ids.includes(type), session: sessionState, targets, looks: profileAuthoring.contexts, empty: profileAuthoring.empty, context: type => layouts.catalogue().context(type),
       character: id => services.characters.character(id) ? heads.context(id) : undefined },
+    product: STUDIO_PRODUCT,
     frameworkProducts: [{ feature: "expressions", name: "expression sets", requirements: EXPRESSION_FRAMEWORK_REQUIREMENTS }],
     modInstall, previewSetup, viewport: viewportDevice.attachment,
     links: { open: async link => {

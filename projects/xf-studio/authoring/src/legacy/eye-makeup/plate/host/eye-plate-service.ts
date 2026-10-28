@@ -1,3 +1,4 @@
+import { canonicalJson } from "../../../../platform/api/canonical-json";
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
@@ -9,7 +10,7 @@ import {
   type HeadRole, type HeadSourcePlan,
 } from "../eye-plate-head-source";
 import {
-  canonicalJson, EYE_PLATE_DERIVER_VERSION, EYE_PLATE_RECIPE, eyePlateBody, eyePlateCacheKey, eyePlateCacheName, eyePlateRecipeSha256,
+  EYE_PLATE_DERIVER_VERSION, EYE_PLATE_RECIPE, eyePlateBody, eyePlateCacheKey, eyePlateCacheName, eyePlateRecipeSha256,
   supportedEyePlateSource, type EyePlateRecipe, type EyePlateSourceRevision,
 } from "../eye-plate-recipe";
 import { verifyEyePlate, type EyePlateVerification } from "../eye-plate-verify";

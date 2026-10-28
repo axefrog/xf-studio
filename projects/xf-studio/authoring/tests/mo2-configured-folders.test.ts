@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { routeStamps } from "../src/game/host/route-fingerprint";
-import { planRuntimeDiagnostic } from "../src/installation/host/runtime-diagnostic-stage";
+import { planRuntimeDiagnostic } from "./fixtures/product-defaults";
 import { tempDir } from "./temp-dir";
 
 /** An instance whose ini keeps its profiles, mods and overwrite in folders of their own names. */

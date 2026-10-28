@@ -2,7 +2,7 @@
  * Builders for action descriptors (the platform's `ActionDescriptor` shape): pure, with no state or I/O, so the
  * system families' table (`studio-action-descriptors.ts`) and eye makeup's (`eye-makeup-descriptors.ts`) share them.
  */
-import type { ActionDescriptor, PayloadSchema, UndoPolicy, ValueSchema } from "../platform/api";
+import type { ActionDescriptor, PayloadSchema, UndoPolicy, ValueSchema } from "../api";
 
 export const target = (type: ValueSchema["type"]): ValueSchema => ({ type, required: true, from: "target" });
 export const input = (type: ValueSchema["type"], min?: number, max?: number): ValueSchema =>

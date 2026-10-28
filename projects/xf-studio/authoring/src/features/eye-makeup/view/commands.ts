@@ -1,4 +1,4 @@
-import type { EyeMakeupAction } from "../../../legacy/eye-makeup/eye-makeup-model";
+import type { EyeMakeupAction } from "../../../engines/layered-makeup/eye-makeup-model";
 import { shortcutLabel } from "../../../app/input-bindings";
 import type { FeatureCommand } from "../../../studio-ui/views/feature-view";
 import { renameCommand } from "./starter-menu";

@@ -68,3 +68,6 @@ export const STUDIO_COMPOSITION: StudioComposition = Object.freeze({ registry: S
   region: LIVE_REGION, modules: STUDIO_MODULE_REGISTRATION });
 export type { EyeMakeupAction, EyeMakeupEditor, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupMemory, EyeMakeupResult,
   EyeMakeupState } from "../features/eye-makeup";
+
+/** Released product defaults contributed by the registered feature. */
+export const STUDIO_PRODUCT = EYE_MAKEUP.product!;

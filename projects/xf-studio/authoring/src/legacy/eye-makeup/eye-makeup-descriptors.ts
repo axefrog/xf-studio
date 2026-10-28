@@ -8,9 +8,9 @@
 import { FINISH_IDS, LEGACY_FINISH_ALIASES } from "../../engines/layered-makeup/finish-catalogue";
 import type { GestureEdit } from "../../engines/layered-makeup/recipe-actions";
 import type { ActionDescriptor, PayloadSchema, UndoPolicy } from "../../platform/api";
-import { describe, enumerated, input, inputText, target } from "../../app/action-descriptor-kit";
+import { describe, enumerated, input, inputText, target } from "../../platform/api/action-descriptor-kit";
 import { MOTTLE_LIMITS, MOTTLE_PRESET_IDS } from "../../engines/layered-makeup/mottle";
-import type { EyeMakeupAction } from "./eye-makeup-model";
+import type { EyeMakeupAction } from "../../engines/layered-makeup/eye-makeup-model";
 
 /** The targets eye makeup's actions apply to (a subset of the Studio's action scopes). */
 export type EyeMakeupScope = "layer" | "point" | "field" | "collection";

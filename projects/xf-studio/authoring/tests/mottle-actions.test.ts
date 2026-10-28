@@ -10,7 +10,7 @@ import type { TestAction } from "./fixtures/named-targets";
 import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace, initialRecipe } from "./fixtures/eye-region";
-import { historyLabel } from "../src/legacy/eye-makeup/history-labels";
+import { historyLabel } from "../src/engines/layered-makeup/history-labels";
 
 import { namedCore } from "./fixtures/named-targets";
 function fixture(recipe: Recipe = initialRecipe()) {

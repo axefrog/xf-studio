@@ -1,3 +1,4 @@
+import { STUDIO_PRODUCT } from "../src/compose/studio-registry";
 /** Read-only framework version check and eye-makeup mod MO2 placement preview. Writes nothing.
  *
  * bun tools/framework-check.ts --game-root <absolute> [--mo2-root <absolute> --profile <name> [--profile <name> ...]]
@@ -34,10 +35,10 @@ const summary = (route: ReturnType<typeof checkFrameworkVersions>["routes"][numb
     ...(row.notes.length ? { notes: row.notes } : {}) } : null])),
   guidance: route.verdicts.map(row => row.message ?? `${row.name}: OK (${row.installed} >= ${row.minimum})`),
 });
-const direct = checkFrameworkVersions(port, { gameRoot, launchRoute: "direct", mo2Root: null, mo2ProfileId: null });
+const direct = checkFrameworkVersions(port, { gameRoot, launchRoute: "direct", mo2Root: null, mo2ProfileId: null }, STUDIO_PRODUCT);
 const output: Record<string, unknown> = { direct: summary(direct.routes[0]!), profiles: {} };
 for (const profile of profiles) {
-  const route = checkFrameworkVersions(port, { gameRoot, launchRoute: "mo2", mo2Root, mo2ProfileId: profile })
+  const route = checkFrameworkVersions(port, { gameRoot, launchRoute: "mo2", mo2Root, mo2ProfileId: profile }, STUDIO_PRODUCT)
     .routes.find(row => row.route === "mo2")!;
   const text = readFileSync(join(readConfiguredMo2Instance(mo2Root!).paths.profiles, profile, "modlist.txt"), "utf8");
   const options = { related: eyeMakeupRelatedEntries, frameworkMods: frameworkModNames(route) };

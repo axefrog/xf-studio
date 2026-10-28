@@ -20,7 +20,7 @@ import { join } from "node:path";
 import type { CharacterRequest } from "../character-detail-request";
 import { choiceKey } from "./choice-manifest";
 import { writeFileAtomic } from "../../host/derived-cache";
-import { canonicalJson } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
+import { canonicalJson } from "../../platform/api/canonical-json";
 import { watchDigest, watchUnchanged } from "../../game/host/installation-snapshot";
 import type { WatchedPath } from "../../game/host/source-discovery";
 

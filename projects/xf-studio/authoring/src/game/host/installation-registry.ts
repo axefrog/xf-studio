@@ -46,7 +46,7 @@
  */
 import { lstat } from "node:fs/promises";
 import { resolve } from "node:path";
-import { canonicalJson } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
+import { canonicalJson } from "../../platform/api/canonical-json";
 import { currentDiagnostics } from "../../diagnostics/host/host-log";
 import { discoverRoute, DISCOVERY_LIMITS, installationView, type NativeRoute, nativeRouteStamp, openInstallation, openNativeRoute, readInstallationAhead,
   type Installation, type InstallationOptions } from "./resolver-host";

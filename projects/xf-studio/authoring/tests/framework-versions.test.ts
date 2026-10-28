@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { checkFrameworkVersions, compareVersions, EYE_ARTISTRY_REQUIREMENTS, FRAMEWORKS, frameworkModNames,
+import { compareVersions, FRAMEWORKS, frameworkModNames,
   normaliseVersion } from "../src/installation/framework-versions";
+import { checkFrameworkVersions, EYE_ARTISTRY_REQUIREMENTS } from "./fixtures/product-defaults";
 import { createWindowsDetectionHost } from "../src/installation/host/install-detection-host";
 import { evaluateLocalReadiness } from "../src/setup/host/local-settings-readiness";
 import { defaultLocalSettings, parseLocalSettings } from "../src/setup/local-settings";

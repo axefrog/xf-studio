@@ -2,8 +2,9 @@
  * a read would have found, through the same wording (`describeInstalled`, `frameworkRouteReport`). The style guide's specimen, the
  * `?verify=1` hooks (tools/framework-status-look.ts) and the tests use them; nothing here reads a computer.
  */
-import { describeInstalled, EYE_ARTISTRY_REQUIREMENTS, frameworkRouteReport, FRAMEWORKS, normaliseVersion, unavailableRouteReport, type FrameworkId,
+import { describeInstalled, frameworkRouteReport, FRAMEWORKS, normaliseVersion, unavailableRouteReport, type FrameworkId,
   type FrameworkProvider, type FrameworkVersionCheck } from "./framework-catalogue";
+import { EYE_ARTISTRY_REQUIREMENTS } from "../legacy/eye-makeup/mod-branding";
 import { EYE_MAKEUP_MOD } from "../legacy/eye-makeup/mod-branding";
 
 /** What one framework looks like on a route: absent, or a version found in a copy (with the mod manager's version and other copies). */
@@ -32,7 +33,7 @@ export function frameworkCheckSample(changes: Partial<Record<FrameworkId, Framew
       : found && !definition.markerHasVersion ? normaliseVersion(found.version) : null, found?.hidden ?? []);
   });
   return { schema: "xfs/framework-version-check-1", mod: EYE_MAKEUP_MOD.modName, requirements: EYE_ARTISTRY_REQUIREMENTS, selectedRoute: "mo2",
-    routes: [frameworkRouteReport("mo2", `Mod Organizer 2 profile "${FRAMEWORK_PROFILE}"`, FRAMEWORK_PROFILE, frameworks)], limitations: [] };
+    routes: [frameworkRouteReport("mo2", `Mod Organizer 2 profile "${FRAMEWORK_PROFILE}"`, FRAMEWORK_PROFILE, frameworks, EYE_ARTISTRY_REQUIREMENTS, EYE_MAKEUP_MOD.modName)], limitations: [] };
 }
 
 /** The states a person meets (the `?verify=1` hook `xfStudioFrameworkStatus.state(name)` names them). "checking" and "no-game" need no

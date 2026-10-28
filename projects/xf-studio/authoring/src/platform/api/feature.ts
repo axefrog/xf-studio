@@ -8,6 +8,7 @@ import type { EditorCodec, MemoryCodec, PartCodec } from "./document";
 import type { HistoryLabel } from "./history";
 import type { ExportInfo } from "./export";
 import type { FeatureEditorFactory } from "./editor";
+import type { ProductDefaults } from "./product";
 
 export type FeatureId = string & { readonly __feature: unique symbol };
 export type FamilyId = string & { readonly __family: unique symbol };
@@ -82,6 +83,7 @@ export interface FeatureModule<A extends { kind: string } = { kind: string }, Sc
    * package plan shows before any Check.
    */
   readonly exports?: ExportInfo;
+  readonly product?: ProductDefaults;
 }
 
 export type ActionOwner<A extends { kind: string } = { kind: string }, Scope extends string = string> =

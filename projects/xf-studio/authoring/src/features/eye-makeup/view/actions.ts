@@ -1,4 +1,4 @@
-import type { EyeMakeupAction } from "../../../legacy/eye-makeup/eye-makeup-model";
+import type { EyeMakeupAction } from "../../../engines/layered-makeup/eye-makeup-model";
 import type { EyeMakeupFacade } from "../../../app/studio-presentation";
 import type { FeatureViewContext } from "../../../studio-ui/views/feature-view";
 

@@ -1,4 +1,5 @@
-import { idListSha256, sha256Hex, selectedFaceIds, type EyePlateRecipe, type EyePlateSeams, type EyePlateTopology } from "./eye-plate-recipe";
+import { idListSha256, selectedFaceIds, type EyePlateRecipe, type EyePlateSeams, type EyePlateTopology } from "./eye-plate-recipe";
+import { sha256Hex } from "../../../formats/content-hash";
 
 /**
  * Independent verifier for a derived eye plate. It reads the plate resources as WolvenKit

@@ -25,7 +25,7 @@ import { join, relative, resolve, sep } from "node:path";
 import { type ArchiveFile, buildMountPlan, DepotIndex, type MountedArchive, type MountPlan, visibleCopy } from "../archive-precedence";
 import { type ArchiveXlConfig, readArchiveXlConfig, type XlDocument } from "../archivexl-config";
 import { depotHash, type DepotRef } from "../depot-path";
-import { depotPathRegex } from "../../legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
+import { depotPathRegex } from "../depot-path-regex";
 import { writeFileAtomic } from "../../host/derived-cache";
 import { touchUsed } from "./game-asset-export";
 import { defaultLocalSettings, type LocalSettings } from "../../setup/local-settings";

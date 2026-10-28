@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { freemem } from "node:os";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { canonicalJson } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
+import { canonicalJson } from "../../platform/api/canonical-json";
 import { CharacterDetailError, CHARACTER_DETAIL_STEPS, CharacterPreparationCache, prepareCharacterDetails, SERVED_TEXTURE_MAX, STORE_FILE, TOOL_MISSING, warmCharacters,
   type CharacterRoute, type PrepareCharacterOptions, type WarmOptions } from "./character-detail-service";
 import { choiceKey, manifestProblemSliced, readChoiceManifest, xlIdentity } from "./choice-manifest";

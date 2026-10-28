@@ -101,6 +101,17 @@ test("slice 11 file workflows bind registered projections and keep the mask work
     expect(DISK.names.filter(name => resolved(name).includes(adapter))).toEqual(["compose/studio-registry"]);
   expect(resolved("preview/browser/layered-preview-capability")).not.toContain("app/trusted-authoring-core");
 });
+test("slice 12 keeps product identities out of framework/install policy and shared helpers out of eye-plate modules", () => {
+  for (const name of ["installation/framework-catalogue", "installation/framework-versions", "installation/install-detection",
+    "installation/host/mod-install-host", "installation/host/mod-install-transport", "installation/host/runtime-diagnostic-stage",
+    "installation/host/runtime-diagnostic-promotion", "setup/wolvenkit-setup"])
+    expect(resolved(name).filter(path => /legacy\/eye-makeup|features\/eye-makeup/.test(path))).toEqual([]);
+  for (const name of ["character/choice-prefetch", "character/host/choice-manifest", "character/host/prepared-answers",
+    "game/host/installation-registry", "game/host/installation-snapshot", "game/host/resolver-host", "game/host/game-asset-export-wolvenkit"])
+    expect(resolved(name).filter(path => /legacy\/eye-makeup/.test(path))).toEqual([]);
+  for (const name of ["legacy/eye-makeup/history-labels", "legacy/eye-makeup/eye-makeup-model", "app/action-descriptor-kit"])
+    expect(DISK.names).not.toContain(name);
+});
 /** A module's imports with whether each is type-only, as src-relative module names. */
 const usesIn = (tree: Tree, name: string) => importUses(tree.text(name)).map(use => ({ path: resolveFrom(name, use.specifier), typeOnly: use.typeOnly }));
 /** A resolved import as the module it names (`x` or `x/index`), when it names one in the tree. */
@@ -514,12 +525,8 @@ function engineViolations(tree: Tree): string[] {
 const FEATURE_CORE_LEGACY = new Map([
   ["legacy/eye-makeup/recipe-schema", "eye makeup's recipe-file lineage and model registry: moves into features/eye-makeup with the exporter " +
     "(step 8), once the library store, file operations and package pipeline read eye makeup's part through its codec"],
-  ["legacy/eye-makeup/history-labels", "eye makeup's Undo labels: move into features/eye-makeup once the authoring document labels steps through " +
-    "the registered specs (step 9)"],
-  ["legacy/eye-makeup/eye-makeup-model", "eye makeup's action and state types: move into features/eye-makeup once StudioApplication and the " +
-    "presentation port take them from the registry (step 9)"],
-  ["legacy/eye-makeup/mod-branding", "XF Eye Artistry's names (its export info's brand and selector label): move into features/eye-makeup once install " +
-    "detection, the framework check and the collection panel read them through the export info (step 9)"],
+  ["legacy/eye-makeup/mod-branding", "product compatibility data: framework/install policy now receives the feature contribution; move once the retained " +
+    "planner, plate messages and guidance/specimens receive that data without a legacy import (CORE-03 slice 12)"],
   ["legacy/eye-makeup/eye-makeup-descriptors", "eye makeup's descriptors: move into features/eye-makeup once the application and presentation " +
     "read descriptors only from the registry (step 9)"],
 ]);
@@ -733,7 +740,7 @@ test("the engine and feature rules fail on the review's probes (CORE-77, CORE-78
   expect(hidden).toContain("features/eye-makeup/core -> legacy/eye-makeup/browser/raster-client");
   expect(hidden).toContain(`features/eye-makeup/core -> ${COMPUTED}`);
   // The leak the review found: a legacy module that reaches the look history through editor-actions, even by type.
-  const leak = featureViolations(probed({ "legacy/eye-makeup/history-labels": `import type { HistoryEntryId as __Probe } from "./editor-actions";` }));
+  const leak = featureViolations(probed({ "legacy/eye-makeup/recipe-schema": `import type { HistoryEntryId as __Probe } from "./editor-actions";` }));
   expect(leak).toContain("features/eye-makeup/index ->* platform/core/look-history");
   // A view's code reaching platform internals by value.
   const view = featureViolations(probed({ "features/eye-makeup/view/layers": `import { LookHistory as __Probe } from "../../../platform/core/look-history";` }));

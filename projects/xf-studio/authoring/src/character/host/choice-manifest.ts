@@ -24,7 +24,7 @@ import type { MountedArchive } from "../../game/archive-precedence";
 import type { CharacterRequest } from "../character-detail-request";
 import { isDecimalHash, refFromHash, refFromPath } from "../../game/depot-path";
 import { writeFileAtomic } from "../../host/derived-cache";
-import { canonicalJson } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
+import { canonicalJson } from "../../platform/api/canonical-json";
 import { archiveExportSource, type ExportKind, type GameAssetExporter } from "../../game/host/game-asset-export";
 import type { Installation } from "../../game/host/resolver-host";
 import type { ResourceGraph } from "../../game/resource-graph";

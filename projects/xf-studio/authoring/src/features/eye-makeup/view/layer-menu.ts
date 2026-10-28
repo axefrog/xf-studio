@@ -1,4 +1,4 @@
-import type { EyeMakeupAction } from "../../../legacy/eye-makeup/eye-makeup-model";
+import type { EyeMakeupAction } from "../../../engines/layered-makeup/eye-makeup-model";
 import { chordLabel, keyBindingById, shortcutLabel } from "../../../app/input-bindings";
 import type { MenuAnchor, MenuSection } from "../../../studio-ui/menu";
 import type { FeatureMenuItem, FeatureTargetMenu } from "../../../studio-ui/views/feature-view";

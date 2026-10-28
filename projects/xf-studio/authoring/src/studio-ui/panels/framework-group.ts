@@ -1,11 +1,10 @@
-import { EYE_MAKEUP_MOD } from "../../legacy/eye-makeup/mod-branding";
 import type { ProjectLink } from "../../app/project-links";
 import type { FrameworkStatusView } from "../../installation/framework-status";
 import { FrameworkStatus } from "../components";
 import type { Frame, StudioRuntime } from "../runtime";
 
 /** What the group's help tip says. */
-export const FRAMEWORKS_HELP = [`The tools your mods rely on in the game. ${EYE_MAKEUP_MOD.modName} always counts, and expression sets count when your library holds any. XF Studio reads which version of each the game will load (through your Mod Organizer 2 profile, or the game folder) and tells you when one needs updating.`,
+export const frameworksHelp = (modName: string) => [`The tools your mods rely on in the game. ${modName} always counts, and expression sets count when your library holds any. XF Studio reads which version of each the game will load (through your Mod Organizer 2 profile, or the game folder) and tells you when one needs updating.`,
   "It never installs, updates or changes them: you do that yourself, from each one's own page."];
 /** Where the Mod package card and the guides send a person who needs the detail. */
 export const FRAMEWORKS_PLACE = "Settings › Game › Mod frameworks";
@@ -29,7 +28,7 @@ export function frameworkNote(frame: Frame): string | null {
  */
 export function frameworkGroup(rt: StudioRuntime) {
   const port = rt.port;
-  const status = new FrameworkStatus({ label: "Mod frameworks", help: FRAMEWORKS_HELP, key: rt.key("settings.frameworks"),
+  const status = new FrameworkStatus({ label: "Mod frameworks", help: frameworksHelp(rt.port.product.modName), key: rt.key("settings.frameworks"),
     onCheckAgain: () => void checkAgain(), onRetryRequirements: () => void port.installDetection.retryRequirements().then(() => rt.changed()),
     onOpenLink: id => void openPage(id as ProjectLink) });
   // Checking and opening a page change nothing, so a read-only window keeps them (style guide t-read-only-window).

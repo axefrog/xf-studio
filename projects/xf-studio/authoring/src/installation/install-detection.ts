@@ -6,7 +6,7 @@
 import { setOwn } from "../platform/api/own-property";
 import { basename, dirname, join, resolve } from "node:path";
 import { describeMo2Instance, parseNxmHandlerIni, type Mo2InstanceDescription } from "./mo2-instance";
-import { EYE_MAKEUP_MOD } from "../legacy/eye-makeup/mod-branding";
+import { NO_PRODUCT, type ProductDefaults } from "../platform/api/product";
 
 export const STEAM_APP_ID = "1091500";
 /** GOG product ID of the base game, observed in a GOG Galaxy registry entry whose gameName is
@@ -223,12 +223,6 @@ export function localDriveRoots(mask: number, driveType: (root: string) => numbe
   }
   return roots;
 }
-/** What to tell someone whose copy comes from the Xbox app. Sources and limits:
- * research/authoring/source-discovery-foundation.md, "Store coverage". */
-export const XBOX_UNSUPPORTED_MESSAGE = `This looks like the Xbox app copy of Cyberpunk 2077. ${EYE_MAKEUP_MOD.modName} ` +
-  "needs ArchiveXL, which installs into the Windows PC edition of the game sold on Steam, GOG and the Epic Games Store. " +
-  "The Xbox store sells Cyberpunk 2077 for Xbox consoles and cloud play. " +
-  "Install Cyberpunk 2077 from Steam, GOG or Epic Games, then choose that folder.";
 const cyberpunkFolder = /cyberpunk\s*2077/i;
 const cyberpunkPackage = /cyberpunk\s*2077|cyberpunk2077/i;
 /** Files an Xbox app install keeps in its `Content` folder (GDK and older UWP packages). */
@@ -239,7 +233,7 @@ const lossy = (value: string) => /[?�]/.test(value);
 const unsupportedHost = "Automatic detection reads Windows launcher records; enter the folder manually on this host.";
 
 export async function detectGameInstalls(port: DetectionHostPort,
-  mo2: Mo2Detection | null = null): Promise<GameInstallDetection> {
+  mo2: Mo2Detection | null = null, product: ProductDefaults = NO_PRODUCT): Promise<GameInstallDetection> {
   const limitations = [
     "A launcher record and executable show where the game is installed, not which copy a launcher or MO2 will start.",
     "Detection does not read the game version, check file integrity or prove that mods load.",
@@ -257,7 +251,7 @@ export async function detectGameInstalls(port: DetectionHostPort,
   };
   const flagXbox = (root: string | null, detail: string) => {
     if (unsupported.some(row => root ? row.root !== null && key(row.root) === key(root) : row.detail === detail)) return;
-    unsupported.push({ source: "xbox", root, detail, message: XBOX_UNSUPPORTED_MESSAGE });
+    unsupported.push({ source: "xbox", root, detail, message: product.unsupportedStoreMessage });
   };
   const readable = (source: string, value: string) => {
     if (!lossy(value)) return true;
@@ -390,7 +384,7 @@ export async function detectGameInstalls(port: DetectionHostPort,
     if (instance.managesCyberpunk && instance.gamePath)
       offer(instance.gamePath, "mo2", `MO2 ${instance.kind} instance "${instance.name}"`);
 
-  if (unsupported.length) issues.push({ source: "xbox", code: "store_unsupported", detail: XBOX_UNSUPPORTED_MESSAGE });
+  if (unsupported.length) issues.push({ source: "xbox", code: "store_unsupported", detail: product.unsupportedStoreMessage });
   const candidates = [...found.values()].map(entry => ({ root: entry.root, evidence: entry.evidence,
     executableFound: true as const })).sort((a, b) => b.evidence.length - a.evidence.length || a.root.localeCompare(b.root));
   return { schema: "xfs/game-install-detection-1", supported: true, candidates,

@@ -1,3 +1,4 @@
+import { STUDIO_PRODUCT } from "./src/compose/studio-registry";
 import { createReferenceCharacterRoutes } from "./src/character/host/reference-character-server";
 import { resolve, sep } from "node:path";
 import { isBelow } from "./src/platform/api/path-containment";
@@ -81,13 +82,13 @@ const wolvenKit = new WolvenKitSetupHost({ root: localToolsRoot(),
   configured: () => process.env.XFS_PACKAGE_WOLVENKIT || localSettings.load().settings.wolvenKitCli, log: diagnostics.log.logger("wolvenkit") });
 const settingsFeatures = (settings: LocalSettings) => ({ updater: false, installer: true,
   wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
-  eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE), frameworks: hostFrameworkCheck(settings) });
+  eyePlate: eyePlateReadiness(localPlateCache(), settings.gameRoot, EYE_PLATE_RECIPE), frameworks: hostFrameworkCheck(settings, undefined, STUDIO_PRODUCT) });
 // Settings › Saves describes the detected saves folder; XFS_SAVES_DIR (a developer override) replaces the chosen or detected one.
 const savesProbe = savesFolderProbe({ allowOverride: true });
 const settingsRequest = createLocalSettingsHandler(localSettings, process.env, settingsFeatures, () => wolvenKit.managedExecutable(), savesProbe);
 const verificationSettingsRequest = createLocalSettingsHandler(verificationSettings, process.env, settingsFeatures, () => wolvenKit.managedExecutable(), savesProbe);
 const wolvenKitRequest = createWolvenKitSetupHandler(wolvenKit);
-const detectionRequest = createInstallDetectionHandler(undefined, { settings: () => {
+const detectionRequest = createInstallDetectionHandler(undefined, { product: STUDIO_PRODUCT, settings: () => {
   const settings = localSettings.load().settings;
   return { ...settings, gameRoot: packageToolPaths(settings).gamepath };
 } });
@@ -118,9 +119,9 @@ const packageRequest = createPackageHandler(action => localPackageAdapter({ expo
 // the person accepted its plan. Receipts and the previous mod list stay in the private data folder.
 // Receipts are per user on this computer (shared with the desktop app); an isolated server keeps its own and adds nothing.
 const installHost = (store: LocalSettingsStore, receiptsRoot: string, readOnly: string | undefined, legacy: string[] = []) =>
-  () => new ModInstallHost({ candidateStore: localCandidateStore(), receiptsRoot, legacyReceiptsRoots: legacy, readOnly,
+  () => new ModInstallHost({ defaults: STUDIO_PRODUCT, candidateStore: localCandidateStore(), receiptsRoot, legacyReceiptsRoots: legacy, readOnly,
     settings: () => { const settings = store.load().settings; return { ...settings, gameRoot: packageToolPaths(settings).gamepath }; },
-    running: () => windowsRunningApps(), ansiCodePage: systemAnsiCodePage, frameworkMods: settings => profileFrameworkMods(settings), reveal: explorerReveal });
+    running: () => windowsRunningApps(), ansiCodePage: systemAnsiCodePage, frameworkMods: settings => profileFrameworkMods(settings, undefined, STUDIO_PRODUCT), reveal: explorerReveal });
 const installLog = (code: string, message: string, error: unknown) => { hostFailure("install", code, message, error); };
 const modInstallRequest = createModInstallHandler(installHost(localSettings, state.installReceipts, state.installs ? undefined : READ_ONLY_TEST_SERVER,
   state.legacyInstallReceipts), installLog);
@@ -217,7 +218,7 @@ const commit = (() => {
   try { const run = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"], { cwd: import.meta.dir, stdout: "pipe", stderr: "ignore" });
     return run.exitCode === 0 ? run.stdout.toString().trim() || null : null; } catch { return null; }
 })();
-const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
+const diagnosticsRequest = createDiagnosticsHandler(diagnostics, { product: STUDIO_PRODUCT,
   app: () => ({ version: "0.1.0", commit, channel: null, host: "localhost" }),
   settings: () => { const settings = localSettings.load().settings; return { ...settings, gameRoot: packageToolPaths(settings).gamepath }; },
   wolvenKit: () => { const state = wolvenKit.snapshot(); return { version: state.version, source: state.source, phase: state.phase }; },

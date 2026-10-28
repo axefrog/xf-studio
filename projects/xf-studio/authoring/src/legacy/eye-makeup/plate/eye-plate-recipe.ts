@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { sha256Hex } from "../../../formats/content-hash";
+import { canonicalJson } from "../../../platform/api/canonical-json";
 import recipeJson from "./eye-plate-recipe.json" with { type: "json" };
 import masculineRecipeJson from "./eye-plate-recipe-pma.json" with { type: "json" };
 
@@ -60,10 +61,6 @@ const sha = (value: unknown, name: string) => text(value, name, /^[a-f0-9]{64}$/
 const identifier = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const depotPath = /^[a-z0-9_]+(?:\\[a-z0-9_.@-]+)+$/;
 const resourceName = /^xfs_[a-z0-9_]{1,60}$/;
-
-export function sha256Hex(data: string | Uint8Array): string {
-  return createHash("sha256").update(data).digest("hex");
-}
 
 /** Face IDs in ascending order, expanded from the recipe's inclusive ranges. */
 export function selectedFaceIds(recipe: Pick<EyePlateRecipe, "selection">): number[] {
@@ -159,14 +156,6 @@ export function parseEyePlateRecipe(value: unknown): EyePlateRecipe {
   if (seams && seams.topology.componentVertexCounts.reduce((sum, value) => sum + value, 0) !== recipe.selection.vertexCount - seams.weldedVertices)
     fail("welded topology components do not add up to vertexCount less the welded vertices.");
   return recipe;
-}
-
-/** Stable JSON with sorted object keys, so equivalent recipes hash identically. */
-export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object")
-    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`).join(",")}}`;
-  return JSON.stringify(value);
 }
 
 export const eyePlateRecipeSha256 = (recipe: EyePlateRecipe) => sha256Hex(canonicalJson(recipe));

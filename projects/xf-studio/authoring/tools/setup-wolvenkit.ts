@@ -1,3 +1,4 @@
+import { STUDIO_PRODUCT } from "../src/compose/studio-registry";
 // Localhost: download XF Studio's own copy of WolvenKit CLI (the pinned official release) into the
 // ignored tools folder (`data/tools`, or XFS_TOOLS_DIR). It shows what it will download and asks
 // first; pass --yes to agree up front. A WolvenKit path in Local setup or XFS_PACKAGE_WOLVENKIT
@@ -17,7 +18,7 @@ if (state.phase === "ready" || state.phase === "needs-runtime" || state.phase ==
   if (state.phase === "needs-runtime" && state.runtime) console.log(`Microsoft's installer: ${state.runtime.installerUrl}\nDownload page: ${state.runtime.pageUrl}`);
   process.exit(state.phase === "ready" ? 0 : 2);
 }
-const consent = wolvenKitConsent(state);
+const consent = wolvenKitConsent(state, STUDIO_PRODUCT.modName);
 console.log(`${consent.title}\n${consent.intro}\n`);
 for (const fact of consent.facts) console.log(`  ${fact.label}: ${fact.value}`);
 if (consent.runtimeNote) console.log(`\n${consent.runtimeNote}`);

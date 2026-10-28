@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { depotHash } from "../depot-path";
-import { depotPathRegex } from "../../legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
+import { depotPathRegex } from "../depot-path-regex";
 import { createGameAssetExporter, GameAssetExportError, type GameAssetExporter, type GeometryRepair, type GeometryRepairOutcome, type GeometryRepairStep, type MorphTargetSkin,
   type UncookRun } from "./game-asset-export";
 import { MESH_EXPORT_REPAIR_VERSION, repairMeshForExport } from "../mesh-export-repair";

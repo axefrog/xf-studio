@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { EYE_MAKEUP_MOD, isEyeMakeupModFolder } from "../src/legacy/eye-makeup/mod-branding";
 import { planCollection } from "../src/legacy/eye-makeup/export/preset-collection";
-import { createModInstallTransport } from "../src/installation/host/mod-install-transport";
+import { createModInstallTransport } from "./fixtures/product-defaults";
 import { defaultLocalSettings } from "../src/setup/local-settings";
 import { preflightPackageCollection } from "./fixtures/eye-exporter";
 import { sourceFiles, sourceText } from "./fixtures/source-files";

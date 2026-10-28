@@ -1,3 +1,4 @@
+import { STUDIO_PRODUCT } from "../src/compose/studio-registry";
 /** Offline first-game diagnostic. Dry-run is the default and writes nothing. */
 import { planRuntimeDiagnostic, stageRuntimeDiagnostic, type RuntimeDiagnosticOptions } from "../src/installation/host/runtime-diagnostic-stage";
 
@@ -15,7 +16,7 @@ for (let i = 0; i < argumentsList.length; i++) {
 }
 const allowed = ["--candidate-store", "--candidate-id", "--game-root", "--mo2-root", "--profile", "--staging-root"];
 if (values.size !== allowed.length || [...values.keys()].some(key => !allowed.includes(key))) usage();
-const options: RuntimeDiagnosticOptions = {
+const options: RuntimeDiagnosticOptions = { defaults: STUDIO_PRODUCT,
   candidateStore: values.get("--candidate-store")!, candidateId: values.get("--candidate-id")!,
   gameRoot: values.get("--game-root")!, mo2Root: values.get("--mo2-root")!,
   profileId: values.get("--profile")!, stagingRoot: values.get("--staging-root")!,

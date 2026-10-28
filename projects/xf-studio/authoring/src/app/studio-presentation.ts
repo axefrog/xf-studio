@@ -1,3 +1,4 @@
+import { NO_PRODUCT, type ProductDefaults } from "../platform/api/product";
 import { liveModuleActions } from "../platform/core/module-actions";
 import type { ExperimentPort } from "../platform/api/experiments";
 import type { FacialPreviewSnapshot } from "../platform/api/facial";
@@ -24,7 +25,7 @@ import { viewPanelId } from "../platform/api/view-graph";
 import type { HistorySnapshot, HistoryState } from "../platform/api/history";
 import type { ConsequenceSubject, PresentationSubject } from "./action-consequences";
 import type { ModuleService, PlannedModule, StudioModule, ViewId, ViewSummaryContribution, ViewToolFilter } from "../platform/api";
-import type { EyeMakeupAction } from "../legacy/eye-makeup/eye-makeup-model";
+import type { EyeMakeupAction } from "../engines/layered-makeup/eye-makeup-model";
 import type { RecipeAction } from "../engines/layered-makeup/recipe-actions";
 import type { FieldLimit } from "../platform/api";
 import type { StudioFileAction, StudioFileOperations } from "./studio-file-operations";
@@ -183,6 +184,7 @@ export type InstallDetectionSnapshot = ReturnType<InstallDetectionActions["snaps
 
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
+  readonly product: ProductDefaults;
   /** Data/facade acquisition only. Controller composition consumes it in P3-iii. */
   readonly capture?: (signal: AbortSignal) => StudioPresentationPort<Slot>;
   readonly editing?: { acquire(instance: string, signal: AbortSignal): import("./profiles/panel-editing-contexts").PanelEditingPort<Slot> | undefined };
@@ -408,6 +410,8 @@ export function createStudioPresentation<Slot>(sources: {
   status?: StatusSource;
   localSetup?: LocalSetupActions;
   installDetection?: InstallDetectionActions;
+  /** Product defaults supplied by the composition's registered feature. */
+  product?: ProductDefaults;
   /** Requirements contributed by a feature whose library holds at least one set (queried through its owner). */
   frameworkProducts?: readonly (FrameworkProduct & { readonly feature: string })[];
   /** Optional for fixtures; without it every install action says it isn't available here. */
@@ -705,7 +709,7 @@ export function createStudioPresentation<Slot>(sources: {
   const linkSource = sources.links;
   const links: ProjectLinkPort = Object.freeze({ open: (link: ProjectLink) => linkSource ? linkSource.open(link)
     : Promise.resolve({ ok: false as const, message: "Web pages can't be opened from here." }) });
-  return Object.freeze({ ...(sources.editing ? { editing: sources.editing } : {}), authoring: Object.freeze(authoring), library: Object.freeze(library),
+  return Object.freeze({ product: sources.product ?? NO_PRODUCT, ...(sources.editing ? { editing: sources.editing } : {}), authoring: Object.freeze(authoring), library: Object.freeze(library),
     files: Object.freeze(files), viewport: Object.freeze(viewport), preferences: Object.freeze(preferences),
     previewReadiness, views, features: () => infos, feature, module: (id: string) => {
       const service = moduleServices.get(id) ?? sources.experiments?.registrations().find(item => item.module.id === id)?.service;

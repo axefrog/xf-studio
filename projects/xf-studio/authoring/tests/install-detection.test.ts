@@ -2,9 +2,10 @@ import { expect, test } from "bun:test";
 import { join, resolve, sep } from "node:path";
 import { decodeQSettingsValue, describeMo2Instance, parseMo2Modlist, parseNxmHandlerIni,
   parseQSettingsIni } from "../src/installation/mo2-instance";
-import { detectGameInstalls, detectMo2Instances, parseEpicInstallList, parseEpicManifest, parseGamingRoot,
-  localDriveRoots, parseRegQuery, parseVdf, steamInstallDir, steamLibraryPaths, XBOX_UNSUPPORTED_MESSAGE,
+import { detectMo2Instances, parseEpicInstallList, parseEpicManifest, parseGamingRoot,
+  localDriveRoots, parseRegQuery, parseVdf, steamInstallDir, steamLibraryPaths,
   type DetectionHostPort } from "../src/installation/install-detection";
+import { detectGameInstalls, XBOX_UNSUPPORTED_MESSAGE } from "./fixtures/product-defaults";
 
 // Synthetic, asset-free fixtures. Paths are placeholders under a fake drive, never a real machine.
 const root = resolve("/xfs-fixture");

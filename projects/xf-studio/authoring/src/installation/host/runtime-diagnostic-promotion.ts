@@ -9,7 +9,7 @@ import { assertNoLinkedPath, inspectLocalPackageCandidate, installedDuplicates, 
 import { frameworkModNames } from "../framework-versions";
 import { candidateModName, diagnosticModlist, enabledMo2Mods, installedPlaces, legacyModFolder, profileFrameworks, type RuntimeDiagnosticOptions,
   type RuntimeDiagnosticPlan } from "./runtime-diagnostic-stage";
-import { EYE_MAKEUP_MOD, eyeMakeupModFolders, isEyeMakeupModFolder } from "../../legacy/eye-makeup/mod-branding";
+import { NO_PRODUCT, isProductFolder, productFolders } from "../../platform/api/product";
 import { readConfiguredMo2Instance } from "./install-detection-host";
 
 const metadata = ["modlist.txt", "plugins.txt", "loadorder.txt", "settings.ini", "archives.txt",
@@ -60,6 +60,7 @@ const durableJson = (path: string, value: unknown) => writeJsonDurably(path, val
 function recordPaths(stage: string) { return { journal: join(stage, "promotion-journal.json"),
   receipt: join(stage, "promotion-receipt.json") }; }
 function validate(options: PromotionOptions) {
+  const defaults = options.defaults ?? NO_PRODUCT;
   for (const value of [options.candidateStore, options.gameRoot, options.mo2Root, options.stagingRoot])
     requireValue(isAbsolute(value), "All roots must be absolute.");
   profileName(options.profileId); profileName(options.newProfileId);
@@ -88,13 +89,13 @@ function validate(options: PromotionOptions) {
   requireValue(sha(sourceModlist) === saved.sourceProfileModlistSha256,
     "Source profile modlist changed since staging.");
   const stageProfile = join(stage, "mo2", "profiles", options.profileId);
-  const candidate = inspectLocalPackageCandidate(options.candidateStore, options.candidateId);
+  const candidate = inspectLocalPackageCandidate(options.candidateStore, options.candidateId, defaults);
   // The mod the stage placed: the candidate's own name, recorded by the stage plan (older plans: eye makeup's brand).
-  const modName = saved.modName ?? EYE_MAKEUP_MOD.modName;
-  requireValue(modName === candidateModName(candidate.manifest), "Stage plan names another mod than this candidate. Stage it again.");
+  const modName = saved.modName ?? defaults.modName;
+  requireValue(modName === candidateModName(candidate.manifest, defaults), "Stage plan names another mod than this candidate. Stage it again.");
   const stageMod = join(stage, "mo2", "mods", modName);
   const stagePayload = join(stageMod, "archive", "pc", "mod");
-  const legacyStage = EYE_MAKEUP_MOD.legacyModFolders.find(name =>
+  const legacyStage = defaults.legacyModFolders.find(name =>
     saved.stageReceipt!.target === join(stage, "mo2", "mods", name, "archive", "pc", "mod"));
   requireValue(!legacyStage, `This stage used the legacy mod folder "${legacyStage}". ` +
     `Stage again so the promoted mod is named "${modName}".`);
@@ -115,11 +116,11 @@ function validate(options: PromotionOptions) {
   const present = metadata.filter(name => existsSync(join(sourceProfile, name)));
   requireValue(present.includes("modlist.txt"), "Source modlist missing.");
   const stageProfileFiles = inventory(stageProfile, present);
-  const frameworkMods = frameworkModNames(profileFrameworks(resolve(options.gameRoot), mo2, options.profileId));
+  const frameworkMods = frameworkModNames(profileFrameworks(resolve(options.gameRoot), mo2, options.profileId, defaults));
   for (const name of present) {
     const source = join(sourceProfile, name); file(source);
     if (name === "modlist.txt") requireValue(readFileSync(join(stageProfile, name), "utf8") ===
-      diagnosticModlist(readFileSync(source, "utf8"), frameworkMods, modName), "Staged modlist differs from expected isolated changes.");
+      diagnosticModlist(readFileSync(source, "utf8"), frameworkMods, modName, defaults), "Staged modlist differs from expected isolated changes.");
     else requireValue(sha(source) === sha(join(stageProfile, name)), `Source profile metadata changed: ${name}`);
   }
   const expectedPayloadNames = candidate.manifest.files.map(entry => basename(entry.path));
@@ -133,7 +134,7 @@ function validate(options: PromotionOptions) {
   const game = resolve(options.gameRoot); directory(game);
   file(join(game, "bin", "x64", "Cyberpunk2077.exe"));
   const enabled = enabledMo2Mods(readFileSync(sourceModlist, "utf8"));
-  const enabledMod = enabled.find(name => name.toLowerCase() === modName.toLowerCase() || isEyeMakeupModFolder(name));
+  const enabledMod = enabled.find(name => name.toLowerCase() === modName.toLowerCase() || isProductFolder(name, defaults));
   requireValue(!enabledMod, `Source profile already enables ${modName}` +
     (enabledMod?.toLowerCase() === modName.toLowerCase() ? "." : ` under its earlier name "${enabledMod}".`));
   for (const entry of modFiles) {
@@ -154,8 +155,8 @@ function validate(options: PromotionOptions) {
   requireValue(!duplicates.length, `Part of this build is already installed in ${duplicates.join(", ")}. Remove it first, or build both mods ` +
     "from the same package plan. Nothing was changed.");
   // An earlier diagnostic install under a legacy folder name is the same mod: never create a second copy beside it.
-  const legacy = legacyModFolder(mods);
-  requireValue(!legacy, `MO2 already has an earlier ${EYE_MAKEUP_MOD.modName} diagnostic install in the legacy ` +
+  const legacy = legacyModFolder(mods, defaults);
+  requireValue(!legacy, `MO2 already has an earlier ${defaults.modName} diagnostic install in the legacy ` +
     `folder "${legacy}". Roll back that promotion (or remove the folder in MO2) before promoting another copy.`);
   return { stage, mo2, profiles, mods, sourceProfile, sourceModlist, stageProfile, stageMod, modName,
     profileFiles: stageProfileFiles, modFiles, candidate, saved };
@@ -202,10 +203,11 @@ function ownedRecord(path: string): Record {
   return value;
 }
 function removeOwned(record: Record, options: PromotionOptions) {
+  const defaults = options.defaults ?? NO_PRODUCT;
   const stage = resolve(options.stagingRoot), instance = readConfiguredMo2Instance(resolve(options.mo2Root)).paths;
   // Records from before mod branding name the legacy folder, and records from before PIPE-90 the brand's; recovery and
   // rollback still accept them. A newer record names its mod.
-  const folders = [...(record.preview.modName !== undefined ? [record.preview.modName] : []), ...eyeMakeupModFolders];
+  const folders = [...(record.preview.modName !== undefined ? [record.preview.modName] : []), ...productFolders(defaults)];
   const folder = folders.find(name => record.preview.dedicatedMod === join(instance.mods, name));
   requireValue(folder !== undefined && record.preview.newProfile === join(instance.profiles, options.newProfileId) &&
     record.preview.stageProfile === join(stage, "mo2", "profiles", options.profileId) &&

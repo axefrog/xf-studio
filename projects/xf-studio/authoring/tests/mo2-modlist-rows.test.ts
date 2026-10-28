@@ -6,7 +6,8 @@
 import { expect, test } from "bun:test";
 import { mo2ModlistRows, parseMo2Modlist, splitMo2ModlistLines } from "../src/installation/mo2-instance";
 import { disableMo2Mods, mo2ModlistEntry } from "../src/installation/mo2-placement";
-import { diagnosticModlist, enabledMo2Mods } from "../src/installation/host/runtime-diagnostic-stage";
+import { enabledMo2Mods } from "../src/installation/host/runtime-diagnostic-stage";
+import { diagnosticModlist } from "./fixtures/product-defaults";
 import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 
 const LIST = "# written by MO2\r\n+High\nPlain\r\n-Off\n*DLC\n+Tools_separator\n  +Padded  \r\n+High\n";

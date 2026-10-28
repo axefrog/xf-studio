@@ -1,3 +1,4 @@
+import { STUDIO_PRODUCT } from "../src/compose/studio-registry";
 import { createReferenceCharacterRoutes } from "../src/character/host/reference-character-server";
 import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { resolve } from "node:path";
@@ -208,14 +209,14 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       packageBuildPending: buildIssue === PROBE_PENDING,
       wolvenKit: wolvenKitReadinessIssue(wolvenKit.snapshot()),
       eyePlate: eyePlateReadiness(desktopPlateCache(dataRoot), settings.gameRoot, EYE_PLATE_RECIPE),
-      frameworks: hostFrameworkCheck(settings) };
+      frameworks: hostFrameworkCheck(settings, undefined, STUDIO_PRODUCT) };
   };
   // Settings › Saves describes the detected saves folder; a packaged app takes no folder override.
   const savesProbe = savesFolderProbe({ allowOverride: false });
   const localSettings = createLocalSettingsHandler(settingsStore, {}, settingsFeatures, () => wolvenKit.managedExecutable(), savesProbe);
   const verificationLocalSettings = createLocalSettingsHandler(verificationSettings, {}, settingsFeatures, () => wolvenKit.managedExecutable(), savesProbe);
   const wolvenKitRequest = createWolvenKitSetupHandler(wolvenKit);
-  const installDetection = createInstallDetectionHandler(undefined, { settings: () => settingsStore.load().settings });
+  const installDetection = createInstallDetectionHandler(undefined, { product: STUDIO_PRODUCT, settings: () => settingsStore.load().settings });
   // The Save Explorer's read-only endpoints (the player's saves, installed scripts' names); a packaged app takes no folder override.
   // A verification workspace reads its own settings' saves folder (UI-98).
   const savesRequest = createSavesHandler(savesHostSources({ allowOverride: false, exists: existsSync, settings: () => settingsStore.load().settings }),
@@ -287,7 +288,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   prepared.partition(facial.preparedPartition());
   prepared.partition(idlePrepared(idles, resolve(desktopPreviewCache(dataRoot), "resolver")));
   // Diagnostics: the page's failures, diagnostic mode and "Report a problem" (nothing is sent anywhere).
-  const diagnosticsRequest = createDiagnosticsHandler(diagnostics, {
+  const diagnosticsRequest = createDiagnosticsHandler(diagnostics, { product: STUDIO_PRODUCT,
     app: () => ({ version: version.version, commit: version.buildHash === "unavailable" ? null : version.buildHash,
       channel: version.channel === "unavailable" ? null : version.channel, host: "desktop" }),
     settings: () => savedSettings(), webView2: hostOptions.webView2 ?? null,
@@ -304,9 +305,9 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   // Receipts are per user on this computer, shared with localhost (INSTALL-04); the app's own earlier folder is taken over.
   const receiptsRoot = resolve(hostOptions.installReceipts ?? installReceiptsRoot(dataRoot));
   const installPorts = { candidateStore: resolve(dataRoot, "package-candidates"), running: () => windowsRunningApps(), ansiCodePage: systemAnsiCodePage,
-    frameworkMods: (settings: LocalSettings) => profileFrameworkMods(settings), reveal: hostOptions.revealPath };
+    frameworkMods: (settings: LocalSettings) => profileFrameworkMods(settings, undefined, STUDIO_PRODUCT), reveal: hostOptions.revealPath };
   const installLog = (code: string, message: string, error: unknown) => { hostFailure("install", code, message, error); };
-  const modInstallRequest = createModInstallHandler(() => new ModInstallHost({ ...installPorts, receiptsRoot,
+  const modInstallRequest = createModInstallHandler(() => new ModInstallHost({ defaults: STUDIO_PRODUCT, ...installPorts, receiptsRoot,
     legacyReceiptsRoots: receiptsRoot === installReceiptsRoot(dataRoot) ? [] : [installReceiptsRoot(dataRoot)],
     settings: () => settingsStore.load().settings,
     transaction: async work => {
@@ -314,7 +315,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       if (!end) throw new ModInstallError("install_unavailable", "An update restart is being prepared. Let it finish, then try again.");
       try { return await work(); } finally { end(); }
     } }), installLog);
-  const verificationModInstallRequest = createModInstallHandler(() => new ModInstallHost({ ...installPorts,
+  const verificationModInstallRequest = createModInstallHandler(() => new ModInstallHost({ defaults: STUDIO_PRODUCT, ...installPorts,
     receiptsRoot: verificationInstallReceipts(dataRoot), settings: () => verificationSettings.load().settings, readOnly: READ_ONLY_VERIFICATION }), installLog);
   const coreFiles = new Set<string>(PREVIEW_CORE_ASSET_NAMES);
   let server: ReturnType<typeof Bun.serve>;

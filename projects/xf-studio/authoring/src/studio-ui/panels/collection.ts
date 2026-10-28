@@ -1,6 +1,6 @@
 import { captureRuntime, capturedItems } from "../captured-runtime";
 import type { PackageBuildResult, PackageCheckResult } from "../../platform/api";
-import { EYE_MAKEUP_MOD, MOD_NAME_HINT } from "../../legacy/eye-makeup/mod-branding";
+import { MOD_NAME_HINT } from "../../legacy/eye-makeup/mod-branding";
 import type { ReadonlyDeep } from "../../platform/api/read-only";
 import { applyCapability, badge, button, setButtonLabel, emptyState, note, section } from "../controls";
 import { h, setAttr, setText } from "../dom";
@@ -200,7 +200,7 @@ export function packagePanel(rt: StudioRuntime): PanelController {
   // names every layer it leaves out.
   const element = h("div", { class: "panel-content" },
     section({ title: "Mod package", help: [`Builds your own copy of your XF mods from this collection as it is now, your latest edits included.`,
-      `Eye makeup becomes ${EYE_MAKEUP_MOD.modName}: each preset is one choice in the character creator's “${EYE_MAKEUP_MOD.selectorLabel}” selector.`,
+      `Eye makeup becomes ${rt.port.product.modName}: each preset is one choice in the character creator's “${rt.port.product.selectorLabel}” selector.`,
       "Check names any layer it would leave out, and why. The finish picker groups finishes by what can be built."] },
       // Check, then the primary Build last; the progress takes the rest of the same row (one line, reserved), so it adds no band.
       mods, h("div", { class: "row gap-s package-actions" }, check, build, rebuild, progress)),

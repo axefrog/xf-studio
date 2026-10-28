@@ -3,7 +3,7 @@ import { FRESNEL_PRESET_RULE, planPresetExport } from "../src/engines/layered-ma
 import { DEFAULT_GLITTER_MODEL, glitterModel, glitterModels, parseGlitterChoices } from "../src/engines/layered-makeup/glitter-model";
 import { defaultFlakes } from "../src/engines/layered-makeup/finish";
 import { defaultDirectGlintFlakes } from "../src/engines/layered-makeup/direct-glint-settings";
-import { historyLabel } from "../src/legacy/eye-makeup/history-labels";
+import { historyLabel } from "../src/engines/layered-makeup/history-labels";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 

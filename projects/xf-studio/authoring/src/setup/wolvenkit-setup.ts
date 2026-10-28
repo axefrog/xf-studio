@@ -6,7 +6,6 @@
  * lost mid-download), and turns the state into plain-language view facts for the card and consent dialog.
  */
 import { PolledHostState, type HostConnection, type HostTimers } from "../app/host-state-poller";
-import { EYE_MAKEUP_MOD } from "../legacy/eye-makeup/mod-branding";
 
 export type WolvenKitSetupPhase = "ready" | "available" | "downloading" | "installing" | "needs-runtime" | "failed" | "custom-missing" | "unsupported";
 export type WolvenKitSetupState = {
@@ -104,14 +103,14 @@ export type WolvenKitConsent = {
 };
 
 /** Pure: what the person agrees to before anything is downloaded. */
-export function wolvenKitConsent(state: WolvenKitSetupState): WolvenKitConsent {
+export function wolvenKitConsent(state: WolvenKitSetupState, modName = "mod"): WolvenKitConsent {
   const offer = state.offer;
   return {
     title: `Download WolvenKit ${offer.version}?`,
     intro: "XF Studio uses WolvenKit to read your Cyberpunk 2077 files. It reads them only; nothing in your game changes.",
     facts: [
       { label: "What it is", value: `WolvenKit ${offer.version}, the free, open-source modding tool made by ${offer.publisher}. It isn't part of XF Studio.` },
-      { label: "Why", value: `It builds the 3D view from your own game files and packs your ${EYE_MAKEUP_MOD.modName} mod files.` },
+      { label: "Why", value: `It builds the 3D view from your own game files and packs your ${modName} mod files.` },
       { label: "Size", value: `${offer.downloadSize} to download, ${offer.installedSize} once unpacked.` },
       { label: "From", value: `${offer.from}. XF Studio checks the download against the release's published fingerprint before using it.` },
       { label: "Where it goes", value: "XF Studio's own data folder. Nothing is installed in Windows or in your game." },

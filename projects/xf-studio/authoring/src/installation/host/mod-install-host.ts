@@ -34,8 +34,7 @@ import { parseMo2Modlist } from "../mo2-instance";
 import { decodeModlist, encodeModlist, type ModlistEncoding } from "../mo2-modlist-text";
 import { applyMo2Placement, mo2ModlistEntry, planMo2Placement, type Mo2Placement } from "../mo2-placement";
 import { createModInstallTransport, extraFileKind, findInstalledDuplicates, inspectLocalPackageCandidate } from "./mod-install-transport";
-import { EYE_MAKEUP_MOD, eyeMakeupRelatedEntries } from "../../legacy/eye-makeup/mod-branding";
-import { EYE_MAKEUP_FEATURE } from "../../legacy/eye-makeup/recipe-schema";
+import { NO_PRODUCT, productRelatedEntries, type ProductDefaults } from "../../platform/api/product";
 import { modNameIssue } from "../../platform/api";
 import { attributeVortexFile } from "../vortex-deployment";
 import { readVortexManifests } from "./vortex-host";
@@ -48,6 +47,7 @@ export type { ModInstallPlan, ModInstallResult, ModInstallRoute } from "../mod-i
 export type RunningApps = { mo2: boolean | null; game: boolean | null };
 
 export type ModInstallPorts = {
+  defaults?: ProductDefaults;
   /** The host's verified builds (`package-candidates` on desktop, `dist` on localhost). */
   candidateStore: string;
   /** Private receipts, backups and journals, per user on this computer (host-state.ts `machineInstallReceiptsRoot`); never inside the store or a target. */
@@ -201,7 +201,7 @@ export class ModInstallHost {
 
   private candidate(candidateId: string) {
     if (!safeCandidate(candidateId)) throw new ModInstallError("candidate_missing", "That build isn't one XF Studio made. Build your mod again.");
-    try { return inspectLocalPackageCandidate(resolve(this.ports.candidateStore), candidateId); }
+    try { return inspectLocalPackageCandidate(resolve(this.ports.candidateStore), candidateId, this.ports.defaults); }
     catch { throw new ModInstallError("candidate_missing", "This build's files are no longer there, or were changed. Build your mod again."); }
   }
 
@@ -238,7 +238,7 @@ export class ModInstallHost {
     // reader would call such a build unreadable), with copying by hand as the way on.
     const unknownKinds = this.unknownKinds(candidateId);
     const inspected = unknownKinds ? null : this.candidate(candidateId);
-    const modName = inspected?.manifest.modName ?? unknownKinds?.modName ?? EYE_MAKEUP_MOD.modName;
+    const modName = inspected?.manifest.modName ?? unknownKinds?.modName ?? (this.ports.defaults ?? NO_PRODUCT).modName;
     const settings = this.ports.settings(), route: ModInstallRoute = settings.launchRoute;
     const profile = settings.mo2ProfileId ?? "";
     const readOnly = this.ports.readOnly;
@@ -271,7 +271,7 @@ export class ModInstallHost {
       if (!existsSync(modlistFile)) return blocked(`The profile ${quoted(profile)} has no mod list yet. Open Mod Organizer 2 with that profile once and ` +
         `close it, ${CHECK_AGAIN}`);
     }
-    const open = (receiptsRoot: string) => createModInstallTransport({ candidateStore: resolve(this.ports.candidateStore), receiptsRoot,
+    const open = (receiptsRoot: string) => createModInstallTransport({ defaults: this.ports.defaults, candidateStore: resolve(this.ports.candidateStore), receiptsRoot,
       settings: { ...settings, installMode: route }, modName, product: manifest.archive,
       ansiCodePage: this.ports.ansiCodePage?.() ?? null });
     let transport: ReturnType<typeof createModInstallTransport>;
@@ -327,7 +327,7 @@ export class ModInstallHost {
       text = read.text;
       let placement: Mo2Placement;
       try {
-        placement = planMo2Placement(read.text, modName, { related: eyeMakeupRelatedEntries, frameworkMods: this.ports.frameworkMods?.(settings) ?? [] });
+        placement = planMo2Placement(read.text, modName, { related: productRelatedEntries(this.ports.defaults ?? NO_PRODUCT), frameworkMods: this.ports.frameworkMods?.(settings) ?? [] });
       } catch (error) { return refused(error); }
       modlist = { file: modlistFile, bytes: read.bytes, text: read.text, encoding: read.encoding, placement, profile };
     }
@@ -360,8 +360,8 @@ export class ModInstallHost {
           : `${quoted(modName)} is already in the profile ${quoted(profile)}; switch it on where it is.`
         : `Add ${quoted(modName)} to the profile ${quoted(profile)}, switched on. ${placement.description}`);
       changes.push("Nothing else in your mod list changes.");
-      for (const older of EYE_MAKEUP_MOD.predecessorMods) if (mo2ModlistEntry(text!, older) === "+")
-        notes.push(`${quoted(older)} is also switched on. It's an older eye makeup mod: switch it off in Mod Organizer 2 if the two clash.`);
+      for (const older of (this.ports.defaults ?? NO_PRODUCT).predecessorMods) if (mo2ModlistEntry(text!, older) === "+")
+        notes.push(`${quoted(older)} is also switched on. ${(this.ports.defaults ?? NO_PRODUCT).predecessorAdvice}`);
       if (running.mo2 !== false) wait(mo2Open(running.mo2));
     }
     // A running game holds the installed `.archive` open, so replacing it would fail halfway (INSTALL-02).
@@ -371,15 +371,15 @@ export class ModInstallHost {
     const token = sha(JSON.stringify([candidateId, route, target, settings.revision, modlist ? sha(modlist.bytes) : null, modlist?.placement ?? null,
       changes, receipt ? [receipt.candidateId, receipt.installedAt] : null]));
     return { plan: { ...base, changes, notes, blocked: readOnly ?? why, next: readOnly !== undefined ? null : next, token }, transport, modlist,
-      outcome: { seeIt: seeIt(manifest.features),
+      outcome: { seeIt: seeIt(manifest.features, this.ports.defaults ?? NO_PRODUCT),
         gameFolders: extras ? "your game folder (its archive\\pc\\mod and r6\\tweaks folders)" : "your game's archive\\pc\\mod folder" } };
   }
 }
 
 /** Where the person sees what the mod adds, by its features: eye makeup in the character creator, expressions in photo mode. */
-function seeIt(features: readonly { feature: string }[]): string {
+function seeIt(features: readonly { feature: string }[], defaults: ProductDefaults): string {
   const kinds = new Set(features.map(item => item.feature));
-  if (kinds.size === 1 && kinds.has(EYE_MAKEUP_FEATURE)) return "to see it in the character creator";
+  if (kinds.size === 1 && kinds.has(defaults.legacyFeature)) return defaults.installedHint;
   if (kinds.size === 1 && kinds.has("expressions")) return "to see its expressions in photo mode";
   return "to see it";
 }

@@ -9,9 +9,9 @@
  */
 import { join } from "node:path";
 import { describeMo2Instance, mo2ProviderFolders, parseMo2Modlist, parseQSettingsIni } from "./mo2-instance";
-import { EYE_MAKEUP_MOD } from "../legacy/eye-makeup/mod-branding";
+import { NO_PRODUCT, type ProductDefaults } from "../platform/api/product";
 import { readPeFileVersion } from "../formats/pe-version";
-import { describeInstalled, EYE_ARTISTRY_REQUIREMENTS, FRAMEWORKS, frameworkRouteReport, normaliseVersion, unavailableRouteReport, type FrameworkDefinition,
+import { describeInstalled, FRAMEWORKS, frameworkRouteReport, normaliseVersion, unavailableRouteReport, type FrameworkDefinition,
   type FrameworkProvider, type FrameworkRouteReport, type FrameworkVersionCheck, type InstalledFramework } from "./framework-catalogue";
 // The catalogue is this module's public face too (the page imports the catalogue directly).
 export * from "./framework-catalogue";
@@ -55,9 +55,9 @@ function inspect(port: FrameworkHostPort, definition: FrameworkDefinition, provi
 }
 
 function report(port: FrameworkHostPort, route: "direct" | "mo2", label: string, profileId: string | null,
-  providers: readonly Provider[] | string): FrameworkRouteReport {
+  providers: readonly Provider[] | string, product: ProductDefaults): FrameworkRouteReport {
   if (typeof providers === "string") return unavailableRouteReport(route, label, profileId, providers);
-  return frameworkRouteReport(route, label, profileId, FRAMEWORKS.map(definition => inspect(port, definition, providers)));
+  return frameworkRouteReport(route, label, profileId, FRAMEWORKS.map(definition => inspect(port, definition, providers)), product.requirements, product.modName);
 }
 /** MO2 providers for the profile, highest priority first: overwrite, enabled mods, then the game folder. */
 function mo2Providers(port: FrameworkHostPort, input: FrameworkCheckInput, game: Provider): Provider[] | string {
@@ -72,16 +72,16 @@ function mo2Providers(port: FrameworkHostPort, input: FrameworkCheckInput, game:
 }
 
 /** Report both routes; nothing is written, launched or changed. */
-export function checkFrameworkVersions(port: FrameworkHostPort, input: FrameworkCheckInput): FrameworkVersionCheck {
+export function checkFrameworkVersions(port: FrameworkHostPort, input: FrameworkCheckInput, product: ProductDefaults = NO_PRODUCT): FrameworkVersionCheck {
   const gameReady = !!input.gameRoot && port.isFile(join(input.gameRoot, "bin", "x64", "Cyberpunk2077.exe"));
   const game: Provider = { kind: "game", name: "Game folder", folder: input.gameRoot ?? "" };
   const noGame = input.gameRoot ? "We couldn't find Cyberpunk 2077 in the selected game folder. Check the folder in Settings › Game."
     : "Choose your Cyberpunk 2077 game folder in Settings › Game so we can check your frameworks.";
-  const routes = [report(port, "direct", "Game folder", null, gameReady ? [game] : noGame)];
+  const routes = [report(port, "direct", "Game folder", null, gameReady ? [game] : noGame, product)];
   if (input.launchRoute === "mo2" || (input.mo2Root && input.mo2ProfileId))
     routes.push(report(port, "mo2", input.mo2ProfileId ? `Mod Organizer 2 profile "${input.mo2ProfileId}"` : "Mod Organizer 2",
-      input.mo2ProfileId, gameReady ? mo2Providers(port, input, game) : noGame));
-  return { schema: "xfs/framework-version-check-1", mod: EYE_MAKEUP_MOD.modName, requirements: EYE_ARTISTRY_REQUIREMENTS,
+      input.mo2ProfileId, gameReady ? mo2Providers(port, input, game) : noGame, product));
+  return { schema: "xfs/framework-version-check-1", mod: product.modName, requirements: product.requirements,
     selectedRoute: input.launchRoute, routes, limitations: LIMITATIONS };
 }
 

@@ -22,6 +22,7 @@ import { StudioFileOperations } from "../src/app/studio-file-operations";
 import { createStudioPresentation, type StudioPresentationPort } from "../src/app/studio-presentation";
 import { createViewServices } from "../src/app/view-actions";
 import { STUDIO_MODULE_REGISTRATION } from "../src/compose/modules";
+import { STUDIO_PRODUCT } from "../src/compose/studio-registry";
 import { UIPreferenceActions } from "../src/app/ui-preferences";
 import { ViewportAttachment, type ViewportAttachmentPort } from "../src/app/viewport-attachment";
 import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
@@ -106,7 +107,7 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   const previewReadiness = { readiness: () => ({ phase: "ready" as const, size: 1024 as const,
     pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: (_listener: () => void) => () => {} };
-  return { shell: createStudioPresentation({ authoring: app, library, files, viewport, preferences,
+  return { shell: createStudioPresentation({ product: STUDIO_PRODUCT, authoring: app, library, files, viewport, preferences,
     previewReadiness, targets, focus: history.focus, ...options.presentation, ...(options.lease ? { workspace: options.lease } : {}) }),
     packageInput: () => packageInput, downloads, locations, outbox };
 }

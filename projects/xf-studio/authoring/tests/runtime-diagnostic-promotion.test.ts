@@ -2,9 +2,8 @@ import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { planRuntimeDiagnostic, stageRuntimeDiagnostic } from "../src/installation/host/runtime-diagnostic-stage";
-import { planRuntimePromotion, promoteRuntimeDiagnostic, recoverRuntimePromotion,
-  rollbackRuntimePromotion } from "../src/installation/host/runtime-diagnostic-promotion";
+import { planRuntimeDiagnostic, stageRuntimeDiagnostic } from "./fixtures/product-defaults";
+import { planRuntimePromotion, promoteRuntimeDiagnostic, recoverRuntimePromotion, rollbackRuntimePromotion } from "./fixtures/product-defaults";
 import { EYE_MAKEUP_MOD } from "../src/legacy/eye-makeup/mod-branding";
 import { tempDir } from "./temp-dir";
 

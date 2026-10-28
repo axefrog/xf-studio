@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs
 import { join, resolve } from "node:path";
 import { buildMountPlan, DepotIndex, type ArchiveFile } from "../src/game/archive-precedence";
 import { depotHash } from "../src/game/depot-path";
-import { depotPathRegex } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
+import { depotPathRegex } from "../src/game/depot-path-regex";
 import { readArchiveIndex, trimBuffers, withoutArchiveFileName } from "../src/game/host/resolver-host";
 import { runWolvenKit, SUPPORTED_WOLVENKIT_VERSIONS, wolvenKitIdentity } from "../src/host/wolvenkit-cli";
 import { oracleDescribe } from "./optional-oracles";

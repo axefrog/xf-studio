@@ -49,6 +49,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   status?: Pick<PresentationStatusSource, "snapshot" | "subscribe">;
   localSetup?: LocalSetupActions;
   installDetection?: InstallDetectionActions;
+  product?: Parameters<typeof createStudioPresentation<Slot>>[0]["product"];
   frameworkProducts?: Parameters<typeof createStudioPresentation<Slot>>[0]["frameworkProducts"];
   /** "Add to my mod manager" after Build (UI-82). */
   modInstall?: ModInstallActions;
@@ -164,7 +165,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     panelTargets: options.panelTargets, naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal,
     files, viewport: options.viewport, preferences: options.preferences,
     previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
-    localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts,
+    localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts, product: options.product,
     modInstall: options.modInstall?.withBuilds(() => builtModsOf(files.snapshot().package)), previewSetup: options.previewSetup,
     desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments,
     workspace: options.lease, outbox: options.outbox, ...(options.panelInstance ? { panelInstance: options.panelInstance } : {}),

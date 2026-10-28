@@ -37,7 +37,7 @@ import { plannedModules, type PlannedModule, type StudioModule, type ViewSummary
 import type { Layer, Point, Recipe, WarpField } from "../engines/layered-makeup/recipe";
 import type { RecipeAction } from "../engines/layered-makeup/recipe-actions";
 import type { EyeMakeupPort } from "../legacy/eye-makeup/authoring-eye-makeup";
-import type { EyeMakeupAction } from "../legacy/eye-makeup/eye-makeup-model";
+import type { EyeMakeupAction } from "../engines/layered-makeup/eye-makeup-model";
 import type { SavedAppearanceAction, SavedAppearanceActions, SavedAppearanceState } from "../character/saved-appearance-actions";
 import { actionRegistry, type ActionDescriptor, type FileDescriptor, type RequestDescriptor,
   type ValueSchema } from "./studio-action-descriptors";

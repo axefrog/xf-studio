@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { depotHash } from "../src/game/depot-path";
-import { depotPathRegex } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
+import { depotPathRegex } from "../src/game/depot-path-regex";
 import { NativeArchive } from "../src/native/archive-reader";
 import { compareDocuments, isNameOnly } from "../src/native/document-diff";
 import { loadGameOodle } from "../src/native/oodle";

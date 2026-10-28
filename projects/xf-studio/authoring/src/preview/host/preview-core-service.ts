@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { contentFingerprint, DerivedCache, fileSha256, samePath } from "../../host/derived-cache";
-import { sha256Hex, type EyePlateRecipe } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
+import { type EyePlateRecipe } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
+import { sha256Hex } from "../../formats/content-hash";
 import { decodePng, encodePng } from "../../formats/png";
 import { adaptMap, checkMap } from "../preview-core-maps";
 import { parseMaterialExport, resolveTextureParameter } from "../preview-core-materials";

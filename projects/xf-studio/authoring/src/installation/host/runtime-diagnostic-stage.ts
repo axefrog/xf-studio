@@ -13,9 +13,9 @@ import { applyMo2Placement, disableMo2Mods, mo2ModlistEntry, planMo2Placement, t
 import { isMo2ModFolderName, parseMo2Modlist } from "../mo2-instance";
 import { assertNoLinkedPath, createModInstallTransport, inspectLocalPackageCandidate, installedDuplicates } from "./mod-install-transport";
 import { modNameIssue } from "../../platform/api";
-import { EYE_MAKEUP_MOD, eyeMakeupRelatedEntries, isEyeMakeupModFolder } from "../../legacy/eye-makeup/mod-branding";
+import { NO_PRODUCT, isProductFolder, productRelatedEntries, type ProductDefaults } from "../../platform/api/product";
 
-export type RuntimeDiagnosticOptions = {
+export type RuntimeDiagnosticOptions = { defaults?: ProductDefaults;
   candidateStore: string; candidateId: string; gameRoot: string; mo2Root: string;
   profileId: string; stagingRoot: string;
 };
@@ -46,28 +46,28 @@ export type RuntimeDiagnosticPlan = {
 
 function requireValue(ok: unknown, message: string): asserts ok { if (!ok) throw Error(message); }
 /** Frameworks the profile would load, read-only; its mod folders mark framework sections for placement. */
-export function profileFrameworks(gameRoot: string, mo2Root: string, profileId: string): FrameworkRouteReport {
+export function profileFrameworks(gameRoot: string, mo2Root: string, profileId: string, defaults: ProductDefaults = NO_PRODUCT): FrameworkRouteReport {
   const report = checkFrameworkVersions(createWindowsDetectionHost(), { gameRoot, launchRoute: "mo2", mo2Root,
-    mo2ProfileId: profileId }).routes.find(route => route.route === "mo2");
+    mo2ProfileId: profileId }, defaults).routes.find(route => route.route === "mo2");
   requireValue(report, "MO2 framework report is missing.");
   return report;
 }
-export function diagnosticPlacement(source: string, frameworkMods: Iterable<string> = [], modName: string = EYE_MAKEUP_MOD.modName): Mo2Placement {
-  return planMo2Placement(source, modName, { related: eyeMakeupRelatedEntries, frameworkMods });
+export function diagnosticPlacement(source: string, frameworkMods: Iterable<string> = [], modName: string | undefined = undefined, defaults: ProductDefaults = NO_PRODUCT): Mo2Placement {
+  return planMo2Placement(source, modName ?? defaults.modName, { related: productRelatedEntries(defaults), frameworkMods });
 }
 /** The isolated modlist a diagnostic clone uses; shared with promotion so both agree exactly. It adds
  * (or enables) only the mod's row and switches off an enabled predecessor of the same mod. */
-export function diagnosticModlist(source: string, frameworkMods: Iterable<string> = [], modName: string = EYE_MAKEUP_MOD.modName): string {
-  const placed = applyMo2Placement(source, diagnosticPlacement(source, frameworkMods, modName), true);
-  return disableMo2Mods(placed, EYE_MAKEUP_MOD.predecessorMods);
+export function diagnosticModlist(source: string, frameworkMods: Iterable<string> = [], modName: string | undefined = undefined, defaults: ProductDefaults = NO_PRODUCT): string {
+  const placed = applyMo2Placement(source, diagnosticPlacement(source, frameworkMods, modName, defaults), true);
+  return disableMo2Mods(placed, defaults.predecessorMods);
 }
 /** The enabled mods of a profile's list, as MO2 reads it (`+` or no prefix; not separators or foreign rows). */
 export function enabledMo2Mods(text: string): string[] {
   return parseMo2Modlist(text).entries.filter(entry => entry.enabled && entry.kind === "mod").map(entry => entry.name);
 }
 /** The mod a candidate is (its manifest's mod name, else eye makeup's brand), checked as a folder name (PIPE-90). */
-export function candidateModName(manifest: { modName?: string }): string {
-  const name = manifest.modName ?? EYE_MAKEUP_MOD.modName;
+export function candidateModName(manifest: { modName?: string }, defaults: ProductDefaults = NO_PRODUCT): string {
+  const name = manifest.modName ?? defaults.modName;
   requireValue(name === name.trim() && modNameIssue(name) === undefined, "This build's mod name can't be used as a mod folder.");
   return name;
 }
@@ -84,9 +84,9 @@ export function installedPlaces(modsFolder: string, game: string): { label: stri
     { label: "the game's archive/pc/mod folder", folder: join(game, "archive", "pc", "mod") }];
 }
 /** An existing MO2 mod folder that holds an earlier install of this mod under a legacy name. */
-export function legacyModFolder(modsRoot: string): string | null {
+export function legacyModFolder(modsRoot: string, defaults: ProductDefaults = NO_PRODUCT): string | null {
   return readdirSync(modsRoot).find(entry =>
-    EYE_MAKEUP_MOD.legacyModFolders.some(name => name.toLowerCase() === entry.toLowerCase())) ?? null;
+    defaults.legacyModFolders.some(name => name.toLowerCase() === entry.toLowerCase())) ?? null;
 }
 const sha = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex");
 const noLinks = (path: string) => assertNoLinkedPath(path, "Linked path is not allowed");
@@ -103,6 +103,7 @@ function modName(value: string) {
   requireValue(isMo2ModFolderName(value), "Unsafe enabled MO2 mod name.");
 }
 function checked(options: RuntimeDiagnosticOptions) {
+  const defaults = options.defaults ?? NO_PRODUCT;
   const { candidateStore, gameRoot, mo2Root, stagingRoot } = options;
   for (const [label, value] of Object.entries({ candidateStore, gameRoot, mo2Root, stagingRoot }))
     requireValue(isAbsolute(value), `${label} must be absolute.`);
@@ -121,21 +122,22 @@ function checked(options: RuntimeDiagnosticOptions) {
   regular(join(game, "bin", "x64", "Cyberpunk2077.exe"));
   requireValue(statSync(join(game, "archive", "pc")).isDirectory(), "Game archive/pc is missing.");
   requireValue(statSync(instance.mods).isDirectory(), "MO2 mods directory is missing.");
-  const candidate = inspectLocalPackageCandidate(store, options.candidateId);
+  const candidate = inspectLocalPackageCandidate(store, options.candidateId, defaults);
   return { store, game, mo2, mods: instance.mods, profiles: instance.profiles, stage, profile, modlist, candidate };
 }
 
 export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): RuntimeDiagnosticPlan {
+  const defaults = options.defaults ?? NO_PRODUCT;
   const paths = checked(options);
   const text = readFileSync(paths.modlist, "utf8");
   const names = enabledMo2Mods(text);
   for (const name of names) modName(name);
-  const mod = candidateModName(paths.candidate.manifest);
-  const enabledMod = names.find(name => name.toLowerCase() === mod.toLowerCase() || isEyeMakeupModFolder(name));
+  const mod = candidateModName(paths.candidate.manifest, defaults);
+  const enabledMod = names.find(name => name.toLowerCase() === mod.toLowerCase() || isProductFolder(name, defaults));
   requireValue(!enabledMod, `Source profile already enables ${mod}` +
     (enabledMod?.toLowerCase() === mod.toLowerCase() ? "" :` under its earlier name "${enabledMod}"`) + "; inspect it before staging.");
-  const frameworks = profileFrameworks(paths.game, paths.mo2, options.profileId);
-  const placement = diagnosticPlacement(text, frameworkModNames(frameworks), mod);
+  const frameworks = profileFrameworks(paths.game, paths.mo2, options.profileId, defaults);
+  const placement = diagnosticPlacement(text, frameworkModNames(frameworks), mod, defaults);
   // Part of this build already installed elsewhere (another stage's promotion, a split-off mod): refused at staging (PIPE-90).
   const xl = paths.candidate.manifest.files[1];
   const duplicateInstalls = installedDuplicates(readFileSync(join(paths.candidate.root, ...xl.path.split("/")), "utf8"),
@@ -152,9 +154,9 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
   }
   // Either manifest version: the looks its verifiers checked (PIPE-09).
   requireValue(paths.candidate.manifest.presetCount > 0, "Diagnostic candidate has no recorded presets.");
-  const legacy = EYE_MAKEUP_MOD.predecessorMods.some(name => names.includes(name));
+  const legacy = defaults.predecessorMods.some(name => names.includes(name));
   const dedicatedModExists = existsSync(join(paths.mods, mod));
-  const legacyFolder = legacyModFolder(paths.mods);
+  const legacyFolder = legacyModFolder(paths.mods, defaults);
   const listed = (name: string) => mo2ModlistEntry(text, name) !== null;
   const cautions = [
     "This checks paired payload hashes and the manifest claim; it does not rerun the independent archive verifier.",
@@ -162,13 +164,13 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
     "The copied profile needs an explicit MO2 launch choice; staging does not activate it in the real instance.",
     "No plate clearance correction has passed every release gate; watch eyelids and idle poses.",
   ];
-  if (legacy) cautions.push("The legacy Eye Artistry selector is enabled in the source profile and will be disabled only in the diagnostic clone.");
+  if (legacy) cautions.push(defaults.predecessorCaution);
   for (const verdict of frameworks.verdicts) if (verdict.message) cautions.push(verdict.message);
   if (!frameworks.available && frameworks.problem) cautions.push(frameworks.problem);
   cautions.push(...frameworks.frameworks.flatMap(row => row.notes));
   if (dedicatedModExists) cautions.push(`The source MO2 instance already has a ${mod} mod folder; inspect its ownership before promoting a diagnostic clone.`);
   for (const place of duplicateInstalls) cautions.push(`Part of this build is already installed in ${place}. Remove or disable it before staging.`);
-  if (legacyFolder) cautions.push(`The source MO2 instance already has an earlier ${EYE_MAKEUP_MOD.modName} diagnostic install in the legacy folder "${legacyFolder}". Promotion refuses to create a second copy until that install is rolled back or removed.`);
+  if (legacyFolder) cautions.push(`The source MO2 instance already has an earlier ${defaults.modName} diagnostic install in the legacy folder "${legacyFolder}". Promotion refuses to create a second copy until that install is rolled back or removed.`);
   if (exactFilenameConflicts.length) cautions.push("Exact archive filename conflicts require resolution before a diagnostic launch.");
   return {
     schema: "xfs/runtime-diagnostic-plan-2", candidateId: options.candidateId,
@@ -177,12 +179,12 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
     presetCount: paths.candidate.manifest.presetCount, omissions: paths.candidate.manifest.omissionCount,
     sourceProfileModlistSha256: sha(paths.modlist), sourceProfileEnabledMods: names.length,
     sourceProfileLegacyEnabled: legacy, sourceProfileModEntryPresent: listed(mod),
-    sourceProfileLegacyModEntryPresent: EYE_MAKEUP_MOD.legacyModFolders.some(listed),
+    sourceProfileLegacyModEntryPresent: defaults.legacyModFolders.some(listed),
     sourceDedicatedModExists: dedicatedModExists, sourceLegacyModFolder: legacyFolder,
     frameworks, placement,
     exactFilenameConflicts, stagingRoot: paths.stage,
     actions: ["Copy selected profile metadata into a new isolated MO2 root.",
-      ...(legacy ? ["Disable the legacy Eye Artistry mod only in that copied modlist."] : []),
+      ...(legacy ? [defaults.predecessorAction] : []),
       placement.rule === "existing" ? `Enable the listed ${mod} entry only in that copied modlist.`
         : `Add one ${mod} entry only to that copied modlist: ${placement.description}`,
       "Leave every framework and every other mod entry as it is; report framework versions only.",
@@ -193,6 +195,7 @@ export function planRuntimeDiagnostic(options: RuntimeDiagnosticOptions): Runtim
 
 /** Explicit stage action; all writes stay beneath a newly created stagingRoot. */
 export function stageRuntimeDiagnostic(options: RuntimeDiagnosticOptions) {
+  const defaults = options.defaults ?? NO_PRODUCT;
   const plan = planRuntimeDiagnostic(options);
   requireValue(plan.exactFilenameConflicts.length === 0, "Exact filename conflicts block staging.");
   requireValue(plan.duplicateInstalls.length === 0, `Part of this build is already installed in ${plan.duplicateInstalls.join(", ")}. ` +
@@ -215,12 +218,12 @@ export function stageRuntimeDiagnostic(options: RuntimeDiagnosticOptions) {
   requireValue(sha(join(stagedProfile, "modlist.txt")) === plan.sourceProfileModlistSha256,
     "Copied MO2 profile changed during diagnostic staging.");
   writeFileSync(join(stagedProfile, "modlist.txt"), diagnosticModlist(readFileSync(paths.modlist, "utf8"),
-    frameworkModNames(plan.frameworks), plan.modName));
+    frameworkModNames(plan.frameworks), plan.modName, defaults));
   const settings = defaultLocalSettings();
   settings.gameRoot = paths.game; settings.mo2Root = stagedMo2; settings.mo2ProfileId = options.profileId;
   settings.launchRoute = "mo2"; settings.installMode = "mo2";
   // The candidate's own mod name flows through to the transport, so a renamed mod stages under its name (PIPE-90).
-  const transport = createModInstallTransport({ candidateStore: paths.store,
+  const transport = createModInstallTransport({ defaults, candidateStore: paths.store,
     receiptsRoot: join(paths.stage, "receipts"), settings, modName: plan.modName, product: plan.namespace });
   const preflight = transport.preflight(options.candidateId);
   requireValue(preflight.route === "mo2" && within(preflight.target, paths.stage),

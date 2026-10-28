@@ -1,7 +1,7 @@
 import { makeupContext } from "./makeup-context";
 /** Registered application/facade contribution. Mutation and publication belong to the registered editor. */
 import type { FeatureApplication } from "../feature-application";
-import type { EyeMakeupAction } from "../../legacy/eye-makeup/eye-makeup-model";
+import type { EyeMakeupAction } from "../../engines/layered-makeup/eye-makeup-model";
 import type { EyeMakeupSpec } from "../../legacy/eye-makeup/authoring-eye-makeup";
 import type { FeatureFacade, EyeMakeupFacade } from "../studio-presentation";
 import type { StudioApplication } from "../studio-application";

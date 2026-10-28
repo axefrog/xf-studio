@@ -1,3 +1,4 @@
+import type { ProductDefaults } from "../../platform/api/product";
 /**
  * What the host contributes to a problem report, built on demand when the person opens "Report a problem" (docs/diagnostics.md
  * §Report). Facts about the app, the system, the game and the tools; the log; the rolling window; and targeted details the window's
@@ -23,6 +24,7 @@ import { formatBytes, previewOf, REPORT_MANIFEST_SCHEMA, type ReportFacts, type 
 
 export type HostAppFacts = { version: string; commit: string | null; channel: string | null; host: "localhost" | "desktop" };
 export type HostReportSources = {
+  product?: ProductDefaults;
   app: () => HostAppFacts;
   settings: () => LocalSettings | null;
   /** The WolvenKit CLI in effect and where it came from. */
@@ -303,7 +305,7 @@ export async function buildHostReport(diagnostics: HostDiagnostics, sources: Hos
   try { settings = sources.settings(); } catch { /* Unreadable settings are reported as such. */ }
   const exe = settings?.gameRoot ? join(settings.gameRoot, "bin", "x64", "Cyberpunk2077.exe") : null;
   const gameFound = !!exe && existsSync(exe);
-  const frameworkCheck = settings ? hostFrameworkCheck(settings) : undefined;
+  const frameworkCheck = settings ? hostFrameworkCheck(settings, undefined, sources.product) : undefined;
   const route = frameworkCheck?.routes.find(item => item.route === frameworkCheck.selectedRoute);
   let wolvenKit: ReturnType<NonNullable<HostReportSources["wolvenKit"]>> = null;
   try { wolvenKit = sources.wolvenKit?.() ?? null; } catch { /* Reported as unknown. */ }

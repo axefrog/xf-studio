@@ -1,17 +1,17 @@
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import {
-  canonicalJson, EYE_PLATE_RECIPE, eyePlateCacheKey, eyePlateCacheName, idListSha256, parseEyePlateRecipe, selectedFaceIds,
+import { EYE_PLATE_RECIPE, eyePlateCacheKey, eyePlateCacheName, idListSha256, parseEyePlateRecipe, selectedFaceIds,
   supportedEyePlateSource,
 } from "../src/legacy/eye-makeup/plate/eye-plate-recipe";
+import { canonicalJson } from "../src/platform/api/canonical-json";
 import { cutMorphBlob, derivePlateDocuments, selectPlate } from "../src/legacy/eye-makeup/plate/eye-plate-cut";
 import { plateTopology, verifyEyePlate } from "../src/legacy/eye-makeup/plate/eye-plate-verify";
 import { contentFingerprint, EyePlateCache, eyePlateReadiness } from "../src/legacy/eye-makeup/plate/host/eye-plate-cache";
 import { cachedPlateReach, discardCachedPlate, EyePlateError, ensureEyePlate, eyePlateRouteKey, type EyePlateTools } from "../src/legacy/eye-makeup/plate/host/eye-plate-service";
 import { plateUvFootprint } from "../src/engines/layered-makeup/plate-uv-window";
 import { PLATE_UV_FILE, plateReachInput, plateUvManifestRecord } from "../src/legacy/eye-makeup/export/host/plate-uv-footprint-io";
-import { depotPathRegex } from "../src/legacy/eye-makeup/plate/host/eye-plate-wolvenkit";
+import { depotPathRegex } from "../src/game/depot-path-regex";
 import { keptJsonDirectory, readKeptJson } from "../src/host/derived-cache";
 import { FIXTURE_DIFFS, fixtureHeadMesh, fixtureHeadMorph, fixtureRecipe } from "./eye-plate-fixture";
 import { tempDir } from "./temp-dir";

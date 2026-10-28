@@ -5,7 +5,7 @@ import { emptyRecipe, type Recipe } from "../../engines/layered-makeup/recipe";
 import { readRecipe as parseRecipe } from "../../legacy/eye-makeup/recipe-schema";
 import type { RecipeActionEffect, RecipeActionState } from "../../engines/layered-makeup/recipe-actions";
 import type { ReadonlyDeep } from "../../platform/api/read-only";
-import type { HistoryLabel } from "../../legacy/eye-makeup/history-labels";
+import type { HistoryLabel } from "../../engines/layered-makeup/history-labels";
 import { LOOK_HISTORY_1, type HistoryParts, type LookHistoryData } from "../../platform/api";
 import type { HistoryScope, HistoryService } from "../../platform/core/history-service";
 import { AuthoringDocument as LookDocument } from "./authoring-document";

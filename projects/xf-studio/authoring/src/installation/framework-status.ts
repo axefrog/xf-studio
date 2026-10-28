@@ -108,7 +108,7 @@ export function frameworkStatusView(input: FrameworkStatusInput): FrameworkStatu
   if (!check || !route || !route.available)
     return { ...none, shown: true, tone: input.checking ? "checking" : "info",
       line: input.checking ? FRAMEWORKS_CHECKING : route?.problem ?? FRAMEWORKS_UNCHECKED };
-  const rows = rowsOf(route, input.products);
+  const rows = rowsOf(route, [{ name: check.mod, requirements: check.requirements }, ...(input.products ?? [])]);
   const attention = rows.filter(row => row.status === "too-old" || row.status === "missing" || row.status === "unreadable").length;
   return { shown: true, checking: input.checking, rows, attention, foldable: attention === 0,
     tone: input.checking ? "checking" : attention ? "attention" : "ready",

@@ -1,4 +1,6 @@
-import { canonicalJson, EYE_PLATE_MASCULINE_RECIPE, EYE_PLATE_RECIPE, eyePlateRecipeSha256, sha256Hex, type EyePlateRecipe } from "../legacy/eye-makeup/plate/eye-plate-recipe";
+import { EYE_PLATE_MASCULINE_RECIPE, EYE_PLATE_RECIPE, eyePlateRecipeSha256, type EyePlateRecipe } from "../legacy/eye-makeup/plate/eye-plate-recipe";
+import { canonicalJson } from "../platform/api/canonical-json";
+import { sha256Hex } from "../formats/content-hash";
 import { CORE_ASSET_PREFIX, CORE_BODIES, coreAssetName, type CoreBody, type CoreTextureSlot } from "../character/render-detail";
 export { CORE_ASSET_PREFIX, CORE_BODIES, coreAssetName, type CoreBody };
 

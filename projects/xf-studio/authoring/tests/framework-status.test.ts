@@ -6,7 +6,7 @@ import { FRAMEWORK_SAMPLE_STATES, frameworkCheckFor, frameworkCheckSample, frame
 import { frameworkStatusView, FRAMEWORKS_ALL_GOOD, FRAMEWORKS_CHECKING, FRAMEWORKS_UNCHECKED } from "../src/installation/framework-status";
 import { frameworkStatusVerification } from "../src/compose/framework-status-verification";
 import { frameworkNote } from "../src/studio-ui/panels/framework-group";
-import { requirementsForProducts } from "../src/installation/framework-catalogue";
+import { requirementsForProducts } from "./fixtures/product-defaults";
 import { EXPRESSION_FRAMEWORK_REQUIREMENTS, EXPRESSIONS_REQUIREMENTS } from "../src/features/expressions/requirements";
 // Settings › Game › Mod frameworks (the model, the keep-current watcher, the named release pages and the verification specimens). The
 // panel itself is exercised over the light DOM in tests/ui-polish-dom.test.ts.

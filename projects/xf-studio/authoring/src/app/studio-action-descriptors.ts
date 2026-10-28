@@ -16,7 +16,7 @@ import type { ActionDescriptor as PlatformActionDescriptor, PayloadSchema, UndoP
 import type { StudioFileAction } from "./studio-file-operations";
 import type { PartPresetRequest } from "../library/part-presets";
 import { CHARACTER_CONTEXT_DESCRIPTORS } from "../character/character-context";
-import { describe, enumerated, input, inputText, state, target } from "./action-descriptor-kit";
+import { describe, enumerated, input, inputText, state, target } from "../platform/api/action-descriptor-kit";
 import { TRANSITION_SECONDS, TRANSITION_SOURCES } from "../platform/core/transition-settings";
 import { EASING_IDS } from "../platform/api/easing";
 import { EYE_MAKEUP_DESCRIPTORS, EYE_MAKEUP_GESTURE_DESCRIPTORS } from "../legacy/eye-makeup/eye-makeup-descriptors";
