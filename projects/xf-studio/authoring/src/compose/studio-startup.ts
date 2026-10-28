@@ -584,9 +584,9 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   }), { once: true });
   // The only object handed to the presentation.
   const viewComposition = { ...composition.view, optional: layouts.registrations, optionalGeneration: layouts.registrationGeneration };
-  bootstrap.mount(publicPort => {
+  bootstrap.mount((publicPort, applicationSignal) => {
     port = publicPort;
-    const shell = mountStudio(publicPort, root, viewComposition);
+    const shell = mountStudio(publicPort, root, viewComposition, applicationSignal);
     releaseShell = shell.dispose;
   });
   defaultNote = text => adapterMessage("layout-default", text);

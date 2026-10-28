@@ -32,7 +32,7 @@
  * - no conflict is against A's own write;
  * - every document A doesn't report unprotected recovers from the durable storage (memory, or the desktop host's copy) with its visible
  *   value;
- * - every caller's outcome, once it has one, is the specification's (acknowledged, dropped, or stopped by a restart), coalesced callers
+ * - every caller's outcome, once it has one, is the specification's (acknowledged, dropped, or stopped at the shutdown/kill boundary), coalesced callers
  *   each counted;
  * - every reference to an immutable document in the library resolves, Keep both copies included.
  * At the end, with everything delivered and every conflict resolved, every caller has its outcome and A, the specification and the library
@@ -348,10 +348,12 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   const webviewStorage = { get length() { return webview.size; }, key: (i: number) => [...webview.keys()][i] ?? null, getItem: (key: string) => webview.get(key) ?? null,
     setItem: (key: string, text: string) => { if (memory.fail) throw new DOMException("Full.", "QuotaExceededError"); webWrite(() => webview.set(key, text)); },
     removeItem: (key: string) => { webWrite(() => webview.delete(key)); } };
+  let killed = false;
+  const stopAtKill = () => { killed = true; a.stop(); };
   /** Kill the page after `writes` more writes to its synchronous storage (memory, or the WebView), or stop arming it (`Infinity`). */
   const killAfter = (writes: number) => {
-    if (mode === "local") memory.killAfter(writes, () => a.stop());
-    else { webKill.left = writes; webKill.onKill = () => a.stop(); webKill.killed = false; }
+    if (mode === "local") memory.killAfter(writes, stopAtKill);
+    else { webKill.left = writes; webKill.onKill = stopAtKill; webKill.killed = false; }
   };
   const syncWrites = () => mode === "local" ? memory.writes : webKill.writes;
   /** The app's launch: a real restart is a new one, and the WebView's records of earlier launches aren't read. */
@@ -364,6 +366,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
   const watch = (entry: OutboxEntry | null, item: Caller) => { if (entry) void a.settled(entry.id).then(outcome => { item.actual = outcome; }); };
 
   const openA = () => {
+    killed = false;
     life++;
     const mine = life;
     let storage;
@@ -439,7 +442,7 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
       openA();
       await ticks();
       killAfter(Infinity);
-      if (a.status().stopped) { count("killed while opening"); continue; }
+      if (killed) { count("killed while opening"); continue; }
       const now = real(), candidates = allowed.map(candidate => restarted(candidate, asHeld, () => ({ id: 0, expected: null, actual: null })));
       const match = candidates.find(candidate => specSignature(candidate, keys) === now);
       adopting = false;
@@ -460,11 +463,13 @@ async function run(mode: "local" | "desktop", seed: number, steps: number): Prom
     // After any number of key writes: mostly the first few, where a step's writes are torn.
     const writesBefore = syncWrites();
     if (kill) killAfter(rng.next() < 0.6 ? rng.int(3) : rng.int(12));
-    try { work(); } catch (error) { if (!a.status().stopped) throw error; }
+    try { work(); } catch (error) { if (!killed) throw error; }
     await ticks();
     killAfter(Infinity);
-    if (!a.status().stopped) return;
+    if (!killed) return;
     count(`killed (${mode})`);
+    // The harness's kill calls stop(): suspension settles every waiter before protection, even if failed desktop protection prevents
+    // final retirement. Model that same stop boundary, not only `stopped`; the intent and outcome comparisons remain exact.
     // Every caller waiting when the step began, or added by it, hears that the page stopped (the kill comes before any other outcome).
     settle([...waiting, ...spec.intents.flatMap(intent => intent.callers)], "stopped");
     // The crash oracle: no key written yet means the step left nothing behind; once one was, the step's decision is stored (every key a
@@ -913,6 +918,24 @@ const RUNS = Number(process.env.XFS_OUTBOX_RUNS ?? 60);
  */
 const FIXED = { local: [5979845, 2527161, 4609858, 982956, 5132512, 5710599], desktop: [1212607, 1719423, 1806532, 365274, 2519242, 476140, 792900, 491978, 2986463, 2717217, 2028264, 990875, 349436] };
 const STEPS = 400;
+
+test("recovery keeps older durable intents before a new intent when the clock has not caught up", () => {
+  const old: OutboxEntry = { id: "older-launch", seq: 50, command: "edit", at: 0, state: "queued",
+    writes: [{ kind: "doc", id: "old", base: 0, value: 1 }] };
+  const record = (entries: readonly OutboxEntry[], stamp: number) => JSON.stringify({ schema: "xfs/outbox-1", stamp, entries });
+  const durable = new Map([["doc/old", record([old], 1)]]);
+  // The current view hides an older host copy. A crash can recover that older copy, so it still bounds all new sequence numbers.
+  const current = new Map([["doc/old", record([], 2)]]), library = storeDocuments();
+  const a = new DocumentOutbox(library, { load: () => current, durable: () => durable,
+    write: (key, text) => { current.set(key, text); } }, { now: () => 0, newId: () => "newer-launch", sendable: () => false });
+  a.open(); const fresh = a.commit("edit", [{ kind: "doc", id: "new", value: 2 }]);
+  const recovered = new DocumentOutbox(library, { load: () => new Map([...durable, ["doc/new", current.get("doc/new")!]]), write() {} },
+    { now: () => 0, sendable: () => false });
+  try {
+    recovered.open();
+    expect(recovered.pendingEntries().map(entry => entry.id)).toEqual([old.id, fresh.id]);
+  } finally { a.retire(); recovered.retire(); }
+});
 test(`the outbox meets its specification in seeded runs (kills while working and while recovering, late checks, failing storage, two windows)`, async () => {
   const all: string[] = [];
   let total = 0;

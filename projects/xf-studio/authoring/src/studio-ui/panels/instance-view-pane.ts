@@ -21,7 +21,7 @@ export function instanceViewPane(root: StudioRuntime, context: ViewContext, inst
     if (!value || typeof value !== "object") return value;
     let proxy = services.get(key); if (!proxy) services.set(key, proxy = service(() => current()[key] as object)); return proxy;
   } });
-  const rt = new StudioRuntime(port, root.feedback, root.views, { id: instance, type: "view", signal: life.signal, captureSignal: life.signal }, root.anchors.scoped(instance, life.signal));
+  const rt = new StudioRuntime(port, root.feedback, root.views, { id: instance, type: "view", signal: life.signal, captureSignal: life.signal }, root.anchors.scoped(instance, life.signal), root.applicationSignal);
   Object.defineProperty(rt, "dock", { get: () => root.dock }); Object.defineProperty(rt, "settings", { get: () => root.settings });
   rt.subscribe(() => root.changed());
   let portOff = current().subscribe(() => root.changed());

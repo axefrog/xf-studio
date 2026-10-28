@@ -94,9 +94,11 @@ export class StudioRuntime {
   /**
    * @param views the catalogue of every contributed panel (the shell's and each feature's) that the
    *   composition root handed `mountStudio`.
+   * @param applicationSignal the mount's internal lifetime: accepted feedback and menu captures end with the application.
    */
   constructor(readonly port: Port, readonly feedback: Feedback, readonly views: ViewCatalogue = SHELL_CATALOGUE,
-    readonly instance?: { id: string; type: string; signal: AbortSignal; captureSignal?: AbortSignal }, anchors?: AnchorRegistry) {
+    readonly instance?: { id: string; type: string; signal: AbortSignal; captureSignal?: AbortSignal }, anchors?: AnchorRegistry,
+    readonly applicationSignal?: AbortSignal) {
     this.anchors = anchors ?? new AnchorRegistry(() => {
       const sources = guidanceSources(this), owners = new Set(this.views.guidance.map(source => source.owner)), active = new Set(sources.map(source => source.owner));
       const panels = this.views.panels.filter(panel => !owners.has(panel.owner) || active.has(panel.owner)).map(panel => panel.id);
@@ -137,7 +139,7 @@ export class StudioRuntime {
   }
   async file(action: PresentationFileAction, options: { quietSuccess?: boolean; actions?: FeedbackAction[] } = {}): Promise<StudioFileOutcome> {
     const outcome = await this.port.files.execute(action);
-    if (this.port.applicationSignal?.aborted) return outcome;
+    if (this.applicationSignal?.aborted) return outcome;
     const source = fileSource(action.kind);
     if (!outcome.ok) {
       if (outcome.code === "cancelled") this.feedback.record("info", source, outcome.message);
@@ -150,7 +152,7 @@ export class StudioRuntime {
   }
   async request(request: CollectionRequest, options: { quietSuccess?: boolean; actions?: FeedbackAction[] } = {}): Promise<CollectionOutcome> {
     const outcome = await this.port.library.execute(request);
-    if (this.port.applicationSignal?.aborted) return outcome;
+    if (this.applicationSignal?.aborted) return outcome;
     const source = request.kind === "package" ? "Mod package" : "Library";
     if (!outcome.ok && outcome.code === "package_build_cancelled") this.feedback.record("info", source, outcome.message);
     else if (!outcome.ok) this.feedback.toast(outcome.code === "unavailable" ? "warning" : "error", source, outcome.message, recoveryFor(outcome.code, this), { code: outcome.code });

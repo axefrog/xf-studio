@@ -59,7 +59,7 @@ export function viewPaneCallbacks(panels: PanelController[], byId: Map<string, P
  * `views` is the composition root's view list (the shell's and each feature's
  * panels, `compose/views.ts`); the shell names no feature's panels.
  */
-export function mountStudio(port: Port, root: HTMLElement, views: ViewComposition) {
+export function mountStudio(port: Port, root: HTMLElement, views: ViewComposition, applicationSignal?: AbortSignal) {
   // Error notices carry a reference and "Report this problem" (docs/diagnostics.md).
   const feedback = new Feedback({ notice: failure => port.diagnostics.notice(failure), report: ref => openReportDialog(rt, ref),
     expected: code => port.diagnostics.expected(code) });
@@ -75,7 +75,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   let optionalGeneration = views.optionalGeneration?.();
   const typeCatalogue = { ...views.catalogue, panels: [...views.catalogue.panels], ids: [...views.catalogue.ids], meta: { ...views.catalogue.meta } };
   typeCatalogue.context = type => typeCatalogue.panels.find(panel => panel.id === type)?.context ?? { kind: "profile" };
-  const rt = new StudioRuntime(port, feedback, typeCatalogue);
+  const rt = new StudioRuntime(port, feedback, typeCatalogue, undefined, undefined, applicationSignal);
   const theme = themeController(port, feedback);
   const view = viewPreferences(port, feedback);
   // Guidance (tours, spotlights, Help) is created once the dock exists; the Help panel reaches it lazily.

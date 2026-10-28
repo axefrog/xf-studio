@@ -352,7 +352,10 @@ export class DocumentOutbox {
     // An entry the repair changed, or whose copies disagree, is written again everywhere with a newer stamp, so no stale copy outlives it.
     const changed = this.entries.filter(entry => repaired.changed.has(entry.id));
     for (const entry of changed) this.touch(entry);
-    this.seq = Math.max(0, ...this.entries.map(entry => entry.seq));
+    // A newer merged key can hide an older durable intent that a crash brings back. Keep its sequence high-water mark too;
+    // the clock may not have caught up with an earlier launch's burst of commands.
+    this.seq = Math.max(0, ...[...records.values(), ...durable.values()]
+      .flatMap(record => record.entries.flatMap(entry => entry && Number.isFinite(entry.seq) ? [entry.seq] : [])));
     for (const entry of this.entries) {
       this.frozenIds.add(entry.id);
       this.recovered.add(entry.id);

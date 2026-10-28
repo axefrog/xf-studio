@@ -177,7 +177,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     } }) : undefined;
     const port = createStudioPresentation({ authoring: core.app, library: collection,
       capturePort: options.capturePort ?? (editing ? signal => editing!.capturePort(options.naming?.().view, signal, files) : undefined),
-      panelTargets: options.panelTargets, naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal, applicationSignal,
+      panelTargets: options.panelTargets, naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal,
       files, viewport: options.viewport, preferences: options.preferences,
       previewReadiness: options.previewReadiness, editor: authoringPresentation(core), status: options.status,
       localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts, product: options.product,
@@ -195,8 +195,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
       /** Trusted handles are retained by the composition root; never pass this object to a UI. */
       files, collection, writer,
       dispose,
-      mount<T>(mountPresentation: (presentation: StudioPresentationPort<Slot>) => T): T {
-        return mountPresentation(port);
+      mount<T>(mountPresentation: (presentation: StudioPresentationPort<Slot>, applicationSignal: AbortSignal) => T): T {
+        return mountPresentation(port, applicationSignal);
       },
     };
   } catch (error) { dispose(); throw error; }

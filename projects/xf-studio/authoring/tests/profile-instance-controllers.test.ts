@@ -52,10 +52,10 @@ test("accepted picker feedback survives menu dismissal exactly as the 3a2ecc71 r
   const gate = Promise.withResolvers<undefined>(), feedbackCalls: unknown[][] = [];
   const s = await profileContextStudio({ pick: () => gate.promise });
   const feedback = { toast: (...args: unknown[]) => feedbackCalls.push(args), record: (...args: unknown[]) => feedbackCalls.push(args) } as unknown as Feedback;
-  const bound = s.bind("presets--scene0"), held = captureRuntime(new StudioRuntime(bound.context.current(), feedback, STUDIO_CATALOGUE));
+  const bound = s.bind("presets--scene0"), held = captureRuntime(new StudioRuntime(bound.context.current(), feedback, STUDIO_CATALOGUE, undefined, undefined, s.applicationSignal));
   const pending = held.runtime.file({ kind: "recipe.import" }); held.release();
   try {
-    expect(held.runtime.port.signal?.aborted).toBe(true); expect(held.runtime.port.applicationSignal?.aborted).toBe(false);
+    expect(held.signal.aborted).toBe(true); expect(s.applicationSignal.aborted).toBe(false);
     gate.resolve(undefined); expect(await pending).toMatchObject({ ok: false, code: "cancelled" });
     expect(feedbackCalls).toEqual([["info", "Recipe", "Recipe selection cancelled."]]);
   } finally { gate.resolve(undefined); await pending; await s.dispose(); }
@@ -65,7 +65,7 @@ test("root abort releases detached menu captures and retained bound writers with
   const life = new AbortController(), picker = Promise.withResolvers<StudioPickedFile | undefined>();
   const s = await profileContextStudio({ signal: life.signal, pick: () => picker.promise });
   const bound = s.bind("presets--scene0");
-  const origin = new StudioRuntime(bound.context.current(), feedback, STUDIO_CATALOGUE);
+  const origin = new StudioRuntime(bound.context.current(), feedback, STUDIO_CATALOGUE, undefined, undefined, s.applicationSignal);
   const menu = captureRuntime(origin), accepted = captureRuntime(origin);
   const pending = accepted.runtime.file({ kind: "recipe.import" });
   accepted.release(); bound.life.abort();
@@ -73,7 +73,7 @@ test("root abort releases detached menu captures and retained bound writers with
   const before = s.outbox.document({ kind: "look-working", id: `${s.looks[0]!.collection}/${s.looks[0]!.look}` })?.value;
   try {
     life.abort(); expect(menu.active()).toBe(false); expect(menu.signal.aborted).toBe(true);
-    expect(menu.runtime.port.signal?.aborted).toBe(true);
+    expect(s.applicationSignal.aborted).toBe(true);
     const published = toasts.length;
     picker.resolve(undefined);
     expect(await pending).toMatchObject({ ok: false, code: "missing_target" });
@@ -87,13 +87,13 @@ test("root abort releases detached menu captures and retained bound writers with
 test("root abort suppresses late library feedback through the actual captured runtime", async () => {
   const life = new AbortController(), gate = Promise.withResolvers<void>();
   const s = await profileContextStudio({ signal: life.signal });
-  const bound = s.bind("presets--scene0"), held = captureRuntime(new StudioRuntime(bound.context.current(), feedback, STUDIO_CATALOGUE));
+  const bound = s.bind("presets--scene0"), held = captureRuntime(new StudioRuntime(bound.context.current(), feedback, STUDIO_CATALOGUE, undefined, undefined, s.applicationSignal));
   const execute = held.runtime.port.library.execute;
   // Keep an already accepted transport reply queued beyond root retirement.
   const port = { ...held.runtime.port, library: { ...held.runtime.port.library, execute: async (...args: Parameters<typeof execute>) => {
     await gate.promise; return execute(...args);
   } } };
-  const runtime = new StudioRuntime(port, feedback, STUDIO_CATALOGUE), pending = runtime.request({ kind: "refresh" });
+  const runtime = new StudioRuntime(port, feedback, STUDIO_CATALOGUE, undefined, undefined, s.applicationSignal), pending = runtime.request({ kind: "refresh" });
   try {
     life.abort(); const published = toasts.length; gate.resolve(); await pending;
     expect(toasts.length).toBe(published); expect(held.active()).toBe(false);
@@ -106,7 +106,7 @@ function arrange(s: Awaited<ReturnType<typeof profileContextStudio>>, ids: strin
 }
 function owner(s: Awaited<ReturnType<typeof profileContextStudio>>, available = () => true, generation?: (type: string) => unknown) {
   let changes = 0;
-  const root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE);
+  const root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE, undefined, undefined, s.applicationSignal);
   const catalogue = { ...STUDIO_CATALOGUE, get ids() { return available() ? STUDIO_CATALOGUE.ids : []; } };
   const panels = new InstancePanels(root, { catalogue: () => catalogue, generation, changed() { changes++; }, make: (instance, rt) => instance.type === "character" ? characterPanel(rt)
     : instance.type === "library" ? libraryPanel(featureViewContext(rt, "eye-makeup"))
@@ -218,7 +218,7 @@ test("registration replacement retires only that contribution's controllers and 
 });
 
 test("shell pane creation and reconciliation accept real view instance IDs and withdraw only the closed pane's anchor", async () => {
-  const s = await profileContextStudio({ viewPanels: true }), root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE);
+  const s = await profileContextStudio({ viewPanels: true }), root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE, undefined, undefined, s.applicationSignal);
   const context = { view: { summaries: () => [], badge: () => undefined }, guidance: {} as never, appearance: {} as never };
   let shown = s.session.graph.snapshot().views.slice(0, 2).map(view => ({ view: view.id, panel: s.session.instance(view.panel) }));
   const panels: PanelController[] = [], byId = new Map<string, PanelController>();
@@ -244,7 +244,7 @@ test("shell pane creation and reconciliation accept real view instance IDs and w
 });
 
 test("real head panes bind their own view and look while the renderer attachment stays shared", async () => {
-  const s = await profileContextStudio({ viewPanels: true }), root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE), runtimes: StudioRuntime[] = [];
+  const s = await profileContextStudio({ viewPanels: true }), root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE, undefined, undefined, s.applicationSignal), runtimes: StudioRuntime[] = [];
   const context = { view: { summaries: () => [], badge: () => undefined }, guidance: {} as never, appearance: {} as never };
   const panes = s.session.graph.snapshot().views.slice(0, 2).map(view => instanceViewPane(root, context, s.session.instance(view.panel), (rt, ctx, id) => {
     runtimes.push(rt); return headPanel(rt, ctx, id);
@@ -320,7 +320,7 @@ test("P3-iii generator: 16 seeds of membership, capture, focus and live withdraw
         else if (command.op === "withdraw") available = false;
         else if (command.op === "resume") available = true;
         else if (command.op === "focus") s.session.focus.focusView(s.session.session().views.views[command.panel]!.id);
-        else if (command.op === "capture") { const port = ui.panels.runtime(id); if (port) captures.push(captureRuntime(new StudioRuntime(port, feedback, STUDIO_CATALOGUE))); }
+        else if (command.op === "capture") { const port = ui.panels.runtime(id); if (port) captures.push(captureRuntime(new StudioRuntime(port, feedback, STUDIO_CATALOGUE, undefined, undefined, s.applicationSignal))); }
         else captures.pop()?.release();
         ui.paint();
         expect(ui.panels.controllers().map(panel => panel.spec.id).sort()).toEqual(available ? [...open].sort() : []); total++;
@@ -523,7 +523,7 @@ test("review preference rule: instance curves persist through the real preferenc
 test("P3-vi real controllers: last look removal keeps collection recovery/imports; subject restoration reacquires its own context", async () => {
   const s = await profileContextStudio(), look = s.looks[2]!, character = s.vs[2]!, preset = "presets--scene2", person = "character--target2";
   arrange(s, [preset, person]);
-  const root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE);
+  const root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE, undefined, undefined, s.applicationSignal);
   const panels = new InstancePanels(root, { catalogue: () => STUDIO_CATALOGUE, changed() {}, make: (instance, rt) =>
     withEmptyChoices(rt, instance.type === "character" ? characterPanel(rt) : presetsPanel(featureViewContext(rt, "eye-makeup"))) });
   const paint = () => { panels.sync(); for (const p of panels.controllers()) { document.body.append(p.spec.element); p.update(new Frame(s.port)); } };

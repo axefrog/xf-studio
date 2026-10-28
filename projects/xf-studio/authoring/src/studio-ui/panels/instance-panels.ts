@@ -45,7 +45,7 @@ export class InstancePanels {
         entry.portOff(); entry.life.abort(); entry.panel.dispose(); entry.panel.spec.element.remove(); entry.port = entry.current(); entry.life = new AbortController(); }
       entry.portOff = entry.port === port ? () => {} : entry.port.subscribe(this.deps.changed);
       const rt = new Runtime(entry.port, this.root.feedback, catalogue, { id: instance.id, type: instance.type, signal: entry.life.signal, captureSignal: entry.captureLife.signal },
-        this.root.anchors.scoped(instance.id, entry.life.signal));
+        this.root.anchors.scoped(instance.id, entry.life.signal), this.root.applicationSignal);
       Object.defineProperty(rt, "dock", { get: () => this.root.dock });
       Object.defineProperty(rt, "settings", { get: () => this.root.settings });
       rt.subscribe(this.deps.changed);

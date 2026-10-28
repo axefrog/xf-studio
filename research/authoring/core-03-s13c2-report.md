@@ -33,8 +33,8 @@ Paths in the next two tables are relative to `projects/xf-studio/authoring/`.
 | `src/library/collection-service.ts` | Owns request/read/progress cancellation and guards async continuations before further work or publication. Accepted version writes keep their existing lifetime. Check remains unavailable to user Stop while becoming cancellable on application release. |
 | `src/library/browser/collection-transport.ts` | Passes read/progress signals to existing HTTP adapters. |
 | `src/legacy/eye-makeup/export/package-action.ts` | Optional signal on progress reads only; no Check/Build inputs, compiler, package, manifest or pipeline-stage change. |
-| `src/app/studio-presentation.ts` | Optional facade and application signals. Captures follow the facade; accepted feedback follows the application and survives normal menu dismissal. Protected panel/history APIs are unchanged. |
-| `src/studio-ui/captured-runtime.ts` | Lifecycle-only: follows the captured facade's signal and removes its forwarding subscription/pagehide/capture listeners on release. |
+| `src/app/studio-presentation.ts` | No lifetime signals on the public port. Bootstrap/mount inject application lifetime separately into the UI runtime; accepted feedback survives normal menu dismissal. Protected panel/history APIs are unchanged. |
+| `src/studio-ui/captured-runtime.ts` | Lifecycle-only: follows injected application lifetime and instance capture lifetime; removes forwarding subscription/pagehide/capture listeners on release. |
 | `src/studio-ui/runtime.ts` | Lifecycle-only: suppresses post-await file/library feedback when the application retires. Menu dismissal alone preserves normal accepted feedback. |
 
 | Test/fixture file | Evidence |
@@ -80,7 +80,7 @@ Every Bun process ran alone under `tools/memory_guard.py --limit 4` using the fu
 | Final facade/application-signal correction | **60 pass, 3 skip, 0 fail**, 14 files, **17 snapshots**, 1,451 assertions, **6.24 s**, **0.8 GB** peak. Rechecks real controllers, bootstrap and every parity/startup file. Application abort still suppresses feedback; normal menu dismissal preserves the baseline behavior. |
 | Final product-test union | **358 pass, 3 skip, 0 unresolved fail across 29 files**; 42 new lifecycle/regression cases. Runs overlap and are not additive. The one archived-runtime reference probe is reported separately. |
 
-The skips are the optional six-private-raster reference case and two unavailable-Chrome normal/empty startup cases. Chrome was made unavailable process-locally only. No skip is a browser pass. Typecheck was deliberately withheld; optional facade/application lifetimes, `StartedOutbox` return types, transport signal signatures, fetch/lock-manager casts, timer handles and fixture callbacks were read manually.
+The skips are the optional six-private-raster reference case and two unavailable-Chrome normal/empty startup cases. Chrome was made unavailable process-locally only. No skip is a browser pass. Typecheck was deliberately withheld; internal mount/runtime lifetimes, `StartedOutbox` return types, transport signal signatures, fetch/lock-manager casts, timer handles and fixture callbacks were read manually.
 
 ## Frozen parity and compatibility
 
@@ -199,6 +199,44 @@ All Bun processes ran sequentially under the 4 GB guard. No heavy gate, typechec
 Repository checks pass: **0 broken links/source paths in 504 Markdown files**, **0 tracked-text privacy findings**, **0 privacy/source-path/whitespace findings across all ten changed files**, clean `git diff --check`, and **all eight Git/LF snapshot hashes match HEAD and the retained table**. Wrap-up footprint: **202.8 GB free on C**, 1 GB guard, rounded **0.0 GB** peak; the unrelated inaccessible worktree scan remains incomplete. No new payload above 5 GB is retained, and all owned jobs have ended. The historical scratch-cleanup limitation below is unchanged.
 
 Coordinator: the exact guarded browser command above still applies. In isolated `?verify=1`, fault backup storage and return superseded while an opacity control is active. The notice must open immediately with the exact text above and Try again / Export this window's copy. Repair storage with the lease retained and retry: the notice clears and normal editing returns. No new WebGL ownership path is touched; the previously listed GPU checks remain coordinator work.
+
+## Full-suite corrections after `b5f55a40`
+
+Both reported files now pass, uncommitted. The reference specification's queue order and all comparisons remain unchanged.
+
+- **Stopped outcomes:** reproduced desktop **1000/293**, **8919/338**, **16838/232**, **48514/57**, **56433/32**, **214813/287**, **365274/199** and **792900/148** (seed/step). The crash harness used completed `status.stopped` as its kill boundary. Since `49a5db3f`, stop suspends and settles waiters before protecting backups; failed desktop protection can leave `stopped: false` after callers already heard `stopped`. The oracle therefore missed a kill, then expected no outcome yet or a later conflict-resolution `dropped`. It now records its own injected kill event, independently of implementation status, and applies the existing exact stopped/restart rule there, including kills while opening. The model comments explain why. No outcome is accepted as an alternative and no comparison is weakened.
+- **Queue order:** reported desktop **222732/349**, `a6-2m71tx1t` before `a9-6s0r2425`. That seed passed in isolation before correction: the failure is clock-dependent. The deterministic regression reproduces the same older/newer reversal with a clock behind an older launch's sequence. `open()` reset sequence from only surviving repaired intents (`bf63f0da5`); `nextSeq()`'s later wall-clock floor (`9b9339ae8`) cannot preserve the order when an earlier burst has outrun the clock. A newer merged key can hide an older durable intent until a crash restores it, so a later intent can get a smaller sequence and `repair` sorts it first. No 13c2 change directly rearranged that queue: it exposed this pre-existing timing hole. Opening now reserves the maximum sequence from **all loaded and durable copies**, including hidden/removed intents. The new deterministic test fails before this production fix and passes after it. The original random model clock is retained; a temporary frozen-clock investigation was removed. The final full seeded run includes 222732 and every listed outcome seed.
+- **Public contract:** `tests/studio-presentation.test.ts` is untouched and passes its original key-list assertion. `signal` and `applicationSignal` are removed from the public port/type. Bootstrap passes application lifetime as a separate mount argument; shell and instance runtimes forward it internally to captures and accepted-feedback checks. Presentation/device mechanics genuinely need this narrow `AbortSignal` to close detached menus and suppress post-await feedback after application abort. Menu dismissal alone still preserves accepted feedback. No new public capability or registry was added; the existing capture acquisition signature remains unchanged.
+
+Changed files (under `projects/xf-studio/authoring/` unless named otherwise):
+
+| Files | Change |
+|---|---|
+| `src/platform/core/document-outbox.ts` | Preserve loaded/durable sequence high-water mark before new commands; no sort, schema or release-policy change. |
+| `tests/document-outbox-model.test.ts` | Model the independent kill/suspension boundary exactly; add deterministic recovery-order regression. |
+| `src/app/studio-presentation.ts` | Restore the public port/type key contract by removing both signal properties. |
+| `src/app/trusted-studio-bootstrap.ts`, `src/compose/studio-startup.ts` | Pass application lifetime separately through the trusted mount callback. |
+| `src/studio-ui/app.ts`, `src/studio-ui/runtime.ts`, `src/studio-ui/captured-runtime.ts`, `src/studio-ui/panels/instance-panels.ts`, `src/studio-ui/panels/instance-view-pane.ts` | Lifecycle-only injection/forwarding of the existing application signal; capture subscriptions/listeners retire and late feedback stays suppressed. No component/guide change. |
+| `tests/fixtures/profile-context-studio.ts`, `tests/profile-instance-controllers.test.ts` | Exercise internal mount lifetime directly rather than reading signal properties off the public port. |
+| `research/authoring/core-03-plan.md`, `research/authoring/code-health.md`, `research/authoring/profiles-views-layouts-design.md`, `knowledge/webgl-program-linking.md`, this report | Current ownership/ordering contract, seed evidence and handoff; 17 files total. |
+
+| Correction gate | Result |
+|---|---|
+| Original-clock isolated 222732 | **1 pass, 1 filtered**, one assertion, **0.180 s**, rounded **0.0 GB** peak; reported order failure does not reproduce in this timing. |
+| Original-clock isolated 1000 | **0 pass, 1 fail, 1 filtered**, one assertion, **0.167 s**, rounded **0.0 GB** peak; reproduces stopped versus dropped at 293. |
+| Original full model baseline | **1 pass, 1 fail**, two tests, **8.27 s**, **0.5 GB** peak; eight outcome seeds above fail. |
+| Temporary coarse-clock 222732 diagnostic | **1 pass, 1 filtered**, one assertion, **0.239 s**, rounded **0.0 GB** peak. |
+| Temporary coarse-clock full model diagnostic | **2 pass, 0 fail**, **43,600 steps**, **12.89 s**, **0.4 GB** peak. This diagnostic clock was removed before final validation. |
+| Deterministic order regression before production fix | **0 pass, 1 fail, 2 filtered**, one assertion, **0.089 s**, rounded **0.0 GB** peak; actual newer/older order reverses the required older/newer order. |
+| Corrected full model file, original clock | **3 pass, 0 fail**, **43,600 steps**, 60 assertions, **12.12 s**, **0.4 GB** peak. |
+| Unchanged presentation contract file | **8 pass, 0 fail**, 96 assertions, **0.211 s**, rounded **0.0 GB** peak. |
+| Final permitted targeted union | **134 pass, 3 skip, 0 fail across 21 files**, **17 matching snapshots**, 2,280 assertions, **26.83 s**, **1.0 GB** peak. Includes both requested files, the exact model after independent kill recording, captured runtime/accepted-work proofs, recovery, boundary/bootstrap/contributions and retained parity/startup tests. |
+
+All Bun processes ran sequentially under the 4 GB guard, including the two requested files separately. No heavy gate, broad suite, typecheck, browser or GPU run. Types were read manually. The three skips remain private-raster and unavailable-Chrome cases; all eight Git/LF snapshot hashes retain the table above. No unique scratch/generated payload was created. The original scratch-cleanup limitation below is unchanged.
+
+Repository checks: **0 broken links/source paths across 504 Markdown files**, **0 tracked-text privacy findings**, **0 privacy/source-path/whitespace/snapshot findings across all 17 changed files**, clean `git diff --check`, and **all eight Git/LF snapshot hashes match HEAD and the retained table**. Footprint: **198.8 GB free on C**, 1 GB guard, rounded **0.0 GB** peak; the unrelated inaccessible worktree inventory remains incomplete. No new task payload above 5 GB is retained. All owned jobs have ended.
+
+Abort/release ordering remains pending protection → permitted workspace release/consumer teardown → durable handoff → lease stop. Bound-panel and capture release rules are unchanged; only lifetime transport moves off the public facade. `panels.bindings`, `panels.setBinding`, `authoring.historyScopes()`, `history.selectScope`, P3-v catalogue implementations/IDs and import allowances remain unchanged. CORE-03 stays High; 13c3/13d and the exact coordinator browser command above remain open. In isolated `?verify=1`, repeat normal menu dismissal with an accepted picker (normal feedback), then application abort with a detached menu/picker/Check (menu closes, no late feedback/result). Existing two-window/recovery checks and the previously listed scene-dispose/scene-runtimes/renderer-device/choice-preview GPU rows remain coordinator work; no new GPU proof is claimed.
 
 ## Remaining work and cleanup
 

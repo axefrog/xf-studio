@@ -142,13 +142,14 @@ export async function profileContextStudio(options: { status?: (outbox: Document
   authoring.drawn.show(session.scene(scene).look);
   const draw = (view: string) => { drawn = view; authoring.drawn.show(sceneOf() ? session.knownScene(sceneOf()!)?.look : undefined); };
   const off = session.subscribe(() => authoring.drawn.show(sceneOf() ? session.knownScene(sceneOf()!)?.look : undefined));
-  const port = boot.mount(port => port), lives: AbortController[] = [];
+  let applicationSignal!: AbortSignal;
+  const port = boot.mount((port, signal) => { applicationSignal = signal; return port; }), lives: AbortController[] = [];
   const bind = (id: string) => { const life = new AbortController(); lives.push(life); return { life, context: port.editing!.acquire(id, life.signal)! }; };
   const settle = async () => { authoring.contexts.commit(); return outbox.settle(); };
   const stored = (): ContextRestart => ({ library, session: profileSessionOf(JSON.parse(JSON.stringify(session.session())))!, profile, looks, vs });
   let disposed = false;
   const dispose = async () => { if (disposed) return; disposed = true; for (const life of lives) life.abort(); off(); await settle(); boot.dispose(); authoring.drawn.dispose();
     for (const id of vs) await services.characters.release(id); outbox.stop(); };
-  return { emptyChoices, panelActions, library, transport, outbox, storage, services, history, session, neutralAuthoring: authoring, neutralCore: core, authoring: makeupProfileFixture(authoring), core: withMakeupCore(core), port, targets, looks, vs, get drawn() { return drawn; }, draw, scene, bind, collectionTransport, fileDevice, starters, settle, stored, dispose,
+  return { applicationSignal, emptyChoices, panelActions, library, transport, outbox, storage, services, history, session, neutralAuthoring: authoring, neutralCore: core, authoring: makeupProfileFixture(authoring), core: withMakeupCore(core), port, targets, looks, vs, get drawn() { return drawn; }, draw, scene, bind, collectionTransport, fileDevice, starters, settle, stored, dispose,
     failures, notes, counters: () => ({ resets, shows }) };
 }
