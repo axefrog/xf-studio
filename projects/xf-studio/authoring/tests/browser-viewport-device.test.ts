@@ -58,3 +58,27 @@ test("a toolbar-free browser viewport mounts once and rehosts live editors", asy
   expect(events).toEqual(["head:resize", "head:cancel", "head:move", "scene:resize", "head:resize"]);
   core.app.dispose(); core.dispose();
 });
+
+test("the viewport releases the shared device once after its caller releases the runtimes", async () => {
+  const life = new AbortController(), events = new EventTarget(), log: string[] = [];
+  const head = { clientWidth: 600, clientHeight: 400, contains: () => false };
+  let runtimes = 0, contexts = 0;
+  const viewer = { slot: "fixture", dispose() { runtimes--; log.push("runtime"); } };
+  const viewport = createBrowserViewportDevice({ signal: life.signal, headHost: head as unknown as HTMLElement,
+    window: events, queryContext: () => { throw Error("No hit expected"); },
+    deviceFactory: (() => { contexts++; return { show() {}, dispose() { log.push(`device:${runtimes}`); contexts--; } }; }) as never,
+    sceneFactory: (async () => { runtimes++; return viewer; }) as unknown as typeof createSceneRuntime });
+  // The same order used by startup: the runtime owner first, then the viewport's shared device.
+  life.signal.addEventListener("abort", () => { viewer.dispose(); viewport.dispose(); }, { once: true });
+  await viewport.buildHead();
+  expect([runtimes, contexts]).toEqual([1, 1]);
+  events.dispatchEvent(Object.assign(new Event("keydown"), { altKey: true }));
+  expect(viewport.attachment.input().modifiers.alt).toBe(true);
+  life.abort(); viewport.dispose();
+  expect([runtimes, contexts]).toEqual([0, 0]); expect(log).toEqual(["runtime", "device:0"]);
+  events.dispatchEvent(Object.assign(new Event("keyup"), { altKey: false }));
+  expect(viewport.attachment.input().modifiers.alt).toBe(true);
+  expect(viewport.scene()).toBeUndefined();
+  await expect(viewport.buildHead()).rejects.toMatchObject({ name: "AbortError" });
+  expect(contexts).toBe(0);
+});

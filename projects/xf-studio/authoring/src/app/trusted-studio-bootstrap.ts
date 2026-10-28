@@ -98,6 +98,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     unavailableReason?(): string | undefined;
   };
 }) {
+  options.signal?.throwIfAborted();
   const { core } = options;
   if (options.emptyChoices) core.app.attach({ emptyChoices: options.emptyChoices });
   const life = new AbortController();
@@ -105,82 +106,95 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   options.signal?.addEventListener("abort", abort, { once: true });
   if (options.signal?.aborted) life.abort();
   let collection: CollectionApplication, editing: PanelEditingContexts<Slot> | undefined;
-  const writer: FileWriter = {
-    operations: () => ({ service: collection.service, execute: request => core.app.execute(request) }),
-    message: () => collection.service.view().progress?.message,
-    collection: () => collection.service.draftIdentity()?.collectionId,
-    featureFiles: registeredFeatureFiles(core.app.actionRegistry(), core.documents.live,
-      { document: core.lookDocument, application: core.app, signal: core.signal, imported: options.onRecipeImported }),
-    hasSavedV: options.savedAppearance.has, savedV: options.savedAppearance.read,
-    loadSavedV: (bytes, character) => {
-      const applied = options.savedAppearance.load(bytes, character);
-      core.app.recordAppliedSavedAppearance(applied);
-      return applied;
-    },
-    savedVReady: options.savedAppearance.ready,
-    savedVUnavailableReason: options.savedAppearance.unavailableReason,
-    characterPreset: {
-      unavailable: kind => core.app.characterPresetUnavailable(kind),
-      // The V the request named when it was asked (profiles design §3.3).
-      load: (value, character) => {
-        const result = core.app.dispatch({ kind: "character.setSource", character, source: { kind: "preset", value } });
-        if (!result.ok) throw Error(result.message);
+  let files: StudioFileOperations, disposed = false;
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    options.signal?.removeEventListener("abort", abort);
+    life.abort();
+    try { if (options.retireFiles) files?.retire(); else files?.dispose(); }
+    finally { collection?.dispose(); }
+  };
+  try {
+    const writer: FileWriter = {
+      operations: () => ({ service: collection.service, execute: request => core.app.execute(request) }),
+      message: () => collection.service.view().progress?.message,
+      collection: () => collection.service.draftIdentity()?.collectionId,
+      featureFiles: registeredFeatureFiles(core.app.actionRegistry(), core.documents.live,
+        { document: core.lookDocument, application: core.app, signal: core.signal, imported: options.onRecipeImported }),
+      hasSavedV: options.savedAppearance.has, savedV: options.savedAppearance.read,
+      loadSavedV: (bytes, character) => {
+        const applied = options.savedAppearance.load(bytes, character);
+        core.app.recordAppliedSavedAppearance(applied);
+        return applied;
       },
-      save: () => core.app.characterPresetFile(),
-    },
-    recoverCollection: draft => collection.recover(draft),
-    buildReadiness: options.localSetup && (() => {
-      const setup = options.localSetup!.snapshot();
-      if (!setup.view) return setup.error ? "needs-setup" : "loading";
-      if (setup.view.source === "backup") return "damaged";
-      return setup.view.readiness.build.ready ? "ready" : buildToolsChecking(setup.view) ? "checking" : "needs-setup";
-    }),
-  };
-  const files = new StudioFileOperations(options.fileDevice, { ...writer, executeCollection: request => core.app.execute(request),
-    capture: options.bound || options.fileCapture ? () => {
-    if (editing) return editing.captureView(options.naming?.().view, life.signal);
-    const held = options.fileCapture?.();
-    return held && { ...held, writer: "writer" in held ? held.writer : writer };
-  } : undefined }, options.fileOwner);
-  collection = new CollectionApplication({ ...options.collections, model: core.documents }, core.lookDocument, core.app, files);
-  editing = options.bound ? new PanelEditingContexts<Slot>({ ...options.bound, create: input => {
-    let childPort: StudioPresentationPort<Slot>, childFiles: StudioFileOperations;
-    const scoped = createTrustedStudioBootstrap<Slot>({ ...options, core: input.core, bound: undefined, fileOwner: input.fileOwner, retireFiles: true, naming: () => input.named,
-      viewport: !input.captured ? options.panelViewport?.(input) ?? options.viewport : options.viewport, panelViewport: undefined, capturePort: signal => ({ ...input.capturePort(signal, childFiles), viewport: childPort.viewport }),
-      lookSelection: input.choose, signal: input.signal,
-      fileCapture: input.capture, panelInstance: (panel, tab) => panel === input.instance || panel === options.bound!.session.panel(input.instance)?.type
-        ? input.instance : options.panelInstance?.(panel, tab) ?? "", onRecipeImported: () => {},
-      collections: { ...options.collections, current: input.check, preserveEmpty: true, scene: input.scene, flushLook: () => options.bound!.looks.commit() },
-      savedAppearance: { has: () => !!input.core.app.characterSavedV(), read: () => input.core.app.characterSavedV(), ready: character => character === input.named.character && !!input.core.app.characterPanel(),
-        load: (bytes, character) => {
-          const value = readSavedV(bytes), done = input.core.app.dispatch({ kind: "character.setSource", character, source: { kind: "save", value } });
-          if (!done.ok) throw Error(done.message);
-          return { savedV: value };
-        } } });
-    childFiles = scoped.files;
-    childPort = scoped.mount(port => port);
-    return { port: childPort, writer: scoped.writer, files: scoped.files, dispose: scoped.dispose };
-  } }) : undefined;
-  const port = createStudioPresentation({ authoring: core.app, library: collection,
-    capturePort: options.capturePort ?? (editing ? signal => editing!.capturePort(options.naming?.().view, signal, files) : undefined),
-    panelTargets: options.panelTargets, naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal,
-    files, viewport: options.viewport, preferences: options.preferences,
-    previewReadiness: options.previewReadiness, editor: authoringPresentation(core), status: options.status,
-    localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts, product: options.product,
-    modInstall: options.modInstall?.withBuilds(() => builtModsOf(files.snapshot().package)), previewSetup: options.previewSetup,
-    desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments,
-    workspace: options.lease, outbox: options.outbox, ...(options.panelInstance ? { panelInstance: options.panelInstance } : {}),
-    ...(options.targets ? { targets: options.targets } : {}), ...(options.focus ? { focus: options.focus } : {}),
-    ...(options.scopeName ? { scopeName: options.scopeName } : {}),
-    ...(options.characterName ? { characterName: options.characterName } : {}), ...(options.tabs ? { tabs: options.tabs } : {}),
-    ...(options.starters ? { starters: options.starters } : {}),
-    ...(options.emptyChoices ? { emptyChoices: options.emptyChoices } : {}) });
-  return {
-    /** Trusted handles are retained by the composition root; never pass this object to a UI. */
-    files, collection, writer,
-    dispose() { options.signal?.removeEventListener("abort", abort); life.abort(); if (options.retireFiles) files.retire(); else files.dispose(); collection.dispose(); },
-    mount<T>(mountPresentation: (presentation: StudioPresentationPort<Slot>) => T): T {
-      return mountPresentation(port);
-    },
-  };
+      savedVReady: options.savedAppearance.ready,
+      savedVUnavailableReason: options.savedAppearance.unavailableReason,
+      characterPreset: {
+        unavailable: kind => core.app.characterPresetUnavailable(kind),
+        // The V the request named when it was asked (profiles design §3.3).
+        load: (value, character) => {
+          const result = core.app.dispatch({ kind: "character.setSource", character, source: { kind: "preset", value } });
+          if (!result.ok) throw Error(result.message);
+        },
+        save: () => core.app.characterPresetFile(),
+      },
+      recoverCollection: draft => collection.recover(draft),
+      buildReadiness: options.localSetup && (() => {
+        const setup = options.localSetup!.snapshot();
+        if (!setup.view) return setup.error ? "needs-setup" : "loading";
+        if (setup.view.source === "backup") return "damaged";
+        return setup.view.readiness.build.ready ? "ready" : buildToolsChecking(setup.view) ? "checking" : "needs-setup";
+      }),
+    };
+    files = new StudioFileOperations(options.fileDevice, { ...writer, executeCollection: request => core.app.execute(request),
+      capture: options.bound || options.fileCapture ? () => {
+      if (editing) return editing.captureView(options.naming?.().view, life.signal);
+      const held = options.fileCapture?.();
+      return held && { ...held, writer: "writer" in held ? held.writer : writer };
+    } : undefined }, options.fileOwner);
+    collection = new CollectionApplication({ ...options.collections, model: core.documents }, core.lookDocument, core.app, files);
+    editing = options.bound ? new PanelEditingContexts<Slot>({ ...options.bound, create: input => {
+      let childPort: StudioPresentationPort<Slot>, childFiles: StudioFileOperations;
+      const scoped = createTrustedStudioBootstrap<Slot>({ ...options, core: input.core, bound: undefined, fileOwner: input.fileOwner, retireFiles: true, naming: () => input.named,
+        viewport: !input.captured ? options.panelViewport?.(input) ?? options.viewport : options.viewport, panelViewport: undefined, capturePort: signal => ({ ...input.capturePort(signal, childFiles), viewport: childPort.viewport }),
+        lookSelection: input.choose, signal: input.signal,
+        fileCapture: input.capture, panelInstance: (panel, tab) => panel === input.instance || panel === options.bound!.session.panel(input.instance)?.type
+          ? input.instance : options.panelInstance?.(panel, tab) ?? "", onRecipeImported: () => {},
+        collections: { ...options.collections, current: input.check, preserveEmpty: true, scene: input.scene, flushLook: () => options.bound!.looks.commit() },
+        savedAppearance: { has: () => !!input.core.app.characterSavedV(), read: () => input.core.app.characterSavedV(), ready: character => character === input.named.character && !!input.core.app.characterPanel(),
+          load: (bytes, character) => {
+            const value = readSavedV(bytes), done = input.core.app.dispatch({ kind: "character.setSource", character, source: { kind: "save", value } });
+            if (!done.ok) throw Error(done.message);
+            return { savedV: value };
+          } } });
+      childFiles = scoped.files;
+      childPort = scoped.mount(port => port);
+      return { port: childPort, writer: scoped.writer, files: scoped.files, dispose: scoped.dispose };
+    } }) : undefined;
+    const port = createStudioPresentation({ authoring: core.app, library: collection,
+      capturePort: options.capturePort ?? (editing ? signal => editing!.capturePort(options.naming?.().view, signal, files) : undefined),
+      panelTargets: options.panelTargets, naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal,
+      files, viewport: options.viewport, preferences: options.preferences,
+      previewReadiness: options.previewReadiness, editor: authoringPresentation(core), status: options.status,
+      localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts, product: options.product,
+      modInstall: options.modInstall?.withBuilds(() => builtModsOf(files.snapshot().package)), previewSetup: options.previewSetup,
+      desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments,
+      workspace: options.lease, outbox: options.outbox, ...(options.panelInstance ? { panelInstance: options.panelInstance } : {}),
+      ...(options.targets ? { targets: options.targets } : {}), ...(options.focus ? { focus: options.focus } : {}),
+      ...(options.scopeName ? { scopeName: options.scopeName } : {}),
+      ...(options.characterName ? { characterName: options.characterName } : {}), ...(options.tabs ? { tabs: options.tabs } : {}),
+      ...(options.starters ? { starters: options.starters } : {}),
+      ...(options.emptyChoices ? { emptyChoices: options.emptyChoices } : {}) });
+    life.signal.addEventListener("abort", dispose, { once: true });
+    if (life.signal.aborted) dispose();
+    return {
+      /** Trusted handles are retained by the composition root; never pass this object to a UI. */
+      files, collection, writer,
+      dispose,
+      mount<T>(mountPresentation: (presentation: StudioPresentationPort<Slot>) => T): T {
+        return mountPresentation(port);
+      },
+    };
+  } catch (error) { dispose(); throw error; }
 }

@@ -144,7 +144,7 @@ const byId = <T extends HTMLElement>(id: string) => {
   return found as T;
 };
 
-/** Slice 13b wires the signal. Coordinated release of all remaining owners belongs to 13c. */
+/** The root lifetime; 13c1 connects existing owners, with remaining release work in 13c2–13c3. */
 export type StudioLifetime = { readonly signal: AbortSignal; abort(): void };
 export function startStudio(host: StudioHost, options: { composition?: StudioStartupComposition; signal?: AbortSignal } = {}): Promise<StudioLifetime | undefined> {
   const root = byId("studio");
@@ -154,17 +154,20 @@ export function startStudio(host: StudioHost, options: { composition?: StudioSta
   const abort = () => life.abort();
   options.signal?.addEventListener("abort", abort, { once: true });
   life.signal.addEventListener("abort", () => options.signal?.removeEventListener("abort", abort), { once: true });
-  window.addEventListener("pagehide", event => { if (!event.persisted) abort(); }, { signal: life.signal });
+  // Existing pagehide owners flush synchronously before the lifetime retires them.
+  window.addEventListener("pagehide", event => { if (!event.persisted) queueMicrotask(abort); }, { signal: life.signal });
   if (options.signal?.aborted) abort();
   return start(host, root, composition, { signal: life.signal, abort }).then(lifetime => {
     if (new URLSearchParams(location.search).get("verify") === "1") Object.assign(window, { xfStudioLifetime: lifetime });
     return lifetime;
   }).catch(error => {
-    abort();
-    root.removeAttribute("aria-busy");
-    const ref = pageFailure("startup", "start_failed", "XF Studio couldn't start.", error);
-    root.replaceChildren(Object.assign(document.createElement("p"), { className: "boot-error",
-      textContent: `XF Studio couldn't start. Reload the page, or restart XF Studio if this keeps happening.${ref ? ` If you report it, mention ${ref}.` : ""}` }));
+    if (life.signal.aborted) return undefined;
+    try {
+      root.removeAttribute("aria-busy");
+      const ref = pageFailure("startup", "start_failed", "XF Studio couldn't start.", error);
+      root.replaceChildren(Object.assign(document.createElement("p"), { className: "boot-error",
+        textContent: `XF Studio couldn't start. Reload the page, or restart XF Studio if this keeps happening.${ref ? ` If you report it, mention ${ref}.` : ""}` }));
+    } finally { abort(); }
     return undefined;
   });
 }
@@ -183,15 +186,14 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   } });
   const workspaceFiles: import("../app/studio-file-operations").StudioFilePort = { ...fileDevice, revealWorkspace: host.revealWorkspace };
   let port: StudioPresentationPort<HTMLElement> | undefined;
-  const diagnosticsDevice = createBrowserDiagnostics({ window, download: (blob, name) => fileDevice.download(blob, name) });
+  const diagnosticsDevice = createBrowserDiagnostics({ window, signal, download: (blob, name) => fileDevice.download(blob, name) });
   // The presentation names the view settings a report carries; the root adds only which workspace this is.
-  const diagnostics = new DiagnosticsActions(diagnosticsDevice.device, Date.now, { "verification workspace": verification ? "yes" : "no" });
+  const diagnostics = new DiagnosticsActions(diagnosticsDevice.device, Date.now, { "verification workspace": verification ? "yes" : "no" }, signal);
   diagnosticsDevice.install(diagnostics);
-  setPageDiagnostics((area, code, message, error, options) => diagnostics.failure(area, code, message, error, options));
+  setPageDiagnostics((area, code, message, error, options) => diagnostics.failure(area, code, message, error, options), signal);
   void diagnostics.refresh();
   const experimentLife = new AbortController();
   signal.addEventListener("abort", () => experimentLife.abort(), { once: true });
-  window.addEventListener("pagehide", () => experimentLife.abort(), { once: true });
   const experiments = host.experiments?.(verification, experimentLife.signal) ?? OFF_EXPERIMENTS;
   const storage = host.storage;
   const restored = loadCompositionWorkspace(storage, verification, composition), workspace = restored.state;
@@ -229,11 +231,11 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   if (PROFILES_MIGRATION_ENABLED && restored.writable && (!lease || lease.writable())) {
     const life = new AbortController();
     signal.addEventListener("abort", () => life.abort(), { once: true });
-    window.addEventListener("pagehide", () => life.abort(), { once: true });
     const early = new WorkspacePersistence({ storage, key: workspaceKeys(verification).workspace, writable: true, capture: () => workspace,
       budget: host.storageBudget, reserved: () => documents.outbox.storedSize(), model: composition.documents,
       ...(lease ? { canWrite: () => lease.draining() } : {}) });
     early.activate();
+    signal.addEventListener("abort", () => early.retire(), { once: true });
     await startProfilesMigration({ endpoint: `${base}/profiles/migrate`, send: fetch, workspace: documents.workspace, fence: documents.fence,
       model: composition.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal, initial: layouts.initial,
       report: error => diagnostics.failure("library", "profiles_migration_failed", "Your work couldn't be moved into your profile yet; it will try again.", error, { level: "warn" }) });
@@ -259,7 +261,8 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   const frameworkFixture = verification ? frameworkStatusVerification({ setup: localSetup, detection: () => installDetection, presets: () => presets }) : undefined;
   const installDetection = createBrowserInstallDetection(frameworkFixture?.transport, () => localSetup.snapshot().view?.fields);
   // The framework check reads the settings and a few installed files: it runs by itself as they change, so it is ready when it is looked at.
-  watchFrameworkInputs(localSetup, installDetection);
+  signal.addEventListener("abort", watchFrameworkInputs(localSetup, installDetection), { once: true });
+  signal.addEventListener("abort", () => { host.previewPreparation.dispose(); host.wolvenKitSetup.dispose(); }, { once: true });
   // Part-less modules' services (the Save Explorer, Poses), over their browser devices. The saves device reads the workspace's own saves
   // folder and follows Settings › Saves (UI-109). Poses reach the shown V through the stage, which the head fills in once it is attached;
   // the whole-body view goes through the application like the toolbar's.
@@ -282,6 +285,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   let previewDevice: BrowserPreview | undefined;
   /** Stops waiting for the page to be quiet before the installed expressions are read ahead (facial-prefetch.ts). */
   let stopPrefetch: (() => void) | undefined;
+  signal.addEventListener("abort", () => stopPrefetch?.(), { once: true });
   let bootstrap: ReturnType<typeof createTrustedStudioBootstrap<HTMLElement>>;
 
   /**
@@ -306,13 +310,15 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     return polishFixture?.snapshot(snapshot) ?? snapshot;
   });
   // The outbox's warning follows its status (a failed outbox write, a send that failed, a conflict).
-  documents.outbox.subscribe(event => { if (event.kind !== "acknowledged") statusSource.changed(); });
+  signal.addEventListener("abort", documents.outbox.subscribe(event => { if (event.kind !== "acknowledged" && !signal.aborted) statusSource.changed(); }), { once: true });
 
   let messageId = 0;
   const adapterMessage = (source: AdapterMessage["source"], text: string) => {
+    if (signal.aborted) return;
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
   let lookShown: (() => void) | undefined;
+  let releaseHeads: (() => void) | undefined, releaseShell: (() => void) | undefined;
   const profileAuthoring = createProfileAuthoring(workspace, {
     history: historyService, views: sessionState.graph,
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
@@ -322,6 +328,11 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     shown: () => lookShown?.(), note: text => adapterMessage("preview", text),
     report: error => diagnostics.failure("library", "look_write_failed", "Your latest look change couldn't be recorded yet; it will be tried again.", error, { level: "warn" }) });
   const core = profileAuthoring.core, lookEditor = profileAuthoring.drawn;
+  // Consumers withdraw before their shared editing owner. Before head/shell construction these releases are absent.
+  signal.addEventListener("abort", () => {
+    try { releaseShell?.(); }
+    finally { try { releaseHeads?.(); } finally { lookEditor.dispose(); } }
+  }, { once: true });
   // One writer per workspace: while another window holds it, every action, request, control and gesture is refused here.
   if (lease) core.app.attach({ access: lease });
   // The session's view graph (view-graph-design.md §3.3), which the core acts on: the head restores and follows its main view.
@@ -347,7 +358,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     historyScopeDetails: scope => historyScopeDetails(scope, { services, history: historyService }) });
   const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
   const headHost = byId("device-head");
-  const viewportDevice = createBrowserViewportDevice({ surface: registeredEditorAdapters(core)?.surface, headHost, queryContext: hit => core.app.contextQuery(hit, targets.namedView(drawnView())), renderers: composition.renderers, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
+  const viewportDevice = createBrowserViewportDevice({ signal, surface: registeredEditorAdapters(core)?.surface, headHost, queryContext: hit => core.app.contextQuery(hit, targets.namedView(drawnView())), renderers: composition.renderers, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
   // The workspace's own editor fields, V and arrangement as the migration found them: stored back unchanged (an older build opens them).
   const frozenEditor = { features: workspace.liveFeatures, locked: workspace.liveLocked,
@@ -356,7 +367,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   const profileMarks = (): Pick<WorkspaceState, "migration" | "profiles"> => ({ migration: workspace.migration,
     profiles: sessionStored ? sessionState.stored(workspace.profiles) : workspace.profiles });
   const session = createBrowserWorkspaceSession({
-    workspace, restored, verification, storage, budget: host.storageBudget, model: composition.documents,
+    workspace, restored, verification, storage, signal, budget: host.storageBudget, model: composition.documents,
     // The outbox's keys share the workspace's storage, so they count against its budget (profiles design §2.2).
     reserved: () => documents.outbox.storedSize(),
     capture: {
@@ -376,9 +387,9 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     canWrite: lease ? () => lease.draining() : undefined,
   });
   // Flush every wanted look, including unseen pinned inspectors, through the single context owner.
-  host.onFlushRequest?.(() => { lookEditor.commit(); session.flush(); });
-  window.addEventListener("pagehide", () => lookEditor.commit());
-  document.addEventListener("visibilitychange", () => { if (document.hidden) lookEditor.commit(); });
+  host.onFlushRequest?.(() => { if (!signal.aborted) { lookEditor.commit(); session.flush(); } });
+  window.addEventListener("pagehide", () => lookEditor.commit(), { signal });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) lookEditor.commit(); }, { signal });
   if (lease) {
     // Releasing to another window: after the pending document saves drain (a step the host registered first), the workspace is
     // written a last time and its timers stop (§2.3 release steps 3 to 5).
@@ -388,13 +399,13 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     lease.onRelease(async () => await (experiments as ExperimentPort).settle?.() ?? true);
     lease.onRelease(() => session.flush());
     lease.onReleased(() => session.retire());
-    lease.subscribe(() => {
+    signal.addEventListener("abort", lease.subscribe(() => {
       statusSource.changed();
       // Taken over: this page was built from the workspace as it was when it opened, so it restarts from the one just released.
       if (lease.snapshot().phase === "taken-over") location.reload();
-    });
+    }), { once: true });
   }
-  const persist = () => session.request();
+  const persist = () => { if (!signal.aborted) session.request(); };
   let panelUV: ReturnType<typeof createPanelUVFactory> | undefined;
   const drawUV = () => { viewportDevice.drawUV(); panelUV?.draw(); };
   previewDevice = createRegisteredPreview(core, {
@@ -411,6 +422,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   // and the head shows the result once it is loaded. Part presets (favourites) live in the library, the verification workspace's apart.
   // The main view shows the held expression: the view graph's per-view scene input is the seam where another view could show another.
   const facial = new FacialPreview(createBrowserFacialDevice());
+  signal.addEventListener("abort", () => facial.dispose(), { once: true });
   // A set of saved expressions exports as one mod through the same package route a collection uses (never installed by Build).
   const presetTransport = partPresetTransport(verification ? "/api/verification/part-presets" : "/api/part-presets");
   const presets = new PartPresetService({ ...presetTransport,
@@ -422,10 +434,11 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     () => shownHead()?.motion.snapshot());
   // Changes ease by the expression's transition setting; an edit inside an open form control (a slider drag) follows at once.
   facial.animate({ setting: () => transitions.get("expression"), continuous: () => !!core.app.featureControlSnapshot() });
-  transitions.subscribe(persist);
-  core.app.subscribe(() => facial.changed());
+  signal.addEventListener("abort", transitions.subscribe(persist), { once: true });
+  signal.addEventListener("abort", core.app.subscribe(() => facial.changed()), { once: true });
   facial.start();
-  previewDevice?.coordinator.quality.subscribe(persist);
+  const offQuality = previewDevice?.coordinator.quality.subscribe(persist);
+  if (offQuality) signal.addEventListener("abort", offQuality, { once: true });
   // The editors (scene-editors.ts): every composed layered surface is registered, and each view's on-head editor edits the look that view's
   // scene shows, naming it through the view's panel (the input layer's resolution, profiles design §3.6). The root names no feature.
   const panelOf = (view: string | undefined) => view === undefined ? undefined : sessionState.instance(viewPanel(view));
@@ -457,6 +470,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     document: { shows: view => { const shows = lookOf(view), edited = lookEditor.ref(); return shows && edited ? sameLook(shows, edited) : !shows && !edited; },
       follow: view => { lookEditor.show(lookOf(view)); } },
     shown: head => {
+      if (signal.aborted) return;
       syncDrawn();
       stopPrefetch?.(); stopPrefetch = undefined;
       facial.attachScene(head?.scene.face);
@@ -470,10 +484,11 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
       host.onPreviewReady?.();
     },
   });
+  releaseHeads = () => { try { heads.dispose(); } finally { viewportDevice.dispose(); } };
   shownHead = () => heads.shown();
   drawnView = () => heads.shownView();
   /** The presentation's read of which view is drawn and whose picture the canvas holds (each 3D view's pane follows it, P2-iii-b). */
-  function syncDrawn() { viewportDevice.attachment.setDrawn({ drawn: heads.shownView(), onCanvas: heads.shown()?.preview.view() }); }
+  function syncDrawn() { if (!signal.aborted) viewportDevice.attachment.setDrawn({ drawn: heads.shownView(), onCanvas: heads.shown()?.preview.view() }); }
   syncDrawn();
   // Camera, preview and motion actions go to the runtime holding the view they name (view-routes.ts).
   core.app.attach({ runtimes: heads.runtimes });
@@ -555,17 +570,22 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   lookEditor.show(shownScene.look());
   // The drawn view follows the shown tab's most recently focused view (another tab shown, another view focused, the view drawn closed):
   // the heads owner draws it, switching the document first when it shows another look (D3). Otherwise the drawn scene's look may change.
-  sessionState.subscribe(() => {
+  signal.addEventListener("abort", sessionState.subscribe(() => {
+    if (signal.aborted) return;
     const target = drawnViewOf(sessionState);
     if (target !== heads.shownView()) {
       const shown = heads.show(target);
       syncDrawn();
       void shown.then(syncDrawn, () => { syncDrawn(); /* Superseded, or noticed by the owner. */ });
     } else lookEditor.show(shownScene.look());
-  });
+  }), { once: true });
   // The only object handed to the presentation.
   const viewComposition = { ...composition.view, optional: layouts.registrations, optionalGeneration: layouts.registrationGeneration };
-  bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); });
+  bootstrap.mount(publicPort => {
+    port = publicPort;
+    const shell = mountStudio(publicPort, root, viewComposition);
+    releaseShell = shell.dispose;
+  });
   defaultNote = text => adapterMessage("layout-default", text);
   if (defaultNotes.length) { defaultNote(defaultNotes.join("\n\n")); defaultNotes.length = 0; }
   host.onMounted?.({ openGameSetup: () => void previewSetup.dispatch({ kind: "previewSetup.openSetup" }) });
@@ -705,11 +725,11 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
       else viewportDevice.headPending(head.phase === "checking" ? "loading" : head.phase, head.message, head.progress);
       statusSource.changed();
     };
-    previewSetup.subscribe(show);
+    signal.addEventListener("abort", previewSetup.subscribe(show), { once: true });
     show();
     session.flush();
     // After installing .NET in another window, coming back re-checks without a click.
-    window.addEventListener("focus", () => previewSetup.windowFocused());
+    window.addEventListener("focus", () => previewSetup.windowFocused(), { signal });
     void previewSetup.start();
   }
 
@@ -718,6 +738,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     core.app.setPreviewUnavailable("");
     try { await heads.load(); }
     catch (error) {
+      if (signal.aborted) throw error;
       // The setup service maps the failure to plain words; nothing of this attempt stays connected (the heads owner released it).
       statusSource.changed();
       pageFailure("preview", "head_load_failed", "The 3D head couldn't be loaded.", error);

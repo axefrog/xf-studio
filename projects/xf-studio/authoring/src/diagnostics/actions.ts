@@ -121,28 +121,33 @@ export class DiagnosticsActions {
   private recent = new Map<string, { at: number; ref: string | null }>();
   private readonly viewStates: { read(): Record<string, string> }[] = [];
   constructor(private readonly device: DiagnosticsDevice, private readonly now: () => number = Date.now,
-    private readonly context: Readonly<Record<string, string>> = {}) {}
+    private readonly context: Readonly<Record<string, string>> = {}, private readonly signal?: AbortSignal) {
+    signal?.addEventListener("abort", () => { this.listeners.clear(); this.viewStates.length = 0; this.recent.clear(); }, { once: true });
+  }
 
   /** Which view settings a report names (the presentation's choice, installed by the composition; DIAG-17). */
   setViewState(read: () => Record<string, string>) {
+    if (this.signal?.aborted) return () => {};
     const entry = { read }; this.viewStates.push(entry);
     return () => { const at = this.viewStates.indexOf(entry); if (at >= 0) this.viewStates.splice(at, 1); };
   }
   /** The window's facts for a report: the browser and graphics card, the host context and a few view settings. */
   pageFacts(): PageFacts {
+    this.signal?.throwIfAborted();
     let state: Record<string, string> = {};
     try { state = this.viewStates.at(-1)?.read() ?? {}; } catch { /* Facts without view settings. */ }
     return { ...this.device.pageFacts(), state: { ...this.context, ...state } };
   }
 
-  subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  subscribe(listener: () => void) { if (!this.signal?.aborted) this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   snapshot(): DiagnosticsSnapshot { return structuredClone(this.state); }
   descriptors() { return structuredClone(DIAGNOSTICS_DESCRIPTORS); }
-  private publish(next: Partial<DiagnosticsSnapshot>) { this.state = { ...this.state, ...next }; for (const listener of this.listeners) listener(); }
+  private publish(next: Partial<DiagnosticsSnapshot>) { if (this.signal?.aborted) return; this.state = { ...this.state, ...next }; for (const listener of this.listeners) listener(); }
   private publishReport(next: Partial<ReportState>) { if (this.state.report) this.publish({ report: { ...this.state.report, ...next } }); }
 
   /** Read the rolling window's mode once the host is reachable. */
   async refresh(): Promise<void> {
+    if (this.signal?.aborted) return;
     try {
       const state = await this.device.state();
       if (state) this.publish({ mode: { mode: state.mode, until: state.until, minutes: state.minutes } });
@@ -159,6 +164,7 @@ export class DiagnosticsActions {
    */
   private record(level: DiagnosticLevel, area: string, code: string, message: string, error: unknown, ref: string | null, source?: string,
     fromHost = false): string | null {
+    if (this.signal?.aborted) return null;
     const key = `${area}|${code}|${message}`, at = this.now(), before = this.recent.get(key);
     if (!fromHost && before && at - before.at < 10_000) return before.ref;
     this.recent.delete(key);
@@ -175,7 +181,7 @@ export class DiagnosticsActions {
    * any other failure is logged and gets a reference, the host's when a failed host request just gave one, else a new one.
    */
   notice(failure: { source: string; message: string; code?: string }): string | null {
-    if (isExpectedFailure(failure.code)) return null;
+    if (this.signal?.aborted || isExpectedFailure(failure.code)) return null;
     const host = this.device.claimHostRef();
     return this.record("error", "notice", failure.code ?? "failed", failure.message, undefined, host ?? newErrorRef(), failure.source, !!host);
   }
@@ -184,7 +190,8 @@ export class DiagnosticsActions {
    * A failure an app service met (the page sink routes `pageFailure` here). Logged with a new reference; with `notify` it is also
    * published for the shell to show once, with that reference and "Report this problem".
    */
-  failure(area: string, code: string, message: string, error?: unknown, options: { notify?: boolean; level?: DiagnosticLevel; source?: string } = {}): string {
+  failure(area: string, code: string, message: string, error?: unknown, options: { notify?: boolean; level?: DiagnosticLevel; source?: string } = {}): string | null {
+    if (this.signal?.aborted) return null;
     const host = this.device.claimHostRef();
     const ref = this.record(options.level ?? "error", area, code, message, error, host ?? newErrorRef(), options.source, !!host)!;
     if (options.notify) this.publish({ notice: { id: ++this.noticeId, ref, area, source: options.source ?? area, message } });
@@ -193,7 +200,7 @@ export class DiagnosticsActions {
 
   /** An uncaught error or rejection: logged; shown at most once a minute, since the page may have recovered by itself. */
   uncaught(kind: "error" | "rejection", error: unknown, message: string) {
-    if (BENIGN.test(message)) return;
+    if (this.signal?.aborted || BENIGN.test(message)) return;
     const ref = this.record("error", "page", kind === "error" ? "uncaught_error" : "unhandled_rejection", message || "Unknown error", error, newErrorRef())!;
     if (this.now() - this.lastUncaught < 60_000) return;
     this.lastUncaught = this.now();
@@ -217,6 +224,7 @@ export class DiagnosticsActions {
   }
 
   capability(action: DiagnosticsAction): Capability {
+    if (this.signal?.aborted) return refusal("unavailable", "This window's diagnostics have ended.");
     const report = this.state.report;
     const ready = report?.phase === "ready";
     switch (action.kind) {
@@ -276,6 +284,7 @@ export class DiagnosticsActions {
         const manifest = this.manifest!, report = this.state.report!;
         const bytes = await this.device.bundle({ id: manifest.id, include: [...this.included], description: report.description,
           sharingConfirmed: report.sharingConfirmed, page: { facts: this.pageFacts(), items: this.pageItems.map(({ text: _text, ...item }) => item) } });
+        this.signal?.throwIfAborted();
         const name = reportFileName(manifest);
         this.device.save(name, bytes, "application/zip");
         this.publishReport({ saved: name });
@@ -289,6 +298,7 @@ export class DiagnosticsActions {
       case "diagnostics.setMode": {
         try {
           const mode = await this.device.setMode(action.mode);
+          this.signal?.throwIfAborted();
           this.publish({ mode });
           return { ok: true, message: action.mode === "deep" ? `Diagnostic mode is on for 24 hours: XF Studio keeps ${mode.minutes} minutes of detail.` : "Diagnostic mode is off." };
         } catch { return { ok: false, code: "unavailable", message: "XF Studio couldn't change diagnostic mode. Try again." }; }
@@ -303,10 +313,13 @@ export class DiagnosticsActions {
   private async step(busy: NonNullable<ReportState["busy"]>, work: () => Promise<string>): Promise<DiagnosticsResult> {
     this.publishReport({ busy, message: null });
     try {
+      this.signal?.throwIfAborted();
       const message = await work();
+      this.signal?.throwIfAborted();
       this.publishReport({ busy: null, message });
       return { ok: true, message };
     } catch (error) {
+      if (this.signal?.aborted) return { ok: false, code: "cancelled", message: "This window's diagnostics have ended." };
       const message = (error as Error)?.message || "That didn't work. Try again.";
       // The host no longer holds this report: "Prepare again" is the way on (DIAG-14).
       const expired = (error as { code?: unknown })?.code === "report_expired";
@@ -326,19 +339,29 @@ export class DiagnosticsActions {
     this.publish({ opens: this.state.opens + 1, report: { phase: "preparing", ref, message: null, title: reportTitle(ref, []), description: this.state.report?.description ?? "",
       sharingConfirmed: false, groups: [], total: 0, limit: 0, totalSize: "", fileName: null, busy: null, saved: null, window: null, files: null, expired: false } });
     // While the host prepares (hashing mod files can take a few seconds), its progress line shows in the review (DIAG-11).
-    let preparing = true;
+    const polling = new AbortController();
+    const stop = () => polling.abort();
+    this.signal?.addEventListener("abort", stop, { once: true });
+    if (this.signal?.aborted) stop();
     const watch = (async () => {
-      while (preparing) {
-        await new Promise(done => setTimeout(done, 600));
-        if (!preparing) break;
+      while (!polling.signal.aborted) {
+        await new Promise<void>(done => {
+          const finish = () => { clearTimeout(timer); polling.signal.removeEventListener("abort", finish); done(); };
+          const timer = setTimeout(finish, 600);
+          polling.signal.addEventListener("abort", finish, { once: true });
+          if (polling.signal.aborted) finish();
+        });
+        if (polling.signal.aborted) break;
         try {
           const state = await this.device.state();
-          if (preparing && state?.preparing && this.state.report?.phase === "preparing") this.publishReport({ message: state.preparing });
+          if (!polling.signal.aborted && state?.preparing && this.state.report?.phase === "preparing") this.publishReport({ message: state.preparing });
         } catch { /* The plain "Preparing" line stays. */ }
       }
     })();
     try {
-      const manifest = await this.device.prepare(ref).finally(() => { preparing = false; });
+      this.signal?.throwIfAborted();
+      const manifest = await this.device.prepare(ref);
+      this.signal?.throwIfAborted();
       void watch;
       this.manifest = manifest;
       for (const item of manifest.items) if (item.included) this.included.add(item.id);
@@ -347,9 +370,10 @@ export class DiagnosticsActions {
       this.regroup();
       return { ok: true, message: "Report ready for review." };
     } catch (error) {
+      if (this.signal?.aborted) return { ok: false, code: "cancelled", message: "This window's diagnostics have ended." };
       this.publishReport({ phase: "failed", message: (error as Error)?.message || "XF Studio couldn't prepare the report." });
       return { ok: false, code: "unavailable", message: this.state.report!.message! };
-    }
+    } finally { stop(); this.signal?.removeEventListener("abort", stop); }
   }
 
   /** The review's groups from the host's items and the page's own, with what is ticked now. */
@@ -391,11 +415,12 @@ export class DiagnosticsActions {
 
   /** One item's whole text for the review's full view (the preview shows its start): the page's own, or the host's. */
   async fullText(item: string): Promise<string | null> {
+    if (this.signal?.aborted) return null;
     const own = this.pageItems.find(entry => entry.id === item);
     if (own) return own.text;
     const manifest = this.manifest;
     if (!manifest || !manifest.items.some(entry => entry.id === item)) return null;
-    try { return await this.device.item(manifest.id, item); } catch { return null; }
+    try { const text = await this.device.item(manifest.id, item); return this.signal?.aborted ? null : text; } catch { return null; }
   }
 }
 

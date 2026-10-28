@@ -14,7 +14,7 @@ export function loadCompositionWorkspace(storage: Pick<Storage, "getItem">, veri
 }
 
 type Observable = { subscribe(listener: () => void): () => void };
-type EventSource = { addEventListener(type: string, listener: EventListener): void };
+type EventSource = { addEventListener(type: string, listener: EventListener, options?: AddEventListenerOptions): void };
 
 /** The key is selected before services are built so the verification draft stays isolated. */
 export function loadBrowserWorkspace(storage: Pick<Storage, "getItem">, verification: boolean, model: DocumentModel & { readonly live: string }) {
@@ -44,21 +44,41 @@ export function createBrowserWorkspaceSession<W extends WorkspaceInput = Workspa
   model: DocumentModel;
   /** Whether this window may write its workspace now (the workspace lease); always, without one. */
   canWrite?: () => boolean;
+  /** The page lifetime; abort retires autosave without requesting a final write. */
+  signal?: AbortSignal;
 }) {
+  const life = new AbortController();
   const composer = new WorkspaceComposer(options.workspace, options.capture);
   const persistence = new WorkspacePersistence({ storage: options.storage,
     key: workspaceKeys(options.verification).workspace, writable: options.restored.writable,
     restoreError: options.restored.error, restoreWarning: options.restored.warning, capture: () => composer.capture(),
     budget: options.budget, reserved: options.reserved, model: options.model, canWrite: options.canWrite });
-  persistence.subscribe(options.onStatus);
-  for (const source of options.sources) source.subscribe(() => persistence.request());
   const request = () => persistence.request(), flush = () => persistence.flush();
-  options.window.addEventListener("pagehide", () => { flush(); });
-  options.document.addEventListener("visibilitychange", () => { if (options.document.hidden) flush(); });
-  for (const event of ["input", "change", "click"]) options.document.addEventListener(event, request);
-  return { request, flush, activate: () => persistence.activate(), retire: () => persistence.retire(),
+  const subscriptions = new Set<() => void>([persistence.subscribe(options.onStatus)]);
+  const watch = (source: Observable) => {
+    if (life.signal.aborted) return () => {};
+    const off = source.subscribe(() => request());
+    const release = () => { if (subscriptions.delete(release)) off(); };
+    subscriptions.add(release);
+    return release;
+  };
+  const retire = () => {
+    if (life.signal.aborted) return;
+    persistence.retire();
+    life.abort();
+    for (const release of subscriptions) release();
+    subscriptions.clear();
+    options.signal?.removeEventListener("abort", retire);
+  };
+  for (const source of options.sources) watch(source);
+  options.window.addEventListener("pagehide", () => { flush(); }, { signal: life.signal });
+  options.document.addEventListener("visibilitychange", () => { if (options.document.hidden) flush(); }, { signal: life.signal });
+  for (const event of ["input", "change", "click"]) options.document.addEventListener(event, request, { signal: life.signal });
+  options.signal?.addEventListener("abort", retire, { once: true });
+  if (options.signal?.aborted) retire();
+  return { request, flush, activate: () => persistence.activate(), retire,
     /** Add a content source created after the session (for example the collection library). */
-    watch: (source: Observable) => source.subscribe(request),
+    watch,
     setPreviewReady: () => composer.setPreviewReady(),
     snapshot: () => composer.capture(), status: () => persistence.snapshot() };
 }

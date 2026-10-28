@@ -21,6 +21,7 @@ export type BrowserDiagnosticsOptions = {
   /** `/api/diagnostics` on both hosts. */
   endpoint?: string;
   download(blob: Blob, name: string): void;
+  signal?: AbortSignal;
 };
 
 /** A plain browser name and version from the user agent (the desktop's WebView2 reports its Edge version). */
@@ -34,14 +35,22 @@ export function browserName(userAgent: string): string {
 
 export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
   const win = options.window, endpoint = options.endpoint ?? "/api/diagnostics";
-  const send = win.fetch.bind(win);
+  const life = new AbortController(), originalSend = win.fetch.bind(win);
+  const send = async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
+    life.signal.throwIfAborted();
+    const signal = init?.signal ? AbortSignal.any([life.signal, init.signal]) : life.signal;
+    const response = await originalSend(input, { ...init, signal });
+    signal.throwIfAborted();
+    return response;
+  };
+  let uninstall: (() => void) | undefined;
   let queue: DiagnosticEntry[] = [], ring: DiagnosticEntry[] = [], timer: ReturnType<typeof setTimeout> | null = null;
   let windowStart = 0, sentInWindow = 0, droppedFromQueue = 0;
   const hostRefs: { ref: string; at: number; claimed: boolean }[] = [];
   let gpu: { renderer: string | null; webgl2: boolean } | null = null;
 
   const keep = (entries: DiagnosticEntry[]) => {
-    ring = [...ring, ...entries].slice(-DIAGNOSTIC_LIMITS.ring);
+    if (!life.signal.aborted) ring = [...ring, ...entries].slice(-DIAGNOSTIC_LIMITS.ring);
   };
   /** A POST is on its way: the next flush waits for it, and `again` asks for one as soon as it ends (DIAG-07). */
   let flushing = false, again = false;
@@ -50,7 +59,9 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
    * what the flush took), and a flush asked for meanwhile runs when it ends (DIAG-07).
    */
   async function flush() {
+    if (timer !== null) clearTimeout(timer);
     timer = null;
+    if (life.signal.aborted) return;
     if (flushing) { again = true; return; }
     flushing = true;
     try {
@@ -81,7 +92,7 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
       if (again) { again = false; if (queue.length) schedule(0); }
     }
   }
-  const schedule = (ms = 250) => { if (!timer) timer = setTimeout(() => void flush(), ms); };
+  const schedule = (ms = 250) => { if (!life.signal.aborted && timer === null) timer = setTimeout(() => void flush(), ms); };
 
   async function api<T>(path: string, body?: unknown, failure = UNREACHABLE): Promise<T> {
     let response: Response;
@@ -98,7 +109,9 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
       } catch { /* Plain. */ }
       throw Object.assign(Error(message), { status: response.status, code });
     }
-    return response.json() as Promise<T>;
+    const answer = await response.json() as T;
+    life.signal.throwIfAborted();
+    return answer;
   }
 
   function probeGpu() {
@@ -119,6 +132,7 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
 
   const device: DiagnosticsDevice = {
     forward(entries) {
+      if (life.signal.aborted) return;
       queue.push(...entries);
       if (queue.length > PAGE_QUEUE) { droppedFromQueue += queue.length - PAGE_QUEUE; queue = queue.slice(-PAGE_QUEUE); }
       schedule(entries.some(entry => entry.level === "error") ? 0 : 250);
@@ -131,6 +145,7 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
       return found.ref;
     },
     pageFacts(): Omit<PageFacts, "state"> {
+      life.signal.throwIfAborted();
       const { renderer, webgl2 } = probeGpu();
       return { browser: browserName(win.navigator.userAgent), gpu: renderer, webgl2 };
     },
@@ -154,11 +169,15 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
         } catch { /* Plain. */ }
         throw Object.assign(Error(message), { code });
       }
-      return new Uint8Array(await response.arrayBuffer());
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      life.signal.throwIfAborted();
+      return bytes;
     },
-    save(name, bytes, type) { options.download(new Blob([bytes as BlobPart], { type }), name); },
+    save(name, bytes, type) { life.signal.throwIfAborted(); options.download(new Blob([bytes as BlobPart], { type }), name); },
     async copy(text) {
+      life.signal.throwIfAborted();
       try { await win.navigator.clipboard.writeText(text); return; } catch { /* Fall back below. */ }
+      life.signal.throwIfAborted();
       const area = win.document.createElement("textarea");
       area.value = text; area.setAttribute("readonly", ""); area.style.position = "fixed"; area.style.opacity = "0";
       win.document.body.append(area); area.select();
@@ -176,6 +195,7 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
       } catch { throw Error(failed); }
       if (response.status === 204) return;
       const answer = response.ok ? await response.json().catch(() => null) as { url?: unknown } | null : null;
+      life.signal.throwIfAborted();
       const url = typeof answer?.url === "string" ? answer.url : null;
       if (!url || !url.startsWith(`${ISSUE_BASE}?`) || url.length > ISSUE_URL_LIMIT) throw Error(failed);
       const opened = win.open(url, "_blank");
@@ -186,6 +206,8 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
 
   /** Trap the page's errors into `actions`; returns a function that stops trapping. */
   function install(actions: DiagnosticsActions): () => void {
+    if (life.signal.aborted) return () => {};
+    uninstall?.();
     const onError = (event: ErrorEvent) => {
       if (/^(?:chrome|moz|safari)-extension:/.test(event.filename ?? "")) return;
       actions.uncaught("error", event.error, event.message || String(event.error ?? ""));
@@ -198,18 +220,34 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
     win.addEventListener("unhandledrejection", onRejection);
     // A failed host request's reference, so the notice that follows can show the same one.
     const original = win.fetch;
-    win.fetch = (async (...args: Parameters<typeof fetch>) => {
+    const wrapped = (async (...args: Parameters<typeof fetch>) => {
       const response = await original.apply(win, args);
       const ref = response.headers.get(ERROR_REF_HEADER);
-      if (ref && isErrorRef(ref)) { hostRefs.push({ ref, at: Date.now(), claimed: false }); if (hostRefs.length > 20) hostRefs.shift(); }
+      if (!life.signal.aborted && ref && isErrorRef(ref)) { hostRefs.push({ ref, at: Date.now(), claimed: false }); if (hostRefs.length > 20) hostRefs.shift(); }
       return response;
     }) as typeof fetch;
-    win.addEventListener("pagehide", () => void flush());
-    return () => {
+    win.fetch = wrapped;
+    const pagehide = () => void flush();
+    win.addEventListener("pagehide", pagehide);
+    let installed = true;
+    return uninstall = () => {
+      if (!installed) return;
+      installed = false;
       win.removeEventListener("error", onError); win.removeEventListener("unhandledrejection", onRejection);
-      win.fetch = original;
+      win.removeEventListener("pagehide", pagehide);
+      if (win.fetch === wrapped) win.fetch = original;
     };
   }
 
-  return { device, install };
+  const dispose = () => {
+    if (life.signal.aborted) return;
+    life.abort();
+    if (timer !== null) clearTimeout(timer);
+    timer = null; queue = []; ring = []; hostRefs.length = 0; again = false;
+    uninstall?.();
+    options.signal?.removeEventListener("abort", dispose);
+  };
+  options.signal?.addEventListener("abort", dispose, { once: true });
+  if (options.signal?.aborted) dispose();
+  return { device, install, dispose };
 }

@@ -81,3 +81,41 @@ test("a presentation mounts from trusted services without any page controls", as
   expect(shell.snapshot().preferences.theme).toBe("dark");
   expect(imports).toBe(0);
 });
+
+for (const fail of [false, true]) test(`bootstrap ${fail ? "construction failure" : "abort"} releases its collection subscriptions and file destination`, async () => {
+  const life = new AbortController(), workspace = freshWorkspace();
+  const core = createTrustedAuthoringCore(workspace, { selectedCollection: () => "fixture" }, STUDIO_COMPOSITION);
+  const collections = bootstrapCollections(core.document, { looks: [{ name: "Look", recipe: workspace.recipe }] });
+  let subscriptions = 0, published = 0;
+  const scene = collections.deps.scene;
+  const options: Parameters<typeof createTrustedStudioBootstrap<string>>[0] = { signal: life.signal, core: { ...core, document: core.lookDocument },
+    preferences: new UIPreferenceActions(workspace.uiPreferences),
+    viewport: new ViewportAttachment<string>({ moveHost() {}, measure: () => ({ width: 0, height: 0 }), resize() {}, cancelInput() {},
+      inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => false, hitAt: () => undefined, queryContext: () => { throw Error("No hit expected"); } }),
+    previewReadiness: { readiness: () => ({ phase: "ready", size: 512, pending: 0, waiting: false, estimatedBytes: 0, layers: [] }), subscribe: () => () => {} },
+    collections: { ...collections.deps, scene: { ...scene, subscribe: listener => {
+      subscriptions++; const off = scene.subscribe(listener); return () => { subscriptions--; off(); };
+    } } },
+    savedAppearance: { has: () => false, read: () => undefined, load: () => ({}), ready: () => false }, onRecipeImported() {},
+    fileDevice: { pick: async () => undefined, download() {} },
+    ...(fail ? { modules: [{ get module(): string { throw Error("Fixture construction failed"); } } as never] } : {}) };
+  try {
+    if (fail) expect(() => { createTrustedStudioBootstrap(options); }).toThrow("Fixture construction failed");
+    else {
+      const bootstrap = createTrustedStudioBootstrap(options);
+      bootstrap.collection.service.subscribe(() => { published++; });
+      expect(subscriptions).toBe(1);
+      expect(bootstrap.files.capability({ kind: "recipe.export" }).available).toBe(true);
+      life.abort();
+      expect(bootstrap.files.capability({ kind: "recipe.export" }).available).toBe(false);
+      expect(await bootstrap.collection.service.execute({ kind: "refresh" })).toMatchObject({ ok: false, code: "missing_target" });
+      bootstrap.dispose();
+      scene.setLook(undefined);
+      expect(published).toBe(0);
+    }
+    expect(subscriptions).toBe(0);
+    expect(() => createTrustedStudioBootstrap({ signal: AbortSignal.abort() } as never)).toThrow();
+  } finally {
+    life.abort(); collections.lookEditor.dispose(); await collections.outbox.settle(); collections.outbox.stop(); core.app.dispose(); core.dispose();
+  }
+});

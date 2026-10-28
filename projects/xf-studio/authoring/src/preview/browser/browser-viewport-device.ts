@@ -26,7 +26,7 @@ export function createBrowserViewportDevice(options: {
   referenceTextures?: import("../../platform/api/scene").SceneHostPort["referenceTextures"];
   sceneFactory?: typeof createSceneRuntime;
   /** The head pane's renderer device (default: the browser's; tests pass a stand-in). Made when the first head is built. */
-  deviceFactory?: (host: HTMLElement, options: RendererDeviceOptions) => SceneDevice & Pick<RendererDevice, "show">;
+  deviceFactory?: (host: HTMLElement, options: RendererDeviceOptions) => SceneDevice & Pick<RendererDevice, "show" | "dispose">;
   /** The head's WebGL context was lost or came back (the renderer device reports it; the composition root logs it). */
   onContext?: (event: "lost" | "restored") => void;
   /** Source of key, pointer, focus and visibility events for modifier tracking. */
@@ -34,7 +34,8 @@ export function createBrowserViewportDevice(options: {
 }) {
   const editors = new ViewportAdapter(options.surface ? ["surface"] : []);
   /** The head pane's one renderer device (profiles phase 4a-ii): made with the first head, kept for the window. */
-  let device: SceneDevice & Pick<RendererDevice, "show"> | undefined;
+  let device: SceneDevice & Pick<RendererDevice, "show" | "dispose"> | undefined;
+  let disposed = false;
   /** The head shown on the device (several may be resident; the scene runtime owner decides which: preview/scene-residency.ts). */
   let viewer: Scene | undefined;
   /** Who else hears the context's loss and restore (the runtime owner drops warm runtimes on a loss). */
@@ -94,6 +95,7 @@ export function createBrowserViewportDevice(options: {
      * It rejects with `signal.reason` once the signal aborts (a newer subject or body change superseded it), having released what it made.
      */
     buildHead(body: CoreBody = "female", signal?: AbortSignal) {
+      if (disposed) return Promise.reject(new DOMException("The viewport was closed.", "AbortError"));
       device ??= (options.deviceFactory ?? createRendererDevice)(options.headHost, { onContext: event => {
         options.onContext?.(event);
         for (const listener of [...contextListeners]) listener(event);
@@ -161,5 +163,14 @@ export function createBrowserViewportDevice(options: {
     capture() { return editors.capture(); },
     surfaceEditor() { return surfaceEditor; },
     scene() { return viewer; },
+    /** The head owner releases its runtimes first; this owner then releases the shared renderer/context. */
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      releaseEditor();
+      for (const item of resources.values()) item.dispose();
+      resources.clear(); contextListeners.clear(); viewer = undefined;
+      device?.dispose(); device = undefined;
+    },
   };
 }

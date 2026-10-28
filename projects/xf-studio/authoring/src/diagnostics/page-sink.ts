@@ -9,7 +9,11 @@ import type { DiagnosticLevel } from "./model";
 export type PageDiagnosticsSink = (area: string, code: string, message: string, error: unknown,
   options: { notify?: boolean; level?: DiagnosticLevel; source?: string }) => string | null;
 let sink: PageDiagnosticsSink | null = null;
-export function setPageDiagnostics(next: PageDiagnosticsSink | null) { sink = next; }
+export function setPageDiagnostics(next: PageDiagnosticsSink | null, signal?: AbortSignal) {
+  if (signal?.aborted) return;
+  sink = next;
+  signal?.addEventListener("abort", () => { if (sink === next) sink = null; }, { once: true });
+}
 
 export function pageFailure(area: string, code: string, message: string, error?: unknown,
   options: { notify?: boolean; level?: DiagnosticLevel; source?: string } = {}): string | null {
