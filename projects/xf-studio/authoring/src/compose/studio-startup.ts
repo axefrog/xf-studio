@@ -73,7 +73,7 @@ import { createBrowserDiagnostics } from "../diagnostics/browser/browser-device"
 import { createBrowserUpdateCheck } from "../setup/browser/browser-update-check-device";
 import { pageFailure, setPageDiagnostics } from "../diagnostics/page-sink";
 import type { WorkspaceLease } from "../app/workspace/workspace-lease";
-import type { StartedOutbox } from "../app/browser/document-outbox-device";
+import { bindWorkspaceHostLifetime, type StartedOutbox } from "../app/browser/document-outbox-device";
 import { PROFILES_MIGRATION_ENABLED, startProfilesMigration, watchProfilesMigration } from "../app/browser/profiles-migration-device";
 import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-state";
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
@@ -151,6 +151,7 @@ export function startStudio(host: StudioHost, options: { composition?: StudioSta
   // Selection is validated before any root-owned device or store can start.
   const composition = selectStartupComposition(location.search, options.composition);
   const life = createBrowserWorkspaceLifetime(window, options.signal), { abort } = life;
+  if (host.documents) bindWorkspaceHostLifetime(host.documents, host.lease, life.signal, error => console.error(error));
   return start(host, root, composition, { signal: life.signal, abort }, life.beforeRelease).then(lifetime => {
     if (new URLSearchParams(location.search).get("verify") === "1") Object.assign(window, { xfStudioLifetime: lifetime });
     return lifetime;
@@ -230,7 +231,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
       budget: host.storageBudget, reserved: () => documents.outbox.storedSize(), model: composition.documents,
       ...(lease ? { canWrite: () => lease.draining() } : {}) });
     early.activate();
-    beforeRelease(() => early.flush());
+    beforeRelease(() => documents.prepareRelease() && early.flush());
     signal.addEventListener("abort", () => early.retire(), { once: true });
     await startProfilesMigration({ endpoint: `${base}/profiles/migrate`, send: fetch, workspace: documents.workspace, fence: documents.fence,
       model: composition.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal, initial: layouts.initial,
@@ -384,7 +385,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   });
   beforeRelease(() => {
     profileAuthoring.contexts.settleEdits(); lookEditor.commit();
-    return session.release();
+    return documents.prepareRelease() && session.release();
   });
   // Flush every wanted look, including unseen pinned inspectors, through the single context owner.
   host.onFlushRequest?.(() => { if (!signal.aborted) { lookEditor.commit(); session.flush(); } });

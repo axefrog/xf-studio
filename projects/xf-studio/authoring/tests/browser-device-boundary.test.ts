@@ -27,6 +27,26 @@ test("browser file adapter accepts shell-provided pickers and resolves selection
   expect(collection.files).toBeUndefined();
 });
 
+test("browser picker abort resolves its wait and removes selection and cancellation listeners", async () => {
+  class ObservedPicker extends Picker {
+    readonly active = new Set<string>();
+    override addEventListener(type: string, listener: EventListenerOrEventListenerObject | null, options?: AddEventListenerOptions | boolean) {
+      this.active.add(type); super.addEventListener(type, listener, options);
+    }
+    override removeEventListener(type: string, listener: EventListenerOrEventListenerObject | null, options?: EventListenerOptions | boolean) {
+      this.active.delete(type); super.removeEventListener(type, listener, options);
+    }
+  }
+  const picker = new ObservedPicker(), life = new AbortController(); let clicks = 0;
+  picker.onClick = () => { clicks++; };
+  const device = createBrowserFileDevice({ document: {} as Document,
+    pickers: { recipe: picker, collection: picker, savedV: picker, characterPreset: picker } as unknown as Record<"recipe" | "collection" | "savedV" | "characterPreset", HTMLInputElement> });
+  const pending = device.pick("recipe", life.signal); expect(picker.active.size).toBe(2);
+  life.abort(); expect(await pending).toBeUndefined(); expect(picker.active.size).toBe(0);
+  picker.files = [new File(["late"], "late.json")]; picker.dispatchEvent(new Event("change"));
+  expect(await device.pick("recipe", life.signal)).toBeUndefined(); expect(clicks).toBe(1);
+});
+
 test("workspace browser adapter keeps verification storage isolated and captures only after activation", () => {
   const stored = new Map<string, string>();
   const storage = { getItem: (key: string) => stored.get(key) ?? null,
@@ -59,4 +79,3 @@ test("workspace browser adapter keeps verification storage isolated and captures
   expect(ready.preview.wire).toBe(true);
   expect(statuses).toContain("saved");
 });
-

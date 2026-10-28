@@ -280,6 +280,8 @@ export class DocumentOutbox {
   private failures = 0;
   private retryTimer: { cancel(): void } | null = null;
   private sizes = new Map<string, number>();
+  private readonly life = new AbortController();
+  private readonly timers = new Set<{ cancel(): void }>();
 
   constructor(private readonly transport: OutboxTransport, private readonly storage: OutboxStorage, private readonly options: OutboxOptions = {}) {
     storage.watch?.((key, state, error) => {
@@ -295,6 +297,12 @@ export class DocumentOutbox {
   private writable() { return !this.stopped && (this.options.writable?.() ?? true); }
   private sendable() { return !this.stopped && (this.options.sendable ?? this.options.writable)?.() !== false; }
   private immutable(kind: string) { return this.options.immutable?.(kind) ?? false; }
+  private schedule(ms: number, run: () => void) {
+    const timer = (this.options.schedule ?? defaultSchedule)(ms, () => { this.timers.delete(owned); if (!this.stopped) run(); });
+    const owned = { cancel: () => { timer.cancel(); this.timers.delete(owned); } };
+    this.timers.add(owned);
+    return owned;
+  }
 
   // -------------------------------------------------------------------------------------------------------------
   // Opening and storage
@@ -304,6 +312,7 @@ export class DocumentOutbox {
    * its own ID. Call once, when this page holds its workspace.
    */
   open(): void {
+    if (this.stopped) throw Error("This workspace was released, so its outbox cannot be opened again.");
     if (this.opened) return;
     this.opened = true;
     const parse = (texts: ReadonlyMap<string, string>, sizes?: Map<string, number>) => {
@@ -362,7 +371,7 @@ export class DocumentOutbox {
     // Restoring that takes long is said so (and offered a way on) once `RECOVERY_NOTICE_MS` has passed.
     this.openedAt = this.now();
     if (this.writable() && this.recoveringKeys().length) for (const ms of [RECOVERY_SHOW_MS, RECOVERY_NOTICE_MS])
-      (this.options.schedule ?? defaultSchedule)(ms, () => { if (!this.stopped && this.recoveringKeys().length) this.emit({ kind: "status" }); });
+      this.schedule(ms, () => { if (this.recoveringKeys().length) this.emit({ kind: "status" }); });
     this.pump();
   }
 
@@ -421,7 +430,7 @@ export class DocumentOutbox {
     if (known && (known.failed || !failed) && (!full || known.full)) return;
     this.unprotectedKeys.set(key, { since: known?.since ?? this.now(), failed: failed || !!known?.failed, full: full || !!known?.full });
     this.emit({ kind: "status" });
-    if (!failed) (this.options.schedule ?? defaultSchedule)(WARN_AFTER_MS, () => { if (this.unprotectedKeys.has(key) && !this.stopped) this.emit({ kind: "status" }); });
+    if (!failed) this.schedule(WARN_AFTER_MS, () => { if (this.unprotectedKeys.has(key)) this.emit({ kind: "status" }); });
   }
   /** Removed entries' markers: kept in every key written until every key that held a copy is stored without it. */
   private bury(entry: OutboxEntry) { this.graves.set(entry.id, new Set(this.keysOf(entry))); }
@@ -432,6 +441,7 @@ export class DocumentOutbox {
    * protected again once that copy lands (`status` follows).
    */
   protect(): boolean {
+    if (this.stopped) return false;
     let ok = true;
     for (const key of [...this.unprotectedKeys.keys()]) ok = this.persistKey(key) && ok;
     return ok;
@@ -447,6 +457,7 @@ export class DocumentOutbox {
    * the document has; later, a clean document takes a newer revision.
    */
   hold(ref: DocumentRef, stored: CurrentDocument): void {
+    if (this.stopped) return;
     const held = this.local(ref), pending = this.entriesFor(documentKey(ref)).length > 0;
     const revision = stored?.revision ?? 0;
     if (!held.known) {
@@ -560,7 +571,7 @@ export class DocumentOutbox {
      * within `STORE_SOON_MS` with the edits that follow (a continuous edit); default `now`. A single-document edit only.
      */
     store?: "now" | "soon" } = {}): OutboxEntry {
-    if (!this.writable() || !this.opened) throw Error("This workspace is open elsewhere, so this change can't be made here.");
+    this.requireWritable();
     if (!edits.length) throw Error("A command changes at least one document.");
     if (edits.length > COMMAND_LIMITS.writes || (options.requires?.length ?? 0) > COMMAND_LIMITS.writes) throw new OutboxTooLargeError();
     if (edits.some(edit => this.recovering(edit))) throw new OutboxRecoveringError();
@@ -598,7 +609,7 @@ export class DocumentOutbox {
    * writing it). Equal content has an equal ID, so another page's write of it is acknowledged, never a conflict.
    */
   put(ref: DocumentRef, value: unknown): OutboxEntry | null {
-    if (!this.writable() || !this.opened) throw Error("This workspace is open elsewhere, so this change can't be made here.");
+    this.requireWritable();
     if (!this.immutable(ref.kind)) throw Error("Only an immutable document is put.");
     const key = documentKey(ref);
     if (this.visible(key) !== undefined || this.entriesFor(key).length) return null;
@@ -618,7 +629,7 @@ export class DocumentOutbox {
   private defer(key: string) {
     this.deferred.add(key);
     this.unprotect(key, false);
-    this.storeTimer ??= (this.options.schedule ?? defaultSchedule)(STORE_SOON_MS, () => { this.storeTimer = null; this.store(); });
+    this.storeTimer ??= this.schedule(STORE_SOON_MS, () => { this.storeTimer = null; this.store(); });
   }
   /**
    * The next entry's place in order: above every entry this page has seen, and never below the clock, so a launch that recovered fewer
@@ -653,6 +664,7 @@ export class DocumentOutbox {
    * Try again: sends what waits now (restored changes, changes waiting for the library), and looks again for missing sources.
    */
   retry(): void {
+    if (this.stopped) return;
     this.retryTimer?.cancel(); this.retryTimer = null;
     // A hung attempt is abandoned and its command sent again (under its own ID: a late answer to the old attempt is ignored).
     for (const attempt of this.attempts.values()) attempt.abort(RETRIED);
@@ -711,8 +723,8 @@ export class DocumentOutbox {
         const lookup = new AbortController();
         this.looking.set(key, lookup);
         const ref = refOfKey(key);
-        const current = () => this.looking.get(key) === lookup && !lookup.signal.aborted;
-        const deadline = (this.options.schedule ?? defaultSchedule)(this.options.attemptMs ?? ATTEMPT_MS, () => {
+        const current = () => !this.stopped && this.looking.get(key) === lookup && !lookup.signal.aborted;
+        const deadline = this.schedule(this.options.attemptMs ?? ATTEMPT_MS, () => {
           if (!current()) return;
           lookup.abort(EXPIRED); this.looking.delete(key); this.later();
         });
@@ -789,7 +801,7 @@ export class DocumentOutbox {
       void this.send(entry);
     }
   }
-  private later() { this.retryTimer ??= (this.options.schedule ?? defaultSchedule)(this.options.retryMs ?? 1000, () => { this.retryTimer = null; this.pump(); }); }
+  private later() { if (!this.stopped) this.retryTimer ??= this.schedule(this.options.retryMs ?? 1000, () => { this.retryTimer = null; this.pump(); }); }
 
   private async send(entry: OutboxEntry): Promise<void> {
     this.frozenIds.add(entry.id); // A1: from here its ID, bases and values are fixed.
@@ -799,7 +811,7 @@ export class DocumentOutbox {
     // later is ignored; the command is sent again under its ID, so the host's receipt decides (A4). The recovery gate stays throughout.
     const attempt = new AbortController();
     this.attempts.set(entry.id, attempt);
-    const deadline = (this.options.schedule ?? defaultSchedule)(this.options.attemptMs ?? ATTEMPT_MS, () => attempt.abort(EXPIRED));
+    const deadline = this.schedule(this.options.attemptMs ?? ATTEMPT_MS, () => attempt.abort(EXPIRED));
     const abandoned = new Promise<never>((_resolve, reject) => attempt.signal.addEventListener("abort", () => reject(Error("The library took too long to answer.")), { once: true }));
     let answer: TransactAnswer;
     try {
@@ -812,6 +824,7 @@ export class DocumentOutbox {
       if (this.attempts.get(entry.id) === attempt) this.attempts.delete(entry.id);
       this.inFlight.delete(entry.id);
       this.forget.push(...forget);
+      if (this.stopped) return;
       this.failures++;
       if (!this.failing) { this.failing = true; this.emit({ kind: "status" }); } else this.wake();
       this.options.report?.(error);
@@ -822,6 +835,7 @@ export class DocumentOutbox {
     deadline.cancel();
     if (this.attempts.get(entry.id) === attempt) this.attempts.delete(entry.id);
     this.inFlight.delete(entry.id);
+    if (this.stopped) return;
     const recovered = this.failing;
     if (this.failing) { this.failing = false; this.emit({ kind: "status" }); }
     if (!this.entries.includes(entry) || this.stopped) { this.forget.push(...forget); return; }
@@ -1039,14 +1053,18 @@ export class DocumentOutbox {
    */
   async check(signal?: AbortSignal): Promise<readonly DocumentRef[]> {
     if (!this.opened || !this.sendable()) return [];
+    const lifetime = signal ? AbortSignal.any([signal, this.life.signal]) : this.life.signal;
     // Owners whose documents another page can add to (a default saved there) look for new ones first, and hold what they find.
-    await Promise.all([...this.membership].map(refresh => refresh(signal).catch(error => this.options.report?.(error))));
+    await Promise.all([...this.membership].map(refresh => refresh(lifetime).catch(error => { if (!lifetime.aborted) this.options.report?.(error); })));
+    if (lifetime.aborted || !this.sendable()) return [];
     const clean = [...this.held.values()].filter(held => held.known && !this.entriesFor(documentKey(held.ref)).length);
     if (!clean.length) return [];
-    const revisions = await this.transport.revisions(clean.map(held => held.ref), signal);
+    const revisions = await this.transport.revisions(clean.map(held => held.ref), lifetime);
+    if (lifetime.aborted || !this.sendable()) return [];
     const newer = clean.filter(held => (revisions[documentKey(held.ref)] ?? 0) > held.revision);
     if (!newer.length) return [];
-    const stored = await this.transport.read(newer.map(held => held.ref), signal);
+    const stored = await this.transport.read(newer.map(held => held.ref), lifetime);
+    if (lifetime.aborted || !this.sendable()) return [];
     const applied: DocumentRef[] = [];
     for (const held of newer) {
       const now = stored[documentKey(held.ref)];
@@ -1091,16 +1109,31 @@ export class DocumentOutbox {
    * Stops for good: what waits to be stored soon is stored first, then nothing is written or sent again (the page released or lost its
    * workspace, or the library said a newer holder superseded it). Stored entries stay for the next holder.
    */
-  stop(): void {
-    if (this.stopped) return;
+  stop(): boolean {
+    if (this.stopped) return true;
     // Persist first, then stop: what waits to be stored soon (`store: "soon"`) is written now, so the next holder recovers it (on every
     // path that stops: a release, a lease lost, a command superseded). Nothing more is sent.
     this.storeTimer?.cancel(); this.storeTimer = null;
     if (this.deferred.size) this.persist([...this.deferred]);
+    for (const [key, protection] of [...this.unprotectedKeys]) if (protection.failed) this.persistKey(key);
+    // A failed synchronous backup still belongs to this owner. Keep it and the lease available for retry/recovery.
+    if ([...this.unprotectedKeys.values()].some(protection => protection.failed)) return false;
     this.stopped = true;
+    this.life.abort();
+    for (const attempt of this.attempts.values()) attempt.abort();
+    for (const lookup of this.looking.values()) lookup.abort();
+    this.attempts.clear(); this.looking.clear(); this.inFlight.clear();
+    for (const timer of this.timers) timer.cancel();
+    this.timers.clear();
     this.retryTimer?.cancel(); this.retryTimer = null;
     for (const id of [...this.waits.keys()]) this.finish(id, "stopped");
     this.emit({ kind: "status" });
+    this.listeners.clear(); this.membership.clear();
+    return true;
+  }
+  private requireWritable() {
+    if (this.stopped) throw Error("This workspace was released, so this change can't be saved here.");
+    if (!this.writable() || !this.opened) throw Error("This workspace is open elsewhere, so this change can't be made here.");
   }
 }
 

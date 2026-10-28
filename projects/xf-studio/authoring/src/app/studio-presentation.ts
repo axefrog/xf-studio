@@ -184,6 +184,10 @@ export type InstallDetectionSnapshot = ReturnType<InstallDetectionActions["snaps
 
 /** The complete current UI entry point. Construct it only in the trusted composition root. */
 export type StudioPresentationPort<Slot> = {
+  /** This facade's lifetime, including detached captures; consumers refuse late publication after abort. */
+  readonly signal?: AbortSignal;
+  /** Accepted work/feedback outlives this facade's dismissal, up to application retirement. */
+  readonly applicationSignal?: AbortSignal;
   readonly product: ProductDefaults;
   /** Data/facade acquisition only. Controller composition consumes it in P3-iii. */
   readonly capture?: (signal: AbortSignal) => StudioPresentationPort<Slot>;
@@ -400,6 +404,7 @@ type StatusSource = { snapshot(): PresentationStatus; subscribe(listener: () => 
 export function createStudioPresentation<Slot>(sources: {
   authoring: StudioApplication;
   signal?: AbortSignal;
+  applicationSignal?: AbortSignal;
   library: CollectionViewPort;
   files: StudioFileOperations;
   viewport: ViewportAttachment<Slot>;
@@ -730,7 +735,7 @@ export function createStudioPresentation<Slot>(sources: {
     ...(sources.tabs ? { tabs: sources.tabs } : {}), ...(sources.starters ? { starters: sources.starters } : {}),
     ...(sources.emptyChoices ? { emptyChoices: Object.freeze({ ...sources.emptyChoices,
       capability: (request: EmptyChoiceRequest) => a.emptyChoiceCapability(request), execute: (request: EmptyChoiceRequest) => a.executeEmptyChoice(request) }) } : {}),
-    capture: sources.capturePort,
+    capture: sources.capturePort, signal: sources.signal, applicationSignal: sources.applicationSignal ?? sources.signal,
     panels: Object.freeze({ ...sources.panelTargets, instance: (panel: string, tab?: string) => sources.panelInstance?.(panel, tab) ?? `${panel}--local`,
       historyScope: (panel: string | undefined) => resolver?.undoScope(panel === undefined ? undefined : sources.panelInstance?.(panel)) }),
     focus: Object.freeze({

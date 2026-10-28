@@ -214,6 +214,7 @@ flowchart TB
 
 **Built in phase 1c-i.** The outbox, as built and tested:
 
+- **Application retirement.** Workspace release can refuse and preserve recovery. Once it permits retirement, pending outbox edits are stored before stop; failed synchronous protection refuses stop, and a failed desktop durable handoff retains the lease. In-flight commands keep their original IDs for retry/receipt replay. Late commands refuse explicitly without storage/network writes. Detached panel captures and accepted work are bounded by the application lifetime; menu dismissal still transfers accepted work and its normal feedback. [CORE-03 13c2 evidence](core-03-s13c2-report.md).
 - **Visible state.** It is computed: the acknowledged baseline with the remaining entries applied. Waiters move with their values. Each entry has a stamp, and repair keeps the newest copy and rewrites anything it changed.
 - **Multi-document entries.** An entry is kept under every document's key. A receipt is forgotten only once every key that holds the entry has been stored without it. An acknowledgement supersedes earlier stored copies of its documents.
 - **Removal markers.** They persist until every stale copy is gone. On desktop, they persist until the host's own copy (`OutboxStorage.durable()`) confirms it. A record that holds only markers is never treated as empty.

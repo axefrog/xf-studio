@@ -27,6 +27,7 @@ export type PanelEditingPort<Slot> = {
 /** Instance-bound input routing. Resolution happens here; document/collection/character owners never read focus. */
 export class PanelEditingContexts<Slot> {
   constructor(private readonly deps: {
+    signal?: AbortSignal;
     session: ProfileSessions; targets: TargetResolver; looks: ProfileLookEditContexts; empty: Core;
     context(type: string): PanelContext;
     available?(type: string): boolean;
@@ -35,8 +36,9 @@ export class PanelEditingContexts<Slot> {
       fileOwner?: StudioFileOperations; captured: boolean; capture(): InputCapture | FileWriterCapture; capturePort(signal: AbortSignal, fileOwner?: StudioFileOperations): StudioPresentationPort<Slot>; signal: AbortSignal }): { port: StudioPresentationPort<Slot>; writer: FileWriter; files: StudioFileOperations; dispose(): void };
   }) {}
   acquire(instance: string, signal: AbortSignal): PanelEditingPort<Slot> | undefined {
+    if (this.deps.signal) signal = AbortSignal.any([signal, this.deps.signal]);
     const initial = this.deps.session.panel(instance);
-    if (signal.aborted || !initial || this.deps.available?.(initial.type) === false) return undefined;
+    if (signal.aborted || this.deps.signal?.aborted || !initial || this.deps.available?.(initial.type) === false) return undefined;
     const listeners = new Set<() => void>();
     let live: { key: string; port: StudioPresentationPort<Slot>; dispose(): void } | undefined;
     let fileOwner: StudioFileOperations | undefined;
@@ -108,7 +110,7 @@ export class PanelEditingContexts<Slot> {
     const named: NamedTargets = frozenData({ ...target, scope: context.kind === "subject" && target.character ? characterScope(target.character)
       : target.look ? lookScope(target.look) : undefined });
     const check = (): Capability => {
-      if (signal.aborted || life.signal.aborted) return refusal("missing_target", "This editing context was released.");
+      if (signal.aborted || life.signal.aborted || this.deps.signal?.aborted) return refusal("missing_target", "This editing context was released.");
       if (extraCheck) { const allowed = extraCheck(); if (!allowed.available) return allowed; }
       if (instance && this.deps.available && !this.deps.available(session.panel(instance)?.type ?? "")) return refusal("missing_target", "This panel was withdrawn.");
       if (destination) try { session.checkPanelTarget(destination); }
@@ -134,6 +136,7 @@ export class PanelEditingContexts<Slot> {
     const destroy = () => {
       if (finished) return;
       finished = true; signal.removeEventListener("abort", retire);
+      this.deps.signal?.removeEventListener("abort", destroy);
       made?.dispose(); app.dispose(); life.abort();
     };
     const retire = () => { retired = true; if (!captures) destroy(); };
@@ -142,7 +145,7 @@ export class PanelEditingContexts<Slot> {
       if (!accepted.available) return { check: () => accepted, release() {} };
       if (extraCheck) {
         // Acceptance transfers out of the shell surface's signal before that menu or palette closes.
-        const request = new AbortController(), held = this.captureInput(named, request.signal, instance);
+        const request = new AbortController(), held = this.captureInput(named, this.deps.signal ? AbortSignal.any([request.signal, this.deps.signal]) : request.signal, instance);
         const current = () => accepted.available ? held() : accepted;
         const operation = this.bind(named, context, request.signal, instance, destination, current);
         return { writer: operation.writer, check: () => {
@@ -152,7 +155,7 @@ export class PanelEditingContexts<Slot> {
         }, release: () => request.abort() };
       }
       captures++;
-      const request = new AbortController(), held = this.captureInput(named, request.signal, instance);
+      const request = new AbortController(), held = this.captureInput(named, this.deps.signal ? AbortSignal.any([request.signal, this.deps.signal]) : request.signal, instance);
       let released = false;
       return { check: () => {
         if (!accepted.available) return accepted;
@@ -172,7 +175,8 @@ export class PanelEditingContexts<Slot> {
       } }); }
     catch (error) { app.dispose(); life.abort(); throw error; }
     signal.addEventListener("abort", retire, { once: true });
-    if (signal.aborted) retire();
+    this.deps.signal?.addEventListener("abort", destroy, { once: true });
+    if (this.deps.signal?.aborted) destroy(); else if (signal.aborted) retire();
     return { port: made.port, writer: made.writer, files: made.files, capture, retire };
   }
 

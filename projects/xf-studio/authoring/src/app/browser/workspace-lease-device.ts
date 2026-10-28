@@ -42,7 +42,8 @@ export async function browserWorkspaceIdentity(storage: Pick<Storage, "getItem" 
   });
 }
 
-type Channel = { postMessage(message: unknown): void; addEventListener(type: "message", listener: (event: MessageEvent) => void): void };
+type Channel = { postMessage(message: unknown): void; addEventListener(type: "message", listener: (event: MessageEvent) => void): void;
+  removeEventListener(type: "message", listener: (event: MessageEvent) => void): void; close(): void };
 type LeaseMessage = { type: "release" | "released"; workspace: string; from: string };
 
 /** Localhost: Web Locks plus a `BroadcastChannel` handshake. */
@@ -60,15 +61,21 @@ export function browserWorkspaceLease(options: {
   /** Waits between attempts to get a generation (default: 250 ms, then 500, 1000, 2000). */
   retryDelays?: readonly number[];
   sleep?: (ms: number) => Promise<void>;
-}): WorkspaceLeaseAdapter {
+}): WorkspaceLeaseAdapter & { stop(): Promise<void> } {
   const name = `xfs.workspace.${options.workspace}`, me = options.window ?? crypto.randomUUID();
-  const sleep = options.sleep ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)));
+  const life = new AbortController(), requests = new Set<Promise<unknown>>();
+  const sleep = options.sleep ?? (ms => new Promise<void>(resolve => {
+    const done = () => { clearTimeout(timer); life.signal.removeEventListener("abort", done); resolve(); };
+    const timer = setTimeout(done, ms); life.signal.addEventListener("abort", done, { once: true });
+  }));
   let hold: (() => void) | null = null;
   let asked: () => void = () => {};
-  options.channel.addEventListener("message", event => {
+  const messageReceived = (event: MessageEvent) => {
     const message = event.data as LeaseMessage | undefined;
     if (message?.type === "release" && message.workspace === options.workspace && message.from !== me && hold) asked();
-  });
+  };
+  options.channel.addEventListener("message", messageReceived);
+  const track = (request: Promise<unknown>) => { requests.add(request); void request.finally(() => requests.delete(request)).catch(() => {}); };
   /** Holds the lock until `release`: the callback's promise is the lock's lifetime. */
   const held = () => new Promise<void>(resolve => { hold = resolve; });
   /**
@@ -76,47 +83,56 @@ export function browserWorkspaceLease(options: {
    * is let go and the caller is refused (fail closed).
    */
   const generation = async (signal: AbortSignal): Promise<number> => {
-    for (const wait of [0, ...(options.retryDelays ?? [250, 500, 1000, 2000])]) {
-      if (wait) await sleep(wait);
-      signal.throwIfAborted();
-      try { const issued = await options.register(signal); if (Number.isSafeInteger(issued)) return issued!; } catch { /* Tried again below. */ }
-    }
-    throw Error("XF Studio's server didn't issue a workspace lease.");
+    let abort!: () => void;
+    const cancelled = new Promise<never>((_resolve, reject) => { abort = () => reject(signal.reason); signal.addEventListener("abort", abort, { once: true }); });
+    try {
+      for (const wait of [0, ...(options.retryDelays ?? [250, 500, 1000, 2000])]) {
+        if (wait) await Promise.race([sleep(wait), cancelled]);
+        signal.throwIfAborted();
+        try { const issued = await Promise.race([options.register(signal), cancelled]); signal.throwIfAborted(); if (Number.isSafeInteger(issued)) return issued!; } catch { /* Tried again below. */ }
+      }
+      throw Error("XF Studio's server didn't issue a workspace lease.");
+    } finally { signal.removeEventListener("abort", abort); }
   };
   /** The lock callback: on a generation, hold the lock and answer; otherwise let the lock go at once and refuse. */
   const holdWith = (signal: AbortSignal, resolve: (value: { generation: number }) => void, reject: (error: unknown) => void, restarting = false) =>
     async (lock: Lock | null) => {
       if (!lock) return;
       let issued: number;
-      try { issued = await generation(signal); } catch (error) { reject(error); return; }
+      try { issued = await generation(signal); signal.throwIfAborted(); } catch (error) { reject(error); return; }
       if (restarting) options.session?.setItem(RESUME_KEY, options.workspace);
       resolve({ generation: issued });
       return held();
     };
   return {
     acquire(signal) {
+      signal = AbortSignal.any([signal, life.signal]);
+      if (signal.aborted) return Promise.reject(signal.reason);
       const resumed = options.session?.getItem(RESUME_KEY) === options.workspace;
       if (resumed) options.session?.removeItem(RESUME_KEY);
       return new Promise((resolve, reject) => {
         const granted = holdWith(signal, resolve, reject);
-        const request = resumed ? { signal: AbortSignal.timeout(options.resumeWaitMs ?? RESUME_WAIT_MS) } : { ifAvailable: true };
-        options.locks.request(name, request, async lock => { if (!lock) { resolve(null); return; } return granted(lock); }).catch(error => {
+        const request = resumed ? { signal: AbortSignal.any([signal, AbortSignal.timeout(options.resumeWaitMs ?? RESUME_WAIT_MS)]) } : { ifAvailable: true };
+        track(options.locks.request(name, request, async lock => { if (!lock) { resolve(null); return; } return granted(lock); }).catch(error => {
           // A restarted page whose old lock didn't go in time opens read-only rather than failing.
           if (resumed) resolve(null); else reject(error);
-        });
+        }));
       });
     },
     takeOver(signal) {
+      signal = AbortSignal.any([signal, life.signal]);
+      if (signal.aborted) return Promise.reject(signal.reason);
       const ask = () => options.channel.postMessage({ type: "release", workspace: options.workspace, from: me } satisfies LeaseMessage);
       ask();
       const repeat = setInterval(ask, options.repeatMs ?? REPEAT_MS);
       // Withdrawn (a failed or abandoned takeover): no more asking; the queued lock request is aborted with the same signal.
-      signal.addEventListener("abort", () => clearInterval(repeat), { once: true });
+      const stopRepeating = () => clearInterval(repeat);
+      signal.addEventListener("abort", stopRepeating, { once: true });
       return new Promise((resolve, reject) => {
-        options.locks.request(name, { signal }, async lock => {
-          clearInterval(repeat);
+        track(options.locks.request(name, { signal }, async lock => {
+          clearInterval(repeat); signal.removeEventListener("abort", stopRepeating);
           return holdWith(signal, resolve, reject, true)(lock);
-        }).catch(error => { clearInterval(repeat); reject(error); });
+        }).catch(error => { clearInterval(repeat); signal.removeEventListener("abort", stopRepeating); reject(error); }));
       });
     },
     onReleaseRequested(listener) { asked = listener; },
@@ -124,7 +140,15 @@ export function browserWorkspaceLease(options: {
       const release = hold;
       hold = null;
       release?.();
-      options.channel.postMessage({ type: "released", workspace: options.workspace, from: me } satisfies LeaseMessage);
+      if (!life.signal.aborted) options.channel.postMessage({ type: "released", workspace: options.workspace, from: me } satisfies LeaseMessage);
+    },
+    async stop() {
+      if (!life.signal.aborted) {
+        life.abort(); asked = () => {};
+        hold?.(); hold = null;
+        options.channel.removeEventListener("message", messageReceived); options.channel.close();
+      }
+      await Promise.allSettled([...requests]);
     },
   };
 }
@@ -141,20 +165,24 @@ export function desktopWorkspaceLease(options: {
   page?: string;
   /** Waits for workspace writes still on their way to the host; rejects when the last one didn't land, so nothing is released. */
   settle?: () => Promise<void>;
-}): WorkspaceLeaseAdapter & { generation(): number | null } {
+}): WorkspaceLeaseAdapter & { generation(): number | null; stop(): Promise<void> } {
   const page = options.page ?? crypto.randomUUID();
+  const life = new AbortController();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  let offAcquire: (() => void) | undefined;
   const separator = options.endpoint.includes("?") ? "&" : "?";
   let current: number | null = null, asked: () => void = () => {}, lost: () => void = () => {};
   let first: { resolve(held: boolean): void; reject(error: unknown): void } | null = null;
   let grant: { id: string; resolve(generation: number): void; reject(error: unknown): void } | null = null;
   let ended = false, operation: string | null = null;
-  const send = (body: Record<string, unknown>) => options.send(options.endpoint, { method: "POST", credentials: "same-origin",
+  const send = (body: Record<string, unknown>) => ended ? Promise.reject(Error("The workspace lease was released.")) : options.send(options.endpoint, { method: "POST", credentials: "same-origin", signal: life.signal,
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ schema: "xfs/desktop-lease-1", page, ...body }) });
   const post = async (body: Record<string, unknown>) => {
     const response = await send(body);
     if (!response.ok) throw Error("The workspace lease request was refused.");
   };
   const handle = (event: DesktopLeaseEvent) => {
+    if (ended) return;
     if (event.event === "granted") {
       current = event.generation;
       if (first) { first.resolve(true); first = null; }
@@ -172,11 +200,11 @@ export function desktopWorkspaceLease(options: {
     lost();
   };
   const listen = async (body: ReadableStream<Uint8Array>) => {
-    const reader = body.getReader(), decoder = new TextDecoder();
+    const stream = reader = body.getReader(), decoder = new TextDecoder();
     let buffered = "";
     try {
       for (;;) {
-        const { done, value } = await reader.read();
+        const { done, value } = await stream.read();
         if (done) break;
         buffered += decoder.decode(value, { stream: true });
         let line: number;
@@ -185,16 +213,28 @@ export function desktopWorkspaceLease(options: {
           try { if (text) handle(JSON.parse(text) as DesktopLeaseEvent); } catch { /* A malformed line is skipped. */ }
         }
       }
-    } finally { end(); }
+    } finally { stream.releaseLock(); reader = undefined; end(); }
+  };
+  const stop = async () => {
+    offAcquire?.(); offAcquire = undefined;
+    life.abort(); end();
+    asked = () => {}; lost = () => {};
+    await reader?.cancel().catch(() => {});
   };
   return {
     generation: () => current,
-    async acquire() {
-      // The stream lives as long as the page: it is never aborted, so its end is the page's end.
-      const response = await options.send(`${options.endpoint}${separator}page=${encodeURIComponent(page)}`, { cache: "no-store", credentials: "same-origin" });
-      if (!response.ok || !response.body) throw Error("The workspace lease is unavailable.");
+    async acquire(signal) {
+      if (signal.aborted || ended) throw Error("The workspace lease was released.");
+      const abort = () => { void stop(); };
+      signal.addEventListener("abort", abort, { once: true });
+      offAcquire = () => signal.removeEventListener("abort", abort);
       const held = new Promise<boolean>((resolve, reject) => { first = { resolve, reject }; });
-      void listen(response.body).catch(() => {});
+      void options.send(`${options.endpoint}${separator}page=${encodeURIComponent(page)}`, { cache: "no-store", credentials: "same-origin", signal: life.signal })
+        .then(response => {
+          if (ended) { void response.body?.cancel().catch(() => {}); return; }
+          if (!response.ok || !response.body) throw Error("The workspace lease is unavailable.");
+          return listen(response.body);
+        }).catch(end);
       return await held ? { generation: current! } : null;
     },
     takeOver(signal) {
@@ -202,7 +242,8 @@ export function desktopWorkspaceLease(options: {
       return new Promise((resolve, reject) => {
         let granted = false;
         const id = crypto.randomUUID();
-        const request = { id, resolve: (generation: number) => { granted = true; signal.removeEventListener("abort", abort); resolve({ generation }); }, reject };
+        const request = { id, resolve: (generation: number) => { granted = true; signal.removeEventListener("abort", abort); resolve({ generation }); },
+          reject: (error: unknown) => { signal.removeEventListener("abort", abort); reject(error); } };
         grant = request;
         // A failed POST can have granted already. Withdrawal belongs to this operation: its promise must not settle until
         // the host has forgotten that request, otherwise a retry can be acknowledged against the old grant and never get its own.
@@ -242,6 +283,7 @@ export function desktopWorkspaceLease(options: {
       if (!held) current = null;
       return held ? "held" : "released";
     },
+    stop,
   };
 }
 
@@ -254,10 +296,8 @@ export function desktopWorkspaceLease(options: {
 export async function startBrowserWorkspaceLease(options: { verification: boolean; send?: typeof fetch;
   report?: (error: unknown) => void }): Promise<{ lease: WorkspaceLease; workspace: string }> {
   let workspace = options.verification ? "browser-verification" : "browser";
-  const life = new AbortController();
-  addEventListener("pagehide", () => life.abort(), { once: true });
   const start = async (adapter: WorkspaceLeaseAdapter) => {
-    const lease = new WorkspaceLease(adapter, { clock: browserLeaseClock, signal: life.signal, report: options.report });
+    const lease = new WorkspaceLease(adapter, { clock: browserLeaseClock, report: options.report });
     await lease.start();
     return { lease, workspace };
   };

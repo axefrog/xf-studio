@@ -93,12 +93,12 @@ export type CollectionOutcome = { ok: true; result: CollectionResult; requestId?
   { ok: false; code: string; message: string; requestId?: number };
 /** The released library (named versions) and the package routes; versions are saved through the collection owner. */
 export type CollectionTransport = {
-  list(): Promise<CollectionSummary[]>;
-  get(id: string): Promise<StoredCollection>;
+  list(signal?: AbortSignal): Promise<CollectionSummary[]>;
+  get(id: string, signal?: AbortSignal): Promise<StoredCollection>;
   /** Sends the collection's stored form (with its package plan); the host plans every product and answers them all. */
   package(action: PackageAction, collection: unknown, signal?: AbortSignal): Promise<PackageCheckResult | PackageBuildResult>;
   /** The running Build's stage (PIPE-131); null when none runs or the host can't say. Optional. */
-  packageProgress?(): Promise<PackageBuildProgress | null>;
+  packageProgress?(signal?: AbortSignal): Promise<PackageBuildProgress | null>;
 };
 
 /** How often a running Build's stage is asked for. */
@@ -173,6 +173,7 @@ export class CollectionService {
   private readonly clock: Clock;
   private readonly unsubscribe: () => void;
   private disposed = false;
+  private readonly life = new AbortController();
   private resultReaders = 0;
 
   constructor(private readonly deps: CollectionServiceDeps) {
@@ -194,7 +195,7 @@ export class CollectionService {
     this.unsubscribe = () => { offOwner(); offScene(); };
   }
   dispose() {
-    this.disposed = true; this.buildAbort?.abort();
+    this.disposed = true; this.life.abort(); this.buildAbort?.abort();
     if (!this.resultReaders) { this.unsubscribe(); this.listeners.clear(); }
   }
   /** A completed package keeps only this bound read service alive, never its editable-context want. */
@@ -207,6 +208,7 @@ export class CollectionService {
     };
   }
   private newId() { return (this.deps.newId ?? (() => crypto.randomUUID()))(); }
+  private checkReleased() { if (this.disposed) throw new CollectionServiceError("missing_target", "This collection destination was released."); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private notify() { for (const listener of [...this.listeners]) listener(); }
 
@@ -620,10 +622,12 @@ export class CollectionService {
     this.baselineReads.add(key!); this.notify();
     let read = false;
     try {
-      const stored = await this.deps.transport.get(view.id);
+      const stored = await this.deps.transport.get(view.id, this.life.signal);
+      this.checkReleased();
       if (stored.revision === revision && stored.collection.id === view.id) { this.remember(stored.collection, stored.revision); read = true; }
     } catch { /* The comparison is unavailable until the next refresh reads it; the collection itself is unaffected. */ }
     finally {
+      if (this.disposed) return;
       this.baselineReads.delete(key!);
       if (read) this.baselineFailed.delete(key!); else this.unread(key!);
       this.persistenceCache = undefined; this.notify();
@@ -631,36 +635,43 @@ export class CollectionService {
   }
   /** A saved version couldn't be read back to compare with (`collection@revision`): unavailable until a refresh reads it. */
   private unread(key: string) { if (!this.baselineFailed.has(key)) { this.baselineFailed.add(key); this.persistenceCache = undefined; this.notify(); } }
-  private setProgress(progress: CollectionProgress) { this.progress = progress; this.notify(); }
+  private setProgress(progress: CollectionProgress) { if (!this.disposed) { this.progress = progress; this.notify(); } }
   /** While Build `requestId` runs, ask the host which stage it has reached and show it in place of the starting line (PIPE-131). */
   private followBuild(requestId: number): () => void {
     const ask = this.deps.transport.packageProgress?.bind(this.deps.transport);
     if (!ask) return () => {};
     const stop = new AbortController();
+    const signal = AbortSignal.any([stop.signal, this.life.signal]);
     const poll = async () => {
+      if (signal.aborted) return;
       try {
-        const stage = await ask();
-        if (!stop.signal.aborted && !this.buildAbort?.signal.aborted && stage && this.running?.requestId === requestId && this.progress?.requestId === requestId &&
+        const stage = await ask(signal);
+        if (!signal.aborted && !this.buildAbort?.signal.aborted && stage && this.running?.requestId === requestId && this.progress?.requestId === requestId &&
             this.progress.phase === "working") {
           const message = registeredCollectionExport(this.deps.model)!.stageLine(stage), fraction = (stage.step - .5) / stage.steps;
           if (message !== this.progress.message || fraction !== this.progress.fraction)
             this.setProgress({ phase: "working", code: "package", requestId, message, fraction });
         }
       } catch { /* The line stays as it was; the Build's own answer decides the outcome. */ }
-      this.clock.after(BUILD_PROGRESS_INTERVAL_MS, () => void poll(), stop.signal);
+      this.clock.after(BUILD_PROGRESS_INTERVAL_MS, () => void poll(), signal);
     };
     void poll();
     return () => stop.abort();
   }
   private async list() {
-    const seq = ++this.listSeq, summaries = await this.deps.transport.list();
+    this.checkReleased();
+    const seq = ++this.listSeq, summaries = await this.deps.transport.list(this.life.signal);
+    this.checkReleased();
     if (seq === this.listSeq) { this.summaries = summaries; this.notify(); }
     return this.summaries;
   }
   /** The collection and its live looks as the library holds them (one read, after this window's changes reached it). */
   private async snapshot(id: string): Promise<LookCollection> {
+    this.checkReleased();
     this.deps.flushLook?.();
-    return this.portable(id, await this.deps.owner.snapshot(id));
+    const snapshot = await this.deps.owner.snapshot(id, this.life.signal);
+    this.checkReleased();
+    return this.portable(id, snapshot);
   }
   /** A snapshot (the library's, or this window's copy) as the portable collection, or the owner's refusal as an error. */
   private portable(id: string, snapshot: CollectionSnapshot | Capability): LookCollection {
@@ -695,11 +706,14 @@ export class CollectionService {
   }
   /** Save version: the host writes a named version from its own snapshot; its content becomes the baseline. */
   private async saveVersion(id: string): Promise<StoredCollection> {
+    this.checkReleased();
     this.deps.flushLook?.();
     const saved = await this.deps.owner.saveVersion(id);
+    this.checkReleased();
     if (!saved.ok) throw new CollectionServiceError(saved.code ?? "unavailable", saved.reason);
     let stored: StoredCollection | undefined;
-    try { stored = await this.deps.transport.get(id); } catch { stored = undefined; }
+    try { stored = await this.deps.transport.get(id, this.life.signal); } catch { stored = undefined; }
+    this.checkReleased();
     if (stored && stored.revision === saved.version.revision) this.remember(stored.collection, stored.revision);
     // The version just saved couldn't be read back: no comparison until a refresh reads it (never a lasting Working…).
     else this.unread(`${id}@${saved.version.revision}`);
@@ -742,12 +756,12 @@ export class CollectionService {
     if (this.disposed) return { ok: false, code: "missing_target", message: "This collection destination was released." };
     const allowed = this.capability(request);
     if (!allowed.available) return { ok: false, code: this.deps.current && allowed.code === "missing_target" ? "missing_target" : "unavailable", message: allowed.reason! };
-    const check = () => { const current = this.deps.current?.(); if (current && !current.available) throw new CollectionServiceError(current.code ?? "missing_target", current.reason ?? "This collection destination changed."); };
+    const check = () => { this.checkReleased(); const current = this.deps.current?.(); if (current && !current.available) throw new CollectionServiceError(current.code ?? "missing_target", current.reason ?? "This collection destination changed."); };
     // Reading the saved list is quiet: it never marks the library busy or replaces the progress line (release-readiness-audit.md item 13).
     if (request.kind === "refresh") {
       const requestId = ++this.requestSeq, seq = ++this.listSeq;
       try {
-        const summaries = await this.deps.transport.list();
+        const summaries = await this.deps.transport.list(this.life.signal);
         check();
         if (seq === this.listSeq && JSON.stringify(summaries) !== JSON.stringify(this.summaries)) { this.summaries = summaries; this.notify(); }
         // A saved version that couldn't be read back to compare with is read again now.
@@ -766,6 +780,7 @@ export class CollectionService {
         ? "Checking which layers in the current collection can become Cyberpunk mod files…" : "Starting the build…"
         : "Working with the local collection library…" });
     try {
+      this.checkReleased();
       let result: CollectionResult, message: string;
       switch (request.kind) {
         case "initialize": {
@@ -780,7 +795,7 @@ export class CollectionService {
           const id = request.id, owner = this.deps.owner;
           let stored: StoredCollection;
           if (!owner.collection(id)) {
-            stored = await this.deps.transport.get(id);
+            stored = await this.deps.transport.get(id, this.life.signal);
             check();
             const collection = this.deps.model.parts.readCollection(stored.collection, true, "keep");
             this.remembered();
@@ -800,7 +815,10 @@ export class CollectionService {
         case "resolveConflict": {
           // What waits in the editor joins this window's version first: Keep mine keeps it, Use theirs lets it go with the rest.
           this.deps.flushLook?.();
-          const answer = await this.deps.owner.resolve(request.conflict, request.keep, this.deps.current);
+          const answer = await this.deps.owner.resolve(request.conflict, request.keep, () => this.disposed
+            ? { available: false, code: "missing_target", reason: "This collection destination was released." }
+            : this.deps.current?.() ?? { available: true });
+          check();
           if (!answer.available) throw new CollectionServiceError(answer.code ?? "unavailable", answer.reason ?? "That couldn't be resolved right now.");
           this.ensureShown();
           result = { kind: "resolved" };
@@ -859,7 +877,9 @@ export class CollectionService {
           const stopFollowing = request.action === "build" ? this.followBuild(requestId) : () => {};
           let response: PackageCheckResult | PackageBuildResult;
           try {
-            response = await this.deps.transport.package(request.action, this.deps.model.parts.writeMinimal(collection), this.buildAbort?.signal);
+            const signal = this.buildAbort ? AbortSignal.any([this.buildAbort.signal, this.life.signal]) : this.life.signal;
+            response = await this.deps.transport.package(request.action, this.deps.model.parts.writeMinimal(collection), signal);
+            this.checkReleased();
           } finally { stopFollowing(); }
           this.packageKey = key;
           if (request.action === "check") {
@@ -894,6 +914,7 @@ export class CollectionService {
           message = "Imported the collection as a new collection. The collection you had open stays in your library."; break;
         }
       }
+      this.checkReleased();
       this.setProgress({ phase: "success", code: result.kind, message, requestId });
       return { ok: true, result, requestId };
     } catch (error) {
@@ -901,7 +922,7 @@ export class CollectionService {
       const message = (error as Error).message;
       this.setProgress({ phase: "error", code, message, requestId });
       return { ok: false, code, message, requestId };
-    } finally { this.buildAbort = undefined; this.busy = false; this.running = undefined; this.notify(); }
+    } finally { this.buildAbort = undefined; this.busy = false; this.running = undefined; if (!this.disposed) this.notify(); }
   }
   /** A snapshot's looks with their own editor memory (Save as new collection keeps each look's Undo history). */
   private storedLooksWithMemory(collection: LookCollection): LookInput[] {

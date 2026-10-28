@@ -47,6 +47,58 @@ beforeAll(() => { installLightDom(); Object.assign(globalThis, { window: testWin
 afterAll(() => { uninstallLightDom(); Object.assign(globalThis, originalGlobals); });
 const toasts: string[] = [];
 const feedback = { toast(_tone: string, _source: string, message: string) { toasts.push(message); }, record() {}, announce() {} } as unknown as Feedback;
+
+test("accepted picker feedback survives menu dismissal exactly as the 3a2ecc71 runtime", async () => {
+  const gate = Promise.withResolvers<undefined>(), feedbackCalls: unknown[][] = [];
+  const s = await profileContextStudio({ pick: () => gate.promise });
+  const feedback = { toast: (...args: unknown[]) => feedbackCalls.push(args), record: (...args: unknown[]) => feedbackCalls.push(args) } as unknown as Feedback;
+  const bound = s.bind("presets--scene0"), held = captureRuntime(new StudioRuntime(bound.context.current(), feedback, STUDIO_CATALOGUE));
+  const pending = held.runtime.file({ kind: "recipe.import" }); held.release();
+  try {
+    expect(held.runtime.port.signal?.aborted).toBe(true); expect(held.runtime.port.applicationSignal?.aborted).toBe(false);
+    gate.resolve(undefined); expect(await pending).toMatchObject({ ok: false, code: "cancelled" });
+    expect(feedbackCalls).toEqual([["info", "Recipe", "Recipe selection cancelled."]]);
+  } finally { gate.resolve(undefined); await pending; await s.dispose(); }
+});
+
+test("root abort releases detached menu captures and retained bound writers without late feedback", async () => {
+  const life = new AbortController(), picker = Promise.withResolvers<StudioPickedFile | undefined>();
+  const s = await profileContextStudio({ signal: life.signal, pick: () => picker.promise });
+  const bound = s.bind("presets--scene0");
+  const origin = new StudioRuntime(bound.context.current(), feedback, STUDIO_CATALOGUE);
+  const menu = captureRuntime(origin), accepted = captureRuntime(origin);
+  const pending = accepted.runtime.file({ kind: "recipe.import" });
+  accepted.release(); bound.life.abort();
+  expect(menu.active()).toBe(true);
+  const before = s.outbox.document({ kind: "look-working", id: `${s.looks[0]!.collection}/${s.looks[0]!.look}` })?.value;
+  try {
+    life.abort(); expect(menu.active()).toBe(false); expect(menu.signal.aborted).toBe(true);
+    expect(menu.runtime.port.signal?.aborted).toBe(true);
+    const published = toasts.length;
+    picker.resolve(undefined);
+    expect(await pending).toMatchObject({ ok: false, code: "missing_target" });
+    expect(toasts.length).toBe(published);
+    expect(s.outbox.document({ kind: "look-working", id: `${s.looks[0]!.collection}/${s.looks[0]!.look}` })?.value).toEqual(before);
+    expect(menu.runtime.port.authoring.dispatch({ kind: "layer.edit", command: { kind: "add" } })).toMatchObject({ ok: false, code: "missing_target" });
+    expect(s.port.editing!.acquire("presets--scene0", new AbortController().signal)).toBeUndefined();
+  } finally { picker.resolve(undefined); menu.release(); await pending; await s.dispose(); }
+});
+
+test("root abort suppresses late library feedback through the actual captured runtime", async () => {
+  const life = new AbortController(), gate = Promise.withResolvers<void>();
+  const s = await profileContextStudio({ signal: life.signal });
+  const bound = s.bind("presets--scene0"), held = captureRuntime(new StudioRuntime(bound.context.current(), feedback, STUDIO_CATALOGUE));
+  const execute = held.runtime.port.library.execute;
+  // Keep an already accepted transport reply queued beyond root retirement.
+  const port = { ...held.runtime.port, library: { ...held.runtime.port.library, execute: async (...args: Parameters<typeof execute>) => {
+    await gate.promise; return execute(...args);
+  } } };
+  const runtime = new StudioRuntime(port, feedback, STUDIO_CATALOGUE), pending = runtime.request({ kind: "refresh" });
+  try {
+    life.abort(); const published = toasts.length; gate.resolve(); await pending;
+    expect(toasts.length).toBe(published); expect(held.active()).toBe(false);
+  } finally { gate.resolve(); held.release(); await pending; await s.dispose(); }
+});
 const node = (value: Element) => value as unknown as LightElement;
 function arrange(s: Awaited<ReturnType<typeof profileContextStudio>>, ids: string[]) {
   const tree = { root: ids.length ? { kind: "group" as const, id: "controllers", panels: ids, active: ids[0]! } : null, floating: [], closed: [] };

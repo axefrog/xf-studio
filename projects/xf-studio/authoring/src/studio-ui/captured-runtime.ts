@@ -13,13 +13,16 @@ export function captureRuntime(runtime: StudioRuntime) {
   const port = runtime.port.capture?.(life.signal) ?? runtime.port;
   const captured = new StudioRuntime(port, runtime.feedback, runtime.views, runtime.instance, runtime.anchors);
   captured.dock = runtime.dock; captured.settings = runtime.settings;
-  captured.subscribe(() => runtime.changed());
-  let active = !life.signal.aborted;
+  const off = captured.subscribe(() => runtime.changed());
+  let active = true;
   const release = () => { if (!active) return; active = false; life.abort();
+    off(); port.signal?.removeEventListener("abort", release);
     runtime.instance?.captureSignal?.removeEventListener("abort", release);
     if (typeof window !== "undefined") window.removeEventListener("pagehide", release); };
   if (typeof window !== "undefined") window.addEventListener("pagehide", release, { once: true });
   runtime.instance?.captureSignal?.addEventListener("abort", release, { once: true });
+  port.signal?.addEventListener("abort", release, { once: true });
+  if (life.signal.aborted || port.signal?.aborted) release();
   return { runtime: captured, signal: life.signal, active: () => active,
     release };
 }

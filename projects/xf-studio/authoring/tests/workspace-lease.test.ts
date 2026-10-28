@@ -403,7 +403,7 @@ test("localhost: a page holding the Web Lock but refused a generation lets the l
   const { browserWorkspaceLease } = await import("../src/app/browser/workspace-lease-device");
   let held = 0;
   const locks = { request: async (_name: string, _options: unknown, callback: (lock: unknown) => unknown) => { held++; try { return await callback({ name: "x" }); } finally { held--; } } };
-  const channel = { postMessage() {}, addEventListener() {} };
+  const channel = { postMessage() {}, addEventListener() {}, removeEventListener() {}, close() {} };
   const adapter = browserWorkspaceLease({ workspace: "browser-test", locks: locks as never, channel, register: async () => null, retryDelays: [1, 1], sleep: async () => {} });
   await expect(adapter.acquire(new AbortController().signal)).rejects.toThrow("didn't issue a workspace lease");
   await new Promise(resolve => setTimeout(resolve, 0));

@@ -36,6 +36,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   fileOwner?: StudioFileOperations;
   retireFiles?: boolean;
   signal?: AbortSignal;
+  /** Accepted work may outlive a panel/input, but never the application that owns it. */
+  applicationSignal?: AbortSignal;
   bound?: Pick<ConstructorParameters<typeof PanelEditingContexts<Slot>>[0], "session" | "targets" | "looks" | "empty" | "character" | "context" | "available">;
   preferences: UIPreferenceActions;
   viewport: ViewportAttachment<Slot>;
@@ -102,6 +104,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
   const { core } = options;
   if (options.emptyChoices) core.app.attach({ emptyChoices: options.emptyChoices });
   const life = new AbortController();
+  const applicationSignal = options.applicationSignal ?? life.signal;
   const abort = () => life.abort();
   options.signal?.addEventListener("abort", abort, { once: true });
   if (options.signal?.aborted) life.abort();
@@ -152,13 +155,13 @@ export function createTrustedStudioBootstrap<Slot>(options: {
       if (editing) return editing.captureView(options.naming?.().view, life.signal);
       const held = options.fileCapture?.();
       return held && { ...held, writer: "writer" in held ? held.writer : writer };
-    } : undefined }, options.fileOwner);
+    } : undefined }, options.fileOwner, applicationSignal);
     collection = new CollectionApplication({ ...options.collections, model: core.documents }, core.lookDocument, core.app, files);
-    editing = options.bound ? new PanelEditingContexts<Slot>({ ...options.bound, create: input => {
+    editing = options.bound ? new PanelEditingContexts<Slot>({ ...options.bound, signal: applicationSignal, create: input => {
       let childPort: StudioPresentationPort<Slot>, childFiles: StudioFileOperations;
       const scoped = createTrustedStudioBootstrap<Slot>({ ...options, core: input.core, bound: undefined, fileOwner: input.fileOwner, retireFiles: true, naming: () => input.named,
         viewport: !input.captured ? options.panelViewport?.(input) ?? options.viewport : options.viewport, panelViewport: undefined, capturePort: signal => ({ ...input.capturePort(signal, childFiles), viewport: childPort.viewport }),
-        lookSelection: input.choose, signal: input.signal,
+        lookSelection: input.choose, signal: input.signal, applicationSignal,
         fileCapture: input.capture, panelInstance: (panel, tab) => panel === input.instance || panel === options.bound!.session.panel(input.instance)?.type
           ? input.instance : options.panelInstance?.(panel, tab) ?? "", onRecipeImported: () => {},
         collections: { ...options.collections, current: input.check, preserveEmpty: true, scene: input.scene, flushLook: () => options.bound!.looks.commit() },
@@ -174,7 +177,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     } }) : undefined;
     const port = createStudioPresentation({ authoring: core.app, library: collection,
       capturePort: options.capturePort ?? (editing ? signal => editing!.capturePort(options.naming?.().view, signal, files) : undefined),
-      panelTargets: options.panelTargets, naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal,
+      panelTargets: options.panelTargets, naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal, applicationSignal,
       files, viewport: options.viewport, preferences: options.preferences,
       previewReadiness: options.previewReadiness, editor: authoringPresentation(core), status: options.status,
       localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts, product: options.product,

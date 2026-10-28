@@ -16,22 +16,27 @@ export function createBrowserFileDevice(options: {
   workerUrl?: string;
   maskBake?: BrowserMaskBake;
 }): StudioFilePort {
-  const pick = (kind: StudioFileKind): Promise<StudioPickedFile | undefined> => new Promise(resolve => {
+  const pick = (kind: StudioFileKind, signal?: AbortSignal): Promise<StudioPickedFile | undefined> => new Promise(resolve => {
+    if (signal?.aborted) { resolve(undefined); return; }
     const picker = options.pickers[kind];
-    const complete = () => {
+    const complete = (aborted = false) => {
+      signal?.removeEventListener("abort", abort);
       picker.removeEventListener("change", selected);
       picker.removeEventListener("cancel", cancelled);
-      const file = picker.files?.[0]; picker.value = "";
+      const file = aborted ? undefined : picker.files?.[0]; picker.value = "";
       resolve(file ? { name: file.name, size: file.size, text: () => file.text(),
         bytes: async () => new Uint8Array(await file.arrayBuffer()) } : undefined);
     };
     const selected = () => complete(), cancelled = () => complete();
+    const abort = () => complete(true);
     picker.value = "";
     picker.addEventListener("change", selected, { once: true });
     picker.addEventListener("cancel", cancelled, { once: true });
+    signal?.addEventListener("abort", abort, { once: true });
     try { picker.click(); } catch (error) {
       picker.removeEventListener("change", selected);
       picker.removeEventListener("cancel", cancelled);
+      signal?.removeEventListener("abort", abort);
       throw error;
     }
   });

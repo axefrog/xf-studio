@@ -144,6 +144,8 @@ export interface WorkspaceLeaseAdapter {
   release(): Promise<void>;
   /** Who holds the lease now, after a release whose answer was lost: still this page, or released. Rejects when it can't tell. */
   reconcile?(): Promise<"held" | "released">;
+  /** Ends this adapter's lifetime after its workspace and pending writes have been secured. */
+  stop?(): Promise<void>;
 }
 
 /** The clock source's timers (the page passes its own; tests a simulated one). */
@@ -161,6 +163,8 @@ export class WorkspaceLease {
   private releasedHooks: (() => void)[] = [];
   private releasing: Promise<boolean> | null = null;
   private takeover: AbortController | null = null;
+  private stopped = false;
+  private stopping?: Promise<void>;
   constructor(private readonly adapter: WorkspaceLeaseAdapter, private readonly options: {
     clock: LeaseClock; graceMs?: number;
     /** The page's lifetime: aborting it abandons a takeover still waiting. */
@@ -235,10 +239,12 @@ export class WorkspaceLease {
 
   /** Takes the lease if it is free; otherwise the page is read-only, or `disconnected` when it can't be held safely. */
   async start(): Promise<WorkspaceLeaseSnapshot> {
+    if (this.stopped) return this.snapshot();
     const signal = this.options.signal ?? new AbortController().signal;
     let held: { generation: number } | null;
     try { held = await this.adapter.acquire(signal); }
-    catch (error) { this.options.report?.(error); this.apply({ kind: error instanceof UnsupportedWorkspaceLease ? "unsupported" : "lost" }); return this.snapshot(); }
+    catch (error) { if (!this.stopped) { this.options.report?.(error); this.apply({ kind: error instanceof UnsupportedWorkspaceLease ? "unsupported" : "lost" }); } return this.snapshot(); }
+    if (this.stopped) return this.snapshot();
     if (held && !Number.isSafeInteger(held.generation)) { this.apply({ kind: "lost" }); return this.snapshot(); }
     this.apply(held ? { kind: "acquired", generation: held.generation } : { kind: "held-elsewhere" });
     return this.snapshot();
@@ -249,6 +255,7 @@ export class WorkspaceLease {
    * fails withdraws its request and returns to `read-only`, where it can be tried again.
    */
   async takeOver(): Promise<{ ok: boolean; message?: string }> {
+    if (this.stopped) return { ok: false, message: "This workspace was released." };
     if (this.takeover) return { ok: false, message: "The previous request is still finishing." };
     if (!this.apply({ kind: "takeover-requested" })) return { ok: false, message: "This workspace is already editable here, or is being taken over." };
     const run = new AbortController();
@@ -258,7 +265,7 @@ export class WorkspaceLease {
     this.options.clock.after(this.options.graceMs ?? TAKEOVER_GRACE_MS, () => { this.apply({ kind: "grace-elapsed" }); }, run.signal);
     try {
       const granted = await this.adapter.takeOver(run.signal);
-      if (run.signal.aborted) {
+      if (run.signal.aborted || this.stopped) {
         // A grant already in transit when Cancel was pressed is returned without writing anything.
         try { await this.adapter.release(); } catch (error) { this.options.report?.(error); this.apply({ kind: "lost" }); }
         return { ok: true };
@@ -321,5 +328,14 @@ export class WorkspaceLease {
       return true;
     })().finally(() => { this.releasing = null; });
     return this.releasing;
+  }
+  /** Application retirement, after workspace release and durable outbox stop; never used for a refused workspace release. */
+  stop(): Promise<void> {
+    if (this.stopping) return this.stopping;
+    this.stopped = true;
+    this.takeover?.abort();
+    this.apply({ kind: "lost" });
+    this.listeners.clear(); this.steps = []; this.settles = []; this.releasedHooks = [];
+    return this.stopping = this.adapter.stop?.() ?? Promise.resolve();
   }
 }

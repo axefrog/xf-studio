@@ -2,6 +2,9 @@ import { expect, test } from "bun:test";
 import { startStudio, type StudioHost } from "../src/compose/studio-startup";
 import { setPageDiagnostics } from "../src/diagnostics/page-sink";
 import { installLightDom, lightDocument, uninstallLightDom } from "./light-dom";
+import { startDocumentOutbox } from "../src/app/browser/document-outbox-device";
+import { WorkspaceLease } from "../src/app/workspace/workspace-lease";
+import { memoryOutboxStorage } from "./fixtures/platform-doubles";
 
 test("a real startup failure hands its displayed error reference to keepalive logging before abort", async () => {
   const previous = ["window", "location"].map(key => ({ key, descriptor: Object.getOwnPropertyDescriptor(globalThis, key) }));
@@ -22,8 +25,15 @@ test("a real startup failure hands its displayed error reference to keepalive lo
     addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events) };
   Object.defineProperty(globalThis, "window", { configurable: true, value: win, writable: true });
   Object.defineProperty(globalThis, "location", { configurable: true, value: { search: "?verify=1&composition=empty" }, writable: true });
+  const releases: string[] = [], storage = memoryOutboxStorage();
+  const lease = new WorkspaceLease({ acquire: async () => ({ generation: 1 }), takeOver: async () => ({ generation: 2 }),
+    onReleaseRequested() {}, release: async () => {}, stop: async () => { releases.push("lease"); } }, { clock: { after() {} } });
+  await lease.start();
+  const documents = startDocumentOutbox({ workspace: "test", prefix: "/documents", lease, send,
+    storage: { ...storage, write: (...args) => { releases.push("outbox"); storage.write(...args); } } });
+  documents.outbox.commit("pending", [{ kind: "sample", id: "a", value: "durable" }], { store: "soon" });
   try {
-    const host = { experiments() { throw Error("Fixture startup failed after diagnostics installation"); } } as unknown as StudioHost;
+    const host = { documents, lease, experiments() { throw Error("Fixture startup failed after diagnostics installation"); } } as unknown as StudioHost;
     expect(await startStudio(host)).toBeUndefined();
     const entryPosts = requests.filter(request => request.url.endsWith("/entries"));
     expect(entryPosts).toHaveLength(1);
@@ -35,9 +45,14 @@ test("a real startup failure hands its displayed error reference to keepalive lo
     expect(win.fetch).toBe(send);
     finish(new Response(null, { status: 204 })); await logged; await Promise.resolve();
     expect(entryPosts).toHaveLength(1);
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    expect(releases).toEqual(["outbox", "lease"]);
+    expect(JSON.parse(storage.load().get("sample/a")!).entries[0].writes[0].value).toBe("durable");
+    expect(lease.generation()).toBeNull();
   } finally {
     finish(new Response(null, { status: 204 }));
     setPageDiagnostics(null);
+    await documents.stop(); await lease.stop();
     for (const { key, descriptor } of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key);
     }

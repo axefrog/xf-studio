@@ -18,6 +18,8 @@ async function browserTest(locks: boolean, channel: boolean, run: (browser: {
   const manager = { request: async (name: string, options: unknown, callback?: (lock: unknown) => unknown) => {
     requests.push(name);
     if (typeof options === "function") { if (identityFails) throw Error("Identity unavailable"); return options(); }
+    const request = options as LockOptions;
+    if (request.ifAvailable && request.signal) throw new DOMException("Invalid Web Lock options", "NotSupportedError");
     if (held) return callback!(null);
     held = true;
     try { return await callback!({ name }); } finally { held = false; }
@@ -26,6 +28,8 @@ async function browserTest(locks: boolean, channel: boolean, run: (browser: {
     constructor(readonly name: string) {}
     postMessage() {}
     addEventListener() {}
+    removeEventListener() {}
+    close() {}
   }
   const globals = { navigator: locks ? { locks: manager } : {}, BroadcastChannel: channel ? Channel : undefined,
     localStorage: storage, sessionStorage: storage, addEventListener: page.addEventListener.bind(page) };

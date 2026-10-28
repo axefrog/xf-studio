@@ -22,8 +22,8 @@ export class PackageRequestError extends Error {
 }
 
 /** The running Build's stage, as the host reports it (PIPE-131), or null when none runs or the answer isn't one. */
-export async function requestPackageProgress(): Promise<PackageBuildProgress | null> {
-  const response = await packageRequest("/api/package/progress", { cache: "no-store" });
+export async function requestPackageProgress(signal?: AbortSignal): Promise<PackageBuildProgress | null> {
+  const response = await packageRequest("/api/package/progress", { cache: "no-store", signal });
   if (!response.ok || !(response.headers.get("Content-Type") ?? "").includes("application/json")) return null;
   const build = (await response.json() as { build?: Partial<PackageBuildProgress> | null }).build;
   return build && (PACKAGE_BUILD_STAGES as readonly unknown[]).includes(build.stage) && Number.isInteger(build.step) && Number.isInteger(build.steps)

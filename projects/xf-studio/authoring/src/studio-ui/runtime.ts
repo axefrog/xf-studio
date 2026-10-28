@@ -137,6 +137,7 @@ export class StudioRuntime {
   }
   async file(action: PresentationFileAction, options: { quietSuccess?: boolean; actions?: FeedbackAction[] } = {}): Promise<StudioFileOutcome> {
     const outcome = await this.port.files.execute(action);
+    if (this.port.applicationSignal?.aborted) return outcome;
     const source = fileSource(action.kind);
     if (!outcome.ok) {
       if (outcome.code === "cancelled") this.feedback.record("info", source, outcome.message);
@@ -149,6 +150,7 @@ export class StudioRuntime {
   }
   async request(request: CollectionRequest, options: { quietSuccess?: boolean; actions?: FeedbackAction[] } = {}): Promise<CollectionOutcome> {
     const outcome = await this.port.library.execute(request);
+    if (this.port.applicationSignal?.aborted) return outcome;
     const source = request.kind === "package" ? "Mod package" : "Library";
     if (!outcome.ok && outcome.code === "package_build_cancelled") this.feedback.record("info", source, outcome.message);
     else if (!outcome.ok) this.feedback.toast(outcome.code === "unavailable" ? "warning" : "error", source, outcome.message, recoveryFor(outcome.code, this), { code: outcome.code });

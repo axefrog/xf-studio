@@ -24,8 +24,35 @@ const requests: CollectionRequest[] = [
   { kind: "package", action: "check" }, { kind: "package", action: "build" }, { kind: "resolveConflict", conflict: "conflict-A", keep: "mine" },
 ];
 
+for (const action of fileActions.filter(action => ["recipe.import", "mask.export", "savedV.import", "characterPreset.import", "characterPreset.export",
+  "collection.import", "collection.export", "package.check", "package.build"].includes(action.kind))) {
+  test(`application abort releases accepted ${action.kind} immediately and suppresses its late result`, async () => {
+    const life = new AbortController(), f = fixture(life.signal);
+    try {
+      const pending = f.files.execute(action);
+      expect(f.released()).toBe(0);
+      life.abort(); expect(f.released()).toBe(1); expect(f.reads()).toBe(0);
+      const published = f.states.length, effects = f.seen.length;
+      f.gate.resolve(); expect(await pending).toMatchObject({ ok: false, code: "missing_target" });
+      expect(f.states.length).toBe(published); expect(f.seen.length).toBe(effects);
+      expect(f.downloads).toEqual([]); expect(f.released()).toBe(1); expect(f.reads()).toBe(0);
+      expect(await f.files.execute(action)).toMatchObject({ ok: false, code: "missing_target" });
+    } finally { f.gate.resolve(); f.files.dispose(); }
+  });
+}
+
+for (const request of requests) test(`application abort fences accepted library ${request.kind} completion`, async () => {
+  const life = new AbortController(), f = fixture(life.signal);
+  try {
+    const pending = f.files.executeCollection(request); life.abort();
+    const published = f.states.length; expect(f.released()).toBe(1);
+    f.gate.resolve(); expect(await pending).toMatchObject({ ok: false, code: "missing_target" });
+    expect(f.states.length).toBe(published); expect(f.downloads).toEqual([]); expect(f.reads()).toBe(0);
+  } finally { f.gate.resolve(); f.files.dispose(); }
+});
+
 /** Deliberately different services: any post-acceptance fallback returns B's sentinel or throws. */
-function fixture() {
+function fixture(signal?: AbortSignal) {
   const gate = Promise.withResolvers<void>(), recipe = initialRecipe(), notifications = new Set<() => void>();
   const seen: string[] = [], downloads: { name: string; blob: Blob }[] = [];
   let focused = "A", request: CollectionActivity | undefined, progress: CollectionProgress | undefined, released = 0, reads = 0;
@@ -87,7 +114,7 @@ function fixture() {
     savedV: wrong, loadSavedV: wrong, recoverCollection: wrong,
     message: wrong, characterPreset: { unavailable: () => undefined, load: wrong, save: async () => wrong() },
     executeCollection: async () => { throw Error("Accepted execution reached the live service"); },
-    capture: () => { focused = "B"; return { writer, check: () => ({ available: true }), release: () => { released++; } }; } });
+    capture: () => { focused = "B"; return { writer, check: () => ({ available: true }), release: () => { released++; } }; } }, undefined, signal);
   files.attachCollection(live);
   const states: ReturnType<StudioFileOperations["snapshot"]>[] = []; files.subscribe(() => states.push(files.snapshot()));
   return { files, service, device, gate, states, seen, downloads, focused: () => focused, released: () => released, reads: () => reads };
@@ -96,6 +123,15 @@ function fixture() {
 test("operation matrix covers every registered file kind and library kind (Stop controls an existing operation)", () => {
   expect(fileActions.map(action => String(action.kind)).sort()).toEqual(Object.keys(FILE_DESCRIPTORS).filter(kind => kind !== "package.stop").sort());
   expect([...new Set(requests.map(request => String(request.kind)))].sort()).toEqual(Object.keys(REQUEST_DESCRIPTORS).sort());
+});
+
+test("application abort ends the accepted caller's wait even if its picker never answers", async () => {
+  const life = new AbortController(), f = fixture(life.signal);
+  const pending = f.files.execute({ kind: "recipe.import", collection: "A" });
+  life.abort();
+  expect(await pending).toMatchObject({ ok: false, code: "missing_target" });
+  expect(f.released()).toBe(1); expect(f.downloads).toEqual([]);
+  f.gate.resolve(); f.files.dispose();
 });
 
 const completedOperations = [

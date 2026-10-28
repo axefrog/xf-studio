@@ -6,8 +6,8 @@ import { formatFence, WORKSPACE_FENCE_HEADER, type WorkspaceFence } from "../../
 
 /** Local HTTP is an injected detail, rather than a dependency of collection commands. */
 export function collectionTransport(endpoint: string): CollectionTransport {
-  async function api<T>(path = "", value?: unknown): Promise<T> {
-    const response = await fetch(endpoint + path, { method: value ? "POST" : "GET",
+  async function api<T>(path = "", value?: unknown, signal?: AbortSignal): Promise<T> {
+    const response = await fetch(endpoint + path, { method: value ? "POST" : "GET", signal,
       headers: value ? { "Content-Type": "application/json" } : undefined,
       body: value ? JSON.stringify(value) : undefined });
     if (!(response.headers.get("Content-Type") ?? "").includes("application/json"))
@@ -18,8 +18,8 @@ export function collectionTransport(endpoint: string): CollectionTransport {
     return data;
   }
   return {
-    list: () => api<CollectionSummary[]>(),
-    get: id => api<StoredCollection>(`/${encodeURIComponent(id)}`),
+    list: signal => api<CollectionSummary[]>("", undefined, signal),
+    get: (id, signal) => api<StoredCollection>(`/${encodeURIComponent(id)}`, undefined, signal),
     package: async (action, collection, signal) => {
       try { return await requestPackage(action, collection, signal); }
       catch (error) {
@@ -27,7 +27,7 @@ export function collectionTransport(endpoint: string): CollectionTransport {
         throw error;
       }
     },
-    packageProgress: () => requestPackageProgress().catch(() => null),
+    packageProgress: signal => requestPackageProgress(signal).catch(() => null),
   };
 }
 

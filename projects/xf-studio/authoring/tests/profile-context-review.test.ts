@@ -129,7 +129,7 @@ for (const target of ["root", "pinned"] as const) for (const entry of ["files", 
       await w.settle();
       const port = target === "root" ? w.port : w.bind("presets--scene2").context.current();
       w.collectionTransport.package = async (_action, input, signal) => {
-        expect(signal).toBeUndefined(); await new Promise<void>(done => { finish = done; });
+        expect(signal?.aborted).toBe(false); await new Promise<void>(done => { finish = done; });
         return eyeCheck(input as { id: string }, { presets: [] });
       };
       const pending = entry === "files" ? port.files.execute({ kind: "package.check" }) : port.library.execute({ kind: "package", action: "check" });

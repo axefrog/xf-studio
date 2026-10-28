@@ -11,7 +11,7 @@ import { refusal, type Capability, type ReasonCode } from "../platform/api/capab
 export type StudioFileKind = "recipe" | "collection" | "savedV" | "characterPreset";
 export type StudioPickedFile = { name: string; size: number; text(): Promise<string>; bytes(): Promise<Uint8Array> };
 export type StudioFilePort = {
-  pick(kind: StudioFileKind): Promise<StudioPickedFile | undefined>;
+  pick(kind: StudioFileKind, signal?: AbortSignal): Promise<StudioPickedFile | undefined>;
   download(blob: Blob, name: string): void;
   bakeMask?(value: unknown, signal?: AbortSignal): Promise<Blob>;
   /** Desktop-only host-owned file; the browser supplies no route. */
@@ -111,13 +111,18 @@ export class StudioFileOperations {
   private retired = false;
   private inputs = 0;
   private readonly executionOwner: StudioFileOperations;
+  private offApplication?: () => void;
   /** Captured shell inputs preflight locally; the initiating operation owner keeps progress, Stop and outcomes. */
-  constructor(private port: StudioFilePort, private sources: FileSources, owner?: StudioFileOperations) {
+  constructor(private port: StudioFilePort, private sources: FileSources, owner?: StudioFileOperations, signal?: AbortSignal) {
     this.executionOwner = owner?.executionOwner ?? this;
     if (this.executionOwner !== this) {
       const held = this.executionOwner; held.inputs++;
       this.life.signal.addEventListener("abort", () => { held.inputs--; held.finishRetired(); }, { once: true });
     }
+    const abort = () => this.dispose();
+    signal?.addEventListener("abort", abort, { once: true });
+    this.offApplication = () => signal?.removeEventListener("abort", abort);
+    if (signal?.aborted) this.dispose();
   }
   private finishRetired() { if (this.retired && !this.inputs && !this.running().length) this.dispose(); }
   /** An instance input can leave while its accepted operation still owns a concrete writer. */
@@ -125,8 +130,19 @@ export class StudioFileOperations {
     this.retired = true;
     if (this.executionOwner !== this) this.dispose(); else this.finishRetired();
   }
-  dispose() { this.life.abort(); this.collectionUnsubscribe?.(); for (const [operation, off] of this.operations) { off(); operation.dispose(); } this.operations.clear(); this.listeners.clear(); }
+  dispose() {
+    if (this.life.signal.aborted) return;
+    this.offApplication?.(); this.offApplication = undefined;
+    // Withdraw observers before cancelling work: release must not publish a terminal result through this owner.
+    this.listeners.clear();
+    for (const off of this.operations.values()) off();
+    this.life.abort(); this.collectionUnsubscribe?.(); this.collectionUnsubscribe = undefined;
+    this.liveCollection = undefined;
+    for (const operation of this.operations.keys()) operation.dispose();
+    this.operations.clear(); this.busy = undefined; this.last = undefined; this.packageOwner = undefined;
+  }
   attachCollection(collection: CollectionService) {
+    if (this.life.signal.aborted) return;
     this.collectionUnsubscribe?.(); this.liveCollection = collection;
     this.collectionUnsubscribe = collection.subscribe(() => this.notify()); this.notify();
   }
@@ -137,7 +153,7 @@ export class StudioFileOperations {
     const off = this.executionOwner !== this ? this.executionOwner.subscribe(listener) : () => {};
     return () => { off(); this.listeners.delete(listener); };
   }
-  private notify() { for (const listener of this.listeners) listener(); }
+  private notify() { if (!this.life.signal.aborted) for (const listener of this.listeners) listener(); }
   private running(): AcceptedStudioOperation[] { if (this.executionOwner !== this) return this.executionOwner.running(); return [...this.operations.keys()].filter(operation => operation.isRunning()); }
   private runningCollection() {
     const operation = this.running().find(operation => operation.snapshot().collectionBusy);
