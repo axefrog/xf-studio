@@ -8,6 +8,30 @@ import { ViewportAttachment } from "../src/app/viewport-attachment";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { fixtureTargets } from "./fixtures/named-targets";
+import { profileContextStudio } from "./fixtures/profile-context-studio";
+
+test("root mask capability and execution follow the drawn look across A/B/A switches", async () => {
+  const w = await profileContextStudio();
+  const baked: unknown[] = [], downloads: string[] = [];
+  w.fileDevice.bakeMask = async value => { baked.push(value); return new Blob(); };
+  w.fileDevice.download = (_blob, name) => { downloads.push(name); };
+  try {
+    const views = w.session.session().views.views;
+    for (const [index, active] of [[0, 0], [1, 1], [0, 0]] as const) {
+      w.draw(views[index]!.id);
+      const eye = w.port.feature("eye-makeup"), layer = eye.view().recipe().layers[active]!;
+      expect(eye.dispatch({ kind: "layer.select", layerId: layer.id }).ok).toBe(true);
+      expect(w.port.files.capability({ kind: "mask.export" })).toEqual({ available: true });
+      expect(await w.port.files.execute({ kind: "mask.export" })).toMatchObject({ ok: true });
+      expect(baked.at(-1)).toEqual(layer);
+      expect(downloads.at(-1)).toBe(`xfs-${layer.id}-alpha.png`);
+    }
+    expect(baked).toHaveLength(3);
+    expect(baked[0]).not.toEqual(baked[1]);
+    expect(baked[2]).toEqual(baked[0]);
+    expect(w.failures).toEqual([]);
+  } finally { await w.dispose(); }
+});
 
 test("a presentation mounts from trusted services without any page controls", async () => {
   expect(typeof document).toBe("undefined");

@@ -95,8 +95,18 @@ exports[`1a6cdc80 portable recipe bytes, names, outcomes and invalid-file refusa
 
 exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and partial-export reports 1`] = `
 {
-  "omissions": [],
-  "packagedSha256": "aae370c93375bf4b1119b3c1e11d2a6ed0980ce7f9245df9c45b553a84dc5e3b",
+  "omissions": [
+    {
+      "finish": "glitter",
+      "kind": "layer",
+      "layerId": "layer-2",
+      "layerName": "Fine wing",
+      "presetId": "00000000-0000-4000-8000-000000000012",
+      "presetName": "Mixed",
+      "reason": "No game material can show individual glitter flakes yet, so Glitter stays preview-only.",
+    },
+  ],
+  "packagedSha256": "832b009a3a7bb7725b6d8f261d14afb05bc5a2725dca37fe6aae6f1ea94e9216",
   "plan": {
     "app": "axefrog/appearance_studio/collections/00000000000040008000000000000011/xfs_collection.app",
     "collectionId": "00000000-0000-4000-8000-000000000011",
@@ -243,132 +253,6 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
                   },
                   "u": 0.369,
                   "v": 0.235,
-                  "weight": 1,
-                },
-              ],
-              "softness": {
-                "mode": "uniform",
-              },
-              "strength": {
-                "blend": 0.0005,
-                "mode": "smooth-boundary",
-              },
-              "symmetry": true,
-            },
-            {
-              "color": "#201b29",
-              "enabled": false,
-              "feather": 0.0015,
-              "fields": [
-                {
-                  "du": 0,
-                  "dv": 0,
-                  "id": "layer-2-field-1",
-                  "radius": 0.07,
-                  "u": 0.342,
-                  "v": 0.223,
-                },
-              ],
-              "finish": "glitter",
-              "id": "layer-2",
-              "name": "Fine wing",
-              "opacity": 0.85,
-              "pathMode": "bezier",
-              "points": [
-                {
-                  "handles": {
-                    "in": {
-                      "u": -0.0025000000000000022,
-                      "v": 0.0024999999999999974,
-                    },
-                    "mode": "symmetric",
-                    "out": {
-                      "u": 0.0025000000000000022,
-                      "v": -0.0024999999999999974,
-                    },
-                  },
-                  "u": 0.31,
-                  "v": 0.241,
-                  "weight": 1,
-                },
-                {
-                  "handles": {
-                    "in": {
-                      "u": -0.01883333333333333,
-                      "v": -0.00016666666666666682,
-                    },
-                    "mode": "symmetric",
-                    "out": {
-                      "u": 0.01883333333333333,
-                      "v": 0.00016666666666666682,
-                    },
-                  },
-                  "u": 0.36,
-                  "v": 0.231,
-                  "weight": 1,
-                },
-                {
-                  "handles": {
-                    "in": {
-                      "u": -0.015666666666666672,
-                      "v": -0.003999999999999999,
-                    },
-                    "mode": "symmetric",
-                    "out": {
-                      "u": 0.015666666666666672,
-                      "v": 0.003999999999999999,
-                    },
-                  },
-                  "u": 0.423,
-                  "v": 0.242,
-                  "weight": 1,
-                },
-                {
-                  "handles": {
-                    "in": {
-                      "u": 0.005166666666666662,
-                      "v": -0.0011666666666666676,
-                    },
-                    "mode": "symmetric",
-                    "out": {
-                      "u": -0.005166666666666662,
-                      "v": 0.0011666666666666676,
-                    },
-                  },
-                  "u": 0.454,
-                  "v": 0.255,
-                  "weight": 1,
-                },
-                {
-                  "handles": {
-                    "in": {
-                      "u": 0.018166666666666675,
-                      "v": 0.0015000000000000013,
-                    },
-                    "mode": "symmetric",
-                    "out": {
-                      "u": -0.018166666666666675,
-                      "v": -0.0015000000000000013,
-                    },
-                  },
-                  "u": 0.392,
-                  "v": 0.249,
-                  "weight": 1,
-                },
-                {
-                  "handles": {
-                    "in": {
-                      "u": 0.013666666666666669,
-                      "v": 0.0013333333333333346,
-                    },
-                    "mode": "symmetric",
-                    "out": {
-                      "u": -0.013666666666666669,
-                      "v": -0.0013333333333333346,
-                    },
-                  },
-                  "u": 0.345,
-                  "v": 0.246,
                   "weight": 1,
                 },
               ],
@@ -806,7 +690,7 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
             "          {",
             "            "id": "layer-2",",
             "            "name": "Fine wing",",
-            "            "enabled": false,",
+            "            "enabled": true,",
             "            "color": "#201b29",",
             "            "finish": "glitter",",
             "            "opacity": 0.85,",
@@ -1358,7 +1242,7 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
             "          {",
             "            "id": "layer-2",",
             "            "name": "Fine wing",",
-            "            "enabled": false,",
+            "            "enabled": true,",
             "            "color": "#201b29",",
             "            "finish": "glitter",",
             "            "opacity": 0.85,",
@@ -1765,7 +1649,7 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
       },
     },
     {
-      "message": "Check: 0 of 0 presets can become mod files.",
+      "message": "Check: 1 of 1 preset can become mod files, some left out.",
       "result": {
         "ok": true,
         "requestId": 3,
@@ -1773,16 +1657,20 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
           "kind": "packageCheck",
           "result": {
             "collectionId": "00000000-0000-4000-8000-000000000011",
-            "collectionSha256": "source",
+            "collectionSha256": "3971fed5dcdf69e3efdcfdb8794c4383cd98098ccef5a3897dfd0babae442eab",
             "omissions": [],
-            "originalPresetCount": 0,
+            "originalPresetCount": 1,
             "products": [
               {
-                "archive": "xfs_test",
+                "archive": "xfs_c00000000000040008000000000000011",
                 "features": [
                   {
                     "brand": "XF Eye Artistry",
                     "details": {
+                      "bodies": [
+                        "female",
+                        "male",
+                      ],
                       "plateLiftsMm": [
                         0.4,
                       ],
@@ -1793,11 +1681,30 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
                     "exporterVersion": "1",
                     "feature": "eye-makeup",
                     "label": "Eye makeup",
-                    "namespace": "xfs_test",
-                    "notes": [],
-                    "omissions": [],
-                    "packagedSha256": "test",
-                    "presets": [],
+                    "namespace": "xfs_c00000000000040008000000000000011",
+                    "notes": [
+                      "Build checks which looks reach the eye area and whether the mod can also fit a masculine V.",
+                    ],
+                    "omissions": [
+                      {
+                        "finish": "glitter",
+                        "kind": "layer",
+                        "layerId": "layer-2",
+                        "layerName": "Fine wing",
+                        "presetId": "00000000-0000-4000-8000-000000000012",
+                        "presetName": "Mixed",
+                        "reason": "No game material can show individual glitter flakes yet, so Glitter stays preview-only.",
+                      },
+                    ],
+                    "packagedSha256": "832b009a3a7bb7725b6d8f261d14afb05bc5a2725dca37fe6aae6f1ea94e9216",
+                    "presets": [
+                      {
+                        "appearance": "xfs_p00000000000040008000000000000012",
+                        "id": "00000000-0000-4000-8000-000000000012",
+                        "revision": 1,
+                        "route": "flat",
+                      },
+                    ],
                     "requirements": {
                       "ArchiveXL": "1.27.3",
                       "game": "2.31",
@@ -1824,7 +1731,7 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
       },
     },
     {
-      "message": "Built XF Eye Artistry for 0 of 0 presets. Not in your game yet.",
+      "message": "Built XF Eye Artistry for 1 of 1 preset. Not in your game yet.",
       "result": {
         "ok": true,
         "requestId": 4,
@@ -1832,19 +1739,23 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
           "kind": "packageBuild",
           "result": {
             "collectionId": "00000000-0000-4000-8000-000000000011",
-            "collectionSha256": "source",
+            "collectionSha256": "3971fed5dcdf69e3efdcfdb8794c4383cd98098ccef5a3897dfd0babae442eab",
             "gameRenderingVerified": false,
             "installed": false,
             "omissions": [],
-            "originalPresetCount": 0,
+            "originalPresetCount": 1,
             "products": [
               {
-                "archive": "xfs_test",
+                "archive": "xfs_c00000000000040008000000000000011",
                 "archiveSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 "features": [
                   {
                     "brand": "XF Eye Artistry",
                     "details": {
+                      "bodies": [
+                        "female",
+                        "male",
+                      ],
                       "plateLiftsMm": [
                         0.4,
                       ],
@@ -1855,11 +1766,30 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
                     "exporterVersion": "1",
                     "feature": "eye-makeup",
                     "label": "Eye makeup",
-                    "namespace": "xfs_test",
-                    "notes": [],
-                    "omissions": [],
-                    "packagedSha256": "test",
-                    "presets": [],
+                    "namespace": "xfs_c00000000000040008000000000000011",
+                    "notes": [
+                      "Build checks which looks reach the eye area and whether the mod can also fit a masculine V.",
+                    ],
+                    "omissions": [
+                      {
+                        "finish": "glitter",
+                        "kind": "layer",
+                        "layerId": "layer-2",
+                        "layerName": "Fine wing",
+                        "presetId": "00000000-0000-4000-8000-000000000012",
+                        "presetName": "Mixed",
+                        "reason": "No game material can show individual glitter flakes yet, so Glitter stays preview-only.",
+                      },
+                    ],
+                    "packagedSha256": "832b009a3a7bb7725b6d8f261d14afb05bc5a2725dca37fe6aae6f1ea94e9216",
+                    "presets": [
+                      {
+                        "appearance": "xfs_p00000000000040008000000000000012",
+                        "id": "00000000-0000-4000-8000-000000000012",
+                        "revision": 1,
+                        "route": "flat",
+                      },
+                    ],
                     "requirements": {
                       "ArchiveXL": "1.27.3",
                       "game": "2.31",
@@ -1871,11 +1801,11 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
                 "gameRenderingVerified": false,
                 "installed": false,
                 "isDefault": true,
-                "manifest": "dist/xfs_test/manifest.json",
+                "manifest": "dist/xfs_c00000000000040008000000000000011/manifest.json",
                 "modName": "XF Eye Artistry",
                 "nameSource": "derived",
                 "omissions": [],
-                "package": "dist/xfs_test",
+                "package": "dist/xfs_c00000000000040008000000000000011",
                 "productId": "00000000-0000-4000-8000-000000000011",
                 "requirements": {
                   "ArchiveXL": "1.27.3",
@@ -2031,7 +1961,7 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
                 },
                 {
                   "color": "#201b29",
-                  "enabled": false,
+                  "enabled": true,
                   "feather": 0.0015,
                   "fields": [
                     {
@@ -2556,7 +2486,7 @@ exports[`1a6cdc80 collection file, compiler plan, Check/Build payloads and parti
                 },
                 {
                   "color": "#201b29",
-                  "enabled": false,
+                  "enabled": true,
                   "feather": 0.0015,
                   "fields": [
                     {

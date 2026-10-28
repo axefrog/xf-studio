@@ -19,7 +19,7 @@ export function createProfileAuthoring(workspace: Parameters<Factory>[0], ports:
     history: emptyLookHistory(), liveFeatures: undefined, liveLocked: undefined }, { ...ports, scope: NO_LOOK_SCOPE, activate: false }, composition);
   base.document.setBlocked(REMOVED_LOOK);
   let handle: LookEditHandle<Attachment> | undefined, life: AbortController | undefined;
-  let current: Pick<Core, "document" | "geometry" | "presentation" | "recipe" | "eyeMakeup" | "gestures" | "controls" | "app"> = base;
+  let current: Pick<Core, "document" | "lookDocument" | "geometry" | "presentation" | "recipe" | "eyeMakeup" | "gestures" | "controls" | "app"> = base;
   let compatibility: Core["app"] | undefined;
   const contexts = new LookEditContexts<Attachment>({ ...deps, memory: { [composition.documents.live]: { choices: workspace.glitterChoices } }, newId: ports.newId, history: base.history, composition,
     attach: (editing, ref) => {
@@ -41,6 +41,7 @@ export function createProfileAuthoring(workspace: Parameters<Factory>[0], ports:
     return Reflect.get(target, key);
   } });
   const core: Core = { ...base, document: document.port, presentation: presentation.port, app,
+    lookDocument: authoringAttachment(() => current.lookDocument).port,
     geometry: authoringAttachment(() => current.geometry).port, recipe: authoringAttachment(() => current.recipe).port,
     eyeMakeup: authoringAttachment(() => current.eyeMakeup).port, gestures: authoringAttachment(() => current.gestures).port,
     controls: authoringAttachment(() => current.controls).port };

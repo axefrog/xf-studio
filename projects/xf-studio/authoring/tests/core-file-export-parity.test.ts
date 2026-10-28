@@ -10,8 +10,8 @@ import { defaultDirectGlintFlakes } from "../src/engines/layered-makeup/direct-g
 import { EYE_RASTER_REGION, initialRecipe } from "./fixtures/eye-region";
 import { collectionServiceOver } from "./fixtures/profile-studio";
 import { preparePackageCollection } from "./fixtures/eye-exporter";
-import { eyeCheck, eyeBuild } from "./fixtures/package-results";
-import type { Recipe } from "../src/engines/layered-makeup/recipe";
+import { realCheck, eyeBuild } from "./fixtures/package-results";
+import { resultOmissions, packagedLookCount } from "../src/platform/api";
 
 const sha = (value: string | Uint8Array | Uint8ClampedArray) => new Bun.CryptoHasher("sha256").update(value).digest("hex");
 // Preserve every portable string byte as lines, avoiding formatter-only trailing whitespace in frozen snapshots.
@@ -51,13 +51,15 @@ test("1a6cdc80 portable recipe bytes, names, outcomes and invalid-file refusals"
 });
 
 test("1a6cdc80 collection file, compiler plan, Check/Build payloads and partial-export reports", async () => {
-  const recipe = initialRecipe(); recipe.layers[1].finish = "glitter";
+  const recipe = initialRecipe(); recipe.layers[1].enabled = true; recipe.layers[1].finish = "glitter";
   const source = { schema: "xfas/collection-1", id: "00000000-0000-4000-8000-000000000011", name: "File parity", presets: [
     { id: "00000000-0000-4000-8000-000000000012", name: "Mixed", revision: 1, recipe },
   ] };
   const sent: unknown[] = [];
   const f = await collectionServiceOver(source, { package: async (action, input) => {
-    sent.push({ action, input }); const checked = eyeCheck(source, { presets: [] });
+    sent.push({ action, input }); const checked = realCheck(input);
+    expect(packagedLookCount(checked)).toBe(1);
+    expect(resultOmissions(checked)).toHaveLength(1);
     return action === "check" ? checked : eyeBuild(checked);
   } });
   try {
@@ -66,10 +68,16 @@ test("1a6cdc80 collection file, compiler plan, Check/Build payloads and partial-
       { kind: "package", action: "check" }, { kind: "package", action: "build" }] as const) {
       const result = await f.svc.execute(request);
       expect(result.ok).toBe(true);
+      if (result.ok && (result.result?.kind === "packageCheck" || result.result?.kind === "packageBuild")) {
+        expect(resultOmissions(result.result.result)).toHaveLength(1);
+        expect(packagedLookCount(result.result.result)).toBe(1);
+      }
       const progress = f.svc.summary().progress;
       results.push({ result, message: progress?.message });
     }
     const prepared = preparePackageCollection(source);
+    expect(prepared.omissions).toHaveLength(1);
+    expect(sent[0]).toEqual({ ...(sent[1] as object), action: "check" });
     expect(snapshotLines({ results, sent, plan: prepared.plan, omissions: prepared.omissions,
       packagedSha256: sha(JSON.stringify(prepared.packaged)) })).toMatchSnapshot();
   } finally { f.svc.dispose(); f.outbox.stop(); f.library.close(); }
