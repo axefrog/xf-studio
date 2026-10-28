@@ -7,7 +7,23 @@ import { orbitDistanceLimits, SURFACE_CLEARANCE, type DistanceLimits, type Subje
  * and a damped step updates in the frame, so hooking `update` is the one place every zoom meets current limits.
  */
 export class SceneOrbitControls extends OrbitControls {
+  // OrbitControls may call connect from its constructor, before derived field initializers run.
+  declare private connection: AbortController | undefined;
   beforeUpdate: (() => void) | undefined;
+  override connect(element: HTMLElement): void {
+    super.connect(element);
+    const root = element.getRootNode(), life = this.connection = new AbortController();
+    // Three rediscovers getRootNode() in disconnect; shell withdrawal can already have detached the canvas.
+    // Bound Three callbacks stay Three's implementation; this adapter owns their registration lifetime.
+    const handlers = this as unknown as { _interceptControlDown: EventListener; _interceptControlUp: EventListener };
+    root.removeEventListener("keydown", handlers._interceptControlDown, { capture: true });
+    root.addEventListener("keydown", handlers._interceptControlDown, { passive: true, capture: true, signal: life.signal });
+    life.signal.addEventListener("abort", () => root.removeEventListener("keyup", handlers._interceptControlUp, { capture: true }), { once: true });
+  }
+  override disconnect(): void {
+    this.connection?.abort(); this.connection = undefined;
+    if (this.domElement) super.disconnect();
+  }
   override update(deltaTime?: number | null): boolean {
     this.beforeUpdate?.();
     return super.update(deltaTime);

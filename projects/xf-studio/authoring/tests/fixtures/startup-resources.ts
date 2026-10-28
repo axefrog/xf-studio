@@ -1,7 +1,7 @@
 /** Runs before the entry script. Counts browser registrations, never application release reports. */
 export const STARTUP_RESOURCES = String.raw`(() => {
   const nativeAdd = EventTarget.prototype.addEventListener, nativeRemove = EventTarget.prototype.removeEventListener;
-  const listeners = new Set(), timers = new Set(), frames = new Set(), workers = new Set(), contexts = new Set(), observers = new Map();
+  const listeners = new Set(), timers = new Map(), frames = new Set(), workers = new Map(), contexts = new Set(), observers = new Map();
   const made = { listeners: 0, timers: 0, frames: 0, workers: 0, contexts: 0, observers: 0 };
   const writes = [], draws = [], deliveries = [], domWrites = [], held = [];
   let watching = false;
@@ -34,11 +34,11 @@ export const STARTUP_RESOURCES = String.raw`(() => {
   const timeout = window.setTimeout.bind(window), interval = window.setInterval.bind(window), clear = window.clearTimeout.bind(window);
   window.setTimeout = (run, ms, ...args) => {
     const id = timeout(() => { timers.delete(id); if (watching) deliveries.push('timeout'); run(...args); }, ms);
-    timers.add(id); made.timers++; return id;
+    timers.set(id, 'timeout:' + (ms ?? 0) + 'ms'); made.timers++; return id;
   };
   window.setInterval = (run, ms, ...args) => {
     const id = interval(() => { if (watching) deliveries.push('interval'); run(...args); }, ms);
-    timers.add(id); made.timers++; return id;
+    timers.set(id, 'interval:' + (ms ?? 0) + 'ms'); made.timers++; return id;
   };
   window.clearTimeout = window.clearInterval = id => { timers.delete(id); clear(id); };
   const raf = window.requestAnimationFrame.bind(window), caf = window.cancelAnimationFrame.bind(window);
@@ -49,7 +49,7 @@ export const STARTUP_RESOURCES = String.raw`(() => {
   window.cancelAnimationFrame = id => { frames.delete(id); caf(id); };
   if (window.Worker) window.Worker = new Proxy(window.Worker, { construct(Type, args) {
     const worker = Reflect.construct(Type, args), terminate = worker.terminate.bind(worker);
-    workers.add(worker); made.workers++;
+    workers.set(worker, 'Worker:' + (args[1]?.type ?? 'classic') + ':' + String(args[0] ?? '<unknown>')); made.workers++;
     worker.terminate = () => { workers.delete(worker); terminate(); }; return worker;
   } });
   for (const name of ['ResizeObserver', 'MutationObserver', 'IntersectionObserver', 'PerformanceObserver']) {
@@ -58,9 +58,9 @@ export const STARTUP_RESOURCES = String.raw`(() => {
       const callback = args[0]; let observer;
       observer = Reflect.construct(Type, [(...values) => { if (watching) deliveries.push(name); callback(...values); }]);
       const observe = observer.observe.bind(observer), disconnect = observer.disconnect.bind(observer), unobserve = observer.unobserve?.bind(observer);
-      observer.observe = (target, ...options) => { observe(target, ...options); if (!observers.has(observer)) made.observers++; const targets = observers.get(observer) ?? new Set(); targets.add(target); observers.set(observer, targets); };
+      observer.observe = (target, ...options) => { observe(target, ...options); if (!observers.has(observer)) made.observers++; const row = observers.get(observer) ?? { kind: name, targets: new Set() }; row.targets.add(target); observers.set(observer, row); };
       observer.disconnect = () => { observers.delete(observer); disconnect(); };
-      if (unobserve) observer.unobserve = target => { unobserve(target); const targets = observers.get(observer); targets?.delete(target); if (!targets?.size) observers.delete(observer); };
+      if (unobserve) observer.unobserve = target => { unobserve(target); const row = observers.get(observer); row?.targets.delete(target); if (!row?.targets.size) observers.delete(observer); };
       return observer;
     } });
   }
@@ -96,7 +96,9 @@ export const STARTUP_RESOURCES = String.raw`(() => {
   const baseline = counts();
   window.xfsReleaseProbe = {
     baseline, counts, made, writes, draws, deliveries, domWrites, held,
-    detail: () => [...listeners].map(row => targetName(row.target) + ':' + row.type),
+    detail: () => [...listeners].map(row => targetName(row.target) + ':' + row.type)
+      .concat([...timers.values()], [...frames].map(id => 'animation-frame:' + id), [...workers.values()],
+        [...contexts].map(() => 'WebGLContext'), [...observers.values()].map(row => row.kind + ':targets=' + row.targets.size)),
     // Harness waits use native functions so the harness cannot conceal an application timer/frame.
     settle: () => new Promise(resolve => raf(() => raf(() => timeout(resolve, 0)))),
     wait: ms => new Promise(resolve => timeout(resolve, ms)),

@@ -3,6 +3,41 @@ import * as THREE from "three";
 import { BODY_SUBJECT, bodyCameraDistance, CAMERA_DISTANCE_RANGE, HEAD_SUBJECT, SURFACE_CLEARANCE, type Subject } from "../src/preview/camera-framing";
 import { createOrbitLimits, SceneOrbitControls } from "../src/platform/scene/orbit-limits";
 
+for (const held of [false, true]) test(`orbit connection releases its original document after canvas detachment (Control held: ${held})`, () => {
+  class Root extends EventTarget {
+    readonly listeners = new Set<EventListenerOrEventListenerObject>();
+    override addEventListener(type: string, listener: EventListenerOrEventListenerObject | null, options?: AddEventListenerOptions | boolean) {
+      super.addEventListener(type, listener, options);
+      if (!listener || (typeof options === "object" && options.signal?.aborted)) return;
+      this.listeners.add(listener);
+      if (typeof options === "object") options.signal?.addEventListener("abort", () => this.listeners.delete(listener), { once: true });
+    }
+    override removeEventListener(type: string, listener: EventListenerOrEventListenerObject | null, options?: EventListenerOptions | boolean) {
+      super.removeEventListener(type, listener, options);
+      if (listener) this.listeners.delete(listener);
+    }
+  }
+  const original = new Root(), detached = new Root(), replacement = new Root();
+  let root: EventTarget = original;
+  const canvas = Object.assign(new EventTarget(), { style: { touchAction: "", cursor: "" }, ownerDocument: original, getRootNode: () => root });
+  const controls = new SceneOrbitControls(new THREE.PerspectiveCamera(), canvas as unknown as HTMLElement);
+  try {
+    expect(original.listeners.size).toBe(1);
+    if (held) original.dispatchEvent(Object.assign(new Event("keydown"), { key: "Control" }));
+    expect(original.listeners.size).toBe(held ? 2 : 1);
+    // Shell withdrawal precedes scene release. Three's disconnect must not rediscover the detached root.
+    root = detached;
+    controls.disconnect();
+    expect(original.listeners.size).toBe(0);
+    expect(detached.listeners.size).toBe(0);
+    // A later show owns a fresh connection; repeated release also remains harmless.
+    root = replacement; controls.connect(canvas as unknown as HTMLElement);
+    expect(replacement.listeners.size).toBe(1);
+    root = detached; controls.disconnect(); controls.disconnect();
+    expect([original.listeners.size, replacement.listeners.size, detached.listeners.size]).toEqual([0, 0, 0]);
+  } finally { controls.disconnect(); }
+});
+
 /**
  * The scene host's orbit limits over the real OrbitControls (no DOM: the controls' programmatic dolly runs the same `update` as the
  * wheel; `dollyIn(s)` multiplies the distance by `s`, `dollyOut(s)` divides it). The head is a 9 cm sphere about the head's centre; its surface lies 9 cm in front of a target at the centre.

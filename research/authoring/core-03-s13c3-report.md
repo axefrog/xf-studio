@@ -1,6 +1,6 @@
 # CORE-03 slice 13c3 report
 
-Implemented from `73de0a0d`, left **uncommitted** for coordinator review. CORE-03 remains **High**. CPU validation passes; the required integrated browser/GPU result is pending. No 13d implementation is included.
+Implemented from `73de0a0d` and committed by the coordinator as `46e905ec`. The review corrections below remain **uncommitted**. CORE-03 remains **High**. CPU validation passes; the integrated release proof needs a coordinator rerun after the reported mounted-listener failure. No 13d implementation is included.
 
 ## Owners and release order
 
@@ -46,7 +46,7 @@ No style-guide edit. Optional internal lifecycle arguments do not add a public p
 | `tests/facial-lifetime.test.ts` | Seven owner/HTTP cases: state, installed expressions, prefetch, solve and late response bodies; timers/sink/publication refusal. |
 | `tests/warm-start-lifetime.test.ts` | Six cases: late metadata/record, pre-aborted construction, taken decode under application abort, ordinary expiry and expiry followed by application abort. A late bitmap closes exactly once. |
 | `tests/shell-lifetime.test.ts` | Six cases: timers/frames and retained feedback actions; tip removal/remount; font-ready/input-origin/preferences; menu handlers; update quiet wait and late transport. |
-| `tests/core-startup-resources.test.ts`, `tests/fixtures/startup-resources.ts` | Four required Chrome rows plus two CPU instrumentation checks, including deliberate leaks/removal. |
+| `tests/core-startup-resources.test.ts`, `tests/fixtures/startup-resources.ts` | Four required Chrome rows plus four CPU instrumentation/preparation checks, including deliberate leaks/removal. |
 | `tests/core-startup-browser.test.ts`, `tests/fixtures/startup-shell-paint.ts` | Move the existing independent pixel/geometry/control paint gate unchanged into a shared fixture; both browser suites reuse it, including transparent-shell rejection. |
 | `tests/character-panel-dom.test.ts`, `tests/layout-tabs.test.ts`, `tests/menu-position.test.ts`, `tests/presets-conflict-dom.test.ts`, `tests/starter-shapes.test.ts`, `tests/ui-polish-dom.test.ts` | Complete existing window mocks with `removeEventListener`; behavioural assertions are unchanged. |
 
@@ -64,7 +64,7 @@ Repository records: this report, [plan](core-03-plan.md), [CORE-03 ledger](code-
 
 Counts begin at a pre-load baseline. Painted normal/empty rows require a real prepared head/context; normal also requires a live worker and empty has none. They reuse 13b's decoded-pixel gate, arm feedback/resize/palette work, abort the actual lifetime and require exact baseline counts within ten seconds, without navigating, reloading, destroying the page or forcing GC. The two partial rows hold startup document reads and invoke the real non-persisted pagehide lifetime path in the same live page. Every held request must carry an aborted signal. Late facial/warm/document answers intentionally ignore cancellation; delivering them and new global input must cause no write, DOM mutation, draw, callback, activity or history change. Harness settling uses captured native scheduling, so test timers cannot hide application timers.
 
-The CPU negative control intentionally retains listeners/timer/frame/worker/context/observer, observes **2/1/1/1/1/1**, then performs actual unregister/terminate/disconnect/context-loss operations and requires exact zero baseline. Duplicate listeners/contexts, once and signal removal, and late storage/draw detection are exercised. This validates the counter logic, **not Chrome/GPU cleanup**.
+The CPU negative control intentionally retains listeners/timer/frame/worker/context/observer, observes **2/2/1/1/1/1**, then performs actual unregister/terminate/disconnect/context-loss operations and requires exact zero baseline. Duplicate listeners/contexts, once and signal removal, and late storage/draw detection are exercised. This validates the counter logic, **not Chrome/GPU cleanup**.
 
 From `projects/xf-studio/authoring/`, in the coordinator's shell with working Chrome and prepared game/WolvenKit settings:
 
@@ -128,4 +128,40 @@ The three worktree scratch files (`check_changes.py`, `warm-baseline.test.ts`, `
 
 Both have zero reparse points: **159 files, 7,260,417 bytes total**. Automatic approval review rejected the owner/path-checked removal of those two stopped-run folders as **“blocked by policy”**, before executing the cleanup command. No alternative deletion route or approval escalation was attempted. They are coordinator cleanup, not retained proof artifacts.
 
+## Review corrections after `46e905ec`
+
+The coordinator's browser run passed both partial starts, but both painted rows retained exactly one `document:keydown` listener. The existing real Three OrbitControls connection is its owner: connect registers against the live canvas root; shell withdrawal detaches the canvas before scene teardown, and native disconnect asks for the now-different root.
+
+Changes in this correction (authoring-relative paths):
+
+- `src/platform/scene/orbit-limits.ts`: `SceneOrbitControls` gives each connection its own signal. It reuses Three's existing bound key callback with signal-bound registration on the original root; disconnect first aborts that signal and removes any held-Control keyup callback from the original root, then delegates native pointer/style cleanup. Constructor-time connect, reconnect and repeated disconnect are covered. The adapter names two existing internal Three callbacks; real-controls tests guard that dependency. Existing application → shell → head → device release order is unchanged.
+- `tests/orbit-limits.test.ts`: two real-controls regressions detach before release, with Control released/held, then reconnect and release twice. On `46e905ec` they retain respectively one/two document listeners; corrected counts return to zero.
+- `tests/core-startup-resources.test.ts`: baseline-wait timeout prints composition, counts, baseline and `detail()` before rethrowing the original error. Both painted rows prepare before launching Chrome, and every row uses 960×720. No count, real-head/context/worker requirement, pixel/control check, transparent-shell negative control, partial-start or late-publication assertion is removed.
+- `tests/fixtures/startup-resources.ts`: diagnostics now identify timeout/interval delays, worker kind/script, observer kind/target count, frames and contexts as well as listeners. CPU controls exercise timeout and interval labels and require empty detail after real cleanup.
+- `tests/fixtures/startup-head-preparation.ts` (new): prepare the real core, then the same default character through existing local HTTP endpoints before Chrome exists. Repeated requests join preparation and renew its existing lease. A shared 180 s AbortSignal deadline and terminal-state/HTTP failures stop the fixture; Chrome is never launched on failure. Each row retains its own copied settings, document store, caches and disposable host; partial rows still use empty settings and do no preparation. The per-row timeout is 420 s to include preparation plus existing paint/head waits.
+- This report, the plan's proof/as-built notes, the High CORE-03 row and WebGL ownership knowledge record the correction and remaining proof limits.
+
+**Memory choice:** separate exporter/resolver preparation from browser rendering, plus 691,200 pixels instead of 1,440,000 (48%). Assets and rendering quality are unchanged. Expected peak is approximately **3–3.5 GB**, pending measurement in the coordinator's shell under the unchanged **4 GB** guard. No shared document/server state, persistent cache borrowing, forced GC or guard increase. The previous **5.6 GB** peak and drop to approximately **1.5 GB** between rows are coordinator observations; there is no new measured Chrome peak here.
+
+**Scope/parity:** no `studio-ui` edit in this correction, no component/style-guide change, no bound-panel/capture implementation or release-order change, no protected binding/history API/catalogue/allowance change. All eight retained snapshot files and all 17 snapshots match `46e905ec`; their hashes and coverage remain the table above. 13d's UV readiness, synthetic substitution and closure remain open; CORE-03 stays High.
+
+| Sequential guarded gate | Result |
+|---|---|
+| Original-owner regression | **6 pass, 2 expected fail**, one file, 29 assertions, 90 ms, rounded 0.0 GB peak. Reproduces the one/two-listener failure before production edits. |
+| Corrected owner/probe/preparation | **12 pass, 4 Chrome skips, 0 fail**, two files, 60 assertions, 664 ms, **0.1 GB** peak. |
+| Final permitted targeted selection | **95 pass, 7 skips, 0 fail**, 17 files, **17 matching snapshots**, 974 assertions, **21.77 s**, **0.7 GB** peak. Includes import boundaries, bootstrap, view contributions and every CORE-03 parity/startup file. |
+
+One Bun process at a time, always under `memory_guard --limit 4`, with Chrome explicitly unavailable process-locally. The seven final skips are six Chrome rows and one private-raster oracle. No Chrome, GPU set, typecheck or heavy gate ran. No corrected browser or memory pass is claimed.
+
+Coordinator rerun, from `projects/xf-studio/authoring/`:
+
+```powershell
+$env:XFS_REQUIRE_ORACLES = '1'
+& "$env:LOCALAPPDATA/Python/pythoncore-3.14-64/python.exe" ../../../tools/memory_guard.py --limit 4 -- bun test tests/core-startup-resources.test.ts
+```
+
+Require all four rows, unchanged-page baseline and late-publication assertions, real head paint and a measured peak below 4 GB. GPU exposure is limited to camera controls connection/disconnection: scene-dispose, scene-runtimes and renderer-device rows. A manual detached-shell release with Control held is useful; no shader/texture/pixel algorithm changes or game check. Final checks: **0 broken links/source paths across 505 Markdown files**, **0 tracked-text or new-file private-path findings**, clean `git diff --check`, and eight LF-normalized snapshot files equal to HEAD. The checkpoint/wrap-up footprint scan reports **200.0 GB free on C**, rounded **0.0 GB** peak under a 1 GB guard; the unrelated inaccessible worktree scan remains incomplete. This correction creates no scratch/capture payload, retains nothing over 5 GB, and all owned test/check/guard processes have ended. All nine correction files remain uncommitted.
+
 **Knowledge used:** knowledge index and WebGL program linking (updated with source/CPU ownership evidence and browser limits); CORE-03 plan/as-built notes and 13c1/13c2 reports; architecture contract, UI architecture boundary, view-graph design, developer orientation and project/status/backlog context. The UI boundary's stale 13c2 public-signal wording is corrected. No game-engine fact was contradicted; integrated browser/GPU release evidence remains incomplete until coordinator execution.
+
+**Memory budget (coordinator measurement).** `tests/core-startup-resources.test.ts` peaks at about 5.3 GB under the memory guard: each painted case runs a real Studio server that prepares the head from game files plus Chrome with a WebGL context, and memory returns to about 1.5 GB between cases (no growth across cases, so not a leak). It therefore runs as its own coordinator step under `memory_guard.py --limit 6` with `XFS_REQUIRE_ORACLES=1`, and is excluded from the 4 GB suite batches; it skips cleanly without Chrome.

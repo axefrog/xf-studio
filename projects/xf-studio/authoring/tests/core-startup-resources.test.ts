@@ -6,6 +6,7 @@ import { oracleTest } from "./optional-oracles";
 import { STARTUP_RESOURCES, type StartupResourceCounts } from "./fixtures/startup-resources";
 import { DEFAULT_CHARACTER } from "../src/character/character-detail-request";
 import { FACIAL_ENDPOINT, FACIAL_STATE_SCHEMA } from "../src/platform/api/facial";
+import { prepareReleaseHead } from "./fixtures/startup-head-preparation";
 
 const browserTest = oracleTest(chromeInstalled(), `Chrome is unavailable at ${CHROME} (set CHROME)`);
 const FACE = { schema: FACIAL_STATE_SCHEMA, rig: { phase: "unconfigured", reason: "Release fixture" },
@@ -20,7 +21,10 @@ for (const composition of ["normal", "empty"] as const) for (const partial of [f
     const host = await startServer(port, { settings: partial ? "empty" : "copy" });
     let page: Awaited<ReturnType<typeof launch>> | undefined;
     try {
-      page = await launch(`http://127.0.0.1:${port}/?verify=1&composition=${composition}`, { width: 1440, height: 1000, scheme: "light", init: STARTUP_RESOURCES + `
+      const origin = `http://127.0.0.1:${port}`;
+      if (!partial) await prepareReleaseHead(origin);
+      // Half the previous pixel area; unchanged real assets, resource assertions and decoded-pixel paint gate.
+      page = await launch(`${origin}/?verify=1&composition=${composition}`, { width: 960, height: 720, scheme: "light", init: STARTUP_RESOURCES + `
         window.releasePageIdentity = {};
         localStorage.setItem('xfs:character:last-request:verification', ${JSON.stringify(JSON.stringify(DEFAULT_CHARACTER))});
         const send = window.fetch;
@@ -62,7 +66,15 @@ for (const composition of ["normal", "empty"] as const) for (const partial of [f
       expect(identity).toBe(true);
       await page.evaluate(partial ? `window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }))` : `window.xfStudioLifetime.abort()`);
       // The page stays alive. Wait for asynchronous context-loss / lease stop, with a bounded deadline.
-      await page.waitFor(`JSON.stringify(window.xfsReleaseProbe.counts()) === JSON.stringify(window.xfsReleaseProbe.baseline)`, 10_000);
+      try {
+        await page.waitFor(`JSON.stringify(window.xfsReleaseProbe.counts()) === JSON.stringify(window.xfsReleaseProbe.baseline)`, 10_000);
+      } catch (error) {
+        try {
+          console.error(JSON.stringify({ composition, partial, ...await page.evaluate(`({ counts: window.xfsReleaseProbe.counts(),
+            baseline: window.xfsReleaseProbe.baseline, detail: window.xfsReleaseProbe.detail() })`) }));
+        } catch (diagnosticError) { console.error("Release diagnostic unavailable", diagnosticError); }
+        throw error;
+      }
       const retired = await page.evaluate(`({ baseline: window.xfsReleaseProbe.baseline, counts: window.xfsReleaseProbe.counts(),
         signals: window.xfsReleaseProbe.held.map(row => row.signal?.aborted), same: window.releaseIdentityBefore === window.releasePageIdentity,
         aborted: ${partial ? "true" : "window.xfStudioLifetime.signal.aborted"} })`) as
@@ -90,7 +102,7 @@ for (const composition of ["normal", "empty"] as const) for (const partial of [f
       expect(page.console.filter(line => ["error", "exception"].includes(line.type))).toEqual([]);
       console.log(JSON.stringify({ composition, partial, live, retired, late }));
     } finally { await page?.close(); host.server.kill(); await host.server.exited; }
-  }, 240_000);
+  }, 420_000);
 
 // Keep the instrumentation executable under Bun too; browser behaviour is still the required oracle above.
 test("release probe is a standalone pre-load script with no production evidence hooks", () => {
@@ -124,20 +136,52 @@ test("independent resource instrumentation detects leaks and returns exactly aft
     window.addEventListener('resize', listener, { signal: controller.signal });
     window.addEventListener('resize', listener, { signal: controller.signal }); // Browser identity deduplicates it.
     document.addEventListener('once', listener, { once: true });
-    const timer = window.setTimeout(listener, 10), frame = window.requestAnimationFrame(listener), worker = new window.Worker();
+    const timer = window.setTimeout(listener, 10), interval = window.setInterval(listener, 20), frame = window.requestAnimationFrame(listener), worker = new window.Worker('probe-worker.js', { type: 'module' });
     const observer = new window.ResizeObserver(listener), target = {}; observer.observe(target);
     const canvas = new HTMLCanvasElement(), gl = canvas.getContext('webgl2'); canvas.getContext('webgl2');
-    const leaked = probe.counts();
+    const leaked = probe.counts(), detail = probe.detail();
     document.dispatchEvent({ type: 'once' }); controller.abort();
-    window.clearInterval(timer); window.cancelAnimationFrame(frame); worker.terminate(); observer.unobserve(target);
+    window.clearInterval(timer); window.clearTimeout(interval); window.cancelAnimationFrame(frame); worker.terminate(); observer.unobserve(target);
     canvas.dispatchEvent({ type: 'webglcontextlost' });
     const retired = probe.counts();
     probe.watch(); new Storage().setItem('late', 'value'); gl.drawArrays();
     window.dispatchEvent({ type: 'resize' }); document.dispatchEvent({ type: 'once' });
-    ({ baseline, leaked, retired, writes: probe.writes, draws: probe.draws, deliveries: probe.deliveries });
-  `) as { baseline: StartupResourceCounts; leaked: StartupResourceCounts; retired: StartupResourceCounts; writes: string[]; draws: string[]; deliveries: string[] };
-  expect(result.leaked).toEqual({ listeners: 2, timers: 1, frames: 1, workers: 1, contexts: 1, observers: 1 });
+    ({ baseline, leaked, detail, retired, retiredDetail: probe.detail(), writes: probe.writes, draws: probe.draws, deliveries: probe.deliveries });
+  `) as { baseline: StartupResourceCounts; leaked: StartupResourceCounts; detail: string[]; retired: StartupResourceCounts; retiredDetail: string[];
+    writes: string[]; draws: string[]; deliveries: string[] };
+  expect(result.leaked).toEqual({ listeners: 2, timers: 2, frames: 1, workers: 1, contexts: 1, observers: 1 });
+  expect(result.detail).toEqual(["window:resize", "document:once", "timeout:10ms", "interval:20ms", "animation-frame:3",
+    "Worker:module:probe-worker.js", "WebGLContext", "ResizeObserver:targets=1"]);
   expect(result.retired).toEqual(result.baseline);
+  expect(result.retiredDetail).toEqual([]);
   expect(result.writes).toEqual(["setItem:late"]); expect(result.draws).toEqual(["WebGL2RenderingContext.drawArrays"]);
   expect(result.deliveries).toEqual([]);
+});
+
+test("release fixture prepares the real core then character before launching Chrome", async () => {
+  const calls: { url: string; body: unknown }[] = [];
+  const request = Object.assign(async (url: string | URL | Request, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    expect(init?.signal?.aborted).toBe(false);
+    expect(headers.get("Origin")).toBe("http://127.0.0.1:1234");
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expect(headers.get("X-XFS-Page")).toBe("core-release-preparation");
+    calls.push({ url: String(url), body: JSON.parse(init?.body as string) });
+    return Response.json({ phase: calls.length === 1 ? "preparing" : "ready" });
+  }, { preconnect() {} }) as typeof fetch;
+  await prepareReleaseHead("http://127.0.0.1:1234", request);
+  expect(calls).toEqual([
+    { url: "http://127.0.0.1:1234/api/preview-core", body: { action: "prepare" } },
+    { url: "http://127.0.0.1:1234/api/preview-core", body: { action: "prepare" } },
+    { url: "http://127.0.0.1:1234/api/preview-character", body: DEFAULT_CHARACTER },
+  ]);
+});
+
+test("release preparation refuses unavailable/failed hosts and has a bounded deadline", async () => {
+  for (const [phase, status] of [["needs-setup", 409], ["failed", 200]] as const) {
+    const request = Object.assign(async () => Response.json({ phase }, { status }), { preconnect() {} }) as typeof fetch;
+    await expect(prepareReleaseHead("http://127.0.0.1:1234", request)).rejects.toThrow(phase);
+  }
+  const preparing = Object.assign(async () => Response.json({ phase: "preparing" }), { preconnect() {} }) as typeof fetch;
+  await expect(prepareReleaseHead("http://127.0.0.1:1234", preparing, 1)).rejects.toThrow();
 });
