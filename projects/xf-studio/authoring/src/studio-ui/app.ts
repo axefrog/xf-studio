@@ -42,6 +42,7 @@ import { SETTINGS_PANEL, type SettingsPart, type SettingsSection } from "./setti
 import { bindViewState, PreferenceViewState } from "./view-state";
 import { flushScrollMemories } from "./scroll-anchor";
 import { HeaderFit } from "./header-fit";
+import { bindPreviewFilterLifetime } from "./components/choice-preview";
 import { BACKUP_PENDING, BACKUP_STORAGE_FULL, LIBRARY_CHIP_WIDEST, MISSING_SAVE, RESTORING, RESTORING_LONG, RESTORING_UNCONFIRMED, UNPROTECTED } from "./notice-text";
 import { EmptyChoices, progressBar, WorkspaceNotice, type WorkspaceNoticeAction, type WorkspaceNoticeState } from "./components";
 
@@ -60,24 +61,40 @@ export function viewPaneCallbacks(panels: PanelController[], byId: Map<string, P
  * panels, `compose/views.ts`); the shell names no feature's panels.
  */
 export function mountStudio(port: Port, root: HTMLElement, views: ViewComposition, applicationSignal?: AbortSignal) {
+  const life = new AbortController(), { signal } = life;
+  applicationSignal?.throwIfAborted();
+  const abort = () => life.abort();
+  applicationSignal?.addEventListener("abort", abort, { once: true });
+  const frames = new Set<number>();
+  signal.addEventListener("abort", () => {
+    applicationSignal?.removeEventListener("abort", abort);
+    for (const id of frames) cancelAnimationFrame(id); frames.clear();
+    closeMenus(false); closePopovers(false);
+  }, { once: true });
+  const frame = (run: () => void) => {
+    if (signal.aborted) return;
+    const id = requestAnimationFrame(() => { frames.delete(id); if (!signal.aborted) run(); });
+    frames.add(id);
+  };
   // Error notices carry a reference and "Report this problem" (docs/diagnostics.md).
   const feedback = new Feedback({ notice: failure => port.diagnostics.notice(failure), report: ref => openReportDialog(rt, ref),
-    expected: code => port.diagnostics.expected(code) });
-  installReasonTips(document);
-  installHelpTips(document);
+    expected: code => port.diagnostics.expected(code) }, signal);
+  installReasonTips(document, signal);
+  installHelpTips(document, signal);
+  bindPreviewFilterLifetime(signal);
   // Remembered folds and scroll positions (view-state.ts) are the workspace's, before any panel is built. Scroll positions are recorded
   // before the page is hidden: capture listeners run ahead of the workspace save's own (browser-workspace-device.ts).
-  bindViewState(new PreferenceViewState(port.preferences));
-  window.addEventListener("pagehide", flushScrollMemories, { capture: true });
-  document.addEventListener("visibilitychange", () => { if (document.hidden) flushScrollMemories(); }, { capture: true });
+  bindViewState(new PreferenceViewState(port.preferences, signal));
+  window.addEventListener("pagehide", flushScrollMemories, { capture: true, signal });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) flushScrollMemories(); }, { capture: true, signal });
   const catalogue = { ...views.catalogue, panels: [...views.catalogue.panels], ids: [...views.catalogue.ids], meta: { ...views.catalogue.meta } };
   let optionalViews = views.optional?.() ?? [];
   let optionalGeneration = views.optionalGeneration?.();
   const typeCatalogue = { ...views.catalogue, panels: [...views.catalogue.panels], ids: [...views.catalogue.ids], meta: { ...views.catalogue.meta } };
   typeCatalogue.context = type => typeCatalogue.panels.find(panel => panel.id === type)?.context ?? { kind: "profile" };
-  const rt = new StudioRuntime(port, feedback, typeCatalogue, undefined, undefined, applicationSignal);
-  const theme = themeController(port, feedback);
-  const view = viewPreferences(port, feedback);
+  const rt = new StudioRuntime(port, feedback, typeCatalogue, undefined, undefined, applicationSignal ?? signal);
+  const theme = themeController(port, feedback, signal);
+  const view = viewPreferences(port, feedback, signal);
   // Guidance (tours, spotlights, Help) is created once the dock exists; the Help panel reaches it lazily.
   let guidance!: GuidanceController;
   // Each feature's view gets one context over its own facade, never the runtime or the port (UI-73).
@@ -146,6 +163,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const instancePanels = new InstancePanels(rt, { catalogue: () => typeCatalogue, make: makeInstance,
     generation: type => views.catalogue.ids.includes(type) ? 0 : optionalGeneration,
     changed: () => { instanceDirty = true; rt.changed(); } });
+  signal.addEventListener("abort", () => instancePanels.dispose(), { once: true });
   const rebuildCatalogue = () => {
     const state = port.tabs?.snapshot(), tab = state?.tabs.find(tab => tab.id === state.shown);
     catalogue.panels.splice(0, catalogue.panels.length, ...(tab?.panels ?? []).flatMap(instance => {
@@ -195,6 +213,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     attach: slot => port.viewport.attach("head", slot),
     ...viewPaneCallbacks(panels, byId),
   });
+  signal.addEventListener("abort", () => viewPanes.dispose(), { once: true });
   viewPanes.start();
   const restored = restoreDockPreference(port.tabs?.dock(),
     { x: 0, y: 0, w: window.innerWidth, h: Math.max(200, window.innerHeight - 84) }, catalogue, [], viewPanelIds(port.views.snapshot()), !!port.tabs);
@@ -206,6 +225,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   /** Put the 3D preview setup card where it belongs now (set below, once the card exists): after every dock layout too (UI-164). */
   let placeSetupCard = () => {};
   const dock = new DockView({
+    signal,
     panels: panels.map(specOf),
     semantic: (kind, id) => panelSemantic(kind, id),
     capture: id => port.panels.capture?.(id) ?? (() => ({ available: true })),
@@ -219,7 +239,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     beforeLayout: () => port.viewport.cancelInput(),
     // A layout change (a tab switched, a pane hidden or resized) may leave the setup card in a pane that is no longer shown or roomy:
     // it is placed again then, not only on the next paint (UI-164).
-    afterLayout: () => requestAnimationFrame(() => { port.viewport.resize(); placeSetupCard(); }),
+    afterLayout: () => frame(() => { port.viewport.resize(); placeSetupCard(); }),
   });
   function panelSemantic(kind: "show" | "remove", id: string) {
     const state = port.tabs?.snapshot(), tab = state?.tabs.find(tab => tab.id === state.shown);
@@ -256,7 +276,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     port.views.withdraw(all.filter(id => !offered.has(id)));
   };
   withdrawUnoffered();
-  const openHelp = (topic?: string) => { dock.reveal("help", false); requestAnimationFrame(() => {
+  const openHelp = (topic?: string) => { dock.reveal("help", false); frame(() => {
     const help = panels.find(panel => port.tabs?.snapshot().tabs.flatMap(tab => tab.panels).some(instance => instance.id === panel.spec.id && instance.type === "help")) as PanelController & { openTopic?(id: string): void; focusSearch?(): void };
     if (topic) help?.openTopic?.(topic); else help?.focusSearch?.(); }); };
   /**
@@ -267,9 +287,9 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const settingsPanel = () => panels.find(panel => port.tabs?.snapshot().tabs.flatMap(tab => tab.panels).some(instance => instance.id === panel.spec.id && instance.type === SETTINGS_PANEL));
   rt.settings = { open: (section?: SettingsSection, part?: SettingsPart) => {
     dock.reveal(SETTINGS_PANEL, false);
-    requestAnimationFrame(() => settingsPanel()?.show?.(section, part));
+    frame(() => settingsPanel()?.show?.(section, part));
   } };
-  guidance = mountGuidance(rt, { openHelp });
+  guidance = mountGuidance(rt, { openHelp, signal });
   const header = shellHeader(rt, theme, view, () => openHelp());
   const status = statusBar(rt);
   const leaseNotice = workspaceNotice(rt);
@@ -278,7 +298,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const tabs = port.tabs ? layoutTabs({ tabs: port.tabs, capability: action => port.authoring.capability(action),
     dispatch: action => port.authoring.dispatch(action), feedback, dock: main,
     moduleIcon: id => modules.find(module => module.id === id)?.icon,
-    changed: () => { viewPanes.sync(); schedule(); } }) : undefined;
+    changed: () => { viewPanes.sync(); schedule(); }, signal }) : undefined;
   const upgrade = new EmptyChoices("viewport");
   upgrade.element.classList.add("workspace-upgrade");
   main.append(upgrade.element);
@@ -289,7 +309,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     const target = event.target as Element | null, control = target?.closest?.("[aria-disabled='true']");
     if (control && main.contains(control)) { event.preventDefault(); event.stopPropagation(); }
   };
-  for (const type of ["click", "dblclick", "pointerdown"]) main.addEventListener(type, refuseUnavailable, true);
+  for (const type of ["click", "dblclick", "pointerdown"]) main.addEventListener(type, refuseUnavailable, { capture: true, signal });
   // Where the person works (profiles design §3.3): the panel holding keyboard focus, and a pointer press or keyboard focus inside a 3D view
   // makes that view the most recently focused. The application never reads it; actions name what it resolves to. Never an Undo step.
   const reportFocus = (target: EventTarget | null, keyboard: boolean) => {
@@ -299,12 +319,14 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     if (view !== undefined) port.focus.view(view);
     if (keyboard) port.focus.panel(panel);
   };
-  main.addEventListener("focusin", event => reportFocus(event.target, true));
-  main.addEventListener("pointerdown", event => reportFocus(event.target, false), true);
+  main.addEventListener("focusin", event => reportFocus(event.target, true), { signal });
+  main.addEventListener("pointerdown", event => reportFocus(event.target, false), { capture: true, signal });
   root.replaceChildren(header.element, leaseNotice.element, ...(tabs ? [tabs.element] : []), main, status.element, setupCard.element, setupCard.consent, ...guidance.elements, feedback.toasts, feedback.live, feedback.assertive);
+  const shellNodes = [...root.childNodes];
+  signal.addEventListener("abort", () => { for (const node of shellNodes) node.remove(); }, { once: true });
   root.classList.add("studio-ready");
   dock.render();
-  requestAnimationFrame(() => dock.recover());
+  frame(() => dock.recover());
   /**
    * The 3D preview setup card sits in the 3D view pane, its subject, whenever that pane is shown and has room for it
    * (release-readiness-audit.md item 10), so it never covers an inspector; it floats over the window only while the pane is hidden or
@@ -367,6 +389,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     instanceSignature = instanceKey();
   }
   const paint = () => {
+    if (signal.aborted) return;
     queued = false;
     tabs?.sync();
     const pendingMigration = !!port.status.snapshot().lease?.migrationPending;
@@ -430,6 +453,8 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   const heavy = { has: (id: string) => !!catalogue.panels.find(panel => panel.id === id)?.heavy,
     *[Symbol.iterator]() { yield* catalogue.panels.filter(panel => panel.heavy).map(panel => panel.id); } };
   let heavyAt = 0, heavyKey = "", heavyTimer: ReturnType<typeof setTimeout> | undefined;
+  let resizeTimer: ReturnType<typeof setTimeout> | undefined;
+  signal.addEventListener("abort", () => { clearTimeout(heavyTimer); clearTimeout(resizeTimer); }, { once: true });
   const heavyDue = (frame: Frame) => {
     const library = frame.library, key = JSON.stringify([library.busy, library.progress, library.summaries.length, library.draft?.revision, library.draft?.previous?.id]);
     const now = performance.now(), busy = !!(frame.preview.gesture || frame.preview.control);
@@ -437,15 +462,16 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     if (!heavyTimer) heavyTimer = setTimeout(() => { heavyTimer = undefined; schedule(); }, 420);
     return false;
   };
-  const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(paint); } };
+  const schedule = () => { if (!signal.aborted && !queued) { queued = true; frame(paint); } };
   const offPort = port.subscribe(() => {
+    if (signal.aborted) return;
     // A preservation notice must reach feedback before another adapter message can replace it while a paint is queued.
     const message = port.status.snapshot().message;
     if (message?.source === "layout-default") showMessage(message);
     schedule();
   }); const offRuntime = rt.subscribe(schedule), offFeedback = feedback.subscribe(schedule);
+  signal.addEventListener("abort", () => { offPort(); offRuntime(); offFeedback(); }, { once: true });
   paint();
-  let resizeTimer: ReturnType<typeof setTimeout> | undefined;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
@@ -456,14 +482,14 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       }
       dock.recover(); dock.condenseTabs(); port.viewport.resize(); schedule();
     }, 120);
-  });
+  }, { signal });
 
   const commands = (input = rt) => withPreviewSetup(input, [...buildCommands(input, theme, view, byId,
     featureViews.flatMap(({ binding }) => featureCommands(binding, featureViewContext(input, binding.owner)))), ...panels.flatMap(panel => panel.commands?.() ?? []), ...(tabs?.commands() ?? []), ...guidance.commands()]);
   const palette = () => { const held = captureFocusedRuntime(rt, id => instancePanels.controllerRuntime(id) ?? viewPanes.pane(id)?.runtime);
     if (held) openPalette(() => commands(held.runtime), { onClose: held.release, signal: held.signal }); };
   // Native menus stay in text fields; custom menus are opened by their targets.
-  document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); });
+  document.addEventListener("contextmenu", event => { if (!allowsNativeTextMenu(event)) event.preventDefault(); }, { signal });
   window.addEventListener("keydown", event => {
     if (event.defaultPrevented || tabs?.globalKey(event)) return;
     const modalOpen = !!document.querySelector("dialog[open]");
@@ -487,21 +513,21 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
     } else if (shortcut === "regions" || shortcut === "regions-back") cycleRegions(root, shortcut === "regions-back");
     else if (shortcut === "guide") { closeMenus(false); openHelp(); }
     else view.openReference();
-  });
+  }, { signal });
   header.bindPalette(palette);
   // The check at start (the host skips it when Settings › Updates turns it off); the service waits until after first paint.
   startupUpdateCheck(rt);
   if (verificationMode(port)) Object.assign(window, { xfStudioShell: { dock, runtime: rt, commands, tabs, panelsMenu: () => panelMenuItems(rt, view.research()), preferences: () => port.preferences.snapshot(),
     guidance: { start: guidance.start, reach: guidance.reach, verifyFacts: guidance.verifyFacts, service: guidance.service, snapshot: () => guidance.service.snapshot(), offerOnboarding: () => guidance.offerOnboarding(new Frame(port, catalogue, dockRef?.tree)) } } });
-  const dispose = () => { clearTimeout(heavyTimer); clearTimeout(resizeTimer); closeMenus(false); closePopovers(false);
-    offPort(); offRuntime(); offFeedback(); tabs?.dispose(); instancePanels.dispose(); viewPanes.dispose(); };
-  window.addEventListener("pagehide", dispose, { once: true });
+  const dispose = abort;
+  // The application owner may refuse pagehide release to preserve unsaved recovery. It alone retires a hosted shell.
+  if (!applicationSignal) window.addEventListener("pagehide", dispose, { once: true, signal });
   return { dock, runtime: rt, dispose };
 }
 
 const verificationMode = (port: Port) => port.status.snapshot().verification;
 
-function themeController(port: Port, feedback: Feedback) {
+function themeController(port: Port, feedback: Feedback, signal: AbortSignal) {
   const media = matchMedia("(prefers-color-scheme: dark)");
   let preference: ThemePreference = port.preferences.snapshot().theme;
   const apply = () => {
@@ -510,12 +536,13 @@ function themeController(port: Port, feedback: Feedback) {
     document.documentElement.dataset.themePreference = preference;
     document.documentElement.style.colorScheme = resolved;
   };
-  media.addEventListener("change", apply);
+  media.addEventListener("change", apply, { signal });
   apply();
   return {
     get preference() { return preference; },
     get system() { return media.matches ? "dark" : "light"; },
     set(next: ThemePreference) {
+      if (signal.aborted) return;
       if (!setPreference(port, feedback, { kind: "theme.set", theme: next },
         next === "system" ? `Theme follows the system (${media.matches ? "dark" : "light"})` : `${next === "dark" ? "Dark" : "Light"} theme`)) return;
       preference = next; apply();
@@ -535,12 +562,12 @@ function setPreference(port: Port, feedback: Feedback, action: Parameters<Port["
 }
 
 /** View preferences beyond the theme: viewport input hints (persisted, on by default) and research tools (off by default, UI-85). */
-function viewPreferences(port: Port, feedback: Feedback) {
+function viewPreferences(port: Port, feedback: Feedback, signal: AbortSignal) {
   const hints = () => port.preferences.snapshot().inputHints;
-  const setHints = (enabled: boolean) => { setPreference(port, feedback, { kind: "inputHints.set", enabled }, enabled ? "Viewport input hints shown" : "Viewport input hints hidden"); };
+  const setHints = (enabled: boolean) => { if (!signal.aborted) setPreference(port, feedback, { kind: "inputHints.set", enabled }, enabled ? "Viewport input hints shown" : "Viewport input hints hidden"); };
   const research = () => !!port.preferences.snapshot().researchTools;
-  const setResearch = (enabled: boolean) => { setPreference(port, feedback, { kind: "researchTools.set", enabled }, enabled ? "Research tools shown" : "Research tools hidden"); };
-  const openReference = () => openInputReference({ hints: { enabled: hints(), set: setHints } });
+  const setResearch = (enabled: boolean) => { if (!signal.aborted) setPreference(port, feedback, { kind: "researchTools.set", enabled }, enabled ? "Research tools shown" : "Research tools hidden"); };
+  const openReference = () => { if (!signal.aborted) openInputReference({ hints: { enabled: hints(), set: setHints } }); };
   return {
     hints, setHints, research, setResearch, openReference,
     items(): MenuItem[] {
@@ -607,6 +634,7 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
     h("div", { class: "header-actions" }, h("span", { class: "history-controls", role: "group", "aria-label": "Undo and Redo" }, undo, redo, historyButton), save, pkg, h("span", { class: "divider", "aria-hidden": "true" }), palette, helpButton, settingsButton, panelsButton, themeButton));
   // The crumbs stay readable (UI-187): the header's other items give way first, in a fixed order, whenever the window or the words change.
   const fit = new HeaderFit(element, [collection, preset], { slot: chipSlot, element: chip, words: LIBRARY_CHIP_WIDEST });
+  rt.applicationSignal?.addEventListener("abort", () => fit.disconnect(), { once: true });
   let fitKey = "";
   return {
     element,

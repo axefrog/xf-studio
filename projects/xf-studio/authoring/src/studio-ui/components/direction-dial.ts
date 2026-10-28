@@ -146,7 +146,7 @@ export class DirectionDial {
   private burst: ReturnType<typeof setTimeout> | null = null;
   private available = Number.POSITIVE_INFINITY;
   private tickKey = "";
-  constructor(private readonly options: DirectionDialOptions) {
+  constructor(private readonly options: DirectionDialOptions, private readonly signal?: AbortSignal) {
     this.range = options.elevation ?? { min: -89, max: 89 };
     const labelId = uid("dial");
     this.art = svg("svg", { viewBox: `${VIEW.x} ${VIEW.y} ${VIEW.width} ${VIEW.height}`, class: "direction-dial-art", "aria-hidden": "true" });
@@ -194,11 +194,16 @@ export class DirectionDial {
         options.help !== undefined ? helpTip(options.label, options.help) : null,
         h("span", { class: "dial-readouts" }, this.angle.element, this.height.element)),
       this.bar.region, this.note.element);
-    this.dial.addEventListener("pointerdown", event => this.drag(event));
-    this.dial.addEventListener("keydown", event => this.key(event));
-    this.dial.addEventListener("blur", () => this.endBurst());
+    this.dial.addEventListener("pointerdown", event => this.drag(event), { signal });
+    this.dial.addEventListener("keydown", event => this.key(event), { signal });
+    this.dial.addEventListener("blur", () => this.endBurst(), { signal });
     // The control's width is what the drawing may take: narrowing the panel draws it smaller, widening brings the chosen size back.
-    if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => this.layout(this.element.clientWidth)).observe(this.element);
+    if (typeof ResizeObserver !== "undefined" && !signal?.aborted) {
+      const observer = new ResizeObserver(() => { if (!signal?.aborted) this.layout(this.element.clientWidth); });
+      observer.observe(this.element);
+      signal?.addEventListener("abort", () => observer.disconnect(), { once: true });
+    }
+    signal?.addEventListener("abort", () => { if (this.burst !== null) clearTimeout(this.burst); this.burst = null; this.dragging = null; this.start = null; }, { once: true });
     this.applySize();
   }
   /** A width as the control's room lets it be drawn. */
@@ -245,7 +250,7 @@ export class DirectionDial {
     t.begin?.(); this.paint(next); t.edit(next); t.commit?.();
   }
   private key(event: KeyboardEvent) {
-    if (this.disabled) return;
+    if (this.disabled || this.signal?.aborted) return;
     if (event.key === "Enter") { event.preventDefault(); this.angle.edit(); return; }
     const turn = { ArrowLeft: -5, ArrowRight: 5, PageDown: -15, PageUp: 15 }[event.key];
     const lift = ({ ArrowUp: 1, ArrowDown: -1 } as const)[event.key as "ArrowUp" | "ArrowDown"];
@@ -267,7 +272,7 @@ export class DirectionDial {
   /** The drag under way, ended by its release, a cancel, Escape, a lost pointer capture or a new press (UI-138). */
   private dragging: ((commit: boolean) => void) | null = null;
   private drag(event: PointerEvent) {
-    if (this.disabled || event.button !== 0) return;
+    if (this.disabled || this.signal?.aborted || event.button !== 0) return;
     event.preventDefault();
     this.endBurst();
     // A press while a drag is under way (another finger, or a release that never arrived) ends that drag where it is: one transaction
@@ -304,11 +309,11 @@ export class DirectionDial {
     // The capture went elsewhere (the element was hidden, or another capture took it): the drag ends where it is.
     const lost = (e: PointerEvent) => { if (mine(e)) finish(true); };
     const escape = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); } };
-    this.dial.addEventListener("pointermove", move);
-    this.dial.addEventListener("pointerup", up);
-    this.dial.addEventListener("pointercancel", cancel);
-    this.dial.addEventListener("lostpointercapture", lost);
-    this.dial.addEventListener("keydown", escape, true);
+    this.dial.addEventListener("pointermove", move, { signal: this.signal });
+    this.dial.addEventListener("pointerup", up, { signal: this.signal });
+    this.dial.addEventListener("pointercancel", cancel, { signal: this.signal });
+    this.dial.addEventListener("lostpointercapture", lost, { signal: this.signal });
+    this.dial.addEventListener("keydown", escape, { capture: true, signal: this.signal });
   }
   /** Draw a direction on the handle, the radius, the height scale, the readouts and the value text. */
   private paint(direction: Direction) {

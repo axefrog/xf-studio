@@ -118,10 +118,13 @@ const NAV_ACTIONS: Record<TourNavigation, GuidanceAction> = {
  * Wires the tour runner to the shell: the overlay, the one-time onboarding offer, the Escape key,
  * the palette commands and tour progress in the workspace's UI preferences.
  */
-export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: string): void }) {
+export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: string): void; signal?: AbortSignal }) {
   const port = rt.port;
+  const signal = options.signal;
+  const frames = new Set<number>();
   let commandRun = new TourCommandRun();
   const record = (tourId: string, outcome: TourRecord) => {
+    if (signal?.aborted) return;
     const action = { kind: "tours.record" as const, tourId, outcome };
     if (port.preferences.capability(action).available) port.preferences.dispatch(action);
   };
@@ -142,6 +145,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
   const service = new GuidanceService(contents().flatMap(content => content.tours), env);
   const sync = () => service.setTours(contents().flatMap(content => content.tours));
   const overlay = new TourOverlay({
+    signal,
     rect: target => target.kind === "anchor" ? rt.anchors.rect(target.anchor) : target.kind === "panel" ? rt.anchors.rect(panelAnchor(target.panel)) : undefined,
     press: button => void press(button),
     nav: action => navigate(action),
@@ -153,6 +157,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
 
   /** Repaint; `focus` moves focus into the card (a person's own navigation), never on an automatic advance. */
   function paint(focus: boolean) {
+    if (signal?.aborted) return;
     const snapshot = service.snapshot(), active = snapshot.active;
     overlay.render(active);
     if (active) {
@@ -171,7 +176,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
           if (target.kind === "anchor" || target.kind === "panel") rt.anchors.element(target.anchor)?.scrollIntoView({ block: "nearest", inline: "nearest" });
         }
         shown = step;
-        if (focus) requestAnimationFrame(() => overlay.callout.focusTitle());
+        if (focus) { const id = requestAnimationFrame(() => { frames.delete(id); if (!signal?.aborted) overlay.callout.focusTitle(); }); frames.add(id); }
       }
     } else if (running) {
       commandRun.cancel();
@@ -188,6 +193,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
   }
   let lastRevision = -1;
   function dispatch(action: GuidanceAction, focus = true) {
+    if (signal?.aborted) return false;
     const result = service.dispatch(action);
     if (!result.ok) { rt.feedback.announce(result.reason); return false; }
     paint(focus);
@@ -212,6 +218,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
     else paint(true);
   }
   function start(tourId: string) {
+    if (signal?.aborted) return false;
     sync();
     if (!service.capability({ kind: "guidance.startTour", tourId }).available) return false;
     commandRun.cancel(); commandRun = new TourCommandRun();
@@ -222,7 +229,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
   }
 
   // ----- The one-time onboarding offer -----
-  const offer = new Callout({ className: "guidance-offer", closeLabel: "Not now", onClose: () => declineOffer(),
+  const offer = new Callout({ signal, className: "guidance-offer", closeLabel: "Not now", onClose: () => declineOffer(),
     onKey: event => { if (event.key !== "Escape") return false; declineOffer(); return true; } });
   offer.update({ ...(onboarding()?.offer ?? { eyebrow: "", title: "", body: "" }),
     actions: [{ id: "later", label: "Not now", variant: "quiet", run: () => declineOffer() },
@@ -243,6 +250,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
    * progress, or once it is set aside), and never in a verification workspace unless `force` asks.
    */
   function maybeOffer(frame: Frame, force = false) {
+    if (signal?.aborted) return;
     if (!onboarding() || offerState !== "waiting" || running) return;
     // A read-only window (another one holds the workspace) offers nothing that would record a choice (t-read-only-window).
     if (frame.status.lease && !frame.status.lease.writable) return;
@@ -264,8 +272,12 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
     if (state.gesture || state.control) return;
     event.preventDefault();
     navigate("skip");
-  });
+  }, { signal });
 
+  signal?.addEventListener("abort", () => {
+    commandRun.cancel();
+    for (const id of frames) cancelAnimationFrame(id); frames.clear();
+  }, { once: true });
   return {
     service, overlay, offer,
     elements: [overlay.element, offer.element],
@@ -289,6 +301,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
     status: (tourId: string) => port.preferences.snapshot().tours?.[tourId],
     /** Called on each shell paint: advance on `advanceWhen`, refresh the card and consider the offer. */
     update(frame: Frame) {
+      if (signal?.aborted) return;
       sync();
       if (!onboarding()) hideOffer();
       if (running) { commandRun.observe(rt); service.observe(); paint(false); }

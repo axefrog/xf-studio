@@ -42,7 +42,8 @@ export class UpdateCheckActions {
    * @param transport the host's endpoint, or null where no host checks (fixtures).
    * @param clock the clock source's timers; without one the check at start asks at once.
    */
-  constructor(private readonly transport: UpdateCheckTransport | null, private readonly clock: UpdateCheckClock | null = null) {}
+  constructor(private readonly transport: UpdateCheckTransport | null, private readonly clock: UpdateCheckClock | null = null,
+    private readonly lifetime?: AbortSignal) {}
   /** After first paint and a moment more; resolves early (and the check is abandoned) when the signal aborts. */
   private quietMoment(signal: AbortSignal) {
     const clock = this.clock;
@@ -56,7 +57,8 @@ export class UpdateCheckActions {
   descriptors() { return structuredClone(UPDATE_CHECK_DESCRIPTORS); }
   snapshot(): Readonly<UpdateCheckState> { return structuredClone(this.state); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-  private publish(next: Partial<UpdateCheckState>) { this.state = { ...this.state, ...next }; for (const listener of this.listeners) listener(); }
+  private publish(next: Partial<UpdateCheckState>) { if (this.lifetime?.aborted) return;
+    this.state = { ...this.state, ...next }; for (const listener of this.listeners) { if (this.lifetime?.aborted) break; listener(); } }
 
   capability(action: UpdateCheckAction): Capability {
     if (!(action?.kind in UPDATE_CHECK_DESCRIPTORS)) return { available: false, code: "invalid_value", reason: "Unknown command." };
@@ -69,6 +71,8 @@ export class UpdateCheckActions {
   }
 
   async dispatch(action: UpdateCheckAction, signal?: AbortSignal): Promise<UpdateCheckOutcome> {
+    if (this.lifetime) signal = signal ? AbortSignal.any([signal, this.lifetime]) : this.lifetime;
+    if (signal?.aborted) return { ok: false, code: "cancelled", message: UNREACHABLE };
     const allowed = this.capability(action);
     if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Not available right now." };
     // The person's own check comes first: a check at start still in its quiet wait is abandoned. Once sent, it is left to finish
@@ -88,7 +92,9 @@ export class UpdateCheckActions {
       : { action: action.kind === "updates.check" ? "check" as const : "startup" as const };
     this.publish({ busy: action.kind === "updates.skipVersion" ? this.state.busy : action.kind });
     try {
+      controller.signal.throwIfAborted();
       const response = await this.transport!(body, controller.signal);
+      controller.signal.throwIfAborted();
       if (!response.ok || !isUpdateCheckAnswer(response.data)) throw Error("unexpected");
       this.publish({ answer: response.data, ...(action.kind === "updates.check" ? { checkedByPerson: true, unreachable: false } : {}) });
       return { ok: true, answer: response.data };

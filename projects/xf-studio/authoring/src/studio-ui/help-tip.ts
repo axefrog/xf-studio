@@ -38,8 +38,8 @@ export function setHelp(button: HTMLElement, text: HelpText, title?: string) {
 let installed: Document | undefined;
 /** The page's tip, told when a help text changes (it follows at once if it shows that icon). */
 let live: ((button: HTMLElement) => void) | undefined;
-export function installHelpTips(doc: Document = document) {
-  if (installed === doc) return;
+export function installHelpTips(doc: Document = document, signal?: AbortSignal) {
+  if (signal?.aborted || installed === doc) return;
   installed = doc;
   const tip = h("div", { class: "help-bubble", role: "tooltip", hidden: true });
   doc.body.append(tip);
@@ -70,7 +70,7 @@ export function installHelpTips(doc: Document = document) {
       event.preventDefault(); event.stopPropagation();
       if (pinned && shownFor === control) hide(); else { show(control); pinned = true; }
     } else if (pinned) hide();
-  }, true);
+  }, { capture: true, signal });
   // Keyboard focus (:focus-visible) only: a click's own focus, or focus a script puts there after a pointer interaction, is not the
   // person asking what the icon is. Scripted focus that follows keyboard input can match :focus-visible, so panels must never focus a
   // help icon themselves (firstControl skips them).
@@ -78,15 +78,16 @@ export function installHelpTips(doc: Document = document) {
     const control = target(event);
     if (!control) { if (shownFor && !pinned) hide(); return; }
     if (control.matches(":focus-visible")) show(control);
-  });
-  doc.addEventListener("focusout", event => { if (event.target === shownFor && !pinned) hide(); });
-  doc.addEventListener("pointerover", event => { const control = target(event); if (control && control !== shownFor) { pinned = false; show(control); } });
+  }, { signal });
+  doc.addEventListener("focusout", event => { if (event.target === shownFor && !pinned) hide(); }, { signal });
+  doc.addEventListener("pointerover", event => { const control = target(event); if (control && control !== shownFor) { pinned = false; show(control); } }, { signal });
   doc.addEventListener("pointerout", event => {
     if (!shownFor || pinned || !(event.target instanceof Node) || !shownFor.contains(event.target)) return;
     if (event.relatedTarget instanceof Node && shownFor.contains(event.relatedTarget)) return;
     if (doc.activeElement !== shownFor) hide();
-  });
-  doc.addEventListener("keydown", event => { if (event.key === "Escape" && shownFor) { event.stopPropagation(); hide(); } }, true);
-  doc.addEventListener("scroll", () => { if (shownFor) hide(); }, true);
+  }, { signal });
+  doc.addEventListener("keydown", event => { if (event.key === "Escape" && shownFor) { event.stopPropagation(); hide(); } }, { capture: true, signal });
+  doc.addEventListener("scroll", () => { if (shownFor) hide(); }, { capture: true, signal });
   live = button => { if (button === shownFor) show(button); };
+  signal?.addEventListener("abort", () => { tip.remove(); if (installed === doc) { installed = undefined; live = undefined; } }, { once: true });
 }

@@ -176,9 +176,9 @@ export class StudioRuntime {
       this.report("history.undo", result);
     } };
   }
-  subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  subscribe(listener: () => void) { if (!this.applicationSignal?.aborted) this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   /** Presentation-local changes (feedback log, drag state) that need a repaint. */
-  changed() { for (const listener of this.listeners) listener(); }
+  changed() { if (!this.applicationSignal?.aborted) for (const listener of this.listeners) { if (this.applicationSignal?.aborted) break; listener(); } }
 }
 
 function fileSource(kind: StudioFileAction["kind"]) {

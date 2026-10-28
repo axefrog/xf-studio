@@ -31,10 +31,10 @@ import type { TransitionSetting } from "../platform/core/transition-settings";
 export type FacialSolved = { ok: true; frames: number; rate?: number; pose: SolvedPose; ms: number; skipped: readonly string[] } |
   { ok: false; code: "superseded" | "unavailable" | "invalid" | "failed"; message: string };
 export interface FacialDevicePort {
-  state(): Promise<FacialHostState>;
+  state(signal?: AbortSignal): Promise<FacialHostState>;
   /** The installed expressions; asking starts the host's read. `prefetch`: read ahead of the Expressions view, at background priority. */
-  expressions(options?: { prefetch?: boolean }): Promise<FacialStartPoints>;
-  solve(request: FacialSolveRequest): Promise<FacialSolved>;
+  expressions(options?: { prefetch?: boolean }, signal?: AbortSignal): Promise<FacialStartPoints>;
+  solve(request: FacialSolveRequest, signal?: AbortSignal): Promise<FacialSolved>;
 }
 /** The scene's face driver as the service sees it (head-rig.ts `face`). */
 export type FacePoseSink = {
@@ -89,6 +89,7 @@ export class FacialPreview {
   private poll: unknown = null;
   private polls = 0;
   private disposed = false;
+  private readonly lifetime = new AbortController();
   /** The Expressions view asked for the installed expressions (`installed`); until then the host doesn't read them (PREV-179). */
   private installedWanted = false;
   /** The host was asked to read them ahead of the view (`prefetch`), once per page. */
@@ -97,8 +98,8 @@ export class FacialPreview {
   private readonly listeners = new Set<() => void>();
   constructor(private readonly device: FacialDevicePort, private readonly timer: FacialTimer = TIMER) {}
 
-  subscribe(listener: () => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  private notify() { for (const listener of this.listeners) listener(); }
+  subscribe(listener: () => void) { if (!this.disposed) this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  private notify() { if (!this.disposed) for (const listener of this.listeners) { if (this.disposed) break; listener(); } }
 
   /** Ask the host for its state now (and again while it prepares). */
   start() { void this.refresh(); }
@@ -110,32 +111,37 @@ export class FacialPreview {
   animate(animation: FacialAnimation | undefined) { this.animation = animation; this.changed(); }
   /** The scene's face driver (undefined while no head is loaded). */
   attachScene(sink: FacePoseSink | undefined) {
+    if (this.disposed) return;
     this.sink = sink; this.sinkRigged = false; this.sinkError = null; this.shown = "none";
     this.rigSink();
     this.changed();
   }
   dispose() {
+    if (this.disposed) return;
     this.disposed = true;
+    this.lifetime.abort();
     if (this.poll !== null) this.timer.clear(this.poll);
     if (this.slowTimer !== null) this.timer.clear(this.slowTimer);
     if (this.tick !== null) this.timer.clear(this.tick);
     this.listeners.clear();
+    this.sink = undefined;
   }
 
   private async refresh() {
     if (this.disposed) return;
     this.poll = null;
-    try { this.host = await this.device.state(); this.hostError = null; }
-    catch { this.hostError = "XF Studio couldn't reach its face data. Reload the page to try again."; }
+    try { const host = await this.device.state(this.lifetime.signal); if (this.disposed) return; this.host = host; this.hostError = null; }
+    catch { if (this.disposed) return; this.hostError = "XF Studio couldn't reach its face data. Reload the page to try again."; }
     if (this.disposed) return;
     const rig = this.host?.rig;
     if (rig?.phase === "ready" && rig.joints && !this.rest) { this.rest = { joints: rig.joints.map(joint => ({ ...joint, t: [...joint.t], r: [...joint.r], s: [...joint.s] })) as unknown as RigRest["joints"] }; this.rigSink(); }
     // Asking for the installed expressions is what starts the host reading them, so they are asked for only once the view wants them.
     const listed = this.host?.expressions.phase === "preparing" || this.host?.expressions.phase === "ready";
     if (this.installedWanted && listed && this.startPoints.phase !== "ready") {
-      try { this.startPoints = await this.device.expressions(); } catch { /* asked again on the next poll */ }
+      try { const points = await this.device.expressions(undefined, this.lifetime.signal); if (this.disposed) return; this.startPoints = points; } catch { /* asked again on the next poll */ }
     } else if (this.host && !listed)
       this.startPoints = { phase: this.host.expressions.phase, ...(this.host.expressions.reason ? { reason: this.host.expressions.reason } : {}), items: [] };
+    if (this.disposed) return;
     const preparing = !this.host || this.host.rig.phase === "preparing" || this.host.solver.phase === "starting" ||
       (this.installedWanted && listed && this.startPoints.phase !== "ready");
     if (preparing && !this.disposed) this.poll = this.timer.set(() => void this.refresh(), POLL_MS[Math.min(this.polls++, POLL_MS.length - 1)]!);
@@ -199,7 +205,7 @@ export class FacialPreview {
     const started = this.solveStarted = this.timer.now();
     this.slowTimer = this.timer.set(() => { this.slowTimer = null; this.slow = true; this.notify(); }, SLOW_SOLVE_MS);
     let answer: FacialSolved;
-    try { answer = await this.device.solve(request); }
+    try { answer = await this.device.solve(request, this.lifetime.signal); }
     catch { answer = { ok: false, code: "failed", message: "XF Studio couldn't reach the facial solver." }; }
     if (this.slowTimer !== null) { this.timer.clear(this.slowTimer); this.slowTimer = null; }
     this.slow = false;
@@ -300,7 +306,7 @@ export class FacialPreview {
   prefetch() {
     if (this.prefetched || this.installedWanted || this.disposed) return;
     this.prefetched = true;
-    void this.device.expressions({ prefetch: true }).catch(() => { /* The view asks again when it shows. */ });
+    void this.device.expressions({ prefetch: true }, this.lifetime.signal).catch(() => { /* The view asks again when it shows. */ });
   }
   /** The Expressions view is showing: read the installed expressions (once; the host starts reading them when first asked). */
   installed() {
@@ -311,6 +317,7 @@ export class FacialPreview {
   }
   /** Solve again after a failure (the drawer's Try again). */
   retry() {
+    if (this.disposed) return;
     // The host's state is asked for again: a solver that stopped or was stuck is started again there (CORE-101), and the solve follows.
     this.failure = null; this.shown = ""; this.polls = 0;
     if (this.poll !== null) { this.timer.clear(this.poll); this.poll = null; }

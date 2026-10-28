@@ -27,7 +27,7 @@ const key = (target: HTMLElement, name: string, mods: { altKey?: boolean; shiftK
 let previousWindow: unknown;
 beforeEach(() => {
   installLightDom(); previousWindow = (globalThis as Record<string, unknown>).window;
-  (globalThis as Record<string, unknown>).window = { innerWidth: 1400, innerHeight: 1000, addEventListener() {} };
+  (globalThis as Record<string, unknown>).window = { innerWidth: 1400, innerHeight: 1000, addEventListener() {}, removeEventListener() {} };
 });
 afterEach(() => {
   for (const form of lightDocument.body.querySelectorAll(".popover")) form.dispatchEvent(lightEvent("keydown", { key: "Escape" }));

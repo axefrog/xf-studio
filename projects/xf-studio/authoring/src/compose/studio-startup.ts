@@ -145,7 +145,7 @@ const byId = <T extends HTMLElement>(id: string) => {
   return found as T;
 };
 
-/** The root lifetime; 13c1 connects existing owners, with remaining release work in 13c2–13c3. */
+/** The application lifetime: owners follow its signal after durable release is permitted. */
 export type StudioLifetime = { readonly signal: AbortSignal; abort(): void };
 export function startStudio(host: StudioHost, options: { composition?: StudioStartupComposition; signal?: AbortSignal } = {}): Promise<StudioLifetime | undefined> {
   const root = byId("studio");
@@ -196,7 +196,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   const restored = loadCompositionWorkspace(storage, verification, composition), workspace = restored.state;
   // The V's details the page asked for last are read while everything else starts (research/backlog/performance.md, warm restart).
   // `?warm=off` leaves it out (a developer's A/B measurement, tools/measure-warm-restart.ts).
-  const warmStart = new CharacterWarmStart({ storage, verification });
+  const warmStart = new CharacterWarmStart({ storage, verification, signal });
   if (new URLSearchParams(location.search).get("warm") !== "off") void warmStart.start();
   const documents = host.documents, lease = host.lease, base = verification ? "/api/verification" : "/api";
   const access = workspaceAccess(lease, documents.outbox);
@@ -525,7 +525,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     } },
     previewReadiness: previewDevice?.coordinator ?? noGeneratedPreview(workspace.preview.textureSize), status: statusSource, about: host.about, desktopApp: host.desktopApp,
     // Both hosts serve the update check; a verification workspace keeps what it found apart (UI-98).
-    updates: createBrowserUpdateCheck(verification ? "/api/verification/update-check" : "/api/update-check"),
+    updates: createBrowserUpdateCheck(verification ? "/api/verification/update-check" : "/api/update-check", signal),
     collections: { owner: services.collections, scene: shownScene, transport: polish5?.transport ?? packageTransport,
       flushLook: () => lookEditor.commit(),
       // A new look's first layer starts from the chosen starter (the default when none was chosen).

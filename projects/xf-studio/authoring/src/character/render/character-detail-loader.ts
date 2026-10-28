@@ -109,7 +109,12 @@ export type WarmedFiles = {
 
 const MAX_BYTES = 256 * 1024 * 1024, MAX_VERTICES = 1_500_000;
 /** Let the page draw and answer between stages of a load (a new task, after the ones already waiting). */
-const yieldTask = () => new Promise<void>(resolve => { setTimeout(resolve, 0); });
+const yieldTask = (signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+  if (signal?.aborted) { reject(signal.reason); return; }
+  const abort = () => { clearTimeout(timer); reject(signal!.reason); };
+  const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, 0);
+  signal?.addEventListener("abort", abort, { once: true });
+});
 const SLOT_NOUN: Record<DetailSlot, [string, string]> = { skin: ["skin", "it isn't"], face: ["face details", "they aren't"], brows: ["eyebrows", "they aren't"], lashes: ["eyelashes", "they aren't"],
   hair: ["hair", "it isn't"], eyes: ["eyes", "they aren't"], teeth: ["teeth", "they aren't"], piercings: ["piercings", "they aren't"], body: ["body", "it isn't"],
   clothing: ["clothes", "they aren't"] };
@@ -227,7 +232,8 @@ const decodeElement = (image: HTMLImageElement) => image.decode?.().catch(() => 
  * the main thread too (character-material-adapters.ts `setReducedImage`). An element without a bitmap, or read on the CPU without its
  * copy, is decoded now, off the main thread (a 4096² map took a frame of its own).
  */
-export async function decodeDetailTexture(bytes: ArrayBuffer, cpuSize: { width: number; height: number } | null, cpuRead: boolean): Promise<DecodedTexture> {
+export async function decodeDetailTexture(bytes: ArrayBuffer, cpuSize: { width: number; height: number } | null, cpuRead: boolean, signal?: AbortSignal): Promise<DecodedTexture> {
+  signal?.throwIfAborted();
   const blob = new Blob([withoutColourChunks(bytes)], { type: "image/png" });
   const bitmap = typeof createImageBitmap === "function" ? createImageBitmap(blob, UPLOAD_BITMAP_OPTIONS).catch(() => null) : Promise.resolve(null);
   const small = cpuSize && typeof createImageBitmap === "function"
@@ -237,8 +243,10 @@ export async function decodeDetailTexture(bytes: ArrayBuffer, cpuSize: { width: 
   try {
     const image = await new THREE.ImageLoader().loadAsync(url);
     const [decoded, reduced] = await Promise.all([bitmap, small]);
+    signal?.throwIfAborted();
     if (reduced) setReducedImage(image, reduced);
     if ((cpuRead && !reduced) || !decoded) await decodeElement(image);
+    signal?.throwIfAborted();
     return { image, bitmap: decoded, reduced };
   } catch (error) {
     // The element can fail before the parallel bitmap decodes finish.
@@ -277,12 +285,13 @@ export function withoutColourChunks(bytes: ArrayBuffer): ArrayBuffer {
   return out.buffer;
 }
 /** Parse a geometry file (its own skin weights kept as floats, `restoreFirstWeights`), each stage in a task of its own (PREV-189). */
-export async function parseDetailGeometry(buffer: ArrayBuffer): Promise<ParsedGeometry> {
-  await yieldTask();
+export async function parseDetailGeometry(buffer: ArrayBuffer, signal?: AbortSignal): Promise<ParsedGeometry> {
+  await yieldTask(signal);
   const raw = restoreFirstWeights(buffer);
-  await yieldTask();
+  await yieldTask(signal);
   const gltf = await new GLTFLoader().parseAsync(buffer.slice(0), "");
-  await yieldTask();
+  try { await yieldTask(signal); }
+  catch (error) { releaseDetailObject(gltf.scene); throw error; }
   const weights = new Map<string, Float32Array>();
   gltf.scene.traverse(object => {
     if (!(object instanceof THREE.SkinnedMesh)) return;
@@ -357,9 +366,12 @@ export function bindRigid(mesh: THREE.Mesh, root: THREE.Object3D, options: { fol
 }
 
 export async function readCharacterRecord(file: string, fetcher: CharacterDetailFetch = fetch, signal?: AbortSignal): Promise<CharacterDetail> {
+  signal?.throwIfAborted();
   const response = await fetcher(`${CHARACTER_DETAIL_ASSETS}${file}`, { signal });
   if (!response.ok) throw Error("The prepared details are unavailable.");
-  return parseCharacterDetail(await response.json());
+  const value: unknown = await response.json();
+  signal?.throwIfAborted();
+  return parseCharacterDetail(value);
 }
 
 /**

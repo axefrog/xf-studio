@@ -30,19 +30,42 @@ export class Feedback {
   private entries: ActivityEntry[] = [];
   private listeners = new Set<() => void>();
   private counter = 0;
-  constructor(private readonly diagnostics?: FeedbackDiagnostics) {
+  private stopped = false;
+  private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+  private readonly frames = new Set<number>();
+  constructor(private readonly diagnostics?: FeedbackDiagnostics, private readonly signal?: AbortSignal) {
     this.toasts = h("div", { class: "toasts", role: "region", "aria-label": "Notifications" });
     this.live = h("div", { class: "sr-only", "aria-live": "polite", "aria-atomic": "true" });
     this.assertive = h("div", { class: "sr-only", "aria-live": "assertive", "aria-atomic": "true" });
+    const stop = () => {
+      this.stopped = true;
+      for (const timer of this.timers) clearTimeout(timer); this.timers.clear();
+      for (const frame of this.frames) cancelAnimationFrame(frame); this.frames.clear();
+      this.listeners.clear();
+    };
+    signal?.addEventListener("abort", stop, { once: true });
+    if (signal?.aborted) stop();
   }
+  private later(run: () => void, ms: number) {
+    if (this.stopped) return;
+    const id = setTimeout(() => { this.timers.delete(id); if (!this.stopped) run(); }, ms);
+    this.timers.add(id); return id;
+  }
+  private clear(id: ReturnType<typeof setTimeout> | undefined) { if (id !== undefined) { clearTimeout(id); this.timers.delete(id); } }
   get log(): readonly ActivityEntry[] { return this.entries; }
-  subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  subscribe(listener: () => void) { if (!this.stopped) this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   /** Screen-reader announcement without a visible toast (layout changes, selections). */
-  announce(message: string) { this.live.textContent = ""; requestAnimationFrame(() => { this.live.textContent = message; }); }
+  announce(message: string) {
+    if (this.stopped) return;
+    this.live.textContent = "";
+    const id = requestAnimationFrame(() => { this.frames.delete(id); if (!this.stopped) this.live.textContent = message; });
+    this.frames.add(id);
+  }
   record(tone: Tone, source: string, message: string, ref?: string) {
+    if (this.stopped) return;
     this.entries.push({ id: ++this.counter, time: new Date(), tone, source, message, ...(ref ? { ref } : {}) });
     if (this.entries.length > 200) this.entries.splice(0, this.entries.length - 200);
-    for (const listener of this.listeners) listener();
+    for (const listener of this.listeners) { if (this.stopped) break; listener(); }
   }
   /**
    * Visible, dismissible toast. Errors stay until dismissed; others fade after a while, but not while the pointer or keyboard
@@ -50,21 +73,23 @@ export class Feedback {
    * ordinary refusal (UI-80: nothing to undo, busy, out of range) is a warning that fades, whoever raised it.
    */
   toast(tone: Tone, source: string, message: string, actions: FeedbackAction[] = [], options: ToastOptions = {}) {
+    if (this.stopped) return () => {};
     // The same notice already on screen isn't shown (or logged) again: a repeated refusal during a drag says it once (UI-15).
     const key = `${tone}\u0000${source}\u0000${options.key ?? message}`;
     const shown = [...this.toasts.children].find(child => (child as HTMLElement).dataset?.key === key && !child.classList.contains("leaving"));
-    if (shown && !options.ref) return () => { shown.classList.add("leaving"); setTimeout(() => shown.remove(), 160); };
+    if (shown && !options.ref) return () => { if (this.stopped) return; shown.classList.add("leaving"); this.later(() => shown.remove(), 160); };
     if (tone === "error" && options.ref === undefined && options.code !== undefined && this.diagnostics?.expected?.(options.code)) tone = "warning";
     const ref = options.ref !== undefined ? options.ref : tone === "error" ? this.diagnostics?.notice({ source, message, code: options.code }) ?? null : null;
     this.record(tone, source, message, ref ?? undefined);
+    if (this.stopped) return () => {};
     const all = ref && this.diagnostics ? [...actions, { label: "Report this problem", run: () => this.diagnostics!.report(ref) }] : actions;
-    const close = () => { element.classList.add("leaving"); setTimeout(() => element.remove(), 160); };
+    const close = () => { if (this.stopped) return; element.classList.add("leaving"); this.later(() => element.remove(), 160); };
     const element = h("div", { class: `toast ${tone}`, role: tone === "error" ? "alert" : "status", "data-key": key },
       h("span", { class: "toast-icon" }, icon(toneIcon[tone])),
       h("div", { class: "toast-body" }, h("strong", { text: source }), h("p", { text: message }),
         ref ? h("p", { class: "toast-ref", text: `Reference ${ref}` }) : null,
         all.length ? h("div", { class: "toast-actions" }, all.map(action =>
-          button({ label: action.label, small: true, onClick: () => { close(); action.run(); } }))) : null),
+          button({ label: action.label, small: true, onClick: () => { if (this.stopped) return; close(); action.run(); } }))) : null),
       iconButton({ label: "Dismiss notification", icon: "close", onClick: close }));
     this.toasts.append(element);
     while (this.toasts.children.length > 4) {
@@ -74,10 +99,10 @@ export class Feedback {
     if (!options.sticky && tone !== "error" && !ref) {
       // Fades after a while; reading it (pointer over it, or focus in it) holds it until the reader moves on.
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const arm = () => { clearTimeout(timer); timer = setTimeout(close, all.length ? 9000 : 5200); };
-      const hold = () => clearTimeout(timer);
-      element.addEventListener("pointerenter", hold); element.addEventListener("focusin", hold);
-      element.addEventListener("pointerleave", arm); element.addEventListener("focusout", arm);
+      const arm = () => { this.clear(timer); timer = this.later(close, all.length ? 9000 : 5200); };
+      const hold = () => this.clear(timer);
+      element.addEventListener("pointerenter", hold, { signal: this.signal }); element.addEventListener("focusin", hold, { signal: this.signal });
+      element.addEventListener("pointerleave", arm, { signal: this.signal }); element.addEventListener("focusout", arm, { signal: this.signal });
       arm();
     }
     return close;

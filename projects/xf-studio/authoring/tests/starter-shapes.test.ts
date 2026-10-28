@@ -618,7 +618,7 @@ describe("the layer commands", () => {
 
 describe("the starters menu", () => {
   let previousPage: unknown;
-  beforeAll(() => { installLightDom(); previousPage = globalThis.window; Object.assign(globalThis, { window: { innerWidth: 900, innerHeight: 900, addEventListener() {} } }); });
+  beforeAll(() => { installLightDom(); previousPage = globalThis.window; Object.assign(globalThis, { window: { innerWidth: 900, innerHeight: 900, addEventListener() {}, removeEventListener() {} } }); });
   afterAll(() => { closeMenus(false); uninstallLightDom(); Object.assign(globalThis, { window: previousPage }); });
 
   test("lists eye makeup's starters then Yours, each row with a thumbnail and a star, the default filled and marked, own rows with the bin", async () => {

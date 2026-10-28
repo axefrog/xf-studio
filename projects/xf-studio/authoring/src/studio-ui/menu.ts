@@ -96,8 +96,6 @@ export function place(element: HTMLElement, anchor: MenuAnchor, submenu = false,
 }
 
 export function closeMenus(restoreFocus = true) { root?.close(restoreFocus); }
-// One listener for the page: leaving the window closes any open menu.
-if (typeof window !== "undefined") window.addEventListener("blur", () => closeMenus(false));
 export function menuOpen() { return !!root; }
 
 /** Whether a menu of these items offers anything to act on (an action or a submenu, available or with its reason). */
@@ -126,7 +124,9 @@ export function openMenu(items: MenuItem[], anchor: MenuAnchor, options: { label
     closeMenus(false);
   };
   document.addEventListener("pointerdown", outside, { capture: true });
-  const detach = () => document.removeEventListener("pointerdown", outside, { capture: true });
+  const blur = () => closeMenus(false);
+  window.addEventListener("blur", blur);
+  const detach = () => { document.removeEventListener("pointerdown", outside, { capture: true }); window.removeEventListener("blur", blur); };
   const previous = root.close;
   const abort = () => menu.close(false), menu = root;
   options.signal?.addEventListener("abort", abort, { once: true });
@@ -139,6 +139,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
   const element = h("div", { class: "menu", role: "menu", "aria-label": label, tabindex: "-1" });
   const entries: HTMLElement[] = [];
   let closed = false;
+  let focusFrame = 0;
   const dispatch = (action: { capability?: Capability; run(): void }) => {
     if (closed || action.capability?.available === false) return;
     const opened = root;
@@ -146,6 +147,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
   };
   const self: OpenMenu = { element, parent, invoker, close(restore) {
     if (closed) return; closed = true;
+    cancelAnimationFrame(focusFrame);
     self.child?.close(false);
     element.remove();
     if (parent) { parent.child = undefined; if (restore) (invoker as HTMLElement | null)?.focus?.(); }
@@ -237,7 +239,7 @@ function build(items: MenuItem[], anchor: MenuAnchor, label: string, parent: Ope
   });
   menuLayer().append(element);
   place(element, anchor, !!parent, placement);
-  if (!parent) requestAnimationFrame(() => {
+  if (!parent) focusFrame = requestAnimationFrame(() => {
     if (!element.isConnected) return;
     const target = focusLabel ? entries.find(entry => entry.querySelector(".menu-label")?.textContent === focusLabel) : undefined;
     if (target) target.focus(); else focusEntry(self, 0);
@@ -299,10 +301,12 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
   form.addEventListener("submit", event => { event.preventDefault(); if (closed || !check()) return; try { options.commit(read(), switches.map(toggle => toggle.input.checked)); } finally { close(false); } });
   form.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } });
   const outside = (event: PointerEvent) => { if (!event.composedPath().includes(form)) close(false); };
-  let closed = false;
+  let closed = false, focusFrame = 0;
+  let outsideTimer: ReturnType<typeof setTimeout> | undefined;
   function close(restore: boolean) {
     if (closed) return;
     closed = true;
+    cancelAnimationFrame(focusFrame); clearTimeout(outsideTimer);
     document.removeEventListener("pointerdown", outside, { capture: true });
     form.remove(); if (popover?.close === close) popover = undefined;
     options.signal?.removeEventListener("abort", abort); options.onClose?.();
@@ -315,9 +319,9 @@ export function openValuePopover(field: ValueField, anchor: MenuAnchor, options:
   menuLayer().append(form);
   place(form, anchor);
   check();
-  requestAnimationFrame(() => { if (closed) return; input.focus(); if (input instanceof HTMLInputElement && field.kind === "text") input.select(); });
+  focusFrame = requestAnimationFrame(() => { if (closed) return; input.focus(); if (input instanceof HTMLInputElement && field.kind === "text") input.select(); });
   // Armed after the press that opened it, unless it was closed first (a listener left behind would outlive it).
-  setTimeout(() => { if (!closed) document.addEventListener("pointerdown", outside, { capture: true }); });
+  outsideTimer = setTimeout(() => { if (!closed) document.addEventListener("pointerdown", outside, { capture: true }); });
   return { close };
 }
 
@@ -340,9 +344,11 @@ export function openConfirmPopover(anchor: MenuAnchor, options: { signal?: Abort
   form.addEventListener("submit", event => { event.preventDefault(); if (closed) return; try { options.onConfirm(); } finally { close(true); } });
   form.addEventListener("keydown", event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } });
   const outside = (event: PointerEvent) => { if (!event.composedPath().includes(form)) close(false); };
-  let closed = false;
+  let closed = false, focusFrame = 0;
+  let outsideTimer: ReturnType<typeof setTimeout> | undefined;
   function close(restore: boolean) {
     if (closed) return; closed = true;
+    cancelAnimationFrame(focusFrame); clearTimeout(outsideTimer);
     options.signal?.removeEventListener("abort", abort); options.onClose?.();
     document.removeEventListener("pointerdown", outside, { capture: true });
     form.remove(); if (popover?.close === close) popover = undefined;
@@ -354,8 +360,8 @@ export function openConfirmPopover(anchor: MenuAnchor, options: { signal?: Abort
   if (options.signal?.aborted) { close(false); return { close }; }
   menuLayer().append(form);
   place(form, anchor);
-  requestAnimationFrame(() => cancel.focus());
+  focusFrame = requestAnimationFrame(() => { if (!closed) cancel.focus(); });
   // Armed after the press that opened it, unless it was closed first (a listener left behind would outlive it).
-  setTimeout(() => { if (!closed) document.addEventListener("pointerdown", outside, { capture: true }); });
+  outsideTimer = setTimeout(() => { if (!closed) document.addEventListener("pointerdown", outside, { capture: true }); });
   return { close };
 }

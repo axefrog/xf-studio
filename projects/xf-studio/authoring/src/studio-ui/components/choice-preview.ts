@@ -400,5 +400,13 @@ export function installPreviewFilter(): void {
     } catch { /* Without tokens the pictures show their raw channels, still recognisable as shapes. */ }
   };
   refresh();
-  new MutationObserver(refresh).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
+  const observer = new MutationObserver(refresh);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
+  releaseFilter = () => { observer.disconnect(); svg.remove(); installed = undefined; releaseFilter = undefined; };
+}
+
+let releaseFilter: (() => void) | undefined;
+/** The shell owns the page's shared filter, including one installed lazily by a later panel. */
+export function bindPreviewFilterLifetime(signal: AbortSignal): void {
+  signal.addEventListener("abort", () => releaseFilter?.(), { once: true });
 }

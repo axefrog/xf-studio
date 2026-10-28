@@ -10,8 +10,8 @@ import { clamp, h } from "./dom";
 const SELECTOR = "button[aria-disabled=\"true\"][data-reason], [role=button][aria-disabled=\"true\"][data-reason]";
 let installed: Document | undefined;
 
-export function installReasonTips(doc: Document = document) {
-  if (installed === doc) return;
+export function installReasonTips(doc: Document = document, signal?: AbortSignal) {
+  if (signal?.aborted || installed === doc) return;
   installed = doc;
   const tip = h("div", { class: "reason-tip", role: "tooltip", hidden: true });
   doc.body.append(tip);
@@ -41,18 +41,19 @@ export function installReasonTips(doc: Document = document) {
     if (!control) return;
     event.preventDefault(); event.stopImmediatePropagation();
     show(control, true);
-  }, true);
+  }, { capture: true, signal });
   // Keyboard focus (:focus-visible) only: a click's own focus, or focus a script puts there after a pointer interaction (a panel
   // focusing its first control), does not open the tip.
   doc.addEventListener("focusin", event => {
     const control = target(event);
     if (!control) { if (shownFor) hide(); return; }
     if (control.matches(":focus-visible")) show(control);
-  });
-  doc.addEventListener("focusout", event => { if (event.target === shownFor) hide(); });
-  doc.addEventListener("pointerover", event => { const control = target(event); if (control && control !== shownFor) show(control); });
+  }, { signal });
+  doc.addEventListener("focusout", event => { if (event.target === shownFor) hide(); }, { signal });
+  doc.addEventListener("pointerover", event => { const control = target(event); if (control && control !== shownFor) show(control); }, { signal });
   doc.addEventListener("pointerout", event => { if (shownFor && event.target instanceof Node && shownFor.contains(event.target) &&
-    !(event.relatedTarget instanceof Node && shownFor.contains(event.relatedTarget)) && doc.activeElement !== shownFor) hide(); });
-  doc.addEventListener("keydown", event => { if (event.key === "Escape" && shownFor) hide(); });
-  doc.addEventListener("scroll", () => { if (shownFor) hide(); }, true);
+    !(event.relatedTarget instanceof Node && shownFor.contains(event.relatedTarget)) && doc.activeElement !== shownFor) hide(); }, { signal });
+  doc.addEventListener("keydown", event => { if (event.key === "Escape" && shownFor) hide(); }, { signal });
+  doc.addEventListener("scroll", () => { if (shownFor) hide(); }, { capture: true, signal });
+  signal?.addEventListener("abort", () => { clearTimeout(timer); tip.remove(); if (installed === doc) installed = undefined; }, { once: true });
 }

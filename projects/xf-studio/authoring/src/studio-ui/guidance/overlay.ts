@@ -15,14 +15,14 @@ export type CalloutView = { eyebrow: string; title: string; body: string; note?:
 
 // Track input once per document. Chromium can carry :focus-visible from a search input
 // through a pointer-triggered, deferred focus(), so the title also needs the actual input origin.
-const inputOrigins = new WeakMap<Document, { keyboard: boolean }>();
-function inputOrigin() {
+const inputOrigins = new WeakMap<Document, { keyboard: boolean; signal?: AbortSignal }>();
+function inputOrigin(signal?: AbortSignal) {
   let origin = inputOrigins.get(document);
-  if (!origin) {
-    origin = { keyboard: false };
+  if (!origin || origin.signal?.aborted) {
+    origin = { keyboard: false, signal };
     const state = origin;
-    document.addEventListener("keydown", () => { state.keyboard = true; }, true);
-    document.addEventListener("pointerdown", () => { state.keyboard = false; }, true);
+    document.addEventListener("keydown", () => { state.keyboard = true; }, { capture: true, signal });
+    document.addEventListener("pointerdown", () => { state.keyboard = false; }, { capture: true, signal });
     inputOrigins.set(document, origin);
   }
   return origin;
@@ -40,11 +40,12 @@ export class Callout {
   private readonly note: HTMLElement;
   private readonly actions: HTMLElement;
   private readonly dots: HTMLElement;
-  private readonly origin = inputOrigin();
+  private readonly origin;
   private bodyKey = "";
   private actionKey = "";
   private runs = new Map<string, () => void>();
-  constructor(private readonly options: { className: string; closeLabel: string; onClose(): void; openTopic?(id: string): void; onKey?(event: KeyboardEvent): boolean }) {
+  constructor(private readonly options: { signal?: AbortSignal; className: string; closeLabel: string; onClose(): void; openTopic?(id: string): void; onKey?(event: KeyboardEvent): boolean }) {
+    this.origin = inputOrigin(options.signal);
     const titleId = uid("guidance-title"), bodyId = uid("guidance-body");
     this.eyebrow = h("span", { class: "guidance-eyebrow" });
     this.title = h("h2", { class: "guidance-title", id: titleId, tabindex: "-1" });
@@ -59,7 +60,7 @@ export class Callout {
     this.element.addEventListener("keydown", event => {
       this.title.removeAttribute("data-pointer-focus");
       if (options.onKey?.(event)) { event.preventDefault(); event.stopPropagation(); }
-    });
+    }, { signal: options.signal });
   }
   update(view: CalloutView) {
     setText(this.eyebrow, view.eyebrow);
@@ -138,6 +139,7 @@ export class TourOverlay {
   private frames = 0;
   private placed = "";
   constructor(private deps: {
+    signal?: AbortSignal;
     rect(target: StepTarget): AnchorRect | undefined;
     press(button: StepButton): void;
     nav(action: TourNavigation): void;
@@ -146,9 +148,10 @@ export class TourOverlay {
     refresh?(): void;
   }) {
     this.spotlight = h("div", { class: "guidance-spotlight", "aria-hidden": "true" });
-    this.callout = new Callout({ className: "guidance-tour", closeLabel: "Skip tour", onClose: () => deps.nav("skip"),
+    this.callout = new Callout({ signal: deps.signal, className: "guidance-tour", closeLabel: "Skip tour", onClose: () => deps.nav("skip"),
       openTopic: deps.openTopic, onKey: event => this.key(event) });
     this.element = h("div", { class: "guidance-layer", hidden: true }, this.spotlight, this.callout.element);
+    deps.signal?.addEventListener("abort", () => { cancelAnimationFrame(this.frameRequest); this.frameRequest = 0; this.active = null; }, { once: true });
   }
   private key(event: KeyboardEvent) {
     if (!this.active) return false;
@@ -157,6 +160,7 @@ export class TourOverlay {
     return !!result;
   }
   render(active: ActiveTour | null) {
+    if (this.deps.signal?.aborted) return;
     this.active = active;
     if (!active) {
       this.element.hidden = true; this.callout.hide();

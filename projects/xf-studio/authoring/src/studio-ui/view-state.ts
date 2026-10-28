@@ -59,7 +59,7 @@ type PreferencePort = {
  * each change shows at once and is remembered best effort (a refused write still holds for the session).
  */
 export class PreferenceViewState extends MemoryViewState {
-  constructor(private readonly preferences: PreferencePort) {
+  constructor(private readonly preferences: PreferencePort, private readonly signal?: AbortSignal) {
     super();
     const stored = preferences.snapshot();
     for (const [key, open] of Object.entries(stored.expanded ?? {})) super.setExpanded([key], open);
@@ -84,6 +84,7 @@ export class PreferenceViewState extends MemoryViewState {
     this.write({ kind: "size.set", key, ...(next !== undefined ? { height: next } : {}) });
   }
   private write(action: UIPreferenceAction) {
+    if (this.signal?.aborted) return;
     try { if (this.preferences.capability(action).available) this.preferences.dispatch(action); } catch { /* View state is best effort. */ }
   }
 }

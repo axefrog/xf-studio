@@ -214,7 +214,7 @@ export function lightingPanel(rt: StudioRuntime): PanelController {
   }, transaction: {
     edit: value => { edit({ kind: "preview.setLight", light: lightId(), key: "azimuth", value: value.azimuth });
       edit({ kind: "preview.setLight", light: lightId(), key: "elevation", value: value.elevation }); },
-    commit: endEdit, cancel: endEdit } });
+    commit: endEdit, cancel: endEdit } }, rt.instance?.signal ?? rt.applicationSignal);
   const lightSlider = (key: "distance" | "intensity" | "cone" | "softness", label: string, range: { min: number; max: number; step: number },
     unit: string, toValue: (shown: number) => number, format: (value: number) => string, help?: string) => new SliderWithValue({ label, ...range, unit, format, help,
     transaction: { edit: value => { edit({ kind: "preview.setLight", light: lightId(), key, value: toValue(value) }); }, commit: endEdit, cancel: endEdit } });

@@ -5,7 +5,7 @@ import { closeMenus, openMenu, place } from "../src/studio-ui/menu";
 let previousPage: unknown;
 beforeEach(() => {
   installLightDom(); previousPage = globalThis.window;
-  Object.assign(globalThis, { window: { innerWidth: 900, innerHeight: 900, addEventListener() {} } });
+  Object.assign(globalThis, { window: { innerWidth: 900, innerHeight: 900, addEventListener() {}, removeEventListener() {} } });
 });
 afterEach(() => { closeMenus(false); uninstallLightDom(); Object.assign(globalThis, { window: previousPage }); });
 const box = (left: number, top: number, width: number, height: number) => {

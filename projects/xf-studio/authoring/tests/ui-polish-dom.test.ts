@@ -756,7 +756,7 @@ describe("The workspace notice (style guide t-recovering, t-unprotected): it nev
   // The confirm popover places itself in the window (the light DOM has none: give it one for these tests).
   const globals = globalThis as { window?: unknown };
   const had = globals.window;
-  beforeAll(() => { globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {} }; });
+  beforeAll(() => { globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {} }; });
   afterAll(() => { if (had === undefined) delete globals.window; else globals.window = had; });
   const harness = async () => {
     const { workspaceNotice, restoringLine } = await import("../src/studio-ui/app");
@@ -855,7 +855,7 @@ describe("The workspace notice (style guide t-recovering, t-unprotected): it nev
 describe("Polish batch 2: the profiles phase 1 UI follow-ups", () => {
   const globals = globalThis as { window?: unknown };
   const had = globals.window;
-  beforeAll(() => { globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {} }; });
+  beforeAll(() => { globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {} }; });
   afterAll(() => { if (had === undefined) delete globals.window; else globals.window = had; });
   const idle = { shown: false, long: false, safe: false, missing: 0 };
   const leaseFrame = (lease: Record<string, unknown>) => ({ status: { lease, outbox: { unprotected: 0, pending: 0, conflicts: 0, failing: false, recovering: idle } },

@@ -13,7 +13,7 @@ import { applyCapability, button, setButtonLabel, TabStrip, openMenu, openValueP
 import type { Feedback } from "./feedback";
 import type { Command } from "./commands";
 
-type TabsDeps = { tabs: LayoutTabsPort; capability(action: LayoutTabAction): Capability;
+type TabsDeps = { tabs: LayoutTabsPort; signal?: AbortSignal; capability(action: LayoutTabAction): Capability;
   dispatch(action: LayoutTabAction): { ok: true } | { ok: false; message: string };
   feedback: Pick<Feedback, "announce" | "toast">; dock: HTMLElement; changed(): void; moduleIcon(module: string): string | undefined };
 const subjectKey = (ref: SubjectRef | undefined) => ref ? JSON.stringify(ref) : "";
@@ -24,6 +24,8 @@ const allowed: Capability = { available: true };
 export function layoutTabs(deps: TabsDeps) {
   const { tabs, feedback } = deps;
   let signature = "", suppressClick = false, naming: string | undefined;
+  let cancelDrag: (() => void) | undefined;
+  let clickTimer: ReturnType<typeof setTimeout> | undefined;
   let choiceForm: ReturnType<typeof openChoicePopover> | undefined;
   const cap = (action: LayoutTabAction) => deps.capability(action);
   const run = (action: LayoutTabAction) => {
@@ -239,6 +241,7 @@ export function layoutTabs(deps: TabsDeps) {
   function drag(event: PointerEvent, id: string) {
     if (event.button !== 0 || !cap({ kind: "tabs.move", tab: id, to: 0 }).available) return;
     const start = event.clientX; let dragging = false, to = -1;
+    cancelDrag?.();
     const clear = () => { strip.tabs.forEach(tab => { tab.classList.remove("drop-before", "drop-after"); }); };
     const move = (event: PointerEvent) => {
       if (!dragging && Math.abs(event.clientX - start) < 5) return;
@@ -250,11 +253,16 @@ export function layoutTabs(deps: TabsDeps) {
       to = target ? others.indexOf(target) : others.length;
       if (target) strip.tab(target)?.classList.add("drop-before"); else if (others.length) strip.tab(others.at(-1)!)?.classList.add("drop-after");
     };
-    const end = (event: PointerEvent) => {
+    const cancel = () => {
       document.removeEventListener("pointermove", move); document.removeEventListener("pointerup", end); document.removeEventListener("pointercancel", end);
       clear(); element.classList.remove("dragging"); strip.tab(id)?.classList.remove("dragging");
-      if (dragging) { suppressClick = true; setTimeout(() => { suppressClick = false; }); if (event.type !== "pointercancel" && to >= 0 && run({ kind: "tabs.move", tab: id, to })) feedback.announce("Tab reordered"); }
+      cancelDrag = undefined;
     };
+    const end = (event: PointerEvent) => {
+      cancel();
+      if (dragging) { suppressClick = true; clearTimeout(clickTimer); clickTimer = setTimeout(() => { suppressClick = false; }); if (event.type !== "pointercancel" && to >= 0 && run({ kind: "tabs.move", tab: id, to })) feedback.announce("Tab reordered"); }
+    };
+    cancelDrag = cancel;
     document.addEventListener("pointermove", move); document.addEventListener("pointerup", end); document.addEventListener("pointercancel", end);
   }
   function commands(): Command[] {
@@ -269,7 +277,9 @@ export function layoutTabs(deps: TabsDeps) {
       ...(state.closed.length ? [command("tab.reopen", "Reopen closed tab", { kind: "tabs.reopen" })] : []),
       { id: "tab.new", title: "New tab…", group: "Layout tabs", icon: "plus", capability: () => defaults.some(view => cap({ kind: "tabs.new", default: view.id }).available) ? allowed : { available: false, reason: "No tab can be created here." }, run: () => newMenu() }];
   }
-  const off = tabs.subscribe(sync); sync();
-  const dispose = () => { off(); observer?.disconnect(); choiceForm?.close(false); };
+  const off = tabs.subscribe(sync);
+  const dispose = () => { off(); observer?.disconnect(); choiceForm?.close(false); cancelDrag?.(); clearTimeout(clickTimer); };
+  deps.signal?.addEventListener("abort", dispose, { once: true });
+  sync();
   return { dispose, element, strip, add, sync, fit, menu, menuItems, newMenu, rename, commands, globalKey };
 }

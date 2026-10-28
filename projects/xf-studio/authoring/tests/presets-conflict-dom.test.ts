@@ -8,7 +8,7 @@ import { installLightDom, lightDocument, lightEvent, type LightElement, uninstal
 // The confirm popover places itself in the window (the light DOM has none: give it one here).
 const globals = globalThis as { window?: unknown };
 const had = globals.window;
-beforeAll(() => { installLightDom(); globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {} }; });
+beforeAll(() => { installLightDom(); globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {} }; });
 afterAll(() => { uninstallLightDom(); if (had === undefined) delete globals.window; else globals.window = had; });
 const settle = () => new Promise(resolve => setTimeout(resolve, 5));
 

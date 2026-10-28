@@ -77,6 +77,12 @@ export class DockView {
    * afresh at each render, so the position comes back after a layout change, a tab switch and a reload alike.
    */
   private scrollMemories: ScrollMemory[] = [];
+  private readonly frames = new Set<number>();
+  private frame(run: () => void) {
+    if (this.options.signal?.aborted) return;
+    const id = requestAnimationFrame(() => { this.frames.delete(id); if (!this.options.signal?.aborted) run(); });
+    this.frames.add(id);
+  }
 
   constructor(private options: DockViewOptions) {
     for (const panel of options.panels) this.panels.set(panel.id, panel);
@@ -89,6 +95,7 @@ export class DockView {
     this.element = h("div", { class: "dock" }, this.surface, this.floatingLayer, this.overlay, this.parking);
     for (const panel of options.panels) this.parking.append(panel.element);
     options.signal?.addEventListener("abort", () => {
+      for (const id of this.frames) cancelAnimationFrame(id); this.frames.clear();
       this.cancelDrag(); this.fitter.disconnect();
       for (const memory of this.scrollMemories) memory.dispose();
       this.scrollMemories = []; this.element.remove();
@@ -177,7 +184,7 @@ export class DockView {
     if (!at) return;
     const collapsed = !at.group.collapsed;
     this.update(setCollapsed(this.tree, at.group.id, collapsed), `${this.describeGroup(at.group)} ${collapsed ? "collapsed" : "expanded"}`);
-    requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`[data-group="${at.group.id}"] .dock-collapse-btn`)?.focus());
+    this.frame(() => this.element.querySelector<HTMLElement>(`[data-group="${at.group.id}"] .dock-collapse-btn`)?.focus());
   }
   /** Why a panel's group can't collapse (it fills the workspace alone or is maximized), else undefined. */
   collapseBlocked(id: PanelId): string | undefined {
@@ -190,6 +197,7 @@ export class DockView {
 
   /** Replace the active size class's tree, render, persist and announce. */
   update(tree: DockTree, message?: string, persist = true) {
+    if (this.options.signal?.aborted) return;
     const area = this.area();
     if (area.w > 40 && area.h > 40) tree = recoverWindows(tree, area);
     tree = keepDockExpanded(tree);
@@ -211,6 +219,7 @@ export class DockView {
   }
 
   render() {
+    if (this.options.signal?.aborted) return;
     // Record where each shown panel was while its content is still in place.
     for (const memory of this.scrollMemories) memory.dispose();
     this.scrollMemories = [];
@@ -517,6 +526,7 @@ export class DockView {
    * group. Focus moves to its tab, unless the caller focuses something inside the panel (`focus: false`, as Help focuses its search).
    */
   reveal(id: PanelId, focus = true) {
+    if (this.options.signal?.aborted) return;
     if ((!this.panels.has(id) || !this.isOpen(id)) && this.options.semantic?.("show", id)) return;
     if (!this.panels.has(id)) { this.options.withdrawn?.(id); return; }
     const before = locate(this.tree, id);
@@ -528,6 +538,7 @@ export class DockView {
   }
   /** A newly created first 3D view uses its tab's view slot, shown and focused, in both size classes. */
   openView(id: PanelId, arrangement: unknown, focus = true) {
+    if (this.options.signal?.aborted) return;
     if (!this.panels.has(id)) return;
     this.state = openViewDockState(this.state, arrangement,
       { wide: this.options.defaults("wide"), compact: this.options.defaults("compact") }, id, this.area().w);
@@ -535,7 +546,7 @@ export class DockView {
   }
   /** Move focus to a panel's tab once the layout it just got has rendered. */
   private focusTab(id: PanelId) {
-    requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus());
+    this.frame(() => this.element.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus());
   }
   /**
    * Where a panel floats: over the middle of the workspace at a readable size, staggered past the windows already open. A summoned
@@ -563,7 +574,7 @@ export class DockView {
   }
   moveTo(id: PanelId, target: DropTarget, message: string) {
     this.update(showPanelDocked(applyDrop(this.tree, { kind: "panel", panelId: id }, target, this.groupRect(locate(this.tree, id)?.group.id)), id), message);
-    requestAnimationFrame(() => this.element.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus());
+    this.frame(() => this.element.querySelector<HTMLElement>(`[id="dock-tab-${id}"]`)?.focus());
   }
   toggleMaximize(groupId: string) {
     const on = this.tree.maximized !== groupId;

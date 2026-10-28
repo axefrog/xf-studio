@@ -17,17 +17,24 @@ const pageId = () => globalThis.crypto?.randomUUID?.() ?? `page-${Math.random().
 
 export function createBrowserFacialDevice(fetcher: (url: string, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init)): FacialDevicePort {
   const client = pageId();
-  const get = async <T>(url: string): Promise<T> => {
-    const response = await fetcher(url, { cache: "no-store" });
+  const get = async <T>(url: string, signal?: AbortSignal): Promise<T> => {
+    signal?.throwIfAborted();
+    const response = await fetcher(url, { cache: "no-store", signal });
+    signal?.throwIfAborted();
     if (!response.ok) throw Error(`The face data answered ${response.status}.`);
-    return await response.json() as T;
+    const answer = await response.json() as T;
+    signal?.throwIfAborted();
+    return answer;
   };
   return {
-    state: () => get<FacialHostState>(FACIAL_ENDPOINT),
-    expressions: options => get<FacialStartPoints>(options?.prefetch ? `${FACIAL_EXPRESSIONS_ENDPOINT}?prefetch=1` : FACIAL_EXPRESSIONS_ENDPOINT),
-    async solve(request: FacialSolveRequest): Promise<FacialSolved> {
-      const response = await fetcher(FACIAL_SOLVE_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...request, client }) });
+    state: signal => get<FacialHostState>(FACIAL_ENDPOINT, signal),
+    expressions: (options, signal) => get<FacialStartPoints>(options?.prefetch ? `${FACIAL_EXPRESSIONS_ENDPOINT}?prefetch=1` : FACIAL_EXPRESSIONS_ENDPOINT, signal),
+    async solve(request: FacialSolveRequest, signal?: AbortSignal): Promise<FacialSolved> {
+      signal?.throwIfAborted();
+      const response = await fetcher(FACIAL_SOLVE_ENDPOINT, { method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...request, client }) });
+      signal?.throwIfAborted();
       const answer = await response.json() as FacialSolveAnswer;
+      signal?.throwIfAborted();
       if (!answer.ok) return answer;
       return { ok: true, frames: answer.frames, ...(answer.rate ? { rate: answer.rate } : {}), pose: { q: floats(answer.q), t: floats(answer.t) },
         ms: answer.ms, skipped: answer.skipped };

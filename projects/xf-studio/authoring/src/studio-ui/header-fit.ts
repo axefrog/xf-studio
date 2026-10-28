@@ -51,16 +51,18 @@ export type HeaderReserve = { readonly slot: HTMLElement; readonly element: HTML
 
 export class HeaderFit {
   private observer?: ResizeObserver;
+  private disconnected = false;
   private minimum = 0;
   private reserved = 0;
   constructor(private readonly header: HTMLElement, private readonly names: readonly HTMLElement[], private readonly reserve?: HeaderReserve) {
     if (typeof ResizeObserver === "function") { this.observer = new ResizeObserver(() => this.refit()); this.observer.observe(header); }
     // The names' widths change once the interface fonts arrive; the header's own size doesn't, so the observer wouldn't hear it.
-    if (typeof document !== "undefined") void document.fonts?.ready.then(() => { this.minimum = 0; this.reserved = 0; this.refit(); });
+    if (typeof document !== "undefined") void document.fonts?.ready.then(() => { if (this.disconnected) return; this.minimum = 0; this.reserved = 0; this.refit(); });
   }
 
   /** Fit again: after the window resizes (observed) and whenever a name, the chip or a label in the header changes (the owner calls it). */
   refit(): void {
+    if (this.disconnected) return;
     const header = this.header;
     // Not laid out (a hidden page, the first paint before layout, a test document): nothing to measure, and every label shows.
     if (!header.isConnected || !header.clientWidth) { setAttr(header, "data-fit", undefined); return; }
@@ -96,5 +98,5 @@ export class HeaderFit {
     return this.minimum = Math.ceil(context.measureText("0".repeat(MIN_CHARACTERS)).width);
   }
 
-  disconnect() { this.observer?.disconnect(); }
+  disconnect() { this.disconnected = true; this.observer?.disconnect(); }
 }

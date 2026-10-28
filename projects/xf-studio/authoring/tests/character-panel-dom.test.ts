@@ -188,7 +188,7 @@ describe("the Character panel's DOM", () => {
     expect(buttons.map(button => [button.textContent, button.hidden])).toEqual([["Keep mine", false], ["Use other window's", false], ["Keep both", false]]);
     // Use other window's discards this window's changes, so it asks first, in place, naming the V (the popover places itself in a window).
     const globals = globalThis as { window?: unknown }, had = globals.window;
-    globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {} };
+    globals.window = { innerWidth: 1200, innerHeight: 800, addEventListener() {}, removeEventListener() {} };
     try {
       buttons[1]!.click();
       const popover = lightDocument.body.querySelector(".confirm-popover")!;
