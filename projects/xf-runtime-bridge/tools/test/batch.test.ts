@@ -127,6 +127,32 @@ describe("batch: anticipation through the session executor", () => {
   });
 });
 
+describe("batch: the in-game progress line (session st-0823-1)", () => {
+  test("a judged row withdraws its progress line and waits for a repaint before its first step; an unjudged row keeps it", async () => {
+    const clock = new FakeClock();
+    const dir = tempDir("xfb-batch-");
+    const api = fakeApi(clock);
+    const rows: Row[] = [
+      { id: "judged", title: "a capture for review", judged_by: "XF · Studio", steps: [{ label: "first", do: "run", command: "scene.read", input: {} }] },
+      { id: "plain", title: "a check", steps: [{ label: "first", do: "run", command: "game.status", input: {} }] },
+    ];
+    await go(script(rows), api, fakeHost({ running: true }), clock, dir);
+    const names = api.calls.map((c) => `${c.name}${c.input.withdraw ? ":withdraw" : c.input.text?.startsWith("XF session · row") ? ":progress" : ""}`);
+    const firstStep = api.calls.findIndex((c) => c.name === "scene.read"); // only the judged row's own step reads the scene
+    const progress = names.indexOf("ui.message:progress");
+    const withdraw = names.indexOf("ui.message:withdraw");
+    expect(progress).toBeGreaterThanOrEqual(0);
+    expect(withdraw).toBeGreaterThan(progress);
+    expect(withdraw).toBeLessThan(firstStep); // gone before the judged row's own steps
+    const lines = api.calls.filter((c) => c.name === "ui.message" && String(c.input.text ?? "").startsWith("XF session · row"));
+    expect(lines.map((c) => c.input.text)).toEqual([
+      "XF session · row 1 of 2: judged. Hands off; nothing needed from you.",
+      "XF session · row 2 of 2: plain. Hands off; nothing needed from you.",
+    ]);
+    expect(api.calls.filter((c) => c.input.withdraw).length).toBe(1); // the unjudged row keeps its line
+  });
+});
+
 describe("batch: safety and stop handling", () => {
   test("handed_over stops the batch cleanly: later rows are SKIP(not reached), the teardown runs and config.ini is restored", async () => {
     const clock = new FakeClock();

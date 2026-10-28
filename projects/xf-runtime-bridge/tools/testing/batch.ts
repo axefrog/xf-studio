@@ -379,9 +379,12 @@ export const STILL_STARTING = ["game_not_running", "timeout", "busy", "bridge_bu
 export const LAUNCH_BLOCKED = "MO2 cannot launch the game; inspect the new Windows error in mo_interface.log.";
 
 /** Launch through MO2 and wait for the game's process; MO2's "Cannot launch program" dialog fails at once. */
+export const LAUNCH_DEADLINE_MS = 150_000;
 export function startSteps(): Step[] {
   return [
-    { label: "launch", do: "host.launch", outcomes: [{ name: "already_running", match: { code: "already_running" }, result: "ok" }] },
+    // The launcher waits up to two minutes for MO2's window (a cold MO2 with a large mod list), so the step's own deadline
+    // must outlast that, or the plan's 60 s default cancels it (the Sol review of 7d0a2b27).
+    { label: "launch", do: "host.launch", deadline_ms: LAUNCH_DEADLINE_MS, outcomes: [{ name: "already_running", match: { code: "already_running" }, result: "ok" }] },
     { label: "process", do: "host.running", until: { any: [{ path: "running", equals: true }, { path: "launch_blocked", exists: true }] }, interval_ms: 2000, deadline_ms: 120_000,
       outcomes: [{ name: "launch_blocked", match: { path: "launch_blocked", exists: true }, result: "fail" }] },
   ] as Step[];
@@ -632,8 +635,13 @@ export class SessionExecutor implements Executor {
 
 
   /** A line for the player (progress, warnings), shown even when the script's own notes aren't echoed. */
-  async notify(input: Record<string, unknown>) {
-    try { return (await this.c.api.run("ui.message", input, { source: "session" })).ok; } catch { return false; }
+  /** Answers the posted message's id (for a later withdraw), or undefined when it wasn't shown. */
+  async notify(input: Record<string, unknown>): Promise<number | undefined> {
+    try {
+      const posted = await this.c.api.run("ui.message", input, { source: "session" });
+      const id = posted.ok ? (posted.result as { id?: unknown } | undefined)?.id : undefined;
+      return typeof id === "number" ? id : undefined;
+    } catch { return undefined; }
   }
   private async echo(input: Record<string, unknown>) {
     if (!this.c.echo) return false;
@@ -1252,6 +1260,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   // 0.8.23 (session st-0823-1: "You need to communicate with me in game if you want me to be hands off"): the player sees
   // which row runs and that it needs nothing from them, and a warning before the runner restarts the game on purpose.
   let bridgeStopped = false, rowNumber = 0;
+  const PROGRESS_REPAINT_MS = 600;
   const progress = (text: string, seconds = 120) =>
     executor.notify({ text, level: "info", seconds, clear: true, keep_asks: true });
   const failures = new Map<string, string[]>();
@@ -1291,7 +1300,13 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       // The prelude: the row's config, a restart if anything read at load changed, a launch if the game isn't running.
       const current = config?.exists() ? config.read() : {};
       const needs = configNeeds(row, current);
-      if ((restartDue || Object.keys(needs).length) && !bridgeStopped) await progress(`XF session: restarting the game on purpose for ${row.id} (about 2 minutes). Hands off; the session carries on by itself.`);
+      // The line shows from before the set-up (restarts and loads are the long waits) through a row that isn't judged from its
+      // captures. A judged row withdraws it after the set-up and lets the surfaces repaint before its own steps, so no review
+      // capture or burst can include it or see it disappear (the Sol review of 7d0a2b27).
+      const line = `XF session · row ${rowNumber} of ${planned.rows.length}: ${row.id}. ` +
+        (row.manual ? "This row needs you: its question shows here when it's time." : "Hands off; nothing needed from you.");
+      const restarting = (restartDue || Object.keys(needs).length > 0) && !bridgeStopped;
+      const shown = await progress(restarting ? `${line} The game restarts on purpose first (about 2 minutes).` : line, 600);
       const prelude = await plan({ id: `${row.id}.prelude`, steps: preludeSteps(needs, restartDue, needsLoad({ ...current, ...needs }), bridgeStopped) });
       record.prelude = { status: prelude.status, reason: prelude.reason };
       record.reports.push(...prelude.reports);
@@ -1306,8 +1321,10 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
         write(setup);
         continue;
       }
-      // A row judged from its captures (judged_by) shows the line briefly, so it is gone before the first capture.
-      await progress(`XF session · row ${rowNumber} of ${planned.rows.length}: ${row.id}. Hands off; nothing needed from you.`, row.judged_by ? 6 : 120);
+      if (row.judged_by) {
+        if (shown !== undefined) await executor.notify({ withdraw: shown });
+        await clock.sleep(PROGRESS_REPAINT_MS, signal);
+      } else if (shown === undefined) await progress(line); // the set-up restarted the game: the line went with it
       // Telemetry: the recorder again after a restart (a new bridge session), and the row's slice from here.
       const recorder = await telemetry.ensureRecorder();
       if (recorder.restarted) log(`     recorder run ${recorder.run} on every channel`);

@@ -180,8 +180,11 @@ describe.skipIf(!existsSync(FENGARI))("0.8.6 init.lua: the CET line and Reconnec
       -- again later than that, so the clock moves on between attempts.
       local clock = 100
       ImGui.GetTime = function() return clock end
+      local rearms, rearm = 0, Game.XFBridge_Rearm
+      Game.XFBridge_Rearm = function(...) rearms = rearms + 1; return rearm(...) end
       for _, code in ipairs({ "still_closing", "restore_pending", "already_running", "failed", "anything_new" }) do
         clock = clock + 1
+        draw() -- an idle frame at the later time: the guard recomputes before the click (it carries over between frames)
         DECODE.REARM = { requested = false, code = code, reason = "the kill switch's restore hasn't finished; try again in a moment" }
         clicks["Reconnect"] = true
         draw()
@@ -190,7 +193,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.6 init.lua: the CET line and Reconnec
         local frame = draw()
         results[#results + 1] = string.match(frame, "wrapped@%d+:(The bridge[^|]*)") or "?"
       end
-      return table.concat(results, "/")`);
+      return table.concat(results, "/") .. "#" .. rearms`);
     expect(out).toBe(
       [
         "The bridge is still putting things back. Press Reconnect again in a moment.",
@@ -198,7 +201,7 @@ describe.skipIf(!existsSync(FENGARI))("0.8.6 init.lua: the CET line and Reconnec
         "The bridge is already running.",
         "The bridge couldn't start again. Restart the game to start it.",
         "The bridge couldn't start again. Restart the game to start it.",
-      ].join("/"),
+      ].join("/") + "#5", // every attempt reached XFBridge_Rearm
     );
     expect(init).not.toMatch(/"The bridge couldn't start again: "/);
   });

@@ -123,3 +123,14 @@ test.skipIf(process.platform !== "win32")("the MO2 process query normalises slas
   const r = runPs(String.raw`[IO.Path]::GetFullPath('F:/Games/MO2/ModOrganizer.exe') -eq [IO.Path]::GetFullPath('F:\Games\MO2\ModOrganizer.exe')`);
   expect(r.stdout.toString().trim()).toBe("True");
 });
+
+// The Sol review of 7d0a2b27: the launch step must outlast the launcher's two-minute window wait, or the plan's 60 s default
+// cancels a slow cold MO2.
+test("the launch step's deadline outlasts the MO2 window wait", async () => {
+  const { startSteps, LAUNCH_DEADLINE_MS } = await import("../testing/batch.ts");
+  const launch = startSteps().find((s) => s.label === "launch") as { deadline_ms?: number };
+  expect(launch.deadline_ms).toBe(LAUNCH_DEADLINE_MS);
+  const f = fake(["starting"]);
+  await createMo2Launcher(f.port).launch(spec);
+  expect(f.time()).toBeLessThan(LAUNCH_DEADLINE_MS - 20_000); // the window wait plus shell overhead fits inside the step
+});
