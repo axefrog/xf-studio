@@ -143,7 +143,7 @@ for (const end of ["abort", "upstream"] as const) test(`dirty workspace ${end} a
   life.beforeRelease(() => { studio.lookEditor.commit(); return session.release(); });
   life.signal.addEventListener("abort", () => { disposed = true; studio.files.dispose(); studio.lookEditor.dispose(); }, { once: true });
   try {
-    session.activate();
+    session.activate(); expect(session.flush()).toBe(true); writes = 0;
     workspace.uiPreferences.theme = "dark";
     workspace.uiPreferences.layout = { format: "fixture", version: 1, state: { ratio: .7 } };
     for (const listener of listeners) listener();

@@ -1,4 +1,4 @@
-import { afterEach, expect, jest, test } from "bun:test";
+import { afterEach, expect, jest, spyOn, test } from "bun:test";
 import { createBrowserWorkspaceSession } from "../src/app/browser/browser-workspace-device";
 import { COLLECTION_RECOVERY_LIMIT, collectionDraft, REMOVED_PRESET_LIMIT, withLiveMemory, type CollectionDraft,
   type CollectionWorkspace } from "../src/app/workspace/makeup-workspace";
@@ -85,7 +85,40 @@ test("save status is published only when it changes", () => {
   expect(seen).toEqual(["saved"]);
 });
 
-test("lost-lease release compares changed content to the last saved capture without writing", () => {
+test("normal autosaves and coarse requests do only the normal fitting serialization", () => {
+  jest.useFakeTimers();
+  const storage = memoryStorage(), workspace = freshWorkspace();
+  let captures = 0;
+  const writer = new WorkspacePersistence({ storage, key, writable: true, model: STUDIO_DOCUMENTS,
+    capture: () => { captures++; return workspace; } });
+  const stringify = spyOn(JSON, "stringify");
+  try {
+    fitWorkspace(workspace, STUDIO_DOCUMENTS);
+    const normalCalls = stringify.mock.calls.length;
+    expect(normalCalls).toBeGreaterThan(0); stringify.mockClear();
+    writer.activate(); writer.request(); jest.advanceTimersByTime(200);
+    expect(stringify.mock.calls.length).toBe(normalCalls);
+    expect(captures).toBe(1); expect(storage.writes()).toBe(1); stringify.mockClear();
+    writer.request(); jest.advanceTimersByTime(200);
+    expect(stringify.mock.calls.length).toBe(normalCalls);
+    expect(captures).toBe(2); expect(storage.writes()).toBe(1);
+  } finally { stringify.mockRestore(); writer.retire(); }
+});
+
+test("a lost-lease release after a failed save does not capture or encode again", () => {
+  const storage = memoryStorage(), workspace = freshWorkspace();
+  let canWrite = true, failed = false, captures = 0;
+  const writer = new WorkspacePersistence({ key, writable: true, model: STUDIO_DOCUMENTS, canWrite: () => canWrite,
+    storage: { setItem: (name, text) => { if (failed) throw Error("Storage unavailable"); storage.setItem(name, text); } },
+    capture: () => { captures++; return workspace; } });
+  writer.activate(); expect(writer.flush()).toBe(true);
+  workspace.uiPreferences.theme = "dark"; failed = true; expect(writer.flush()).toBe(false);
+  canWrite = false; expect(writer.flushForRelease()).toBe(false);
+  expect(captures).toBe(2); expect(storage.writes()).toBe(1);
+  writer.retire();
+});
+
+test("lost-lease release compares normal save bytes without writing", () => {
   jest.useFakeTimers();
   const storage = memoryStorage(), workspace = freshWorkspace(), theme = workspace.uiPreferences.theme;
   let canWrite = true;
@@ -100,7 +133,7 @@ test("lost-lease release compares changed content to the last saved capture with
   writer.retire();
 });
 
-for (const fault of ["capture", "snapshot"] as const) test(`lost-lease release retains recovery if ${fault} comparison fails`, () => {
+for (const fault of ["capture", "encoding"] as const) test(`lost-lease release retains recovery if ${fault} comparison fails`, () => {
   jest.useFakeTimers();
   const storage = memoryStorage(), workspace = freshWorkspace(), theme = workspace.uiPreferences.theme;
   let canWrite = true, broken = false;
@@ -108,7 +141,7 @@ for (const fault of ["capture", "snapshot"] as const) test(`lost-lease release r
     capture: () => { if (broken && fault === "capture") throw Error("Capture unavailable"); return workspace; } });
   writer.activate(); expect(writer.flush()).toBe(true);
   writer.request(); canWrite = false; broken = true;
-  if (fault === "snapshot") Object.defineProperty(workspace.uiPreferences, "theme", { configurable: true, enumerable: true, get() { throw Error("Snapshot unavailable"); } });
+  if (fault === "encoding") Object.defineProperty(workspace.uiPreferences, "theme", { configurable: true, enumerable: true, get() { throw Error("Encoding unavailable"); } });
   expect(writer.flushForRelease()).toBe(false);
   jest.advanceTimersByTime(200); expect(writer.flushForRelease()).toBe(false);
   expect(storage.writes()).toBe(1);
@@ -118,7 +151,7 @@ for (const fault of ["capture", "snapshot"] as const) test(`lost-lease release r
   writer.retire(); expect(jest.getTimerCount()).toBe(0);
 });
 
-test("lost-lease comparison keeps changes that the storage budget would trim", () => {
+test("lost-lease comparison permits release when trimming leaves the normal save bytes unchanged", () => {
   jest.useFakeTimers();
   const storage = memoryStorage(), history = fullHistory(initialRecipe()), workspace = { ...freshWorkspace(), history };
   let canWrite = true;
@@ -126,7 +159,7 @@ test("lost-lease comparison keeps changes that the storage budget would trim", (
   writer.activate(); expect(writer.flush()).toBe(true);
   history[0] = variant(history[0]!, 37); writer.request(); canWrite = false;
   expect(fitWorkspace(workspace, STUDIO_DOCUMENTS, 1).encoded).toBe(storage.stored.get(key)!);
-  expect(writer.flushForRelease()).toBe(false); expect(storage.writes()).toBe(1);
+  expect(writer.flushForRelease()).toBe(true); expect(storage.writes()).toBe(1);
   writer.retire();
 });
 
