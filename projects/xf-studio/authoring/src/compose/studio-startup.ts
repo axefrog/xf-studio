@@ -82,7 +82,7 @@ import { pageFailure, setPageDiagnostics } from "../diagnostics/page-sink";
 import type { WorkspaceLease } from "../app/workspace/workspace-lease";
 import type { StartedOutbox } from "../app/browser/document-outbox-device";
 import { PROFILES_MIGRATION_ENABLED, startProfilesMigration, watchProfilesMigration } from "../app/browser/profiles-migration-device";
-import { workspaceKeys, type WorkspaceState } from "../app/workspace/makeup-workspace";
+import { lookWorkspace, workspaceKeys, type WorkspaceState } from "../app/workspace/makeup-workspace";
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
@@ -302,7 +302,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
   let lookShown: (() => void) | undefined;
-  const profileAuthoring = createProfileAuthoring(workspace, {
+  const profileAuthoring = createProfileAuthoring(lookWorkspace(workspace, STUDIO_COMPOSITION.documents), {
     history: historyService, views: sessionState.graph,
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).

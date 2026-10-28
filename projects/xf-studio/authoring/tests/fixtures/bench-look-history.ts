@@ -6,7 +6,7 @@
  */
 import { LegacyDraftActions as CollectionActions, copyWorkspace } from "./legacy-draft";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./makeup-core";
 import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
 import { restore } from "./workspace-observable";
 import { largeWorkspaceV1 } from "./workspace-v1-fixtures";

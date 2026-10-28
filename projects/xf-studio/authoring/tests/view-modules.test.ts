@@ -9,7 +9,7 @@ import { deriveViewSummaries, deriveViewTools, moduleRegistrationIssues, viewTit
 import { PLATFORM_VIEW_TOOLS } from "../src/platform/core/view-tools";
 import { STUDIO_MODULE_REGISTRATION } from "../src/compose/modules";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { activate, allGroups, applyDrop, closePanel, locate, openShares, panelsIn, parkPanels, parseTree, setCollapsed, unparkPanels, type DockNode, type DockTree } from "../src/studio-ui/dock/layout";
 import { defaultCompact, defaultWide } from "../src/studio-ui/layout-defaults";
 import { activeModules, toolFilter } from "../src/studio-ui/runtime";

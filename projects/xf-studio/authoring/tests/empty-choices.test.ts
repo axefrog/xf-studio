@@ -17,7 +17,7 @@ import { openSession } from "./fixtures/profile-sessions";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { starterParts } from "../src/app/workspace/collection-workspace";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { profileStudio } from "./fixtures/profile-studio";
 import { lookContent } from "../src/library/makeup-look-editor";
 import { tabDefaults } from "../src/app/profiles/profile-window";

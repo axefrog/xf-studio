@@ -6,7 +6,7 @@
 import { expect, test } from "bun:test";
 import { STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { createStudioPresentation } from "../src/app/studio-presentation";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { trustedFixture } from "./studio-presentation-fixture";
 import { withHair, type Hair } from "./fixtures/hair-feature";
 import { freshWorkspace } from "./fixtures/eye-region";

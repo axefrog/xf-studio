@@ -378,7 +378,7 @@ export async function generateAsyncContextSeeds(first: number, last: number) {
             if (!added) throw Error("Recipe never reached its captured collection.");
             model.complete(view.scene, { collection: target.collection, look: added.id });
             const content = w.core.documents.parts.readPreset({ id: added.id, name, revision: 1, parts: added.parts }, "xfs/collection-2", "keep");
-            equal(livePart(content, w.core.documents)!.layers[0]!.opacity, recipe.layers[0]!.opacity, "imported recipe content");
+            equal(livePart(content, { ...w.core.documents, live: w.core.documents.live! })!.layers[0]!.opacity, recipe.layers[0]!.opacity, "imported recipe content");
           }
         }
         pending = undefined; release = () => {};

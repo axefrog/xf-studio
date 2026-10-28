@@ -3,7 +3,7 @@ import { CollectionService } from "../src/library/collection-service";
 import { bootstrapCollections } from "./fixtures/profile-studio";
 import { PreviewActions } from "../src/preview/preview-actions";
 import { CharacterContextActions } from "../src/character/character-context-actions";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { ViewportAttachment } from "../src/app/viewport-attachment";
 import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-actions";
 import { ACTION_DESCRIPTORS, type ActionDescriptor } from "../src/app/studio-action-descriptors";

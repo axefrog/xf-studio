@@ -10,7 +10,7 @@ import { LookEditor } from "../src/library/makeup-look-editor";
 import { LookSessions } from "../src/library/look-sessions";
 import { collectionServiceOver } from "./fixtures/profile-studio";
 import { COLLECTION_2 } from "../src/platform/api";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { withHair, withTint, type Hair } from "./fixtures/hair-feature";
 import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";

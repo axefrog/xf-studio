@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { bootstrapCollections } from "./fixtures/profile-studio";
 import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { createTrustedStudioBootstrap } from "../src/app/trusted-studio-bootstrap";
 import { UIPreferenceActions } from "../src/app/ui-preferences";
 import { ViewportAttachment } from "../src/app/viewport-attachment";
@@ -54,7 +54,7 @@ test("a presentation mounts from trusted services without any page controls", as
   // The input layer the composition root gives the port (profiles design §3.6): what each action names.
   const targets = fixtureTargets(core, { scene: collections.scene });
   const downloads: string[] = [];
-  const bootstrap = createTrustedStudioBootstrap({ core, targets, focus: core.history.focus,
+  const bootstrap = createTrustedStudioBootstrap({ core: { ...core, document: core.lookDocument }, targets, focus: core.history.focus,
     preferences: new UIPreferenceActions(workspace.uiPreferences), viewport, collections: collections.deps,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 1024,
       pending: 0, waiting: false, estimatedBytes: 1024, layers: [] }), subscribe: () => () => {} },

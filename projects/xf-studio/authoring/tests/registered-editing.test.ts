@@ -15,7 +15,7 @@ import { undoPolicyOf, type ActionSpec, type FeatureActionSpec } from "../src/pl
 import { Registry } from "../src/platform/core/registry";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import type { EyeMakeupAction, EyeMakeupState } from "../src/engines/layered-makeup/eye-makeup-model";
-import { createTrustedAuthoringCore, type StudioComposition } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore, type StudioComposition } from "./fixtures/makeup-core";
 import { glitterRecipe, opticsRecipe } from "./fixtures/workspace-v1-fixtures";
 import { readRecipe as parseRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { freshWorkspace } from "./fixtures/eye-region";

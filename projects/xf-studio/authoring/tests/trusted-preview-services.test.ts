@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { eyeShapeFallback, type PreviewPort } from "../src/preview/preview-actions";
 import type { MotionPort } from "../src/animation/motion-actions";
 import type { SavedV } from "../src/saves/save-reader";

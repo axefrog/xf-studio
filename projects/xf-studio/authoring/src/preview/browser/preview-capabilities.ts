@@ -12,7 +12,7 @@ export type BrowserPreview = Device & { readonly feature: string; start(): void;
 export type BrowserPreviewCapability = { create(state: unknown, options: BrowserPreviewOptions): BrowserPreview };
 export function createRegisteredPreview(core: Pick<Core, "app" | "documents">, options: BrowserPreviewOptions): BrowserPreview | undefined {
   options.signal.throwIfAborted();
-  const owner = core.app.actionRegistry().owner(core.documents.live);
+  const owner = core.documents.live ? core.app.actionRegistry().owner(core.documents.live) : undefined;
   return owner?.owner === "feature" ? (owner as typeof owner & { preview?: BrowserPreviewCapability }).preview?.create(core, options) : undefined;
 }
 /** Readiness when no feature contributes generated textures. Creates no raster scheduler, worker or feature state. */

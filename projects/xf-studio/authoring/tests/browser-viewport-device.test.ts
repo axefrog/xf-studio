@@ -5,8 +5,12 @@ import { createBrowserViewportDevice } from "../src/preview/browser/browser-view
 import type { createSceneRuntime } from "../src/platform/scene/scene-host";
 import type { createSurfaceEditor } from "../src/legacy/eye-makeup/browser/surface-editor";
 import { EYE_REGION } from "./fixtures/eye-region";
+import { freshWorkspace } from "./fixtures/eye-region";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
+import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 
 test("a toolbar-free browser viewport mounts once and rehosts live editors", async () => {
+  const core = createTrustedAuthoringCore(freshWorkspace(), { selectedCollection: () => "fixture" }, STUDIO_COMPOSITION);
   const events: string[] = [];
   const head = { clientWidth: 600, clientHeight: 400, contains: () => false };
   const camera = { position: [0, 1, 2] as [number, number, number],
@@ -39,11 +43,11 @@ test("a toolbar-free browser viewport mounts once and rehosts live editors", asy
   expect(attachment.snapshot().head).toMatchObject({ phase: "error", error: "The 3D preview couldn't be loaded. Try again." });
   expect(attachment.snapshot().head.message).toBeUndefined();
   device.headPending("loading", "Loading the 3D head…");
-  expect(() => device.mountSurface({} as THREE.SkinnedMesh, { state: {}, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} })).toThrow();
+  expect(() => device.mountSurface({} as THREE.SkinnedMesh, { state: core, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} })).toThrow();
   expect(attachment.snapshot().uv).toBeUndefined();
   // A head is built hidden, then shown on the pane's device.
   device.showHead(await device.buildHead());
-  expect(device.mountSurface({} as THREE.SkinnedMesh, { state: {}, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} })).toBe(surfaceEditor);
+  expect(device.mountSurface({} as THREE.SkinnedMesh, { state: core, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} })).toBe(surfaceEditor);
   device.headReady();
   expect(attachment.snapshot().head).toMatchObject({ phase: "ready", view: camera });
   const slot = { append(node: unknown) { events.push(node === head ? "head:move" : "uv:move"); } };
@@ -52,4 +56,5 @@ test("a toolbar-free browser viewport mounts once and rehosts live editors", asy
   expect({ devices, shown }).toEqual({ devices: 1, shown: ["viewer"] });
   expect(device.scene()).toBe(viewer as unknown as Awaited<ReturnType<typeof createSceneRuntime>>);
   expect(events).toEqual(["head:resize", "head:cancel", "head:move", "scene:resize", "head:resize"]);
+  core.app.dispose(); core.dispose();
 });

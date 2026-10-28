@@ -9,7 +9,7 @@ import { ValueTransition, weightBlend } from "../src/platform/core/value-transit
 import { DEFAULT_TRANSITION, parseTransitions, TransitionSettings } from "../src/platform/core/transition-settings";
 import { storedWeight } from "../src/engines/facial-rig/vector";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
 import { EASING_ICONS, iconPaths } from "../src/studio-ui/icons";

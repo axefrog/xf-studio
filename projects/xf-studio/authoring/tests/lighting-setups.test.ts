@@ -16,7 +16,7 @@ import { PreviewActions, type LightingStatus, type PreviewPort } from "../src/pr
 import { createStudioViewGraph, previewLights, sessionViewGraph } from "../src/preview/preview-view-graph";
 import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { DEFAULT_KEY_ANGLE, DEFAULT_STUDIO_STAGE, STUDIO_LIGHT_COLOURS, STUDIO_SETUP_IDS, STUDIO_SETUPS } from "../src/preview/studio-lighting";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { WorkspaceComposer } from "../src/app/workspace/workspace-composer";
 import { parseWorkspace, serializeWorkspace, type WorkspaceState } from "../src/app/workspace/makeup-workspace";

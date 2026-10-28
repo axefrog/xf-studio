@@ -8,7 +8,7 @@ import { EXPRESSIONS, expressionPart, expressionPose } from "../src/features/exp
 import { applyExpression, expressionCapability, pairLinked, type ExpressionAction } from "../src/features/expressions/core";
 import type { ExpressionPart } from "../src/features/expressions/part";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { f32 } from "../src/engines/facial-rig/vector";
 import { freshWorkspace } from "./fixtures/eye-region";

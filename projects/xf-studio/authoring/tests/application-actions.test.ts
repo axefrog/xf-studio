@@ -4,7 +4,7 @@ import { profileStudio } from "./fixtures/profile-studio";
 import { RECIPE_HISTORY, recipeHistory } from "../src/legacy/eye-makeup/editor-actions";
 import { recipeActionCapability, type RecipeActionState } from "../src/engines/layered-makeup/recipe-actions";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { PreviewActions, type PreviewPort } from "../src/preview/preview-actions";
 import { ViewportAdapter, type ViewportPort } from "../src/app/viewport-adapter";
 import { glitterModel, type GlitterChoices } from "../src/engines/layered-makeup/glitter-model";

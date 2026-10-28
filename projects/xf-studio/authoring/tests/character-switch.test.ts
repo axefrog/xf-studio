@@ -10,7 +10,7 @@ import { encodePng } from "../src/formats/png";
 import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail } from "../src/character/render-detail";
 import { SavedAppearanceActions, type SavedAppearanceResult } from "../src/character/saved-appearance-actions";
 import type { SavedV } from "../src/saves/save-reader";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { detailFixture, FACE, P, REQUEST_A, REQUEST_B } from "./character-detail-fixtures";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";

@@ -322,7 +322,7 @@ test("editing/file capture owns target data even across its adapter callback and
   const inputs: Input[] = []; let held: ReturnType<Input["capture"]> | undefined;
   try {
     // Only adapter mechanics are stubbed: the real context, resolver, history and look owners perform all validation.
-    const router = new PanelEditingContexts({ session: w.session, targets: w.targets, looks: w.authoring.contexts, empty: w.core,
+    const router = new PanelEditingContexts({ session: w.session, targets: w.targets, looks: w.neutralAuthoring.contexts, empty: w.neutralCore,
       context: () => ({ kind: "look" }), character: () => undefined,
       create: input => { inputs.push(input); return { port: w.port, writer: {} as FileWriter,
         files: { observeInput() {} } as unknown as StudioFileOperations, dispose() {} }; } });

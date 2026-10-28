@@ -9,15 +9,13 @@ import type { ViewGraph } from "../platform/core/view-graph";
 import { StudioApplication } from "./studio-application";
 import type { Recipe } from "../engines/layered-makeup/recipe";
 import type { LayeredMakeupRegion } from "../engines/layered-makeup/region";
-import type { WorkspaceState } from "./workspace/makeup-workspace";
-import { createMakeupView } from "./authoring/makeup-view";
-import { makeupEditingState, lookWorkspace } from "./workspace/makeup-workspace";
+import type { WorkspaceState } from "./workspace/workspace-state";
+import { createAuthoringProjections } from "./authoring/feature-projections";
 
 /** The existing action and part registrations; editing does not require a primary feature or region. */
 export type EditingComposition = { readonly registry: Registry<AnyOwner>; readonly documents: DocumentModel };
-/** The released geometry/view composition still requires the concrete product until the adapter slices. */
-export type StudioComposition = EditingComposition & { readonly documents: DocumentModel & { readonly live: string };
-  readonly region: LayeredMakeupRegion; readonly modules?: ModuleRegistration };
+/** Optional product metadata does not participate in neutral editor construction. */
+export type StudioComposition = EditingComposition & { readonly region?: LayeredMakeupRegion; readonly modules?: ModuleRegistration };
 
 export type AuthoringEditing = ReturnType<typeof createAuthoringEditing>;
 /** One authoritative look and the opaque editors supplied by its registered features. No application or renderer. */
@@ -67,17 +65,17 @@ export function createAuthoringEditing(state: DocumentState, ports: {
 
 /** Trusted application composition with the remaining geometry/view projection over registered editing services. */
 export function createTrustedAuthoringCore(workspace: WorkspaceState, ports: {
-  resetStack(previous: Recipe): void; selectedCollection(): string; newId?(): string;
+  resetStack?(previous: Recipe): void; selectedCollection(): string; newId?(): string;
   history?: HistoryService; scope?: string; activate?: boolean; views?: ViewGraph;
 }, composition: StudioComposition) {
   const history = ports.history ?? createHistoryService(), life = new AbortController();
-  const editing = createAuthoringEditing(makeupEditingState(workspace, composition),
-    { ...ports, history, signal: life.signal, memory: lookWorkspace(workspace, composition.documents).featureMemory, key: ports.selectedCollection }, composition);
+  const editing = createAuthoringEditing({ features: workspace.liveFeatures, history: workspace.history, locked: workspace.liveLocked },
+    { ...ports, history, signal: life.signal, memory: workspace.featureMemory, key: ports.selectedCollection }, composition);
   try {
-    const makeup = createMakeupView(editing, { ...ports, release: () => life.abort() }, composition);
+    const { projections, services } = createAuthoringProjections(editing, { ...ports, release: () => life.abort() }, composition);
     const { views, viewActions } = createViewServices(workspace.preview, workspace.views, composition.modules, history, ports.views);
-    const app = new StudioApplication({ ...makeup, signal: editing.signal, history, views, viewActions,
+    const app = new StudioApplication({ document: editing.document, ...services, signal: editing.signal, history, views, viewActions,
       ...(ports.newId ? { newId: ports.newId } : {}) }, composition.registry);
-    return { ...editing, ...makeup, app, history, documents: composition.documents, views };
+    return { ...editing, projections, projectionServices: services, app, history, documents: composition.documents, views, dispose: () => life.abort() };
   } catch (error) { life.abort(); throw error; }
 }

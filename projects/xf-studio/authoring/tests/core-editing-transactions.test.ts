@@ -1,6 +1,6 @@
 /** Slice 6: production registered editing, with no application or compatibility document/view. */
 import { expect, test } from "bun:test";
-import { createAuthoringEditing, createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createAuthoringEditing, createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { makeupEditingState, freshWorkspace } from "../src/app/workspace/makeup-workspace";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { createHistoryService } from "../src/platform/core/history-service";

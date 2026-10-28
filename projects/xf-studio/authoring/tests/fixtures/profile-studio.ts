@@ -6,7 +6,7 @@
  */
 import { ProfileService } from "../../src/app/profiles/profile-service";
 import { createStudioSubjects } from "../../src/compose/subjects";
-import { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./makeup-core";
 import type { StudioApplication } from "../../src/app/studio-application";
 import { fixtureTargets, named } from "./named-targets";
 import { StudioFileOperations, type StudioPickedFile } from "../../src/app/studio-file-operations";

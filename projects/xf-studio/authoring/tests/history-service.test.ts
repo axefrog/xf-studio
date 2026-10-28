@@ -11,7 +11,7 @@ const LOOK_SCOPE = lookScopeOf({ collection: "c", look: "l" });
 import { CONTROL_TRANSACTION, GESTURE_TRANSACTION } from "../src/platform/core/history-transaction";
 import { createStudioViewGraph, defaultViewGraph, STUDIO_VIEW_GRAPH_RULES } from "../src/preview/preview-view-graph";
 import { ViewGraph } from "../src/platform/core/view-graph";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { DEFAULT_CREATOR_LIGHTING } from "../src/preview/creator-lighting";
 import { CHARACTER_NOT_SHOWN, characterHistory } from "../src/character/character-history";

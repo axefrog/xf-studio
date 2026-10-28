@@ -9,7 +9,7 @@ import { featureActionTable, featureId, refusal, type ActionDescriptor, type Edi
   type PartCodec } from "../../src/platform/api";
 import { PartRegistry } from "../../src/platform/core/document";
 import { Registry } from "../../src/platform/core/registry";
-import type { StudioComposition } from "../../src/app/trusted-authoring-core";
+import type { StudioComposition } from "./makeup-core";
 
 export type Hair = { colour: string; strands: number[] };
 export type HairEditor = { strand: number };

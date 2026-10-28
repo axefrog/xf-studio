@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { cancelsGesture } from "../src/legacy/eye-makeup/gesture-cancel";
 import { IRREGULAR_RANGE_MESSAGE } from "../src/engines/layered-makeup/recipe-actions";
 import { StudioFileOperations } from "../src/app/studio-file-operations";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { profileStudio } from "./fixtures/profile-studio";

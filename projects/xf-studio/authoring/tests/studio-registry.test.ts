@@ -9,7 +9,7 @@ import { Registry } from "../src/platform/core/registry";
 import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-actions";
 import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { StudioApplication } from "../src/app/studio-application";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { freshWorkspace } from "./fixtures/eye-region";
 
 import { namedCore } from "./fixtures/named-targets";

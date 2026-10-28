@@ -11,7 +11,7 @@ import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 const written = (recipe: Recipe) => { expect(recipe).not.toHaveProperty("schema"); return recipeFile(recipe)!.schema; };
 import { StudioApplication, type StudioAction } from "../src/app/studio-application";
 import type { TestAction } from "./fixtures/named-targets";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { STUDIO_COMPOSITION, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { initialRecipe, freshWorkspace } from "./fixtures/eye-region";
 import { finenessState } from "../src/features/eye-makeup/view/actions";

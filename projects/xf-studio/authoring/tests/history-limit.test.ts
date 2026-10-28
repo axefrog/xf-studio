@@ -3,7 +3,7 @@ import { RECIPE_HISTORY, RECIPE_HISTORY_LIMIT } from "../src/legacy/eye-makeup/e
 import type { AuthoringDocument } from "./fixtures/makeup-document";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
 import { lookHistoryBodies } from "../src/platform/core/look-history";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 

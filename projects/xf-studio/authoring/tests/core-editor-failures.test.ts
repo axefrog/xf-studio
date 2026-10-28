@@ -4,7 +4,7 @@
  * its positive construction gate supplies the behavior assertions. No placeholder facade counts.
  */
 import { describe, expect, test } from "bun:test";
-import { createAuthoringEditing, createTrustedAuthoringCore, type StudioComposition } from "../src/app/trusted-authoring-core";
+import { createAuthoringEditing, createTrustedAuthoringCore, type StudioComposition } from "./fixtures/makeup-core";
 import { StudioApplication } from "../src/app/studio-application";
 import { loadWorkspace } from "../src/app/workspace/workspace-state";
 import { freshWorkspace } from "../src/app/workspace/makeup-workspace";

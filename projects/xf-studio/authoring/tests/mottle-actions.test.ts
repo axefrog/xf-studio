@@ -7,7 +7,7 @@ import { mottlePreset, mottleSeed, nextMottleSeed } from "../src/engines/layered
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
 import type { TestAction } from "./fixtures/named-targets";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace, initialRecipe } from "./fixtures/eye-region";
 import { historyLabel } from "../src/engines/layered-makeup/history-labels";

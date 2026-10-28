@@ -20,7 +20,7 @@ import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/bro
 import type { RasterPort } from "../src/legacy/eye-makeup/browser/raster-client";
 import type { LayeredMakeupSurface } from "../src/engines/layered-makeup/render/makeup-stack";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { namedCore } from "./fixtures/named-targets";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { emptyLookHistory } from "../src/platform/core/look-history";

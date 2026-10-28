@@ -257,7 +257,7 @@ test("fence headers round-trip and refuse malformed values", () => {
 });
 
 test("a release first ends an open gesture or slider drag (committed, one Undo step each), then refuses edits and drains", async () => {
-  const { createTrustedAuthoringCore } = await import("../src/app/trusted-authoring-core");
+  const { createTrustedAuthoringCore } = await import("./fixtures/makeup-core");
   const { STUDIO_COMPOSITION } = await import("../src/compose/studio-registry");
   const script = scriptedAdapter(false), order: string[] = [];
   const lease = new WorkspaceLease(script.adapter, { clock: simulatedClock().clock });

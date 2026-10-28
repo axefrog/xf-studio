@@ -8,7 +8,7 @@ import { DEFAULT_STUDIO_STAGE } from "../src/preview/studio-lighting";
 import type { StudioEnvironment } from "../src/preview/render/studio-environment";
 import { PreviewActions, type LightingStatus, type PreviewPort } from "../src/preview/preview-actions";
 import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { createTrustedPreviewServices } from "../src/app/trusted-preview-services";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { createStudioViewGraph, sessionViewGraph } from "../src/preview/preview-view-graph";

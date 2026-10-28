@@ -13,7 +13,7 @@ import { PartRegistry } from "../src/platform/core/document";
 import { CONTROL_TRANSACTION, GESTURE_TRANSACTION, HistoryTransaction, type TransactionHost } from "../src/platform/core/history-transaction";
 import { LookHistory, lookHistoryBodies, trimLookHistory } from "../src/platform/core/look-history";
 import { MAX_LAYERS, type Recipe } from "../src/engines/layered-makeup/recipe";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { encodeWorkspacePlan, fitWorkspace, MIN_SELECTED_HISTORY, PERSISTED_BACKGROUND_HISTORY, STANDARD_PLAN, WORKSPACE_STORAGE_BUDGET } from "../src/app/workspace/workspace-budget";
 import { WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
 import { loadWorkspace, parseWorkspace, type WorkspaceState } from "../src/app/workspace/makeup-workspace";

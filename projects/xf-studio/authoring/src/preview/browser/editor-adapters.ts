@@ -43,6 +43,6 @@ export type BrowserEditorAdapters = {
 };
 /** No secondary registry or product fallback: the same registered owner supplies its browser adapters. */
 export function registeredEditorAdapters(core: Pick<Core, "app" | "documents">): BrowserEditorAdapters | undefined {
-  const owner = core.app.actionRegistry().owner(core.documents.live);
+  const owner = core.documents.live ? core.app.actionRegistry().owner(core.documents.live) : undefined;
   return owner?.owner === "feature" ? (owner as typeof owner & { editors?: BrowserEditorAdapters }).editors : undefined;
 }

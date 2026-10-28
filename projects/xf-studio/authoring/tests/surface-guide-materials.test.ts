@@ -1,4 +1,7 @@
 import { createLayeredEditorAdapters } from "../src/preview/browser/layered-editor-adapters";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
+import { freshWorkspace } from "./fixtures/eye-region";
+import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { createSurfaceEditor, surfaceGuideStandIns } from "../src/legacy/eye-makeup/browser/surface-editor";
@@ -72,6 +75,7 @@ test("an editor given the head's guide materials draws with them on every mount 
 }));
 
 test("the viewport device mounts each head's editor with that head's guide materials, the ones its stand-ins compiled; they go with the head", async () => {
+  const core = createTrustedAuthoringCore(freshWorkspace(), { selectedCollection: () => "fixture" }, STUDIO_COMPOSITION);
   const host = { clientWidth: 600, clientHeight: 400, contains: () => false };
   const given: unknown[] = [];
   let built = 0;
@@ -84,9 +88,9 @@ test("the viewport device mounts each head's editor with that head's guide mater
   });
   const a = await device.buildHead(), b = await device.buildHead(), surface = {} as THREE.SkinnedMesh;
   const standInsA = device.surfaceGuides(a);
-  device.showHead(a); device.mountSurface(surface, { state: {}, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} });
-  device.showHead(b); device.mountSurface(surface, { state: {}, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} });
-  device.showHead(a); device.mountSurface(surface, { state: {}, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} });
+  device.showHead(a); device.mountSurface(surface, { state: core, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} });
+  device.showHead(b); device.mountSurface(surface, { state: core, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} });
+  device.showHead(a); device.mountSurface(surface, { state: core, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} });
   const [first, other, again] = given as { point: THREE.Material }[];
   expect(first!.point).toBe((standInsA[0] as THREE.Points).material as THREE.Material);
   expect(again).toBe(first);
@@ -95,4 +99,5 @@ test("the viewport device mounts each head's editor with that head's guide mater
   first!.point.addEventListener("dispose", () => { disposed = true; });
   device.disposeHead(a);
   expect(disposed).toBe(true);
+  core.app.dispose(); core.dispose();
 });

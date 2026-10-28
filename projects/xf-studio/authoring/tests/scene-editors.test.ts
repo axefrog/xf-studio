@@ -24,7 +24,8 @@ function editors() {
   const resources = adapters.surface!.create({} as never);
   const ports = { adapters,
     surfaces: new Map([["eye-makeup", factory]]), look: { feature: "eye-makeup", preview: {} },
-    core: { geometry: { layer: () => layer, recipe: () => ({ layers: [layer] }) }, presentation: { selected: 0, layer: () => layer, selectedField: () => ({ id: "F1" }) },
+    core: { documents: { live: "eye-makeup" }, projections: new Map([["eye-makeup", {
+      geometry: { layer: () => layer, recipe: () => ({ layers: [layer] }) }, presentation: { selected: 0, layer: () => layer, selectedField: () => ({ id: "F1" }) } }]]),
       app: { dispatch: (action: { kind: string; instance?: string }) => { log.push(`dispatch:${action.kind}@${action.instance}`); return { ok: true }; },
         beginGesture: (source: string, id: string, look?: { look: string }) => { log.push(`begin:${source}:${id}:${look?.look}`); return true; },
         applyGesture: (source: string) => { log.push(`apply:${source}`); return true; }, endGesture: (source: string, cancel?: boolean) => { log.push(`end:${source}:${!!cancel}`); },

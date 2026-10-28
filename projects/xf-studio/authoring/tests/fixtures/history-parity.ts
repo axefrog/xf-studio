@@ -14,7 +14,7 @@ import { STUDIO_COMPOSITION } from "../../src/compose/studio-registry";
 import { DEFAULT_CREATOR_LIGHTING } from "../../src/preview/creator-lighting";
 import { createHistoryService } from "../../src/platform/core/history-service";
 import { createStudioPresentation } from "../../src/app/studio-presentation";
-import { createTrustedAuthoringCore, type StudioComposition } from "../../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore, type StudioComposition } from "./makeup-core";
 import { createViewServices } from "../../src/app/view-actions";
 import { STUDIO_MODULE_REGISTRATION } from "../../src/compose/modules";
 import { freshWorkspace } from "./eye-region";

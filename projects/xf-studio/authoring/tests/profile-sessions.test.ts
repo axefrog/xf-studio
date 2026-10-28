@@ -25,7 +25,7 @@ import { type ProfileSessions, type TabContent } from "../src/app/profiles/profi
 import { UIPreferenceActions, type DockLayout } from "../src/app/ui-preferences";
 import { drawnView } from "../src/app/profiles/profile-window";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { MAIN_VIEW, SLOT_COLLECTIONS, VIEW_SLOTS, type StoredNode, type ViewRecord } from "../src/platform/api/view-graph";
 import { createHistoryService, lookScope, viewScope, type HistoryService } from "../src/platform/core/history-service";

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createAuthoringEditing, createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createAuthoringEditing, createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { StudioApplication } from "../src/app/studio-application";
 import { createStudioPresentation } from "../src/app/studio-presentation";
 import { STUDIO_OWNERS, STUDIO_COMPOSITION } from "../src/compose/studio-registry";

@@ -23,6 +23,7 @@ import type { Capability } from "../platform/api";
 import { PanelEditingContexts } from "./profiles/panel-editing-contexts";
 import { builtModsOf } from "../installation/mod-install-actions";
 import { registeredFeatureFiles } from "./feature-files";
+import { authoringPresentation } from "./authoring/feature-projections";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
@@ -141,7 +142,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     const held = options.fileCapture?.();
     return held && { ...held, writer: "writer" in held ? held.writer : writer };
   } : undefined }, options.fileOwner);
-  collection = new CollectionApplication({ ...options.collections, model: core.documents }, core.document, core.app, files);
+  collection = new CollectionApplication({ ...options.collections, model: core.documents }, core.lookDocument, core.app, files);
   editing = options.bound ? new PanelEditingContexts<Slot>({ ...options.bound, create: input => {
     let childPort: StudioPresentationPort<Slot>, childFiles: StudioFileOperations;
     const scoped = createTrustedStudioBootstrap<Slot>({ ...options, core: input.core, bound: undefined, fileOwner: input.fileOwner, retireFiles: true, naming: () => input.named,
@@ -164,7 +165,7 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     capturePort: options.capturePort ?? (editing ? signal => editing!.capturePort(options.naming?.().view, signal, files) : undefined),
     panelTargets: options.panelTargets, naming: options.naming, lookSelection: options.lookSelection, editing, signal: life.signal,
     files, viewport: options.viewport, preferences: options.preferences,
-    previewReadiness: options.previewReadiness, editor: core.presentation, status: options.status,
+    previewReadiness: options.previewReadiness, editor: authoringPresentation(core), status: options.status,
     localSetup: options.localSetup, installDetection: options.installDetection, frameworkProducts: options.frameworkProducts, product: options.product,
     modInstall: options.modInstall?.withBuilds(() => builtModsOf(files.snapshot().package)), previewSetup: options.previewSetup,
     desktopApp: options.desktopApp, updates: options.updates, links: options.links, about: options.about, diagnostics: options.diagnostics, modules: options.modules, experiments: options.experiments,

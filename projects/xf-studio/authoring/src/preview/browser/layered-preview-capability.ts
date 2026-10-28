@@ -4,9 +4,12 @@ import { GlitterMeasurements } from "../../legacy/eye-makeup/glitter-measurement
 import { rasterRegion, type LayeredMakeupRegion } from "../../engines/layered-makeup/region";
 import type { BrowserPreviewCapability } from "./preview-capabilities";
 import type { PreviewLayerSource } from "../../legacy/eye-makeup/preview/authoring-render-scheduler";
+import { makeupProjection } from "../../app/authoring/makeup-view";
 export function createLayeredPreviewCapability(region: LayeredMakeupRegion): BrowserPreviewCapability {
   return { create(state, options) {
-    const { document: source } = state as { readonly document: PreviewLayerSource };
+    const input = state as Parameters<typeof makeupProjection>[0] | { document: PreviewLayerSource };
+    const source = "projections" in input ? makeupProjection(input)?.document : input.document;
+    if (!source) throw Error("The layered preview needs its registered authoring projection.");
     const measurements = new GlitterMeasurements({ layers: () => source.recipe.layers,
       size: () => device.coordinator.size, fineGlitter: region.fineGlitter });
     const device = createBrowserPreviewDevice({ ...options, document: source, region: rasterRegion(region),

@@ -5,7 +5,7 @@ import { Registry, type AnyOwner } from "../src/platform/core/registry";
 import { createRegisteredPreview, noGeneratedPreview, type BrowserPreviewOptions } from "../src/preview/browser/preview-capabilities";
 import { registeredPreviewPreparation } from "../src/preview/preview-capabilities";
 import { STUDIO_COMPOSITION, STUDIO_OWNERS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { buildBrowserHead } from "../src/preview/browser/browser-head-attachment";
 import { ensurePreviewCore, previewCoreReadiness } from "../src/preview/host/preview-core-service";
 import { PREVIEW_CORE_RECIPES, previewCoreRecipeSha256 } from "../src/preview/preview-core-recipe";

@@ -8,7 +8,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { STUDIO_COMPOSITION, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { POSE_LIBRARY_DESCRIPTORS } from "../src/features/poses/actions";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import type { StudioAction } from "../src/app/studio-application";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { STUDIO_LAYERED_SURFACES } from "../src/compose/renderers";

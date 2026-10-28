@@ -20,7 +20,7 @@ import { profileSessionOf, type ProfileSessionData, type SessionScene, type Sess
 import { openSession } from "./fixtures/profile-sessions";
 import { sessionOfWorkspace } from "../src/app/profiles/profiles-migration-data";
 import type { StudioAction } from "../src/app/studio-application";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { immutableDocumentKind } from "../src/compose/document-kinds";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { createStudioSubjects } from "../src/compose/subjects";

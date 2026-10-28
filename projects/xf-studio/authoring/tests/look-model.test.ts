@@ -25,7 +25,7 @@ import { eyeMakeupCollection, parseCollection, planCollection } from "../src/leg
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
 import type { LayerChoices } from "../src/engines/layered-makeup/glitter-model";
 import type { EyeMakeupState } from "../src/compose/studio-registry";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { encodeWorkspaceAt } from "../src/app/workspace/workspace-budget";
 import { loadWorkspace, parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { COLLECTION_FIXTURES, readFixture } from "./fixtures/capture-plan-golden";

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { CollectionServiceError } from "../src/library/collection-service";
 import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 

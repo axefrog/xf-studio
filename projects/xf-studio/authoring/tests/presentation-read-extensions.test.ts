@@ -3,7 +3,7 @@ import { bootstrapCollections } from "./fixtures/profile-studio";
 import type { PresetCollection } from "../src/legacy/eye-makeup/export/preset-collection";
 import { emptyPresentationStatus, PresentationStatusSource } from "../src/app/presentation-status";
 import { PreviewQualityActions } from "../src/legacy/eye-makeup/preview/preview-quality-actions";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { createTrustedStudioBootstrap } from "../src/app/trusted-studio-bootstrap";
 import { UIPreferenceActions } from "../src/app/ui-preferences";
 import { ViewportAttachment } from "../src/app/viewport-attachment";
@@ -28,7 +28,7 @@ function mountFixture() {
   const source = { id: collections.id, presets: collections.looks };
   let status = emptyPresentationStatus(true);
   const statusSource = new PresentationStatusSource(() => status);
-  const bootstrap = createTrustedStudioBootstrap({ core: { ...core, app: core.application }, targets: core.targets, focus: core.history.focus, viewport, collections: collections.deps,
+  const bootstrap = createTrustedStudioBootstrap({ core: { ...core, document: core.lookDocument, app: core.application }, targets: core.targets, focus: core.history.focus, viewport, collections: collections.deps,
     preferences: new UIPreferenceActions(workspace.uiPreferences), status: statusSource,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 1024, pending: 0, waiting: false, estimatedBytes: 1, layers: [] }),
       subscribe: () => () => {} },

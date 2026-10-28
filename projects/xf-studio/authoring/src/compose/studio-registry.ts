@@ -15,6 +15,7 @@ import { createLayeredEditorAdapters } from "../preview/browser/layered-editor-a
  * the application's system-family handlers independently of the feature list.
  */
 import { MAKEUP_APPLICATION } from "../app/authoring/makeup-application";
+import { makeupAuthoring } from "../app/authoring/makeup-view";
 import { Registry } from "../platform/core/registry";
 import { PartRegistry } from "../platform/core/document";
 import { EYE_MAKEUP, EYE_MAKEUP_ID, EYE_MAKEUP_REGION } from "../features/eye-makeup";
@@ -32,7 +33,7 @@ export type { StudioOwnerActions, StudioOwnerId };
  * Registration order is catalogue order: the golden registry snapshot pins it. The asynchronous
  * families (library requests, file workflows) route by owner too, outside the synchronous table.
  */
-export const STUDIO_OWNERS = [HISTORY_FAMILY, { ...EYE_MAKEUP, application: MAKEUP_APPLICATION, files: makeupFiles(EYE_MAKEUP_ID),
+export const STUDIO_OWNERS = [HISTORY_FAMILY, { ...EYE_MAKEUP, application: MAKEUP_APPLICATION, authoring: makeupAuthoring(EYE_MAKEUP_ID), files: makeupFiles(EYE_MAKEUP_ID),
   collectionExport: makeupCollectionExport(EYE_MAKEUP_ID), maskBake: layeredMaskBake(EYE_MAKEUP_REGION),
   editors: createLayeredEditorAdapters(EYE_MAKEUP_REGION), preview: createLayeredPreviewCapability(EYE_MAKEUP_REGION),
   previewPreparation: { plate: { female: femalePlate as EyePlateRecipe, male: malePlate as EyePlateRecipe } } }, COLLECTION_FAMILY, SCENES_FAMILY, TABS_FAMILY, PANELS_FAMILY, STARTERS_FAMILY, PREVIEW_FAMILY, MOTION_FAMILY, TRANSITIONS_FAMILY,
@@ -64,8 +65,8 @@ export const STUDIO_DOCUMENTS: DocumentModel & { readonly live: string } = Objec
 /** The live feature's layered-makeup region: eye makeup's plate, mirror, fine-Glitter scope, textures and wording. */
 export const LIVE_REGION = EYE_MAKEUP_REGION;
 /** Everything the trusted core needs from the composition. */
-export const STUDIO_COMPOSITION: StudioComposition = Object.freeze({ registry: STUDIO_REGISTRY, documents: STUDIO_DOCUMENTS,
-  region: LIVE_REGION, modules: STUDIO_MODULE_REGISTRATION });
+export const STUDIO_COMPOSITION = Object.freeze({ registry: STUDIO_REGISTRY, documents: STUDIO_DOCUMENTS,
+  region: LIVE_REGION, modules: STUDIO_MODULE_REGISTRATION }) satisfies StudioComposition;
 export type { EyeMakeupAction, EyeMakeupEditor, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupMemory, EyeMakeupResult,
   EyeMakeupState } from "../features/eye-makeup";
 

@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import type { StudioAction } from "../src/app/studio-application";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { STUDIO_COMPOSITION, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import { MotionActions, type MotionPort } from "../src/animation/motion-actions";

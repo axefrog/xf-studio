@@ -18,7 +18,7 @@ import { TargetResolver } from "../../src/app/profiles/targets";
 import { SceneCommands } from "../../src/app/profiles/scene-commands";
 import { nameTargets, type Unnamed } from "../../src/app/action-targets";
 import type { PresentationSubject } from "../../src/app/action-consequences";
-import type { createTrustedAuthoringCore } from "../../src/app/trusted-authoring-core";
+import type { createTrustedAuthoringCore } from "./makeup-core";
 
 /** The look a look history scope names (`look:<collection>/<look>`). */
 export function lookOfScope(scope: string): LookRef | undefined {

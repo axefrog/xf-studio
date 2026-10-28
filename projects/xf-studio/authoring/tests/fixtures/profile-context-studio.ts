@@ -1,3 +1,5 @@
+import { makeupProfileFixture, withMakeupCore } from "./makeup-core";
+import { lookWorkspace } from "../../src/app/workspace/makeup-workspace";
 import type { Clock } from "../../src/platform/core/clock";
 import { emptyChoicesPort } from "../../src/app/profiles/empty-choices";
 import { starterParts } from "../../src/app/workspace/collection-workspace";
@@ -85,7 +87,7 @@ export async function profileContextStudio(options: { clock?: Clock; now?: () =>
   }
   const session = openSession(profileSessionOf(data)!, { profile, history }), notes: string[] = [], failures: unknown[] = [];
   let resets = 0, shows = 0;
-  const authoring = createProfileAuthoring(workspace, { history, views: session.graph, selectedCollection: () => "fixture", resetStack: () => { resets++; } },
+  const authoring = createProfileAuthoring(lookWorkspace(workspace, STUDIO_COMPOSITION.documents), { history, views: session.graph, selectedCollection: () => "fixture", resetStack: () => { resets++; } },
     STUDIO_COMPOSITION, { owner: services.collections, sessions: services.looks, outbox, note: text => notes.push(text), report: error => failures.push(error), shown: () => { shows++; } });
   const core = authoring.core, targets = createTargetResolver({ state: session, history, services, available: options.available, generation: options.generation, contexts: type => STUDIO_CATALOGUE.context(type) });
   if (options.presets) core.app.attach({ presets: options.presets });
@@ -142,6 +144,6 @@ export async function profileContextStudio(options: { clock?: Clock; now?: () =>
   let disposed = false;
   const dispose = async () => { if (disposed) return; disposed = true; for (const life of lives) life.abort(); off(); await settle(); boot.dispose(); authoring.drawn.dispose();
     for (const id of vs) await services.characters.release(id); outbox.stop(); };
-  return { emptyChoices, panelActions, library, transport, outbox, storage, services, history, session, authoring, core, port, targets, looks, vs, get drawn() { return drawn; }, draw, scene, bind, collectionTransport, fileDevice, starters, settle, stored, dispose,
+  return { emptyChoices, panelActions, library, transport, outbox, storage, services, history, session, neutralAuthoring: authoring, neutralCore: core, authoring: makeupProfileFixture(authoring), core: withMakeupCore(core), port, targets, looks, vs, get drawn() { return drawn; }, draw, scene, bind, collectionTransport, fileDevice, starters, settle, stored, dispose,
     failures, notes, counters: () => ({ resets, shows }) };
 }

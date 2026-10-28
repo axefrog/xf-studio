@@ -5,7 +5,7 @@ import { COLLECTION_RECOVERY_LIMIT, collectionDraft, REMOVED_PRESET_LIMIT, withL
 import { RECIPE_HISTORY_LIMIT } from "../src/legacy/eye-makeup/editor-actions";
 import { PresentationStatusSource, emptyPresentationStatus } from "../src/app/presentation-status";
 import { type Recipe } from "../src/engines/layered-makeup/recipe";
-import { createTrustedAuthoringCore } from "../src/app/trusted-authoring-core";
+import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { encodeWorkspaceForStorage, fitWorkspace, PERSISTED_BACKGROUND_HISTORY, WORKSPACE_STORAGE_BUDGET } from "../src/app/workspace/workspace-budget";
 import { SAVE_MESSAGES, WorkspacePersistence } from "../src/app/workspace/workspace-persistence";
 import { loadWorkspace, parseWorkspace, serializeWorkspace, workspaceKeys, type WorkspaceState } from "../src/app/workspace/makeup-workspace";

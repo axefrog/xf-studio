@@ -65,6 +65,16 @@ test("the makeup construction bundle is removed (CORE-03 slice 6)", () => {
   expect(DISK.names.filter(name => resolved(name).includes("app/authoring/makeup-editing"))).toEqual([]);
 });
 
+test("slice 13a product constructors use the neutral document and registered optional projections", () => {
+  for (const name of ["app/trusted-authoring-core", "app/profiles/profile-authoring"]) {
+    expect(resolved(name).filter(path => /makeup-view|makeup-workspace|makeup-document/.test(path))).toEqual([]);
+    expect(codeOnly(DISK.text(name))).not.toMatch(/\b(?:createMakeupView|emptyRecipe|makeupEditingState)\b/);
+    expect(resolved(name)).toContain("app/authoring/feature-projections");
+  }
+  expect(DISK.names.filter(name => /\bmakeupAuthoring\(/.test(codeOnly(DISK.text(name))))).toEqual(["app/authoring/makeup-view", "compose/studio-registry"]);
+  expect(codeOnly(DISK.text("app/trusted-studio-bootstrap"))).not.toMatch(/core\.presentation\b/);
+});
+
 test("slice 9 core viewport hosts bind registered adapters without constructing makeup editors or hooks", () => {
   for (const name of ["preview/browser/panel-uv", "preview/browser/browser-viewport-device", "preview/browser/scene-editors"]) {
     expect(resolved(name).filter(path => /legacy\/eye-makeup\/browser\/(?:uv|surface)-editor$/.test(path))).toEqual([]);
