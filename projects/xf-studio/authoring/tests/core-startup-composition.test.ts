@@ -13,11 +13,12 @@ import { serializeWorkspace } from "../src/app/workspace/workspace-state";
 import { editorComposition, SYNTHETIC_LAYERED } from "./fixtures/editor-composition";
 import { Registry } from "../src/platform/core/registry";
 
-test("alternate composition selection refuses before normal workspace startup", () => {
+test("outside ?verify=1 a composition query is ignored and the normal Studio starts; a supplied alternate is refused", () => {
   expect(selectStartupComposition("")).toBe(NORMAL);
   expect(selectStartupComposition("?composition=normal")).toBe(NORMAL);
   for (const query of ["?composition=empty", "?verify=0&composition=empty", "?verify&composition=empty", "?composition=unknown"])
-    expect(() => selectStartupComposition(query)).toThrow("?verify=1");
+    expect(selectStartupComposition(query)).toBe(NORMAL);
+  expect(() => selectStartupComposition("?composition=empty", EMPTY)).toThrow("?verify=1");
   expect(selectStartupComposition("?verify=1&composition=empty")).toBe(EMPTY);
   expect(() => selectStartupComposition("?verify=1&composition=unknown")).toThrow("Unknown verification composition");
   const fixture = editorComposition([SYNTHETIC_LAYERED]);

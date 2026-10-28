@@ -43,13 +43,13 @@ export const EMPTY_STARTUP_COMPOSITION: StudioStartupComposition = Object.freeze
   renderers: [], surfaces: new Map(), facePoses: [],
 });
 
-/** Refuse before workspace/lease/outbox startup. No query can change a normal workspace's composition. */
+/** Chosen before workspace/lease/outbox startup. No query can change a normal workspace's composition: outside an isolated
+ * ?verify=1 workspace a `composition` query is ignored and the normal Studio starts; a supplied alternate is a programming error. */
 export function selectStartupComposition(search: string, supplied?: StudioStartupComposition): StudioStartupComposition {
-  const query = new URLSearchParams(search), name = query.get("composition");
-  if ((name && name !== "normal") || supplied && supplied !== STUDIO_STARTUP_COMPOSITION) {
-    if (query.get("verify") !== "1") throw Error("Alternate compositions require an isolated ?verify=1 workspace.");
-  }
+  const query = new URLSearchParams(search), verify = query.get("verify") === "1";
+  if (supplied && supplied !== STUDIO_STARTUP_COMPOSITION && !verify) throw Error("Alternate compositions require an isolated ?verify=1 workspace.");
   if (supplied) return supplied;
+  const name = verify ? query.get("composition") : null;
   if (!name || name === "normal") return STUDIO_STARTUP_COMPOSITION;
   if (name === "empty") return EMPTY_STARTUP_COMPOSITION;
   throw Error(`Unknown verification composition: ${name}.`);
