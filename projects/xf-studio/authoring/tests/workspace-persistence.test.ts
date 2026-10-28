@@ -85,6 +85,51 @@ test("save status is published only when it changes", () => {
   expect(seen).toEqual(["saved"]);
 });
 
+test("lost-lease release compares changed content to the last saved capture without writing", () => {
+  jest.useFakeTimers();
+  const storage = memoryStorage(), workspace = freshWorkspace(), theme = workspace.uiPreferences.theme;
+  let canWrite = true;
+  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => workspace, model: STUDIO_DOCUMENTS, canWrite: () => canWrite });
+  writer.activate(); expect(writer.flush()).toBe(true);
+  workspace.uiPreferences.theme = "dark"; writer.request(); canWrite = false;
+  expect(writer.flushForRelease()).toBe(false);
+  jest.advanceTimersByTime(200); expect(writer.flushForRelease()).toBe(false);
+  expect(storage.writes()).toBe(1); expect(workspace.uiPreferences.theme).toBe("dark");
+  workspace.uiPreferences.theme = theme;
+  expect(writer.flushForRelease()).toBe(true); expect(storage.writes()).toBe(1);
+  writer.retire();
+});
+
+for (const fault of ["capture", "snapshot"] as const) test(`lost-lease release retains recovery if ${fault} comparison fails`, () => {
+  jest.useFakeTimers();
+  const storage = memoryStorage(), workspace = freshWorkspace(), theme = workspace.uiPreferences.theme;
+  let canWrite = true, broken = false;
+  const writer = new WorkspacePersistence({ storage, key, writable: true, model: STUDIO_DOCUMENTS, canWrite: () => canWrite,
+    capture: () => { if (broken && fault === "capture") throw Error("Capture unavailable"); return workspace; } });
+  writer.activate(); expect(writer.flush()).toBe(true);
+  writer.request(); canWrite = false; broken = true;
+  if (fault === "snapshot") Object.defineProperty(workspace.uiPreferences, "theme", { configurable: true, enumerable: true, get() { throw Error("Snapshot unavailable"); } });
+  expect(writer.flushForRelease()).toBe(false);
+  jest.advanceTimersByTime(200); expect(writer.flushForRelease()).toBe(false);
+  expect(storage.writes()).toBe(1);
+  broken = false;
+  Object.defineProperty(workspace.uiPreferences, "theme", { configurable: true, enumerable: true, writable: true, value: theme });
+  expect(writer.flushForRelease()).toBe(true); expect(storage.writes()).toBe(1);
+  writer.retire(); expect(jest.getTimerCount()).toBe(0);
+});
+
+test("lost-lease comparison keeps changes that the storage budget would trim", () => {
+  jest.useFakeTimers();
+  const storage = memoryStorage(), history = fullHistory(initialRecipe()), workspace = { ...freshWorkspace(), history };
+  let canWrite = true;
+  const writer = new WorkspacePersistence({ storage, key, writable: true, budget: 1, capture: () => workspace, model: STUDIO_DOCUMENTS, canWrite: () => canWrite });
+  writer.activate(); expect(writer.flush()).toBe(true);
+  history[0] = variant(history[0]!, 37); writer.request(); canWrite = false;
+  expect(fitWorkspace(workspace, STUDIO_DOCUMENTS, 1).encoded).toBe(storage.stored.get(key)!);
+  expect(writer.flushForRelease()).toBe(false); expect(storage.writes()).toBe(1);
+  writer.retire();
+});
+
 // ---- CORE-02: realistic scale ----
 
 function eightLayerRecipe(): Recipe {

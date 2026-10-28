@@ -169,6 +169,32 @@ for (const end of ["abort", "upstream"] as const) test(`dirty workspace ${end} a
   }
 });
 
+for (const end of ["abort", "upstream"] as const) test(`an unchanged document-click request permits ${end} after lease loss`, () => {
+  jest.useFakeTimers();
+  const upstream = new AbortController(), page = new Events(), doc = new Events();
+  const life = createBrowserWorkspaceLifetime(page as unknown as Pick<Window, "addEventListener">, upstream.signal);
+  let writable = true, writes = 0, captures = 0, disposed = false;
+  const storage = { getItem: () => null, setItem: () => { writes++; } };
+  const restored = loadWorkspace(storage, true, STUDIO_DOCUMENTS), workspace = restored.state;
+  const listeners = new Set<() => void>();
+  const source = { subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; } };
+  const session = createBrowserWorkspaceSession({ signal: life.signal, workspace, restored, storage, verification: true, model: STUDIO_DOCUMENTS,
+    canWrite: () => writable,
+    capture: { editor: () => { if (disposed) throw Error("Capture source was released"); captures++; return { features: workspace.liveFeatures, history: workspace.history }; },
+      uvView: () => workspace.uvView, savedV: () => undefined, collections: () => undefined, quality: () => 1024, preview: () => undefined },
+    sources: [source], window: page, document: doc, onStatus() {} });
+  life.beforeRelease(session.release);
+  life.signal.addEventListener("abort", () => { disposed = true; }, { once: true });
+  session.activate(); expect(session.flush()).toBe(true);
+  doc.emit("click"); expect(jest.getTimerCount()).toBe(1);
+  writable = false;
+  if (end === "upstream") upstream.abort(); else life.abort();
+  expect([life.signal.aborted, disposed, captures, writes]).toEqual([true, true, 2, 1]);
+  expect([listeners.size, page.count(), doc.count(), jest.getTimerCount()]).toEqual([0, 0, 0, 0]);
+  jest.advanceTimersByTime(200); life.abort();
+  expect([captures, writes]).toEqual([2, 1]);
+});
+
 for (const state of ["unchanged", "drained"] as const) test(`a formerly writable workspace retires after lease loss when ${state}`, () => {
   jest.useFakeTimers();
   const page = new Events(), doc = new Events(), life = createBrowserWorkspaceLifetime(page as unknown as Pick<Window, "addEventListener">);
