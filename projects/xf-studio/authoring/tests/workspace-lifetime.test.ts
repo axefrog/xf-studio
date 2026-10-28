@@ -85,6 +85,38 @@ for (const end of ["abort", "release", "pagehide", "upstream", "already-aborted"
   expect([writes, statuses, listeners.size, jest.getTimerCount()]).toEqual([written, published, 0, 0]);
 });
 
+for (const end of ["abort", "upstream"] as const) test(`read-only workspace ${end} releases its lifetime without capturing or writing`, () => {
+  jest.useFakeTimers();
+  const upstream = new AbortController(), page = new Events(), doc = new Events();
+  const life = createBrowserWorkspaceLifetime(page as unknown as Pick<Window, "addEventListener">, upstream.signal);
+  let writable = false, writes = 0, captures = 0, statuses = 0, disposed = false;
+  const storage = { getItem: () => null, setItem: () => { writes++; } };
+  const restored = loadWorkspace(storage, true, STUDIO_DOCUMENTS), workspace = restored.state;
+  const listeners = new Set<() => void>();
+  const source = { subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; } };
+  const session = createBrowserWorkspaceSession({ signal: life.signal, workspace, restored, storage, verification: true, model: STUDIO_DOCUMENTS,
+    canWrite: () => writable,
+    capture: { editor: () => { captures++; return { features: workspace.liveFeatures, history: workspace.history }; },
+      uvView: () => workspace.uvView, savedV: () => undefined, collections: () => undefined, quality: () => 1024, preview: () => undefined },
+    sources: [source], window: page, document: doc, onStatus: () => { statuses++; } });
+  life.beforeRelease(session.release);
+  life.signal.addEventListener("abort", () => { disposed = true; }, { once: true });
+  session.activate();
+  for (const listener of listeners) listener();
+  expect([listeners.size, page.count(), doc.count(), jest.getTimerCount()]).toEqual([1, 2, 4, 0]);
+  if (end === "upstream") upstream.abort(); else life.abort();
+  expect([life.signal.aborted, disposed]).toEqual([true, true]);
+  expect([listeners.size, page.count(), doc.count(), jest.getTimerCount(), captures, writes, statuses]).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  // Retirement stays final even if the lease later becomes writable.
+  writable = true;
+  session.activate(); session.request(); session.flush(); session.watch(source)();
+  doc.hidden = true;
+  for (const type of ["input", "change", "click", "visibilitychange"]) doc.emit(type);
+  page.emit("pagehide"); life.abort(); expect(session.release()).toBe(true);
+  jest.advanceTimersByTime(60_000);
+  expect([listeners.size, jest.getTimerCount(), captures, writes, statuses]).toEqual([0, 0, 0, 0, 0]);
+});
+
 test("a refused final workspace save keeps the lifetime and capture sources alive for retry", () => {
   jest.useFakeTimers();
   const page = new Events(), doc = new Events(), life = createBrowserWorkspaceLifetime(page as unknown as Pick<Window, "addEventListener">);

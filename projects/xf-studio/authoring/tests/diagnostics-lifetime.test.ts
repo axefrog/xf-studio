@@ -64,7 +64,7 @@ test("diagnostics abort cancels reads and hooks while accepted keepalive log del
 test("diagnostics abort clears the rate-limit retry and an already-aborted owner installs nothing", async () => {
   jest.useFakeTimers();
   const life = new AbortController(); let sends = 0;
-  const { win, count } = windowFixture((async () => { sends++; return new Response(null, { status: 204 }); }) as typeof fetch);
+  const { win, count } = windowFixture((async () => { sends++; return new Response(null, { status: 204 }); }) as unknown as typeof fetch);
   const owner = createBrowserDiagnostics({ window: win, signal: life.signal, download() {} });
   // Repeated zero-delay flushes exhaust the minute budget; the remaining batch schedules the long retry.
   const allowed = DIAGNOSTIC_LIMITS.perMinute / DIAGNOSTIC_LIMITS.batch;
@@ -110,7 +110,7 @@ for (const status of [400, 503]) test(`shutdown retains all accepted log entries
   jest.useFakeTimers();
   const life = new AbortController(); let sent = 0;
   const first = deferred<Response>();
-  const { win } = windowFixture((async () => { sent++; return sent === 1 ? first.promise : new Response(null, { status }); }) as typeof fetch);
+  const { win } = windowFixture((async () => { sent++; return sent === 1 ? first.promise : new Response(null, { status }); }) as unknown as typeof fetch);
   const owner = createBrowserDiagnostics({ window: win, signal: life.signal, download() {} });
   owner.device.forward([{ ...entry(), message: "in flight" }]); jest.advanceTimersByTime(1);
   owner.device.forward(Array.from({ length: PAGE_QUEUE }, (_, i) => ({ ...entry(), message: `queued ${i}` })));

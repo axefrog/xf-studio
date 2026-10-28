@@ -93,7 +93,8 @@ export function createBrowserWorkspaceSession<W extends WorkspaceInput = Workspa
     if (releasing) return false;
     releasing = true;
     try {
-      if (!flush()) return false;
+      // A read-only session owns no write to drain. Writable sessions must still save successfully before retirement.
+      if (options.canWrite?.() !== false && !flush()) return false;
       retire();
       return true;
     } finally { releasing = false; }
