@@ -2,7 +2,7 @@ import { refusal } from "../../platform/api/capability";
 import type { DocumentOutbox } from "../../platform/core/document-outbox";
 import { leaseSnapshot, type WorkspaceLease } from "./workspace-lease";
 
-export const PAUSED_WORKSPACE = "This window can't save changes, so it is read-only. Try again, export this window's copy, or reopen the window.";
+export const PAUSED_WORKSPACE = "This window can't save changes, so editing is paused. Try again, or Export this window's copy.";
 export const BACKUP_RECOVERY_FAILED = "Your changes still couldn't be backed up. Export this window's copy, or reopen the window.";
 const RETRY_REFUSALS = {
   stopped: "This window has stopped saving. Export this window's copy, or reopen the window.",

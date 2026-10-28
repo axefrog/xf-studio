@@ -479,6 +479,10 @@ export function createStudioPresentation<Slot>(sources: {
   // The lease's gate for the families that don't route through the application (which refuses by itself, `Services.access`).
   const lease = sources.workspace;
   const access = workspaceAccess(lease, sources.outbox);
+  const readStatus = (): PresentationStatus => {
+    const status = s.snapshot(), outbox = sources.outbox?.status();
+    return outbox?.suspended ? { ...status, lease: access.snapshot(), outbox: outboxView(outbox) } : status;
+  };
   const denied = () => access.refusal();
   const refusedAsync = async () => { const why = denied()!; return { ok: false as const, code: why.code!, message: why.reason! }; };
   /** A family's capability and dispatch behind the lease. */
@@ -735,7 +739,7 @@ export function createStudioPresentation<Slot>(sources: {
       capability: (request: PartPresetRequest) => a.presetCapability(withPart(request)), execute: (request: PartPresetRequest) => a.executePreset(withPart(request)) }),
     installDetection: Object.freeze(installDetection), modInstall: Object.freeze(leased(modInstall)), previewSetup: Object.freeze(leased(previewSetup)),
     desktopApp: Object.freeze(leased(desktopApp)), updates: Object.freeze(leased(updates)),
-    status: Object.freeze({ snapshot: () => s.snapshot() }), links, about, diagnostics: Object.freeze(diagnostics),
+    status: Object.freeze({ snapshot: readStatus }), links, about, diagnostics: Object.freeze(diagnostics),
     ...(sources.tabs ? { tabs: sources.tabs } : {}), ...(sources.starters ? { starters: sources.starters } : {}),
     ...(sources.emptyChoices ? { emptyChoices: Object.freeze({ ...sources.emptyChoices,
       capability: (request: EmptyChoiceRequest) => a.emptyChoiceCapability(request), execute: (request: EmptyChoiceRequest) => a.executeEmptyChoice(request) }) } : {}),
@@ -775,7 +779,7 @@ export function createStudioPresentation<Slot>(sources: {
       descriptors: () => structuredClone(WORKSPACE_LEASE_DESCRIPTORS) }),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
-      status: { ...s.snapshot(), ...(sources.outbox?.status().suspended ? { lease: access.snapshot(), outbox: outboxView(sources.outbox.status()) } : {}) }, localSetup: localSetup.snapshot(),
+      status: readStatus(), localSetup: localSetup.snapshot(),
       installDetection: installDetection.snapshot(), modInstall: modInstall.snapshot(), previewSetup: previewSetup.snapshot(),
       desktopApp: desktopApp.snapshot(), updates: updates.snapshot() }),
     subscribe(listener: () => void) {

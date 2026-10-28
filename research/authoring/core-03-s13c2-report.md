@@ -177,6 +177,29 @@ Repository checks: **0 broken links/source paths across 504 Markdown files**, **
 
 Coordinator: use the exact guarded `core-startup-browser.test.ts` command above. In isolated `?verify=1`, fault backup storage and return superseded during a look send: confirm the plain read-only notice, refused opacity/control edits, unchanged look and matching Export copy. Repair storage with the lease retained, choose Try again and confirm sending/editing return. Repeat after lease loss: retry must refuse and Export copy/reopen remain the routes forward. Confirm ordinary two-window handover still shows its existing notice/actions. Release ownership and the WebGL rows named above are unchanged; no new browser/GPU proof is claimed.
 
+## Notice-path re-review after `9ee0ab00`
+
+The remaining Medium is fixed. `src/app/studio-presentation.ts` now shares one suspension-aware status reader between `port.status.snapshot()` (the shell's `Frame.status`) and aggregate `port.snapshot().status`. When not suspended it returns the host status unchanged. The pause message in `src/app/workspace/workspace-access.ts` is exactly:
+
+> This window can't save changes, so editing is paused. Try again, or Export this window's copy.
+
+`tests/document-outbox-recovery.test.ts` now supplies the same raw held-lease/outbox status shape as production, through the fixture's optional status-source factory (`tests/fixtures/profile-context-studio.ts`). The regression uses the real bound presentation port, starts an actual opacity control, suspends through supersession plus a failed backup, constructs the real shell `Frame` and `StudioRuntime`, and renders the existing workspace notice. It proves equal status paths, non-empty full rendered text, immediate visibility despite the active control, both labelled actions, and restoration of unchanged normal status/hidden notice after successful recovery. `tests/ui-polish-dom.test.ts` updates its earlier plain-message expectation. No production studio-ui, component/guide, startup, lifetime/release, persistence, access-gate or retry-policy change. Bound panels/captures retain their existing release paths; protected APIs, catalogue IDs and import allowances remain unchanged.
+
+The other changed files are this report, `research/authoring/core-03-plan.md`, `research/authoring/code-health.md`, `research/authoring/profiles-views-layouts-design.md` and `knowledge/webgl-program-linking.md`: ten files in total. Owner abort ordering and the durability proofs above are unchanged. CORE-03 remains High; 13c3/13d, integrated browser/resource-baseline proof and coordinator GPU checks remain open.
+
+| Notice-fix gate | Result |
+|---|---|
+| Initial regression setup | **0 pass, 1 fail, 4 filtered**, one file, three assertions, **0.237 s**, rounded **0.0 GB** peak. Starting a real control creates an additional pending history command; the helper no longer assumes one pending entry for that case. |
+| Corrected pre-fix reproduction | **0 pass, 1 fail, 4 filtered**, one file, six assertions, **0.177 s**, rounded **0.0 GB** peak. Real Frame status is writable with an empty message while aggregate status has the pause message. |
+| Focused recovery validation | **5 pass, 0 fail**, one file, 66 assertions, **0.282 s**, rounded **0.0 GB** peak. |
+| Final permitted targeted run | **188 pass, 3 skip, 0 fail across 19 files**, **17 matching snapshots**, 2,324 assertions, **19.09 s**, **0.9 GB** peak. Includes changed recovery/notice tests, affected profile fixtures, architecture boundary, trusted bootstrap, view contributions and retained parity/startup tests. |
+
+All Bun processes ran sequentially under the 4 GB guard. No heavy gate, typecheck, browser or GPU run; the three skips remain private-raster and unavailable-Chrome cases. Retained snapshot hashes/coverage are the table above (Git/LF content); no snapshot update or compatibility change. Types were read manually. No new scratch or generated output was created.
+
+Repository checks pass: **0 broken links/source paths in 504 Markdown files**, **0 tracked-text privacy findings**, **0 privacy/source-path/whitespace findings across all ten changed files**, clean `git diff --check`, and **all eight Git/LF snapshot hashes match HEAD and the retained table**. Wrap-up footprint: **202.8 GB free on C**, 1 GB guard, rounded **0.0 GB** peak; the unrelated inaccessible worktree scan remains incomplete. No new payload above 5 GB is retained, and all owned jobs have ended. The historical scratch-cleanup limitation below is unchanged.
+
+Coordinator: the exact guarded browser command above still applies. In isolated `?verify=1`, fault backup storage and return superseded while an opacity control is active. The notice must open immediately with the exact text above and Try again / Export this window's copy. Repair storage with the lease retained and retry: the notice clears and normal editing returns. No new WebGL ownership path is touched; the previously listed GPU checks remain coordinator work.
+
 ## Remaining work and cleanup
 
 - **13c3:** complete shell/facial/warm-start listener/request/timer/frame/observer cancellation and integrated normal/empty/partial-start CDP resource-baseline/late-publication proof without destroying the page.

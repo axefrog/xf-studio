@@ -914,7 +914,7 @@ describe("Polish batch 2: the profiles phase 1 UI follow-ups", () => {
     expect(workspaceNoticeState(frame)).toEqual({ message: PAUSED_WORKSPACE, actions: ["retryRestore", "exportCopy"] });
     notice.update(frame);
     const root = notice.element as unknown as LightElement;
-    expect(root.hidden).toBe(false); expect(text(root)).toContain("read-only");
+    expect(root.hidden).toBe(false); expect(text(root)).toContain("editing is paused");
     const shown = buttons(root).filter(button => !button.hidden);
     expect(shown.map(button => text(button))).toEqual(["Try again", "Export this window's copy"]);
     for (const button of shown) button.click();

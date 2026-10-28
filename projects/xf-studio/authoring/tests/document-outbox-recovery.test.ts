@@ -4,15 +4,19 @@ import { memoryOutboxStorage } from "./fixtures/platform-doubles";
 import { WorkspaceLease } from "../src/app/workspace/workspace-lease";
 import { PAUSED_WORKSPACE } from "../src/app/workspace/workspace-access";
 import { STUDIO_COMPOSITION } from "../src/compose/studio-registry";
+import { emptyPresentationStatus, outboxView } from "../src/app/presentation-status";
+import { installLightDom, uninstallLightDom, type LightElement } from "./light-dom";
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
-async function suspendedProfile() {
+async function suspendedProfile(activeControl = false) {
   let lost = () => {}, broken = false, sends = 0;
   const lease = new WorkspaceLease({ acquire: async () => ({ generation: 1 }), takeOver: async () => ({ generation: 2 }),
     onReleaseRequested() {}, onLost: listener => { lost = listener; }, release: async () => {} }, { clock: { after() {} } });
   await lease.start();
   const storage = memoryOutboxStorage(), downloads: Blob[] = [];
-  const studio = await profileContextStudio({ lease, download: blob => { downloads.push(blob); }, outbox: { storage: {
+  const studio = await profileContextStudio({ lease, download: blob => { downloads.push(blob); },
+    status: outbox => ({ snapshot: () => ({ ...emptyPresentationStatus(), lease: lease.snapshot(), outbox: outboxView(outbox.status()) }),
+      subscribe: listener => outbox.subscribe(() => listener()) }), outbox: { storage: {
     ...storage, write: (...args) => { if (broken) throw Error("Backup unavailable"); storage.write(...args); },
   } } });
   const panel = studio.bind("presets--scene0").context.current(), eye = panel.feature("eye-makeup");
@@ -22,12 +26,44 @@ async function suspendedProfile() {
   broken = true;
   const layer = eye.view().recipe().layers[0]!.id;
   expect(eye.dispatch({ kind: "layer.setOpacity", layerId: layer, opacity: .37 }).ok).toBe(true);
+  if (activeControl) expect(eye.controlBegin("paused-opacity", layer)).toBe(true);
   studio.outbox.store(); await tick();
-  expect(studio.outbox.status()).toMatchObject({ stopped: false, pending: 1, unprotectedWarning: true });
+  expect(studio.outbox.status()).toMatchObject({ stopped: false, ...(activeControl ? {} : { pending: 1 }), unprotectedWarning: true });
   return { studio, panel, eye, layer, lease, lost: () => lost(), downloads, sends: () => sends,
     repair: () => { broken = false; studio.transport.transact = transact; },
     dispose: async () => { broken = false; studio.transport.transact = transact; await studio.dispose(); await lease.stop(); } };
 }
+
+test("the real presentation status reaches Frame and renders the recovery notice during an active control", async () => {
+  installLightDom();
+  try {
+    const { Frame, StudioRuntime } = await import("../src/studio-ui/runtime");
+    const { workspaceNotice } = await import("../src/studio-ui/app");
+    const { Feedback } = await import("../src/studio-ui/feedback");
+    const w = await suspendedProfile(true);
+    try {
+      const frame = new Frame(w.panel), notice = workspaceNotice(new StudioRuntime(w.panel, new Feedback()));
+      const message = "This window can't save changes, so editing is paused. Try again, or Export this window's copy.";
+      expect(w.lease.snapshot()).toMatchObject({ writable: true, message: "" });
+      expect(frame.preview.control?.id).toBe("paused-opacity");
+      expect(frame.status).toEqual(w.panel.snapshot().status);
+      expect(frame.status.lease).toMatchObject({ writable: false, message });
+      notice.update(frame);
+      const root = notice.element as unknown as LightElement;
+      expect(root.hidden).toBe(false);
+      expect(root.querySelector(".workspace-notice-text")?.textContent).toBe(message);
+      expect(root.querySelectorAll("button").filter(button => !button.hidden).map(button => button.textContent))
+        .toEqual(["Try again", "Export this window's copy"]);
+      w.repair();
+      expect(await w.panel.documents.dispatch({ kind: "documents.retryRecovery" })).toEqual({ ok: true });
+      expect(await w.studio.outbox.settle()).toBe(true);
+      const normal = { ...emptyPresentationStatus(), lease: w.lease.snapshot(), outbox: outboxView(w.studio.outbox.status()) };
+      const resumed = new Frame(w.panel);
+      expect(resumed.status).toEqual(normal); expect(w.panel.snapshot().status).toEqual(normal);
+      notice.update(resumed); expect(root.hidden).toBe(true);
+    } finally { await w.dispose(); }
+  } finally { uninstallLightDom(); }
+});
 
 test("a suspended real profile refuses edits before mutation and Export copy equals the shown look", async () => {
   const w = await suspendedProfile();
