@@ -67,8 +67,10 @@ test("autosave stops when idle: a save's own status never schedules another writ
 });
 
 test("save status is published only when it changes", () => {
+  jest.useFakeTimers();
   const storage = memoryStorage(), workspace = freshWorkspace();
-  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => workspace, model: STUDIO_DOCUMENTS });
+  let canWrite = true;
+  const writer = new WorkspacePersistence({ storage, key, writable: true, capture: () => workspace, model: STUDIO_DOCUMENTS, canWrite: () => canWrite });
   const seen: string[] = [];
   writer.subscribe(s => seen.push(s.kind));
   writer.activate();
@@ -76,6 +78,10 @@ test("save status is published only when it changes", () => {
   workspace.recipe.layers[0].opacity = .21; writer.flush();
   workspace.recipe.layers[0].opacity = .22; writer.flush();
   expect(storage.writes()).toBe(3);
+  // An unchanged flush drains a coarse autosave request without rewriting or publishing another status.
+  writer.request(); expect(writer.flush()).toBe(true);
+  canWrite = false; expect(writer.flushForRelease()).toBe(true);
+  expect(storage.writes()).toBe(3); expect(jest.getTimerCount()).toBe(0);
   expect(seen).toEqual(["saved"]);
 });
 

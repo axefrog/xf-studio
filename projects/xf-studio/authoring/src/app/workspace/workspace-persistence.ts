@@ -31,6 +31,8 @@ export class WorkspacePersistence {
   private active = false;
   /** Retired (the workspace was handed to another page): nothing is written again in this page's lifetime. */
   private retired = false;
+  /** Work accepted while this page could write, not yet captured successfully into storage. Lease loss does not clear it. */
+  private unsaved = false;
   private timer?: ReturnType<typeof setTimeout>;
   private status: WorkspaceSaveStatus = { kind: "idle", message: "" };
   private listeners = new Set<(status: WorkspaceSaveStatus) => void>();
@@ -64,8 +66,13 @@ export class WorkspacePersistence {
   }
   request() {
     if (!this.active || this.options.canWrite?.() === false) return;
+    this.unsaved = true;
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.flush(), this.options.delayMs ?? 180);
+  }
+  /** A non-writer may retire only if it owns no unsaved work. Keep failed/lost-lease work and its capture sources available for recovery. */
+  flushForRelease(): boolean {
+    return this.options.canWrite?.() === false ? !this.unsaved : this.flush();
   }
   /**
    * Writes the latest draft now. Answers whether it is stored: written (whole or trimmed to fit), unchanged since the last write, or
@@ -78,9 +85,12 @@ export class WorkspacePersistence {
     if (!this.active) return true;
     // A protected workspace (unreadable at restore) is never written by any page, so there is nothing of this one's to lose.
     if (!this.options.writable) {
+      this.unsaved = false;
       this.publish({ kind: "protected", message: `${this.options.restoreError ?? "Workspace could not be restored"}. Original storage kept; export your recipe before closing.` });
       return true;
     }
+    // Explicit flushes can capture a change without a preceding debounce request; a failed one still owns that work.
+    this.unsaved = true;
     let state: WorkspaceState;
     try { state = this.options.capture(); }
     catch { this.publish({ kind: "unavailable", message: SAVE_MESSAGES.unavailable }); return false; }
@@ -90,7 +100,7 @@ export class WorkspacePersistence {
     for (let attempt = 0; attempt < 12; attempt++) {
       const fitted = fitWorkspace(state, this.options.model, budget, this.lastPlan);
       // Unchanged content is not rewritten, so status or view refreshes cannot cause writes.
-      if (fitted.encoded === this.written) return true;
+      if (fitted.encoded === this.written) { this.unsaved = false; return true; }
       try {
         this.options.storage.setItem(this.options.key, fitted.encoded);
       } catch (error) {
@@ -101,6 +111,7 @@ export class WorkspacePersistence {
         continue;
       }
       this.written = fitted.encoded; this.lastSize = fitted.size; this.lastPlan = fitted.plan;
+      this.unsaved = false;
       this.publish(fitted.trimmed || fitted.overBudget
         ? { kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull }
         : this.options.restoreWarning ? { kind: "repaired", message: `Draft autosaved. ${this.options.restoreWarning}` }
