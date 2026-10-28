@@ -102,14 +102,14 @@ function context(rt: StudioRuntime, owner: string): FeatureViewContext {
       const items = capturedItems(menuFromSections(captured.targetSections(target, definition, anchor)), held.active);
       if (!openMenu(items, anchor, { label: definition.title, invoker, signal: held.signal, onClose: held.release })) held.release();
     },
-    uv: Object.freeze({
+    uv: port.viewport.snapshot().uv ? Object.freeze({
       attach: (slot: HTMLElement) => port.viewport.attach("uv", slot),
       resize: () => port.viewport.resize("uv"),
       command: (command: Parameters<typeof port.viewport.uvCommand>[0]) => port.viewport.uvCommand(command),
       commandCapability: (command: Parameters<typeof port.viewport.uvCommandCapability>[0]) => port.viewport.uvCommandCapability(command),
       menu: (anchor: Parameters<typeof openMenu>[1], at?: { x: number; y: number }, invoker?: Element) => viewportMenu(rt, "uv", anchor, at, invoker),
       hints: (slot: HTMLElement, host: HTMLElement) => new ViewportInputHints(port.viewport, "uv", slot, host),
-    }),
+    }) : undefined,
     readiness: () => readinessText(new Frame(port)),
     facial: Object.freeze({ snapshot: () => port.facial.snapshot(), retry: () => port.facial.retry(), installed: () => port.facial.installed?.() }),
     presets: Object.freeze({

@@ -1,3 +1,4 @@
+import { registeredEditorAdapters } from "../preview/browser/editor-adapters";
 import { STUDIO_CATALOGUE } from "./views";
 import { createPanelUVFactory } from "../preview/browser/panel-uv";
 import { EXPRESSION_FRAMEWORK_REQUIREMENTS } from "../features/expressions/requirements";
@@ -337,8 +338,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   core.app.attach({ targetCheck: targets, panels: panelActions,
     historyScopeDetails: scope => historyScopeDetails(scope, { services, history: historyService }) });
   const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
-  const headHost = byId("device-head"), uvHost = byId("device-uv");
-  const viewportDevice = createBrowserViewportDevice({ region, headHost, uvHost, queryContext: hit => core.app.contextQuery(hit, targets.namedView(drawnView())), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
+  const headHost = byId("device-head");
+  const viewportDevice = createBrowserViewportDevice({ surface: registeredEditorAdapters(core)?.surface, headHost, queryContext: hit => core.app.contextQuery(hit, targets.namedView(drawnView())), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
   // The workspace's own editor fields, V and arrangement as the migration found them: stored back unchanged (an older build opens them).
   const frozenEditor = { recipe: workspace.recipe, active: workspace.active, selected: workspace.selected, fieldSelection: workspace.fieldSelection,
@@ -484,7 +485,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   });
   const packageTransport = collectionTransport(`${base}/collections`);
   const polish5 = verification ? polish5Verification(packageTransport) : undefined;
-  panelUV = createPanelUVFactory({ session: sessionState, fallback: viewportDevice.attachment, region, initial: workspace.uvView,
+  panelUV = createPanelUVFactory({ session: sessionState, fallback: viewportDevice.attachment, initial: workspace.uvView,
     canvases: named => named.look && lookEditor.ref() && sameLook(named.look, lookEditor.ref()!) ? previewDevice.canvases : [],
     albedo: named => named.character && named.character === targets.namedView(drawnView()).character ? shownHead()?.scene.albedo.image as HTMLImageElement | undefined : undefined });
   bootstrap = createTrustedStudioBootstrap({

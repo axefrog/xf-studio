@@ -135,7 +135,7 @@ export type FeatureViewContext<F extends FeatureFacade = FeatureFacade> = {
   targetMenu(target: MenuTarget, menu: FeatureTargetMenu<FacadeAction<F>> | ((context: FeatureViewContext<F>) => FeatureTargetMenu<FacadeAction<F>>), anchor: MenuAnchor, invoker?: Element): void;
   /** The sections `targetMenu` shows (for tests and the style guide). */
   targetSections(target: MenuTarget, menu: FeatureTargetMenu<FacadeAction<F>>, anchor: MenuAnchor): MenuSection[];
-  readonly uv: UvViewportSlot;
+  readonly uv?: UvViewportSlot;
   /** The makeup preview's readiness in the shell's one wording (UI-92), for a view's readiness badge. */
   readiness(): ViewBadge;
   /** The live facial preview (the held expression on the head): its readiness, controls and start points; `retry` tries again. */

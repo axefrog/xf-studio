@@ -202,7 +202,7 @@ test("pointer edits preserve target identity, reject stale presets and leave one
 });
 
 test("viewport lifecycle cancels capture before disposal and routes resize to attached ports", () => {
-  const events: string[] = [], viewport = new ViewportAdapter();
+  const events: string[] = [], viewport = new ViewportAdapter(["uv", "surface"]);
   const port = (name: string): ViewportPort => ({
     resize: () => events.push(`${name}:resize`), cancelInput: () => events.push(`${name}:cancel`),
     inputCapture: () => name === "uv", dispose: () => events.push(`${name}:dispose`),

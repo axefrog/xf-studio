@@ -143,7 +143,7 @@ export function collectionMenu(origin: StudioRuntime, anchor: MenuAnchor, invoke
 function viewSection(rt: StudioRuntime, kind: ViewportHostKind): MenuSection {
   const port = rt.port;
   if (kind === "uv") {
-    const view = port.viewport.snapshot().uv.view;
+    const view = port.viewport.snapshot().uv?.view;
     const command = (id: "both" | "single" | "other" | "fit", label: string): MenuItem => ({ kind: "action", label, shortcut: shortcutLabel(`uv.${id}`),
       capability: port.viewport.uvCommandCapability(id), checked: id === "both" ? view?.mode === "both" : id === "single" ? view?.mode === "single" : undefined,
       run: () => { port.viewport.uvCommand(id); } });

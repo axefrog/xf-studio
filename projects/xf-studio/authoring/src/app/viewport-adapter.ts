@@ -10,8 +10,8 @@ export type ViewportPort = {
  * the device that owns the editors, not a fixed set (view-graph-design.md §2.6).
  */
 export type EditorSlot = string;
-/** The slots a browser viewport device registers today: the flat UV editor and the main view's on-head editor. */
-export const DEFAULT_EDITOR_SLOTS: readonly EditorSlot[] = ["uv", "surface"];
+/** No implicit editor slots: the device registers only the adapters the composition supplies. */
+export const DEFAULT_EDITOR_SLOTS: readonly EditorSlot[] = [];
 
 export class ViewportAdapter {
   private ports = new Map<EditorSlot, ViewportPort>();

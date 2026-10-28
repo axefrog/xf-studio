@@ -58,7 +58,7 @@ test("replacement presentation can perform current cross-surface workflows witho
   expect(shell.viewport.uvCommand("other")).toBe(true);
   shell.viewport.rehost("uv", "floating");
   expect(locations).toContain("uv:floating");
-  expect(shell.snapshot().viewport.uv.view).toMatchObject({ mode: "single", side: "high" });
+  expect(shell.snapshot().viewport.uv!.view).toMatchObject({ mode: "single", side: "high" });
   const query = shell.viewport.contextAt("uv", 20, 20)!;
   expect(query.options.some(option => option.id === "point.remove")).toBe(true);
   expect(shell.authoring.dispatch({ kind: "layer.setOpacity", layerId: firstLayer.id,

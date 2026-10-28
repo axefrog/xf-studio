@@ -15,7 +15,7 @@ test("rehosting keeps the same hosts, cancels the target gesture and resizes onl
     uvCommand: () => true,
     hitAt: () => undefined, queryContext: () => { throw Error("No hit expected"); },
   };
-  const attachment = new ViewportAttachment(port);
+  const attachment = new ViewportAttachment(port, ["head", "uv"]);
   let changes = 0; attachment.subscribe(() => changes++);
   attachment.setReady("uv"); attachment.rehost("uv", "floating");
   attachment.setReady("head"); attachment.attach("head", "docked");
@@ -26,8 +26,8 @@ test("rehosting keeps the same hosts, cancels the target gesture and resizes onl
   const detached = attachment.snapshot();
   expect(detached.head).toMatchObject({ phase: "ready", width: 600, height: 400, captured: false });
   expect(detached.uv).toMatchObject({ phase: "ready", width: 500, height: 240, captured: true });
-  detached.uv.view!.span = 9;
-  expect(attachment.snapshot().uv.view?.span).toBe(1);
+  detached.uv!.view!.span = 9;
+  expect(attachment.snapshot().uv!.view?.span).toBe(1);
   expect(changes).toBe(4);
 });
 
@@ -38,7 +38,7 @@ test("hidden hosts skip device resizes and retain a finite camera aspect until v
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined,
     uvCommand: () => false,
     hitAt: () => undefined, queryContext: () => { throw Error("No hit expected"); },
-  });
+  }, ["head", "uv"]);
   attachment.resize();
   expect(events).toEqual([]);
   expect(visibleViewportSize(0, 400)).toBeUndefined();
@@ -64,14 +64,14 @@ test("UV view commands are available only for a ready view and publish persisted
       if (command === "other") view = { ...view, side: "high" };
       return true;
     }, hitAt: () => undefined, queryContext: () => { throw Error("No hit expected"); },
-  });
+  }, ["head", "uv"]);
   expect(attachment.uvCommand("single")).toBe(false);
   attachment.setReady("uv");
   expect(attachment.uvCommandCapability("other")).toMatchObject({ available: false });
   let notifications = 0; attachment.subscribe(() => notifications++);
   expect(attachment.uvCommand("single")).toBe(true);
   expect(attachment.uvCommand("other")).toBe(true);
-  expect(attachment.snapshot().uv.view).toMatchObject({ mode: "single", side: "high" });
+  expect(attachment.snapshot().uv!.view).toMatchObject({ mode: "single", side: "high" });
   expect(commands).toEqual(["single", "other"]);
   expect(notifications).toBe(2);
 });
@@ -81,7 +81,7 @@ test("the drawn view and the view whose picture the canvas holds are in the head
     moveHost: () => {}, measure: () => ({ width: 10, height: 10 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined,
     uvCommand: () => false, hitAt: () => undefined, queryContext: () => { throw Error("No hit expected"); },
-  });
+  }, ["head", "uv"]);
   let changes = 0; attachment.subscribe(() => changes++);
   expect(attachment.snapshot().head).not.toHaveProperty("drawn");
   attachment.setDrawn({ drawn: "v2", onCanvas: "main" });

@@ -110,7 +110,7 @@ export async function profileContextStudio(options: { clock?: Clock; now?: () =>
   const fileDevice: StudioFilePort = { pick: options.pick ?? (async () => undefined), download: () => {}, bakeMask: async () => new Blob() };
   const viewport = new ViewportAttachment<HTMLElement>({ moveHost: () => {}, measure: () => ({ width: 300, height: 600 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => false,
-    hitAt: () => undefined, queryContext: hit => core.app.contextQuery(hit) });
+    hitAt: () => undefined, queryContext: hit => core.app.contextQuery(hit) }, ["head", "uv"]);
   const emptyChoices = emptyChoicesPort({ session, resolver: targets, services, panels: panelActions,
     ownerType: (instance, route) => route === "look" ? "presets" : route === "subject" ? "view" : STUDIO_CATALOGUE.primary(session.panel(instance)?.type ?? "")?.id,
     starter: () => starterParts(core.documents), createLookCapability: () => ({ available: true }), access: () => ({ available: true }),

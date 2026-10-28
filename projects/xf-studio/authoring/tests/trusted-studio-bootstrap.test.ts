@@ -24,7 +24,7 @@ test("a presentation mounts from trusted services without any page controls", as
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined,
     uvView: () => workspace.uvView, uvCommand: () => true, hitAt: () => undefined,
     queryContext: hit => core.app.contextQuery(hit, targets.named()),
-  });
+  }, ["head", "uv"]);
   viewport.setReady("uv");
   const collections = bootstrapCollections(core.document, { looks: [{ name: "Look", recipe: workspace.recipe }] });
   // The input layer the composition root gives the port (profiles design §3.6): what each action names.

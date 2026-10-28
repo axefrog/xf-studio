@@ -182,7 +182,7 @@ test("UV: Ctrl-drag pans, Shift off makeup does nothing, Shift-double-click neve
 test("viewport attachment publishes deduplicated input reports and modifier resets on its own channel", () => {
   const port = { moveHost() {}, measure: () => ({ width: 1, height: 1 }), resize() {}, cancelInput() {}, inputCapture: () => false,
     headView: () => undefined, uvView: () => undefined, uvCommand: () => false, hitAt: () => undefined, queryContext: () => { throw Error(); } } as unknown as ViewportAttachmentPort<unknown>;
-  const attachment = new ViewportAttachment(port);
+  const attachment = new ViewportAttachment(port, ["head", "uv"]);
   let input = 0, general = 0;
   attachment.subscribeInput(() => input++); attachment.subscribe(() => general++);
   attachment.reportInput("head", { target: "shape", editable: true });

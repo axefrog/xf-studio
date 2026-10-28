@@ -8,7 +8,7 @@ import { EYE_MAKEUP_PANEL_META } from "./contribution";
 
 /** Eye makeup's flat UV editor: the UV viewport device hosted in its panel, with its view modes and hints. */
 export function uvPanel(ctx: EyeMakeupViewContext): PanelController {
-  const uv = ctx.uv;
+  const uv = ctx.uv!;
   const slot = h("div", { class: "viewport-slot uv-slot" });
   const modes = new Segmented<"both" | "single">({ label: "UV view", showLabel: false, compact: true, options: [
     { value: "both", label: "Both eyes" }, { value: "single", label: "Single eye" }], onSelect: mode => { uv.command(mode); } });
@@ -45,11 +45,11 @@ export function uvPanel(ctx: EyeMakeupViewContext): PanelController {
     spec: { id: "uv", ...EYE_MAKEUP_PANEL_META.uv, element,
       visibility: visible => { if (visible) requestAnimationFrame(() => uv.resize()); } },
     update(frame) {
-      const view = frame.viewport.uv.view;
+      const view = frame.viewport.uv?.view;
       modes.update(view?.mode, value => uv.commandCapability(value));
       applyCapability(other, uv.commandCapability("other"));
       applyCapability(fit, uv.commandCapability("fit"));
-      const selection = frame.viewport.uv.selection;
+      const selection = frame.viewport.uv?.selection;
       warning.hidden = !(selection?.point && !selection.point.visible);
       hints.update(frame);
       // Hidden hints free their reserved band; the editor reads the new insets on the next draw.

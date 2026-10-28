@@ -100,7 +100,7 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
     hitAt: options.hitAt ?? (() => ({ hit: { kind: "point", layerId: document.recipe.layers[document.active].id,
       index: 0 }, affordance: "point" })),
     queryContext: hit => app.contextQuery(hit, targets.named()),
-  });
+  }, ["head", "uv"]);
   viewport.setReady("uv"); viewport.setReady("head");
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
   const previewReadiness = { readiness: () => ({ phase: "ready" as const, size: 1024 as const,

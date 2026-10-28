@@ -1,3 +1,5 @@
+import { createLayeredEditorAdapters } from "../src/preview/browser/layered-editor-adapters";
+import { EYE_REGION } from "./fixtures/eye-region";
 /**
  * The scene editors (src/preview/browser/scene-editors.ts; profiles phase 4a-vi, experiment 043 §13): the on-head editor mounted per view
  * on the head shown for it, naming that view's look; the UV editor naming the drawn view's. They replace UI-boundary exception 17 (the
@@ -18,7 +20,9 @@ function editors() {
   const listeners = new Set<() => void>();
   const plate = { geometry: new THREE.PlaneGeometry(1, 1) };
   const factory = { feature: "eye-makeup" };
-  const ports = {
+  const adapters = createLayeredEditorAdapters(EYE_REGION, { surface: ((_scene: unknown, given: unknown) => { hooks = given as unknown as typeof hooks; log.push("mount"); return { setEnabled: (on: boolean) => log.push(`enabled:${on}`) }; }) as never });
+  const resources = adapters.surface!.create({} as never);
+  const ports = { adapters,
     surfaces: new Map([["eye-makeup", factory]]), look: { feature: "eye-makeup", preview: {} },
     core: { geometry: { layer: () => layer, recipe: () => ({ layers: [layer] }) }, presentation: { selected: 0, layer: () => layer, selectedField: () => ({ id: "F1" }) },
       app: { dispatch: (action: { kind: string; instance?: string }) => { log.push(`dispatch:${action.kind}@${action.instance}`); return { ok: true }; },
@@ -29,8 +33,8 @@ function editors() {
     naming: { look: (view: string | undefined) => view === undefined || view === "empty" ? undefined : ({ collection: "c", look: view === "twin" ? "look-of-main" : `look-of-${view}` }),
       complete: (action: object, view: string | undefined) => ({ ...action, instance: view }) },
     drawn: () => drawn,
-    viewport: { mountSurface: (_surface: unknown, given: typeof hooks) => { hooks = given; log.push("mount"); return { setEnabled: (on: boolean) => log.push(`enabled:${on}`) }; },
-      unmountSurface: () => log.push("unmount") },
+    viewport: { mountSurface: (surface: never, binding: never) => resources.mount(surface, binding),
+      surfaceOutline: (surface: never) => resources.outline(surface), unmountSurface: () => log.push("unmount") },
     attach: (services: Record<string, unknown>) => Object.assign(attached, services), message: (source: string, text: string) => log.push(`message:${source}:${text}`),
   } as unknown as SceneEditorPorts;
   const head = { scene: { feature: (renderer: unknown) => renderer === factory ? { surface: plate } : undefined },
@@ -61,21 +65,17 @@ test("mounted for a view, the on-head editor names that view's look, follows the
   expect(e.log.filter(entry => entry === "unmount")).toHaveLength(1);
 });
 
-test("a head whose scene has no edited surface mounts nothing; the UV editor names the drawn view's look", () => {
+test("a head whose scene has no edited surface mounts nothing", () => {
   const e = editors();
   const bare = { ...e.head, scene: { feature: () => undefined } } as unknown as AttachedHead;
   e.made.mount(bare, "main")();
   expect(e.log).toEqual([]);
-  const uv = e.made.uvHooks();
-  uv.begin!();
-  expect(e.log).toEqual(["begin:uv:L1:look-of-main"]);
 });
 
-test("P2-iii: the UV editor follows the drawn view (its look named at each gesture), and names none while no view is drawn", () => {
-  const e = editors(), uv = e.made.uvHooks();
-  e.draw("side");
-  uv.begin!();
-  e.draw(undefined);
-  uv.begin!(); uv.select!(1);
-  expect(e.log).toEqual(["begin:uv:L1:look-of-side", "begin:uv:L1:undefined", "dispatch:point.select@undefined"]);
+test("64101571 surface wiring parity: selection, captured view, controls, outline and idempotent release", () => {
+  const e = editors(), release = e.made.mount(e.head, "side"), hooks = e.hooks();
+  const reads = { layer: hooks.layer!(), selected: hooks.selected!(), field: hooks.selectedField!(), layers: hooks.layers!(), outline: e.attached.surfaceOutline };
+  hooks.begin!(); e.draw("other"); hooks.apply!({}); hooks.select!(2); hooks.selectField!("F2"); hooks.finish!(); hooks.cancel!(); hooks.message!("unchanged");
+  e.setControls(false); e.setControls(true); release(); release();
+  expect({ reads, log: e.log, outlineAfter: e.attached.surfaceOutline, subscriptionsAfter: e.listeners.size }).toMatchSnapshot();
 });

@@ -21,7 +21,7 @@ function mountFixture() {
   const viewport = new ViewportAttachment<string>({ moveHost: () => {}, measure: () => ({ width: 1, height: 1 }),
     resize: () => {}, cancelInput: () => {}, inputCapture: () => false, headView: () => undefined,
     uvView: () => workspace.uvView, uvCommand: () => true, hitAt: () => undefined,
-    queryContext: hit => core.app.contextQuery(hit) });
+    queryContext: hit => core.app.contextQuery(hit) }, ["head", "uv"]);
   // The collection shown: "Fixture", saved as version 3, its first look the workspace's recipe and its second empty.
   const collections = bootstrapCollections(core.document, { name: "Fixture", saved: 3, looks: [{ name: "First", recipe: structuredClone(workspace.recipe) },
     { name: "Second", recipe: { ...structuredClone(workspace.recipe), layers: [] } }] });

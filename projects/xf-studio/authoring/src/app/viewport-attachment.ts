@@ -11,9 +11,9 @@ export type { UVViewCommand };
  * editor's (`uv`). Hosts are registered by the device, not a fixed set; `head` stays the main view's alias for every caller.
  */
 export type ViewportHostId = string;
-/** The hosts a browser viewport device registers today (the main 3D view `head` and the flat UV editor `uv`): the binding scopes. */
+/** Binding scopes; a flat host exists only when its adapter is registered. */
 export type ViewportHostKind = ViewportScope;
-export const DEFAULT_VIEWPORT_HOSTS: readonly ViewportHostKind[] = [viewPanelId(MAIN_VIEW) as ViewportHostKind, "uv"];
+export const DEFAULT_VIEWPORT_HOSTS: readonly ViewportHostKind[] = [viewPanelId(MAIN_VIEW) as ViewportHostKind];
 /** Programmatic UV navigation (audit A-5): pan by atlas units, zoom by a factor about a UV point. */
 export type UVNavigation = { kind: "pan"; du: number; dv: number } | { kind: "zoom"; factor: number; at?: { u: number; v: number } };
 import { visibleViewportSize, type ViewportSize } from "../preview/viewport-size";
@@ -40,12 +40,12 @@ type PhaseState = { phase: ViewportPhase; error?: string; message?: string; prog
 export type DrawnViews = { readonly drawn?: ViewId; readonly onCanvas?: ViewId };
 export type ViewportAttachmentState = {
   head: ViewportHostState & { view?: CameraState } & DrawnViews;
-  uv: ViewportHostState & { view?: UVView; selection?: UVSelectionVisibility };
+  uv?: ViewportHostState & { view?: UVView; selection?: UVSelectionVisibility };
 };
 export type ViewportHit = { hit: StudioContextHit; mirror?: boolean;
   affordance: "point" | "tangent" | "warp-origin" | "warp-vector" | "shape" | "empty" };
-/** Read-only input context for hint strips and cursors: held modifiers plus each viewport's report (`head` and `uv` always present). */
-export type ViewportInputSnapshot = Readonly<{ modifiers: HeldModifiers; head: EditorInputState; uv: EditorInputState } &
+/** Read-only input context for hint strips and cursors. Only registered hosts have reports. */
+export type ViewportInputSnapshot = Readonly<{ modifiers: HeldModifiers; head: EditorInputState; uv?: EditorInputState } &
   Record<ViewportHostId, EditorInputState | HeldModifiers>>;
 export type ViewportContextQuery = ReturnType<StudioApplication["contextQuery"]> &
   Pick<ViewportHit, "mirror" | "affordance"> & { source: ViewportHostId };
@@ -76,7 +76,7 @@ export class ViewportAttachment<Slot, Host extends ViewportHostId = ViewportHost
   private listeners = new Set<() => void>();
   private inputListeners = new Set<() => void>();
   private inputState: ViewportInputSnapshot;
-  /** @param hosts the hosts the device registers (the main view's `head` and the flat editor's `uv` by default) */
+  /** @param hosts the device's registered hosts; by default only the main 3D view exists. */
   constructor(private port: ViewportAttachmentPort<Slot, Host>, private readonly hosts: readonly Host[] = DEFAULT_VIEWPORT_HOSTS as readonly Host[]) {
     for (const host of hosts) this.phases.set(host, { phase: "loading" });
     this.inputState = { modifiers: NO_MODIFIERS, ...Object.fromEntries(hosts.map(host => [host, { editable: false }])) } as ViewportInputSnapshot;
@@ -199,8 +199,8 @@ export class ViewportAttachment<Slot, Host extends ViewportHostId = ViewportHost
     };
     return {
       head: { ...state("head" as Host), view: structuredClone(this.port.headView()), ...this.drawnViews },
-      uv: { ...state("uv" as Host), view: structuredClone(this.port.uvView()),
-        ...(this.port.uvSelection?.() ? { selection: structuredClone(this.port.uvSelection()) } : {}) },
+      ...(this.phases.has("uv" as Host) ? { uv: { ...state("uv" as Host), view: structuredClone(this.port.uvView()),
+        ...(this.port.uvSelection?.() ? { selection: structuredClone(this.port.uvSelection()) } : {}) } } : {}),
     };
   }
 }

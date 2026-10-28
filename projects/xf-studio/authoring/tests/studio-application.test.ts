@@ -233,7 +233,7 @@ test("viewport hit query binds the current geometry revision without selection o
     uvCommand: () => false,
     hitAt: () => ({ hit: { kind: "point", layerId, index: 0 }, mirror: true, affordance: "point" }),
     queryContext: hit => app.contextQuery(hit),
-  });
+  }, ["head", "uv"]);
   expect(port.contextAt("uv", 10, 10)).toBeUndefined();
   port.setReady("uv");
   const before = document.snapshot(), hit = port.contextAt("uv", 10, 10)!;

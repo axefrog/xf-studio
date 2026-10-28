@@ -130,7 +130,8 @@ describe("the composition root names no live feature (§7, liveSurface)", () => 
 
   test("a scene wires the registered surface of the feature its look editor edits, with the editor's device, as the on-head editor's; others get no layer source", () => {
     const preview = { connectScene: () => ({}), disconnectScene: () => {}, presentInitialLayers: () => {} } as unknown as SceneEditorPorts["look"]["preview"];
-    const editors = (feature: string) => createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: { feature, preview } } as SceneEditorPorts);
+    const editors = (feature: string) => createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: { feature, preview },
+      core: { documents: { ...STUDIO_COMPOSITION.documents, live: feature }, app: { actionRegistry: () => STUDIO_COMPOSITION.registry } } } as SceneEditorPorts);
     const shown = editors(STUDIO_COMPOSITION.documents.live);
     expect(shown.wiring.map(wiring => [wiring.feature, wiring.preview === preview, wiring.edited]))
       .toEqual([[STUDIO_COMPOSITION.documents.live, true, true]]);

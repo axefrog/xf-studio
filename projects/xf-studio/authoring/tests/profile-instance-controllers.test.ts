@@ -1,3 +1,4 @@
+import { createLayeredEditorAdapters } from "../src/preview/browser/layered-editor-adapters";
 import { withEmptyChoices } from "../src/studio-ui/panels/empty-choices";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
 import { recipeFile } from "../src/legacy/eye-makeup/recipe-schema";
@@ -217,14 +218,14 @@ test("two real UV controllers have separate canvases, navigation and bound gestu
       viewCommand: (command: string) => { view = { ...view, mode: command === "single" ? "single" : "both" }; return true; }, navigate: () => true,
       cancelInput: () => hooks.cancel(), dispose: () => { adapter.disposed = true; }, hitAt: () => undefined };
   }) as unknown as typeof createUVEditor;
-  const s = await profileContextStudio({ panelViewport: input => createPanelUV(input, { region: STUDIO_COMPOSITION.region, canvases: () => [], albedo: () => undefined, factory }) });
+  const s = await profileContextStudio({ panelViewport: input => createPanelUV(input, { adapters: createLayeredEditorAdapters(STUDIO_COMPOSITION.region, { flat: factory }), canvases: () => [], albedo: () => undefined }) });
   const ids = [0, 1].map(i => s.session.addPanel(s.session.tabId(), "uv", { binding: { policy: "pinned", target: { look: s.looks[i]! } } }));
   arrange(s, ids); const ui = owner(s);
   try {
     ui.paint(); expect(ui.panels.controllers()).toHaveLength(2); expect(adapters).toHaveLength(2);
     expect(adapters[0]!.canvas).not.toBe(adapters[1]!.canvas);
     ui.panels.runtime(ids[0]!)!.viewport.uvCommand("single");
-    expect(ui.panels.runtime(ids[1]!)!.viewport.snapshot().uv.view?.mode).toBe("both");
+    expect(ui.panels.runtime(ids[1]!)!.viewport.snapshot().uv!.view?.mode).toBe("both");
     const before = ui.panels.runtime(ids[1]!)!.feature("eye-makeup").view().selected();
     adapters[0]!.hooks.select(1);
     expect(ui.panels.runtime(ids[0]!)!.feature("eye-makeup").view().selected()).toBe(1);

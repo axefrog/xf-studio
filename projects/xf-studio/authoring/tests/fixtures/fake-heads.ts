@@ -1,3 +1,4 @@
+import { createLayeredEditorAdapters } from "../../src/preview/browser/layered-editor-adapters";
 /**
  * Scene runtime heads over fake scenes (tests/browser-head-attachment.test.ts, tests/browser-scene-heads.test.ts): the real head
  * attachment and viewport device, with scenes that only record what is asked of them.
@@ -59,8 +60,8 @@ export function harness(plan: { failBuild?: number[]; failPresent?: number[]; bu
   const scenes: ReturnType<typeof fakeScene>[] = [];
   const bodies: string[] = [], drawn: unknown[] = [];
   let builds = 0, presents = 0, persisted = 0;
-  const viewport = createBrowserViewportDevice({ region: EYE_REGION,
-    headHost: host as unknown as HTMLElement, uvHost: { clientWidth: 1, clientHeight: 1, contains: () => false } as unknown as HTMLElement,
+  const viewport = createBrowserViewportDevice({
+    headHost: host as unknown as HTMLElement,
     queryContext: () => { throw Error("No hit expected"); },
     sceneFactory: (async (_device: unknown, options: { body?: "female" | "male"; signal?: AbortSignal }) => {
       const id = ++builds, body = options.body ?? "female";
@@ -74,8 +75,8 @@ export function harness(plan: { failBuild?: number[]; failPresent?: number[]; bu
       return made.scene;
     }) as unknown as typeof createSceneRuntime,
     deviceFactory: (() => ({ show: (slot: unknown) => drawn.push(slot) })) as never,
-    surfaceFactory: (() => ({ resize: noop, cancelInput: () => log.push("surface:cancel"), inputCapture: () => false, hitAt: () => undefined,
-      setEnabled: (on: boolean) => log.push(`surface:enabled:${on}`), dispose: () => log.push("surface:dispose") })) as unknown as typeof createSurfaceEditor,
+    surface: createLayeredEditorAdapters(EYE_REGION, { surface: (() => ({ resize: noop, cancelInput: () => log.push("surface:cancel"), inputCapture: () => false, hitAt: () => undefined,
+      setEnabled: (on: boolean) => log.push(`surface:enabled:${on}`), dispose: () => log.push("surface:dispose") })) as unknown as typeof createSurfaceEditor }).surface,
     window: { addEventListener: noop },
   });
   const preferenceListeners = new Set<Listener>(), schemeListeners = new Set<Listener>();

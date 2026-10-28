@@ -65,11 +65,11 @@ export class ViewportInputHints {
   dispose() { clearTimeout(this.dwell); this.unsubscribe(); }
   context(): ViewportInputContext {
     const input = this.source.input(), own = input[this.scope];
-    return { scope: this.scope, target: own.target, gesture: own.gesture, modifiers: input.modifiers, blocked: this.blocked, editing: this.editing };
+    return { scope: this.scope, target: own?.target, gesture: own?.gesture, modifiers: input.modifiers, blocked: this.blocked, editing: this.editing };
   }
   update(frame: Frame) {
     this.enabled = frame.preferences.inputHints;
-    this.interactive = frame.viewport[this.scope].phase === "ready";
+    this.interactive = frame.viewport[this.scope]?.phase === "ready";
     const facts = frame.inputFacts;
     // The 3D view edits through the tool its modules offer for it (Surface controls). Without one (its module is hidden) the strip
     // hints camera input only, and never points at a tool or panel that isn't there (UI-102). The UV map is the module's own panel.

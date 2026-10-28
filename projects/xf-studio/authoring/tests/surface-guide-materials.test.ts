@@ -1,3 +1,4 @@
+import { createLayeredEditorAdapters } from "../src/preview/browser/layered-editor-adapters";
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { createSurfaceEditor, surfaceGuideStandIns } from "../src/legacy/eye-makeup/browser/surface-editor";
@@ -74,18 +75,18 @@ test("the viewport device mounts each head's editor with that head's guide mater
   const host = { clientWidth: 600, clientHeight: 400, contains: () => false };
   const given: unknown[] = [];
   let built = 0;
-  const device = createBrowserViewportDevice({ region: EYE_REGION,
-    headHost: host as unknown as HTMLElement, uvHost: host as unknown as HTMLElement, queryContext: () => { throw Error("No hit expected"); },
+  const device = createBrowserViewportDevice({
+    headHost: host as unknown as HTMLElement, queryContext: () => { throw Error("No hit expected"); },
     sceneFactory: (async () => ({ slot: ++built, dispose: () => {}, resize: () => {} })) as unknown as typeof createSceneRuntime,
     deviceFactory: (() => ({ show: () => {} })) as never,
-    surfaceFactory: ((_viewer: unknown, _hooks: unknown, _parts: unknown, guides: unknown) => { given.push(guides);
-      return { resize: () => {}, cancelInput: () => {}, inputCapture: () => false, hitAt: () => undefined, dispose: () => {} }; }) as unknown as typeof createSurfaceEditor,
+    surface: createLayeredEditorAdapters(EYE_REGION, { surface: ((_viewer: unknown, _hooks: unknown, _parts: unknown, guides: unknown) => { given.push(guides);
+      return { resize: () => {}, cancelInput: () => {}, inputCapture: () => false, hitAt: () => undefined, dispose: () => {} }; }) as unknown as typeof createSurfaceEditor }).surface,
   });
   const a = await device.buildHead(), b = await device.buildHead(), surface = {} as THREE.SkinnedMesh;
   const standInsA = device.surfaceGuides(a);
-  device.showHead(a); device.mountSurface(surface, {} as Parameters<typeof createSurfaceEditor>[1]);
-  device.showHead(b); device.mountSurface(surface, {} as Parameters<typeof createSurfaceEditor>[1]);
-  device.showHead(a); device.mountSurface(surface, {} as Parameters<typeof createSurfaceEditor>[1]);
+  device.showHead(a); device.mountSurface(surface, { state: {}, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} });
+  device.showHead(b); device.mountSurface(surface, { state: {}, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} });
+  device.showHead(a); device.mountSurface(surface, { state: {}, signal: new AbortController().signal, source: "main", look: () => undefined, complete: action => action as never, check: () => ({ available: true }), message: () => {} });
   const [first, other, again] = given as { point: THREE.Material }[];
   expect(first!.point).toBe((standInsA[0] as THREE.Points).material as THREE.Material);
   expect(again).toBe(first);

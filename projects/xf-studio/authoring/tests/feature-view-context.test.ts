@@ -41,7 +41,7 @@ test("a feature view's context is its facade and the shell's services: no port, 
   expect(Object.keys(ctx.collection).sort()).toEqual(["capability", "file", "fileCapability", "import", "menu", "menuCapability", "presetMenu", "refresh",
     "reopenPreviousAction", "request", "requestCapability", "state", "summary"]);
   expect(Object.isFrozen(ctx.collection)).toBe(true);
-  expect(Object.keys(ctx.uv).sort()).toEqual(["attach", "command", "commandCapability", "hints", "menu", "resize"]);
+  expect(Object.keys(ctx.uv!).sort()).toEqual(["attach", "command", "commandCapability", "hints", "menu", "resize"]);
   // "Add to my mod manager" for a mod the view built: the shell's review sheet over port.modInstall, named by product only.
   expect(Object.keys(ctx.modInstall).sort()).toEqual(["capability", "label", "outcome", "review"]);
   expect(Object.isFrozen(ctx.modInstall)).toBe(true);

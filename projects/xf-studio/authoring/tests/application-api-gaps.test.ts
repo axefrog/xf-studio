@@ -264,13 +264,13 @@ test("the viewport snapshot carries UV selection visibility and view-change noti
   const attachment = new ViewportAttachment<object>({ moveHost: () => {}, measure: () => ({ width: 10, height: 10 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined,
     uvSelection: () => selection, uvCommand: () => true, hitAt: () => undefined,
-    queryContext: () => { throw Error("not used"); } });
+    queryContext: () => { throw Error("not used"); } }, ["head", "uv"]);
   let notified = 0; attachment.subscribe(() => notified++);
-  expect(attachment.snapshot().uv.selection).toEqual({ point: { index: 2, visible: false } });
+  expect(attachment.snapshot().uv!.selection).toEqual({ point: { index: 2, visible: false } });
   attachment.viewChanged();
   expect(notified).toBe(1);
   selection = undefined;
-  expect("selection" in attachment.snapshot().uv).toBe(false);
+  expect("selection" in attachment.snapshot().uv!).toBe(false);
 });
 
 test("coordinate commands edit geometry with one Undo each and refuse invalid targets", () => {
@@ -355,7 +355,7 @@ test("camera and UV navigation commands are view-only and bounded", async () => 
   const moves: unknown[] = [];
   const attachment = new ViewportAttachment<object>({ moveHost: () => {}, measure: () => ({ width: 10, height: 10 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => true,
-    uvNavigate: command => { moves.push(command); return true; }, hitAt: () => undefined, queryContext: () => { throw Error("not used"); } });
+    uvNavigate: command => { moves.push(command); return true; }, hitAt: () => undefined, queryContext: () => { throw Error("not used"); } }, ["head", "uv"]);
   expect(attachment.uvNavigateCapability({ kind: "pan", du: .1, dv: 0 }).available).toBe(false);
   attachment.setReady("uv");
   expect(attachment.uvNavigateCapability({ kind: "zoom", factor: 0 }).available).toBe(false);

@@ -3,23 +3,22 @@ import { createSceneRuntime, type SceneDevice, type SceneRuntime } from "../../p
 import { createRendererDevice, type RendererDevice, type RendererDeviceOptions } from "../../platform/scene/renderer-device";
 import type { FeatureRendererFactory } from "../../platform/api/scene";
 import type { CoreBody } from "../../character/render-detail";
-import type { LayeredMakeupRegion } from "../../engines/layered-makeup/region";
-import { createSurfaceEditor, surfaceEditorParts, surfaceGuideStandIns, type SurfaceEditorParts } from "../../legacy/eye-makeup/browser/surface-editor";
-import { createUVEditor } from "../../legacy/eye-makeup/browser/uv-editor";
 import { modifiersOf, NO_MODIFIERS } from "../../app/input-bindings";
 import { ViewportAdapter } from "../../app/viewport-adapter";
 import { ViewportAttachment, type ViewportAttachmentPort, type ViewportHostKind } from "../../app/viewport-attachment";
 
+import type { BrowserEditorAdapters, EditorBinding, SurfaceEditor } from "./editor-adapters";
+
 type Scene = SceneRuntime;
-type UVEditor = ReturnType<typeof createUVEditor>;
-type SurfaceEditor = ReturnType<typeof createSurfaceEditor>;
+/** The device's scene view handed to registered editors; they do not depend on the full scene-host API. */
+export type EditorScene = Pick<SceneRuntime, "renderer" | "scene" | "camera" | "head" | "eyes" | "controls" | "cameraInput" | "onFrame" | "requestRender">;
 
 /** Browser resource owner. The presentation receives only `attachment`, never these handles. */
 export function createBrowserViewportDevice(options: {
-  /** The live feature's region: the layer models its editors' shape edits validate with and the mirror their hit tests reflect across. */
-  region: Pick<LayeredMakeupRegion, "models" | "mirror">;
   headHost: HTMLElement;
-  uvHost: HTMLElement;
+  /** Supplied by the edited feature; absent means camera-only input and no editor resources. */
+  surface?: BrowserEditorAdapters["surface"];
+  signal?: AbortSignal;
   queryContext: ViewportAttachmentPort<HTMLElement>["queryContext"];
   /** The feature renderers each loaded head creates (the composition's list, handed down by the composition root). */
   renderers?: readonly FeatureRendererFactory[];
@@ -30,37 +29,26 @@ export function createBrowserViewportDevice(options: {
   deviceFactory?: (host: HTMLElement, options: RendererDeviceOptions) => SceneDevice & Pick<RendererDevice, "show">;
   /** The head's WebGL context was lost or came back (the renderer device reports it; the composition root logs it). */
   onContext?: (event: "lost" | "restored") => void;
-  uvFactory?: typeof createUVEditor;
-  surfaceFactory?: typeof createSurfaceEditor;
   /** Source of key, pointer, focus and visibility events for modifier tracking. */
   window?: Pick<Window, "addEventListener"> & { document?: Pick<Document, "addEventListener" | "visibilityState"> };
 }) {
-  const editors = new ViewportAdapter();
+  const editors = new ViewportAdapter(options.surface ? ["surface"] : []);
   /** The head pane's one renderer device (profiles phase 4a-ii): made with the first head, kept for the window. */
   let device: SceneDevice & Pick<RendererDevice, "show"> | undefined;
   /** The head shown on the device (several may be resident; the scene runtime owner decides which: preview/scene-residency.ts). */
   let viewer: Scene | undefined;
   /** Who else hears the context's loss and restore (the runtime owner drops warm runtimes on a loss). */
   const contextListeners = new Set<(event: "lost" | "restored") => void>();
-  let uvEditor: UVEditor | undefined;
   let surfaceEditor: SurfaceEditor | undefined;
-  /**
-   * Each head's guide materials and their stand-ins (`surfaceGuideStandIns`), compiled with it before it is shown (`surfaceGuides`); the
-   * on-head editor mounted on the head draws with the same materials, so their programs stay linked across its mounts. They go with the head.
-   */
-  const guides = new Map<Scene, ReturnType<typeof surfaceGuideStandIns>>();
-  const guidesFor = (scene: Scene) => { let made = guides.get(scene); if (!made) guides.set(scene, made = surfaceGuideStandIns()); return made; };
-  /** Each head's on-head editor parts (its surface map and occlusion trees), made before it is shown (`surfaceSteps`); they go with the head. */
-  const editorParts = new Map<Scene, { surface: THREE.SkinnedMesh; parts: SurfaceEditorParts }>();
-  const partsFor = (scene: Scene, surface: THREE.SkinnedMesh) => {
-    let made = editorParts.get(scene);
-    if (!made || made.surface !== surface) editorParts.set(scene, made = { surface, parts: surfaceEditorParts(scene.head, scene.eyes, surface) });
-    return made.parts;
+  let releaseBinding: (() => void) | undefined;
+  const resources = new Map<Scene, ReturnType<NonNullable<BrowserEditorAdapters["surface"]>["create"]>>();
+  const resourcesFor = (scene: Scene) => {
+    let made = resources.get(scene);
+    if (!made && options.surface) resources.set(scene, made = options.surface.create(scene));
+    return made;
   };
   // Each registered viewport host's element and the editor slot its input and capture belong to.
-  const hosts: Record<ViewportHostKind, { element: HTMLElement; editor: string }> = {
-    head: { element: options.headHost, editor: "surface" }, uv: { element: options.uvHost, editor: "uv" } };
-  const host = (kind: ViewportHostKind) => hosts[kind].element;
+  const host = (_kind: ViewportHostKind) => options.headHost;
   const attachment = new ViewportAttachment<HTMLElement>({
     moveHost: (kind, slot) => {
       const node = host(kind);
@@ -70,45 +58,37 @@ export function createBrowserViewportDevice(options: {
     measure: kind => ({ width: host(kind).clientWidth, height: host(kind).clientHeight }),
     resize: kind => {
       if (kind === "head") viewer?.resize();
-      editors.resize(hosts[kind].editor);
+      editors.resize("surface");
     },
-    cancelInput: kind => editors.cancelInput(hosts[kind].editor),
-    inputCapture: kind => editors.capture()[hosts[kind].editor] ?? false,
+    cancelInput: () => editors.cancelInput("surface"),
+    inputCapture: () => editors.capture()["surface"] ?? false,
     headView: () => viewer?.cameraState(),
-    uvView: () => uvEditor?.snapshot(),
-    uvSelection: () => uvEditor?.selection?.(),
-    uvCommand: command => uvEditor?.viewCommand(command) ?? false,
-    uvNavigate: command => uvEditor?.navigate?.(command) ?? false,
-    hitAt: (kind, x, y) => kind === "uv" ? uvEditor?.hitAt(x, y) : surfaceEditor?.hitAt(x, y),
+    uvView: () => undefined, uvCommand: () => false,
+    hitAt: (_kind, x, y) => surfaceEditor?.hitAt(x, y),
     queryContext: options.queryContext,
-  });
+  }, ["head"]);
   // Held modifiers for hints and cursors. Key and pointer events both carry the live state (a
   // pointer event also resyncs after a key was released elsewhere); blur or a hidden page
   // clears them, so no modifier can stay stuck after the window loses focus.
   const events = options.window ?? (typeof window === "undefined" ? undefined : window);
   if (events) {
     const track = (event: Event) => attachment.reportModifiers(modifiersOf(event as KeyboardEvent));
-    for (const type of ["keydown", "keyup", "pointermove", "pointerdown"]) events.addEventListener(type, track, { capture: true, passive: true });
-    events.addEventListener("blur", () => attachment.reportModifiers(NO_MODIFIERS));
+    for (const type of ["keydown", "keyup", "pointermove", "pointerdown"]) events.addEventListener(type, track, { capture: true, passive: true, signal: options.signal });
+    events.addEventListener("blur", () => attachment.reportModifiers(NO_MODIFIERS), { signal: options.signal });
     events.document?.addEventListener("visibilitychange", () => {
       if (events.document?.visibilityState === "hidden") attachment.reportModifiers(NO_MODIFIERS);
-    });
+    }, { signal: options.signal });
   }
   /** The on-head editor goes with the head it edits: an open gesture is settled (cancelled), and its listeners leave the canvas. */
   function releaseEditor() {
+    releaseBinding?.(); releaseBinding = undefined;
     editors.detach("surface");
     surfaceEditor = undefined;
+    attachment.reportInput("head", { editable: false });
   }
+  options.signal?.addEventListener("abort", () => { releaseEditor(); for (const item of resources.values()) item.dispose(); resources.clear(); }, { once: true });
   return {
     attachment,
-    mountUV(canvas: HTMLCanvasElement, controls: Parameters<typeof createUVEditor>[1],
-      hooks: Omit<Parameters<typeof createUVEditor>[2], "region">, initial: Parameters<typeof createUVEditor>[3]) {
-      uvEditor = (options.uvFactory ?? createUVEditor)(canvas, controls,
-        { ...hooks, region: options.region, input: state => attachment.reportInput("uv", state) }, initial);
-      editors.attach("uv", uvEditor);
-      attachment.setReady("uv");
-      return uvEditor;
-    },
     /**
      * Build a head with a body's core (the feminine V's by default), hidden on the pane's renderer device, whatever is shown meanwhile.
      * It rejects with `signal.reason` once the signal aborts (a newer subject or body change superseded it), having released what it made.
@@ -137,31 +117,36 @@ export function createBrowserViewportDevice(options: {
     /** Dispose a head (shown or not); the renderer device stays. A head shown now is hidden first. */
     disposeHead(scene: Scene) {
       if (viewer === scene) { releaseEditor(); viewer = undefined; }
-      guides.get(scene)?.dispose(); guides.delete(scene); editorParts.delete(scene);
+      resources.get(scene)?.dispose(); resources.delete(scene);
       scene.dispose();
     },
     /**
      * What the on-head editor will add to `scene` once mounted on it (its guides), as stand-ins to compile with the head before it is shown,
      * so its first shown frame links nothing of theirs (profiles phase 4a-v-b). They live as long as the head, keeping those programs.
      */
-    surfaceGuides(scene: Scene): readonly THREE.Object3D[] { return guidesFor(scene).objects; },
+    surfaceGuides(scene: Scene): readonly THREE.Object3D[] { return resourcesFor(scene)?.guides ?? []; },
     /**
      * The steps that make the on-head editor's parts for `surface` on `scene` ahead (its surface map and occlusion trees, tens of milliseconds
      * each), for a head prepared before it is shown: the editor mounted at show takes them made (profiles phase 4a-v-b).
      */
-    surfaceSteps(scene: Scene, surface: THREE.SkinnedMesh): readonly (() => void)[] { return partsFor(scene, surface).steps; },
+    surfaceSteps(scene: Scene, surface: THREE.SkinnedMesh): readonly (() => void)[] { return resourcesFor(scene)?.steps(surface) ?? []; },
     /** Hear the head pane's context being lost and coming back. Returns the unsubscribe. */
     onContext(listener: (event: "lost" | "restored") => void) { contextListeners.add(listener); return () => { contextListeners.delete(listener); }; },
     /** Mount the on-head editor over `surface` (the layered-makeup surface a feature renderer draws: eye makeup's plate), on the shown head. */
-    mountSurface(surface: THREE.SkinnedMesh, hooks: Omit<Parameters<typeof createSurfaceEditor>[1], "region">) {
+    mountSurface(surface: THREE.SkinnedMesh, binding: Omit<EditorBinding, "input">) {
       if (!viewer) throw Error("The head scene must be shown before mounting surface controls.");
-      const { renderer, scene, camera, head, eyes, controls, cameraInput, onFrame, requestRender } = viewer;
-      surfaceEditor = (options.surfaceFactory ?? createSurfaceEditor)({ renderer, scene, camera, head, eyes, controls, cameraInput, onFrame,
-        requestRender, plate: surface }, { ...hooks, region: options.region, input: state => attachment.reportInput("head", state) }, partsFor(viewer, surface),
-        guidesFor(viewer).materials);
+      const prepared = resourcesFor(viewer);
+      if (!prepared || binding.signal.aborted) return;
+      surfaceEditor = prepared.mount(surface, { ...binding, input: state => attachment.reportInput("head", state) });
       editors.attach("surface", surfaceEditor);
+      const mounted = surfaceEditor;
+      const abort = () => { if (surfaceEditor === mounted) releaseEditor(); };
+      binding.signal.addEventListener("abort", abort, { once: true });
+      releaseBinding = () => binding.signal.removeEventListener("abort", abort);
+      if (binding.signal.aborted) { releaseEditor(); return; }
       return surfaceEditor;
     },
+    surfaceOutline(surface: THREE.SkinnedMesh) { return viewer ? resourcesFor(viewer)?.outline(surface) : undefined; },
     /** Unmount the on-head editor (its view stops being drawn on this head, or the head goes): an open gesture is settled (cancelled). */
     unmountSurface() { releaseEditor(); },
     headReady() { attachment.setReady("head"); },
@@ -172,9 +157,8 @@ export function createBrowserViewportDevice(options: {
     /** How far the head the drawn view wants is being built and prepared (null: none is); the pane shows it (phase 4a-v). */
     headPreparation(state: Parameters<ViewportAttachment<HTMLElement>["setPreparation"]>[1]) { attachment.setPreparation("head", state); },
     /** The recipe or selection changed: redraw the UV pane, and the head's next frame (its handles follow them). */
-    drawUV() { uvEditor?.draw(); viewer?.requestRender(); },
+    drawUV() { viewer?.requestRender(); },
     capture() { return editors.capture(); },
-    uvEditor() { return uvEditor; },
     surfaceEditor() { return surfaceEditor; },
     scene() { return viewer; },
   };

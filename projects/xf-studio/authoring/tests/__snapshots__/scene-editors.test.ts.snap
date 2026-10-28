@@ -1,0 +1,54 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`64101571 surface wiring parity: selection, captured view, controls, outline and idempotent release 1`] = `
+{
+  "log": [
+    "mount",
+    "enabled:true",
+    "begin:side:L1:look-of-side",
+    "apply:side",
+    "dispatch:point.select@side",
+    "dispatch:field.select@side",
+    "end:side:false",
+    "end:side:true",
+    "message:surface:unchanged",
+    "enabled:false",
+    "enabled:true",
+    "unmount",
+  ],
+  "outlineAfter": undefined,
+  "reads": {
+    "field": "F1",
+    "layer": {
+      "id": "L1",
+    },
+    "layers": [
+      {
+        "id": "L1",
+      },
+    ],
+    "outline": {
+      "segments": Float64Array [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+      ],
+    },
+    "selected": 0,
+  },
+  "subscriptionsAfter": 0,
+}
+`;

@@ -1,0 +1,495 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`bound UV state, navigation, selection, gesture commit/Escape and release match 64101571 1`] = `
+{
+  "events": [
+    [
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "single",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "dispose",
+    ],
+    [
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "draw",
+      "dispose",
+    ],
+  ],
+  "states": [
+    [
+      {
+        "input": {
+          "editable": false,
+        },
+        "layerCount": 4,
+        "point": {
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333,
+            },
+            "mode": "symmetric",
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333,
+            },
+          },
+          "u": 0.304,
+          "v": 0.231,
+          "weight": 1,
+        },
+        "selected": 0,
+        "selectedField": "layer-1-field-1",
+        "uv": {
+          "captured": false,
+          "height": undefined,
+          "phase": "ready",
+          "selection": {
+            "point": {
+              "visible": true,
+            },
+          },
+          "view": {
+            "mode": "both",
+            "side": "low",
+            "span": 0.5,
+            "u": 0.5,
+            "v": 0.2775,
+          },
+          "width": 0,
+        },
+      },
+      {
+        "input": {
+          "editable": false,
+        },
+        "layerCount": 4,
+        "point": {
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333,
+            },
+            "mode": "symmetric",
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333,
+            },
+          },
+          "u": 0.303,
+          "v": 0.231,
+          "weight": 1,
+        },
+        "selected": 0,
+        "selectedField": "layer-1-field-1",
+        "uv": {
+          "captured": false,
+          "height": undefined,
+          "phase": "ready",
+          "selection": {
+            "point": {
+              "visible": true,
+            },
+          },
+          "view": {
+            "mode": "both",
+            "side": "low",
+            "span": 0.5,
+            "u": 0.5,
+            "v": 0.2775,
+          },
+          "width": 0,
+        },
+      },
+    ],
+    [
+      {
+        "input": {
+          "editable": false,
+        },
+        "layerCount": 4,
+        "point": {
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333,
+            },
+            "mode": "symmetric",
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333,
+            },
+          },
+          "u": 0.304,
+          "v": 0.231,
+          "weight": 1,
+        },
+        "selected": 1,
+        "selectedField": "layer-1-field-1",
+        "uv": {
+          "captured": false,
+          "height": undefined,
+          "phase": "ready",
+          "selection": {
+            "point": {
+              "visible": true,
+            },
+          },
+          "view": {
+            "mode": "single",
+            "side": "low",
+            "span": 0.5,
+            "u": 0.5,
+            "v": 0.2775,
+          },
+          "width": 0,
+        },
+      },
+      {
+        "input": {
+          "editable": false,
+        },
+        "layerCount": 4,
+        "point": {
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333,
+            },
+            "mode": "symmetric",
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333,
+            },
+          },
+          "u": 0.303,
+          "v": 0.231,
+          "weight": 1,
+        },
+        "selected": 0,
+        "selectedField": "layer-1-field-1",
+        "uv": {
+          "captured": false,
+          "height": undefined,
+          "phase": "ready",
+          "selection": {
+            "point": {
+              "visible": true,
+            },
+          },
+          "view": {
+            "mode": "both",
+            "side": "low",
+            "span": 0.5,
+            "u": 0.5,
+            "v": 0.2775,
+          },
+          "width": 0,
+        },
+      },
+    ],
+    [
+      {
+        "input": {
+          "editable": false,
+        },
+        "layerCount": 4,
+        "point": {
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333,
+            },
+            "mode": "symmetric",
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333,
+            },
+          },
+          "u": 0.304,
+          "v": 0.231,
+          "weight": 1,
+        },
+        "selected": 0,
+        "selectedField": "layer-1-field-1",
+        "uv": {
+          "captured": false,
+          "height": undefined,
+          "phase": "ready",
+          "selection": {
+            "point": {
+              "visible": true,
+            },
+          },
+          "view": {
+            "mode": "single",
+            "side": "low",
+            "span": 0.5,
+            "u": 0.5,
+            "v": 0.2775,
+          },
+          "width": 0,
+        },
+      },
+      {
+        "input": {
+          "editable": false,
+        },
+        "layerCount": 4,
+        "point": {
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333,
+            },
+            "mode": "symmetric",
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333,
+            },
+          },
+          "u": 0.303,
+          "v": 0.231,
+          "weight": 1,
+        },
+        "selected": 0,
+        "selectedField": "layer-1-field-1",
+        "uv": {
+          "captured": false,
+          "height": undefined,
+          "phase": "ready",
+          "selection": {
+            "point": {
+              "visible": true,
+            },
+          },
+          "view": {
+            "mode": "both",
+            "side": "low",
+            "span": 0.5,
+            "u": 0.5,
+            "v": 0.2775,
+          },
+          "width": 0,
+        },
+      },
+    ],
+    [
+      {
+        "input": {
+          "editable": false,
+        },
+        "layerCount": 4,
+        "point": {
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333,
+            },
+            "mode": "symmetric",
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333,
+            },
+          },
+          "u": 0.304,
+          "v": 0.231,
+          "weight": 1,
+        },
+        "selected": 0,
+        "selectedField": "layer-1-field-1",
+        "uv": {
+          "captured": false,
+          "height": undefined,
+          "phase": "ready",
+          "selection": {
+            "point": {
+              "visible": true,
+            },
+          },
+          "view": {
+            "mode": "single",
+            "side": "low",
+            "span": 0.5,
+            "u": 0.5,
+            "v": 0.2775,
+          },
+          "width": 0,
+        },
+      },
+      {
+        "input": {
+          "editable": false,
+        },
+        "layerCount": 4,
+        "point": {
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333,
+            },
+            "mode": "symmetric",
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333,
+            },
+          },
+          "u": 0.303,
+          "v": 0.231,
+          "weight": 1,
+        },
+        "selected": 0,
+        "selectedField": "layer-1-field-1",
+        "uv": {
+          "captured": false,
+          "height": undefined,
+          "phase": "ready",
+          "selection": {
+            "point": {
+              "visible": true,
+            },
+          },
+          "view": {
+            "mode": "both",
+            "side": "low",
+            "span": 0.5,
+            "u": 0.5,
+            "v": 0.2775,
+          },
+          "width": 0,
+        },
+      },
+    ],
+    [
+      {
+        "input": {
+          "editable": true,
+          "gesture": "rotate",
+          "target": "tangent",
+        },
+        "layerCount": 4,
+        "point": {
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333,
+            },
+            "mode": "symmetric",
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333,
+            },
+          },
+          "u": 0.304,
+          "v": 0.231,
+          "weight": 1,
+        },
+        "selected": 0,
+        "selectedField": "layer-1-field-1",
+        "uv": {
+          "captured": false,
+          "height": undefined,
+          "phase": "ready",
+          "selection": {
+            "point": {
+              "visible": true,
+            },
+          },
+          "view": {
+            "mode": "single",
+            "side": "low",
+            "span": 0.5,
+            "u": 0.5,
+            "v": 0.2775,
+          },
+          "width": 0,
+        },
+      },
+      {
+        "input": {
+          "editable": false,
+        },
+        "layerCount": 4,
+        "point": {
+          "handles": {
+            "in": {
+              "u": 0.006499999999999996,
+              "v": 0.004833333333333333,
+            },
+            "mode": "symmetric",
+            "out": {
+              "u": -0.006499999999999996,
+              "v": -0.004833333333333333,
+            },
+          },
+          "u": 0.303,
+          "v": 0.231,
+          "weight": 1,
+        },
+        "selected": 0,
+        "selectedField": "layer-1-field-1",
+        "uv": {
+          "captured": false,
+          "height": undefined,
+          "phase": "ready",
+          "selection": {
+            "point": {
+              "visible": true,
+            },
+          },
+          "view": {
+            "mode": "both",
+            "side": "low",
+            "span": 0.5,
+            "u": 0.5,
+            "v": 0.2775,
+          },
+          "width": 0,
+        },
+      },
+    ],
+  ],
+}
+`;

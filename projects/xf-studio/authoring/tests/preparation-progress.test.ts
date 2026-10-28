@@ -13,7 +13,7 @@ const port = { moveHost: () => {}, measure: () => ({ width: 300, height: 200 }),
   queryContext: () => { throw Error("No hit expected"); } };
 
 test("the attachment carries the preparation beside the phase, publishes each change once, and drops it when it ends", () => {
-  const attachment = new ViewportAttachment<unknown>(port as never);
+  const attachment = new ViewportAttachment<unknown>(port as never, ["head", "uv"]);
   let published = 0;
   attachment.subscribe(() => { published++; });
   attachment.setReady("head");
@@ -22,7 +22,7 @@ test("the attachment carries the preparation beside the phase, publishes each ch
   attachment.setPreparation("head", { ...state });
   expect(published).toBe(2);
   expect(attachment.snapshot().head).toMatchObject({ phase: "ready", preparation: state });
-  expect(attachment.snapshot().uv.preparation).toBeUndefined();
+  expect(attachment.snapshot().uv!.preparation).toBeUndefined();
   attachment.setPreparation("head", null);
   expect(attachment.snapshot().head.preparation).toBeUndefined();
   expect(published).toBe(3);

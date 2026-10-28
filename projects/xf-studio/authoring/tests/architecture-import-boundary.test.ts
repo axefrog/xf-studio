@@ -65,6 +65,14 @@ test("the makeup construction bundle is removed (CORE-03 slice 6)", () => {
   expect(DISK.names.filter(name => resolved(name).includes("app/authoring/makeup-editing"))).toEqual([]);
 });
 
+test("slice 9 core viewport hosts bind registered adapters without constructing makeup editors or hooks", () => {
+  for (const name of ["preview/browser/panel-uv", "preview/browser/browser-viewport-device", "preview/browser/scene-editors"]) {
+    expect(resolved(name).filter(path => /legacy\/eye-makeup\/browser\/(?:uv|surface)-editor$/.test(path))).toEqual([]);
+    expect(codeOnly(DISK.text(name))).not.toMatch(/\b(?:createUVEditor|createSurfaceEditor|surfaceEditorParts|surfaceGuideStandIns)\b|\.(?:geometry|presentation)\.(?:recipe|layer|selectedField)\b/);
+  }
+  expect(DISK.names.filter(name => resolved(name).includes("preview/browser/layered-editor-adapters"))).toEqual(["compose/studio-registry"]);
+});
+
 test("registered makeup application publication is composed once, with no ID routing in the application (CORE-03)", () => {
   expect(DISK.names.filter(name => resolved(name).includes("app/authoring/makeup-application")).sort())
     .toEqual(["compose/studio-registry"]);
