@@ -120,7 +120,7 @@ The browser gate now uses the existing PNG decoder and a hidden-shell reference,
 Targeted validation, one guarded Bun process at a time: the pre-fix composition run had **5 pass, 1 expected regression failure**. After the fix, **10 pass, 0 skip, 0 fail across two files**, 55 assertions; guard peak rounded to 0.0 GB. The four decoded-image tests cover device scaling, the sparse real menu icon, a blank capture, a boot message alone, missing region pixels, hidden controls and missing control pixels.
 
 ```powershell
-& "C:/Users/Nathan/AppData/Local/Python/pythoncore-3.14-64/python.exe" D:/Dev/cp2077-modding-hq/tools/memory_guard.py --limit 4 -- bun test tests/core-startup-composition.test.ts tests/core-startup-paint.test.ts
+& "$env:LOCALAPPDATA/Python/pythoncore-3.14-64/python.exe" ../../../tools/memory_guard.py --limit 4 -- bun test tests/core-startup-composition.test.ts tests/core-startup-paint.test.ts
 ```
 
 Review changes: `src/compose/layout-defaults.ts`, `tests/core-startup-composition.test.ts`, `tests/core-startup-browser.test.ts`, new `tests/core-startup-paint.test.ts` and `tests/fixtures/startup-paint.ts`, plus this report and the plan. The coordinator owns the browser run (command above in Browser and GPU handoff), authoring check, batches, desktop and 038 gates under the new handle-investigation restriction; none of those were run for this follow-up. The read-only footprint report has **209.8 GB free on C** (0.0 GB guard peak under 1 GB), with no new task payload above 5 GB. No scratch or capture files were created; all guarded jobs have exited.
