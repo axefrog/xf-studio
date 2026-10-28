@@ -5766,6 +5766,19 @@ int RunUnitTests()
         Check("reader flood: authenticated pacing refusals incur endpoint strikes", limited > 700 && badMetadata == 0);
         Check("reader flood: eight readers share sampled refusal logging", sink.rateWarnings > 0 && sink.rateWarnings <= 1 + elapsed / 1000);
         Check("reader flood: writer pacing reserve survives abuse", json::parse(dispatcher.Handle(R"({"token":"reader-flood","method":"ping"})", 2).line)["ok"] == true);
+        {
+            // Repeated bare keys ("id":x"id":x...) once made each key's value scan run on to the end of the line:
+            // quadratic work before admission. A full-size line is now one linear pass (eight lines well under 200 ms;
+            // the old scan took several seconds).
+            std::string hostile = R"({"token":"reader-flood","method":"ping","id":)";
+            while (hostile.size() + 8 < 64 * 1024) hostile += R"(x"id":)";
+            hostile += "7}";
+            ReaderRequestBudget hostileBudget(config.maxRequestsPerSecond);
+            const auto hostileBegan = std::chrono::steady_clock::now();
+            bool answered = true;
+            for (int i = 0; i < 8; ++i) answered = answered && !dispatcher.Handle(hostile, 3, false, &hostileBudget).line.empty();
+            Check("reader flood: repeated bare envelope keys are scanned in linear time", answered && MsSince(hostileBegan) < 200);
+        }
 
         ReaderRequestBudget readerBudget(config.maxRequestsPerSecond);
         const auto badVersion = dispatcher.Handle(R"({"v":2,"token":"reader-flood","method":"bridge.kill"})", 1, false, &readerBudget);

@@ -87,6 +87,8 @@ private:
     std::atomic<uint64_t> m_identityRun{0}, m_identityWorld{0}, m_identityConnection{0}; // set by Start; read without the lock
     double m_nextHeartbeat = 0, m_nextUiHeartbeat = 0;
     std::deque<json> m_recentGaps;
+    uint64_t m_dropGapMark = 0; // drops already recorded as a gap; a new drop adds one gap when the next record lands
+    double m_lastAppend = 0;    // source time of the last stored record (the start of a drop gap)
     std::string m_lastUi; // the polled UI snapshot last recorded: unchanged snapshots wait for a heartbeat
     std::filesystem::path m_root, m_output;
     std::thread m_writer;

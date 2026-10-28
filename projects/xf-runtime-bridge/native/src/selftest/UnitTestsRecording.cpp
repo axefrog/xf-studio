@@ -427,6 +427,18 @@ int RecordingUnitTests()
     Check(!taps.Ingress("voice", "{bad", 600.04, 7, 4, 3), "malformed ingress refused");
     Check(!taps.Ingress("voice", std::string(20, '[') + "0" + std::string(20, ']'), 600.05, 7, 4, 3), "nested ingress refused before parse");
     Check(taps.Read({{"run", 1}}, 600.1)["invalid"] == 3, "ingress failures invalidate absence proof");
+    {
+        // A drop is one gap between the stored records around it; later healthy snapshots neither move nor repeat it.
+        Service gaps; gaps.Start({{"channels", {"voice"}}}, 700, 7, 4, "gap-test");
+        Check(gaps.Ingress("voice", R"({"event":"voice.requested"})", 700.1, 7, 4, 1), "gap: first record");
+        Check(!gaps.Ingress("voice", "{bad", 700.2, 7, 4, 2), "gap: a dropped record");
+        auto open = gaps.SnapshotData(700.3, 7)["gaps"];
+        Check(open.size() == 1 && open[0]["reason"] == "dropped" && open[0]["from_s"] == 700.1 && open[0]["to_s"] == 700.3, "gap: an unfollowed drop is open to now");
+        Check(gaps.Ingress("voice", R"({"event":"voice.requested"})", 700.4, 7, 4, 3), "gap: the next record lands");
+        const auto closed = gaps.SnapshotData(700.5, 7)["gaps"], later = gaps.SnapshotData(709.0, 7)["gaps"];
+        Check(closed.size() == 1 && closed[0]["from_s"] == 700.1 && closed[0]["to_s"] == 700.4 && closed[0]["count"] == 1, "gap: the drop closes at the next record");
+        Check(later == closed, "gap: a healthy later snapshot neither moves nor repeats the drop");
+    }
     int heartbeats = 0;
     ops.sample = [&](const std::string&, const std::vector<std::string>&) { ++heartbeats; return json{{"event", "tap.coverage"}, {"valid", true}}; };
     for (int i = 0; i < 10; ++i) taps.Tick(600.1 + i * 0.1, 7, 4, true, i, ops);

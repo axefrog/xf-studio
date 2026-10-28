@@ -60,7 +60,9 @@ json RoutingFields(const std::string& raw)
             size_t start=colon+1;while(start<raw.size()&&std::isspace(static_cast<unsigned char>(raw[start])))++start;
             size_t end=start;bool str=start<raw.size()&&raw[start]=='"',esc=false;
             if(str){++end;for(;end<raw.size();++end){if(esc){esc=false;continue;}if(raw[end]=='\\'){esc=true;continue;}if(raw[end]=='"'){++end;break;}}}
-            else while(end<raw.size()&&raw[end]!=','&&raw[end]!='}'&&!std::isspace(static_cast<unsigned char>(raw[end])))++end;
+            // A bare scalar ends at the next structural character, so every byte is scanned a bounded number of times
+            // (a value can never run on through later keys: linear in the envelope, whatever its shape).
+            else while(end<raw.size()&&std::string_view(",}]{[\":").find(raw[end])==std::string_view::npos&&!std::isspace(static_cast<unsigned char>(raw[end])))++end;
             fields[name]=nullptr;
             if(end-start<=(name=="id"?65536u:256u)){auto value=json::parse(raw.substr(start,end-start),nullptr,false);if(!value.is_discarded()&&value.is_primitive())fields[name]=std::move(value);}
         }else if(c=='"'){quoted=true;begin=n;}else if(c=='{'||c=='[')++depth;else if(c=='}'||c==']')--depth;

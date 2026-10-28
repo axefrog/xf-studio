@@ -212,7 +212,7 @@ json Service::Start(const json& p, double now, uint64_t world, uint64_t connecti
     ++m_run; m_world = world; m_connection = connection; m_session = session;
     m_latest = m_ack = m_dropped = m_missed = m_samples = m_bytes = m_invalid = 0;
     m_start = m_next = now; m_until = now + static_cast<double>(duration); m_last = m_gap = m_end = 0;
-    m_startSync = ClockSync(now); m_actorIdentities.clear(); m_recentGaps.clear(); m_identityOmitted = 0;
+    m_startSync = ClockSync(now); m_actorIdentities.clear(); m_recentGaps.clear(); m_identityOmitted = 0; m_dropGapMark = 0; m_lastAppend = now;
     m_ingressDropped.store(0); m_nextHeartbeat = now; m_nextUiHeartbeat = 0; m_lastUi.clear();
     // Identity first: a reader that sees the channel wanted must see this run's identity.
     m_identityRun.store(m_run); m_identityWorld.store(m_world); m_identityConnection.store(m_connection);
@@ -332,6 +332,14 @@ bool Service::Append(const std::string& channel, const std::string& text, double
     r.run = m_run; r.seq = m_latest; r.tick = tick; r.at = at; r.end = end; r.valid = valid;
     std::memcpy(r.channel.data(), channel.c_str(), channel.size() + 1);
     std::memcpy(r.payload.data(), text.c_str(), text.size() + 1);
+    // Drops are recorded once, between the last stored record and this one; a later healthy read never moves them.
+    if (const auto drops = m_dropped + m_ingressDropped.load(); drops > m_dropGapMark)
+    {
+        if (m_recentGaps.size() == 8) m_recentGaps.pop_front();
+        m_recentGaps.push_back({{"channel", "recorder"}, {"from_s", m_lastAppend}, {"to_s", at}, {"reason", "dropped"}, {"count", drops - m_dropGapMark}});
+        m_dropGapMark = drops;
+    }
+    m_lastAppend = at;
     m_wake.notify_all();
     return true;
 }
@@ -363,7 +371,8 @@ json Service::SnapshotData(double now,uint64_t world) const
        if(!v&&std::string_view(row.channel.data())=="v")v=row;
        if(!actors&&std::string_view(row.channel.data())=="actors")actors=row;
      }
-     if(m_ingressDropped.load()||m_dropped){if(result["gaps"].size()>=8)result["gaps"].erase(0);result["gaps"].push_back({{"channel","recorder"},{"from_s",m_last},{"to_s",now},{"reason","dropped"}});}
+     // Drops not yet followed by a stored record: one open gap from the last stored record to now.
+     if(const auto drops=m_dropped+m_ingressDropped.load();drops>m_dropGapMark){if(result["gaps"].size()>=8)result["gaps"].erase(0);result["gaps"].push_back({{"channel","recorder"},{"from_s",m_lastAppend},{"to_s",now},{"reason","dropped"},{"count",drops-m_dropGapMark}});}
     }
     // At most two existing 8 KiB payloads; never encode/parse the whole recorder ring.
     if(v){result["v"]=json::parse(v->payload.data(),nullptr,false);result["v_s"]=v->at;if(!result["v"].is_object())result["v"]=nullptr;else if(!v->valid)result["v"]["valid"]=false;}
