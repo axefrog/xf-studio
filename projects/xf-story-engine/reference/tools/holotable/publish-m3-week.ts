@@ -32,6 +32,17 @@ function firstDifference(a: any, b: any, path = 'record'): string | undefined {
   return `${path}: archive=${JSON.stringify(a)?.slice(0, 400)}, regenerated=${JSON.stringify(b)?.slice(0, 400)}`;
 }
 
+/** Every path a publish writes. All must be fresh, and none may be one of its inputs. */
+export function assertFreshOutputs(output: string, inputs: readonly string[] = [], bare = false): void {
+  const directory = resolve(output), key = (p: string) => resolve(p).toLowerCase();
+  const targets = [directory, directory + '.pending', directory + '.run.json.gz', directory + '.summary.json', ...(bare ? [directory + '.bare.run.json.gz'] : [])];
+  const taken = new Set(inputs.map(key));
+  for (const target of targets) {
+    if (taken.has(key(target))) throw Error(`Output would overwrite an input: ${target}`);
+    if (existsSync(target)) throw Error(`Use a fresh output name; this already exists: ${target}`);
+  }
+}
+
 export function publishM3Week(output: string, expected: Week3Record, areas: readonly Area[], options: {
   holotableHooks?: boolean;
   /** Supply the same configured run as the expected record (including its index). */
@@ -39,9 +50,11 @@ export function publishM3Week(output: string, expected: Week3Record, areas: read
   deadline?: number;
   identitySource?: 'archive' | 'observer-off';
   progress?: (run: Run, seconds: number) => void;
+  /** Input files the outputs must not overwrite. */
+  inputs?: readonly string[];
 } = {}) {
   const directory = resolve(output), pending = directory + '.pending';
-  if (existsSync(directory) || existsSync(pending)) throw Error('Use a fresh output directory (and no .pending sibling)');
+  assertFreshOutputs(output, options.inputs);
   if (expected.version !== 3 || expected.method !== 'reviewed-v5' || !['E', 'A1'].includes(expected.arm) ||
     !Number.isSafeInteger(expected.windows) || expected.windows < 1) throw Error('Expected a reviewed-v5 engine run-3 record');
   const c: Week3Config = expected;
@@ -119,9 +132,10 @@ export function publishImportedM3Week(output: string, index: ImportedWorldIndex,
   holotableHooks?: boolean;
   progress?: (run: Run, seconds: number) => void;
   deadline?: number;
+  inputs?: readonly string[];
 } = {}) {
   if (!importedWorld(index)) throw Error('Expected an imported world index');
-  if (existsSync(resolve(output)) || existsSync(resolve(output) + '.pending')) throw Error('Use a fresh output directory (and no .pending sibling)');
+  assertFreshOutputs(output, options.inputs, true);
   const c = options.config ?? { id: 'E-m3c-w2-restless-engage-realstreets', world: 'm3c-w2', arm: 'E', tempo: 'restless', policy: 'engage', windows: 1008 };
   const deadline = options.deadline ?? Date.now() + 75 * 60000, start = performance.now();
   console.log('Observer-off identity run');
@@ -153,7 +167,7 @@ export function runM3WeekCli(args: string[]): void {
   const progress = (r: Run, seconds: number) => console.log(`${id}: day ${r.windowNo / 144}, ${r.deliveries.length} deliveries, ${seconds} s`);
   if (indexPath) {
     const index = JSON.parse(readFileSync(indexPath, 'utf8')) as ImportedWorldIndex;
-    const { summary } = publishImportedM3Week(args[0], index, { holotableHooks, progress });
+    const { summary } = publishImportedM3Week(args[0], index, { holotableHooks, progress, inputs: [indexPath] });
     console.log(JSON.stringify(summary, null, 2));
     return;
   }
@@ -161,7 +175,7 @@ export function runM3WeekCli(args: string[]): void {
   if (expected.id !== id) throw Error('Archived record id differs from requested id');
   const pack = JSON.parse(readFileSync(worldPack, 'utf8'));
   if (pack.schema !== 'xfh/world-pack-1' || !Array.isArray(pack.areas)) throw Error('Not an xfh/world-pack-1 pack');
-  const { summary } = publishM3Week(args[0], expected, pack.areas, { holotableHooks, progress });
+  const { summary } = publishM3Week(args[0], expected, pack.areas, { holotableHooks, progress, inputs: [worldPack] });
   console.log(JSON.stringify(summary, null, 2));
 }
 if (import.meta.main) runM3WeekCli(process.argv.slice(2));

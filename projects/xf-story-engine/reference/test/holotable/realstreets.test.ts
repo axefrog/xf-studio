@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import pack from '../world/fixtures/world-pack.json';
@@ -7,7 +7,7 @@ import content from '../world/fixtures/content.json';
 import { importW1 } from '../../src/world/import-w1.ts';
 import type { W1Content, W1Pack } from '../../src/world/types.ts';
 import { createWeek3, type Week3Config } from '../../src/m3/week3.ts';
-import { canonicalRun, publishImportedM3Week } from '../../tools/holotable/publish-m3-week.ts';
+import { assertFreshOutputs, canonicalRun, publishImportedM3Week } from '../../tools/holotable/publish-m3-week.ts';
 import { readRunRecord } from '../../src/m3/run-record.ts';
 import { checkSpool } from '../../tools/holotable/check-spool.ts';
 
@@ -51,3 +51,18 @@ test('imported run-3 span has identical observer-on/off records and a readable r
   } finally { rmSync(root, { recursive: true, force: true }); }
 }, 20000);
 
+
+test('a publish refuses outputs that would overwrite an input or an existing sidecar', () => {
+  const root = resolve(import.meta.dir, '../../../../../.scratch-realstreets/test-' + randomUUID());
+  mkdirSync(root, { recursive: true });
+  try {
+    const week = join(root, 'week');
+    expect(() => assertFreshOutputs(week, [week + '.summary.json'], true)).toThrow('overwrite an input');
+    expect(() => assertFreshOutputs(week, [(week + '.SUMMARY.json')], true)).toThrow('overwrite an input');
+    writeFileSync(week + '.bare.run.json.gz', '');
+    expect(() => assertFreshOutputs(week, [], true)).toThrow('already exists');
+    expect(() => assertFreshOutputs(week, [], false)).not.toThrow();
+    writeFileSync(week + '.summary.json', '');
+    expect(() => assertFreshOutputs(week, [], false)).toThrow('already exists');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
