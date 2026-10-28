@@ -445,6 +445,12 @@ export function preludeSteps(needs: Record<string, string>, restart: boolean, lo
           { do: "note", text: "The running game's bridge isn't the staged candidate (an earlier build or settings): the runner restarts it." },
           ...closeSteps(),
         ] },
+        // A stopped bridge (an earlier row's bridge.kill closes its listener) can't be asked: restart the game,
+        // which is also how a stopped row's after: restart re-arms it without anyone pressing Reconnect.
+        { name: "stopped", match: { code: ["no_bridge", "killed"] }, run: [
+          { do: "note", text: "The bridge is stopped (an earlier row stopped it on purpose): the runner restarts the game. Nothing to do." },
+          ...closeSteps(),
+        ] },
       ] },
     ] },
     ...(changes ? [{ label: "config", do: "config.set", values: needs }] : []),

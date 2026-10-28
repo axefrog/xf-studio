@@ -557,9 +557,10 @@ function stoppedRow(theme: Theme, writes: boolean): Json {
   return { id: row, title: `Stopped (one bridge.kill): the CET window with Reconnect, the Stopped chip, the stopped CET line (ST7, ST6, ST8) (${theme})`,
     requires: [...atLoad(writes), cetKey], judged_by: STUDIO, ...(writes ? { after: "restart" } : {}),
     steps: [writes ? inPlay(row) : atMenuOrPlay(row), ...look(row, theme, "full", false, writes), cetLine(row), windowOf(row), ...cetOpen(row),
+      { do: "note", text: `${row}: stopping the bridge on purpose to capture its Stopped look; the runner restarts the game afterwards. Nothing to do.` },
       { label: `${row}-kill`, do: "run", command: "bridge.kill", input: {} },
-      // A stopped bridge refuses everything with killed: that refusal is the named state.
-      verify(row, "stopped", { code: "killed" }),
+      // A stopped bridge closes its listener (no_bridge from here); a request that races the close is refused with killed.
+      verify(row, "stopped", { code: ["killed", "no_bridge"] }),
       { label: `${row}-wait`, do: "wait", ms: 800 }, visible(row, "cet_window", theme, "window"),
       ...cetShot(row, `ST7-cet-stopped-${theme}`, "stopped", theme), ...cetShot(row, `ST6-cet-chip-stopped-${theme}`, "chip", theme),
       ...cetClose(row, "cet-close-for-line"), { label: `${row}-line-wait`, do: "wait", ms: 800 }, visible(row, "cet_line", theme, "line"),

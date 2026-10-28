@@ -20611,6 +20611,10 @@
           ]
         },
         {
+          "do": "note",
+          "text": "ST7-dark-stopped: stopping the bridge on purpose to capture its Stopped look; the runner restarts the game afterwards. Nothing to do."
+        },
+        {
           "label": "ST7-dark-stopped-kill",
           "do": "run",
           "command": "bridge.kill",
@@ -20622,7 +20626,10 @@
           "command": "bridge.info",
           "input": {},
           "until": {
-            "code": "killed"
+            "code": [
+              "killed",
+              "no_bridge"
+            ]
           },
           "interval_ms": 250,
           "deadline_ms": 4000,
@@ -22939,6 +22946,10 @@
           ]
         },
         {
+          "do": "note",
+          "text": "ST7-light-stopped: stopping the bridge on purpose to capture its Stopped look; the runner restarts the game afterwards. Nothing to do."
+        },
+        {
           "label": "ST7-light-stopped-kill",
           "do": "run",
           "command": "bridge.kill",
@@ -22950,7 +22961,10 @@
           "command": "bridge.info",
           "input": {},
           "until": {
-            "code": "killed"
+            "code": [
+              "killed",
+              "no_bridge"
+            ]
           },
           "interval_ms": 250,
           "deadline_ms": 4000,
