@@ -20,7 +20,7 @@ function fixture() {
   let current: ViewportHit | undefined;
   const { shell } = trustedFixture({ hitAt: () => current });
   const rt = new StudioRuntime(shell as unknown as Port, {} as Feedback);
-  const recipe = () => rt.editor.recipe(), selected = () => recipe().layers[rt.editor.active()];
+  const recipe = () => rt.port.feature("eye-makeup").view().recipe(), selected = () => recipe().layers[rt.port.feature("eye-makeup").view().active()];
   // A Bézier selected layer (tangents exist) and another visible layer for non-selected makeup hits.
   expect(rt.port.authoring.dispatch({ kind: "path.edit", layerId: selected().id, command: { kind: "enable-bezier" } }).ok).toBe(true);
   const layer = selected(), other = recipe().layers.find(item => item.id !== layer.id)!;
@@ -71,7 +71,7 @@ test("every context-menu section for every target kind holds an action; no infor
   }
   const port = rt.port, eye = featureViewContext(rt, "eye-makeup");
   // Eye makeup's layer menu comes from its view: the layer's application-bound entries, then its own commands.
-  for (const layer of rt.editor.recipe().layers)
+  for (const layer of rt.port.feature("eye-makeup").view().recipe().layers)
     for (const section of menuSections(menuFromSections(layerSections(eye, layer.id, anchor)))) expect(actionable(section.items)).toBe(true);
   for (const preset of port.library.summary().draft?.presets ?? [])
     for (const section of menuSections(menuFromSections(presetSections(rt, preset.id, anchor)))) expect(actionable(section.items)).toBe(true);

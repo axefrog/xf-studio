@@ -1,3 +1,4 @@
+import { guidanceEditing } from "./contributions";
 import type { NamedTargets } from "../../app/action-targets";
 import type { StudioRuntime } from "../runtime";
 import type { SingleTourCommand, TourCommand } from "./types";
@@ -17,8 +18,8 @@ export class TourCommandRun {
   valid(rt: StudioRuntime, id: string): boolean {
     const target = this.targets.get(id), now = rt.port.focus.targets(), draft = rt.port.library.summary().draft;
     return !this.signal.aborted && !!target && !!draft && draft.id === target.named.look?.collection && draft.presets.some(preset => preset.id === target.named.look?.look)
-      && same(target.named, now) && rt.editor.layer()?.id === target.layer
-      && rt.editor.recipe().layers.some(layer => layer.id === target.layer);
+      && same(target.named, now) && guidanceEditing(rt)?.layer()?.id === target.layer
+      && (guidanceEditing(rt)?.layerIds().includes(target.layer) ?? false);
   }
   /** Watch the create action while its step is showing, so pressing the real Add control captures the same targets as the helper. */
   watch(rt: StudioRuntime, command: TourCommand) {
@@ -36,7 +37,7 @@ export class TourCommandRun {
       && chosen.look?.look === now.look?.look && chosen.look?.collection === now.look?.collection;
   }
   private ids(rt: StudioRuntime, kind: "preset" | "layer"): string[] {
-    return kind === "preset" ? rt.port.library.summary().draft?.presets.map(item => item.id) ?? [] : rt.editor.recipe().layers.map(item => item.id);
+    return kind === "preset" ? rt.port.library.summary().draft?.presets.map(item => item.id) ?? [] : [...(guidanceEditing(rt)?.layerIds() ?? [])];
   }
   /** Only an added identity qualifies; switching to another existing look cannot satisfy a pending create. */
   observe(rt: StudioRuntime) {
@@ -55,9 +56,9 @@ export class TourCommandRun {
       const target = this.targets.get(command.target!);
       if (!target || !same(target.named, now)) return false;
     }
-    const layer = rt.editor.layer();
+    const layer = guidanceEditing(rt)?.layer();
     if (!now.look || !layer || (now.scene !== undefined && now.sceneGen === undefined) || (command.capture === "layer" && layer.id !== pending.expected)) return false;
-    if (!rt.port.authoring.capability({ kind: "layer.setEnabled", look: now.look, id: layer.id, enabled: layer.enabled }).available) return false;
+    if (!guidanceEditing(rt)?.canCapture()) return false;
     this.targets.set(command.target!, { named: structuredClone(now), layer: layer.id });
     this.creation = undefined;
     return true;

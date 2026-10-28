@@ -38,7 +38,7 @@ const probed = (probes: Readonly<Record<string, string>>): Tree =>
 /** A module's imports as src-relative module names (`platform/api`, `app/studio-application`), or bare package names. */
 const resolvedIn = (tree: Tree, name: string) => imports(tree.text(name)).map(path => resolveFrom(name, path));
 const resolved = (name: string) => resolvedIn(DISK, name);
-test("slice 7 confines deprecated runtime projections to their current guidance callers", () => {
+test("slice 8 removes runtime makeup projections and forbids new shell callers", () => {
   const reads = (text: string, member: string) => {
     const code = codeOnly(text);
     return new RegExp(`\\.\\s*${member}\\b`).test(code) ||
@@ -47,8 +47,9 @@ test("slice 7 confines deprecated runtime projections to their current guidance 
   };
   const callers = (tree: Tree, member: string) => tree.names.filter(name => name.startsWith("studio-ui/") && name !== "studio-ui/runtime" &&
     reads(tree.text(name), member)).sort();
-  expect(callers(DISK, "editor")).toEqual(["studio-ui/guidance/command-run", "studio-ui/guidance/controller"]);
-  expect(callers(DISK, "finishes")).toEqual(["studio-ui/guidance/controller", "studio-ui/guidance/help-panel"]);
+  expect(codeOnly(DISK.text("studio-ui/runtime"))).not.toMatch(/\b(?:eyeMakeup|EyeMakeupFacade)\b|\bget\s+(?:editor|finishes)\b/);
+  expect(callers(DISK, "editor")).toEqual([]);
+  expect(callers(DISK, "finishes")).toEqual([]);
   expect(callers(probed({ "studio-ui/target-menus": "const alias = rt; alias.editor.recipe();" }), "editor"))
     .toContain("studio-ui/target-menus");
   for (const code of ['const { editor: alias } = rt;', 'const alias = rt["finishes"];'])

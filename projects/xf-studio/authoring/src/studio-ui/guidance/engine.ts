@@ -1,6 +1,6 @@
 import type { PayloadSchema } from "../../app/studio-action-descriptors";
 import type { StudioPanelId } from "../layout-defaults";
-import { anchorInfo, type AnchorId, type AnchorState } from "./anchors";
+import { anchorInfo, type AnchorInfo, type AnchorId, type AnchorState } from "./anchors";
 import type { AppCondition, GuidanceEvent, GuidanceFacts, HelpContent, Side, Tour, TourButton, TourCommand, TourGate, TourNavigation } from "./types";
 
 /**
@@ -30,6 +30,7 @@ export const GUIDANCE_DESCRIPTORS = {
 export interface GuidanceEnvironment {
   facts(): GuidanceFacts;
   anchor(id: AnchorId): AnchorState;
+  anchorInfo?(id: AnchorId): AnchorInfo | undefined;
   panelVisible(panel: StudioPanelId): boolean;
   /** A contributed panel's title (from the catalogue), for "Show …" offers. */
   panelTitle(panel: StudioPanelId): string;
@@ -115,6 +116,10 @@ export class GuidanceService {
     try { return run(); } finally { if (--this.depth === 0) this.memo = undefined; }
   }
 
+  setTours(tours: readonly Tour[]) {
+    this.tours = tours;
+    if (this.active && !tours.some(tour => tour.id === this.active!.tour.id)) this.end(this.active.tour.id, "skipped");
+  }
   tourList(): readonly Tour[] { return this.tours; }
   descriptors() { return structuredClone(GUIDANCE_DESCRIPTORS); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
@@ -126,7 +131,7 @@ export class GuidanceService {
     if (step?.when && !gateHolds(step.when, this.facts())) return false;
     const anchor = step?.anchor;
     if (!anchor) return true;
-    return this.env.anchor(anchor) === "visible" || !!anchorInfo(anchor)?.panel;
+    return this.env.anchor(anchor) === "visible" || !!(this.env.anchorInfo ? this.env.anchorInfo(anchor) : anchorInfo(anchor))?.panel;
   }
   private nearest(tour: Tour, from: number, step: 1 | -1) {
     for (let index = from; index >= 0 && index < tour.steps.length; index += step) if (this.showable(tour, index)) return index;
@@ -207,7 +212,7 @@ export class GuidanceService {
 
   private target(anchor: AnchorId | undefined, spotlight: "anchor" | "none" | undefined): StepTarget {
     if (!anchor) return { kind: "none" };
-    const state = this.env.anchor(anchor), panel = anchorInfo(anchor)?.panel;
+    const state = this.env.anchor(anchor), panel = (this.env.anchorInfo ? this.env.anchorInfo(anchor) : anchorInfo(anchor))?.panel;
     if (state === "visible") return spotlight === "none" ? { kind: "none" } : { kind: "anchor", anchor };
     if (panel && this.env.panelVisible(panel)) return spotlight === "none" ? { kind: "none" } : { kind: "panel", anchor, panel };
     if (panel) return { kind: "offer", anchor, panel, panelTitle: this.env.panelTitle(panel) };

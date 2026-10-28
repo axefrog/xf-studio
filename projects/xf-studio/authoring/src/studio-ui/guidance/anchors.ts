@@ -8,31 +8,23 @@ import type { StudioPanelId } from "../layout-defaults";
  * (`panel.<id>`), registered by the shell for its content element.
  */
 export const CONTROL_ANCHORS = {
-  "header.save": { label: "Save button" },
-  "header.package": { label: "Package button" },
-  "header.history": { label: "History button" },
-  "header.help": { label: "Help button" },
-  "header.settings": { label: "Settings button" },
-  "header.palette": { label: "Commands button" },
-  "tabs.strip": { label: "Layout tabs" },
-  "layers.add": { panel: "layers", label: "Add layer" },
-  "layers.list": { panel: "layers", label: "Layer list" },
-  "layers.starters": { panel: "layers", label: "Starter shapes" },
-  "uv.canvas": { panel: "uv", label: "UV map" },
-  "head.view": { panel: "head", label: "3D view" },
-  "finish.color": { panel: "finish", label: "Colour" },
-  "finish.picker": { panel: "finish", label: "Finish picker" },
-  "presets.list": { panel: "presets", label: "Preset list" },
-  "presets.add": { panel: "presets", label: "Add preset" },
-  "history.list": { panel: "history", label: "History list" },
-  "package.check": { panel: "package", label: "Check" },
-  "package.build": { panel: "package", label: "Build" },
-  "package.setup": { panel: "package", label: "Game setup" },
+  "header.save": { label: "Save button", order: 1 },
+  "header.package": { label: "Package button", order: 2 },
+  "header.history": { label: "History button", order: 3 },
+  "header.help": { label: "Help button", order: 4 },
+  "header.settings": { label: "Settings button", order: 5 },
+  "header.palette": { label: "Commands button", order: 6 },
+  "tabs.strip": { label: "Layout tabs", order: 7 },
+  "head.view": { panel: "head", label: "3D view", order: 12 },
+  "history.list": { panel: "history", label: "History list", order: 17 },
+  "package.check": { panel: "package", label: "Check", order: 18 },
+  "package.build": { panel: "package", label: "Build", order: 19 },
+  "package.setup": { panel: "package", label: "Game setup", order: 20 },
   /** The row with Add to my mod manager and Show in folder; it exists once a Build has finished. */
-  "package.install": { panel: "package", label: "Add to my mod manager" },
-} as const satisfies Record<string, { panel?: StudioPanelId; label: string }>;
+  "package.install": { panel: "package", label: "Add to my mod manager", order: 21 },
+} as const satisfies Record<string, { panel?: StudioPanelId; label: string; order: number }>;
 
-export type ControlAnchorId = keyof typeof CONTROL_ANCHORS;
+export type ControlAnchorId = string;
 export type PanelAnchorId = `panel.${StudioPanelId}`;
 export type AnchorId = ControlAnchorId | PanelAnchorId;
 export type AnchorInfo = Readonly<{ id: AnchorId; label: string; panel?: StudioPanelId }>;
@@ -41,10 +33,10 @@ export const panelAnchor = (panel: StudioPanelId): PanelAnchorId => `panel.${pan
 
 const panelAnchorInfo = (panel: StudioPanelId): AnchorInfo => ({ id: panelAnchor(panel), label: `${panel} panel`, panel });
 /** Every anchor a tour may name: the control anchors plus one per contributed panel (`panelIds`, from the catalogue). */
-export function anchorCatalogue(panelIds: readonly StudioPanelId[]): AnchorInfo[] {
+export function anchorCatalogue(panelIds: readonly StudioPanelId[], extra: readonly (AnchorInfo & { order: number })[] = []): AnchorInfo[] {
   return [
-    ...Object.entries(CONTROL_ANCHORS).map(([id, info]) => ({ id: id as ControlAnchorId, label: info.label,
-      ...("panel" in info ? { panel: info.panel as StudioPanelId } : {}) })),
+    ...[...Object.entries(CONTROL_ANCHORS).map(([id, info]) => ({ id, ...info })), ...extra]
+      .sort((a, b) => a.order - b.order).map(({ order: _order, ...info }) => info),
     ...panelIds.map(panelAnchorInfo),
   ];
 }
@@ -72,6 +64,14 @@ export type AnchorState = "visible" | "hidden" | "missing";
  * build it. The registry only reads layout boxes; it never changes the elements.
  */
 export class AnchorRegistry<T extends AnchorTarget = HTMLElement> {
+  constructor(private readonly catalogue?: () => readonly AnchorInfo[]) {}
+  info(id: AnchorId): AnchorInfo | undefined { return this.catalogue ? this.catalogue().find(info => info.id === id) : anchorInfo(id); }
+  private withdraw() {
+    if (!this.catalogue) return;
+    const allowed = new Set(this.catalogue().map(info => info.id));
+    for (const id of this.elements.keys()) if (!allowed.has(id)) this.elements.delete(id);
+    for (const id of this.instances.keys()) if (!allowed.has(id)) this.instances.delete(id);
+  }
   private elements = new Map<AnchorId, T>();
   private instances = new Map<AnchorId, Map<string, T>>();
   /** Instance registrations are independent; a type-level tour chooses the first visible survivor. */
@@ -79,8 +79,8 @@ export class AnchorRegistry<T extends AnchorTarget = HTMLElement> {
     const releases = new Set<() => void>();
     signal.addEventListener("abort", () => { for (const off of releases) off(); releases.clear(); }, { once: true });
     return new Proxy(this, { get: (target, key) => key === "register" ? (id: AnchorId, element: T) => {
-      if (!isAnchorId(id)) throw Error(`Unknown guidance anchor ${id}`);
       if (signal.aborted) return () => {};
+      if (!this.info(id)) throw Error(`Unknown guidance anchor ${id}`);
       let group = this.instances.get(id); if (!group) this.instances.set(id, group = new Map());
       group.set(instance, element);
       const off = () => { if (group!.get(instance) === element) group!.delete(instance); if (!group!.size && this.instances.get(id) === group) this.instances.delete(id); releases.delete(off); };
@@ -89,16 +89,17 @@ export class AnchorRegistry<T extends AnchorTarget = HTMLElement> {
   }
   /** Register (or replace) an anchor's element. Returns an unregister function. */
   register(id: AnchorId, element: T): () => void {
-    if (!isAnchorId(id)) throw Error(`Unknown guidance anchor ${id}`);
+    if (!this.info(id)) throw Error(`Unknown guidance anchor ${id}`);
     this.elements.set(id, element);
     return () => { if (this.elements.get(id) === element) this.elements.delete(id); };
   }
   element(id: AnchorId): T | undefined {
+    this.withdraw();
     const choices = [...(this.instances.get(id)?.values() ?? [])];
     return choices.find(element => { const box = element.getBoundingClientRect(); return element.isConnected && box.width > 0 && box.height > 0; })
       ?? choices.find(element => element.isConnected) ?? this.elements.get(id);
   }
-  registered(): AnchorId[] { return [...new Set([...this.elements.keys(), ...this.instances.keys()])]; }
+  registered(): AnchorId[] { this.withdraw(); return [...new Set([...this.elements.keys(), ...this.instances.keys()])]; }
   /** The anchor's box, cut to what its scrolling panels actually show (a long list lights only its visible part). */
   rect(id: AnchorId): AnchorRect | undefined {
     const element = this.element(id);

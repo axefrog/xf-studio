@@ -5,10 +5,11 @@ import type { StudioDispatchResult } from "../app/studio-application";
 import type { PresentationAction } from "../app/studio-presentation";
 import type { StudioFileAction, StudioFileOutcome } from "../app/studio-file-operations";
 import type { PresentationFileAction } from "../app/studio-presentation";
-import type { EyeMakeupFacade, StudioPresentationPort } from "../app/studio-presentation";
+import type { StudioPresentationPort } from "../app/studio-presentation";
 import type { DockView } from "./dock/dock-view";
 import type { Feedback, FeedbackAction } from "./feedback";
-import { AnchorRegistry } from "./guidance/anchors";
+import { guidanceSources } from "./guidance/contributions";
+import { AnchorRegistry, anchorCatalogue } from "./guidance/anchors";
 import { activitySource, viewCatalogue, type ViewCatalogue } from "./views/contribution";
 import { SHELL_VIEW } from "./views/shell";
 import type { StudioModule } from "../platform/api";
@@ -84,9 +85,6 @@ export class StudioRuntime {
   readonly anchors: AnchorRegistry;
   key(key: string) { return this.instance ? `${this.instance.id}:${key}` : key; }
   readonly descriptors: Ret<Port["authoring"]["actionDescriptors"]>;
-  private get eyeMakeup(): EyeMakeupFacade { return this.port.feature("eye-makeup"); }
-  /** @deprecated CORE-03: guidance-only compatibility; slice 8 contributes guidance/anchors, then deletes this getter. */
-  get finishes(): Ret<EyeMakeupFacade["finishCatalogue"]> { return this.eyeMakeup.finishCatalogue(); }
   private listeners = new Set<() => void>();
   /**
    * Open the Settings panel at a group (UI-109): floating when it was closed (it has no home among the docked groups), otherwise brought
@@ -99,15 +97,17 @@ export class StudioRuntime {
    */
   constructor(readonly port: Port, readonly feedback: Feedback, readonly views: ViewCatalogue = SHELL_CATALOGUE,
     readonly instance?: { id: string; type: string; signal: AbortSignal; captureSignal?: AbortSignal }, anchors?: AnchorRegistry) {
-    this.anchors = anchors ?? new AnchorRegistry();
+    this.anchors = anchors ?? new AnchorRegistry(() => {
+      const sources = guidanceSources(this), owners = new Set(this.views.guidance.map(source => source.owner)), active = new Set(sources.map(source => source.owner));
+      const panels = this.views.panels.filter(panel => !owners.has(panel.owner) || active.has(panel.owner)).map(panel => panel.id);
+      return anchorCatalogue(panels, sources.flatMap(source => source.contribution.anchors));
+    });
     this.descriptors = port.authoring.actionDescriptors();
   }
   /** Which modules have an instance docked in the shown tab. */
   shownModules() { return this.toolFilter().modules; }
   /** The filter of every derived view-tool list: the shown modules and the research preference. */
   toolFilter() { return toolFilter(this.port, this.views, this.dock?.tree); }
-  /** @deprecated CORE-03: guidance-only compatibility; slice 8 contributes guidance/anchors, then deletes this getter. */
-  get editor() { return this.eyeMakeup.view(); }
   /** Descriptor limits drive control ranges, so the view keeps no copy of domain constants. */
   range(kind: PresentationAction["kind"], field: string, variant?: string): { min: number; max: number } {
     const descriptor = this.descriptors[kind] as { payload: Record<string, ValueSchema>; variants?: Record<string, { payload: Record<string, ValueSchema> }> };

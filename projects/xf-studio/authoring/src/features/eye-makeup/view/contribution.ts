@@ -1,3 +1,4 @@
+import { MAKEUP_GUIDANCE } from "./guidance";
 /**
  * Eye makeup's view contribution (feature module #1): its layer stack, the UV map and its inspectors,
  * and the activity sources of its actions. Its panel IDs are grandfathered (they predate feature views),
@@ -7,6 +8,7 @@
 import { panelMeta, type ViewContribution } from "../../../studio-ui/views/contribution";
 
 export const EYE_MAKEUP_VIEW = {
+  guidance: MAKEUP_GUIDANCE,
   owner: "eye-makeup",
   primary: "layers",
   panels: [

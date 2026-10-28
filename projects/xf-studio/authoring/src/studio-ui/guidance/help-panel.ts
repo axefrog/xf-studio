@@ -1,3 +1,4 @@
+import { guidanceContents, guidanceSources } from "./contributions";
 import { shortcutLabel } from "../../app/input-bindings";
 import type { ProjectLink } from "../../app/project-links";
 import { applyCapability, badge, button, emptyState, section } from "../controls";
@@ -5,7 +6,7 @@ import { h, isUnavailable, setText, uid } from "../dom";
 import type { PanelController } from "../panels/collection";
 import { PANEL_META } from "../panel-meta";
 import type { Frame, StudioRuntime } from "../runtime";
-import { HELP_LINKS, helpReference, helpTopicsFor, searchTopics, searchTours } from "./help-topics";
+import { HELP_LINKS, helpReference, searchTopics, searchTours } from "./help-topics";
 import { renderHelp } from "./render";
 import type { Tour } from "./types";
 import type { TourRecord } from "../../app/ui-preferences";
@@ -103,14 +104,17 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
     }));
     return list.length;
   }
-  const helpTopics = helpTopicsFor(rt.finishes);
+  const helpTopics = () => guidanceContents(rt).flatMap(content => content.topics);
+  let shownSources = "";
+  const sourceKey = () => guidanceSources(rt).map(source => source.owner).join("|");
   function render() {
+    shownSources = sourceKey();
     const query = search.value.trim();
     const tourCount = renderTours(query);
-    const found = searchTopics(query, helpTopics);
+    const found = searchTopics(query, helpTopics());
     topics.replaceChildren(...found.map(topic => h("details", { class: "help-topic", "data-help-topic": topic.id, open: query ? true : undefined },
       h("summary", { text: topic.title }), h("div", { class: "help-topic-body" }, renderHelp(topic.body)))));
-    const sections = helpReference(query);
+    const sections = helpReference(query, guidanceContents(rt).flatMap(content => content.reference ?? []));
     reference.replaceChildren(...sections.map(item => h("section", { class: "reference-section", "aria-label": item.title },
       h("h4", { text: item.title }), item.detail ? h("p", { class: "muted small", text: item.detail }) : null,
       h("dl", { class: "shortcut-list" }, item.rows.flatMap(row => [h("dt", {}, h("kbd", { text: row.input })),
@@ -128,7 +132,7 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
     dispose() {},
     spec: { id: "help", ...PANEL_META.help, element },
     update(_frame: Frame) {
-      if (!rendered) {
+      if (!rendered || shownSources !== sourceKey()) {
         rendered = true; render();
         // Whether the desktop app is installed, looked up once the panel is first shown (the sheet looks again when opened).
         const app = rt.port.desktopApp;
@@ -138,12 +142,12 @@ export function helpPanel(rt: StudioRuntime, guidance: HelpGuidance): PanelContr
       renderUpdates();
     },
     openTopic(id: string) {
-      const topic = helpTopics.find(item => item.id === id);
+      const topic = helpTopics().find(item => item.id === id);
       if (!topic) return;
       rendered = true; search.value = topic.title; render();
       const summary = topics.querySelector<HTMLElement>(`[data-help-topic="${topic.id}"]`)?.querySelector<HTMLElement>("summary");
       summary?.focus();
     },
-    focusSearch() { if (!rendered) { rendered = true; render(); } search.focus(); search.select(); },
+    focusSearch() { if (!rendered || shownSources !== sourceKey()) { rendered = true; render(); } search.focus(); search.select(); },
   };
 }

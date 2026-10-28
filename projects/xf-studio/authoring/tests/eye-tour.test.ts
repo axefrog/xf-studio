@@ -8,17 +8,21 @@ import { join, resolve } from "node:path";
 import { LEASE_MESSAGES, WorkspaceLease } from "../src/app/workspace/workspace-lease";
 import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { EYE_STARTERS } from "../src/features/eye-makeup/starters";
-import { isAnchorId, anchorInfo, type AnchorId, type AnchorState } from "../src/studio-ui/guidance/anchors";
+import { anchorCatalogue as shellAnchorCatalogue, isAnchorId as shellIsAnchorId, anchorInfo as shellAnchorInfo, type AnchorId, type AnchorState } from "../src/studio-ui/guidance/anchors";
 import { TourCommandRun, TOUR_TARGET_MISSING } from "../src/studio-ui/guidance/command-run";
 import { commandCapability, packageFacts, runCommand } from "../src/studio-ui/guidance/controller";
 import { eventHappened, gateHolds, GuidanceService, type GuidanceEnvironment } from "../src/studio-ui/guidance/engine";
 import { plainText } from "../src/studio-ui/guidance/content";
 import { EYE_TOUR_ID, EYE_TOUR_LOOKS, TOURS, toursFor } from "../src/studio-ui/guidance/tours";
 import type { GuidanceFacts, Tour, TourCommand } from "../src/studio-ui/guidance/types";
-import { PANEL_IDS } from "../src/compose/views";
+import { STUDIO_CATALOGUE, PANEL_IDS } from "../src/compose/views";
 import { finishCatalogue } from "./fixtures/eye-region";
 import { trustedFixture } from "./studio-presentation-fixture";
 
+const contributionAnchors = STUDIO_CATALOGUE.guidance.flatMap(source => source.contribution.anchors);
+const anchorCatalogue = (panels: readonly string[]) => shellAnchorCatalogue(panels, contributionAnchors);
+const anchorInfo = (id: AnchorId) => contributionAnchors.find(info => info.id === id) ?? shellAnchorInfo(id);
+const isAnchorId = (id: string) => contributionAnchors.some(info => info.id === id) || shellIsAnchorId(id);
 const tour = TOURS.find(item => item.id === EYE_TOUR_ID)!;
 const ids = tour.steps.map(step => step.id!);
 const root = resolve(import.meta.dir, "..", "src");
@@ -29,7 +33,7 @@ const facts: GuidanceFacts = { layers: 1, activeLayer: "a", finish: "matte", col
 function environment(start: Partial<GuidanceFacts> = {}, hiddenAnchors: AnchorId[] = []) {
   let current = { ...facts, ...start };
   const env: GuidanceEnvironment = {
-    facts: () => current,
+    facts: () => current, anchorInfo,
     anchor: (id): AnchorState => hiddenAnchors.includes(id) ? "hidden" : "visible",
     panelVisible: () => true, panelTitle: panel => panel,
     capability: () => ({ available: true }),
@@ -56,7 +60,8 @@ test("the tour is registered for Help's Guided tours, never auto-started, and ha
   expect(new Set(ids).size).toBe(ids.length);
   // Only the onboarding tour is offered by itself, and it may mention this one; this one is started from Help (or the palette).
   const controller = readFileSync(join(root, "studio-ui", "guidance", "controller.ts"), "utf8");
-  expect([...controller.matchAll(/start\((\w+)\)/g)].map(match => match[1]).filter(name => name !== "tourId")).toEqual(["ONBOARDING_TOUR_ID"]);
+  expect(controller).toContain('start(onboarding()?.tour ?? "")');
+  expect(STUDIO_CATALOGUE.guidance.flatMap(source => source.contribution.create({ finishCatalogue, view: () => ({}) } as never).onboarding?.tour ?? [])).toEqual(["onboarding"]);
   // Each step is anchored to a real control or panel, in plain words.
   for (const step of tour.steps) {
     if (step.anchor) { expect(isAnchorId(step.anchor)).toBe(true); const panel = anchorInfo(step.anchor)?.panel; if (panel) expect(PANEL_IDS as readonly string[]).toContain(panel); }
@@ -205,7 +210,7 @@ test("a read-only window gets one step that says it needs the window that can ma
 function runtime(options: Parameters<typeof trustedFixture>[0] = {}) {
   const fixture = trustedFixture(options), shell = fixture.shell, eye = shell.feature("eye-makeup");
   const refused: string[] = [], announced: string[] = [], files: unknown[] = [], settings: string[] = [];
-  const rt = { port: shell, get editor() { return eye.view(); },
+  const rt = { port: shell, views: STUDIO_CATALOGUE,
     feedback: { toast: (_kind: string, _source: string, message: string) => { refused.push(message); }, announce: (text: string) => { announced.push(text); } },
     dispatch: (action: Parameters<typeof shell.authoring.dispatch>[0]) => { const result = shell.authoring.dispatch(action); if (!result.ok) refused.push(result.message); return result.ok; },
     file: async (action: unknown) => { files.push(action); return { ok: true }; },

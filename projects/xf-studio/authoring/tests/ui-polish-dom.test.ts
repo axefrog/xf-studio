@@ -2,6 +2,7 @@
 // focusable and say why, a Build offers "Add to my mod manager" with a reviewed plan and "Show in folder", Settings offers what
 // XF Studio found and saves each choice at once (the saves folder too), and the failure card offers a report instead of a log path.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { STUDIO_CATALOGUE } from "../src/compose/views";
 import { InstallDetectionActions } from "../src/installation/install-detection-actions";
 import { LocalSetupActions, type LocalSetupTransport } from "../src/setup/local-setup-actions";
 import { ModInstallActions, type ModInstallPlan } from "../src/installation/mod-install-actions";
@@ -16,6 +17,9 @@ import { installLightDom, lightDocument, lightEvent, type LightElement, uninstal
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
 const settle = (ms = 5) => new Promise(resolve => setTimeout(resolve, ms));
+// Help now consumes a registered text contribution, rather than a runtime finish getter.
+const helpFacade = { finishCatalogue: () => [] };
+const helpFeatures = { features: () => [{ id: "eye-makeup" }], feature: () => helpFacade };
 /** Wait (up to a second, for a busy full run) until `ready` holds, repainting between tries. */
 async function until(ready: () => boolean, paint: () => void = () => {}) {
   for (let i = 0; i < 100 && !ready(); i++) { await settle(10); paint(); }
@@ -640,8 +644,8 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
   test("a tour Help link opens its topic despite an earlier search, with the answer expanded and focused", async () => {
     const { helpPanel } = await import("../src/studio-ui/guidance/help-panel");
     const host = heldHost(), updates = new UpdateCheckActions(host.transport);
-    const rt = { port: { updates, about: { capability: () => ({ available: false }) }, desktopApp: { offered: () => false },
-      links: { open: async () => ({ ok: true }) } }, feedback: { toast() {} }, changed() {}, finishes: [], settings: { open() {} } };
+    const rt = { views: STUDIO_CATALOGUE, port: { ...helpFeatures, updates, about: { capability: () => ({ available: false }) }, desktopApp: { offered: () => false },
+      links: { open: async () => ({ ok: true }) } }, feedback: { toast() {} }, changed() {}, settings: { open() {} } };
     const panel = helpPanel(rt as never, { tours: () => [], status: () => undefined, start: () => false });
     panel.update(null as never);
     const root = panel.spec.element as unknown as LightElement;
@@ -659,9 +663,9 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
     const { helpPanel } = await import("../src/studio-ui/guidance/help-panel");
     const host = heldHost(), updates = new UpdateCheckActions(host.transport);
     let panel: ReturnType<typeof helpPanel> | null = null;
-    const rt = { port: { updates, about: { capability: () => ({ available: false }) }, desktopApp: { offered: () => false },
+    const rt = { views: STUDIO_CATALOGUE, port: { ...helpFeatures, updates, about: { capability: () => ({ available: false }) }, desktopApp: { offered: () => false },
       links: { open: async () => ({ ok: true }) } }, feedback: { toast: () => () => {}, record: () => {} }, changed: () => panel?.update(null as never),
-    finishes: [], settings: { open: () => {} } };
+    settings: { open: () => {} } };
     panel = helpPanel(rt as never, { tours: () => [], status: () => undefined, start: () => false });
     panel.update(null as never);
     const root = panel.spec.element as unknown as LightElement;

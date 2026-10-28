@@ -5,7 +5,7 @@ import { bindingReference, KEY_BINDINGS } from "../src/app/input-bindings";
 import { ACTION_DESCRIPTORS, FILE_DESCRIPTORS, PREVIEW_SETUP_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { isProjectLink, LOCAL_PROJECT_PAGES, PROJECT_LINKS } from "../src/app/project-links";
 import { parseUIPreferences, UIPreferenceActions } from "../src/app/ui-preferences";
-import { AnchorRegistry, anchorCatalogue, anchorInfo, CONTROL_ANCHORS, isAnchorId, type AnchorId, type AnchorState } from "../src/studio-ui/guidance/anchors";
+import { AnchorRegistry, anchorCatalogue as shellAnchorCatalogue, anchorInfo as shellAnchorInfo, CONTROL_ANCHORS, isAnchorId as shellIsAnchorId, type AnchorId, type AnchorState } from "../src/studio-ui/guidance/anchors";
 import { keyTokens, parseHelp, parseInlines, plainText } from "../src/studio-ui/guidance/content";
 import { conditionHolds, eventHappened, GUIDANCE_DESCRIPTORS, GuidanceService, type GuidanceEnvironment } from "../src/studio-ui/guidance/engine";
 import { exportableFinishClause, finishExportHelp } from "../src/studio-ui/guidance/finish-text";
@@ -15,11 +15,15 @@ import { NARROW_WIDTH, placeCallout } from "../src/studio-ui/guidance/placement"
 import { ONBOARDING_TOUR_ID, TOURS, toursFor } from "../src/studio-ui/guidance/tours";
 import type { GuidanceFacts, Tour, TourCommand } from "../src/studio-ui/guidance/types";
 import type { StudioPanelId } from "../src/studio-ui/layout-defaults";
-import { PANEL_IDS, PANEL_META } from "../src/compose/views";
+import { STUDIO_CATALOGUE, PANEL_IDS, PANEL_META } from "../src/compose/views";
 import { SETTINGS_SECTIONS } from "../src/studio-ui/settings-sections";
 import { studioShortcut } from "../src/studio-ui/shortcuts";
 import { finishCatalogue } from "./fixtures/eye-region";
 
+const contributionAnchors = STUDIO_CATALOGUE.guidance.flatMap(source => source.contribution.anchors);
+const anchorCatalogue = (panels: readonly string[]) => shellAnchorCatalogue(panels, contributionAnchors);
+const anchorInfo = (id: AnchorId) => contributionAnchors.find(info => info.id === id) ?? shellAnchorInfo(id);
+const isAnchorId = (id: string) => contributionAnchors.some(info => info.id === id) || shellIsAnchorId(id);
 const root = resolve(import.meta.dir, "..", "src");
 const guidanceDir = join(root, "studio-ui", "guidance");
 const files = (dir: string): string[] => readdirSync(dir).flatMap(name => {
@@ -113,7 +117,7 @@ test("instance anchors select a visible survivor and release independently", () 
 
 test("the registry reports visible, hidden and missing anchors from layout boxes only", () => {
   const box = (width: number, height: number, isConnected = true) => ({ isConnected, getBoundingClientRect: () => ({ left: 10, top: 20, width, height }) });
-  const registry = new AnchorRegistry<ReturnType<typeof box>>();
+  const registry = new AnchorRegistry<ReturnType<typeof box>>(() => anchorCatalogue(PANEL_IDS));
   expect(registry.state("layers.add")).toBe("missing");
   const unregister = registry.register("layers.add", box(80, 24));
   expect(registry.state("layers.add")).toBe("visible");
@@ -135,7 +139,7 @@ function environment(overrides: Partial<{ anchors: Partial<Record<AnchorId, Anch
   let facts = { ...baseFacts };
   const recorded: [string, string][] = [];
   const env: GuidanceEnvironment = {
-    facts: () => facts,
+    facts: () => facts, anchorInfo,
     anchor: id => overrides.anchors?.[id] ?? "visible",
     panelVisible: panel => (overrides.panels ?? ["layers", "uv", "head", "finish", "presets"]).includes(panel),
     panelTitle: panel => (PANEL_META as Record<string, { title: string }>)[panel]?.title ?? panel,
@@ -333,7 +337,7 @@ test("the Help keyboard and mouse reference is the binding catalogue, filtered b
   expect(helpReference("keyboard undo").flatMap(section => section.rows)).toEqual(rows);
   // The panel renders the derived reference; no hand-written shortcut table.
   const panel = readFileSync(join(guidanceDir, "help-panel.ts"), "utf8");
-  expect(panel).toContain("helpReference(query)");
+  expect(panel).toContain("helpReference(query, guidanceContents(rt)");
   expect(panel).not.toMatch(/Ctrl\+|"F1"/);
   // F1 opens Help; the tour keys are catalogued and listed in the reference.
   expect(studioShortcut({ key: "F1" }, { textInput: true, modalOpen: false })).toBe("guide");

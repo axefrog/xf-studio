@@ -4,11 +4,12 @@
  * icons, purposes), its factory layouts, where closed panels open, which panels repaint lazily and its
  * activity-log sources from these records; it keeps no hand-made list of them.
  *
- * Data only: the panels themselves are built by the factories bound in `panels.ts`, so the catalogue can
+ * Metadata and pure guidance readers only: the panels themselves are built by the factories bound in `panels.ts`, so the catalogue can
  * be read (by guidance, the style guide and tests) without loading any panel.
  */
 import type { IconName } from "../icons";
 import type { PanelContext } from "../../platform/api/subjects";
+import type { GuidanceContribution } from "../guidance/contributions";
 
 /**
  * Where a panel sits in the shell's factory layouts. The shell maps slots to tab groups per size class
@@ -51,6 +52,7 @@ export type PanelContribution = {
 export type ActivitySource = { readonly pattern: RegExp; readonly label: string };
 
 export type ViewContribution = {
+  readonly guidance?: GuidanceContribution;
   /** `shell` for the platform's own panels, else the feature ID whose view this is. */
   readonly owner: string;
   /** Primary editor: owns the missing-view chooser; other feature panels point here. */
@@ -77,6 +79,7 @@ export function viewCatalogue(views: readonly ViewContribution[]) {
     throw Error(`Primary panel ${view.primary} is not contributed by ${view.owner}.`);
   panels.sort((a, b) => a.order - b.order);
   return {
+    guidance: views.flatMap(view => view.guidance ? [{ owner: view.owner, contribution: view.guidance }] : []),
     panels,
     primary: (type: string) => {
       const view = views.find(view => view.panels.some(panel => panel.id === type));

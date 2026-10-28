@@ -109,7 +109,7 @@ test("G2: captured shell input keeps focus-moved target and refuses rebind-away/
   const s = await profileContextStudio(); arrange(s, ["presets--scene0"]); const ui = owner(s);
   try {
     ui.paint(); const origin = new StudioRuntime(ui.panels.runtime("presets--scene0")!, feedback, STUDIO_CATALOGUE);
-    const held = captureRuntime(origin), layer = held.runtime.editor.layer()!;
+    const held = captureRuntime(origin), layer = held.runtime.port.feature("eye-makeup").view().layer()!;
     s.session.focus.focusView(s.session.session().views.views[1]!.id);
     expect(held.runtime.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .32 })).toBe(true);
     const scope = s.history.scope(viewScope(s.session.profile))!;
@@ -122,9 +122,9 @@ test("G2: captured shell input keeps focus-moved target and refuses rebind-away/
     held.release(); expect(s.targets.held()).toBe(0);
     ui.paint(); const removed = captureRuntime(new StudioRuntime(ui.panels.runtime(dest.instance)!, feedback, STUDIO_CATALOGUE));
     s.session.setPanelsOpen(dest.tab, [dest.instance], false, () => null); scope.undo();
-    const revision = removed.runtime.editor.revision();
+    const revision = removed.runtime.port.feature("eye-makeup").view().revision();
     expect(removed.runtime.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .99 })).toBe(false);
-    expect(removed.runtime.editor.revision()).toBe(revision); removed.release();
+    expect(removed.runtime.port.feature("eye-makeup").view().revision()).toBe(revision); removed.release();
     const released = captureRuntime(origin); released.release();
     expect(released.runtime.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .99 })).toBe(false);
   } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
@@ -171,7 +171,7 @@ test("real head panes bind their own view and look while the renderer attachment
     for (let i = 0; i < panes.length; i++) {
       panes[i]!.update(new Frame(s.port));
       expect(runtimes[i]!.port.focus.targets().look).toEqual(s.looks[i]);
-      const layer = runtimes[i]!.editor.layer()!;
+      const layer = runtimes[i]!.port.feature("eye-makeup").view().layer()!;
       expect(runtimes[i]!.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .4 + i * .1 })).toBe(true);
     }
     s.session.focus.focusView(s.session.session().views.views[2]!.id);
@@ -278,7 +278,7 @@ test("G2 real shell menu → naming popover transfers one capture; focus movemen
 test("G2 palette dismissal releases its capture and retained callbacks leave no Undo step", async () => {
   const s = await profileContextStudio(); arrange(s, ["presets--scene0"]); const ui = owner(s);
   try {
-    ui.paint(); const held = captureRuntime(ui.panels.controllerRuntime("presets--scene0")!), layer = held.runtime.editor.layer()!;
+    ui.paint(); const held = captureRuntime(ui.panels.controllerRuntime("presets--scene0")!), layer = held.runtime.port.feature("eye-makeup").view().layer()!;
     openPalette(() => [{ id: "test.opacity", title: "Opacity", group: "Edit", capability: () => held.runtime.port.authoring.capability({ kind: "layer.setOpacity", layerId: layer.id, opacity: .4 }),
       run: () => { held.runtime.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .4 }); } }], { onClose: held.release });
     const dialog = node(document.body).querySelector("dialog.palette")!, option = dialog.querySelector(".palette-item")!;
@@ -307,7 +307,7 @@ test("G2 a palette-selected file request transfers its concrete writer before th
   try {
     s.session.focus.focusView(s.session.session().views.views[0]!.id); ui.paint();
     const origin = ui.panels.runtime("presets--follow")!, held = captureRuntime(ui.panels.controllerRuntime("presets--follow")!);
-    const recipe = structuredClone(held.runtime.editor.recipe()) as unknown as Recipe; recipe.layers[0]!.opacity = .61;
+    const recipe = structuredClone(held.runtime.port.feature("eye-makeup").view().recipe()) as unknown as Recipe; recipe.layers[0]!.opacity = .61;
     openPalette(() => [{ id: "test.import", title: "Import recipe", group: "File", capability: () => held.runtime.port.files.capability({ kind: "recipe.import" }),
       run: () => { pending = held.runtime.file({ kind: "recipe.import" }); } }], { onClose: held.release });
     s.session.focus.focusView(s.session.session().views.views[1]!.id); ui.paint();
@@ -356,7 +356,7 @@ test("review High: the palette captures the focused unseen inspector, then keeps
   try {
     ui.paint(); s.port.focus.panel(inspector);
     const a = JSON.stringify(ui.panels.runtime("presets--scene0")!.feature("eye-makeup").view().recipe());
-    const held = captureFocusedRuntime(ui.root, id => ui.panels.controllerRuntime(id))!, layer = held.runtime.editor.layer()!;
+    const held = captureFocusedRuntime(ui.root, id => ui.panels.controllerRuntime(id))!, layer = held.runtime.port.feature("eye-makeup").view().layer()!;
     expect(held.runtime.port.focus.targets().look).toEqual(s.looks[2]);
     openPalette(() => [{ id: "opacity", title: "Set opacity", group: "Edit", capability: () => ({ available: true }),
       run: () => { held.runtime.dispatch({ kind: "layer.setOpacity", layerId: layer.id, opacity: .43 }); } }], { signal: held.signal, onClose: held.release });
@@ -371,7 +371,7 @@ test("review capture handoff: real palette → starter menu → naming popover e
   const s = await profileContextStudio({ starters: true }); arrange(s, ["presets--unseen"]); const ui = owner(s);
   try {
     ui.paint(); const origin = ui.panels.controllerRuntime("presets--unseen")!;
-    expect(origin.dispatch({ kind: "starters.save", layerId: origin.editor.layer()!.id, name: "Own shape" })).toBe(true);
+    expect(origin.dispatch({ kind: "starters.save", layerId: origin.port.feature("eye-makeup").view().layer()!.id, name: "Own shape" })).toBe(true);
     const held = captureRuntime(origin);
     openPalette(() => featureCommands(EYE_MAKEUP_VIEW_BINDING, featureViewContext(held.runtime, "eye-makeup")).filter(command => command.id === "starters.rename"),
       { signal: held.signal, onClose: held.release });

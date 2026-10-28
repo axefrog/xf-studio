@@ -79,9 +79,8 @@ export function searchTours(query: string, tours: readonly Tour[]): Tour[] {
   return tours.filter(tour => matches(`${tour.title} ${tour.summary} ${tour.steps.map(step => step.content.title).join(" ")}`, query));
 }
 /** The keyboard and mouse reference, filtered by the search; generated from the binding catalogue. */
-export function helpReference(query = ""): ReferenceSection[] {
-  const sections = bindingReference();
-  if (!terms(query).length) return sections;
+export function helpReference(query = "", sections: readonly ReferenceSection[] = bindingReference()): ReferenceSection[] {
+  if (!terms(query).length) return [...sections];
   // Every row belongs to "Keyboard & mouse", so those words (and "shortcut") narrow nothing on their own.
   return sections.map(section => ({ ...section, rows: section.rows.filter(row =>
     matches(`keyboard mouse shortcuts keys ${section.title} ${row.input} ${row.label} ${row.where ?? ""}`, query)) }))

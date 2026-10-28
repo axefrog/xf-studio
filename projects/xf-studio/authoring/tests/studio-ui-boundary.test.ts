@@ -50,7 +50,7 @@ const CORE_VALUES = new Map<string, readonly string[]>([
 ]);
 /**
  * What a feature's view may take by value from the shell (UI-73, UI-74): the stateless presentation toolkit
- * (`*`: any export) and a few named helpers. The shell's runtime, menus, palette, guidance, dock and the
+ * (`*`: any export) and a few named helpers. The shell's runtime, menus, palette, guidance runner/overlays, dock and the
  * context builder are not the view's: it reaches the shell only through its `FeatureViewContext`.
  */
 const VIEW_TOOLKIT = new Map<string, readonly string[]>([
@@ -60,6 +60,9 @@ const VIEW_TOOLKIT = new Map<string, readonly string[]>([
   ["studio-ui/panels/viewports", ["contextMenuGate", "keyDescription"]],
   ["studio-ui/views/contribution", ["panelMeta"]],
   ["studio-ui/views/feature-view", ["featureView", "moduleView"]],
+  // Pure text/reference builders for registered guidance contributions; no runner, overlay or runtime access.
+  ["studio-ui/guidance/tours", ["toursFor", "ONBOARDING_TOUR_ID"]],
+  ["studio-ui/guidance/help-topics", ["helpTopicsFor", "helpReference"]],
   // Preset sets (part-preset-sets.ts): pure naming, membership and result-key rules, so a set's view names its mod as its export does and
   // tells a stale result the way the service does (PIPE-120).
   ["library/part-preset-sets", ["defaultSetModName", "setExportKey", "setMembers", "setModName"]],

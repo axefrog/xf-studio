@@ -7,15 +7,15 @@ import { panelAnchor } from "./anchors";
 import { GuidanceService, type GuidanceAction, type GuidanceCapability, type GuidanceEnvironment, type StepButton } from "./engine";
 import { Callout, TourOverlay } from "./overlay";
 import { TourCommandRun, TOUR_TARGET_MISSING } from "./command-run";
-import { ONBOARDING_TOUR_ID, toursFor } from "./tours";
+import { guidanceContents, guidanceEditing } from "./contributions";
 import type { GuidanceFacts, SingleTourCommand, TourCommand, TourNavigation } from "./types";
 
 /** Read-only facts for `advanceWhen`, from the port's snapshots and the dock. */
 export function guidanceFacts(rt: StudioRuntime): GuidanceFacts {
-  const port = rt.port, layer = rt.editor.layer(), history = port.authoring.historyTimeline();
+  const port = rt.port, facts = guidanceEditing(rt)?.facts(), history = port.authoring.historyTimeline();
   return {
-    layers: rt.editor.recipe().layers.length,
-    activeLayer: layer?.id ?? null, finish: layer?.finish ?? null, color: layer?.color ?? null,
+    layers: facts?.layers ?? 0,
+    activeLayer: facts?.activeLayer ?? null, finish: facts?.finish ?? null, color: facts?.color ?? null,
     edit: `${history.steps.length}:${history.current}:${history.steps[history.current]?.id ?? history.startId}`,
     presets: port.library.summary().draft?.presets.length ?? 0,
     lighting: port.authoring.previewState().preview?.lightingPreset ?? null,
@@ -51,7 +51,7 @@ export function commandCapability(rt: StudioRuntime, command: TourCommand, run?:
     case "settings": return { available: true };
     case "studio": return port.authoring.capability(command.action);
     case "studio.activeLayer": {
-      const layer = rt.editor.layer();
+      const layer = guidanceEditing(rt)?.layer();
       return layer ? port.authoring.capability({ ...command.action, layerId: layer.id } as Parameters<typeof port.authoring.capability>[0])
         : { available: false, reason: "Add or select a layer first." };
     }
@@ -95,7 +95,7 @@ async function runSingle(rt: StudioRuntime, command: SingleTourCommand, run?: To
       return !run?.signal.aborted;
     }
     case "studio.activeLayer": {
-      const layer = rt.editor.layer();
+      const layer = guidanceEditing(rt)?.layer();
       if (!layer) { rt.feedback.toast("info", "Tour", "Add or select a layer first."); return false; }
       return rt.dispatch({ ...command.action, ...named, layerId: captured ? captured.layer : layer.id } as Parameters<StudioRuntime["dispatch"]>[0]);
     }
@@ -131,19 +131,23 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
   const env: GuidanceEnvironment = {
     facts: () => factsOverride ? { ...guidanceFacts(rt), ...factsOverride } : guidanceFacts(rt),
     anchor: id => rt.anchors.state(id),
+    anchorInfo: id => rt.anchors.info(id),
     panelVisible: panel => rt.dock.isVisible(panel),
     panelTitle: panel => rt.views.meta[panel]?.title ?? panel,
     capability: command => commandCapability(rt, command, commandRun),
     record,
   };
-  const service = new GuidanceService(toursFor(rt.finishes), env);
+  const contents = () => guidanceContents(rt);
+  const onboarding = () => contents().find(content => content.onboarding)?.onboarding;
+  const service = new GuidanceService(contents().flatMap(content => content.tours), env);
+  const sync = () => service.setTours(contents().flatMap(content => content.tours));
   const overlay = new TourOverlay({
     rect: target => target.kind === "anchor" ? rt.anchors.rect(target.anchor) : target.kind === "panel" ? rt.anchors.rect(panelAnchor(target.panel)) : undefined,
     press: button => void press(button),
     nav: action => navigate(action),
     openTopic: id => { navigate(service.snapshot().active?.last ? "finish" : "skip"); options.openHelp(id); },
     // Dock changes (tab switches, floating, closing) don't touch the port; re-check anchors a few times a second.
-    refresh: () => { commandRun.observe(rt); service.observe(); paint(false); },
+    refresh: () => { sync(); commandRun.observe(rt); service.observe(); paint(false); },
   });
   let invoker: HTMLElement | null = null, shown = "", running = false;
 
@@ -208,6 +212,7 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
     else paint(true);
   }
   function start(tourId: string) {
+    sync();
     if (!service.capability({ kind: "guidance.startTour", tourId }).available) return false;
     commandRun.cancel(); commandRun = new TourCommandRun();
     hideOffer();
@@ -219,16 +224,15 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
   // ----- The one-time onboarding offer -----
   const offer = new Callout({ className: "guidance-offer", closeLabel: "Not now", onClose: () => declineOffer(),
     onKey: event => { if (event.key !== "Escape") return false; declineOffer(); return true; } });
-  offer.update({ eyebrow: "Welcome", title: "New to XF Studio?",
-    body: "A short tour shows where everything is: layers, drawing, the 3D view, colour and finish, your library and making your mod. It takes about two minutes, and you can replay it from Help.\n\nXF Studio is in beta. If something doesn't work, **Report a problem…** in Help prepares a report for you to review; nothing is sent by itself.",
+  offer.update({ ...(onboarding()?.offer ?? { eyebrow: "", title: "", body: "" }),
     actions: [{ id: "later", label: "Not now", variant: "quiet", run: () => declineOffer() },
-      { id: "start", label: "Show me around", variant: "primary", run: () => { start(ONBOARDING_TOUR_ID); } }] });
+      { id: "start", label: "Show me around", variant: "primary", run: () => { start(onboarding()?.tour ?? ""); } }] });
   let offerState: "waiting" | "shown" | "done" = "waiting";
   const mountedAt = performance.now();
   function hideOffer() { if (offerState === "shown") offerState = "done"; offer.hide(); }
   function declineOffer() {
     const hadFocus = offer.element.contains(document.activeElement);
-    record(ONBOARDING_TOUR_ID, "declined");
+    record(onboarding()?.tour ?? "", "declined");
     hideOffer();
     rt.feedback.announce(`Tour declined. Help (${shortcutLabel("shell.help")}) has it whenever you want it.`);
     if (hadFocus) document.querySelector<HTMLElement>(".shell-header button")?.focus();
@@ -239,11 +243,11 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
    * progress, or once it is set aside), and never in a verification workspace unless `force` asks.
    */
   function maybeOffer(frame: Frame, force = false) {
-    if (offerState !== "waiting" || running) return;
+    if (!onboarding() || offerState !== "waiting" || running) return;
     // A read-only window (another one holds the workspace) offers nothing that would record a choice (t-read-only-window).
     if (frame.status.lease && !frame.status.lease.writable) return;
     if (!force) {
-      if (frame.status.verification || frame.preferences.tours?.[ONBOARDING_TOUR_ID]) { offerState = "done"; return; }
+      if (frame.status.verification || frame.preferences.tours?.[onboarding()?.tour ?? ""]) { offerState = "done"; return; }
       const card = frame.previewSetup.card;
       if (performance.now() - mountedAt < 1500 || document.querySelector("dialog[open]") || (card.open && card.canDismiss)) return;
     }
@@ -285,10 +289,13 @@ export function mountGuidance(rt: StudioRuntime, options: { openHelp(topic?: str
     status: (tourId: string) => port.preferences.snapshot().tours?.[tourId],
     /** Called on each shell paint: advance on `advanceWhen`, refresh the card and consider the offer. */
     update(frame: Frame) {
+      sync();
+      if (!onboarding()) hideOffer();
       if (running) { commandRun.observe(rt); service.observe(); paint(false); }
       maybeOffer(frame);
     },
     commands(): Command[] {
+      sync();
       return [
         // The one palette entry for Help, named as its panel (the Panels group leaves Help out, as it does Settings; C-9).
         { id: "help.open", title: "Help", group: "Help", icon: "help", shortcut: shortcutLabel("shell.help"),
