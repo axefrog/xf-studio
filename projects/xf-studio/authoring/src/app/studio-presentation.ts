@@ -153,7 +153,7 @@ export type PresentationFileAction = Unnamed<StudioFileAction>;
 type PresentationAuthoring = Pick<StudioApplication,
     "actionKinds" | "requestKinds" | "actionDescriptors" | "requestDescriptors" |
     "gestureDescriptors" | "fileKinds" | "fileDescriptors" | "registry" | "descriptorsFor" | "targetCapability" |
-    "limitsFor" | "contextOptionsFor" |
+    "limitsFor" | "contextOptionsFor" | "contextDetail" | "contextSelected" | "editorInputFacts" | "contextInputAction" | "captureUndo" |
     "controlBegin" | "controlCommit" | "controlCancel" |
     "requestCapability" | "execute" | "canBeginGesture" | "gestureCapability" |
     "beginGesture" | "applyGesture" | "endGesture" | "previewState" | "finishCatalogue" | "layerExport" | "layerSurfaceEdge" |
@@ -505,6 +505,8 @@ export function createStudioPresentation<Slot>(sources: {
     contextCapability: (target, action) => a.contextCapability(target, name<StudioAction>(action), action as StudioAction),
     choicesFor: (target, kind, field, base) => a.choicesFor(target, kind, field, base, named()),
     limitsFor: (target, kind, variant) => a.limitsFor(target, kind, variant),
+    contextDetail: hit => a.contextDetail(hit), contextSelected: () => a.contextSelected(), editorInputFacts: () => a.editorInputFacts(),
+    contextInputAction: (context, id, value) => a.contextInputAction(context, id, value), captureUndo: () => a.captureUndo(),
     contextFor: hit => a.contextFor(hit, named()),
     contextOptionsFor: context => a.contextOptionsFor(context, name),
     contextQuery: hit => a.contextQuery(hit, named(), name),

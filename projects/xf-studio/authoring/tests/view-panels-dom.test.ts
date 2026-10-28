@@ -499,7 +499,7 @@ describe("the not-drawn state (U7)", () => {
       viewport: { head: { phase: "ready", width: 300, height: 200, captured: false, ...head } },
       views: { views: records },
       viewTitles: viewTitles(records).map((title, index) => ({ view: records[index]!.id, panel: records[index]!.panel, title, subject: "" })),
-      previewSetup: { head: { next: null }, wolvenKitStep: null }, preferences: { inputHints: true }, layer: undefined, viewTools: [], locked: undefined,
+      previewSetup: { head: { next: null }, wolvenKitStep: null }, preferences: { inputHints: true }, inputFacts: { hasTarget: false, enabled: false, locked: false }, viewTools: [],
       status: { assets: {} }, library: { draft: null } });
     const main = headPanel(rt as never, context as never, "head"), side = headPanel(rt as never, context as never, "view.v2");
     for (const pane of [main, side]) pane.update(frame({ drawn: "main", onCanvas: "main" }) as never);

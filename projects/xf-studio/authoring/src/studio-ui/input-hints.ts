@@ -70,15 +70,15 @@ export class ViewportInputHints {
   update(frame: Frame) {
     this.enabled = frame.preferences.inputHints;
     this.interactive = frame.viewport[this.scope].phase === "ready";
-    const layer = frame.layer;
+    const facts = frame.inputFacts;
     // The 3D view edits through the tool its modules offer for it (Surface controls). Without one (its module is hidden) the strip
     // hints camera input only, and never points at a tool or panel that isn't there (UI-102). The UV map is the module's own panel.
     const editor = this.scope === "head" ? frame.viewTools.find(tool => tool.editing) : undefined;
     this.editing = this.scope !== "head" || !!editor;
     // A look made with a newer XF Studio can't be edited here; Layers says why and offers the update.
-    const locked = frame.locked !== undefined;
-    this.blocked = !this.editing ? undefined : locked ? "look-locked" : !layer ? "no-layer" : editor && !editor.on ? "surface-off"
-      : this.scope === "head" && !layer.enabled ? "layer-hidden" : undefined;
+    const locked = facts.locked;
+    this.blocked = !this.editing ? undefined : locked ? "look-locked" : !facts.hasTarget ? "no-layer" : editor && !editor.on ? "surface-off"
+      : this.scope === "head" && !facts.enabled ? "layer-hidden" : undefined;
     this.render();
   }
   render() {

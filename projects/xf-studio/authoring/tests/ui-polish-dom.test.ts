@@ -700,11 +700,12 @@ describe("Settings: one form, what XF Studio found, saved as chosen (UI-83, UI-0
 
 describe("the layer list says what the flag shows (UI-95)", () => {
   test("a layer left out of the mod files is described to screen readers, not only drawn", async () => {
+    const { Frame } = await import("../src/studio-ui/runtime");
     const { EDGE_CUT_NOTE, layersPanel } = await import("../src/features/eye-makeup/view/layers");
     const recipe = { layers: [{ id: "a", name: "Glitter lid", color: "#ffffff", opacity: 1, symmetry: true, enabled: true, finish: "glitter" },
       { id: "b", name: "Liner", color: "#000000", opacity: 1, symmetry: true, enabled: true, finish: "matte" },
       { id: "c", name: "Wash", color: "#000000", opacity: .6, symmetry: true, enabled: true, finish: "matte" }] };
-    const facade = { view: () => ({ recipe: () => recipe, layer: () => recipe.layers[0], selected: () => 0 }),
+    const facade = { view: () => ({ recipe: () => recipe, layer: () => recipe.layers[0], selected: () => 0 }), locked: () => undefined,
       finishCatalogue: () => [{ id: "glitter", label: "Glitter", stored: [], exportAdapter: "none" }, { id: "matte", label: "Matte", stored: [], exportAdapter: "flat-provisional" }],
       glitterModelCatalogue: () => [{ id: "classic", label: "Classic", summary: "", stored: [] }],
       layerExport: (id: string) => id === "a" ? { exportable: false, reason: "Glitter can't be built into a mod yet.", blockedBy: "layer" } : { exportable: true, experimental: false, note: "" },
@@ -714,7 +715,7 @@ describe("the layer list says what the flag shows (UI-95)", () => {
     const ctx = { facade, dispatch: () => true, platform: () => true, feedback: { toast() {}, announce() {} }, anchors: { register() {} }, links: { open: async () => ({ ok: true }) },
       starters: { ready: () => false, list: () => undefined, capability: () => ({ available: false, reason: "The starters are still loading." }) } };
     const panel = layersPanel(ctx as never);
-    panel.update({ recipe, library: { draft: undefined }, locked: undefined, layer: recipe.layers[0] } as never);
+    panel.update(new Frame({ library: { summary: () => ({ draft: undefined }) } } as never));
     const rows = (panel.spec.element as unknown as LightElement).querySelectorAll(".item-main");
     const glitter = rows.find(row => row.textContent.includes("Glitter lid"))!, liner = rows.find(row => row.textContent.includes("Liner"))!;
     expect(glitter.getAttribute("aria-description")).toBe("Left out of your mod files: Glitter can't be built into a mod yet.");

@@ -65,11 +65,11 @@ describe("CORE-03 captured startup failures", () => {
     } finally { core.app.dispose(); core.document.dispose(); }
   });
 
-  test("slice 7 flips: shell runtime reads finishCatalogue from an absent makeup facade", () => {
+  test("slice 7 resolved: shell runtime construction does not read an absent makeup facade", () => {
     // Honest missing feature. The constructor must not need any other port member to reach this probe.
-    const expected: ErrorConstructor | null = TypeError, lookups: string[] = [];
+    const expected: ErrorConstructor | null = null, lookups: string[] = [];
     const port = { authoring: { actionDescriptors: () => ({}) }, feature: (id: string) => { lookups.push(id); return undefined; } } as unknown as Port;
     probe(() => new StudioRuntime(port, {} as Feedback), expected);
-    if (expected !== null) expect(lookups).toEqual(["eye-makeup"]);
+    expect(lookups).toEqual([]);
   });
 });

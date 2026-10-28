@@ -1,3 +1,4 @@
+import { MAKEUP_CONTEXT_LABELS, makeupContextCandidates } from "../src/app/authoring/makeup-context";
 import { expect, test } from "bun:test";
 import { ACTION_DESCRIPTORS } from "../src/app/studio-action-descriptors";
 import { contextCandidates, type StudioContextHit } from "../src/app/studio-context-targets";
@@ -49,9 +50,9 @@ test("every context-menu candidate has a label, and destructive entries name the
   const hits: StudioContextHit[] = [{ kind: "collection" }, { kind: "preset", id: "p" }, { kind: "layer", id: layer.id },
     { kind: "shape", layerId: layer.id }, { kind: "point", layerId: layer.id, index: 0 },
     { kind: "tangent", layerId: bezier.id, index: 0, side: "outgoing" }, { kind: "field", layerId: layer.id, id: "f" }, { kind: "uv-empty" }];
-  const ids = new Set(hits.flatMap(hit => contextCandidates(hit, recipe).map(candidate => candidate.id)));
+  const ids = new Set(hits.flatMap(hit => (hit.kind === "collection" || hit.kind === "preset" ? contextCandidates(hit) : makeupContextCandidates(hit, recipe)).map(candidate => candidate.id)));
   expect(ids.has("point.mode.corner")).toBe(true);
-  expect([...ids].filter(id => !CONTEXT_LABELS[id])).toEqual([]);
+  expect([...ids].filter(id => !CONTEXT_LABELS[id] && !MAKEUP_CONTEXT_LABELS[id])).toEqual([]);
   expect(undoHint("part", "layer.remove")).toBe("Undo with Ctrl+Z");
   expect(undoHint("recovery", "preset.remove")).toBe("Restore from the Presets panel");
   expect(undoHint("part", "layer.duplicate")).toBeUndefined();
@@ -67,9 +68,9 @@ test("every action ID has an activity source label", () => {
 
 test("a paint frame reads each port source at most once", () => {
   let reads = 0;
-  const port = { feature: () => ({ view: () => ({ recipe: () => (reads++, initialRecipe()) }) }), library: { summary: () => (reads++, {}) } } as unknown as Port;
+  const port = { authoring: { editorInputFacts: () => (reads++, { hasTarget: true, enabled: true, locked: false }) }, library: { summary: () => (reads++, {}) } } as unknown as Port;
   const frame = new Frame(port);
-  void frame.recipe; void frame.recipe; void frame.library; void frame.library;
+  void frame.inputFacts; void frame.inputFacts; void frame.library; void frame.library;
   expect(reads).toBe(2);
 });
 

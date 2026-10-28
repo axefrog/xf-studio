@@ -42,18 +42,12 @@ export class Frame {
     if (!this.cache.has(key)) this.cache.set(key, read());
     return this.cache.get(key) as T;
   }
-  /** Eye makeup's editor view (its facade's `view()`): the eye-makeup reads below are a recorded coupling (UI-75). */
-  private get editor() { return this.port.feature("eye-makeup").view(); }
-  get recipe() { return this.once("recipe", () => this.editor.recipe()); }
-  get layer() { return this.once("layer", () => this.editor.layer()); }
-  get active() { return this.once("active", () => this.editor.active()); }
-  get selected() { return this.once("selected", () => this.editor.selected()); }
-  get field() { return this.once("field", () => this.editor.selectedField()); }
-  get revision() { return this.once("revision", () => this.editor.revision()); }
+  /** Feature views may memoize their own projections without adding a feature model to this frame. */
+  read<T>(key: string, value: () => T): T { return this.once(`feature:${key}`, value); }
+  /** Feature-contributed input facts, with no recipe or selection model in the shell. */
+  get inputFacts() { return this.once("inputFacts", () => this.port.authoring.editorInputFacts()); }
   /** Whether Undo has a step: the look-wide history, across every feature's part. */
   get canUndo() { return this.once("canUndo", () => this.port.authoring.history().undo !== undefined); }
-  /** The plain reason when the selected look was made with a newer XF Studio (its eye makeup is kept as it is); else undefined. */
-  get locked() { return this.once("locked", () => this.port.feature("eye-makeup").locked()); }
   get library() { return this.once("librarySummary", () => this.port.library.summary()); }
   get persistence() { return this.once("persistence", () => this.port.library.persistence()); }
   get files() { return this.once("files", () => this.port.files.snapshot()); }
@@ -90,14 +84,9 @@ export class StudioRuntime {
   readonly anchors: AnchorRegistry;
   key(key: string) { return this.instance ? `${this.instance.id}:${key}` : key; }
   readonly descriptors: Ret<Port["authoring"]["actionDescriptors"]>;
-  /**
-   * Eye makeup's facade and finish catalogue, for the shell's remaining eye-makeup reads (context-menu values,
-   * viewport crumbs and hints, guidance facts and tours, the finish lists in Help and Mod package, the toast
-   * Undo's revision check). Recorded couplings (UI-75, ui-architecture-boundary.md) that go once the shell
-   * mounts with no features; feature views never see the runtime (they get a `FeatureViewContext`).
-   */
-  readonly eyeMakeup: EyeMakeupFacade;
-  readonly finishes: Ret<EyeMakeupFacade["finishCatalogue"]>;
+  private get eyeMakeup(): EyeMakeupFacade { return this.port.feature("eye-makeup"); }
+  /** @deprecated CORE-03: guidance-only compatibility; slice 8 contributes guidance/anchors, then deletes this getter. */
+  get finishes(): Ret<EyeMakeupFacade["finishCatalogue"]> { return this.eyeMakeup.finishCatalogue(); }
   private listeners = new Set<() => void>();
   /**
    * Open the Settings panel at a group (UI-109): floating when it was closed (it has no home among the docked groups), otherwise brought
@@ -112,14 +101,12 @@ export class StudioRuntime {
     readonly instance?: { id: string; type: string; signal: AbortSignal; captureSignal?: AbortSignal }, anchors?: AnchorRegistry) {
     this.anchors = anchors ?? new AnchorRegistry();
     this.descriptors = port.authoring.actionDescriptors();
-    this.eyeMakeup = port.feature("eye-makeup");
-    this.finishes = this.eyeMakeup.finishCatalogue();
   }
   /** Which modules have an instance docked in the shown tab. */
   shownModules() { return this.toolFilter().modules; }
   /** The filter of every derived view-tool list: the shown modules and the research preference. */
   toolFilter() { return toolFilter(this.port, this.views, this.dock?.tree); }
-  /** Eye makeup's live editor view (cheap, cached and read-only). */
+  /** @deprecated CORE-03: guidance-only compatibility; slice 8 contributes guidance/anchors, then deletes this getter. */
   get editor() { return this.eyeMakeup.view(); }
   /** Descriptor limits drive control ranges, so the view keeps no copy of domain constants. */
   range(kind: PresentationAction["kind"], field: string, variant?: string): { min: number; max: number } {
@@ -175,13 +162,14 @@ export class StudioRuntime {
   }
   /** A toast "Undo" that only undoes the change it announced, never a later unrelated edit. */
   undoAction(): FeedbackAction {
-    const revision = this.editor.revision();
+    const undo = this.port.authoring.captureUndo();
     return { label: "Undo", run: () => {
-      if (this.editor.revision() !== revision) {
+      const result = undo();
+      if (!result.ok && result.code === "missing_target") {
         this.feedback.toast("warning", "Undo", `Other edits happened since. Use Undo (${shortcutLabel("shell.undo")}) to step back through them in order.`);
         return;
       }
-      this.dispatch({ kind: "history.undo" });
+      this.report("history.undo", result);
     } };
   }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }

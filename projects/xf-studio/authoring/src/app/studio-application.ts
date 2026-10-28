@@ -1,3 +1,4 @@
+import type { FeatureContext, ContextCandidate, EditorInputFacts } from "./studio-context-targets";
 import type { AuthoringDocument } from "./authoring/makeup-document";
 import type { AuthoringDocument as LookDocument } from "./authoring/authoring-document";
 import { featureApplication, type FeatureFacadeHost } from "./feature-application";
@@ -420,17 +421,28 @@ export class StudioApplication {
       targetCapability, requiresInput: Object.values(descriptor.payload).some(field => field.from === "input"),
     }));
   }
+  private featureContexts(): FeatureContext[] {
+    if (this.disposed || this.services.signal?.aborted) return [];
+    return this.routes.owners().flatMap(owner => {
+      const context = featureApplication(owner)?.context?.(this.services); return context ? [context] : [];
+    });
+  }
+  private contextFeature(hit: StudioContextHit) { return this.featureContexts().find(context => context.handles(hit)); }
+  private contextCandidates(hit: StudioContextHit, collection?: string): ContextCandidate[] {
+    return hit.kind === "collection" || hit.kind === "preset" ? contextCandidates(hit, collection) : this.contextFeature(hit)?.candidates(hit) ?? [];
+  }
+  contextDetail(hit: StudioContextHit) { return this.contextFeature(hit)?.detail(hit); }
+  contextSelected() { return this.featureContexts().map(context => context.selected()).find(Boolean); }
+  editorInputFacts(): EditorInputFacts { return this.featureContexts()[0]?.inputFacts() ?? { hasTarget: false, enabled: false, locked: !!this.lookDocument.locked }; }
+  contextInputAction(context: StudioBoundContext, id: string, value: string | number): StudioAction | undefined {
+    const candidate = this.contextCandidates(context.hit, context.named.collection).find(item => item.id === id);
+    return candidate?.input ? this.withTargets(candidate.input.make(value) as StudioAction, context.named) : undefined;
+  }
   targetCapability(target: StudioTarget): StudioCapability {
     const s = this.services;
-    const recipe = "recipe" in s.document ? s.document.recipe : undefined;
-    if ((target.kind === "layer" || target.kind === "point" || target.kind === "field") && !recipe)
-      return missingTarget("That target isn't available in this editor.");
-    if (target.kind === "layer" && !recipe!.layers.some(layer => layer.id === target.id))
-      return missingTarget("That layer no longer exists.");
-    if (target.kind === "point" && !recipe!.layers.find(layer => layer.id === target.layerId)?.points[target.index])
-      return missingTarget("That control point no longer exists.");
-    if (target.kind === "field" && !recipe!.layers.find(layer => layer.id === target.layerId)?.fields.some(field => field.id === target.id))
-      return missingTarget("That warp no longer exists.");
+    if (target.kind === "layer" || target.kind === "point" || target.kind === "field") {
+      return this.featureContexts().map(context => context.target(target)).find(Boolean) ?? missingTarget("That target isn't available in this editor.");
+    }
     // Cheap reads: target checks never clone the draft (CORE-05).
     if (target.kind === "preset" && !s.collection?.hasPreset(target.id))
       return s.collection ? missingTarget("That preset no longer exists.") : missing("Collection is still loading.");
@@ -507,9 +519,10 @@ export class StudioApplication {
       contextIdentity: this.contextIdentity,
       selectedPresetId: draft?.selected,
       collectionRevision: this.collectionRevision,
-      geometryRevision: this.makeupDocument.geometryVersion.revision });
+      geometryRevision: this.contextFeature(hit)?.revision() ?? -1 });
   }
   private boundContextCapability(context: StudioBoundContext): StudioCapability {
+    if (this.disposed || this.services.signal?.aborted) return missingTarget("This editing context was released.");
     if (context.contextIdentity !== this.contextIdentity) return missingTarget("This editing context changed after the menu opened.");
     const current = this.services.targetCheck?.check(context.named);
     if (current && !current.available) return current;
@@ -521,38 +534,32 @@ export class StudioApplication {
     if (context.hit.kind !== "collection" && context.hit.kind !== "preset" &&
       context.selectedPresetId !== draft?.selected)
       return missingTarget("The selected preset changed after this menu opened.");
-    if (geometryHit(context.hit) && context.geometryRevision !== this.makeupDocument.geometryVersion.revision)
+    if (geometryHit(context.hit) && context.geometryRevision !== (this.contextFeature(context.hit)?.revision() ?? -1))
       return missingTarget("The shape changed after this menu opened.");
-    if (context.hit.kind === "tangent") {
-      const hit = context.hit;
-      const layer = this.makeupDocument.recipe.layers.find(item => item.id === hit.layerId);
-      if (layer?.pathMode !== "bezier" || !layer.points[hit.index]?.handles)
-        return missingTarget("That Bézier tangent no longer exists.");
-    }
+    const feature = this.contextFeature(context.hit), validation = feature?.validate(context.hit);
+    if (validation && !validation.available) return validation;
     const target = contextScope(context.hit);
     if (!target) return { available: true };
     return this.targetCapability(target);
   }
   /** Input candidates carry an applicable/disabled reason but no forged placeholder action. */
   contextOptionsFor(context: StudioBoundContext, complete?: CompleteInput) {
-    const bound = this.boundContextCapability(context), target = contextScope(context.hit), hit = context.hit;
-    return contextCandidates(context.hit, this.makeupDocument.recipe, context.named.collection).map(candidate => {
+    const bound = this.boundContextCapability(context), target = contextScope(context.hit);
+    return this.contextCandidates(context.hit, context.named.collection).map(candidate => {
+      const { input, ...rest } = candidate;
+      const inputView = input ? (({ make: _, ...view }) => view)(input) : undefined;
+      const offered = { ...rest, input: inputView };
       if ("action" in candidate) {
         const action = this.withTargets(candidate.action as StudioAction, context.named);
-        return { ...candidate, action, requiresInput: false as const,
+        return { ...offered, action, requiresInput: false as const,
           capability: bound.available && target ? this.contextCapability(target, complete?.(action, context.named) ?? action, action) : bound,
           undo: this.routes.undoPolicy(complete?.(action, context.named) ?? action) };
       }
       let capability = bound;
-      if (capability.available && (hit.kind === "point" || hit.kind === "tangent")) {
-        if (candidate.id === "point.softness" &&
-          this.makeupDocument.recipe.layers.find(layer => layer.id === hit.layerId)?.softness.mode !== "boundary")
-          capability = { available: false, code: "incompatible_mode",
-            reason: "Turn on Per-point edge softness before editing one point's edge." };
-      }
+      if (capability.available && candidate.capability) capability = candidate.capability;
       // The Undo policy of the variant the option edits, as dispatch records it (CORE-32).
       const variant = { kind: candidate.actionKind, command: { kind: candidate.variant } } as { kind: string };
-      return { ...candidate, capability, undo: undoPolicyOf(this.routes.descriptor(candidate.actionKind)!, variant) };
+      return { ...offered, requiresInput: true as const, actionKind: candidate.actionKind, variant: candidate.variant, capability, undo: undoPolicyOf(this.routes.descriptor(candidate.actionKind)!, variant) };
     });
   }
   contextQuery(hit: StudioContextHit, named: NamedTargets = {}, complete?: CompleteInput) {
@@ -570,7 +577,7 @@ export class StudioApplication {
       reason: "No standalone edit command applies off the makeup." };
     const variant = "command" in action && action.command && typeof action.command === "object" &&
       "kind" in action.command ? action.command.kind : undefined;
-    const candidate = contextCandidates(context.hit, this.makeupDocument.recipe, context.named.collection).find(item =>
+    const candidate = this.contextCandidates(context.hit, context.named.collection).find(item =>
       "action" in item ? item.action.kind === action.kind &&
         ("command" in item.action && item.action.command && typeof item.action.command === "object" &&
           "kind" in item.action.command ? item.action.command.kind : undefined) === variant :
@@ -664,6 +671,20 @@ export class StudioApplication {
    * "Earlier change"); with no scope (no editing context yet) or one that can't act now, nothing.
    */
   history(scope?: string): HistoryState { return this.historyScope(scope)?.state() ?? { depth: 0, redoDepth: 0 }; }
+  /** Capture the look owner and exact history position; focus changes cannot retarget a toast's Undo. */
+  captureUndo(): () => StudioDispatchResult {
+    if (this.disposed || this.services.signal?.aborted) return () => ({ ok: false, code: "missing_target", message: "This editing context was released." });
+    const document = this.lookDocument, scope = document.history, id = scope.id, version = document.version;
+    const timeline = JSON.stringify(scope.timeline());
+    return () => {
+      const denied = this.denied();
+      if (denied) return { ok: false, code: denied.code ?? "unavailable", message: denied.reason ?? "Action unavailable." };
+      if (this.services.history.scope(id) !== scope || document.scopeId !== id ||
+        document.version !== version || JSON.stringify(scope.timeline()) !== timeline)
+        return { ok: false, code: "missing_target", message: "That Undo no longer names the same change." };
+      return this.dispatch({ kind: "history.undo", scope: id });
+    };
+  }
   /** Read-only projection over the existing recent scopes; no History panel binding or second stack. */
   historyScopes() {
     return this.services.history.recentScopes(this.services.historyScopeDetails).map(row => ({ ...row,

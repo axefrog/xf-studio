@@ -14,7 +14,7 @@ import { ChoiceList, propertyList, setHelp } from "../../../studio-ui/components
 import { icon } from "../../../studio-ui/icons";
 import type { Frame } from "../../../studio-ui/runtime";
 import type { PanelController } from "../../../studio-ui/panels/collection";
-import { addLayer, addLayerCapability, catalogues, finenessState, finishOffered, type EyeMakeupViewContext } from "./actions";
+import { makeupFrame, addLayer, addLayerCapability, catalogues, finenessState, finishOffered, type EyeMakeupViewContext } from "./actions";
 import { EYE_MAKEUP_PANEL_META } from "./contribution";
 
 type RLayer = ReadonlyDeep<Layer>;
@@ -39,7 +39,7 @@ function layerStrip(ctx: EyeMakeupViewContext) {
   const swatch = h("span", { class: "swatch", "aria-hidden": "true" }), name = h("strong"), meta = h("span", { class: "muted small" });
   const element = h("div", { class: "layer-strip", role: "status", "aria-live": "off" }, swatch, h("div", {}, name, meta));
   return { element, update(frame: Frame) {
-    const layer = frame.layer, recipe = frame.recipe;
+    const layer = makeupFrame(frame, ctx).layer, recipe = makeupFrame(frame, ctx).recipe;
     element.hidden = !layer;
     if (!layer) return;
     swatch.style.setProperty("--swatch", layer.color); swatch.dataset.finish = catalogues(ctx).finishOf(layer.finish)?.id ?? layer.finish;
@@ -172,7 +172,7 @@ export function finishPanel(ctx: EyeMakeupViewContext): PanelController {
     spec: { id: "finish", ...EYE_MAKEUP_PANEL_META.finish, element },
     update(frame) {
       strip.update(frame);
-      const layer = frame.layer;
+      const layer = makeupFrame(frame, ctx).layer;
       empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
       color.update(layer.color); opacity.update(layer.opacity);
@@ -305,9 +305,9 @@ export function shapePanel(ctx: EyeMakeupViewContext): PanelController {
     spec: { id: "shape", ...EYE_MAKEUP_PANEL_META.shape, element },
     update(frame) {
       strip.update(frame);
-      const layer = frame.layer; empty.update(!!layer); body.hidden = !layer;
+      const layer = makeupFrame(frame, ctx).layer; empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
-      const index = frame.selected, point = layer.points[index];
+      const index = makeupFrame(frame, ctx).selected, point = layer.points[index];
       setText(pointLabel, `Point ${index + 1} of ${layer.points.length}`);
       const target = { kind: "point" as const, layerId: layer.id, index };
       applyCapability(remove, ctx.facade.contextCapability(target, { kind: "point.remove", layerId: layer.id, index }));
@@ -362,10 +362,10 @@ export function edgePanel(ctx: EyeMakeupViewContext): PanelController {
     spec: { id: "edge", ...EYE_MAKEUP_PANEL_META.edge, element },
     update(frame) {
       strip.update(frame);
-      const layer = frame.layer; empty.update(!!layer); body.hidden = !layer;
+      const layer = makeupFrame(frame, ctx).layer; empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
-      const point = layer.points[frame.selected];
-      setText(pointLabel, `Point ${frame.selected + 1} of ${layer.points.length}`);
+      const point = layer.points[makeupFrame(frame, ctx).selected];
+      setText(pointLabel, `Point ${makeupFrame(frame, ctx).selected + 1} of ${layer.points.length}`);
       weight.update(point?.weight);
       const smoothMode = layer.strength.mode === "smooth-boundary";
       smooth.update(smoothMode);
@@ -474,9 +474,9 @@ export function warpPanel(ctx: EyeMakeupViewContext): PanelController {
     spec: { id: "warp", ...EYE_MAKEUP_PANEL_META.warp, element },
     update(frame) {
       strip.update(frame);
-      const layer = frame.layer; empty.update(!!layer); body.hidden = !layer;
+      const layer = makeupFrame(frame, ctx).layer; empty.update(!!layer); body.hidden = !layer;
       if (!layer) return;
-      const field = frame.field;
+      const field = makeupFrame(frame, ctx).field;
       const key = JSON.stringify([layer.id, layer.fields.map(item => item.id)]);
       if (key !== signature) {
         signature = key;

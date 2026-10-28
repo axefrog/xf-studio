@@ -1,4 +1,5 @@
 /** Application adapters contributed on the existing feature registration, never in a second catalogue. */
+import type { FeatureContext } from "./studio-context-targets";
 import type { ActionHandler, FeatureModule } from "../platform/api";
 import type { Registry, AnyOwner } from "../platform/core/registry";
 import type { StudioApplication, StudioApplicationServices } from "./studio-application";
@@ -16,6 +17,7 @@ export type FeatureFacadeHost = {
   end(id: string): void;
 };
 export type FeatureApplication = {
+  context?(services: StudioApplicationServices): FeatureContext;
   bind?(services: () => StudioApplicationServices, registry: () => Registry<AnyOwner>, recorded: (action: { kind: string }) => boolean): ActionHandler<{ kind: string }>;
   facade?(base: FeatureFacade, host: FeatureFacadeHost): FeatureFacade & { view(): unknown };
 };

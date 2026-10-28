@@ -1,6 +1,6 @@
 import type { StudioAction, StudioTarget } from "./studio-application";
 import type { NamedTargets, Unnamed } from "./action-targets";
-import type { Recipe } from "../engines/layered-makeup/recipe";
+import type { StudioCapability } from "./studio-application";
 
 /**
  * A renderer/DOM adapter identifies the hit; this module never performs picking.
@@ -32,9 +32,9 @@ export type StudioBoundContext = Readonly<{
   geometryRevision: number;
 }>;
 
-export type ContextCandidate =
+export type ContextCandidate = ContextPresentation & (
   | { id: string; action: Unnamed<StudioAction> }
-  | { id: string; actionKind: StudioAction["kind"]; variant?: string; requiresInput: true };
+  | { id: string; actionKind: StudioAction["kind"]; variant?: string; requiresInput: true });
 
 export function contextScope(hit: StudioContextHit): StudioTarget | undefined {
   switch (hit.kind) {
@@ -54,7 +54,7 @@ export function geometryHit(hit: StudioContextHit) {
  * Only existing commands are offered. Input candidates need a value before dispatch. `collection`: the collection the menu's targets name,
  * whose preset a preset hit shows (`scene.setLook`).
  */
-export function contextCandidates(hit: StudioContextHit, recipe: Recipe, collection?: string): ContextCandidate[] {
+export function contextCandidates(hit: StudioContextHit, collection?: string): ContextCandidate[] {
   const ready = (id: string, action: Unnamed<StudioAction>): ContextCandidate => ({ id, action });
   const input = (id: string, actionKind: StudioAction["kind"], variant?: string): ContextCandidate =>
     ({ id, actionKind, variant, requiresInput: true });
@@ -69,41 +69,23 @@ export function contextCandidates(hit: StudioContextHit, recipe: Recipe, collect
     ready("preset.remove", { kind: "preset.edit", command: { kind: "remove", id: hit.id } }),
     input("preset.rename", "preset.edit", "rename"),
     input("preset.move", "preset.edit", "move")];
-  if (hit.kind === "layer") {
-    const layer = recipe.layers.find(item => item.id === hit.id);
-    return [
-      ready("layer.select", { kind: "layer.select", layerId: hit.id }),
-      ready("layer.duplicate", { kind: "layer.edit", command: { kind: "duplicate", id: hit.id } }),
-      ready("layer.remove", { kind: "layer.edit", command: { kind: "remove", id: hit.id } }),
-      ready("layer.toggle", { kind: "layer.setEnabled", id: hit.id, enabled: !layer?.enabled }),
-      input("layer.rename", "layer.edit", "rename"),
-      input("layer.move", "layer.edit", "move")];
-  }
-  if (hit.kind === "shape") return [
-    ready("shape.selectLayer", { kind: "layer.select", layerId: hit.layerId }),
-    ready("shape.addWarp", { kind: "field.add", layerId: hit.layerId }),
-    ...(recipe.layers.find(layer => layer.id === hit.layerId)?.pathMode === "bezier" ? [] : [
-      ready("shape.enableBezier", { kind: "path.edit", layerId: hit.layerId,
-        command: { kind: "enable-bezier" } })])];
-  if (hit.kind === "point" || hit.kind === "tangent") {
-    const options: ContextCandidate[] = [
-      ready("point.select", { kind: "point.select", layerId: hit.layerId, index: hit.index }),
-      ready("point.remove", { kind: "point.remove", layerId: hit.layerId, index: hit.index })];
-    if (recipe.layers.find(layer => layer.id === hit.layerId)?.pathMode === "bezier")
-      for (const mode of ["aligned", "symmetric", "corner"] as const)
-        options.push(ready(`point.mode.${mode}`, { kind: "path.edit", layerId: hit.layerId,
-          command: { kind: "point-mode", index: hit.index, mode } }));
-    options.push(input("point.strength", "pigment.edit", "point-strength"),
-      input("point.softness", "softness.edit", "point-softness"));
-    return options;
-  }
-  if (hit.kind === "field") return [
-    ready("field.select", { kind: "field.select", layerId: hit.layerId, fieldId: hit.id }),
-    ready("field.clear", { kind: "field.clear", layerId: hit.layerId, fieldId: hit.id }),
-    ready("field.remove", { kind: "field.remove", layerId: hit.layerId, fieldId: hit.id }),
-    input("field.reach", "field.setReach")];
-  // Pan, zoom and insertion need adapter coordinates; no current standalone action
-  // has those inputs. Do not suggest an edit at the wrong place on bare skin or empty
-  // canvas: those hits offer no target section, only the viewport's own view actions.
   return [];
 }
+
+/** Data the shell can render without interpreting a feature's part. */
+export type ContextInput = { kind: "range" | "text" | "integer"; label: string; value: string | number;
+  min?: number; max?: number; step?: number; maxLength?: number; field?: string; format?: "percent" | "scale"; title: string; apply: string };
+export type ContextPresentation = { label?: string; icon?: string; checked?: boolean;
+  capability?: StudioCapability; input?: ContextInput & { make(value: string | number): Unnamed<StudioAction> } };
+export type ContextSelection = { hit: StudioContextHit; label: string; detail?: string };
+export type EditorInputFacts = { hasTarget: boolean; enabled: boolean; locked: boolean };
+export type FeatureContext = {
+  handles(hit: StudioContextHit): boolean;
+  revision(): number;
+  target(target: StudioTarget): StudioCapability | undefined;
+  validate(hit: StudioContextHit): StudioCapability | undefined;
+  candidates(hit: StudioContextHit): ContextCandidate[];
+  detail(hit: StudioContextHit): string | undefined;
+  selected(): ContextSelection | undefined;
+  inputFacts(): EditorInputFacts;
+};

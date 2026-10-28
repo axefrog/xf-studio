@@ -25,16 +25,6 @@ export const CONTEXT_LABELS: Readonly<Record<string, [string, IconName?]>> = {
   "collection.undoOpen": ["Reopen previous collection", "undo"], "collection.rename": ["Rename collection…", "rename"],
   "preset.select": ["Edit this preset", "target"], "preset.copy": ["Duplicate preset", "duplicate"],
   "preset.remove": ["Remove preset", "trash"], "preset.rename": ["Rename…", "rename"], "preset.move": ["Move to position…", "arrowDown"],
-  "layer.select": ["Select layer", "target"], "layer.duplicate": ["Duplicate layer", "duplicate"],
-  "layer.remove": ["Remove layer", "trash"], "layer.toggle": ["Show or hide layer", "eye"], "layer.rename": ["Rename…", "rename"], "layer.move": ["Move to position…", "arrowDown"],
-  "shape.selectLayer": ["Select this layer", "target"], "shape.addWarp": ["Add warp", "warp"],
-  "shape.enableBezier": ["Enable Bézier handles", "shape"],
-  "point.select": ["Select point", "target"], "point.remove": ["Remove point", "trash"],
-  "point.mode.aligned": ["Smooth handles", "shape"], "point.mode.symmetric": ["Symmetric handles", "shape"],
-  "point.mode.corner": ["Corner handles", "shape"], "point.strength": ["Set point pigment…", "edge"],
-  "point.softness": ["Set point edge softness…", "edge"],
-  "field.select": ["Select warp", "target"], "field.clear": ["Reset warp pull", "reset"],
-  "field.remove": ["Remove warp", "trash"], "field.reach": ["Set warp reach…", "warp"],
 };
 const labels = CONTEXT_LABELS;
 /** Recovery wording for destructive menu entries, from the action's Undo policy: verb first either way (C-8). */
@@ -45,20 +35,16 @@ const reorderKey = (index: 0 | 1) => chordLabel(keyBindingById("rows.reorder").c
 
 /** Menu items for an application-bound context. Every dispatch rechecks the binding. */
 export function contextItems(rt: StudioRuntime, query: Query, anchor: MenuAnchor): MenuItem[] {
-  const port = rt.port, recipe = rt.editor.recipe(), hit = query.context.hit;
   // A stale or missing target needs no heading of its own: each entry is disabled with that reason.
   const items: MenuItem[] = [];
   for (const option of query.options) {
-    const [label, iconName] = labels[option.id] ?? [option.id];
+    const [label, iconName] = option.label ? [option.label, option.icon && isIconName(option.icon) ? option.icon : undefined] : labels[option.id] ?? [option.id];
     if (!option.requiresInput) {
       const action = option.action;
-      let text = label;
-      if (option.id === "layer.toggle" && action.kind === "layer.setEnabled") text = action.enabled ? "Show layer" : "Hide layer";
-      const checked = option.id.startsWith("point.mode.") && (hit.kind === "point" || hit.kind === "tangent")
-        ? recipe.layers.find(layer => layer.id === hit.layerId)?.points[hit.index]?.handles?.mode === option.id.slice(11) : undefined;
-      items.push({ kind: "action", label: text, icon: option.id === "layer.toggle" ? (text === "Show layer" ? "eye" : "eyeOff") : iconName,
+      items.push({ kind: "action", label, icon: iconName,
+        capability: option.capability, checked: option.checked,
         // Danger only where Undo or recovery can't bring it back ([c-buttons], release-readiness-audit.md C-22).
-        capability: option.capability, checked, danger: option.id.endsWith(".remove") && option.undo === "none", hint: undoHint(option.undo, option.id),
+        danger: option.id.endsWith(".remove") && option.undo === "none", hint: undoHint(option.undo, option.id),
         run: () => dispatchBound(rt, query.context, action) });
       continue;
     }
@@ -79,36 +65,18 @@ function openInput(origin: StudioRuntime, inputContext: StudioBoundContext, opti
   if (!allowed?.available) { origin.feedback.toast("warning", "Context menu", allowed?.reason ?? "That menu is no longer available."); return; }
   const held = captureRuntime(origin), rt = held.runtime;
   const valuePopover: typeof openValuePopover = (field, anchor, options) => openValuePopover(field, anchor, { ...options, signal: held.signal, onClose: () => { options.onClose?.(); held.release(); } });
-  const port = rt.port, context = port.authoring.contextFor(inputContext.hit), hit = context.hit, recipe = rt.editor.recipe();
+  const port = rt.port, context = port.authoring.contextFor(inputContext.hit), hit = context.hit;
   const bound = (action: PresentationAction) => port.authoring.boundActionCapability(context, action);
   const commit = (action: PresentationAction) => dispatchBound(rt, context, action);
   const percent = (value: number) => `${Math.round(value * 100)}%`;
-  if (option.id === "point.strength" && (hit.kind === "point" || hit.kind === "tangent")) {
-    const layer = recipe.layers.find(item => item.id === hit.layerId), range = rt.range("pigment.edit", "value", "point-strength");
-    const make = (value: number): PresentationAction => ({ kind: "pigment.edit", layerId: hit.layerId, command: { kind: "point-strength", index: hit.index, value } });
-    valuePopover({ kind: "range", label: "Pigment strength", value: layer?.points[hit.index]?.weight ?? 1, ...range, step: .01, format: percent },
-      anchor, { title: `Point ${hit.index + 1} pigment`, apply: "Apply", validate: value => bound(make(Number(value))), commit: value => commit(make(Number(value))) });
-  } else if (option.id === "point.softness" && (hit.kind === "point" || hit.kind === "tangent")) {
-    const layer = recipe.layers.find(item => item.id === hit.layerId), range = rt.range("softness.edit", "value", "point-softness");
-    const make = (value: number): PresentationAction => ({ kind: "softness.edit", layerId: hit.layerId, command: { kind: "point-softness", index: hit.index, value } });
-    valuePopover({ kind: "range", label: "Edge softness", value: layer?.points[hit.index]?.feather ?? layer?.feather ?? .012, ...range, step: .0005, format: scaleText(range.min, range.max) },
-      anchor, { title: `Point ${hit.index + 1} edge softness`, apply: "Apply", validate: value => bound(make(Number(value))), commit: value => commit(make(Number(value))) });
-  } else if (option.id === "field.reach" && hit.kind === "field") {
-    const field = recipe.layers.find(item => item.id === hit.layerId)?.fields.find(item => item.id === hit.id);
-    const range = rt.range("field.setReach", "radius");
-    const make = (radius: number): PresentationAction => ({ kind: "field.setReach", layerId: hit.layerId, fieldId: hit.id, radius });
-    valuePopover({ kind: "range", label: "Reach", value: field?.radius ?? .03, ...range, step: .001, format: scaleText(range.min, range.max) },
-      anchor, { title: "Warp reach", apply: "Apply", validate: value => bound(make(Number(value))), commit: value => commit(make(Number(value))) });
-  } else if (option.id === "layer.rename" && hit.kind === "layer") {
-    const layer = recipe.layers.find(item => item.id === hit.id);
-    const make = (name: string): PresentationAction => ({ kind: "layer.edit", command: { kind: "rename", id: hit.id, name } });
-    valuePopover({ kind: "text", label: "Layer name", value: layer?.name ?? "", maxLength: 80 }, anchor,
-      { title: "Rename layer", apply: "Rename", validate: value => bound(make(String(value))), commit: value => commit(make(String(value))) });
-  } else if (option.id === "layer.move" && hit.kind === "layer") {
-    const count = recipe.layers.length, index = recipe.layers.findIndex(item => item.id === hit.id);
-    const make = (position: number): PresentationAction => ({ kind: "layer.edit", command: { kind: "move", id: hit.id, to: count - position } });
-    valuePopover({ kind: "integer", label: `Position from front (1–${count})`, value: count - index, min: 1, max: count }, anchor,
-      { title: "Move layer", apply: "Move", validate: value => bound(make(Number(value))), commit: value => commit(make(Number(value))) });
+  if (option.input) {
+    const { title, apply, format, field: inputField, ...field } = option.input;
+    const range = rt.range(option.actionKind, inputField ?? "value", option.variant);
+    const make = (value: string | number) => port.authoring.contextInputAction(context, option.id, value);
+    valuePopover({ ...field, ...(field.kind === "range" ? range : {}),
+      ...(format ? { format: format === "percent" ? percent : scaleText(range.min, range.max) } : {}) } as Parameters<typeof openValuePopover>[0], anchor,
+      { title, apply, validate: value => { const action = make(value); return action ? bound(action) : { available: false, reason: "That menu is no longer available." }; },
+        commit: value => { const action = make(value); if (action) commit(action); } });
   } else if (option.id === "preset.rename" && hit.kind === "preset") {
     const preset = port.library.summary().draft?.presets.find(item => item.id === hit.id);
     const make = (name: string): PresentationAction => ({ kind: "preset.edit", command: { kind: "rename", id: hit.id, name } });
@@ -197,14 +165,12 @@ export function viewportSections(rt: StudioRuntime, kind: ViewportHostKind, anch
   const port = rt.port, sections: MenuSection[] = [];
   const query = at ? port.viewport.contextAt(kind, at.x, at.y) : undefined;
   if (query) {
-    const hit = query.context.hit, layerId = "layerId" in hit ? hit.layerId : undefined;
-    const layer = layerId ? rt.editor.recipe().layers.find(item => item.id === layerId) : undefined;
-    const detail = [layer?.name, query.mirror ? "mirrored copy" : undefined].filter(Boolean).join(" · ") || undefined;
+    const detail = [port.authoring.contextDetail(query.context.hit), query.mirror ? "mirrored copy" : undefined].filter(Boolean).join(" · ") || undefined;
     sections.push({ label: TARGET_LABELS[kind][query.affordance], detail, items: contextItems(rt, query, anchor) });
   } else if (!at) {
-    const layer = rt.editor.layer();
-    if (layer) sections.push({ label: `Selected point ${rt.editor.selected() + 1}`, detail: layer.name,
-      items: contextItems(rt, port.authoring.contextQuery({ kind: "point", layerId: layer.id, index: rt.editor.selected() }), anchor) });
+    const selected = port.authoring.contextSelected();
+    if (selected) sections.push({ label: selected.label, detail: selected.detail,
+      items: contextItems(rt, port.authoring.contextQuery(selected.hit), anchor) });
   }
   sections.push(viewSection(rt, kind));
   return sections;

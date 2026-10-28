@@ -2,7 +2,7 @@ import { expect, setDefaultTimeout, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { sourceText } from "./fixtures/source-files";
 import { COMPUTED, imports, importUses, resolveFrom } from "./fixtures/import-scan";
-import { codeOnly, pageGlobals, PAGE_GLOBALS } from "./fixtures/code-scan";
+import { codeOnly, withoutComments, pageGlobals, PAGE_GLOBALS } from "./fixtures/code-scan";
 
 // Whole-tree scans: the first test to read every module can pass 20 s while other suites load the machine.
 setDefaultTimeout(60_000);
@@ -38,6 +38,27 @@ const probed = (probes: Readonly<Record<string, string>>): Tree =>
 /** A module's imports as src-relative module names (`platform/api`, `app/studio-application`), or bare package names. */
 const resolvedIn = (tree: Tree, name: string) => imports(tree.text(name)).map(path => resolveFrom(name, path));
 const resolved = (name: string) => resolvedIn(DISK, name);
+test("slice 7 confines deprecated runtime projections to their current guidance callers", () => {
+  const reads = (text: string, member: string) => {
+    const code = codeOnly(text);
+    return new RegExp(`\\.\\s*${member}\\b`).test(code) ||
+      new RegExp(`\\[\\s*(["'])${member}\\1\\s*\\]`).test(withoutComments(text)) ||
+      new RegExp(`\\{[^{}]*\\b${member}\\b[^{}]*\\}\\s*(?:=|:)`).test(code);
+  };
+  const callers = (tree: Tree, member: string) => tree.names.filter(name => name.startsWith("studio-ui/") && name !== "studio-ui/runtime" &&
+    reads(tree.text(name), member)).sort();
+  expect(callers(DISK, "editor")).toEqual(["studio-ui/guidance/command-run", "studio-ui/guidance/controller"]);
+  expect(callers(DISK, "finishes")).toEqual(["studio-ui/guidance/controller", "studio-ui/guidance/help-panel"]);
+  expect(callers(probed({ "studio-ui/target-menus": "const alias = rt; alias.editor.recipe();" }), "editor"))
+    .toContain("studio-ui/target-menus");
+  for (const code of ['const { editor: alias } = rt;', 'const alias = rt["finishes"];'])
+    expect(callers(probed({ "studio-ui/target-menus": code }), code.includes("finishes") ? "finishes" : "editor"))
+      .toContain("studio-ui/target-menus");
+  for (const name of ["studio-ui/runtime", "studio-ui/target-menus", "studio-ui/input-hints"])
+    expect(codeOnly(DISK.text(name))).not.toMatch(/\.\s*(?:recipe|layer|selectedField|revision)\s*\(/);
+  expect(resolved("app/studio-context-targets").some(path => path.startsWith("engines/"))).toBe(false);
+});
+
 test("the makeup construction bundle is removed (CORE-03 slice 6)", () => {
   expect(DISK.names).not.toContain("app/authoring/makeup-editing");
   expect(DISK.names.filter(name => resolved(name).includes("app/authoring/makeup-editing"))).toEqual([]);

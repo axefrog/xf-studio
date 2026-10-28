@@ -61,3 +61,14 @@ export function catalogues(ctx: EyeMakeupViewContext): Catalogues {
   }
   return entry;
 }
+
+/** Eye makeup owns its paint projection; the shell frame only memoizes opaque reads. */
+export function makeupFrame(frame: import("../../../studio-ui/runtime").Frame, ctx: EyeMakeupViewContext) {
+  return frame.read("eye-makeup/frame", () => ({
+    get recipe() { return frame.read("eye-makeup/recipe", () => ctx.facade.view().recipe()); },
+    get layer() { return frame.read("eye-makeup/layer", () => ctx.facade.view().layer()); },
+    get selected() { return frame.read("eye-makeup/selected", () => ctx.facade.view().selected()); },
+    get field() { return frame.read("eye-makeup/field", () => ctx.facade.view().selectedField()); },
+    get locked() { return frame.read("eye-makeup/locked", () => ctx.facade.locked()); },
+  }));
+}

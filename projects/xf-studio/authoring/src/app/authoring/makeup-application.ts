@@ -1,3 +1,4 @@
+import { makeupContext } from "./makeup-context";
 /** Registered application/facade contribution. Mutation and publication belong to the registered editor. */
 import type { FeatureApplication } from "../feature-application";
 import type { EyeMakeupAction } from "../../legacy/eye-makeup/eye-makeup-model";
@@ -7,6 +8,7 @@ import type { StudioApplication } from "../studio-application";
 import type { RecipeAction } from "../../engines/layered-makeup/recipe-actions";
 
 export const MAKEUP_APPLICATION: FeatureApplication = {
+  context: makeupContext,
   bind(read, registry, recorded) {
     if (!read().eyeMakeup)
       throw Error("The makeup application needs its registered editor projection.");

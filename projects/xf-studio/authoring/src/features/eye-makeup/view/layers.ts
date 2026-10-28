@@ -6,7 +6,7 @@ import { icon } from "../../../studio-ui/icons";
 import { EmptyState, helpTip, iconButton } from "../../../studio-ui/components";
 import { ItemList } from "../../../studio-ui/item-list";
 import type { PanelController } from "../../../studio-ui/panels/collection";
-import { addLayer, addLayerCapability, catalogues, type EyeMakeupViewContext } from "./actions";
+import { makeupFrame, addLayer, addLayerCapability, catalogues, type EyeMakeupViewContext } from "./actions";
 import { EYE_MAKEUP_PANEL_META } from "./contribution";
 import { openLayerMenu } from "./layer-menu";
 import { starterItems } from "./starter-menu";
@@ -111,10 +111,10 @@ export function layersPanel(ctx: EyeMakeupViewContext): PanelController {
     dispose() {},
     spec: { id: "layers", ...EYE_MAKEUP_PANEL_META.layers, element },
     update(frame) {
-      const recipe = frame.recipe, layers = recipe.layers, active = frame.layer;
+      const recipe = makeupFrame(frame, ctx).recipe, layers = recipe.layers, active = makeupFrame(frame, ctx).layer;
       // Without a loaded library the document's layers remain editable; only a loaded, empty collection has no preset.
       const draft = frame.library.draft, hasPreset = !draft || !!draft.selected;
-      const reason = hasPreset ? frame.locked : undefined, locked = reason !== undefined;
+      const reason = hasPreset ? makeupFrame(frame, ctx).locked : undefined, locked = reason !== undefined;
       noPreset.hidden = hasPreset;
       newer.element.hidden = !locked;
       if (locked) newer.update("This look needs a newer XF Studio", reason);
