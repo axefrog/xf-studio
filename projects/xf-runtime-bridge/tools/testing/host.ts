@@ -109,6 +109,11 @@ export function parseCetBindings(text: string): Record<string, Record<string, bi
 export function cetWindowRect(width: number, height: number) {
   return { x: 0, y: 0, width: Math.min(width, Math.round(height * (820 / 1600))), height };
 }
+/** The CET window's review crop: wider than the presence checks' area so its right edge and scrollbar are always in it (the
+ *  0.8.23 UI review's evidence note); the checks keep cetWindowRect, which their plate thresholds were set against. */
+export function cetWindowCropRect(width: number, height: number) {
+  return { x: 0, y: 0, width: Math.min(width, Math.round(height * (960 / 1600))), height };
+}
 
 /** The native Diagnostics card opened beside CET: Overlay.cpp places it 16px from the top-right. */
 export function cetDiagnosticsRect(width: number, height: number) {

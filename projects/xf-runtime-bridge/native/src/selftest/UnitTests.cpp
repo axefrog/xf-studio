@@ -3806,6 +3806,27 @@ void Bridge080Tests()
                                                                    board.StateOf(id, t0).state == "answered");
     }
 
+    // 0.8.23 (the UI review's fix 3): the frame carries the board's step-ending clear count; a capture's clear keeps it.
+    {
+        xfb::MessageBoard board;
+        k::HudSettings settings;
+        k::BridgeView view;
+        view.pluginEnabled = view.listening = view.allowWrites = view.hasClient = view.scriptReady = true;
+        const auto id = board.Post({"Which?", 60, "ask", false, {"First", "Second"}}, t0)["id"].get<uint64_t>();
+        board.Answer(id, 0, t0);
+        const auto start = k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6"}, 0)).value("clears", 99ull);
+        xfb::MessageRequest capture{"", 8, "info", true};
+        capture.keepAsks = true;
+        board.Post(capture, t0);
+        const auto afterCapture = k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6"}, 0)).value("clears", 99ull);
+        board.Post({"", 8, "info", true}, t0);
+        const auto afterStep = k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6"}, 0)).value("clears", 99ull);
+        board.Clear();
+        const auto afterClear = k::ParseFrame(k::BuildFrame(settings, view, board, {"IK_F6"}, 0)).value("clears", 99ull);
+        Check("0.8.23 clears: a capture's clear keeps the count, a step's clear and Clear() raise it",
+              start == 0 && afterCapture == 0 && afterStep == 1 && afterClear == 2);
+    }
+
     // The UI review's 3, 4 and 14: one wording, plain words, the colour meaning.
     {
         k::BridgeView view;

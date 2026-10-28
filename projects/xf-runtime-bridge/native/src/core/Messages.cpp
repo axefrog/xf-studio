@@ -176,6 +176,11 @@ json MessageBoard::Post(const MessageRequest& aRequest, Clock::time_point aNow)
     }
     if (aRequest.clear)
     {
+        // A step's clear withdraws questions too; a capture's keeps them (keepAsks) and is part of the step, not its end.
+        if (!aRequest.keepAsks)
+        {
+            ++m_clears;
+        }
         // RB-103: a clear (a capture's, a session step's) takes the lines down but leaves a question that is still waiting
         // for the player's answer, unless the caller withdraws questions too.
         const auto before = m_messages.size();
@@ -474,7 +479,14 @@ size_t MessageBoard::Clear()
     std::scoped_lock _(m_mutex);
     const auto count = m_messages.size();
     m_messages.clear();
+    ++m_clears;
     return count;
+}
+
+uint64_t MessageBoard::Clears()
+{
+    std::scoped_lock _(m_mutex);
+    return m_clears;
 }
 
 size_t MessageBoard::Active(Clock::time_point aNow)

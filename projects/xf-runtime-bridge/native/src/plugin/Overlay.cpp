@@ -940,7 +940,8 @@ void StatusDot(const ImVec2& aCentre, const std::string& aTone, float aAlpha)
         list->AddCircle(aCentre, radius - 0.75f * gR.scale, Col(c.warning), 20, 1.5f * gR.scale);
         return;
     }
-    const ImVec4& colour = aTone == "ok" ? c.success : aTone == "write" ? c.warning : aTone == "killed" ? c.danger : c.textDisabled;
+    // 0.8.23 (the UI review's fix 4): the dot is the connection; changes allowed (write) has its own amber chip.
+    const ImVec4& colour = aTone == "ok" || aTone == "write" ? c.success : aTone == "killed" ? c.danger : c.textDisabled;
     list->AddCircleFilled(aCentre, radius, Col(colour, aAlpha), 20);
 }
 
@@ -1192,7 +1193,7 @@ void DrawPanel(double aSeconds)
         char label[48];
         std::snprintf(label, sizeof(label), "%.2f ms of 1 ms", cpu);
         Bar(static_cast<float>(cpu), true, label, cpu > 0.9 ? Tone::Danger : cpu > 0.75 ? Tone::Warning : Tone::Neutral, motion.reduced, aSeconds);
-        Bar(static_cast<float>(std::fmod(aSeconds, 1.0)), false, nullptr, Tone::Neutral, motion.reduced, aSeconds);
+        // 0.8.23 (the UI review's fix 5): the unlabelled one-second sweep under the CPU bar is gone; Frames shows the overlay is live.
         EndCard();
     }
     ImGui::End();

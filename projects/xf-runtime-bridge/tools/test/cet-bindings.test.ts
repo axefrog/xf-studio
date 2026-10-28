@@ -206,6 +206,7 @@ const IMPL = `
     SetNextWindowPos = function(x,y) rec("pos:" .. x .. "," .. y) end,
     SameLine = function(x,gap) rec("same:" .. tostring(x) .. "," .. tostring(gap)) end,
     CollapsingHeader = function(label) rec("header:" .. label); return true end,
+    TreeNodeEx = function(label) rec("header:" .. label); return true end,
     SetNextItemOpen = function(open) rec("setnextopen:" .. tostring(open)) end,
     PushStyleColor = function() pc = pc + 1 end,
     PopStyleColor = function(n) pc = pc - (n or 1) end,
@@ -448,14 +449,14 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
         calls, curY = {}, 0
         panel.draw(s, function(name) queued[#queued + 1] = name end, THEME)
       end
-      IMPL.CollapsingHeader = function() return false end
+      IMPL.TreeNodeEx = function() return false end
       frame(); queued = {}
       IMPL.Button = function(label) curY = curY + 22; return label == "Mark this moment" or label == "Stop the bridge" end
       s.info.bridge.writes_paused = true
       T = T + 0.1; frame(); local guarded = #queued
       T = T + 0.5; frame(); local settled = #queued
       queued = {}; IMPL.Button = function(label) curY = curY + 22; return label == "Stop the bridge" end
-      IMPL.CollapsingHeader = function() return true end
+      IMPL.TreeNodeEx = function() return true end
       T = T + 0.1; frame()
       local killed = false; for _, name in ipairs(queued) do if name == "kill" then killed = true end end
       return guarded .. "," .. settled .. "," .. tostring(killed)`);
@@ -549,7 +550,7 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
       handlers.onUpdate(0.3); handlers.onDraw()
       local before = #diagnostics
       handlers.onUpdate(0.3); handlers.onDraw(); handlers.onUpdate(0.3)
-      IMPL.CollapsingHeader = function() return false end
+      IMPL.TreeNodeEx = function() return false end
       handlers.onDraw(); handlers.onUpdate(0.3)
       return before .. "|" .. table.concat(diagnostics, ",")`);
     expect(out).toBe("0|DIAG_ON,DIAG_OFF");
@@ -559,7 +560,7 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
     const out = runCet(`${panelRig({ requests: `{ { id = 1, diagnostics_open = true } }`, info: INFO(), open: true })}
       local headerOpen, nextOpen = false, nil
       IMPL.SetNextItemOpen = function(value) nextOpen = value end
-      IMPL.CollapsingHeader = function()
+      IMPL.TreeNodeEx = function()
         if nextOpen ~= nil then headerOpen, nextOpen = nextOpen, nil end
         return headerOpen
       end
@@ -580,7 +581,7 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
   test("review Medium: reopening re-notifies an open native card once, and leaves an unchanged closed card alone", () => {
     for (const open of [true, false]) {
       const out = runCet(`${panelRig({ requests: `{}`, info: INFO(), open: true })}
-        IMPL.CollapsingHeader = function() return ${open} end
+        IMPL.TreeNodeEx = function() return ${open} end
         handlers.onUpdate(0.3); handlers.onDraw(); handlers.onUpdate(0.3)
         handlers.onOverlayClose(); handlers.onOverlayOpen()
         handlers.onDraw(); handlers.onUpdate(0.3); handlers.onDraw(); handlers.onUpdate(0.3)
@@ -614,7 +615,7 @@ describe.skipIf(skip)("0.8.22 the CET layer against CET 1.37.1's bindings under 
     expect(out).toBe("true,5");
     // A header over a window that drew it closed: the state before is captured as false.
     const known = runCet(`${panelRig({ requests: `{}`, info: INFO(), open: true })}
-      IMPL.CollapsingHeader = function(label) calls[#calls + 1] = "header:" .. label; return false end
+      IMPL.TreeNodeEx = function(label) calls[#calls + 1] = "header:" .. label; return false end
       handlers.onUpdate(0.3); calls = {}; handlers.onDraw() -- drawn closed
       DECODE.ALL = { { id = 6, diagnostics_open = true } }
       handlers.onUpdate(0.3); calls = {}; handlers.onDraw(); handlers.onUpdate(0.3)

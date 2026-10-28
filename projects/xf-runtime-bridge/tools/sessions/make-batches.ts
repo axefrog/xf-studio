@@ -196,7 +196,7 @@ const cetShot = (row: string, name: string, bind: string, theme: Theme): Json[] 
   ...cetCrop(row, name, bind, theme),
 ];
 const cetCrop = (row: string, name: string, bind: string, theme: Theme): Json[] => [
-  { label: `${row}-${name}-crop`, do: "run", command: "capture.recrop", input: { path: ref(row, bind, "full.path"), rect: "$win.regions.cet_window", name: `${name}-crop` }, on_fail: "continue" },
+  { label: `${row}-${name}-crop`, do: "run", command: "capture.recrop", input: { path: ref(row, bind, "full.path"), rect: "$win.regions.cet_window_crop", name: `${name}-crop` }, on_fail: "continue" },
   inFrame(row, bind, "cet_window", theme),
 ];
 /** The XF box as the status surface: ink panel off, CET line off (CET closed). */

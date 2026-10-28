@@ -186,6 +186,9 @@ struct AskView
     std::string answeredLabel;
     uint64_t inkShown = 0;
     bool keysArmed = false; // 0.8.2 (the review): the answer keys answer this question now (the "keys" record)
+    // 0.8.23 (the UI review): the board's clear count ("clears" record). A clear ends the step that asked, so the CET window
+    // drops the "Sent: ..." card it keeps after the answer line itself has gone.
+    uint64_t clears = 0;
 };
 
 // 0.8.2 (the review: the XF box showed "F6 Done" while no key could answer): the line under a question on the overlay

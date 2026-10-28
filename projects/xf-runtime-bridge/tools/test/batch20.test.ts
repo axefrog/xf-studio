@@ -176,7 +176,12 @@ describe.skipIf(!existsSync(FENGARI))("0.8.6 init.lua: the CET line and Reconnec
       handlers.onUpdate(3)
       handlers.onOverlayOpen()
       local results = {}
+      -- 0.8.23: the refusal's line appears under Reconnect, so the click-settle guard holds clicks for 0.4 s; a person clicks
+      -- again later than that, so the clock moves on between attempts.
+      local clock = 100
+      ImGui.GetTime = function() return clock end
       for _, code in ipairs({ "still_closing", "restore_pending", "already_running", "failed", "anything_new" }) do
+        clock = clock + 1
         DECODE.REARM = { requested = false, code = code, reason = "the kill switch's restore hasn't finished; try again in a moment" }
         clicks["Reconnect"] = true
         draw()

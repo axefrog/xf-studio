@@ -132,6 +132,9 @@ public:
     std::vector<std::pair<std::string, std::string>> Lines(Clock::time_point aNow = Clock::now());
     // Removes every message; returns how many were showing.
     size_t Clear();
+    // Clears that end a step so far (a ui.message clear without keepAsks, Clear()), whether or not they removed a line: the CET
+    // window drops the answered question it keeps showing when this changes. A capture's clear (keepAsks) doesn't count.
+    uint64_t Clears();
     size_t Active(Clock::time_point aNow = Clock::now());
 
     // 0.7: the ask the player can answer now, if any.
@@ -174,6 +177,7 @@ private:
     std::mutex m_mutex;
     std::deque<Message> m_messages;
     uint64_t m_next = 1;
+    uint64_t m_clears = 0;
     // The last kAnsweredKept answers by ask id (the "Answered: ..." line fades after kAnsweredSeconds).
     std::deque<std::pair<uint64_t, AskState>> m_answered;
 };

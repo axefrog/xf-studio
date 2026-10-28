@@ -261,6 +261,7 @@ const IMGUI = (flags: { child?: boolean; fontScale?: boolean; childMode?: "throw
     IsKeyDown = function() return false end,
     InputTextMultiline = function(label, text) return text, false end,
     CollapsingHeader = function(label) rec("header:" .. label); return false end,
+    TreeNodeEx = function(label) rec("header:" .. label); return false end,
     BeginDisabled = function() end,
     EndDisabled = function() end,
     PushStyleColor = function() pc = pc + 1 end,

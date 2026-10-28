@@ -461,8 +461,10 @@ end
 -- list at (x, y) in screen pixels; paused is a ring. alpha is the pulse. Answers whether it was drawn.
 function panel.dot(state, theme, which, tone, x, y, alpha)
   local radius = 4 * (panel.k or 1)
-  local colour = tone == "ok" and panel.colour(theme, which, "XfSuccess", GREEN)
-    or (tone == "write" or tone == "paused") and panel.colour(theme, which, "XfWarning", AMBER)
+  -- 0.8.23 (the UI review's fix 4): one signal per meaning: the dot is the connection (green connected, amber paused, red
+  -- stopped); changes allowed has its own amber chip.
+  local colour = (tone == "ok" or tone == "write") and panel.colour(theme, which, "XfSuccess", GREEN)
+    or tone == "paused" and panel.colour(theme, which, "XfWarning", AMBER)
     or tone == "killed" and panel.colour(theme, which, "XfDanger", RED)
     or panel.colour(theme, which, "TextDisabled", GREY)
   return (try(state, "dot", function()
@@ -763,6 +765,7 @@ function panel.keySlot(state)
   return nil, nil
 end
 
+local TRANSIENT_SECONDS = 4
 local function mutedWrapped(theme, which, text)
   local muted = panel.colour(theme, which, "XfTextMuted", GREY)
   ImGui.PushTextWrapPos(wrapPos())
@@ -1115,13 +1118,29 @@ function panel.statusBlock(state, theme, which, info, bridge)
   if dotDrawn then
     ImGui.Indent(hang)
   else
-    local c = panel.colour(theme, which, tone == "ok" and "XfSuccess" or (tone == "write" or tone == "paused") and "XfWarning" or tone == "killed" and "XfDanger" or "TextDisabled", GREY)
+    local c = panel.colour(theme, which, (tone == "ok" or tone == "write") and "XfSuccess" or tone == "paused" and "XfWarning" or tone == "killed" and "XfDanger" or "TextDisabled", GREY)
     ImGui.PushStyleColor(ImGuiCol.Text, c[1], c[2], c[3], c[4])
     ImGui.Bullet()
     ImGui.PopStyleColor(1)
     ImGui.SameLine()
   end
   local text = tone == "killed" and panel.colour(theme, which, "XfDanger", RED) or panel.colour(theme, which, "XfTextMuted", GREY)
+  -- 0.8.23 (the UI review's fix 1): the window's own feedback lives in the Status section, never outside a section, and never
+  -- moves a control (transient UI doesn't shift layout). A confirmation or a progress line (messageOk) takes the connection
+  -- sentence's place, a confirmation for TRANSIENT_SECONDS (the dot and chip still show the state); a failure or guidance is
+  -- drawn under the section's primary action (panel.feedbackBelow) and stays until the next message replaces it.
+  state.feedbackBelow = nil
+  if state.message then
+    if state.messageShown ~= state.message then state.messageShown, state.messageAt = state.message, now end
+    local transient = state.messageOk == true and state.messageProgress ~= state.message
+    if transient and now - (state.messageAt or now) > TRANSIENT_SECONDS then
+      state.message, state.messageShown = nil, nil
+    elseif state.messageOk == true then
+      sentence = tostring(state.message)
+    else
+      state.feedbackBelow = tostring(state.message)
+    end
+  end
   local top = curY()
   ImGui.PushTextWrapPos(wrapPos())
   coloured(text, sentence)
@@ -1177,16 +1196,37 @@ function panel.bar(state, theme, which, fraction, label, tone)
 end
 
 -- Diagnostics keeps the request/undo disclosure, but opens the native card instead of duplicating its contents here.
+-- 0.8.23 (the UI review's fix 2): its header reads like the other sections' eyebrows (square marker, caps label in the eyebrow
+-- role, muted) at the content margin, with ImGui's own disclosure arrow from an unframed tree node instead of the tinted
+-- full-width CollapsingHeader bar; the open state, SetNextItemOpen requests and undo work as before. Opened by a request
+-- (cet.panel), the window scrolls so the open section shows (fix 6).
+local TREE_NO_PUSH = (ImGuiTreeNodeFlags and ImGuiTreeNodeFlags.NoTreePushOnOpen) or 8
 local function drawDiagnostics(state, queue, theme, which, info)
   if not info then return end
   local wanted = state.diagnosticsWanted
-  if wanted ~= nil then
-    state.diagnosticsWanted = nil
-    if ImGui.SetNextItemOpen ~= nil then try(state, "SetNextItemOpen", function() ImGui.SetNextItemOpen(wanted.value == true) end) end
-  end
+  state.diagnosticsWanted = nil
   local before = state.diagnosticsOpen
   local open = false
-  panel.inRole(theme, "eyebrow", function() open = ImGui.CollapsingHeader("DIAGNOSTICS##xf_diagnostics") end)
+  local square = 6 * (panel.k or 1)
+  local cx = curX()
+  panel.inRole(theme, "eyebrow", function()
+    local _, th = textSize("X")
+    try(state, "eyebrow_square", function()
+      local sx, sy = xyOf(ImGui.GetCursorScreenPos())
+      rectFilled(drawList(), sx, sy + (th - square) / 2, sx + square, sy + (th + square) / 2, panel.colour(theme, which, "XfAccentEdge", AMBER))
+    end)
+    ImGui.SetCursorPosX(cx + square * 2)
+    local c = panel.colour(theme, which, "XfTextMuted", GREY)
+    ImGui.PushStyleColor(ImGuiCol.Text, c[1], c[2], c[3], c[4])
+    if wanted ~= nil and ImGui.SetNextItemOpen ~= nil then try(state, "SetNextItemOpen", function() ImGui.SetNextItemOpen(wanted.value == true) end) end
+    if type(ImGui.TreeNodeEx) == "function" then
+      open = ImGui.TreeNodeEx("DIAGNOSTICS##xf_diagnostics", TREE_NO_PUSH)
+    else
+      open = ImGui.CollapsingHeader("DIAGNOSTICS##xf_diagnostics")
+    end
+    ImGui.PopStyleColor(1)
+    ImGui.SetCursorPosX(cx)
+  end)
   state.diagnosticsOpen = open == true
   if state.diagnosticsNeedsNotify or wanted ~= nil or (before ~= nil and before ~= state.diagnosticsOpen) or (before == nil and open) then
     queue("diagnostics", state.diagnosticsOpen)
@@ -1194,6 +1234,7 @@ local function drawDiagnostics(state, queue, theme, which, info)
   state.diagnosticsNeedsNotify = false
   if wanted ~= nil and state.headerDoneFor then state.headerDoneFor({ id = wanted.id, previous = before }) end
   if open then mutedWrapped(theme, which, "Diagnostics is shown in the XF box.") end
+  if wanted ~= nil and open and type(ImGui.SetScrollHereY) == "function" then try(state, "diagnostics_scroll", function() ImGui.SetScrollHereY(1.0) end) end
 end
 
 -- state: init.lua's state (info from XFBridge_Info, pluginPresent, pending, message, pendingAsk, answeredAsk, comment).
@@ -1278,6 +1319,7 @@ function panel.body(state, queue, theme, which)
     elseif bridge and bridge.listening and bridge.writes_paused and bridge.allow_writes then
       if primaryButton(theme, which, "Resume changes") then queue("pause", false) end
     end
+    if state.feedbackBelow then wrapped(state.feedbackBelow) end
 
     local live = bridge and bridge.enabled and bridge.listening and not bridge.killed
     local slotTop = ImGui.GetCursorPosY()
@@ -1334,12 +1376,9 @@ function panel.body(state, queue, theme, which)
     if saveLock and saveLock.last and saveLock.last_seq ~= state.saveSeenSeq then
       state.saveSeenSeq = saveLock.last_seq
       state.message = tostring(saveLock.last)
+      state.messageOk = false -- an outcome stays until the next one (it may be a failure)
     end
 
-    if state.message then
-      ImGui.Separator()
-      wrapped(state.message)
-    end
 
     if live then
       -- Diagnostics and action feedback now precede Danger. A change there gets the same click guard.

@@ -26,7 +26,7 @@ import type { CommandApi } from "../api/command-api.ts";
 import { decodePng, diffStats, crop } from "../capture/image.ts";
 import { validateBound } from "./assertions.ts";
 import { ConfigEditor, readIni, stagedConfigPath, stagedManifestPath, type IniValues } from "./config-ini.ts";
-import { burstBytes, cetDiagnosticsRect, cetLineRect, cetWindowRect, decodeCetBinding, inkPanelRect, keysLabel, parseCetBindings, parseKeys, xfBoxRect, type Host } from "./host.ts";
+import { burstBytes, cetDiagnosticsRect, cetLineRect, cetWindowCropRect, cetWindowRect, decodeCetBinding, inkPanelRect, keysLabel, parseCetBindings, parseKeys, xfBoxRect, type Host } from "./host.ts";
 import { BURST_MEMORY_LIMIT } from "../capture/capture.ts";
 import { checkMatch, checkPlan, describePlan, matches, realClock, resolveRefs, runPlan, type Action, type ExecContext, type Executor, type Match, type Outcome, type Plan, type PlanClock, type PlanResult, type ReportEntry, type Step } from "./plan.ts";
 import { planTestStep, TEST_STEP_KINDS, TestSession } from "./script.ts";
@@ -433,13 +433,14 @@ export function closeSteps(): Step[] {
 }
 
 /** The steps that bring the game to a row's config: set the keys, restart when they changed (or a restart is due), launch when it isn't running. */
-export function preludeSteps(needs: Record<string, string>, restart: boolean, load: boolean): Step[] {
+export function preludeSteps(needs: Record<string, string>, restart: boolean, load: boolean, bridgeStopped = false): Step[] {
   const changes = Object.keys(needs).length > 0;
   return [
     // A running game is adopted only if its bridge is the staged candidate (a --loop restage may have replaced the
     // build, or config.ini, since it started): otherwise it closes, and the start below launches the staged one.
     { label: "candidate", when: { check: { do: "host.running" }, match: { path: "running", equals: true } }, sequence: [
-      { label: "candidate-bridge", do: "run", command: "bridge.ping", input: {}, until: { ok: true }, interval_ms: 2000, deadline_ms: 120_000, on_fail: "continue" },
+      // A bridge the last row stopped on purpose won't answer: don't wait two minutes to find that out.
+      { label: "candidate-bridge", do: "run", command: "bridge.ping", input: {}, until: { ok: true }, interval_ms: 2000, deadline_ms: bridgeStopped ? 3000 : 120_000, on_fail: "continue" },
       { label: "candidate-check", do: "bridge.candidate", outcomes: [
         { name: "stale", match: { path: "matches", equals: false }, run: [
           { do: "note", text: "The running game's bridge isn't the staged candidate (an earlier build or settings): the runner restarts it." },
@@ -630,6 +631,10 @@ export class SessionExecutor implements Executor {
   }
 
 
+  /** A line for the player (progress, warnings), shown even when the script's own notes aren't echoed. */
+  async notify(input: Record<string, unknown>) {
+    try { return (await this.c.api.run("ui.message", input, { source: "session" })).ok; } catch { return false; }
+  }
   private async echo(input: Record<string, unknown>) {
     if (!this.c.echo) return false;
     try { return (await this.c.api.run("ui.message", input, { source: "session" })).ok; } catch { return false; }
@@ -744,7 +749,7 @@ export class SessionExecutor implements Executor {
           const window = pid === undefined ? null : await this.c.host.window(pid);
           if (!window) return { ok: false, code: "no_window", message: "The game's window wasn't found." };
           const monitors = await this.c.host.monitors().catch(() => []);
-          return { ok: true, value: { ...window, monitors, regions: { cet_window: cetWindowRect(window.width, window.height), xf_box: xfBoxRect(window.width, window.height),
+          return { ok: true, value: { ...window, monitors, regions: { cet_window: cetWindowRect(window.width, window.height), cet_window_crop: cetWindowCropRect(window.width, window.height), xf_box: xfBoxRect(window.width, window.height),
             cet_diagnostics: cetDiagnosticsRect(window.width, window.height), cet_line: cetLineRect(window.width, window.height), ink_panel: inkPanelRect(window.width, window.height) } } };
         }
         case "host.commit": {
@@ -1244,8 +1249,14 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
   await telemetry.ensureRecorder().catch(() => undefined);
   telemetry.markRow();
   let restartDue = false;
+  // 0.8.23 (session st-0823-1: "You need to communicate with me in game if you want me to be hands off"): the player sees
+  // which row runs and that it needs nothing from them, and a warning before the runner restarts the game on purpose.
+  let bridgeStopped = false, rowNumber = 0;
+  const progress = (text: string, seconds = 120) =>
+    executor.notify({ text, level: "info", seconds, clear: true, keep_asks: true });
   const failures = new Map<string, string[]>();
   for (const { row, plan: rowPlan, failRow } of planned.rows) {
+    rowNumber++;
     const started = clock.now();
     const record: RowRecord = { id: row.id, title: row.title, verdict: "SKIP", evidence: [], checks: [], reports: [], attempt, started_at: new Date().toISOString(), ...(row.judged_by ? { judged_by: row.judged_by } : {}) };
     records.push(record);
@@ -1280,7 +1291,8 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       // The prelude: the row's config, a restart if anything read at load changed, a launch if the game isn't running.
       const current = config?.exists() ? config.read() : {};
       const needs = configNeeds(row, current);
-      const prelude = await plan({ id: `${row.id}.prelude`, steps: preludeSteps(needs, restartDue, needsLoad({ ...current, ...needs })) });
+      if ((restartDue || Object.keys(needs).length) && !bridgeStopped) await progress(`XF session: restarting the game on purpose for ${row.id} (about 2 minutes). Hands off; the session carries on by itself.`);
+      const prelude = await plan({ id: `${row.id}.prelude`, steps: preludeSteps(needs, restartDue, needsLoad({ ...current, ...needs }), bridgeStopped) });
       record.prelude = { status: prelude.status, reason: prelude.reason };
       record.reports.push(...prelude.reports);
       // A load stops the recorder (load_requested): the run the batch holds is stale, and the next ensureRecorder starts afresh.
@@ -1294,6 +1306,8 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
         write(setup);
         continue;
       }
+      // A row judged from its captures (judged_by) shows the line briefly, so it is gone before the first capture.
+      await progress(`XF session · row ${rowNumber} of ${planned.rows.length}: ${row.id}. Hands off; nothing needed from you.`, row.judged_by ? 6 : 120);
       // Telemetry: the recorder again after a restart (a new bridge session), and the row's slice from here.
       const recorder = await telemetry.ensureRecorder();
       if (recorder.restarted) log(`     recorder run ${recorder.run} on every channel`);
@@ -1323,6 +1337,7 @@ export async function runBatch(script: BatchScript, options: BatchRunOptions): P
       if (monitor.reason) stopWith("tripwire", monitor.reason, row.id);
       if (result.status === "stopped") stopWith(kindOfStop(result.reason), result.reason ?? "stopped", row.id);
       restartDue = stopsTheBridge(row);
+      bridgeStopped = JSON.stringify(row.steps).includes('"command":"bridge.kill"');
       // Significant bugs: the batch stops here rather than piling misleading rows on top.
       const kinds = row.halt_on ? new Set(row.halt_on) : policy.kinds;
       if (!halt && kinds.has("runner_error") && /runner_error|executor_error/.test(record.close.reason ?? "")) stopWith("runner_error", `the runner failed in ${row.id}: ${record.close.reason}`, row.id, [record.telemetry.dir]);

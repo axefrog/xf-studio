@@ -634,6 +634,10 @@ std::string Frame(const HudSettings& aSettings, const BridgeView& aView, const s
         {
             out += "inkask\t" + std::to_string(aAsk->inkShown) + "\n";
         }
+        if (aAsk)
+        {
+            out += "clears\t" + std::to_string(aAsk->clears) + "\n";
+        }
     }
     return out;
 }
@@ -659,6 +663,7 @@ std::string BuildFrame(const HudSettings& aSettings, const BridgeView& aView, Me
         {
             lines.push_back({level, text});
         }
+        ask.clears = aBoard.Clears();
         PendingAsk pending;
         if (aBoard.Pending(pending))
         {
@@ -713,6 +718,10 @@ json ParseFrame(const std::string& aFrame)
         else if (key == "answered" && fields.size() >= 3)
         {
             out["answered"] = {{"id", std::stoull(fields[1])}, {"label", fields[2]}};
+        }
+        else if (key == "clears" && fields.size() >= 2)
+        {
+            out["clears"] = std::stoull(fields[1]);
         }
         else if (key == "inkask" && fields.size() >= 2)
         {

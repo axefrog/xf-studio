@@ -5404,7 +5404,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST6_dark_chips_changes.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST6-cet-chip-changes-dark-crop"
           },
           "on_fail": "continue"
@@ -6084,7 +6084,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST6_dark_paused_paused.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST6-cet-chip-paused-dark-crop"
           },
           "on_fail": "continue"
@@ -6736,7 +6736,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_dark_running_running.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-running-dark-crop"
           },
           "on_fail": "continue"
@@ -7355,7 +7355,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_dark_question_qa.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-question-a-dark-crop"
           },
           "on_fail": "continue"
@@ -7385,7 +7385,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_dark_question_qb.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-question-b-dark-crop"
           },
           "on_fail": "continue"
@@ -7586,7 +7586,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_dark_question_answered.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-answered-dark-crop"
           },
           "on_fail": "continue"
@@ -8276,7 +8276,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_dark_diagnostics_diag.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-diagnostics-dark-crop"
           },
           "on_fail": "continue"
@@ -15131,7 +15131,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST6_light_chips_changes.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST6-cet-chip-changes-light-crop"
           },
           "on_fail": "continue"
@@ -15811,7 +15811,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST6_light_paused_paused.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST6-cet-chip-paused-light-crop"
           },
           "on_fail": "continue"
@@ -16463,7 +16463,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_light_running_running.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-running-light-crop"
           },
           "on_fail": "continue"
@@ -17082,7 +17082,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_light_question_qa.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-question-a-light-crop"
           },
           "on_fail": "continue"
@@ -17112,7 +17112,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_light_question_qb.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-question-b-light-crop"
           },
           "on_fail": "continue"
@@ -17313,7 +17313,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_light_question_answered.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-answered-light-crop"
           },
           "on_fail": "continue"
@@ -18003,7 +18003,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_light_diagnostics_diag.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-diagnostics-light-crop"
           },
           "on_fail": "continue"
@@ -20677,7 +20677,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_dark_stopped_stopped.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-stopped-dark-crop"
           },
           "on_fail": "continue"
@@ -20714,7 +20714,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_dark_stopped_chip.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST6-cet-chip-stopped-dark-crop"
           },
           "on_fail": "continue"
@@ -21281,7 +21281,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST6_dark_readonly_chip.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST6-cet-chip-readonly-dark-crop"
           },
           "on_fail": "continue"
@@ -21318,7 +21318,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST6_dark_readonly_running.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-running-readonly-dark-crop"
           },
           "on_fail": "continue"
@@ -22137,7 +22137,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST6_light_readonly_chip.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST6-cet-chip-readonly-light-crop"
           },
           "on_fail": "continue"
@@ -22174,7 +22174,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST6_light_readonly_running.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-running-readonly-light-crop"
           },
           "on_fail": "continue"
@@ -23012,7 +23012,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_light_stopped_stopped.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-stopped-light-crop"
           },
           "on_fail": "continue"
@@ -23049,7 +23049,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_light_stopped_chip.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST6-cet-chip-stopped-light-crop"
           },
           "on_fail": "continue"

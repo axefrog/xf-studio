@@ -4120,7 +4120,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST6_dark_paused_paused.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST6-cet-chip-paused-dark-crop"
           },
           "on_fail": "continue"
@@ -4825,7 +4825,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_dark_diagnostics_diag.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-diagnostics-dark-crop"
           },
           "on_fail": "continue"
@@ -10545,7 +10545,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST6_light_paused_paused.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST6-cet-chip-paused-light-crop"
           },
           "on_fail": "continue"
@@ -11250,7 +11250,7 @@
           "command": "capture.recrop",
           "input": {
             "path": "$ST7_light_diagnostics_diag.full.path",
-            "rect": "$win.regions.cet_window",
+            "rect": "$win.regions.cet_window_crop",
             "name": "ST7-cet-diagnostics-light-crop"
           },
           "on_fail": "continue"

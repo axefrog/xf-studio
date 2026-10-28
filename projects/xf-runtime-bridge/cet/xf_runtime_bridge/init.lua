@@ -33,11 +33,12 @@ local MESSAGE_COLORS = {
   done = { 0.45, 0.95, 0.55, 1.0 },
 }
 local MUTED = { 0.69, 0.71, 0.73, 1.0 }
--- 0.8: the status line's tone (the plugin's core/InkUi.cpp Summarize): amber only while changes are allowed or paused.
-local TONE_TOKENS = { ok = "XfSuccess", write = "XfWarning", paused = "XfWarning", killed = "XfDanger", off = "TextDisabled", idle = "TextDisabled" }
+-- 0.8: the status line's tone (the plugin's core/InkUi.cpp Summarize). 0.8.23 (the UI review's fix 4): the dot is the
+-- connection, so changes allowed (write) is green like connected; amber only while paused.
+local TONE_TOKENS = { ok = "XfSuccess", write = "XfSuccess", paused = "XfWarning", killed = "XfDanger", off = "TextDisabled", idle = "TextDisabled" }
 local TONE_COLORS = {
   ok = { 0.4, 0.9, 0.5, 1.0 },
-  write = { 1.0, 0.7, 0.2, 1.0 },
+  write = { 0.4, 0.9, 0.5, 1.0 },
   paused = { 1.0, 0.7, 0.2, 1.0 },
   killed = { 1.0, 0.35, 0.35, 1.0 },
   off = { 0.6, 0.6, 0.6, 1.0 },
@@ -302,6 +303,11 @@ local function pollMessages()
   state.keysArmed = keys ~= "0"
   local inkAsk = hudOk and type(frame) == "string" and string.match(frame, "\ninkask\t(%d+)\n") or nil
   state.inkAsk = tonumber(inkAsk) or 0
+  -- 0.8.23 (the UI review's fix 3): "Sent: ..." and the CET line's "Answered: ..." stay until the next question or the end of
+  -- the step that asked. A step ends with a clear of the board, so a changed clear count drops the kept answer.
+  local clears = hudOk and type(frame) == "string" and tonumber(string.match(frame, "\nclears\t(%d+)\n")) or nil
+  if clears and state.boardClears and clears ~= state.boardClears then state.answeredAsk = nil end
+  if clears then state.boardClears = clears end
   local ok, text = pcall(function() return Game.XFBridge_Messages() end)
   if not ok or type(text) ~= "string" or text == "" then
     -- 0.8.2 (session 9: "Answer: F6 Done" stayed after the last answer): an empty board has no question either. 0.8.4 (the
@@ -381,6 +387,7 @@ local function runAction(action)
       state.pending = "rearm"
       state.message = "Reconnecting..."
       state.messageOk = true
+      state.messageProgress = state.message -- in progress: stays until the outcome replaces it
       log("warn", cid, "panel: reconnect requested")
     else
       state.message = answer and rearmCopy(answer.code) or "The bridge didn't answer. Restart the game to start it again."
@@ -498,6 +505,7 @@ local function runAction(action)
     if answer and answer.started then
       state.message = "Saving... The XF Runtime Bridge window says when it's done."
       state.messageOk = true
+      state.messageProgress = state.message -- in progress: stays until the outcome replaces it
     else
       state.message = answer and answer.why and ("The save didn't start: " .. tostring(answer.why) .. ".")
         or "The bridge didn't answer. Restart the game to start it again."
