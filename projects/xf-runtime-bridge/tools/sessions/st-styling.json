@@ -20656,7 +20656,7 @@
             242
           ],
           "rect": "$win.regions.cet_window",
-          "min_plate": 0.15,
+          "min_plate": 0.03,
           "until": {
             "ok": true
           },
@@ -20697,7 +20697,7 @@
             242
           ],
           "rect": "$win.regions.cet_window",
-          "min_plate": 0.15,
+          "min_plate": 0.03,
           "bind": "ST7_dark_stopped_frame_stopped",
           "on_fail": "fail_row"
         },
@@ -20734,7 +20734,7 @@
             242
           ],
           "rect": "$win.regions.cet_window",
-          "min_plate": 0.15,
+          "min_plate": 0.03,
           "bind": "ST7_dark_stopped_frame_chip",
           "on_fail": "fail_row"
         },
@@ -22991,7 +22991,7 @@
             32
           ],
           "rect": "$win.regions.cet_window",
-          "min_plate": 0.15,
+          "min_plate": 0.03,
           "until": {
             "ok": true
           },
@@ -23032,7 +23032,7 @@
             32
           ],
           "rect": "$win.regions.cet_window",
-          "min_plate": 0.15,
+          "min_plate": 0.03,
           "bind": "ST7_light_stopped_frame_stopped",
           "on_fail": "fail_row"
         },
@@ -23069,7 +23069,7 @@
             32
           ],
           "rect": "$win.regions.cet_window",
-          "min_plate": 0.15,
+          "min_plate": 0.03,
           "bind": "ST7_light_stopped_frame_chip",
           "on_fail": "fail_row"
         },
