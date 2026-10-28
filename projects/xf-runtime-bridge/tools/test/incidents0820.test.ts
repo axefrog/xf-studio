@@ -97,12 +97,20 @@ describe("0.8.20 the taps: autonomous only, wired to a registered native, passiv
   });
   test("every wrap calls the game's own method first, then reads", () => {
     const wraps = [...taps.matchAll(/@wrapMethod\((\w+)\)\n[^\n]*\n([\s\S]*?)\n}\n/g)];
-    expect(wraps.map(w => w[1]).sort()).toEqual(["AICombatTargetHelper", "GameObject", "ReactionManagerComponent", "StimBroadcasterComponent", "VehicleObject"]);
+    expect(wraps.map(w => w[1]).sort()).toEqual(["AICombatTargetHelper", "GameObject", "ReactionManagerComponent", "StimBroadcasterComponent"]);
     for (const wrap of wraps) {
       const body = wrap[2]!;
       expect(body.indexOf("wrappedMethod("), wrap[1]).toBeGreaterThanOrEqual(0);
       expect(body.indexOf("wrappedMethod("), wrap[1]).toBeLessThan(body.indexOf("XFIncidentTap."));
     }
+    // 0.8.25: vehicle theft is one shared wrap that feeds the incidents and the world feed; the game's method still runs
+    // first, and the incidents' call keeps its gate.
+    const hooks = read("redscript", "XFRuntimeBridgeWorldHooks.reds");
+    const steal = hooks.slice(hooks.indexOf("@wrapMethod(VehicleObject)\nprivate final func StealVehicle("));
+    expect(steal.indexOf("wrappedMethod(thief);")).toBeGreaterThan(0);
+    expect(steal.indexOf("wrappedMethod(thief);")).toBeLessThan(steal.indexOf("XFWorldHooks.Theft(this, thief as GameObject);"));
+    expect(hooks).toContain("if XFIncidentTap.On() { XFIncidentTap.Theft(vehicle, thief); }");
+    expect(taps).not.toContain("@wrapMethod(VehicleObject)");
   });
   test("nothing in the taps writes to the game or sends anything into it", () => {
     const code = taps.replace(/\/\/[^\n]*/g, "");

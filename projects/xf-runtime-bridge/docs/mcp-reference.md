@@ -1973,7 +1973,7 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 
 ### `world_events`
 
-**Read the passive world event feed.** Bounded read-only feed in every build, also during loads. since is an inclusive sequence cursor; resume at next, including across filtered rows. Kinds: session, death (including defeated and knockdown), combat, heat, dialogue, journal, fact, call. Each carries QPC s, nullable game_time_s, world_generation, session_counter and dropped since its kind's last kept event. 2048 entries, 20 admissions per kind per QPC second; 100 records and 48 KiB per page. missed and evicted expose retention loss; dropped counts rate and contention loss. Codeware supplies early session/load/save callbacks. Without it coverage.session_callbacks is script_layer_only, with no early load/start or save notifications. Dialogue copies at most two hubs/four choices/48 characters and marks truncation; partner is unavailable because the checked hub schema provides no entity. Journal paths cap at 16 segments and mark path_complete. Source/offline until commissioned. Optional recorder events channel carries these same envelopes; game.catchup includes them in channels.events. Cursors restart with the bridge process/session.
+**Read the passive world event feed.** Bounded read-only feed in every build, also during loads. since is an inclusive sequence cursor; resume at next, including across filtered rows. Kinds: session, death (including defeated and knockdown), combat, heat, dialogue, journal, fact, call, district, vehicle (mount/unmount/theft), vehicle.acquired, time (menu skip or inferred recorder-sample jump). Other clock jumps require active V recording; no new poll. Inference compares contiguous valid samples in one run/world/session, with a threshold above max(300 game seconds, 60 times real elapsed seconds) and a 30-second maximum gap; it does not establish the cause. Each carries QPC s, nullable game_time_s, world_generation, session_counter and dropped since its kind's last kept event. 2048 entries, 20 admissions per kind per QPC second; 100 records and 48 KiB per page. missed and evicted expose retention loss; dropped counts rate and contention loss. Codeware supplies early session/load/save callbacks. Without it coverage.session_callbacks is script_layer_only, with no early load/start or save notifications. Dialogue copies at most two hubs/four choices/48 characters and marks truncation; partner is unavailable because the checked hub schema provides no entity. Journal paths cap at 16 segments and mark path_complete. Source/offline until commissioned. Optional recorder events channel carries these same envelopes; game.catchup includes them in channels.events. Cursors restart with the bridge process/session.
 
 - **Command:** `world.events`, the bridge method `world.events`
 - **Permission:** Look (`read`)
@@ -1985,7 +1985,7 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 |---|---|---|---|
 | `since` | integer | 0 to 1000000000000 | Inclusive cursor returned as next |
 | `limit` | integer | 1 to 100 | Page size, also bounded to 48 KiB |
-| `kinds` | array of string | at most 8 items; each `session`, `death`, `combat`, `heat`, `dialogue`, `journal`, `fact`, `call` | Filter to these event families |
+| `kinds` | array of string | at most 12 items; each `session`, `death`, `combat`, `heat`, `dialogue`, `journal`, `fact`, `call`, `district`, `vehicle`, `vehicle.acquired`, `time` | Filter to these event families |
 
 ### `world_facts`
 

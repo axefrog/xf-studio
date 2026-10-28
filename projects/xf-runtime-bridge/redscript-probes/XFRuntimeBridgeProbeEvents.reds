@@ -320,7 +320,10 @@ public class XFEventProbe extends ScriptableSystem {
       let inside = IsEntityInInteriorArea(player) ? 1 : 0;
       if inside != this.m_interior {
         if this.m_interior >= 0 {
-          XFProbeOut.Emit("interior", "\"inside\":" + XFJson.Flag(inside == 1) + ",\"district\":" + XFJson.Str(this.m_lastDistrict));
+          // The district listener moved to the world feed; read the map's current location once, on a change only.
+          let defs = GetAllBlackboardDefs();
+          let district = GameInstance.GetBlackboardSystem(game).Get(defs.UI_Map).GetString(defs.UI_Map.currentLocationEnumName);
+          XFProbeOut.Emit("interior", "\"inside\":" + XFJson.Flag(inside == 1) + ",\"district\":" + XFJson.Str(district));
         }
         this.m_interior = inside;
       }
