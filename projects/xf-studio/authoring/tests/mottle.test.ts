@@ -224,8 +224,8 @@ test("mottle stays within the raster budget (a few per cent of the unmottled ras
   // the core inflates one timing by more than the whole budget. Each timing starts after a full collection; the three rasters are timed
   // back to back in a rotating order, five rounds; the fastest of each is its cost (pauses only ever add time). The budget is a ratio to
   // the unmottled raster timed alongside, so a slower machine scales both: an absolute per-texel bound failed on slow CI runners while
-  // the same code measured 1–19 % here. A measurement over budget is taken again, up to three times: a real regression (say, the tile
-  // evaluated per texel) is over budget every time, a slow moment on the machine is not.
+  // the same code measured 1–19 % here. A measurement over budget is taken again, up to three times: substantial overhead (say, the tile
+  // rebuilt per texel) stays over budget, while a burst of load usually passes on a retry.
   const time = (l: Layer) => { Bun.gc(true); const t = performance.now(); raster(l, 2048); return performance.now() - t; };
   const layers = { base: plain, everywhere: withMottle, streaks: streaked } as const;
   const measure = () => {
