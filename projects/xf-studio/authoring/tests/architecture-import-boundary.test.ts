@@ -71,7 +71,7 @@ test("slice 13a product constructors use the neutral document and registered opt
     expect(codeOnly(DISK.text(name))).not.toMatch(/\b(?:createMakeupView|emptyRecipe|makeupEditingState)\b/);
     expect(resolved(name)).toContain("app/authoring/feature-projections");
   }
-  expect(DISK.names.filter(name => /\bmakeupAuthoring\(/.test(codeOnly(DISK.text(name))))).toEqual(["app/authoring/makeup-view", "compose/studio-registry"]);
+  expect(DISK.names.filter(name => /\bmakeupAuthoring\(/.test(codeOnly(DISK.text(name)))).toSorted()).toEqual(["app/authoring/makeup-view", "compose/studio-registry"]);
   expect(codeOnly(DISK.text("app/trusted-studio-bootstrap"))).not.toMatch(/core\.presentation\b/);
 });
 
