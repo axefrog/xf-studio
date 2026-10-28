@@ -55,7 +55,7 @@ test("Save Explorer first keeps its viewless default during startup layout const
   const modules = { ...NORMAL.modules, modules: [saveExplorer, ...NORMAL.modules.modules.filter(module => module !== saveExplorer)] };
   const layouts = studioLayoutDefaults(OFF_EXPERIMENTS, undefined, { modules, views: NORMAL.views, catalogue: NORMAL.view.catalogue });
   expect(layouts.initial.origin).toBe("save-explorer/default");
-  expect(layouts.initial.dock).toEqual(saveExplorer.defaults![0]!.fragment.tab.dock);
+  expect(layouts.initial.dock as unknown).toEqual(saveExplorer.defaults![0]!.fragment.tab.dock);
   expect(dockPanels(layouts.initial.dock)).not.toContain("head");
   const { state: workspace } = loadCompositionWorkspace({ getItem: () => null }, true, NORMAL);
   const session = sessionOfWorkspace(workspace, { tab: "Save Explorer" }, () => .2, layouts.initial);
