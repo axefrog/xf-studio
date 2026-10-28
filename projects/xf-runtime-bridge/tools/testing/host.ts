@@ -225,6 +225,14 @@ export function mo2Failure(log: string): string {
   return detail || "MO2 cannot launch the game; no new Windows error was found in mo_interface.log.";
 }
 
+/**
+ * Prints 'ready', 'starting' or nothing for this MO2 installation (not another instance on the desktop).
+ * Paths are compared normalised: fixtures may use forward slashes, Get-Process reports backslashes.
+ * It always exits 0: an empty Get-Process leaves $? false even with SilentlyContinue, and "not running" is not a failure.
+ */
+export const mo2ProcessQuery = (exe: string) =>
+  `$p = Get-Process -Name ModOrganizer -ErrorAction SilentlyContinue | Where-Object { $_.Path -and [IO.Path]::GetFullPath($_.Path) -eq [IO.Path]::GetFullPath(${psString(exe)}) }; if ($p) { if ($p | Where-Object { $_.MainWindowHandle -ne 0 }) { 'ready' } else { 'starting' } }; exit 0`;
+
 /** One launch attempt owns its log cursor. No old access-denied error is attributed to a later attempt. */
 export function createMo2Launcher(port: Mo2Port) {
   let attempt: { path: string; cursor: LogCursor | null } | undefined;
@@ -238,8 +246,7 @@ export function createMo2Launcher(port: Mo2Port) {
         if (await port.breakawayBlocked()) return { started: false, command, error: JOB_BREAKAWAY_MESSAGE };
       } catch (error) { return { started: false, command, error: String((error as Error)?.message ?? error) }; }
       if (signal?.aborted) return cancelled();
-      // Match this installation, not another MO2 instance on the same desktop.
-      const query = `$p = Get-Process -Name ModOrganizer -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq ${psString(spec.exe)} }; if ($p) { if ($p | Where-Object { $_.MainWindowHandle -ne 0 }) { 'ready' } else { 'starting' } }`;
+      const query = mo2ProcessQuery(spec.exe);
       const status = await port.shell(query);
       if (signal?.aborted) return cancelled();
       if (status.code !== 0) return { started: false, command, error: "could not inspect MO2's process" };
@@ -248,7 +255,7 @@ export function createMo2Launcher(port: Mo2Port) {
         const created = await port.shell(`$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = ${psString(line)}; CurrentDirectory = ${psString(dirname(spec.exe))} }; if ($r.ReturnValue -ne 0) { throw "WMI process creation failed: $($r.ReturnValue)" }`);
         if (created.code !== 0) return { started: false, command, error: `WMI could not start MO2: ${created.out.trim()}` };
       }
-      const deadline = port.now() + 30_000;
+      const deadline = port.now() + 120_000; // A large mod list can take over a minute to load.
       let ready = status.out.trim() === "ready";
       while (!ready && port.now() < deadline && !signal?.aborted) {
         await port.sleep(250);
@@ -257,7 +264,7 @@ export function createMo2Launcher(port: Mo2Port) {
         ready = polled.code === 0 && polled.out.trim() === "ready";
       }
       if (signal?.aborted) return cancelled();
-      if (!ready) return { started: false, command, error: "MO2's window did not appear within 30 seconds" };
+      if (!ready) return { started: false, command, error: "MO2's window did not appear within 2 minutes" };
       const path = join(dirname(spec.exe), "logs", "mo_interface.log");
       attempt = { path, cursor: port.cursor(path) };
       // A game can appear while MO2's window is starting. Check at the last async boundary before forwarding.
