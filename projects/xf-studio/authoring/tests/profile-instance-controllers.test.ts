@@ -20,6 +20,9 @@ import { profileContextStudio } from "./fixtures/profile-context-studio";
 import { StudioRuntime, Frame, type Port } from "../src/studio-ui/runtime";
 import { InstancePanels } from "../src/studio-ui/panels/instance-panels";
 import { instanceViewPane } from "../src/studio-ui/panels/instance-view-pane";
+import { viewPaneCallbacks } from "../src/studio-ui/app";
+import { ViewPanels } from "../src/studio-ui/panels/view-panels";
+import type { PanelController } from "../src/studio-ui/panels/collection";
 import { headPanel } from "../src/studio-ui/panels/viewports";
 import { presetsPanel, libraryPanel } from "../src/features/eye-makeup/view/collection";
 import { finishPanel } from "../src/features/eye-makeup/view/inspector";
@@ -159,6 +162,32 @@ test("registration replacement retires only that contribution's controllers and 
     const preferences = s.port.preferences.snapshot(); command.run();
     expect(command.capability().available).toBe(false); expect(s.port.preferences.snapshot()).toEqual(preferences);
   } finally { ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("shell pane creation and reconciliation accept real view instance IDs and withdraw only the closed pane's anchor", async () => {
+  const s = await profileContextStudio({ viewPanels: true }), root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE);
+  const context = { view: { summaries: () => [], badge: () => undefined }, guidance: {} as never, appearance: {} as never };
+  let shown = s.session.graph.snapshot().views.slice(0, 2).map(view => ({ view: view.id, panel: s.session.instance(view.panel) }));
+  const panels: PanelController[] = [], byId = new Map<string, PanelController>();
+  const empty = { root: null, floating: [], closed: [] }, state = { wide: empty, compact: empty };
+  const panes = new ViewPanels({ views: () => shown, drawn: () => ({}), arrangement: () => ({ layout: null }),
+    restore() {}, save() {}, catalogue() {}, attach() {}, spec: pane => pane.spec,
+    dock: { addPanels() {}, removePanels() {}, dockState: state },
+    make: id => instanceViewPane(root, context, id, headPanel), ...viewPaneCallbacks(panels, byId) });
+  try {
+    expect(shown.map(view => view.panel)).toEqual(["view--scene0", "view--scene1"]);
+    expect(() => panes.start()).not.toThrow();
+    for (const pane of panels) document.body.append(pane.spec.element);
+    expect([...byId.keys()]).toEqual(shown.map(view => view.panel));
+    expect(root.anchors.element("panel.head")).toBe(panels[0]!.spec.element);
+    const survivor = panels[1]!;
+    shown = shown.slice(1); expect(() => panes.sync()).not.toThrow();
+    expect([...byId.keys()]).toEqual(["view--scene1"]);
+    expect(root.anchors.element("panel.head")).toBe(survivor.spec.element);
+    expect(root.anchors.registered()).not.toContain("panel.view--scene0");
+    shown = []; panes.sync(); expect(root.anchors.element("panel.head")).toBeUndefined();
+    expect(panels).toHaveLength(0); expect(byId.size).toBe(0);
+  } finally { panes.dispose(); await s.dispose(); s.library.close(); }
 });
 
 test("real head panes bind their own view and look while the renderer attachment stays shared", async () => {

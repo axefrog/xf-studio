@@ -30,7 +30,6 @@ import { closeMenus, closePopovers, openMenu, type Capability, type MenuItem } f
 import { importCollection, libraryState, type PanelController } from "./panels/collection";
 import { HISTORY_SCOPE, historyCommandLabel, historyCommandTitle } from "./history-model";
 import { previewSetupCard } from "./preview-setup-card";
-import { isAnchorId, panelAnchor } from "./guidance/anchors";
 import { mountGuidance, type GuidanceController } from "./guidance/controller";
 import type { ViewComposition, ViewContext, ViewPaneFactory } from "./views/panels";
 import { featureCommands, featureViewContext, moduleViewContext } from "./views/feature-context";
@@ -45,6 +44,14 @@ import { flushScrollMemories } from "./scroll-anchor";
 import { HeaderFit } from "./header-fit";
 import { BACKUP_PENDING, BACKUP_STORAGE_FULL, LIBRARY_CHIP_WIDEST, MISSING_SAVE, RESTORING, RESTORING_LONG, RESTORING_UNCONFIRMED, UNPROTECTED } from "./notice-text";
 import { EmptyChoices, progressBar, WorkspaceNotice, type WorkspaceNoticeAction, type WorkspaceNoticeState } from "./components";
+
+/** Shell bookkeeping only: instanceViewPane owns the guidance anchor and its AbortSignal lifetime. */
+export function viewPaneCallbacks(panels: PanelController[], byId: Map<string, PanelController>) {
+  return {
+    added: (pane: PanelController) => { panels.push(pane); byId.set(pane.spec.id, pane); },
+    removed: (pane: PanelController) => { panels.splice(panels.indexOf(pane), 1); byId.delete(pane.spec.id); },
+  };
+}
 
 /**
  * Mount the XF Studio presentation. It receives only the public presentation
@@ -152,16 +159,12 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   instancePanels.sync();
   panels.push(...instancePanels.controllers());
   for (const panel of panels) byId.set(panel.spec.id, panel);
-  const anchorPanel = (panel: PanelController) => {
-    const anchor = panelAnchor(panel.spec.id); return isAnchorId(anchor) ? rt.anchors.register(anchor, panel.spec.element) : () => {};
-  };
   rebuildCatalogue();
   /**
    * A pane per 3D view of the shown tab (panels/view-panels.ts): made and withdrawn as the tab's views change, the canvas in the pane that
    * holds the picture. The dock is made below, so the panes' owner reaches it late.
    */
   let dockRef: DockView | undefined;
-  const paneAnchors = new Map<PanelController, () => void>();
   const viewPanes = new ViewPanels({
     contributions: { pending: () => queueOptional(), reconcile: () => syncOptional() },
     arrangement: () => ({ tab: port.focus.targets().tab || undefined, layout: port.tabs?.dock() ?? null }),
@@ -190,8 +193,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
       get dockState() { return dockRef!.dockState; } },
     spec: pane => specOf(pane),
     attach: slot => port.viewport.attach("head", slot),
-    added: pane => { panels.push(pane); byId.set(pane.spec.id, pane); paneAnchors.set(pane, anchorPanel(pane)); },
-    removed: pane => { panels.splice(panels.indexOf(pane), 1); byId.delete(pane.spec.id); paneAnchors.get(pane)?.(); paneAnchors.delete(pane); },
+    ...viewPaneCallbacks(panels, byId),
   });
   viewPanes.start();
   const restored = restoreDockPreference(port.tabs?.dock(),
