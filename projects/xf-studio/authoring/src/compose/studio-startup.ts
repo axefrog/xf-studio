@@ -1,7 +1,7 @@
 import { registeredEditorAdapters } from "../preview/browser/editor-adapters";
-import { STUDIO_CATALOGUE } from "./views";
+import { selectStartupComposition, type StudioStartupComposition } from "./startup-composition";
+import { registeredStarters } from "../app/starters/feature-starters";
 import { createPanelUVFactory } from "../preview/browser/panel-uv";
-import { EXPRESSION_FRAMEWORK_REQUIREMENTS } from "../features/expressions/requirements";
 import { polish5Verification } from "./polish5-verification";
 import { startersFixtures } from "./starters-verification";
 import { polish4Defaults, polish4Verification, type Polish4State } from "./polish4-verification";
@@ -52,7 +52,7 @@ import { panelCommands } from "./panel-commands";
 import { createBrowserCreatorDevice } from "../character/browser/browser-cc-catalogue-device";
 import { readSavedV } from "../saves/save-reader";
 import { createBrowserViewportDevice } from "../preview/browser/browser-viewport-device";
-import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "../app/browser/browser-workspace-device";
+import { createBrowserWorkspaceSession, loadCompositionWorkspace } from "../app/browser/browser-workspace-device";
 import { collectionTransport, collectionVersions } from "../library/browser/collection-transport";
 import type { LocalSetupActions } from "../setup/local-setup-actions";
 import type { DesktopAppActions } from "../setup/desktop-app";
@@ -61,13 +61,6 @@ import type { StudioPresentationPort } from "../app/studio-presentation";
 import { mountStudio } from "../studio-ui/app";
 import { createProfileAuthoring } from "../app/profiles/profile-authoring";
 import { createTrustedStudioBootstrap } from "../app/trusted-studio-bootstrap";
-// The composition root: the one browser module that imports the composition list (CORE-29).
-import { STUDIO_COMPOSITION, STUDIO_PRODUCT } from "./studio-registry";
-import { ShapeStarters } from "../app/starters/shape-starters";
-import { StarterActions } from "../app/starters/starter-actions";
-import { readStarterShape } from "../engines/layered-makeup/starter-shape";
-import { STUDIO_VIEW_COMPOSITION } from "./view-panels";
-import { STUDIO_FACE_POSES, STUDIO_LAYERED_SURFACES, STUDIO_RENDERERS } from "./renderers";
 import { combineFacePoses, FacialPreview } from "../animation/facial-preview";
 import { headQuiet, prefetchWhenQuiet } from "../animation/facial-prefetch";
 import { TransitionSettings } from "../platform/core/transition-settings";
@@ -82,7 +75,7 @@ import { pageFailure, setPageDiagnostics } from "../diagnostics/page-sink";
 import type { WorkspaceLease } from "../app/workspace/workspace-lease";
 import type { StartedOutbox } from "../app/browser/document-outbox-device";
 import { PROFILES_MIGRATION_ENABLED, startProfilesMigration, watchProfilesMigration } from "../app/browser/profiles-migration-device";
-import { lookWorkspace, workspaceKeys, type WorkspaceState } from "../app/workspace/makeup-workspace";
+import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-state";
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
 import type { TargetResolver } from "../app/profiles/targets";
@@ -90,7 +83,7 @@ import { createProfileServices, createTargetResolver, drawnView as drawnViewOf, 
   sceneHeadTargets, sceneCommands, tabDefaults } from "../app/profiles/profile-window";
 import { starterParts } from "../app/workspace/collection-workspace";
 import { printDefault } from "../app/profiles/layout-fragment";
-import { keepsStateInDefaults, STUDIO_INITIAL_LAYOUT, studioLayoutDefaults } from "./layout-defaults";
+import { studioLayoutDefaults } from "./layout-defaults";
 import { viewPanel } from "../app/profiles/profile-sessions";
 import { createStudioSubjects } from "./subjects";
 import { sameLook, type LookRef } from "../library/collection-documents";
@@ -151,21 +144,38 @@ const byId = <T extends HTMLElement>(id: string) => {
   return found as T;
 };
 
-export function startStudio(host: StudioHost): Promise<void> {
+/** Slice 13b wires the signal. Coordinated release of all remaining owners belongs to 13c. */
+export type StudioLifetime = { readonly signal: AbortSignal; abort(): void };
+export function startStudio(host: StudioHost, options: { composition?: StudioStartupComposition; signal?: AbortSignal } = {}): Promise<StudioLifetime | undefined> {
   const root = byId("studio");
-  return start(host, root).catch(error => {
+  // Selection is validated before any root-owned device or store can start.
+  const composition = selectStartupComposition(location.search, options.composition);
+  const life = new AbortController();
+  const abort = () => life.abort();
+  options.signal?.addEventListener("abort", abort, { once: true });
+  life.signal.addEventListener("abort", () => options.signal?.removeEventListener("abort", abort), { once: true });
+  window.addEventListener("pagehide", event => { if (!event.persisted) abort(); }, { signal: life.signal });
+  if (options.signal?.aborted) abort();
+  return start(host, root, composition, { signal: life.signal, abort }).then(lifetime => {
+    if (new URLSearchParams(location.search).get("verify") === "1") Object.assign(window, { xfStudioLifetime: lifetime });
+    return lifetime;
+  }).catch(error => {
+    abort();
     root.removeAttribute("aria-busy");
     const ref = pageFailure("startup", "start_failed", "XF Studio couldn't start.", error);
     root.replaceChildren(Object.assign(document.createElement("p"), { className: "boot-error",
       textContent: `XF Studio couldn't start. Reload the page, or restart XF Studio if this keeps happening.${ref ? ` If you report it, mention ${ref}.` : ""}` }));
+    return undefined;
   });
 }
 
-async function start(host: StudioHost, root: HTMLElement) {
+async function start(host: StudioHost, root: HTMLElement, composition: StudioStartupComposition, lifetime: StudioLifetime): Promise<StudioLifetime> {
+  const { signal } = lifetime;
+  signal.throwIfAborted();
   const verification = new URLSearchParams(location.search).has("verify");
   // Diagnostics first, so everything after is trapped (docs/diagnostics.md): page failures reach the host log, notices carry a
   // reference, and "Report a problem" prepares a report for review. Nothing is sent anywhere by itself.
-  const fileDevice = createBrowserFileDevice({ document, maskBake: registeredMaskBake(STUDIO_COMPOSITION.registry, STUDIO_COMPOSITION.documents), pickers: {
+  const fileDevice = createBrowserFileDevice({ document, maskBake: registeredMaskBake(composition.registry, composition.documents), pickers: {
     recipe: byId<HTMLInputElement>("device-recipe-picker"),
     collection: byId<HTMLInputElement>("device-collection-picker"),
     savedV: byId<HTMLInputElement>("device-save-picker"),
@@ -180,10 +190,11 @@ async function start(host: StudioHost, root: HTMLElement) {
   setPageDiagnostics((area, code, message, error, options) => diagnostics.failure(area, code, message, error, options));
   void diagnostics.refresh();
   const experimentLife = new AbortController();
+  signal.addEventListener("abort", () => experimentLife.abort(), { once: true });
   window.addEventListener("pagehide", () => experimentLife.abort(), { once: true });
   const experiments = host.experiments?.(verification, experimentLife.signal) ?? OFF_EXPERIMENTS;
   const storage = host.storage;
-  const restored = loadBrowserWorkspace(storage, verification, STUDIO_COMPOSITION.documents), workspace = restored.state;
+  const restored = loadCompositionWorkspace(storage, verification, composition), workspace = restored.state;
   // The V's details the page asked for last are read while everything else starts (research/backlog/performance.md, warm restart).
   // `?warm=off` leaves it out (a developer's A/B measurement, tools/measure-warm-restart.ts).
   const warmStart = new CharacterWarmStart({ storage, verification });
@@ -197,7 +208,8 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The library's owners (profiles design §7): profiles, Vs, collections and looks, each changed only through its commands (the outbox).
   // Startup preservation can finish before the presentation exists. Deliver its information through the usual message route once mounted.
   // The default layouts and what this build knows, the experiments switched on included (compose/layout-defaults.ts).
-  const layouts = studioLayoutDefaults(experiments, message => diagnostics.failure("layouts", "experiment_defaults_refused", message, undefined, { level: "warn" }));
+  const layouts = studioLayoutDefaults(experiments, message => diagnostics.failure("layouts", "experiment_defaults_refused", message, undefined, { level: "warn" }),
+    { modules: composition.modules, views: composition.views, catalogue: composition.view.catalogue });
   const defaultNotes: string[] = [];
   let defaultNote: (text: string) => void = text => { defaultNotes.push(text); };
   const services = createProfileServices({ documents: documents.documents, outbox: documents.outbox, subjects: createStudioSubjects(),
@@ -208,33 +220,34 @@ async function start(host: StudioHost, root: HTMLElement) {
     report: error => diagnostics.failure("library", "library_owner_failed", "Part of your library couldn't be read.", error, { level: "warn" }) });
   // The live feature's starter shapes (profiles design §6): its contributed ones and the person's own (library documents through the outbox),
   // and which one new layers and looks start from, kept in the workspace's feature memory.
-  const region = STUDIO_COMPOSITION.region;
-  const starterShapes = new ShapeStarters({ documents: documents.documents, outbox: documents.outbox, feature: region.id, label: region.label,
-    contributed: region.starters, fallback: region.defaultStarter, read: shape => readStarterShape(shape, region.newLayer(), region.models),
-    choice: { get: () => workspace.defaultStarter, set: id => { if (id === undefined) delete workspace.defaultStarter; else workspace.defaultStarter = id; } },
-    writable: () => lease?.writable() ?? true, note: text => defaultNote(text),
+  const starters = registeredStarters(composition.registry, composition.documents)?.create({ workspace,
+    documents: documents.documents, outbox: documents.outbox, writable: () => lease?.writable() ?? true, note: text => defaultNote(text),
     report: error => diagnostics.failure("library", "starters_failed", "Part of your starters couldn't be read.", error, { level: "warn" }) });
+  const starterShapes = starters?.shapes;
   // The profiles migration (profiles design §8) runs before anything is built, in the window holding the workspace: the Studio opens on the
   // session it makes, and the workspace's own fields stay as they were (migration input only). A migrated workspace costs nothing.
   if (PROFILES_MIGRATION_ENABLED && restored.writable && (!lease || lease.writable())) {
     const life = new AbortController();
+    signal.addEventListener("abort", () => life.abort(), { once: true });
     window.addEventListener("pagehide", () => life.abort(), { once: true });
     const early = new WorkspacePersistence({ storage, key: workspaceKeys(verification).workspace, writable: true, capture: () => workspace,
-      budget: host.storageBudget, reserved: () => documents.outbox.storedSize(), model: STUDIO_COMPOSITION.documents,
+      budget: host.storageBudget, reserved: () => documents.outbox.storedSize(), model: composition.documents,
       ...(lease ? { canWrite: () => lease.draining() } : {}) });
     early.activate();
     await startProfilesMigration({ endpoint: `${base}/profiles/migrate`, send: fetch, workspace: documents.workspace, fence: documents.fence,
-      model: STUDIO_COMPOSITION.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal, initial: STUDIO_INITIAL_LAYOUT,
+      model: composition.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal, initial: layouts.initial,
       report: error => diagnostics.failure("library", "profiles_migration_failed", "Your work couldn't be moved into your profile yet; it will try again.", error, { level: "warn" }) });
   }
-  await Promise.all([services.load(), starterShapes.load()]);
+  signal.throwIfAborted();
+  await Promise.all([services.load(signal), starterShapes?.load(signal)]);
+  signal.throwIfAborted();
   // The session this window opens on (its tabs, the views and scenes, and what each scene shows), with the window's focus: the history
   // service records the editing context into it (profiles design §3.3, §3.7). The session owns the view graph and its View and lighting
   // history: its operations and the graph's edits are one history (§4.1).
   const { state: sessionState, stored: sessionStored } = openProfileSession(workspace, services, { history: historyService,
-    graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph, initial: STUDIO_INITIAL_LAYOUT });
+    graph: (data, owner) => createStudioViewGraph(workspace.preview, data, owner), stored: sessionViewGraph, initial: layouts.initial });
   if (lease && profileWorkspaceLease(lease, sessionStored).migrationPending) watchProfilesMigration({ storage,
-    key: workspaceKeys(verification).workspace, model: STUDIO_COMPOSITION.documents,
+    key: workspaceKeys(verification).workspace, model: composition.documents,
     readOnly: () => profileWorkspaceLease(lease, sessionStored).migrationPending, reload: () => location.reload(), signal: experimentLife.signal, readStored: host.readWorkspace });
   // The shown tab's arrangement is the dock's; the workspace's own arrangement stays as it was (migration input only).
   const preferences = new UIPreferenceActions(workspace.uiPreferences);
@@ -256,7 +269,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   });
   const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document,
     { verification, locationChanged: savesLocationSignal(localSetup) }),
-    poses: { device: createBrowserPoseLibraryDevice({ verification }), stage: poseStage } });
+    poses: { device: createBrowserPoseLibraryDevice({ verification }), stage: poseStage } }, composition.modules?.modules.map(module => module.id) ?? []);
   // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists) and of each expression
   // set's latest Build (the part preset service, made below).
   let setBuilds: () => readonly BuiltMod[] = () => [];
@@ -267,8 +280,6 @@ async function start(host: StudioHost, root: HTMLElement) {
   // Whether the person chose Not now on the 3D preview card; a workspace preference too, so it stays declined.
   let declined = workspace.previewSetup?.declined === true;
   let previewDevice: BrowserPreview | undefined;
-  const previewLife = new AbortController();
-  window.addEventListener("pagehide", event => { if (!event.persisted) previewLife.abort(); });
   /** Stops waiting for the page to be quiet before the installed expressions are read ahead (facial-prefetch.ts). */
   let stopPrefetch: (() => void) | undefined;
   let bootstrap: ReturnType<typeof createTrustedStudioBootstrap<HTMLElement>>;
@@ -302,12 +313,12 @@ async function start(host: StudioHost, root: HTMLElement) {
     status = { ...status, message: { id: ++messageId, source, text } }; statusSource.changed();
   };
   let lookShown: (() => void) | undefined;
-  const profileAuthoring = createProfileAuthoring(lookWorkspace(workspace, STUDIO_COMPOSITION.documents), {
+  const profileAuthoring = createProfileAuthoring(workspace, {
     history: historyService, views: sessionState.graph,
     resetStack: previous => previewDevice?.coordinator.syncStack(previous),
     // A cheap read: Glitter-model and finish changes ask for it, and a snapshot would stash and copy the whole draft (CORE-05).
     selectedCollection: () => bootstrap?.collection.selectedPresetId() ?? "draft",
-  }, STUDIO_COMPOSITION, { owner: services.collections, sessions: services.looks, outbox: documents.outbox,
+  }, composition, { owner: services.collections, sessions: services.looks, outbox: documents.outbox,
     shown: () => lookShown?.(), note: text => adapterMessage("preview", text),
     report: error => diagnostics.failure("library", "look_write_failed", "Your latest look change couldn't be recorded yet; it will be tried again.", error, { level: "warn" }) });
   const core = profileAuthoring.core, lookEditor = profileAuthoring.drawn;
@@ -323,11 +334,11 @@ async function start(host: StudioHost, root: HTMLElement) {
     subscribe: (listener: () => void) => sessionState.subscribe(listener) };
   // The scenes' `gen` (what a view action that edits a scene names) and the input layer's resolution over the session.
   // The layout tabs' actions: the session's operations, and those naming a default (the modules' and the person's own).
-  const layoutTabs = tabDefaults(sessionState, services, { keepsState: keepsStateInDefaults, known: layouts.known });
+  const layoutTabs = tabDefaults(sessionState, services, { keepsState: layouts.keepsState, known: layouts.known });
   core.app.attach({ scenes: sceneCommands(sessionState, services), tabs: layoutTabs });
-  const starterActions = new StarterActions({ starters: starterShapes, feature: region.id, label: region.label, thumbnail: region.thumbnail });
+  const starterActions = starters?.actions;
   core.app.attach({ starters: starterActions, starterShapes });
-  const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, generation: type => type === "view" || STUDIO_CATALOGUE.ids.includes(type) ? 0 : experiments.registrationGeneration(), available: type => type === "view" || layouts.catalogue().ids.includes(type), contexts: type => layouts.catalogue().context(type),
+  const targets: TargetResolver = createTargetResolver({ state: sessionState, history: historyService, services, generation: type => type === "view" || composition.view.catalogue.ids.includes(type) ? 0 : experiments.registrationGeneration(), available: type => type === "view" || layouts.catalogue().ids.includes(type), contexts: type => layouts.catalogue().context(type),
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
   const panelActions = panelCommands(sessionState, targets, layouts.catalogue,
@@ -336,16 +347,16 @@ async function start(host: StudioHost, root: HTMLElement) {
     historyScopeDetails: scope => historyScopeDetails(scope, { services, history: historyService }) });
   const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
   const headHost = byId("device-head");
-  const viewportDevice = createBrowserViewportDevice({ surface: registeredEditorAdapters(core)?.surface, headHost, queryContext: hit => core.app.contextQuery(hit, targets.namedView(drawnView())), renderers: STUDIO_RENDERERS, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
+  const viewportDevice = createBrowserViewportDevice({ surface: registeredEditorAdapters(core)?.surface, headHost, queryContext: hit => core.app.contextQuery(hit, targets.namedView(drawnView())), renderers: composition.renderers, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
   // The workspace's own editor fields, V and arrangement as the migration found them: stored back unchanged (an older build opens them).
-  const frozenEditor = { recipe: workspace.recipe, active: workspace.active, selected: workspace.selected, fieldSelection: workspace.fieldSelection,
-    history: workspace.history, ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}), ...(workspace.liveFeatures ? { liveFeatures: workspace.liveFeatures } : {}) };
+  const frozenEditor = { features: workspace.liveFeatures, locked: workspace.liveLocked,
+    history: workspace.history, ...(workspace.historyTrimmed ? { historyTrimmed: true } : {}) };
   // The session as it is now, stored with the migration's mark (a session made for this window from the library is stored nowhere).
   const profileMarks = (): Pick<WorkspaceState, "migration" | "profiles"> => ({ migration: workspace.migration,
     profiles: sessionStored ? sessionState.stored(workspace.profiles) : workspace.profiles });
   const session = createBrowserWorkspaceSession({
-    workspace, restored, verification, storage, budget: host.storageBudget, model: STUDIO_COMPOSITION.documents,
+    workspace, restored, verification, storage, budget: host.storageBudget, model: composition.documents,
     // The outbox's keys share the workspace's storage, so they count against its budget (profiles design §2.2).
     reserved: () => documents.outbox.storedSize(),
     capture: {
@@ -360,7 +371,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       transitions: () => transitions.stored(),
       profiles: profileMarks,
     },
-    sources: [preferences, sessionState, views, starterShapes], window, document,
+    sources: [preferences, sessionState, views, ...(starterShapes ? [starterShapes] : [])], window, document,
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
     canWrite: lease ? () => lease.draining() : undefined,
   });
@@ -387,7 +398,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   let panelUV: ReturnType<typeof createPanelUVFactory> | undefined;
   const drawUV = () => { viewportDevice.drawUV(); panelUV?.draw(); };
   previewDevice = createRegisteredPreview(core, {
-    signal: previewLife.signal, initialSize: workspace.preview.textureSize, changed: () => statusSource.changed(),
+    signal, initialSize: workspace.preview.textureSize, changed: () => statusSource.changed(),
     // The look the document shows: a warm head's surface keeps that look's makeup, given back when the document shows it again (D3).
     look: () => { const ref = lookEditor.ref(); return ref ? lookScope(ref) : undefined; },
     frame: run => requestAnimationFrame(run),
@@ -407,7 +418,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     setExportTransport(verification ? "/api/verification/mod-install" : "/api/mod-install"));
   setBuilds = () => presets.builtMods();
   core.app.attach({ facial, presets, transitions });
-  facial.follow(() => combineFacePoses(STUDIO_FACE_POSES.map(poser => poser.pose(core.app.featureState(poser.feature)?.part))),
+  facial.follow(() => combineFacePoses(composition.facePoses.map(poser => poser.pose(core.app.featureState(poser.feature)?.part))),
     () => shownHead()?.motion.snapshot());
   // Changes ease by the expression's transition setting; an edit inside an open form control (a slider drag) follows at once.
   facial.animate({ setting: () => transitions.get("expression"), continuous: () => !!core.app.featureControlSnapshot() });
@@ -418,7 +429,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // The editors (scene-editors.ts): every composed layered surface is registered, and each view's on-head editor edits the look that view's
   // scene shows, naming it through the view's panel (the input layer's resolution, profiles design §3.6). The root names no feature.
   const panelOf = (view: string | undefined) => view === undefined ? undefined : sessionState.instance(viewPanel(view));
-  const editors = createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: previewDevice ? { feature: previewDevice.feature, preview: previewDevice } : undefined, core,
+  const editors = createSceneEditors({ surfaces: composition.surfaces, look: previewDevice ? { feature: previewDevice.feature, preview: previewDevice } : undefined, core,
     naming: { look: view => targets.named(panelOf(view)).look,
       complete: (action, view) => targets.complete(action, core.app.descriptor(action.kind as StudioAction["kind"]), { instance: panelOf(view) }) as StudioAction },
     drawn: () => drawnView(), viewport: viewportDevice, attach: services => core.app.attach(services), message: adapterMessage });
@@ -467,7 +478,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   // Camera, preview and motion actions go to the runtime holding the view they name (view-routes.ts).
   core.app.attach({ runtimes: heads.runtimes });
   // 3D preview setup: follows the host's preparation and WolvenKit setup, then loads the head.
-  const previewSetup = new PreviewSetupActions({ modName: STUDIO_PRODUCT.modName,
+  const previewSetup = new PreviewSetupActions({ modName: composition.product?.modName,
     preparation: host.previewPreparation, wolvenKit: host.wolvenKitSetup, detection: installDetection, localSetup,
     openLink: host.openLink ?? (link => openInNewTab(host.wolvenKitSetup, link)),
     openHostSetup: host.openSetup, setupPlace: host.setupPlace,
@@ -481,14 +492,14 @@ async function start(host: StudioHost, root: HTMLElement) {
     canvases: named => named.look && lookEditor.ref() && sameLook(named.look, lookEditor.ref()!) ? previewDevice?.canvases ?? [] : [],
     albedo: named => named.character && named.character === targets.namedView(drawnView()).character ? shownHead()?.scene.albedo.image as HTMLImageElement | undefined : undefined });
   bootstrap = createTrustedStudioBootstrap({
-    core, preferences, localSetup, installDetection,
+    core, preferences, localSetup, installDetection, signal,
     naming: () => targets.namedView(drawnView()),
 
     panelViewport: input => panelUV!.acquire(input),
     bound: { available: type => type === "view" || layouts.catalogue().ids.includes(type), session: sessionState, targets, looks: profileAuthoring.contexts, empty: profileAuthoring.empty, context: type => layouts.catalogue().context(type),
       character: id => services.characters.character(id) ? heads.context(id) : undefined },
-    product: STUDIO_PRODUCT,
-    frameworkProducts: [{ feature: "expressions", name: "expression sets", requirements: EXPRESSION_FRAMEWORK_REQUIREMENTS }],
+    product: composition.product,
+    frameworkProducts: composition.frameworkProducts,
     modInstall, previewSetup, viewport: viewportDevice.attachment,
     links: { open: async link => {
       try { await (host.openLink ? host.openLink(link) : openProjectLinkInNewTab(link)); return { ok: true }; }
@@ -500,7 +511,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     collections: { owner: services.collections, scene: shownScene, transport: polish5?.transport ?? packageTransport,
       flushLook: () => lookEditor.commit(),
       // A new look's first layer starts from the chosen starter (the default when none was chosen).
-      starterPart: () => region.starter(starterShapes.shapeOf()),
+      starterPart: starters?.part,
       membership: id => services.profiles.collectionMembership(sessionState.profile, id),
       join: id => {
         const profile = services.profiles.profile(sessionState.profile);
@@ -529,12 +540,12 @@ async function start(host: StudioHost, root: HTMLElement) {
       const structural = targets.structural(id), destination = sessionState.panelTarget(id);
       return () => { const current = structural(); return current.available ? core.app.capability({ kind: "panels.show", destination }) : current; };
     } },
-    tabs: layoutTabsPort(sessionState, layoutTabs, services), starters: starterActions.port(),
+    tabs: layoutTabsPort(sessionState, layoutTabs, services), starters: starterActions?.port(),
     emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, panels: panelActions,
       ownerType: (instance, route) => route === "look" ? "presets" : route === "subject" ? "view" : layouts.catalogue().primary(sessionState.panel(instance)?.type ?? "")?.id,
       registration: () => experiments.registrationGeneration(), access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
       createLookCapability: collection => core.app.capability({ kind: "preset.edit", collection, command: { kind: "add" } }),
-      starter: () => starterParts(core.documents, region.starter(starterShapes.shapeOf())), baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) }),
+      starter: () => starterParts(core.documents, starters?.part()), baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) }),
     // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.
     targets, focus: historyService.focus, scopeName: scope => historyScopeName(scope, { services, history: historyService }),
     characterName: character => services.characters.character(character)?.label,
@@ -553,7 +564,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     } else lookEditor.show(shownScene.look());
   });
   // The only object handed to the presentation.
-  const viewComposition = { ...STUDIO_VIEW_COMPOSITION, optional: layouts.registrations, optionalGeneration: layouts.registrationGeneration };
+  const viewComposition = { ...composition.view, optional: layouts.registrations, optionalGeneration: layouts.registrationGeneration };
   bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); });
   defaultNote = text => adapterMessage("layout-default", text);
   if (defaultNotes.length) { defaultNote(defaultNotes.join("\n\n")); defaultNotes.length = 0; }
@@ -579,7 +590,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     },
     // Verification only (starter shapes, tools/starter-shapes-look.ts): the menu's own starters (a long name, a same-named pair, one the default),
     // and the shown look holding one layer of a starter (every other layer removed), through the real actions.
-    xfStudioStarters: {
+    xfStudioStarters: starterShapes ? {
       fixtures: () => startersFixtures(starterShapes, documents.outbox),
       only: (starter: string) => {
         const eye = port!.feature("eye-makeup")!;
@@ -590,7 +601,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       },
       /** The default, as the owner reports it now. */
       defaultId: () => starterShapes.defaultId(),
-    },
+    } : undefined,
     xfStudioPolish4: {
       state: (state: Polish4State) => polishFixture!.state(state),
       /** Visual host-capability specimen; no folder is opened by this fixture. */
@@ -669,11 +680,14 @@ async function start(host: StudioHost, root: HTMLElement) {
       },
     } });
   }
+  signal.throwIfAborted();
   void localSetup.dispatch({ kind: "setup.refresh" });
   previewDevice?.start();
   session.activate();
   await port!.library.execute({ kind: "initialize" });
+  signal.throwIfAborted();
   followPreviewSetup();
+  return lifetime;
 
   /**
    * The 3D head has one source: the preview the host derives from the player's own game files.

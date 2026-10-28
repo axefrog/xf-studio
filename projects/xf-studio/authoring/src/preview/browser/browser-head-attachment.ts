@@ -34,7 +34,7 @@ import type { PreviewActions } from "../preview-actions";
 import type { SavedAppearanceActions } from "../../character/saved-appearance-actions";
 import { bindStageTheme, type SystemColourScheme } from "./stage-theme-binding";
 import { createTrustedPreviewServices } from "../../app/trusted-preview-services";
-import type { WorkspaceState } from "../../app/workspace/makeup-workspace";
+import type { WorkspaceState } from "../../app/workspace/workspace-state";
 import type { ViewGraph } from "../../platform/core/view-graph";
 import type { PreparationProgress } from "../scene-residency";
 import type { ViewId } from "../../platform/api/view-graph";
@@ -61,7 +61,7 @@ export type HeadPreviewWiring = {
 };
 
 export type HeadAttachmentPorts = {
-  workspace: WorkspaceState;
+  workspace: Pick<WorkspaceState, "preview" | "savedV" | "views" | "uiPreferences" | "migration" | "profiles">;
   /** The workspace's view graph (it outlives any one head): the head restores the view it is made for and follows the view it draws. */
   graph?: ViewGraph;
   /** The destination view, resolved after construction and preparation waits so a surviving view of its scene can take over. */

@@ -30,7 +30,7 @@ import { LOOK_WORKING, lookRef as lookDocument } from "../../library/collection-
 import type { PanelContext, ConstraintRule } from "./bindings";
 import { TargetResolver } from "./targets";
 import { SceneCommands } from "./scene-commands";
-import type { WorkspaceState } from "../workspace/makeup-workspace";
+import type { WorkspaceState } from "../workspace/workspace-state";
 import { ProfileService } from "./profile-service";
 import { ProfileSessions } from "./profile-sessions";
 import type { ProfileSessionData } from "./profile-session";
@@ -73,7 +73,7 @@ export function createProfileServices(deps: { documents: DocumentStorePort; outb
  * first profile (its first V and its first collection's first look), stored nowhere (`stored` false). `graph` makes the view graph over its
  * views (the composition's rules and recovery), recording through the session; `stored` is the graph as the session stores it.
  */
-export function openProfileSession(workspace: WorkspaceState, services: Pick<ProfileServices, "profiles" | "collections">,
+export function openProfileSession(workspace: Pick<WorkspaceState, "preview" | "savedV" | "views" | "uiPreferences" | "migration" | "profiles">, services: Pick<ProfileServices, "profiles" | "collections">,
   deps: { history: HistoryService; graph(data: ViewGraphData, owner: ViewGraphOwner): ViewGraph; stored?(graph: ViewGraph): ViewGraphData;
     initial?: InitialProfileLayout },
   random: () => number = hostRandom().next): { state: ProfileSessions; stored: boolean } {

@@ -99,6 +99,11 @@ export function loadWorkspace(storage: Pick<Storage, "getItem">, verification: b
   const result = load(storage, verification, model);
   return { ...result, state: makeupWorkspace(result.state, model) };
 }
+/** Released startup defaults projected back onto the neutral workspace, without another owner. */
+export function loadLookWorkspace(storage: Pick<Storage, "getItem">, verification: boolean, model: DocumentModel): LoadedLookWorkspace {
+  const result = loadWorkspace(storage, verification, model);
+  return { ...result, state: lookWorkspace(result.state, model) };
+}
 export function serializeWorkspace(state: WorkspaceState, model: DocumentModel, options: { lookLevel?: boolean } = {}) {
   return serialize(lookWorkspace(state, model), model, options);
 }

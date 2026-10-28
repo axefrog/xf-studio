@@ -13,7 +13,9 @@ import { poseLibraryFacade, PoseLibraryActions, type PoseLibraryDevice, type Pos
  */
 export type ModuleDevices = { readonly saves: SaveExplorerDevice | null; readonly poses: { readonly device: PoseLibraryDevice; readonly stage: PoseStage } };
 
-export function createModuleServices(devices: ModuleDevices): readonly ModuleService[] {
-  return Object.freeze([saveExplorerFacade(new SaveExplorerSessions(devices.saves)),
-    poseLibraryFacade(new PoseLibraryActions(devices.poses.device, devices.poses.stage))]);
+export function createModuleServices(devices: ModuleDevices, modules: readonly string[] = ["save-explorer", "poses"]): readonly ModuleService[] {
+  return Object.freeze([
+    ...(modules.includes("save-explorer") ? [saveExplorerFacade(new SaveExplorerSessions(devices.saves))] : []),
+    ...(modules.includes("poses") ? [poseLibraryFacade(new PoseLibraryActions(devices.poses.device, devices.poses.stage))] : []),
+  ]);
 }

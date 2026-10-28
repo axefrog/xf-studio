@@ -5,7 +5,7 @@
  * from a newer build is listed as unavailable rather than made into a broken tab.
  */
 import { contributedDefaultIssues, contributedDefaults, type ContributedDefaultsSource, type ContributedLayoutDefault } from "../app/profiles/layout-defaults";
-import type { StudioModule } from "../platform/api";
+import type { StudioModule, ModuleRegistration } from "../platform/api";
 import { dispatchIsolated } from "../platform/core/listeners";
 import type { FragmentKnowledge } from "../app/profiles/layout-fragment";
 import { STUDIO_VIEW_GRAPH_RULES } from "../preview/preview-view-graph";
@@ -16,6 +16,10 @@ import { legacyEnabledModules, type DockLayout, type UIPreferences } from "../ap
 import { dockPanels, rewriteDock, type InitialProfileLayout } from "../app/profiles/profiles-migration-data";
 import { defaultDockState } from "../studio-ui/layout-defaults";
 import { DOCK_FORMAT, DOCK_VERSION, parseTree, unparkPanels, type DockState, type DockTree } from "../studio-ui/dock/layout";
+import { serializeDockState } from "../studio-ui/dock/persist";
+
+export type LayoutComposition = { modules: ModuleRegistration; views: readonly ViewContribution[]; catalogue: ViewCatalogue };
+export const STUDIO_LAYOUT_COMPOSITION: LayoutComposition = { modules: STUDIO_MODULE_REGISTRATION, views: STUDIO_VIEWS, catalogue: STUDIO_CATALOGUE };
 
 const panels = new Set<string>(STUDIO_CATALOGUE.ids), tools = new Set(STUDIO_MODULE_REGISTRATION.tools.map(tool => tool.id));
 export const STUDIO_FRAGMENT_KNOWLEDGE: FragmentKnowledge = Object.freeze({ panel: (type: string) => panels.has(type), tool: (id: string) => tools.has(id),
@@ -41,7 +45,14 @@ export type LayoutExperiments<T extends LayoutExperiment = LayoutExperiment> = {
  * the build's knowledge plus that experiment's own panels; an invalid one is refused, logged once and never offered, and it never stops
  * the build. Switching the experiment off withdraws its defaults and its panel types; tabs made from them are the person's and stay.
  */
-export function studioLayoutDefaults<T extends LayoutExperiment>(experiments: LayoutExperiments<T>, log: (message: string) => void = () => {}) {
+export function studioLayoutDefaults<T extends LayoutExperiment>(experiments: LayoutExperiments<T>, log: (message: string) => void = () => {},
+  composition: LayoutComposition = STUDIO_LAYOUT_COMPOSITION) {
+  const { modules, views, catalogue } = composition;
+  const panels = new Set<string>(catalogue.ids), tools = new Set(modules.tools.map(tool => tool.id));
+  const knowledge: FragmentKnowledge = { panel: type => panels.has(type), tool: id => tools.has(id), rules: STUDIO_VIEW_GRAPH_RULES };
+  const issues = contributedDefaultIssues(modules.modules, knowledge);
+  if (issues.length) throw Error(`The modules' default layouts are incomplete: ${issues.join("; ")}.`);
+  const defaults = contributedDefaults(modules.modules);
   const refused = new WeakSet<StudioModule>();
   const refuse = (item: LayoutExperiment, reason: string) => {
     if (refused.has(item.module)) return;
@@ -60,13 +71,13 @@ export function studioLayoutDefaults<T extends LayoutExperiment>(experiments: La
       try {
         if (!item.module.defaults?.length) return [];
         const own = new Set(item.contribution.panels.map(panel => panel.id));
-        const issues = contributedDefaultIssues([item.module], { ...STUDIO_FRAGMENT_KNOWLEDGE, panel: type => panels.has(type) || own.has(type) });
+        const issues = contributedDefaultIssues([item.module], { ...knowledge, panel: type => panels.has(type) || own.has(type) });
         if (!issues.length) return contributedDefaults([item.module]);
         refuse(item, issues.join("; "));
       } catch (error) { refuse(item, String((error as Error)?.message ?? error)); }
       return [];
     });
-    return { generation: at, list: Object.freeze([...STUDIO_LAYOUT_DEFAULTS, ...added]), registrations: Object.freeze(on),
+    return { generation: at, list: Object.freeze([...defaults, ...added]), registrations: Object.freeze(on),
       panels: new Set(on.flatMap(item => item.contribution.panels.map(panel => panel.id))) };
   };
   /**
@@ -75,7 +86,7 @@ export function studioLayoutDefaults<T extends LayoutExperiment>(experiments: La
    * and knowledge stand in, cached for that generation; a withdrawn set is never returned. A read made from inside a build (a listener
    * reached during it) gets the built-ins too.
    */
-  const builtIns = (generation: number): Snapshot => ({ generation, list: STUDIO_LAYOUT_DEFAULTS, panels: new Set(), registrations: [] });
+  const builtIns = (generation: number): Snapshot => ({ generation, list: defaults, panels: new Set(), registrations: [] });
   let snap: Snapshot = builtIns(-1), building = false;
   const snapshot = (): Snapshot => {
     const current = experiments.registrationGeneration();
@@ -93,26 +104,33 @@ export function studioLayoutDefaults<T extends LayoutExperiment>(experiments: La
   const listeners = new Set<() => void>();
   experiments.onRegistrationsChanged(() => dispatchIsolated(listeners, error =>
     log(`A default layouts listener failed: ${String((error as Error)?.message ?? error)}.`)));
-  const known: FragmentKnowledge = Object.freeze({ rules: STUDIO_VIEW_GRAPH_RULES, tool: STUDIO_FRAGMENT_KNOWLEDGE.tool,
+  const known: FragmentKnowledge = Object.freeze({ rules: STUDIO_VIEW_GRAPH_RULES, tool: knowledge.tool,
     panel: (type: string) => panels.has(type) || snapshot().panels.has(type) });
   const contributed: ContributedDefaultsSource = { list: () => snapshot().list, generation: () => snapshot().generation,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; } };
   // Defaults, command metadata, target contexts and the shell's factories all read this same generation-checked registration set.
   return { contributed, known, registrations: () => snapshot().registrations, registrationGeneration: () => snapshot().generation,
-    catalogue: () => { const current = snapshot(); return current.catalogue ??= viewCatalogue([...STUDIO_VIEWS, ...current.registrations.map(item => item.contribution)]); } };
+    catalogue: () => { const current = snapshot(); return current.catalogue ??= viewCatalogue([...views, ...current.registrations.map(item => item.contribution)]); },
+    initial: initialLayout(composition), keepsState: (type: string) => catalogue.panels.some(panel => panel.id === type && panel.stateInDefaults === true) };
 }
 // A first workspace keeps its legacy view graph, and starts with Eye makeup's contributed panel arrangement in both size classes.
-const first = STUDIO_LAYOUT_DEFAULTS.find(item => item.id === "eye-makeup/default")!;
-export const STUDIO_INITIAL_LAYOUT: InitialProfileLayout = { origin: first.id, dock: rewriteDock(first.fragment.tab.dock as DockLayout,
-  key => key === `view:${first.fragment.views[0]!.key}` ? "head" : first.fragment.panels.find(panel => panel.key === key)?.type ?? key)!, legacyDock };
+export const STUDIO_INITIAL_LAYOUT = initialLayout(STUDIO_LAYOUT_COMPOSITION);
+
+export function initialLayout(composition: LayoutComposition): InitialProfileLayout {
+  const first = contributedDefaults(composition.modules.modules)[0];
+  return { origin: first?.id ?? "shell/default", dock: first ? rewriteDock(first.fragment.tab.dock as DockLayout,
+    key => key === `view:${first.fragment.views[0]!.key}` ? "head" : first.fragment.panels.find(panel => panel.key === key)?.type ?? key)!
+    : serializeDockState(defaultDockState(composition.catalogue)),
+    legacyDock: (dock, preferences) => legacyDock(dock, preferences, composition) };
+}
 
 /** Dock mechanics stay in the adapter: enabled legacy modules return at remembered places, or join their factory siblings. */
-function legacyDock(dock: DockLayout, preferences: UIPreferences): DockLayout {
+function legacyDock(dock: DockLayout, preferences: UIPreferences, composition: LayoutComposition): DockLayout {
   const on = legacyEnabledModules(preferences);
-  const enabled = STUDIO_CATALOGUE.panels.filter(panel => STUDIO_MODULES.some(module => (module.feature ?? module.id) === panel.owner
+  const enabled = composition.catalogue.panels.filter(panel => composition.modules.modules.some(module => (module.feature ?? module.id) === panel.owner
     && on.has(module.id))).map(panel => panel.id);
   if (!enabled.length || dock.format !== DOCK_FORMAT || dock.version !== DOCK_VERSION || !dock.state || typeof dock.state !== "object") return dock;
-  const state = dock.state as unknown as DockState, defaults = defaultDockState(STUDIO_CATALOGUE);
+  const state = dock.state as unknown as DockState, defaults = defaultDockState(composition.catalogue);
   const tree = (size: "wide" | "compact"): DockTree => {
     const current = state[size], known = dockPanels({ ...dock, state: { [size]: current } as unknown as DockLayout["state"] });
     // Validate without replacing the stored tree: retain its exact split shares, rectangles and unknown fields.

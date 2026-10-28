@@ -6,6 +6,7 @@
 import { LOCALHOST_SETUP_PLACE } from "../app/alpha-availability";
 import { createBrowserPreviewPreparation } from "../preview/preview-preparation";
 import { startStudio } from "./studio-startup";
+import { selectStartupComposition } from "./startup-composition";
 import { createBrowserDesktopApp } from "../setup/browser/browser-desktop-app-device";
 import { createBrowserWolvenKitSetup } from "../setup/wolvenkit-setup";
 import { browserExperiments } from "./experiments";
@@ -15,6 +16,7 @@ import { localOutboxStorage } from "../app/browser/outbox-storage";
 import { immutableDocumentKind } from "./document-kinds";
 
 const verification = new URLSearchParams(location.search).has("verify");
+const composition = selectStartupComposition(location.search);
 // One writer per workspace (profiles design §2.3): the lease is settled before the Studio builds anything, so a second tab opens read-only.
 const workspaceLease = await startBrowserWorkspaceLease({ verification });
 // The outbox (§2.2): the one way documents reach the library, kept in this browser's storage under the workspace's identity.
@@ -31,4 +33,4 @@ void startStudio({
   setupPlace: LOCALHOST_SETUP_PLACE,
   // Localhost-only: offer the desktop app (a verification workspace checks it too, but never starts anything).
   desktopApp: createBrowserDesktopApp(verification ? "/api/verification/desktop-app" : "/api/desktop-app"),
-});
+}, { composition });

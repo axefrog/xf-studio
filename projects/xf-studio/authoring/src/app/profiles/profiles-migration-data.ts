@@ -23,8 +23,10 @@ import { LAYOUT_FRAGMENT_SCHEMA, type LayoutFragment } from "../../platform/api/
 import { workspaceViewGraph } from "../../preview/preview-view-graph";
 import type { SavedV } from "../../saves/save-reader";
 import type { DockLayout, JsonValue, UIPreferences } from "../ui-preferences";
-import type { DocumentModel } from "../workspace/makeup-workspace";
-import { serializeWorkspace, type WorkspaceState } from "../workspace/makeup-workspace";
+import type { DocumentModel } from "../workspace/collection-workspace";
+import { serializeWorkspace, type WorkspaceState as NeutralWorkspace } from "../workspace/workspace-state";
+import { lookWorkspace, type WorkspaceState as MakeupWorkspace } from "../workspace/makeup-workspace";
+type WorkspaceState = NeutralWorkspace | MakeupWorkspace;
 import { type LayoutTab, type PanelInstance, PROFILE_SESSION_SCHEMA, type ProfileSessionData, PROFILES_MIGRATION, type SessionScene, type SessionView,
   WORKSPACE_PROFILES_SCHEMA, type WorkspaceProfiles } from "./profile-session";
 
@@ -129,7 +131,7 @@ export const LOOSE_COLLECTION_NAME = "My looks";
  * the V, and its saved layouts as fragments. `workspace` is the workspace's identity.
  */
 export function migrationSnapshot(state: WorkspaceState, model: DocumentModel, workspace: string): MigrationSnapshot {
-  const stored = JSON.parse(JSON.stringify(serializeWorkspace(state, model))) as { collections?: StoredDraft & { previous?: StoredDraft; older?: StoredDraft[] };
+  const stored = JSON.parse(JSON.stringify(serializeWorkspace(lookWorkspace(state, model), model))) as { collections?: StoredDraft & { previous?: StoredDraft; older?: StoredDraft[] };
     look?: { parts: Record<string, PartEnvelope>; memory: unknown } };
   const drafts: MigrationDraft[] = [];
   let selected: string | undefined;
@@ -326,7 +328,7 @@ export function buildProfileSession(state: WorkspaceState, snapshot: Pick<Migrat
  * arrangement with its panels as instances; every view is in tab 1; every character scene shows `character` and `look`. Its editing
  * context (§3.7) is the look's history, so Undo reaches it as it did before the session existed.
  */
-export function sessionOfWorkspace(state: WorkspaceState, input: { tab: string; origin?: string; character?: string; look?: { collection: string; look: string } },
+export function sessionOfWorkspace(state: Pick<WorkspaceState, "preview" | "views" | "uiPreferences">, input: { tab: string; origin?: string; character?: string; look?: { collection: string; look: string } },
   random: () => number = Math.random, initial?: InitialProfileLayout): ProfileSessionData {
   const tab = `t-${base36(random)}`;
   const base = state.uiPreferences.layout ?? initial?.dock ?? null;

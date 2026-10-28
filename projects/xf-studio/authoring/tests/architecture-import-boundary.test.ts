@@ -775,7 +775,8 @@ test("only the composition imports compose/: every other module receives the reg
     .flatMap(name => resolved(name).filter(path => path.startsWith("compose/")).map(path => `${name} -> ${path}`));
   expect(violations).toEqual([]);
   // The root does import it: the composition reaches the app only through it.
-  expect(resolved("compose/studio-startup")).toContain("compose/studio-registry");
+  expect(resolved("compose/studio-startup")).toContain("compose/startup-composition");
+  expect(resolved("compose/startup-composition")).toContain("compose/studio-registry");
 });
 
 test("no module outside the composition reaches a feature, directly or through other modules", () => {

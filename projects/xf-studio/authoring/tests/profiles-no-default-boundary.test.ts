@@ -125,7 +125,7 @@ describe("the composition root names no live feature (§7, liveSurface)", () => 
   test("the root registers every layered surface and wires none by the live feature's name; a scene wires what its look editor edits", () => {
     const root = readFileSync(join(SRC, "compose/studio-startup.ts"), "utf8").split("\n").filter(line => !/^\s*(\*|\/\/)/.test(line)).join("\n");
     expect(root).not.toMatch(/\.live\b|LIVE_FEATURE|LIVE_REGION|liveSurface|EYE_MAKEUP|features\/eye-makeup/);
-    expect(root).toMatch(/createSceneEditors\(\{ surfaces: STUDIO_LAYERED_SURFACES,/);
+    expect(root).toMatch(/createSceneEditors\(\{ surfaces: composition\.surfaces,/);
   });
 
   test("a scene wires the registered surface of the feature its look editor edits, with the editor's device, as the on-head editor's; others get no layer source", () => {

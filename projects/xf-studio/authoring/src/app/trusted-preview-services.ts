@@ -1,7 +1,7 @@
 import { MotionActions, type MotionPort } from "../animation/motion-actions";
 import { PreviewActions, type PreviewPort } from "../preview/preview-actions";
 import { SavedAppearanceActions, type SavedAppearancePort } from "../character/saved-appearance-actions";
-import type { WorkspaceState } from "./workspace/makeup-workspace";
+import type { WorkspaceState } from "./workspace/workspace-state";
 import type { ViewGraph } from "../platform/core/view-graph";
 import type { ViewId } from "../platform/api/view-graph";
 import { createStudioViewGraph, previewLights, previewMirror, type SceneState } from "../preview/preview-view-graph";
@@ -36,7 +36,7 @@ export function graphMotionScene(graph: ViewGraph, preview: () => PreviewActions
  * Restore order: the saved V, the optics, eye shape and details when the head is built; then, each time the head is shown (`show`), the
  * motion and then the camera (the camera node's pose, which the head shown before wrote when it was hidden).
  */
-export function createTrustedPreviewServices(workspace: WorkspaceState, ports: {
+export function createTrustedPreviewServices(workspace: Pick<WorkspaceState, "preview" | "savedV" | "views" | "uiPreferences" | "migration" | "profiles">, ports: {
   savedAppearance: SavedAppearancePort;
   preview: PreviewPort;
   motion: MotionPort;

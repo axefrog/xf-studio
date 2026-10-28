@@ -1,23 +1,33 @@
-import { WorkspaceComposer, type WorkspaceCapturePorts } from "../workspace/workspace-composer";
+import { WorkspaceComposer, type WorkspaceCapturePorts, type WorkspaceInput } from "../workspace/workspace-composer";
 import { WorkspacePersistence, type WorkspaceSaveStatus } from "../workspace/workspace-persistence";
-import type { DocumentModel } from "../workspace/makeup-workspace";
+import type { DocumentModel } from "../workspace/collection-workspace";
 import { loadWorkspace, workspaceKeys, type WorkspaceState } from "../workspace/makeup-workspace";
+import { loadWorkspace as loadNeutralWorkspace } from "../workspace/workspace-state";
+import type { EditingComposition } from "../trusted-authoring-core";
+
+/** Normal compatibility defaults are contributed by the primary registered feature. */
+export function loadCompositionWorkspace(storage: Pick<Storage, "getItem">, verification: boolean, composition: EditingComposition) {
+  const model = composition.documents;
+  const owner = model.live ? composition.registry.owner(model.live) : undefined;
+  const loader = (owner as { workspace?: { load: typeof loadNeutralWorkspace } } | undefined)?.workspace?.load;
+  return (loader ?? loadNeutralWorkspace)(storage, verification, model);
+}
 
 type Observable = { subscribe(listener: () => void): () => void };
 type EventSource = { addEventListener(type: string, listener: EventListener): void };
 
 /** The key is selected before services are built so the verification draft stays isolated. */
-export function loadBrowserWorkspace(storage: Pick<Storage, "getItem">, verification: boolean, model: DocumentModel) {
+export function loadBrowserWorkspace(storage: Pick<Storage, "getItem">, verification: boolean, model: DocumentModel & { readonly live: string }) {
   return loadWorkspace(storage, verification, model);
 }
 
 /** Own the browser write transport and coarse event triggers; policy remains in the services. */
-export function createBrowserWorkspaceSession(options: {
-  workspace: WorkspaceState;
+export function createBrowserWorkspaceSession<W extends WorkspaceInput = WorkspaceState>(options: {
+  workspace: W;
   verification: boolean;
   restored: { writable: boolean; error?: string; warning?: string };
   storage: Pick<Storage, "setItem">;
-  capture: WorkspaceCapturePorts;
+  capture: WorkspaceCapturePorts<W>;
   /**
    * Domain and content sources whose changes need saving. Never pass the whole presentation
    * port: it also carries the save status itself, and a save must not request another save.
