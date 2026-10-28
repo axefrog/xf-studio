@@ -552,6 +552,10 @@ function writesRows(theme: Theme): Json[] {
 }
 
 /** Stopped: the CET window with Reconnect and the Stopped chip (ST7, ST6), then the stopped CET line (ST8), from one bridge.kill. */
+// Stopped, the CET window shrinks to Status, Reconnect and Diagnostics (about a third of the running window's
+// height), so its plate covers about 5 % of the running window's region: the window checks take 3 %.
+const compactWindow = (step: Json): Json =>
+  step.do === "capture.surface" && step.rect === "$win.regions.cet_window" ? { ...step, min_plate: 0.03 } : step;
 function stoppedRow(theme: Theme, writes: boolean): Json {
   const row = `ST7-${theme}-stopped`;
   return { id: row, title: `Stopped (one bridge.kill): the CET window with Reconnect, the Stopped chip, the stopped CET line (ST7, ST6, ST8) (${theme})`,
@@ -565,7 +569,7 @@ function stoppedRow(theme: Theme, writes: boolean): Json {
       ...cetShot(row, `ST7-cet-stopped-${theme}`, "stopped", theme), ...cetShot(row, `ST6-cet-chip-stopped-${theme}`, "chip", theme),
       ...cetClose(row, "cet-close-for-line"), { label: `${row}-line-wait`, do: "wait", ms: 800 }, visible(row, "cet_line", theme, "line"),
       { label: `${row}-line-shot`, do: "capture", name: `ST8-cetline-stopped-${theme}`, clear_overlay: false, bind: key(row, "line") },
-      inFrame(row, "line", "cet_line", theme)],
+      inFrame(row, "line", "cet_line", theme)].map(compactWindow),
     pass: [captured("stopped, with Reconnect", row, "stopped"), captured("the Stopped chip", row, "chip"), captured("the stopped CET line", row, "line"),
       framed(row, "stopped"), framed(row, "chip"), framed(row, "line")],
     cleanup: [...cetClose(row)] };
