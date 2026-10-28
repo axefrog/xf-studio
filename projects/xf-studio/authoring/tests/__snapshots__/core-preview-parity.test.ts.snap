@@ -1,0 +1,308 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`registered head preparation preserves every 2afdbe8d output byte and identity 1`] = `
+{
+  "files": [
+    {
+      "bytes": 9876,
+      "name": "head.glb",
+      "sha256": "44d7e995c52446e77bfd33b1897a297d56b834af68335568622663615cb193f8",
+    },
+    {
+      "bytes": 684,
+      "name": "head-color.png",
+      "sha256": "5b794b689174eed98de6698456499418eec4307fd50c785cf65f6784281dbccb",
+    },
+    {
+      "bytes": 856,
+      "name": "head-normal.png",
+      "sha256": "fd6694ba05713e899a6ea8bccce758b4c66542ff53965843eea66724c594f11c",
+    },
+    {
+      "bytes": 883,
+      "name": "head-roughness.png",
+      "sha256": "fd2ad0166828970faddaa1dfa181542635ab3cce3b4bd1b3a7307fa4c077ba03",
+    },
+    {
+      "bytes": 684,
+      "name": "eye-color.png",
+      "sha256": "5b794b689174eed98de6698456499418eec4307fd50c785cf65f6784281dbccb",
+    },
+    {
+      "bytes": 4134,
+      "name": "preview-core.json",
+      "sha256": "316a61909d2fa215fc88807e4590ec105ba15b2f3e225908a59c635561a2ac2b",
+    },
+  ],
+  "manifest": {
+    "cacheKey": "1d419b82c76af2417a8c729c013becd0e32227ef41f63ea3e9c98f5a28773f0e",
+    "deriverVersion": 3,
+    "files": [
+      {
+        "bytes": 9876,
+        "name": "head.glb",
+        "sha256": "44d7e995c52446e77bfd33b1897a297d56b834af68335568622663615cb193f8",
+      },
+      {
+        "bytes": 684,
+        "name": "head-color.png",
+        "sha256": "5b794b689174eed98de6698456499418eec4307fd50c785cf65f6784281dbccb",
+      },
+      {
+        "bytes": 856,
+        "name": "head-normal.png",
+        "sha256": "fd6694ba05713e899a6ea8bccce758b4c66542ff53965843eea66724c594f11c",
+      },
+      {
+        "bytes": 883,
+        "name": "head-roughness.png",
+        "sha256": "fd2ad0166828970faddaa1dfa181542635ab3cce3b4bd1b3a7307fa4c077ba03",
+      },
+      {
+        "bytes": 684,
+        "name": "eye-color.png",
+        "sha256": "5b794b689174eed98de6698456499418eec4307fd50c785cf65f6784281dbccb",
+      },
+      {
+        "bytes": 4134,
+        "name": "preview-core.json",
+        "sha256": "316a61909d2fa215fc88807e4590ec105ba15b2f3e225908a59c635561a2ac2b",
+      },
+    ],
+    "geometry": {
+      "eyes": {
+        "morphTargets": 1,
+        "triangles": 2,
+        "uv0Max": [
+          1.5,
+          0.30000001192092896,
+        ],
+        "uv0Min": [
+          -1.5,
+          0,
+        ],
+        "vertices": 6,
+      },
+      "head": {
+        "influenceSets": 2,
+        "joints": 2,
+        "morphTargets": 2,
+        "triangles": 32,
+        "vertices": 25,
+      },
+      "plate": {
+        "morphTargets": 2,
+        "triangles": 6,
+        "vertices": 8,
+      },
+    },
+    "limits": [
+      "Geometry and textures are the installed game's own data, decoded by WolvenKit; they are private to this computer and must not be redistributed.",
+      "Skin, normal and roughness maps are approximations for the browser renderer, not the game's skin shader.",
+      "The eye shows the vanilla eye base texture; the game's brown iris gradient, refraction and wetness are not reproduced.",
+      "The eyeballs follow the eye-shape choice through the eye's own morph targets; morph-specific joint binds are not applied, so the idle turns each eye about its unmorphed pivot.",
+      "Brows, lashes, hair, piercings and the character-creator idle are not derived here.",
+    ],
+    "plateRecipeId": "fixture-plate",
+    "plateRecipeRevision": 1,
+    "recipeId": "xfs-preview-core-female-average",
+    "recipeRevision": 2,
+    "recipeSha256": "11fcbd92b4c104a8471a0b0d60b6fb45d38880b330a0b20a6b61696a80101909",
+    "schema": "xfs/preview-core-cache-1",
+    "source": {
+      "eyeGlbSha256": "91e76f37d4184624a6e7e4844a2cdd2d89af362a3a2dc41b459acdf755f9c9ba",
+      "eyeMaterialsSha256": "a8238b57314c5394b7559a750dfc23e799ce0ae6a74836077790121b9c6f2f67",
+      "eyeMeshDepotPath": "base\\characters\\head\\player_base_heads\\player_female_average\\h0_000_pwa_c__basehead\\he_000_pwa_c__basehead.mesh",
+      "eyeMeshSha256": "048eed54e2b6c8878646530bad960ab250e01967976103c2d0adab29478e2e75",
+      "eyeMorphDepotPath": "base\\characters\\head\\player_base_heads\\player_female_average\\he_000_pwa__morphs.morphtarget",
+      "eyeMorphGlbSha256": "36902accaa17edb8fd24f4048491459806f7926e8ce98095677776ed20b1ccea",
+      "eyeMorphSha256": "9eba771975d9cf57eede37ada5debe25a04745e4bf681faff1d46fb8852fd435",
+      "headGlbSha256": "0861a00bd608f89e9656f5a7b2a94ac3d7e8b5c3bfe11d5d6055e42fa907a6e3",
+      "headMaterialsSha256": "e713f5c1d8aac533c9700dcc3ad1cd007b5881eb339ba5bc0007298e6c80a779",
+      "headMeshDepotPath": "base\\fixture\\head.mesh",
+      "headMeshSha256": "865552a0755b8577c9a1322aeaf5e3b0800ee7237b40488e1c42914917a043cc",
+      "headMorphDepotPath": "base\\fixture\\head_morphs.morphtarget",
+      "headMorphSha256": "fc497759dfbe905c5588fca5891b91badeca37633eee54f4ca2dc5fe5e406f7a",
+      "label": "Fixture 1.0",
+      "revisionId": "fixture-1",
+      "textures": [
+        {
+          "adapter": "colour-copy",
+          "appearance": "default",
+          "baseMaterial": "base\\fixture\\pale.mi",
+          "decodedSha256": "99a576a2a154bf31ce2bb6becb46206dd631fbfa6fab095fd7655be22cea203e",
+          "depotPath": "base\\fixture\\textures\\head_d01.xbm",
+          "file": "head-color.png",
+          "height": 256,
+          "material": "01_ca_pale",
+          "mesh": "head",
+          "parameter": "Albedo",
+          "width": 256,
+        },
+        {
+          "adapter": "packed-normal",
+          "appearance": "default",
+          "baseMaterial": "base\\fixture\\pale.mi",
+          "decodedSha256": "7be6487d0e8cb65e8743a93d126777e9f74bb1c5c6fe711e65eb2ef22f42d400",
+          "depotPath": "base\\fixture\\textures\\head_n01.xbm",
+          "file": "head-normal.png",
+          "height": 256,
+          "material": "01_ca_pale",
+          "mesh": "head",
+          "parameter": "Normal",
+          "width": 256,
+        },
+        {
+          "adapter": "red-to-grey",
+          "appearance": "default",
+          "baseMaterial": "base\\fixture\\pale.mi",
+          "decodedSha256": "9c83848cffdf77f42c76ae1c772b779c9f734b29ff8fc1ebfb0a5881bf55fe47",
+          "depotPath": "base\\fixture\\textures\\head_rm01.xbm",
+          "file": "head-roughness.png",
+          "height": 256,
+          "material": "01_ca_pale",
+          "mesh": "head",
+          "parameter": "Roughness",
+          "width": 256,
+        },
+        {
+          "adapter": "colour-copy",
+          "appearance": "gradient_brown",
+          "baseMaterial": "base\\fixture\\brown.mi",
+          "decodedSha256": "99a576a2a154bf31ce2bb6becb46206dd631fbfa6fab095fd7655be22cea203e",
+          "depotPath": "base\\fixture\\textures\\eye_d02.xbm",
+          "file": "eye-color.png",
+          "height": 256,
+          "material": "gradient_brown",
+          "mesh": "eye",
+          "parameter": "Albedo",
+          "width": 256,
+        },
+      ],
+      "tool": {
+        "key": "fixture-tool:1",
+        "label": "Fixture exporter 1.0",
+      },
+    },
+  },
+}
+`;
+
+exports[`2afdbe8d raster worker bytes survive registration, including 2K and mottle 1`] = `
+[
+  {
+    "bytes": 1048576,
+    "name": "plain",
+    "sha256": "5d809b79bea84126ff0a1dffcf7e907137c222c58d74ac305d1007980efcd93d",
+    "size": 512,
+  },
+  {
+    "bytes": 16777216,
+    "name": "plain",
+    "sha256": "87661b9adbf2219ef6766b689e583ca5e2c4ed150e9f1a08b90735afdb7b60cf",
+    "size": 2048,
+  },
+  {
+    "bytes": 1048576,
+    "name": "directional",
+    "sha256": "a8b80a5852619b9cd3920866330a4b4fbeae85f28cf55129e9451b701dbc1fae",
+    "size": 512,
+  },
+  {
+    "bytes": 16777216,
+    "name": "directional",
+    "sha256": "0a7eeda66b2d141497156725cf234704b713a522d33c67e6f57981ddbf9b2e3e",
+    "size": 2048,
+  },
+  {
+    "bytes": 1048576,
+    "name": "mottle",
+    "sha256": "e10d1bba3e47e471b7ba4b5b6e518b491ff4d7ed9785aa2334c63d6942539fbb",
+    "size": 512,
+  },
+  {
+    "bytes": 16777216,
+    "name": "mottle",
+    "sha256": "f6be568abd02e12577c73480b6651dd73751d5ea7428224de3720ef3656900d3",
+    "size": 2048,
+  },
+]
+`;
+
+exports[`2afdbe8d preview presentation, warm holds and superseded worker results stay identical 1`] = `
+[
+  [
+    "request",
+    0,
+    1,
+    512,
+  ],
+  [
+    "paint",
+    512,
+  ],
+  [
+    "report",
+    "Live makeup · 512² · 2 ms · layer 1",
+  ],
+  [
+    "stack",
+    [
+      512,
+      1,
+      1,
+      1,
+    ],
+    [
+      "layer-1",
+      "layer-2",
+      "layer-3",
+      "layer-4",
+    ],
+  ],
+  [
+    "layer",
+    0,
+  ],
+  [
+    "layer",
+    1,
+  ],
+  [
+    "layer",
+    2,
+  ],
+  [
+    "layer",
+    3,
+  ],
+  [
+    "prepared",
+    true,
+  ],
+  [
+    "request",
+    1,
+    2,
+    1,
+  ],
+  [
+    "warm",
+    true,
+  ],
+  [
+    "cancel",
+    2,
+  ],
+  [
+    "request",
+    0,
+    6,
+    1024,
+  ],
+  [
+    "discarded",
+    1,
+  ],
+]
+`;

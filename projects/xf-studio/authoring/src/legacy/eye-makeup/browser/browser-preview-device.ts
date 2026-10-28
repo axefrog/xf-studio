@@ -31,6 +31,7 @@ export { previewOpticalKey };
 
 /** Trusted browser resource owner. A replacement presentation receives quality actions, never these canvases or worker. */
 export function createBrowserPreviewDevice(options: {
+  signal?: AbortSignal;
   /** Where the surface's layers come from (the live feature's authoring document). */
   document: PreviewLayerSource;
   /**
@@ -52,6 +53,7 @@ export function createBrowserPreviewDevice(options: {
   createCanvas?(size: number): HTMLCanvasElement;
   createPixels?(data: CompleteRaster["data"], size: number): ImageData;
 }) {
+  options.signal?.throwIfAborted();
   const { document: authoring } = options;
   const createCanvas = options.createCanvas ?? ((size: number) => {
     const canvas = document.createElement("canvas");
@@ -173,6 +175,9 @@ export function createBrowserPreviewDevice(options: {
   scheduler = new AuthoringRenderScheduler(authoring, {
     frame: options.frame, render: i => coordinator.render(i), refreshSelection: options.refreshSelection,
   });
+  const release = () => { scheduler.dispose(); client.dispose(); held.clear(); viewer = undefined; };
+  options.signal?.addEventListener("abort", release, { once: true });
+  if (options.signal?.aborted) { release(); options.signal.throwIfAborted(); }
   return {
     coordinator,
     canvases,

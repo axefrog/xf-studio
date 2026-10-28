@@ -13,7 +13,7 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
 import { createBrowserSceneHeads, type SceneHeadsPorts } from "../src/preview/browser/browser-scene-heads";
-import type { LayeredSurfaceWiring } from "../src/preview/browser/browser-head-attachment";
+import { layeredPreviewWiring, type LayeredSurfaceWiring } from "../src/preview/browser/layered-preview-wiring";
 import { CharacterContextActions } from "../src/character/character-context-actions";
 import { AuthoringDocument, type DocumentState } from "./fixtures/makeup-document";
 import { createBrowserPreviewDevice } from "../src/legacy/eye-makeup/browser/browser-preview-device";
@@ -87,7 +87,7 @@ function world() {
     document: () => ({}) as never, decoded: () => null };
   const gate = { open: true, waiting: [] as (() => void)[] };
   const heads = createBrowserSceneHeads({
-    head: { ...h.ports, layered: [wiring] },
+    head: { ...h.ports, layered: [layeredPreviewWiring(wiring)] },
     scenes: { view: () => "main", of: view => views[view]?.scene, has: scene => Object.values(views).some(view => view.scene === scene),
       subject: scene => Object.values(views).find(view => view.scene === scene)?.subject, ensureSubject: async scene => Object.values(views).find(view => view.scene === scene)!.subject,
       subscribe: () => () => {} },

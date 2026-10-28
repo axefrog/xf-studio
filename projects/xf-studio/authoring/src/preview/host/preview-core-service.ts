@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { contentFingerprint, DerivedCache, fileSha256, samePath } from "../../host/derived-cache";
-import { EYE_PLATE_RECIPE, sha256Hex, supportedEyePlateSource, type EyePlateRecipe } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
+import { sha256Hex, type EyePlateRecipe } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
 import { decodePng, encodePng } from "../../formats/png";
 import { adaptMap, checkMap } from "../preview-core-maps";
 import { parseMaterialExport, resolveTextureParameter } from "../preview-core-materials";
@@ -10,7 +10,7 @@ import { GameAssetExportError, gameContentSource, type ExportSource, type GameAs
 import { RENDER_DETAIL_SCHEMA, type CoreDetail } from "../../character/render-detail";
 import {
   PREVIEW_CORE_DERIVER_VERSION, PREVIEW_CORE_FILES, PREVIEW_CORE_RECORD_FILE, PREVIEW_CORE_RECIPE, PREVIEW_CORE_RECIPES, previewCoreCacheKey,
-  previewCoreCacheName, previewCoreRecipeSha256, type CoreBody, type MapAdapter, type PreviewCoreRecipe,
+  previewCoreCacheName, previewCoreRecipeSha256, previewCoreHeadSource, type CoreBody, type MapAdapter, type PreviewCoreRecipe,
 } from "../preview-core-recipe";
 
 /**
@@ -35,7 +35,7 @@ export type PreviewCoreTexture = { file: string; mesh: "head" | "eye"; appearanc
   parameter: string; depotPath: string; decodedSha256: string; adapter: MapAdapter; width: number; height: number };
 export type PreviewCoreManifest = {
   schema: typeof PREVIEW_CORE_MANIFEST_SCHEMA;
-  recipeId: string; recipeRevision: number; plateRecipeId: string; plateRecipeRevision: number; recipeSha256: string;
+  recipeId: string; recipeRevision: number; plateRecipeId?: string; plateRecipeRevision?: number; recipeSha256: string;
   deriverVersion: number; cacheKey: string;
   source: { revisionId: string; label: string; headMeshDepotPath: string; headMorphDepotPath: string; eyeMeshDepotPath: string;
     eyeMorphDepotPath: string; headMeshSha256: string; headMorphSha256: string; eyeMeshSha256: string; eyeMorphSha256: string;
@@ -84,9 +84,10 @@ const ARCHIVE_DIRECTORY = "archive/pc/content";
 
 export class PreviewCoreCache extends DerivedCache {
   /** One cache holds every body's core; each recipe keeps its own status (the feminine one in the original file). */
-  constructor(root: string, private readonly recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE) { super(root, "3D view"); }
+  constructor(root: string, private readonly recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, private readonly withPlate = true) { super(root, "3D view"); }
   protected override get statusFile() {
-    return this.recipe.id === PREVIEW_CORE_RECIPE.id ? super.statusFile : join(this.root, `status-${this.recipe.id}.json`);
+    return !this.withPlate ? join(this.root, `status-${this.recipe.id}-head-only.json`)
+      : this.recipe.id === PREVIEW_CORE_RECIPE.id ? super.statusFile : join(this.root, `status-${this.recipe.id}.json`);
   }
   writeStatus(status: Omit<PreviewCoreStatus, "schema" | "updatedAt">): void {
     this.writeStatusDocument({ schema: PREVIEW_CORE_STATUS_SCHEMA, ...status, updatedAt: new Date().toISOString() });
@@ -99,8 +100,8 @@ export class PreviewCoreCache extends DerivedCache {
 
 
 const headWord = (recipe: PreviewCoreRecipe) => recipe.body === "male" ? "male" : "female";
-function unsupportedMessage(plate: EyePlateRecipe, recipe: PreviewCoreRecipe): string {
-  const labels = plate.source.supported.map(item => item.label).join(", ");
+function unsupportedMessage(source: EyePlateRecipe["source"], recipe: PreviewCoreRecipe): string {
+  const labels = source.supported.map(item => item.label).join(", ");
   return `Your Cyberpunk 2077 has a different ${headWord(recipe)} player head from the one XF Studio checks against (${labels}). ` +
     "This usually means a newer game patch. Update XF Studio to a version that supports your game. Nothing was changed.";
 }
@@ -134,7 +135,7 @@ function classifyFailure(error: unknown, aborted: boolean): PreviewCoreError {
 
 /** Validate a cached entry against its manifest and the expected identity; `key` null accepts any matching recipe entry. */
 export function loadPreviewCoreEntry(cache: PreviewCoreCache, name: string, key: string | null,
-  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate: EyePlateRecipe = PREVIEW_CORE_RECIPES[recipe.body]?.plate ?? EYE_PLATE_RECIPE): PreviewCoreResult | null {
+  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate?: EyePlateRecipe): PreviewCoreResult | null {
   const directory = cache.entry(name);
   const manifestFile = join(directory, PREVIEW_CORE_MANIFEST_FILE);
   if (!existsSync(manifestFile)) return null;
@@ -156,16 +157,16 @@ export function loadPreviewCoreEntry(cache: PreviewCoreCache, name: string, key:
 
 export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Promise<PreviewCoreResult> {
   const chosen = PREVIEW_CORE_RECIPES[options.body ?? options.recipe?.body ?? "female"];
-  const recipe = options.recipe ?? chosen.recipe, plate = options.plateRecipe ?? chosen.plate;
+  const recipe = options.recipe ?? chosen.recipe, plate = options.plateRecipe, headSource = previewCoreHeadSource(recipe, plate);
   const { exporter, signal, gameRoot } = options;
   const total = PREVIEW_CORE_STEPS.length;
   const progress = (step: PreviewCoreStep) => {
     const index = PREVIEW_CORE_STEPS.findIndex(item => item.step === step);
-    options.progress?.(step, index, total, PREVIEW_CORE_STEPS[index]!.label);
+    options.progress?.(step, index, total, !plate && step === "assembling" ? "Building the 3D head and eyes" : PREVIEW_CORE_STEPS[index]!.label);
   };
-  if (recipe.plateRecipeId !== plate.id) throw new PreviewCoreError("preview_verification_failed", "The preview recipe names a different eye plate recipe.");
+  if (plate && recipe.plateRecipeId !== plate.id) throw new PreviewCoreError("preview_verification_failed", "The preview recipe names a different eye plate recipe.");
   let cache: PreviewCoreCache, work: string;
-  try { cache = new PreviewCoreCache(options.cacheRoot, recipe); work = cache.createWork(); }
+  try { cache = new PreviewCoreCache(options.cacheRoot, recipe, !!plate); work = cache.createWork(); }
   catch (error) { throw new PreviewCoreError("preview_cache_unavailable", "XF Studio could not open its private 3D view cache.", (error as Error).message); }
   const fingerprint = contentFingerprint(gameRoot, ARCHIVE_DIRECTORY);
   const status = (state: PreviewCoreStatusState, code: string | null, message: string, cacheName: string | null = null) => {
@@ -182,7 +183,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
   try {
     progress("reading");
     session = exporter.open(options.source ?? gameContentSource(gameRoot), signal);
-    const headMesh = plate.source.meshDepotPath, headMorph = plate.source.morphDepotPath, eyeMesh = recipe.eye.meshDepotPath,
+    const headMesh = headSource.meshDepotPath, headMorph = headSource.morphDepotPath, eyeMesh = recipe.eye.meshDepotPath,
       eyeMorph = recipe.eye.morphDepotPath;
     const geometry = await session.geometry([headMorph, headMesh, eyeMesh, eyeMorph]);
     cancelled();
@@ -198,8 +199,8 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
         (present ? " although the game's archives contain them." : "; the game's archive index could not be read."));
     }
     const hashes = { meshSha256: geometry.get(headMesh)!.rawSha256, morphSha256: geometry.get(headMorph)!.rawSha256 };
-    const revision = supportedEyePlateSource(plate, hashes);
-    if (!revision) fail("preview_source_unsupported", unsupportedMessage(plate, recipe), `mesh ${hashes.meshSha256}, morph ${hashes.morphSha256}`, "unsupported");
+    const revision = headSource.supported.find(item => item.meshSha256 === hashes.meshSha256 && item.morphSha256 === hashes.morphSha256);
+    if (!revision) fail("preview_source_unsupported", unsupportedMessage(headSource, recipe), `mesh ${hashes.meshSha256}, morph ${hashes.morphSha256}`, "unsupported");
     const eyeMeshSha256 = geometry.get(eyeMesh)!.rawSha256, eyeMorphSha256 = geometry.get(eyeMorph)!.rawSha256;
     const exported = (file: string | null, depot: string, what: string) => {
       if (!file || !existsSync(file)) fail("preview_tool_failed", `WolvenKit did not export the ${what}. Try again; if it keeps happening, check WolvenKit in Settings › Game.`, depot);
@@ -278,11 +279,11 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     const record: CoreDetail = {
       schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: key, origin: "game-files",
       provenance: { label: `Your Cyberpunk 2077 files (${revision!.label})`, notes: limitsFor(recipe), tool: session.tool.label },
-      geometry: { file: "head.glb", sha256: file("head.glb").sha256, nodes: { head: "head", plate: "makeup_plate", eyes: "eyes" },
+      geometry: { file: "head.glb", sha256: file("head.glb").sha256, nodes: { head: "head", ...(plate ? { plate: "makeup_plate" } : {}), eyes: "eyes" },
         sources: [{ depotPath: headMorph, sha256: hashes.morphSha256 }, { depotPath: headMesh, sha256: hashes.meshSha256 },
           { depotPath: eyeMesh, sha256: eyeMeshSha256 }, { depotPath: eyeMorph, sha256: eyeMorphSha256 }],
         // Which morph resource supplied each mesh node's facial targets (paired by target and region).
-        morphs: [{ node: "head", depotPath: headMorph, sha256: hashes.morphSha256 }, { node: "makeup_plate", depotPath: headMorph, sha256: hashes.morphSha256 },
+        morphs: [{ node: "head", depotPath: headMorph, sha256: hashes.morphSha256 }, ...(plate ? [{ node: "makeup_plate", depotPath: headMorph, sha256: hashes.morphSha256 }] : []),
           { node: "eyes", depotPath: eyeMorph, sha256: eyeMorphSha256 }] },
       textures: Object.fromEntries(recipe.maps.map(map => {
         const texture = records.find(entry => entry.file === map.file)!;
@@ -292,8 +293,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
     };
     cache.writeJson(join(assets, PREVIEW_CORE_RECORD_FILE), record);
     const manifest: PreviewCoreManifest = {
-      schema: PREVIEW_CORE_MANIFEST_SCHEMA, recipeId: recipe.id, recipeRevision: recipe.revision, plateRecipeId: plate.id,
-      plateRecipeRevision: plate.revision, recipeSha256: previewCoreRecipeSha256(recipe, plate), deriverVersion: PREVIEW_CORE_DERIVER_VERSION, cacheKey: key,
+      schema: PREVIEW_CORE_MANIFEST_SCHEMA, recipeId: recipe.id, recipeRevision: recipe.revision, ...(plate ? { plateRecipeId: plate.id, plateRecipeRevision: plate.revision } : {}), recipeSha256: previewCoreRecipeSha256(recipe, plate), deriverVersion: PREVIEW_CORE_DERIVER_VERSION, cacheKey: key,
       source: { revisionId: revision!.id, label: revision!.label, headMeshDepotPath: headMesh, headMorphDepotPath: headMorph, eyeMeshDepotPath: eyeMesh,
         eyeMorphDepotPath: eyeMorph, headMeshSha256: hashes.meshSha256, headMorphSha256: hashes.morphSha256, eyeMeshSha256, eyeMorphSha256,
         ...exportHashes, tool: { label: session.tool.label, key: session.tool.key }, textures: records },
@@ -330,10 +330,10 @@ export type PreviewCoreReadiness =
  * A missing or unsupported head stays blocked until the game or XF Studio's recipe changes.
  */
 export function previewCoreReadiness(cacheRoot: string | null, gameRoot: string | null,
-  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate: EyePlateRecipe = PREVIEW_CORE_RECIPES[recipe.body]?.plate ?? EYE_PLATE_RECIPE): PreviewCoreReadiness {
+  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate?: EyePlateRecipe): PreviewCoreReadiness {
   if (!cacheRoot || !gameRoot) return { state: "none" };
   let cache: PreviewCoreCache, status: PreviewCoreStatus | null;
-  try { cache = new PreviewCoreCache(cacheRoot, recipe); status = cache.readStatus(); } catch { return { state: "none" }; }
+  try { cache = new PreviewCoreCache(cacheRoot, recipe, !!plate); status = cache.readStatus(); } catch { return { state: "none" }; }
   if (!status || status.recipeId !== recipe.id || status.recipeRevision !== recipe.revision || status.deriverVersion !== PREVIEW_CORE_DERIVER_VERSION ||
       !samePath(status.gameRoot, gameRoot) || status.contentFingerprint !== contentFingerprint(gameRoot, ARCHIVE_DIRECTORY)) return { state: "none" };
   if (status.state === "ready" && status.cacheName) {

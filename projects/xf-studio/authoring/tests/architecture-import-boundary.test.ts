@@ -80,6 +80,17 @@ test("registered makeup application publication is composed once, with no ID rou
   expect(DISK.text("app/studio-application")).not.toContain('"eye-makeup": {');
   expect(DISK.text("app/studio-presentation")).not.toMatch(/info\.id\s*!?==\s*"eye-makeup"/);
 });
+
+test("slice 10 preview construction is registered and head preparation names no makeup device or surface", () => {
+  const head = codeOnly(DISK.text("preview/browser/browser-head-attachment"));
+  expect(resolved("preview/browser/browser-head-attachment").filter(path => /layered-makeup|legacy\/eye-makeup/.test(path))).toEqual([]);
+  expect(head).not.toMatch(/createBrowserPreviewDevice|LayeredMakeupSurface|\.surface\(/);
+  const startup = codeOnly(DISK.text("compose/studio-startup"));
+  expect(startup).not.toMatch(/createBrowserPreviewDevice|new Worker\(|core\.document\.recipe|new GlitterMeasurements/);
+  expect(DISK.names.filter(name => resolved(name).includes("preview/browser/layered-preview-capability"))).toEqual(["compose/studio-registry"]);
+  expect(resolved("legacy/eye-makeup/preview/authoring-preview-coordinator")).not.toContain("app/authoring/makeup-document");
+  expect(resolved("legacy/eye-makeup/preview/authoring-render-scheduler")).not.toContain("app/authoring/makeup-document");
+});
 /** A module's imports with whether each is type-only, as src-relative module names. */
 const usesIn = (tree: Tree, name: string) => importUses(tree.text(name)).map(use => ({ path: resolveFrom(name, use.specifier), typeOnly: use.typeOnly }));
 /** A resolved import as the module it names (`x` or `x/index`), when it names one in the tree. */

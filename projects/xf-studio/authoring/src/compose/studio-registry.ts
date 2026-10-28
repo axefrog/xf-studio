@@ -1,3 +1,7 @@
+import { createLayeredPreviewCapability } from "../preview/browser/layered-preview-capability";
+import femalePlate from "../legacy/eye-makeup/plate/eye-plate-recipe.json" with { type: "json" };
+import malePlate from "../legacy/eye-makeup/plate/eye-plate-recipe-pma.json" with { type: "json" };
+import type { EyePlateRecipe } from "../legacy/eye-makeup/plate/eye-plate-recipe";
 import { createLayeredEditorAdapters } from "../preview/browser/layered-editor-adapters";
 /**
  * The composition list (feature-module platform §4, §9): every system family and feature
@@ -26,7 +30,8 @@ export type { StudioOwnerActions, StudioOwnerId };
  * Registration order is catalogue order: the golden registry snapshot pins it. The asynchronous
  * families (library requests, file workflows) route by owner too, outside the synchronous table.
  */
-export const STUDIO_OWNERS = [HISTORY_FAMILY, { ...EYE_MAKEUP, application: MAKEUP_APPLICATION, editors: createLayeredEditorAdapters(EYE_MAKEUP_REGION) }, COLLECTION_FAMILY, SCENES_FAMILY, TABS_FAMILY, PANELS_FAMILY, STARTERS_FAMILY, PREVIEW_FAMILY, MOTION_FAMILY, TRANSITIONS_FAMILY,
+export const STUDIO_OWNERS = [HISTORY_FAMILY, { ...EYE_MAKEUP, application: MAKEUP_APPLICATION, editors: createLayeredEditorAdapters(EYE_MAKEUP_REGION), preview: createLayeredPreviewCapability(EYE_MAKEUP_REGION),
+  previewPreparation: { plate: { female: femalePlate as EyePlateRecipe, male: malePlate as EyePlateRecipe } } }, COLLECTION_FAMILY, SCENES_FAMILY, TABS_FAMILY, PANELS_FAMILY, STARTERS_FAMILY, PREVIEW_FAMILY, MOTION_FAMILY, TRANSITIONS_FAMILY,
   QUALITY_FAMILY, SAVED_V_FAMILY, CHARACTER_CONTEXT_FAMILY, VIEWS_FAMILY, LIBRARY_FAMILY, FILES_FAMILY, EXPRESSIONS, PRESETS_FAMILY, EMPTY_CHOICES_FAMILY] as const;
 /**
  * Every feature binds from registration, using pure specs by default. Eye makeup's temporary

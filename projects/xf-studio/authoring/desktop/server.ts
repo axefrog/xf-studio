@@ -27,7 +27,7 @@ import { DesktopOutboxStore, desktopOutboxRequest } from "./outbox-store";
 import { DESKTOP_WORKSPACE, DesktopWorkspaceLeases } from "./workspace-lease-host";
 import { INSTANCE_ROUTE, instanceActivateRequest } from "./single-instance";
 // A composition root: the part registry and document model are built once and injected (CORE-29).
-import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
+import { STUDIO_DOCUMENTS, STUDIO_PARTS, STUDIO_REGISTRY } from "../src/compose/studio-registry";
 import { DesktopWorkActivity } from "./work-activity";
 import { DesktopUpdateApplyGuard } from "./update-apply-guard";
 import { PreviewCoreHost } from "../src/preview/host/preview-core-host";
@@ -226,7 +226,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const holotable = createHolotableHandler(), verificationHolotable = createHolotableHandler();
   const token = randomBytes(32).toString("hex");
   // The core preview has one source: the derivation from the player's own game files.
-  const previewCore = new PreviewCoreHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
+  const previewCore = new PreviewCoreHost({ registry: STUDIO_REGISTRY, cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
     // The preview runs WolvenKit only once it is ready to run (present, verified, with its .NET runtime).
     settings: () => ({ gameRoot: savedSettings()?.gameRoot ?? null, wolvenKitCli: wolvenKit.usable() }),
     log: logTo("preview") });

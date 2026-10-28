@@ -67,8 +67,9 @@ export function createRasterClient(makeWorker: () => RasterPort,
   let running: RasterRequest | undefined, cancelSent = false, sequence = 0;
   let cancellations = 0, completed = 0, discarded = 0, failures = 0;
   let worker: RasterPort | undefined;
+  let disposed = false;
   function recover(port: RasterPort | undefined) {
-    if (port !== worker) return;
+    if (disposed || port !== worker) return;
     if (running && queue.get(running.i)?.version === running.version) queue.delete(running.i);
     failures++; running = undefined; cancelSent = false; worker = undefined;
     // Construction and message delivery can throw before an error event exists.
@@ -84,11 +85,12 @@ export function createRasterClient(makeWorker: () => RasterPort,
     catch {if (running === request) recover(port);}
   }
   function dispatch() {
-    if (running || !queue.size) return;
+    if (disposed || running || !queue.size) return;
     const [i, request] = queue.entries().next().value!;
     queue.delete(i); running = request; cancelSent = false;
     try {
       worker ??= connect();
+      if (disposed) { worker.onmessage = null; worker.onerror = null; worker.terminate(); worker = undefined; return; }
       worker.postMessage(request);
     } catch {
       // A synchronous mock/adapter may already have delivered the result; do
@@ -99,6 +101,7 @@ export function createRasterClient(makeWorker: () => RasterPort,
   function connect() {
     const port = makeWorker();
     port.onmessage = ({ data }) => {
+      if (disposed) return;
       if (port !== worker || !running) return;
       if (!data || typeof data !== "object") {recover(port); return;}
       if (running.version !== data.version || running.i !== data.i) return;
@@ -122,6 +125,7 @@ export function createRasterClient(makeWorker: () => RasterPort,
   }
   return {
     request(i: number, layer: Layer, prioritize = true, sizeOverride?: number, bakeOptics = false) {
+      if (disposed) return;
       const requestedSize = sizeOverride ?? size;
       if (!Number.isInteger(requestedSize) || requestedSize < 1 || requestedSize > 4096 || typeof bakeOptics !== "boolean" ||
         (bakeOptics && layer.enabled && (layer.finish === "shimmer" || layer.finish === "glitter" && !isDirectGlint(layer.flakes)) && requestedSize < 32))
@@ -140,6 +144,11 @@ export function createRasterClient(makeWorker: () => RasterPort,
       dispatch();
     },
     reset() { queue.clear(); versions.clear(); cancelRunning(); },
+    dispose() {
+      if (disposed) return;
+      disposed = true; queue.clear(); versions.clear(); running = undefined;
+      if (worker) { worker.onmessage = null; worker.onerror = null; worker.terminate(); worker = undefined; }
+    },
     diagnostics: () => ({ running: running ? { i: running.i, version: running.version } : null,
       queued: queue.size, queuedIndices: [...queue.keys()], cancelling: cancelSent,
       cancellations, completed, discarded, failures }),

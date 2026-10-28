@@ -1,3 +1,5 @@
+import { registeredPreviewPreparation } from "../preview-capabilities";
+import type { Registry, AnyOwner } from "../../platform/core/registry";
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseCoreAssetName, PREVIEW_CORE_RECIPES, type CoreBody } from "../preview-core-recipe";
@@ -37,6 +39,7 @@ export type PreviewCoreState = {
 export type PreviewCoreHostSettings = { gameRoot: string | null; wolvenKitCli: string | null };
 export type PreviewCoreHostOptions = {
   cacheRoot: string;
+  registry?: Pick<Registry<AnyOwner>, "owners">;
   settings: () => PreviewCoreHostSettings;
   /** Game asset exporter for a WolvenKit CLI path; defaults to WolvenKit with a cache under `cacheRoot/exports`. */
   exporter?: (cli: string | null) => GameAssetExporter;
@@ -71,7 +74,8 @@ export class PreviewCoreHost {
     const key = `${gameRoot}`, memo = this.readinessMemo.get(body);
     // Verifying the cache hashes ~20 MB; a short memo keeps asset requests cheap.
     if (memo && memo.key === key && now - memo.at < 5_000) return memo.value;
-    const { recipe, plate } = PREVIEW_CORE_RECIPES[body];
+    const { recipe } = PREVIEW_CORE_RECIPES[body];
+    const plate = registeredPreviewPreparation(this.options.registry, body);
     const value = previewCoreReadiness(this.options.cacheRoot, gameRoot, recipe, plate);
     this.readinessMemo.set(body, { key, value, at: now });
     return value;
@@ -121,7 +125,7 @@ export class PreviewCoreHost {
       createWolvenKitGameAssetExporter(join(this.options.cacheRoot, "exports"), settings.wolvenKitCli);
     this.progress = { index: 0, total: PREVIEW_CORE_STEPS.length, label: PREVIEW_CORE_STEPS[0]!.label };
     delete this.lastFailure[body];
-    const promise = ensurePreviewCore({ gameRoot: settings.gameRoot!, cacheRoot: this.options.cacheRoot, exporter, signal: controller.signal, body,
+    const promise = ensurePreviewCore({ gameRoot: settings.gameRoot!, cacheRoot: this.options.cacheRoot, exporter, signal: controller.signal, body, plateRecipe: registeredPreviewPreparation(this.options.registry, body),
       progress: (_step, index, total, label) => { this.progress = { index, total, label }; } })
       .then(result => {
         this.lastDurationSeconds = Math.round(((this.options.now ?? Date.now)() - started) / 100) / 10;
@@ -149,10 +153,11 @@ export class PreviewCoreHost {
     const settings = this.options.settings();
     if (isGame(settings.gameRoot) && isFile(settings.wolvenKitCli)) {
       this.forget();
-      const { recipe, plate } = PREVIEW_CORE_RECIPES[body];
+      const { recipe } = PREVIEW_CORE_RECIPES[body];
+      const plate = registeredPreviewPreparation(this.options.registry, body);
       const readiness = previewCoreReadiness(this.options.cacheRoot, settings.gameRoot, recipe, plate);
       if (readiness.state === "ready") {
-        try { new PreviewCoreCache(this.options.cacheRoot, recipe).remove(dirname(readiness.directory)); }
+        try { new PreviewCoreCache(this.options.cacheRoot, recipe, !!plate).remove(dirname(readiness.directory)); }
         catch (error) { this.options.log?.(`The damaged 3D preview could not be removed: ${(error as Error).message}`); }
       }
       this.forget();

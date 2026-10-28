@@ -27,7 +27,6 @@ import type { CharacterContextActions } from "../../character/character-context-
 import type { CoreBody } from "../../character/render-detail";
 import type { SavedV } from "../../saves/save-reader";
 import { followCharacter } from "../../character/character-follow";
-import type { createBrowserPreviewDevice } from "../../legacy/eye-makeup/browser/browser-preview-device";
 import type { createBrowserViewportDevice } from "./browser-viewport-device";
 import { createBrowserScenePreviewPorts } from "./browser-scene-preview-ports";
 import type { MotionActions } from "../../animation/motion-actions";
@@ -37,36 +36,28 @@ import { bindStageTheme, type SystemColourScheme } from "./stage-theme-binding";
 import { createTrustedPreviewServices } from "../../app/trusted-preview-services";
 import type { WorkspaceState } from "../../app/workspace/makeup-workspace";
 import type { ViewGraph } from "../../platform/core/view-graph";
-import type { LayeredMakeupSurface } from "../../engines/layered-makeup/render/makeup-stack";
-import type { SurfaceOutline } from "../../engines/layered-makeup/surface-edge";
 import type { PreparationProgress } from "../scene-residency";
 import type { ViewId } from "../../platform/api/view-graph";
 import { previewFields } from "../preview-view-graph";
 import { lightingSource, type LightingSource } from "../lighting-setups";
 
 type ViewportDevice = ReturnType<typeof createBrowserViewportDevice>;
-type PreviewDevice = ReturnType<typeof createBrowserPreviewDevice>;
 type Scene = Awaited<ReturnType<ViewportDevice["buildHead"]>>;
 
 /** The head-bound services the application holds; `undefined` disconnects one. */
 export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewActions; motion?: MotionActions; characterDetails?: CharacterDetailActions;
   characterContext?: CharacterContextActions;
   /** The edited layered surface's outer boundary in UV, where its makeup is cut off (surface-edge.ts, PREV-146). */
-  surfaceOutline?: SurfaceOutline };
+  surfaceOutline?: ReturnType<ViewportDevice["surfaceOutline"]> };
 
-/**
- * One layered-makeup surface on the loaded head and the device that fills its layers (UI-76), and whether it is the surface the on-head
- * editor edits. The scene editors (scene-editors.ts) build one per registered surface a look editor edits, so neither they nor this module
- * name a feature.
- */
-export type LayeredSurfaceWiring = {
-  /** The feature whose renderer draws the surface (for messages). */
-  feature: string;
-  /** The surface on a loaded head (the feature renderer's). */
-  surface(scene: Scene): LayeredMakeupSurface | undefined;
-  preview: Pick<PreviewDevice, "connectScene" | "disconnectScene" | "presentInitialLayers" | "fillScene" | "holdsCurrent" | "releaseScene">;
-  /** The surface the on-head editor edits (at most one): its guides and parts are prepared with the head (`prepare`). */
+/** Registered preview lifecycle. A head with no contributions prepares and draws without feature surfaces. */
+export type HeadPreviewWiring = {
+  readonly feature: string;
   edited?: boolean;
+  bind(scene: Scene, viewport: HeadAttachmentPorts["viewport"]): {
+    connect(): void; disconnect(): void; present(): void; fill(): void; current(): boolean; release(): void;
+    preparation(): Pick<NonNullable<Parameters<NonNullable<Scene["prepare"]>>[0]>, "overlays" | "work">;
+  };
 };
 
 export type HeadAttachmentPorts = {
@@ -77,7 +68,7 @@ export type HeadAttachmentPorts = {
   view?: ViewId | (() => ViewId);
   viewport: Pick<ViewportDevice, "buildHead" | "showHead" | "hideHead" | "disposeHead"> & Partial<Pick<ViewportDevice, "surfaceGuides" | "surfaceSteps">>;
   /** Every layered-makeup surface to connect, in composition order; at most one is the on-head editor's. */
-  layered: readonly LayeredSurfaceWiring[];
+  layered: readonly HeadPreviewWiring[];
   /**
    * The UI theme preference and the OS colour scheme the stage backdrop follows; the research tools preference the feature renderers
    * follow (they make ahead only what can be chosen, PREV-194).
@@ -204,12 +195,11 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
       follow();
       releases.push(quality.subscribe(follow));
     }
-    for (const wiring of ports.layered) {
-      const makeup = wiring.surface(scene);
-      if (!makeup) throw Error(`The ${wiring.feature} renderer is not composed.`);
-      // What the surface was filled with while hidden (`prepare`) or left with when hidden goes with it.
-      releases.push(() => wiring.preview.releaseScene(makeup));
-    }
+    const previews = ports.layered.map(wiring => {
+      const preview = wiring.bind(scene, ports.viewport);
+      releases.push(() => preview.release());
+      return preview;
+    });
     // Skin, face details, eyes, brows, lashes, hair, piercings and body follow the V's context while this head is shown (`show`).
     const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene, undefined, ports.warmStart));
     releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
@@ -246,13 +236,13 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     const connectSurfaces = () => {
       if (connected) return;
       connected = true;
-      for (const wiring of ports.layered) wiring.preview.connectScene(wiring.surface(scene)!);
+      for (const preview of previews) preview.connect();
     };
     /** Each layered surface keeps what it holds now (the preview device's hold) and stops following. */
     const holdSurfaces = () => {
       if (!connected) return;
       connected = false;
-      for (const wiring of ports.layered) wiring.preview.disconnectScene(wiring.surface(scene)!);
+      for (const preview of previews) preview.disconnect();
     };
     /** The save this head's saved-V service shows (the one it was built with, then each one shown on it). */
     let savedShown: SavedV | null = ports.character.save ?? null;
@@ -292,7 +282,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
           // The authored makeup as it is now, so the plate's composite, its masks and maps and their programs are prepared with the scene.
           // The surface holds this snapshot until show connects it, which brings only what changed since.
           prepareSignal.throwIfAborted();
-          for (const wiring of ports.layered) wiring.preview.fillScene(wiring.surface(scene)!);
+          for (const preview of previews) preview.fill();
           // Every lighting setup another view of this scene shows (the view it draws is the scene's own now).
           const setups: LightingSource[] = [];
           if (ports.graph) {
@@ -304,16 +294,17 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
           }
           // The on-head editor, which show mounts: its guides compiled with the scene (their first frame links nothing), and its parts (the
           // surface map and occlusion trees) made ahead between frames, so mounting it makes none of them.
-          const edited = ports.layered.find(wiring => wiring.edited), viewport = ports.viewport;
-          const guides = edited && viewport.surfaceGuides ? () => viewport.surfaceGuides!(scene) : undefined;
-          const work = edited && viewport.surfaceSteps ? () => viewport.surfaceSteps!(scene, edited.surface(scene)!.surface) : undefined;
-          await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report), ...(guides ? { overlays: guides } : {}),
-            ...(work ? { work } : {}) });
+          const preparation = previews.map(preview => preview.preparation());
+          const overlays = preparation.flatMap(item => item.overlays ? [item.overlays] : []);
+          const work = preparation.flatMap(item => item.work ? [item.work] : []);
+          await scene.prepare?.({ signal: prepareSignal, setups, report: report => progress(report),
+            ...(overlays.length ? { overlays: () => overlays.flatMap(read => [...read()]) } : {}),
+            ...(work.length ? { work: () => work.flatMap(read => [...read()]) } : {}) });
           bindPreparationView(prepareSignal);
           if (JSON.stringify(request) === JSON.stringify(context.detailRequest())) return;
         }
       },
-      prepared: () => (scene.prepared?.() ?? true) && ports.layered.every(wiring => wiring.preview.holdsCurrent(wiring.surface(scene)!)),
+      prepared: () => (scene.prepared?.() ?? true) && previews.every(preview => preview.current()),
       async prepareShown(prepareSignal, progress) {
         if (disposed) throw Error("The head was released.");
         await scene.prepare?.({ signal: prepareSignal, report: report => progress(report) });
@@ -343,7 +334,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
           add(holdSurfaces);
           connectSurfaces();
           add(preview.subscribe(ports.persist)); add(motion.subscribe(ports.persist)); add(preview.subscribe(ports.changed));
-          for (const wiring of ports.layered) wiring.preview.presentInitialLayers();
+          for (const preview of previews) preview.present();
           add(characterDetails.subscribe(ports.changed)); add(characterDetails.subscribe(ports.persist));
           // The scene's motion, then the view's camera (where the head shown before left it).
           restored.show(view);
@@ -391,7 +382,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
       connectSurfaces() {
         if (!shown || connected) return;
         connectSurfaces();
-        for (const wiring of ports.layered) wiring.preview.presentInitialLayers();
+        for (const preview of previews) preview.present();
       },
       dispose() {
         if (disposed) return;

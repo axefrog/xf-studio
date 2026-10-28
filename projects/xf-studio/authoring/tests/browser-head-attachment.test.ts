@@ -1,5 +1,6 @@
+import { layeredPreviewWiring, type LayeredSurfaceWiring } from "../src/preview/browser/layered-preview-wiring";
 import { expect, test } from "bun:test";
-import { buildBrowserHead, type LayeredSurfaceWiring } from "../src/preview/browser/browser-head-attachment";
+import { buildBrowserHead } from "../src/preview/browser/browser-head-attachment";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import type { CameraState } from "../src/app/workspace/makeup-workspace";
 import { contextOf, harness } from "./fixtures/fake-heads";
@@ -81,7 +82,7 @@ test("every composed layered surface is connected and presented while its head i
       presentInitialLayers: () => { events.push("cheek:present"); },
       fillScene: () => { events.push("cheek:fill"); }, holdsCurrent: () => true, releaseScene: () => { events.push("cheek:release"); },
     } };
-  const head = await buildBrowserHead({ ...h.ports, layered: [...h.ports.layered, second] });
+  const head = await buildBrowserHead({ ...h.ports, layered: [...h.ports.layered, layeredPreviewWiring(second)] });
   expect(events).toEqual([]);
   head.show();
   expect(h.connected).toBe(h.surfaces.get(head.scene));
@@ -91,8 +92,8 @@ test("every composed layered surface is connected and presented while its head i
   expect(h.connected).toBeUndefined();
   head.dispose();
   // A surface whose renderer isn't composed, and two on-head editors, are refused and leave nothing behind.
-  await expect(buildBrowserHead({ ...h.ports, layered: [{ ...second, surface: () => undefined }] })).rejects.toThrow("The cheek-makeup renderer is not composed.");
-  await expect(buildBrowserHead({ ...h.ports, layered: [...h.ports.layered, { ...second, edited: true }] }))
+  await expect(buildBrowserHead({ ...h.ports, layered: [layeredPreviewWiring({ ...second, surface: () => undefined })] })).rejects.toThrow("The cheek-makeup renderer is not composed.");
+  await expect(buildBrowserHead({ ...h.ports, layered: [...h.ports.layered, layeredPreviewWiring({ ...second, edited: true })] }))
     .rejects.toThrow("Only one layered surface can carry the on-head editor.");
   expect(h.host.canvases).toBe(0);
   expect(h.viewport.scene()).toBeUndefined();
@@ -202,7 +203,7 @@ test("4a-v: a cold V's authored makeup is on its surface before its scene is pre
   const h = harness(), makeup = layeredMakeup();
   // The authored layer's mask, completed while no head is shown.
   makeup.publish();
-  const head = await buildBrowserHead({ ...h.ports, layered: [makeup.wiring] });
+  const head = await buildBrowserHead({ ...h.ports, layered: [layeredPreviewWiring(makeup.wiring)] });
   let atPrepare: ReturnType<typeof makeup.state> | undefined;
   // The scene's preparation, as scene-host.ts does it for the plate: the feature renderers bring the stack up to date ahead (its composite).
   (head.scene as unknown as { prepare(): Promise<void> }).prepare = async () => {
@@ -234,9 +235,9 @@ test("4a-v: a cold V's authored makeup is on its surface before its scene is pre
 test("4a-v: a surface filled ahead keeps its snapshot while a newer mask completes, and show brings only that slot up to date", async () => {
   const h = harness(), makeup = layeredMakeup();
   makeup.publish();
-  const shownHead = await buildBrowserHead({ ...h.ports, layered: [makeup.wiring] });
+  const shownHead = await buildBrowserHead({ ...h.ports, layered: [layeredPreviewWiring(makeup.wiring)] });
   shownHead.show();
-  const hidden = await buildBrowserHead({ ...h.ports, layered: [makeup.wiring] });
+  const hidden = await buildBrowserHead({ ...h.ports, layered: [layeredPreviewWiring(makeup.wiring)] });
   await hidden.prepare(new AbortController().signal, () => {});
   const filled = makeup.state(hidden.scene), heldCanvas = filled.images[0];
   expect(heldCanvas).toBe(makeup.canvas());
@@ -266,10 +267,10 @@ test("4a final review: a warm head prepared before a layer was enabled is not pr
   const h = harness(), makeup = layeredMakeup(), signal = new AbortController().signal;
   // A is prepared and shown with its one layer off (no makeup), then B is shown and A goes warm.
   makeup.setEnabled(false);
-  const a = await buildBrowserHead({ ...h.ports, layered: [makeup.wiring] });
+  const a = await buildBrowserHead({ ...h.ports, layered: [layeredPreviewWiring(makeup.wiring)] });
   await a.prepare(signal, () => {});
   a.show();
-  const b = await buildBrowserHead({ ...h.ports, layered: [makeup.wiring] });
+  const b = await buildBrowserHead({ ...h.ports, layered: [layeredPreviewWiring(makeup.wiring)] });
   await b.prepare(signal, () => {});
   a.hide(); b.show();
   expect(a.prepared()).toBe(true);

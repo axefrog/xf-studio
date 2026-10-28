@@ -1,10 +1,11 @@
+import { layeredPreviewWiring, type LayeredSurfaceWiring } from "../../src/preview/browser/layered-preview-wiring";
 import { createLayeredEditorAdapters } from "../../src/preview/browser/layered-editor-adapters";
 /**
  * Scene runtime heads over fake scenes (tests/browser-head-attachment.test.ts, tests/browser-scene-heads.test.ts): the real head
  * attachment and viewport device, with scenes that only record what is asked of them.
  */
 import { createBrowserViewportDevice } from "../../src/preview/browser/browser-viewport-device";
-import type { HeadAttachmentPorts, HeadServices, LayeredSurfaceWiring } from "../../src/preview/browser/browser-head-attachment";
+import type { HeadAttachmentPorts, HeadServices } from "../../src/preview/browser/browser-head-attachment";
 import type { createSceneRuntime } from "../../src/platform/scene/scene-host";
 import type { createSurfaceEditor } from "../../src/legacy/eye-makeup/browser/surface-editor";
 import { CharacterContextActions } from "../../src/character/character-context-actions";
@@ -89,12 +90,12 @@ export function harness(plan: { failBuild?: number[]; failPresent?: number[]; bu
   const ports: HeadAttachmentPorts = {
     workspace, graph, viewport,
     // The scene editors wire the live feature's layered surface (its renderer's), the on-head editor's; here, one per scene.
-    layered: [{ feature: "eye-makeup", surface: surfaceOf, edited: true, preview: {
+    layered: [layeredPreviewWiring({ feature: "eye-makeup", surface: surfaceOf, edited: true, preview: {
       connectScene: scene => { connected = scene; return { accepted: true } as ReturnType<LayeredSurfaceWiring["preview"]["connectScene"]>; },
       disconnectScene: scene => { if (connected === scene) connected = undefined; },
       presentInitialLayers: () => { presents++; if (plan.failPresent?.includes(presents)) throw Error("A layer could not be shown."); },
       fillScene: noop, holdsCurrent: () => true, releaseScene: noop,
-    } }],
+    } })],
     preferences: { snapshot: () => ({ theme: "dark" }), subscribe: listener => { preferenceListeners.add(listener); return () => { preferenceListeners.delete(listener); }; } },
     colourScheme: { matches: true, addEventListener: (_type, listener) => schemeListeners.add(listener), removeEventListener: (_type, listener) => schemeListeners.delete(listener) },
     attach: services => Object.assign(attached, services),

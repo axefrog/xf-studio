@@ -1,3 +1,5 @@
+import { registeredPreviewPreparation } from "../src/preview/preview-capabilities";
+import { STUDIO_REGISTRY } from "../src/compose/studio-registry";
 // Derive the localhost 3D preview core from the configured game (Local setup, or the
 // XFS_PACKAGE_GAMEPATH / XFS_PACKAGE_WOLVENKIT overrides) into the ignored preview cache.
 // The localhost server serves the core preview files only from this cache.
@@ -21,7 +23,7 @@ if (!tools.gamepath || !tools.wolvenkit) {
 }
 const started = Date.now();
 try {
-  const result = await ensurePreviewCore({ gameRoot: tools.gamepath, cacheRoot,
+  const result = await ensurePreviewCore({ plateRecipe: registeredPreviewPreparation(STUDIO_REGISTRY, "female"), gameRoot: tools.gamepath, cacheRoot,
     exporter: createWolvenKitGameAssetExporter(join(cacheRoot, "exports"), tools.wolvenkit),
     progress: (_step, index, total, label) => console.log(`[${index + 1}/${total}] ${label}`) });
   console.log(`${result.reused ? "Reused" : "Prepared"} in ${((Date.now() - started) / 1000).toFixed(1)} s: ${result.directory}`);

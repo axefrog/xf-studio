@@ -7,7 +7,7 @@ import { hostClock } from "./src/platform/core/clock";
 import { openLibraryFiles } from "./src/library/host/library-files";
 import { EXPERIMENT_FLAGS, type ExperimentFlagsDocument } from "./src/platform/api/experiments";
 // A composition root: the part registry is built once and injected (CORE-29).
-import { STUDIO_PARTS } from "./src/compose/studio-registry";
+import { STUDIO_PARTS, STUDIO_REGISTRY } from "./src/compose/studio-registry";
 import { EXPRESSIONS_GAME_PREREQUISITE } from "./src/features/expressions/export/game";
 import { createPackageHandler, localCandidateStore, localEyePlate, localExpressionsGame, localMasculineEyePlate, testMasculineEyePlate, localPackageAdapter, localPackageTools, localPlateCache, localToolsRoot, packageRequestSettings } from "./src/host/package-server";
 import { createModInstallHandler, explorerReveal, ModInstallHost, READ_ONLY_TEST_SERVER, READ_ONLY_VERIFICATION, systemAnsiCodePage, windowsRunningApps } from "./src/installation/host/mod-install-host";
@@ -130,7 +130,7 @@ const verificationModInstallRequest = createModInstallHandler(installHost(verifi
 // The 3D preview core (head, plate, eyes, maps and their record) is derived from the configured game and
 // served only from this cache; `XFS_PREVIEW_CORE_CACHE` relocates it.
 const previewCacheRoot = resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(import.meta.dir, "data", "preview-cache"));
-const previewCore = new PreviewCoreHost({
+const previewCore = new PreviewCoreHost({ registry: STUDIO_REGISTRY,
   cacheRoot: previewCacheRoot,
   settings: () => ({ gameRoot: packageToolPaths(localSettings.load().settings).gamepath, wolvenKitCli: wolvenKit.usable() }),
   log: diagnostics.log.logger("preview"),

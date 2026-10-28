@@ -123,7 +123,7 @@ export type CoreDetail = {
   origin: "game-files";
   /** `tool` names the program that decoded the game files (e.g. "WolvenKit CLI 9.0.1"), when there was one. */
   provenance: { label: string; notes: string[]; tool?: string };
-  geometry: RenderResource & { nodes: { head: string; plate: string; eyes: string };
+  geometry: RenderResource & { nodes: { head: string; plate?: string; eyes: string };
     /** Morph resource per mesh node. */
     morphs: RenderMorphSource[] };
   textures: Record<CoreTextureSlot, RenderResource>;
@@ -189,7 +189,7 @@ export function parseCoreDetail(value: unknown): CoreDetail {
     provenance: { label: text(doc.provenance?.label, "provenance label"),
       notes: Array.isArray(doc.provenance?.notes) ? doc.provenance.notes.map(note => text(note, "note")) : [],
       ...(doc.provenance?.tool === undefined ? {} : { tool: text(doc.provenance.tool, "provenance tool") }) },
-    geometry: { ...resource(doc.geometry, "geometry"), nodes: { head: text(nodes.head, "head node"), plate: text(nodes.plate, "plate node"), eyes: text(nodes.eyes, "eyes node") },
+    geometry: { ...resource(doc.geometry, "geometry"), nodes: { head: text(nodes.head, "head node"), ...(nodes.plate === undefined ? {} : { plate: text(nodes.plate, "plate node") }), eyes: text(nodes.eyes, "eyes node") },
       morphs: morphSources(doc.geometry.morphs) },
     textures,
   };

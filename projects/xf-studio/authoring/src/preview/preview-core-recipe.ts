@@ -38,6 +38,8 @@ export type PreviewCoreRecipe = {
    * resolver's winning archives too (PREV-03).
    */
   plateRecipeId: string;
+  /** Independent head source for a head-only preparation. Released recipes retain their original bytes/identity. */
+  source?: EyePlateRecipe["source"];
   /**
    * The eye component: its mesh (materials and base geometry) and the morph resource the installed
    * eye entity binds (`he_000_pwa__basehead.ent` → `morphResource`), whose `eyes` targets pair with
@@ -118,9 +120,12 @@ export function parseCoreAssetName(name: string): { body: CoreBody; file: string
  * Recipe identity. `body` is left out: the depot paths already say whose head it is, and leaving it out keeps the feminine
  * core's identity (and every cached feminine preview) unchanged from before the masculine core existed.
  */
-export const previewCoreRecipeSha256 = (recipe: PreviewCoreRecipe, plate: EyePlateRecipe) => {
+export const previewCoreHeadSource = (recipe: PreviewCoreRecipe, plate?: EyePlateRecipe) =>
+  plate?.source ?? recipe.source ?? PREVIEW_CORE_RECIPES[recipe.body].plate.source;
+export const previewCoreRecipeSha256 = (recipe: PreviewCoreRecipe, plate?: EyePlateRecipe) => {
   const { body: _body, ...identity } = recipe;
-  return sha256Hex(canonicalJson({ preview: identity, plate: eyePlateRecipeSha256(plate) }));
+  return sha256Hex(canonicalJson({ preview: identity, plate: plate ? eyePlateRecipeSha256(plate) : null,
+    ...(!plate ? { source: previewCoreHeadSource(recipe) } : {}) }));
 };
 
 export type PreviewCoreSourceHashes = {
@@ -133,7 +138,7 @@ export type PreviewCoreSourceHashes = {
   textures: Record<string, string>;
 };
 /** Cache identity: recipe content, both recipes' revisions, exact sources and the deriver's output contract. */
-export function previewCoreCacheKey(recipe: PreviewCoreRecipe, plate: EyePlateRecipe, source: PreviewCoreSourceHashes): string {
+export function previewCoreCacheKey(recipe: PreviewCoreRecipe, plate: EyePlateRecipe | undefined, source: PreviewCoreSourceHashes): string {
   return sha256Hex(canonicalJson({ deriver: PREVIEW_CORE_DERIVER_VERSION, recipe: previewCoreRecipeSha256(recipe, plate), source }));
 }
 export const previewCoreCacheName = (recipe: PreviewCoreRecipe, key: string) => `${recipe.id}-r${recipe.revision}-${key.slice(0, 16)}`;

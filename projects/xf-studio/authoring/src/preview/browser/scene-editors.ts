@@ -23,9 +23,10 @@ import type { StudioAction } from "../../app/studio-application";
 import type { AdapterMessage } from "../../app/presentation-status";
 import type { LookRef } from "../../library/collection-documents";
 import type { createTrustedAuthoringCore } from "../../app/trusted-authoring-core";
-import type { AttachedHead, HeadServices, LayeredSurfaceWiring } from "./browser-head-attachment";
+import type { AttachedHead, HeadServices } from "./browser-head-attachment";
 import type { createBrowserViewportDevice } from "./browser-viewport-device";
 
+import { layeredPreviewWiring, type LayeredSurfaceWiring } from "./layered-preview-wiring";
 import { registeredEditorAdapters, type BrowserEditorAdapters } from "./editor-adapters";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
@@ -37,7 +38,7 @@ export type LayeredSurfaces = ReadonlyMap<string, FeatureRendererFactory<Layered
 export type SceneEditorPorts = {
   surfaces: LayeredSurfaces;
   /** The look editor: the feature whose part it edits and the device that rasters its layers. */
-  look: { readonly feature: string; readonly preview: LayeredSurfaceWiring["preview"] };
+  look?: { readonly feature: string; readonly preview: LayeredSurfaceWiring["preview"] };
   /** Bound services are opaque to the core host; only the registered adapter interprets the projection. */
   core: Pick<Core, "app" | "documents">;
   adapters?: BrowserEditorAdapters;
@@ -59,12 +60,12 @@ export type SceneEditorPorts = {
 export function createSceneEditors(ports: SceneEditorPorts) {
   const { core, naming } = ports;
   const adapters = ports.adapters ?? registeredEditorAdapters(core);
-  const edited = ports.surfaces.get(ports.look.feature);
+  const edited = ports.look ? ports.surfaces.get(ports.look.feature) : undefined;
   const wiring: readonly LayeredSurfaceWiring[] = edited
-    ? [{ feature: edited.feature, surface: scene => scene.feature(edited), preview: ports.look.preview, edited: true }] : [];
+    ? [{ feature: edited.feature, surface: scene => scene.feature(edited), preview: ports.look!.preview, edited: true }] : [];
   return {
     /** The layered surfaces each head connects (in composition order; the edited one carries the on-head editor). */
-    wiring,
+    wiring: wiring.map(layeredPreviewWiring),
     /** The renderer of the surface the look editor edits (developer evidence reads it). */
     edited,
     /**

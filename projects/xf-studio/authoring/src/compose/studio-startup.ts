@@ -42,7 +42,7 @@ import { createBrowserPoseLibraryDevice } from "../animation/browser/browser-pos
 import { PoseStageHub } from "../animation/pose-stage";
 import { createBrowserModInstall } from "../installation/browser/browser-mod-install-device";
 import { builtModsOf, type BuiltMod } from "../installation/mod-install-actions";
-import { createBrowserPreviewDevice } from "../legacy/eye-makeup/browser/browser-preview-device";
+import { createRegisteredPreview, noGeneratedPreview, type BrowserPreview } from "../preview/browser/preview-capabilities";
 import { createBrowserSceneHeads } from "../preview/browser/browser-scene-heads";
 import type { AttachedHead } from "../preview/browser/browser-head-attachment";
 import { createSceneEditors } from "../preview/browser/scene-editors";
@@ -51,15 +51,12 @@ import { CreatorCatalogue } from "../character/creator-catalogue";
 import { panelCommands } from "./panel-commands";
 import { createBrowserCreatorDevice } from "../character/browser/browser-cc-catalogue-device";
 import { readSavedV } from "../saves/save-reader";
-import { rasterRegion } from "../engines/layered-makeup/region";
 import { createBrowserViewportDevice } from "../preview/browser/browser-viewport-device";
 import { createBrowserWorkspaceSession, loadBrowserWorkspace } from "../app/browser/browser-workspace-device";
 import { collectionTransport, collectionVersions } from "../library/browser/collection-transport";
-import { GlitterMeasurements } from "../legacy/eye-makeup/glitter-measurements";
 import type { LocalSetupActions } from "../setup/local-setup-actions";
 import type { DesktopAppActions } from "../setup/desktop-app";
 import { emptyPresentationStatus, PresentationStatusSource, type AdapterMessage } from "../app/presentation-status";
-import type { Layer } from "../engines/layered-makeup/recipe";
 import type { StudioPresentationPort } from "../app/studio-presentation";
 import { mountStudio } from "../studio-ui/app";
 import { createProfileAuthoring } from "../app/profiles/profile-authoring";
@@ -269,7 +266,9 @@ async function start(host: StudioHost, root: HTMLElement) {
   let autostart = workspace.previewSetup?.autostart ?? legacyAutostart(storage, verification);
   // Whether the person chose Not now on the 3D preview card; a workspace preference too, so it stays declined.
   let declined = workspace.previewSetup?.declined === true;
-  let previewDevice: ReturnType<typeof createBrowserPreviewDevice>;
+  let previewDevice: BrowserPreview | undefined;
+  const previewLife = new AbortController();
+  window.addEventListener("pagehide", event => { if (!event.persisted) previewLife.abort(); });
   /** Stops waiting for the page to be quiet before the installed expressions are read ahead (facial-prefetch.ts). */
   let stopPrefetch: (() => void) | undefined;
   let bootstrap: ReturnType<typeof createTrustedStudioBootstrap<HTMLElement>>;
@@ -286,13 +285,11 @@ async function start(host: StudioHost, root: HTMLElement) {
   let drawnView: () => string | undefined = () => drawnViewOf(sessionState);
   // Device facts published read-only to the view.
   let status = emptyPresentationStatus(verification);
-  const measurements = new GlitterMeasurements({
-    layers: () => core.document.recipe.layers, size: () => previewDevice.coordinator.size, fineGlitter: region.fineGlitter });
   const polishFixture = verification ? polish4Verification(() => statusSource.changed()) : undefined;
   const statusSource = new PresentationStatusSource(() => {
     const head = shownHead(), eye = head?.scene.eyeAppearance().optics;
     const snapshot = { ...status, ...(lease ? { lease: profileWorkspaceLease(lease, sessionStored) } : {}), outbox: outboxView(documents.outbox.status()),
-      glitter: measurements.snapshot(), assets: { ...status.assets,
+      glitter: previewDevice?.measurements() ?? [], assets: { ...status.assets,
       characterDetails: head?.characterDetails.snapshot(),
       eyeOptics: eye ? { requested: eye.requested, active: eye.active, reason: eye.reason, error: eye.error } : undefined } };
     return polishFixture?.snapshot(snapshot) ?? snapshot;
@@ -389,21 +386,16 @@ async function start(host: StudioHost, root: HTMLElement) {
   const persist = () => session.request();
   let panelUV: ReturnType<typeof createPanelUVFactory> | undefined;
   const drawUV = () => { viewportDevice.drawUV(); panelUV?.draw(); };
-  previewDevice = createBrowserPreviewDevice({
-    document: core.document, region: rasterRegion(region), initialSize: workspace.preview.textureSize,
+  previewDevice = createRegisteredPreview(core, {
+    signal: previewLife.signal, initialSize: workspace.preview.textureSize, changed: () => statusSource.changed(),
     // The look the document shows: a warm head's surface keeps that look's makeup, given back when the document shows it again (D3).
     look: () => { const ref = lookEditor.ref(); return ref ? lookScope(ref) : undefined; },
-    makeWorker: () => new Worker("/build/raster-worker.js", { type: "module" }),
     frame: run => requestAnimationFrame(run),
     refresh: () => { drawUV(); persist(); }, refreshSelection: () => { drawUV(); persist(); },
     refreshQuality: () => { persist(); }, drawUV,
     report: text => adapterMessage("preview", text),
-    measurement: (layer: Layer, size, stats) => {
-      measurements.record(layer, size, stats);
-      statusSource.changed();
-    },
   });
-  core.app.attach({ quality: previewDevice.coordinator.quality });
+  core.app.attach({ quality: previewDevice?.coordinator.quality });
   // The live face (facial-preview.ts): the composition's face posers read the selected look's parts, the host solves them with the blink,
   // and the head shows the result once it is loaded. Part presets (favourites) live in the library, the verification workspace's apart.
   // The main view shows the held expression: the view graph's per-view scene input is the seam where another view could show another.
@@ -422,11 +414,11 @@ async function start(host: StudioHost, root: HTMLElement) {
   transitions.subscribe(persist);
   core.app.subscribe(() => facial.changed());
   facial.start();
-  previewDevice.coordinator.quality.subscribe(persist);
+  previewDevice?.coordinator.quality.subscribe(persist);
   // The editors (scene-editors.ts): every composed layered surface is registered, and each view's on-head editor edits the look that view's
   // scene shows, naming it through the view's panel (the input layer's resolution, profiles design §3.6). The root names no feature.
   const panelOf = (view: string | undefined) => view === undefined ? undefined : sessionState.instance(viewPanel(view));
-  const editors = createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: { feature: core.document.feature, preview: previewDevice }, core,
+  const editors = createSceneEditors({ surfaces: STUDIO_LAYERED_SURFACES, look: previewDevice ? { feature: previewDevice.feature, preview: previewDevice } : undefined, core,
     naming: { look: view => targets.named(panelOf(view)).look,
       complete: (action, view) => targets.complete(action, core.app.descriptor(action.kind as StudioAction["kind"]), { instance: panelOf(view) }) as StudioAction },
     drawn: () => drawnView(), viewport: viewportDevice, attach: services => core.app.attach(services), message: adapterMessage });
@@ -439,7 +431,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       layered: editors.wiring,
       // The stage backdrop follows the resolved UI theme through the renderer's typed input.
       colourScheme: matchMedia("(prefers-color-scheme: dark)"),
-      quality: previewDevice.coordinator.quality,
+      quality: previewDevice?.coordinator.quality,
       attach: attached => core.app.attach(attached), persist, changed: () => statusSource.changed() },
     scenes: sceneHeadTargets(sessionState, services),
     characters: services.characters,
@@ -486,7 +478,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   const packageTransport = collectionTransport(`${base}/collections`);
   const polish5 = verification ? polish5Verification(packageTransport) : undefined;
   panelUV = createPanelUVFactory({ session: sessionState, fallback: viewportDevice.attachment, initial: workspace.uvView,
-    canvases: named => named.look && lookEditor.ref() && sameLook(named.look, lookEditor.ref()!) ? previewDevice.canvases : [],
+    canvases: named => named.look && lookEditor.ref() && sameLook(named.look, lookEditor.ref()!) ? previewDevice?.canvases ?? [] : [],
     albedo: named => named.character && named.character === targets.namedView(drawnView()).character ? shownHead()?.scene.albedo.image as HTMLImageElement | undefined : undefined });
   bootstrap = createTrustedStudioBootstrap({
     core, preferences, localSetup, installDetection,
@@ -501,7 +493,7 @@ async function start(host: StudioHost, root: HTMLElement) {
       try { await (host.openLink ? host.openLink(link) : openProjectLinkInNewTab(link)); return { ok: true }; }
       catch (error) { return { ok: false, message: error instanceof Error ? error.message : "That page couldn't be opened. Try again." }; }
     } },
-    previewReadiness: previewDevice.coordinator, status: statusSource, about: host.about, desktopApp: host.desktopApp,
+    previewReadiness: previewDevice?.coordinator ?? noGeneratedPreview(workspace.preview.textureSize), status: statusSource, about: host.about, desktopApp: host.desktopApp,
     // Both hosts serve the update check; a verification workspace keeps what it found apart (UI-98).
     updates: createBrowserUpdateCheck(verification ? "/api/verification/update-check" : "/api/update-check"),
     collections: { owner: services.collections, scene: shownScene, transport: polish5?.transport ?? packageTransport,
@@ -547,7 +539,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     characterName: character => services.characters.character(character)?.label,
   });
   // The editor shows the drawn scene's look, and follows it when the scene shows another one. A warm head's look comes back with its makeup.
-  lookShown = () => { previewDevice.showLook(); drawUV(); };
+  lookShown = () => { previewDevice?.showLook(); drawUV(); };
   lookEditor.show(shownScene.look());
   // The drawn view follows the shown tab's most recently focused view (another tab shown, another view focused, the view drawn closed):
   // the heads owner draws it, switching the document first when it shows another look (D3). Otherwise the drawn scene's look may change.
@@ -677,7 +669,7 @@ async function start(host: StudioHost, root: HTMLElement) {
     } });
   }
   void localSetup.dispatch({ kind: "setup.refresh" });
-  for (let i = 0; i < core.document.recipe.layers.length; i++) previewDevice.coordinator.render(i);
+  previewDevice?.start();
   session.activate();
   await port!.library.execute({ kind: "initialize" });
   followPreviewSetup();

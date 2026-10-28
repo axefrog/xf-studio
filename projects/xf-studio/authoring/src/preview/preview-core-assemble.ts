@@ -176,7 +176,7 @@ export function eyeMorphTargets(eyeMorphBytes: Uint8Array, eyeSurfaceMesh: strin
   return { targets: source.targets, names };
 }
 
-export function assemblePreviewGlb(headBytes: Uint8Array, eyeBytes: Uint8Array, plateRecipe: EyePlateRecipe, eyeSurfaceMesh: string,
+export function assemblePreviewGlb(headBytes: Uint8Array, eyeBytes: Uint8Array, plateRecipe: EyePlateRecipe | undefined, eyeSurfaceMesh: string,
   eyeMorphBytes: Uint8Array): PreviewAssembly {
   const head = parseGlb(headBytes), eye = parseGlb(eyeBytes);
   const headNodeIndex = head.json.nodes.findIndex((node: GltfJson) => node.mesh !== undefined);
@@ -189,10 +189,10 @@ export function assemblePreviewGlb(headBytes: Uint8Array, eyeBytes: Uint8Array, 
   const targetNames: string[] = head.json.meshes[headNode.mesh].extras?.targetNames ?? [];
   if (!headSource.targets.length || targetNames.length !== headSource.targets.length || new Set(targetNames).size !== targetNames.length)
     throw Error("The exported head has no uniquely named facial morph targets.");
-  if (headSource.targets.length !== plateRecipe.selection.morphTargetCount)
+  if (plateRecipe && headSource.targets.length !== plateRecipe.selection.morphTargetCount)
     throw Error("The exported head's morph target count differs from the audited eye plate recipe.");
-  const selection = plateSelection(headSource.indices, plateRecipe);
-  const plate = subsetPrimitive(headSource, selection.vertexIds, selection.faces);
+  const selection = plateRecipe ? plateSelection(headSource.indices, plateRecipe) : undefined;
+  const plate = selection ? subsetPrimitive(headSource, selection.vertexIds, selection.faces) : undefined;
 
   const eyeNode = eye.json.nodes.find((node: GltfJson) => node.name === eyeSurfaceMesh && node.mesh !== undefined);
   if (!eyeNode) throw Error(`The exported eye mesh has no ${eyeSurfaceMesh} surface.`);
@@ -220,20 +220,20 @@ export function assemblePreviewGlb(headBytes: Uint8Array, eyeBytes: Uint8Array, 
     return remap.get(joint)!;
   });
   const headNodeOut = nodes.push({ name: "head", mesh: 0, skin: 0 }) - 1;
-  const plateNodeOut = nodes.push({ name: "makeup_plate", mesh: 1, skin: 0 }) - 1;
-  const eyesNodeOut = nodes.push({ name: "eyes", mesh: 2 }) - 1;
+  const plateNodeOut = plate ? nodes.push({ name: "makeup_plate", mesh: 1, skin: 0 }) - 1 : undefined;
+  const eyesNodeOut = nodes.push({ name: "eyes", mesh: plate ? 2 : 1 }) - 1;
   const weights = Array(targetNames.length).fill(0);
   const json: GltfJson = {
     asset: { version: "2.0", generator: PREVIEW_GLB_GENERATOR },
     scene: 0,
-    scenes: [{ name: "Scene", nodes: [...roots, headNodeOut, plateNodeOut, eyesNodeOut] }],
+    scenes: [{ name: "Scene", nodes: [...roots, headNodeOut, ...(plateNodeOut === undefined ? [] : [plateNodeOut]), eyesNodeOut] }],
     nodes,
     skins: [{ name: "Armature", joints, ...(inverseBind === undefined ? {} : { inverseBindMatrices: inverseBind }) }],
-    materials: ["head_preview", "makeup_plate_preview", "eyes_preview"].map(name => ({ name, pbrMetallicRoughness: { metallicFactor: 0 } })),
+    materials: ["head_preview", ...(plate ? ["makeup_plate_preview"] : []), "eyes_preview"].map(name => ({ name, pbrMetallicRoughness: { metallicFactor: 0 } })),
     meshes: [
       { name: "head", primitives: [writePrimitive(writer, headSource, 0)], weights, extras: { targetNames } },
-      { name: "makeup_plate", primitives: [writePrimitive(writer, plate, 1)], weights, extras: { targetNames } },
-      { name: "eyes", primitives: [writePrimitive(writer, eyes, 2)], weights: Array(eyeMorphs.names.length).fill(0),
+      ...(plate ? [{ name: "makeup_plate", primitives: [writePrimitive(writer, plate, 1)], weights, extras: { targetNames } }] : []),
+      { name: "eyes", primitives: [writePrimitive(writer, eyes, plate ? 2 : 1)], weights: Array(eyeMorphs.names.length).fill(0),
         extras: { targetNames: eyeMorphs.names } },
     ],
   };
@@ -247,23 +247,23 @@ const finite = (data: ArrayLike<number>) => { for (let i = 0; i < data.length; i
  * Independent structural check of an assembled preview GLB. It re-reads the bytes and
  * re-derives the plate rows from the output head, so it also guards the writer.
  */
-export function verifyPreviewGlb(bytes: Uint8Array, plateRecipe: EyePlateRecipe): PreviewGlbReport {
+export function verifyPreviewGlb(bytes: Uint8Array, plateRecipe?: EyePlateRecipe): PreviewGlbReport {
   const glb = parseGlb(bytes);
   const node = (name: string) => {
     const found = glb.json.nodes.filter((entry: GltfJson) => entry.name === name && entry.mesh !== undefined);
     if (found.length !== 1) throw Error(`Preview GLB needs exactly one ${name} mesh node.`);
     return found[0];
   };
-  const headNode = node("head"), plateNode = node("makeup_plate"), eyesNode = node("eyes");
-  if (headNode.skin !== 0 || plateNode.skin !== 0 || eyesNode.skin !== undefined || glb.json.skins?.length !== 1)
+  const headNode = node("head"), plateNode = plateRecipe ? node("makeup_plate") : undefined, eyesNode = node("eyes");
+  if (headNode.skin !== 0 || (plateNode && plateNode.skin !== 0) || eyesNode.skin !== undefined || glb.json.skins?.length !== 1)
     throw Error("Preview GLB skinning layout is wrong.");
   const jointCount = glb.json.skins[0].joints.length;
   const read = (meshNode: GltfJson, names: readonly string[], targets: boolean) =>
     readPrimitive(glb, only(glb.json.meshes[meshNode.mesh].primitives, "primitive"), names, targets);
-  const headMesh = read(headNode, HEAD_ATTRIBUTES, true), plateMesh = read(plateNode, HEAD_ATTRIBUTES, true), eyeMesh = read(eyesNode, EYE_ATTRIBUTES, true);
+  const headMesh = read(headNode, HEAD_ATTRIBUTES, true), plateMesh = plateNode ? read(plateNode, HEAD_ATTRIBUTES, true) : undefined, eyeMesh = read(eyesNode, EYE_ATTRIBUTES, true);
   const names = glb.json.meshes[headNode.mesh].extras?.targetNames;
-  if (!Array.isArray(names) || names.length !== headMesh.targets.length || names.length !== plateRecipe.selection.morphTargetCount ||
-      JSON.stringify(glb.json.meshes[plateNode.mesh].extras?.targetNames) !== JSON.stringify(names) || plateMesh.targets.length !== names.length)
+  if (!Array.isArray(names) || names.length !== headMesh.targets.length || (plateRecipe && (names.length !== plateRecipe.selection.morphTargetCount ||
+      JSON.stringify(glb.json.meshes[plateNode.mesh].extras?.targetNames) !== JSON.stringify(names) || plateMesh!.targets.length !== names.length)))
     throw Error("Preview GLB morph targets are incomplete.");
   // The eyes follow the head's eye-shape choice: each eye target must name a head target.
   const eyeNames = glb.json.meshes[eyesNode.mesh].extras?.targetNames;
@@ -294,15 +294,18 @@ export function verifyPreviewGlb(bytes: Uint8Array, plateRecipe: EyePlateRecipe)
     }
     return { vertices, sets };
   };
-  const headInfo = check("Head", headMesh, true), plateInfo = check("Eye plate", plateMesh, true), eyeInfo = check("Eyes", eyeMesh, false);
-  const selection = plateSelection(headMesh.indices, plateRecipe);
-  if (plateInfo.vertices !== selection.vertexIds.length || plateMesh.indices.length !== selection.faces.length ||
-      plateMesh.indices.some((index, position) => index !== selection.faces[position]))
-    throw Error("Eye plate triangles differ from the head selection.");
-  const headPosition = headMesh.attributes.get("POSITION")!.data, platePosition = plateMesh.attributes.get("POSITION")!.data;
-  selection.vertexIds.forEach((row, index) => {
-    for (let k = 0; k < 3; k++) if (platePosition[index * 3 + k] !== headPosition[row * 3 + k]) throw Error("Eye plate rows are not the head's rows.");
-  });
+  const headInfo = check("Head", headMesh, true), plateInfo = plateMesh ? check("Eye plate", plateMesh, true) : { vertices: 0, sets: 0 }, eyeInfo = check("Eyes", eyeMesh, false);
+  if (plateRecipe && plateMesh) {
+      const selection = plateSelection(headMesh.indices, plateRecipe);
+      if (plateInfo.vertices !== selection.vertexIds.length || plateMesh.indices.length !== selection.faces.length ||
+          plateMesh.indices.some((index, position) => index !== selection.faces[position]))
+        throw Error("Eye plate triangles differ from the head selection.");
+      const headPosition = headMesh.attributes.get("POSITION")!.data, platePosition = plateMesh.attributes.get("POSITION")!.data;
+      selection.vertexIds.forEach((row, index) => {
+        for (let k = 0; k < 3; k++) if (platePosition[index * 3 + k] !== headPosition[row * 3 + k]) throw Error("Eye plate rows are not the head's rows.");
+      });
+  } else if (glb.json.nodes.some((entry: GltfJson) => entry.name === "makeup_plate")) throw Error("An unregistered eye plate was prepared.");
+  const headPosition = headMesh.attributes.get("POSITION")!.data;
   // The eyeballs must sit inside the head's bounds (a gross placement check, not a clearance test).
   const bounds = (data: AccessorArray) => {
     const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
@@ -317,7 +320,7 @@ export function verifyPreviewGlb(bytes: Uint8Array, plateRecipe: EyePlateRecipe)
   for (let i = 0; i < uv.length; i++) { uvMin[i % 2] = Math.min(uvMin[i % 2]!, uv[i]!); uvMax[i % 2] = Math.max(uvMax[i % 2]!, uv[i]!); }
   return {
     head: { vertices: headInfo.vertices, triangles: headMesh.indices.length / 3, joints: jointCount, morphTargets: headMesh.targets.length, influenceSets: headInfo.sets },
-    plate: { vertices: plateInfo.vertices, triangles: plateMesh.indices.length / 3, morphTargets: plateMesh.targets.length },
+    plate: { vertices: plateInfo.vertices, triangles: (plateMesh?.indices.length ?? 0) / 3, morphTargets: plateMesh?.targets.length ?? 0 },
     eyes: { vertices: eyeInfo.vertices, triangles: eyeMesh.indices.length / 3, uv0Min: uvMin, uv0Max: uvMax, morphTargets: eyeMesh.targets.length },
   };
 }

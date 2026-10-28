@@ -1,3 +1,7 @@
+import { registeredPreviewPreparation } from "../src/preview/preview-capabilities";
+import { STUDIO_REGISTRY } from "../src/compose/studio-registry";
+import { PREVIEW_CORE_RECIPE } from "../src/preview/preview-core-recipe";
+const plateRecipe = registeredPreviewPreparation(STUDIO_REGISTRY, "female");
 // Real derivation of the 3D preview core from an installed game. Needs private local inputs, so it
 // runs only when XFS_TEST_GAME_ROOT (Cyberpunk 2077 folder) and XFS_TEST_WOLVENKIT (WolvenKit.CLI.exe)
 // are set. Without them it is reported as skipped, never as a pass.
@@ -51,7 +55,7 @@ test.skipIf(!available)("the 3D preview core derives from the installed 2.31 gam
   const cacheRoot = tempDir("xfs-preview-game-");
   try {
     const exporter = createGameAssetExporter(join(cacheRoot, "exports"), createWolvenKitUncook(wolvenkit!));
-    const derived = await ensurePreviewCore({ gameRoot: game!, cacheRoot, exporter });
+    const derived = await ensurePreviewCore({ plateRecipe, gameRoot: game!, cacheRoot, exporter });
     expect(derived.reused).toBe(false);
     const { geometry, source } = derived.manifest;
     expect(source.revisionId).toBe("cp2077-2.31");
@@ -71,8 +75,8 @@ test.skipIf(!available)("the 3D preview core derives from the installed 2.31 gam
     expect(seating.shapes).toHaveLength(21);
     expect(total("morphed")).toBeLessThan(total("static") * 0.2);
     expect(seating.shapes.filter(shape => shape.morphed <= seating.base + 5).length).toBeGreaterThanOrEqual(15);
-    expect(previewCoreReadiness(cacheRoot, game!).state).toBe("ready");
-    const reused = await ensurePreviewCore({ gameRoot: game!, cacheRoot, exporter });
+    expect(previewCoreReadiness(cacheRoot, game!, PREVIEW_CORE_RECIPE, plateRecipe).state).toBe("ready");
+    const reused = await ensurePreviewCore({ plateRecipe, gameRoot: game!, cacheRoot, exporter });
     expect(reused.reused).toBe(true);
     expect(JSON.parse(readFileSync(join(derived.directory, "preview-core.json"), "utf8")).identity).toBe(derived.manifest.cacheKey);
   } finally { rmSync(cacheRoot, { recursive: true, force: true }); }
@@ -85,8 +89,8 @@ test.skipIf(!available)("cancelling a real derivation stops WolvenKit and publis
     const exporter = createGameAssetExporter(join(cacheRoot, "exports"), createWolvenKitUncook(wolvenkit!));
     const started = Date.now();
     setTimeout(() => controller.abort(), 1500);
-    await expect(ensurePreviewCore({ gameRoot: game!, cacheRoot, exporter, signal: controller.signal })).rejects.toMatchObject({ code: "preview_cancelled" });
+    await expect(ensurePreviewCore({ plateRecipe, gameRoot: game!, cacheRoot, exporter, signal: controller.signal })).rejects.toMatchObject({ code: "preview_cancelled" });
     expect(Date.now() - started).toBeLessThan(10_000);
-    expect(previewCoreReadiness(cacheRoot, game!).state).toBe("none");
+    expect(previewCoreReadiness(cacheRoot, game!, PREVIEW_CORE_RECIPE, plateRecipe).state).toBe("none");
   } finally { rmSync(cacheRoot, { recursive: true, force: true }); }
 }, 120_000);

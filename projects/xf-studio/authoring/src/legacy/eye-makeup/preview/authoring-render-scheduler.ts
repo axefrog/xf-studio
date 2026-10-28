@@ -1,4 +1,6 @@
-import type { AuthoringDocument, DocumentEffect } from "../../../app/authoring/makeup-document";
+import type { RecipeActionEffect } from "../../../engines/layered-makeup/recipe-actions";
+import type { Recipe } from "../../../engines/layered-makeup/recipe";
+type DocumentEffect = RecipeActionEffect | { kind: "gesture"; layerIndex: number };
 import { layerRenderQueue } from "./layer-render-queue";
 import type { Layer } from "../../../engines/layered-makeup/recipe";
 
@@ -6,7 +8,7 @@ import type { Layer } from "../../../engines/layered-makeup/recipe";
  * Where a layered surface's preview reads its layers (UI-76): the stack, the active layer and the document's change intents. The live
  * feature's authoring document is one; the preview devices depend on nothing more of it.
  */
-export type PreviewLayerSource = Pick<AuthoringDocument, "recipe" | "active" | "subscribeEffects">;
+export type PreviewLayerSource = { readonly recipe: Recipe; readonly active: number; subscribeEffects(listener: (effect: DocumentEffect) => void): () => void };
 
 export type AuthoringRenderPort = {
   frame(run: () => void): void;
@@ -16,10 +18,11 @@ export type AuthoringRenderPort = {
 
 /** Maps document change intent to layer-specific rendering without owning DOM or raster resources. */
 export class AuthoringRenderScheduler {
+  private disposed = false;
   private queue: (layer: Layer | undefined) => void;
   private unsubscribe: () => void;
   constructor(private document: PreviewLayerSource, private port: AuthoringRenderPort) {
-    this.queue = layerRenderQueue(() => document.recipe.layers, port.frame, port.render);
+    this.queue = layerRenderQueue(() => document.recipe.layers, run => port.frame(() => { if (!this.disposed) run(); }), port.render);
     this.unsubscribe = document.subscribeEffects(effect => this.handle(effect));
   }
   private handle(effect: DocumentEffect) {
@@ -32,6 +35,7 @@ export class AuthoringRenderScheduler {
     this.port.refreshSelection();
   }
   renderAll(order: "stack" | "active-first" = "active-first") {
+    if (this.disposed) return;
     const indices = this.document.recipe.layers.map((_, index) => index);
     if (order === "active-first" && indices.includes(this.document.active)) {
       indices.splice(this.document.active, 1);
@@ -39,5 +43,5 @@ export class AuthoringRenderScheduler {
     }
     for (const index of indices) this.port.render(index);
   }
-  dispose() { this.unsubscribe(); }
+  dispose() { this.disposed = true; this.unsubscribe(); }
 }

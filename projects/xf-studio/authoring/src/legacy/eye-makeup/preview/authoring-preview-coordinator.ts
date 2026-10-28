@@ -1,4 +1,3 @@
-import type { AuthoringDocument } from "../../../app/authoring/makeup-document";
 import { planLayerPreview } from "./authoring-preview-policy";
 import { assessPreviewQuality, type PreviewTextureSize } from "./preview-quality";
 import { PreviewQualityActions } from "./preview-quality-actions";
@@ -45,7 +44,7 @@ export class AuthoringPreviewCoordinator {
   readonly quality: PreviewQualityActions;
   private lastRaster = 0;
   private listeners = new Set<() => void>();
-  constructor(private document: Pick<AuthoringDocument, "recipe" | "active">, initialSize: PreviewTextureSize,
+  constructor(private document: { readonly recipe: Recipe; readonly active: number }, initialSize: PreviewTextureSize,
     private port: PreviewRenderPort) {
     this.quality = new PreviewQualityActions(initialSize, {
       assess: size => this.assess(size),

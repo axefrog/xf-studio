@@ -398,10 +398,13 @@ function lookSwitching() {
     { mount: (head, view) => { log.push(`mount:${id(head)}:${view}`); return () => log.push(`unmount:${id(head)}:${view}`); } },
     { shows: view => looks[view] === edited, follow: view => { edited = looks[view]!; log.push(`follow:${edited}`); } });
   // The fake layered surface's connections, logged by head.
-  const preview = o.h.ports.layered[0]!.preview, { connectScene, disconnectScene } = preview;
-  const headOf = (surface: unknown) => [...o.h.surfaces].find(([, item]) => item === surface)?.[0] as { slot: { id: number } } | undefined;
-  preview.connectScene = surface => { log.push(`connect:${headOf(surface)?.slot.id}`); return connectScene(surface); };
-  preview.disconnectScene = surface => { if (o.h.connected === surface) log.push(`hold:${headOf(surface)?.slot.id}`); disconnectScene(surface); };
+  const wiring = o.h.ports.layered[0]!, bind = wiring.bind;
+  wiring.bind = (scene, viewport) => {
+    const connection = bind(scene, viewport);
+    return { ...connection,
+      connect: () => { log.push(`connect:${(scene.slot as unknown as { id: number }).id}`); connection.connect(); },
+      disconnect: () => { if (o.h.connected) log.push(`hold:${(scene.slot as unknown as { id: number }).id}`); connection.disconnect(); } };
+  };
   const side = o.h.ports.graph!.addView("main", {}, { label: "Side" });
   views[side] = { scene: "s2", subject: "v2" }; looks[side] = "B";
   return { o, log, side, edited: () => edited, looks, views };
