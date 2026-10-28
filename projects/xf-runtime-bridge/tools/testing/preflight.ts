@@ -111,7 +111,13 @@ export async function preflight(options: PreflightOptions): Promise<PreflightRes
   if (!gameDir) add("warn", "fixtures", "No game_dir: CET's key bindings and the frame-generation modules can't be checked.");
   if (!mo2?.exe || !mo2.profile || !mo2.executable) add("warn", "fixtures", "No mo2 {exe, profile, executable}: the runner can't launch or restart the game itself.");
   else add(text(mo2.exe) === null && !existsSync(mo2.exe) ? "blocker" : "ok", "MO2", `${mo2.profile} through ${mo2.exe.split(/[\\/]/).pop()}${mo2.arguments ? ` with ${mo2.arguments}` : ""}`);
-  if (f.save === undefined) add("info", "fixtures", "No save named: loads use the latest save of the playthrough.");
+  // The newest save may belong to another profile, so a session names the save it is anchored to.
+  if (f.save === undefined) add("warn", "fixtures", "No save named: loads use the latest save, which may not suit the test profile. Name one in the fixtures (save).");
+  else {
+    const saves = process.env.USERPROFILE ? join(process.env.USERPROFILE, "Saved Games", "CD Projekt Red", "Cyberpunk 2077") : null;
+    if (saves && existsSync(saves)) add(existsSync(join(saves, String(f.save))) ? "ok" : "blocker", "save", existsSync(join(saves, String(f.save))) ? `${f.save} (named in the fixtures)` : `${f.save} isn't in the game's save folder.`);
+    else add("info", "save", `${f.save} (the save folder couldn't be checked here)`);
+  }
 
   // The staged build.
   const tools = JSON.parse(text(join(options.projectDir, "package.json")) ?? "{}").version as string | undefined;
