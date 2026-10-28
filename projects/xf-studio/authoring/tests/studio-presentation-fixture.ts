@@ -1,4 +1,5 @@
 import type { PartPresetService } from "../src/library/part-presets";
+import type { Recipe } from "../src/engines/layered-makeup/recipe";
 import type { WorkspaceLease } from "../src/app/workspace/workspace-lease";
 import { eyeCheck } from "./fixtures/package-results";
 import { AuthoringControlEdits } from "../src/app/authoring/authoring-control-edits";
@@ -36,13 +37,14 @@ import { eyeMakeupPort } from "./fixtures/eye-region";
  * for the viewport pickers (default: the selected layer's first point).
  */
 export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>["hitAt"];
+  recipe?: Recipe;
   presentation?: Pick<Parameters<typeof createStudioPresentation<string>>[0], "signal" | "panelInstance" | "scopeName" | "characterName" | "installDetection" | "localSetup" | "frameworkProducts" | "experiments">;
   /** The window's workspace lease (profiles design §2.3); without it the window is the only one. */
   presets?: PartPresetService;
   lease?: WorkspaceLease } = {}): {
   shell: StudioPresentationPort<string>; packageInput: () => PresetCollection | undefined;
   downloads: string[]; locations: string[]; outbox: DocumentOutbox } {
-  const workspace = freshWorkspace(), history = createHistoryService(), document = new AuthoringDocument(workspace, undefined, { history });
+  const workspace = freshWorkspace(options.recipe), history = createHistoryService(), document = new AuthoringDocument(workspace, undefined, { history });
   const recipe = new RecipeActions(() => ({ recipe: document.recipe, active: document.active,
     selected: document.selected, fieldSelection: document.fieldSelection }),
   (next, effect) => document.applyActionState(next, effect), document, {}, () => "fixture");

@@ -674,15 +674,20 @@ export class StudioApplication {
   /** Capture the look owner and exact history position; focus changes cannot retarget a toast's Undo. */
   captureUndo(): () => StudioDispatchResult {
     if (this.disposed || this.services.signal?.aborted) return () => ({ ok: false, code: "missing_target", message: "This editing context was released." });
-    const document = this.lookDocument, scope = document.history, id = scope.id, version = document.version;
+    const document = this.lookDocument, scope = document.history, history = this.services.history, id = scope.id, version = document.version;
     const timeline = JSON.stringify(scope.timeline());
     return () => {
-      const denied = this.denied();
+      // The toast belongs to this look, not the originating panel/scene facade. Switching that
+      // surface may retire its input while another requester still owns this exact live history.
+      const denied = this.services.access?.refusal();
       if (denied) return { ok: false, code: denied.code ?? "unavailable", message: denied.reason ?? "Action unavailable." };
-      if (this.services.history.scope(id) !== scope || document.scopeId !== id ||
+      if (history.scope(id) !== scope || document.scopeId !== id ||
         document.version !== version || JSON.stringify(scope.timeline()) !== timeline)
         return { ok: false, code: "missing_target", message: "That Undo no longer names the same change." };
-      return this.dispatch({ kind: "history.undo", scope: id });
+      const action = { kind: "history.undo" } as const, allowed = scope.capability(action);
+      if (!allowed.available) return { ok: false, code: allowed.code ?? "unavailable", message: allowed.reason ?? "Action unavailable." };
+      try { return { ok: true, result: scope.command(action) }; }
+      catch (error) { return { ok: false, ...failure(undefined, error) }; }
     };
   }
   /** Read-only projection over the existing recent scopes; no History panel binding or second stack. */

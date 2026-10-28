@@ -110,6 +110,7 @@ test("toast Undo captures its look and step, ignores focus/selection, and refuse
     expect(replaced()).toMatchObject({ ok: false, code: "missing_target" });
     const released = core.app.captureUndo();
     core.app.dispose();
+    core.document.dispose();
     expect(core.app.contextQuery({ kind: "point", layerId, index: 0 })).toMatchObject({
       targetCapability: { available: false, code: "missing_target" }, options: [] });
     expect(core.app.contextInputAction(core.app.contextFor({ kind: "layer", id: layerId }), "layer.rename", "late")).toBeUndefined();

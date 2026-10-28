@@ -108,6 +108,15 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
       "label": "Add warp",
     },
     {
+      "capability": {
+        "available": true,
+      },
+      "danger": false,
+      "icon": "shape",
+      "kind": "action",
+      "label": "Enable Bézier handles",
+    },
+    {
       "kind": "separator",
     },
     {
@@ -160,36 +169,6 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
       "icon": "trash",
       "kind": "action",
       "label": "Remove point",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Smooth handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": true,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Symmetric handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Corner handles",
     },
     {
       "capability": {
@@ -266,42 +245,6 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
       "icon": "trash",
       "kind": "action",
       "label": "Remove point",
-    },
-    {
-      "capability": {
-        "available": false,
-        "code": "missing_target",
-        "reason": "That control point no longer exists.",
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Smooth handles",
-    },
-    {
-      "capability": {
-        "available": false,
-        "code": "missing_target",
-        "reason": "That control point no longer exists.",
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Symmetric handles",
-    },
-    {
-      "capability": {
-        "available": false,
-        "code": "missing_target",
-        "reason": "That control point no longer exists.",
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Corner handles",
     },
     {
       "capability": {
@@ -360,7 +303,9 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
     },
     {
       "capability": {
-        "available": true,
+        "available": false,
+        "code": "missing_target",
+        "reason": "That Bézier tangent no longer exists.",
       },
       "danger": false,
       "icon": "target",
@@ -369,7 +314,9 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
     },
     {
       "capability": {
-        "available": true,
+        "available": false,
+        "code": "missing_target",
+        "reason": "That Bézier tangent no longer exists.",
       },
       "danger": false,
       "hint": "Undo with Ctrl+Z",
@@ -379,37 +326,9 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
     },
     {
       "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Smooth handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": true,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Symmetric handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Corner handles",
-    },
-    {
-      "capability": {
-        "available": true,
+        "available": false,
+        "code": "missing_target",
+        "reason": "That Bézier tangent no longer exists.",
       },
       "icon": "edge",
       "kind": "action",
@@ -418,8 +337,8 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
     {
       "capability": {
         "available": false,
-        "code": "incompatible_mode",
-        "reason": "Turn on Per-point edge softness before editing one point's edge.",
+        "code": "missing_target",
+        "reason": "That Bézier tangent no longer exists.",
       },
       "icon": "edge",
       "kind": "action",
@@ -630,36 +549,6 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
       "icon": "trash",
       "kind": "action",
       "label": "Remove point",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Smooth handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": true,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Symmetric handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Corner handles",
     },
     {
       "capability": {
@@ -856,6 +745,15 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
       "label": "Add warp",
     },
     {
+      "capability": {
+        "available": true,
+      },
+      "danger": false,
+      "icon": "shape",
+      "kind": "action",
+      "label": "Enable Bézier handles",
+    },
+    {
       "kind": "separator",
     },
     {
@@ -922,36 +820,6 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
       "icon": "trash",
       "kind": "action",
       "label": "Remove point",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Smooth handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": true,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Symmetric handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Corner handles",
     },
     {
       "capability": {
@@ -1042,42 +910,6 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
       "icon": "trash",
       "kind": "action",
       "label": "Remove point",
-    },
-    {
-      "capability": {
-        "available": false,
-        "code": "missing_target",
-        "reason": "That control point no longer exists.",
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Smooth handles",
-    },
-    {
-      "capability": {
-        "available": false,
-        "code": "missing_target",
-        "reason": "That control point no longer exists.",
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Symmetric handles",
-    },
-    {
-      "capability": {
-        "available": false,
-        "code": "missing_target",
-        "reason": "That control point no longer exists.",
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Corner handles",
     },
     {
       "capability": {
@@ -1150,7 +982,9 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
     },
     {
       "capability": {
-        "available": true,
+        "available": false,
+        "code": "missing_target",
+        "reason": "That Bézier tangent no longer exists.",
       },
       "danger": false,
       "icon": "target",
@@ -1159,7 +993,9 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
     },
     {
       "capability": {
-        "available": true,
+        "available": false,
+        "code": "missing_target",
+        "reason": "That Bézier tangent no longer exists.",
       },
       "danger": false,
       "hint": "Undo with Ctrl+Z",
@@ -1169,37 +1005,9 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
     },
     {
       "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Smooth handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": true,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Symmetric handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Corner handles",
-    },
-    {
-      "capability": {
-        "available": true,
+        "available": false,
+        "code": "missing_target",
+        "reason": "That Bézier tangent no longer exists.",
       },
       "icon": "edge",
       "kind": "action",
@@ -1208,8 +1016,8 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
     {
       "capability": {
         "available": false,
-        "code": "incompatible_mode",
-        "reason": "Turn on Per-point edge softness before editing one point's edge.",
+        "code": "missing_target",
+        "reason": "That Bézier tangent no longer exists.",
       },
       "icon": "edge",
       "kind": "action",
@@ -1462,36 +1270,6 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
       "icon": "trash",
       "kind": "action",
       "label": "Remove point",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Smooth handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": true,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Symmetric handles",
-    },
-    {
-      "capability": {
-        "available": true,
-      },
-      "checked": false,
-      "danger": false,
-      "icon": "shape",
-      "kind": "action",
-      "label": "Corner handles",
     },
     {
       "capability": {
@@ -3811,6 +3589,4166 @@ exports[`makeup menu output has identical items, labels, order, sections, icons,
       "shortcut": "Alt+↓",
     },
   ],
+]
+`;
+
+exports[`makeup alternate checked modes, boundary softness and invoked input popovers match the pre-slice-7 output: bb99992b alternate menus and invoked popovers 1`] = `
+[
+  {
+    "boundary": false,
+    "menu": [
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point pigment…",
+      },
+      {
+        "capability": {
+          "available": false,
+          "code": "incompatible_mode",
+          "reason": "Turn on Per-point edge softness before editing one point's edge.",
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point edge softness…",
+      },
+    ],
+    "mode": "regular",
+  },
+  {
+    "boundary": false,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "100%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "1",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.strength",
+    "mode": "regular",
+    "warnings": [],
+  },
+  {
+    "input": "point.strength",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "-99900%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "boundary": false,
+    "initial": undefined,
+    "input": "point.softness",
+    "mode": "regular",
+    "warnings": [
+      [
+        "warning",
+        "Context menu",
+        "Turn on Per-point edge softness before editing one point's edge.",
+      ],
+    ],
+  },
+  {
+    "boundary": true,
+    "menu": [
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point pigment…",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point edge softness…",
+      },
+    ],
+    "mode": "regular",
+  },
+  {
+    "boundary": true,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "100%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "1",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.strength",
+    "mode": "regular",
+    "warnings": [],
+  },
+  {
+    "input": "point.strength",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "-99900%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "boundary": true,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 edge softness",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 edge softness",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Edge softness",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "19",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "0.06",
+            "min": "0.0005",
+            "step": "0.0005",
+            "type": "range",
+            "value": "0.012",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "0.012",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.softness",
+    "mode": "regular",
+    "warnings": [],
+  },
+  {
+    "input": "point.softness",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 edge softness",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 edge softness",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Edge softness",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "0.0",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "0.06",
+            "min": "0.0005",
+            "step": "0.0005",
+            "type": "range",
+            "value": "0.012",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "boundary": false,
+    "menu": [
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": true,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Smooth handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Symmetric handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Corner handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point pigment…",
+      },
+      {
+        "capability": {
+          "available": false,
+          "code": "incompatible_mode",
+          "reason": "Turn on Per-point edge softness before editing one point's edge.",
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point edge softness…",
+      },
+    ],
+    "mode": "aligned",
+  },
+  {
+    "boundary": false,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "100%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "1",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.strength",
+    "mode": "aligned",
+    "warnings": [],
+  },
+  {
+    "input": "point.strength",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "-99900%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "boundary": false,
+    "initial": undefined,
+    "input": "point.softness",
+    "mode": "aligned",
+    "warnings": [
+      [
+        "warning",
+        "Context menu",
+        "Turn on Per-point edge softness before editing one point's edge.",
+      ],
+    ],
+  },
+  {
+    "boundary": true,
+    "menu": [
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": true,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Smooth handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Symmetric handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Corner handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point pigment…",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point edge softness…",
+      },
+    ],
+    "mode": "aligned",
+  },
+  {
+    "boundary": true,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "100%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "1",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.strength",
+    "mode": "aligned",
+    "warnings": [],
+  },
+  {
+    "input": "point.strength",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "-99900%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "boundary": true,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 edge softness",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 edge softness",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Edge softness",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "19",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "0.06",
+            "min": "0.0005",
+            "step": "0.0005",
+            "type": "range",
+            "value": "0.012",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "0.012",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.softness",
+    "mode": "aligned",
+    "warnings": [],
+  },
+  {
+    "input": "point.softness",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 edge softness",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 edge softness",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Edge softness",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "0.0",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "0.06",
+            "min": "0.0005",
+            "step": "0.0005",
+            "type": "range",
+            "value": "0.012",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "boundary": false,
+    "menu": [
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Smooth handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": true,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Symmetric handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Corner handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point pigment…",
+      },
+      {
+        "capability": {
+          "available": false,
+          "code": "incompatible_mode",
+          "reason": "Turn on Per-point edge softness before editing one point's edge.",
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point edge softness…",
+      },
+    ],
+    "mode": "symmetric",
+  },
+  {
+    "boundary": false,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "100%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "1",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.strength",
+    "mode": "symmetric",
+    "warnings": [],
+  },
+  {
+    "input": "point.strength",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "-99900%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "boundary": false,
+    "initial": undefined,
+    "input": "point.softness",
+    "mode": "symmetric",
+    "warnings": [
+      [
+        "warning",
+        "Context menu",
+        "Turn on Per-point edge softness before editing one point's edge.",
+      ],
+    ],
+  },
+  {
+    "boundary": true,
+    "menu": [
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Smooth handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": true,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Symmetric handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Corner handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point pigment…",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point edge softness…",
+      },
+    ],
+    "mode": "symmetric",
+  },
+  {
+    "boundary": true,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "100%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "1",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.strength",
+    "mode": "symmetric",
+    "warnings": [],
+  },
+  {
+    "input": "point.strength",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "-99900%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "boundary": true,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 edge softness",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 edge softness",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Edge softness",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "19",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "0.06",
+            "min": "0.0005",
+            "step": "0.0005",
+            "type": "range",
+            "value": "0.012",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "0.012",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.softness",
+    "mode": "symmetric",
+    "warnings": [],
+  },
+  {
+    "input": "point.softness",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 edge softness",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 edge softness",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Edge softness",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "0.0",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "0.06",
+            "min": "0.0005",
+            "step": "0.0005",
+            "type": "range",
+            "value": "0.012",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "boundary": false,
+    "menu": [
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Smooth handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Symmetric handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": true,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Corner handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point pigment…",
+      },
+      {
+        "capability": {
+          "available": false,
+          "code": "incompatible_mode",
+          "reason": "Turn on Per-point edge softness before editing one point's edge.",
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point edge softness…",
+      },
+    ],
+    "mode": "corner",
+  },
+  {
+    "boundary": false,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "100%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "1",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.strength",
+    "mode": "corner",
+    "warnings": [],
+  },
+  {
+    "input": "point.strength",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "-99900%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "boundary": false,
+    "initial": undefined,
+    "input": "point.softness",
+    "mode": "corner",
+    "warnings": [
+      [
+        "warning",
+        "Context menu",
+        "Turn on Per-point edge softness before editing one point's edge.",
+      ],
+    ],
+  },
+  {
+    "boundary": true,
+    "menu": [
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Smooth handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Symmetric handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": true,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Corner handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point pigment…",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point edge softness…",
+      },
+    ],
+    "mode": "corner",
+  },
+  {
+    "boundary": true,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "100%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "1",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.strength",
+    "mode": "corner",
+    "warnings": [],
+  },
+  {
+    "input": "point.strength",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 pigment",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 pigment",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Pigment strength",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "-99900%",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "1",
+            "min": "0",
+            "step": "0.01",
+            "type": "range",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "boundary": true,
+    "initial": {
+      "attributes": {
+        "aria-label": "Point 1 edge softness",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 edge softness",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Edge softness",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "19",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "0.06",
+            "min": "0.0005",
+            "step": "0.0005",
+            "type": "range",
+            "value": "0.012",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "0.012",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "point.softness",
+    "mode": "corner",
+    "warnings": [],
+  },
+  {
+    "input": "point.softness",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Point 1 edge softness",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Point 1 edge softness",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Edge softness",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "0.0",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "0.06",
+            "min": "0.0005",
+            "step": "0.0005",
+            "type": "range",
+            "value": "0.012",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "enabled": false,
+    "menu": [
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select layer",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "duplicate",
+        "kind": "action",
+        "label": "Duplicate layer",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove layer",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "eye",
+        "kind": "action",
+        "label": "Show layer",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "rename",
+        "kind": "action",
+        "label": "Rename…",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "arrowDown",
+        "kind": "action",
+        "label": "Move to position…",
+      },
+    ],
+  },
+  {
+    "enabled": true,
+    "menu": [
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select layer",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "duplicate",
+        "kind": "action",
+        "label": "Duplicate layer",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove layer",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "eyeOff",
+        "kind": "action",
+        "label": "Hide layer",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "rename",
+        "kind": "action",
+        "label": "Rename…",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "arrowDown",
+        "kind": "action",
+        "label": "Move to position…",
+      },
+    ],
+  },
+  {
+    "menu": [
+      {
+        "detail": "Petal wash",
+        "kind": "heading",
+        "label": "Selected point 1",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Smooth handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Symmetric handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": true,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Corner handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point pigment…",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point edge softness…",
+      },
+      {
+        "kind": "separator",
+      },
+      {
+        "kind": "heading",
+        "label": "UV view",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "kind": "action",
+        "label": "Both eyes",
+        "shortcut": "1",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": true,
+        "kind": "action",
+        "label": "Single eye",
+        "shortcut": "2",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "kind": "action",
+        "label": "Other eye",
+        "shortcut": "O",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "kind": "action",
+        "label": "Fit shape",
+        "shortcut": "F",
+      },
+    ],
+    "uv": "single",
+  },
+  {
+    "menu": [
+      {
+        "detail": "Petal wash",
+        "kind": "heading",
+        "label": "Selected point 1",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "icon": "target",
+        "kind": "action",
+        "label": "Select point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "danger": false,
+        "hint": "Undo with Ctrl+Z",
+        "icon": "trash",
+        "kind": "action",
+        "label": "Remove point",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Smooth handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Symmetric handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": true,
+        "danger": false,
+        "icon": "shape",
+        "kind": "action",
+        "label": "Corner handles",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point pigment…",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "icon": "edge",
+        "kind": "action",
+        "label": "Set point edge softness…",
+      },
+      {
+        "kind": "separator",
+      },
+      {
+        "kind": "heading",
+        "label": "UV view",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": true,
+        "kind": "action",
+        "label": "Both eyes",
+        "shortcut": "1",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "checked": false,
+        "kind": "action",
+        "label": "Single eye",
+        "shortcut": "2",
+      },
+      {
+        "capability": {
+          "available": false,
+          "reason": "Switch to single-eye view first.",
+        },
+        "kind": "action",
+        "label": "Other eye",
+        "shortcut": "O",
+      },
+      {
+        "capability": {
+          "available": true,
+        },
+        "kind": "action",
+        "label": "Fit shape",
+        "shortcut": "F",
+      },
+    ],
+    "uv": "both",
+  },
+  {
+    "initial": {
+      "attributes": {
+        "aria-label": "Rename layer",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Rename layer",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Layer name",
+              "tag": "span",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "field",
+            "id": "generated-input",
+            "maxlength": "80",
+            "type": "text",
+            "value": "Petal wash",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "Petal wash",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Rename",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "layer.rename",
+  },
+  {
+    "input": "layer.rename",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Rename layer",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Rename layer",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Layer name",
+              "tag": "span",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "field",
+            "id": "generated-input",
+            "maxlength": "80",
+            "type": "text",
+            "value": "Petal wash",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "Enter a name; it cannot be blank.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Rename",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "initial": {
+      "attributes": {
+        "aria-label": "Move layer",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Move layer",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Position from front (1–4)",
+              "tag": "span",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "field",
+            "id": "generated-input",
+            "max": "4",
+            "min": "1",
+            "step": "1",
+            "type": "number",
+            "value": "4",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "4",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Move",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "layer.move",
+  },
+  {
+    "input": "layer.move",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Move layer",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Move layer",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Position from front (1–4)",
+              "tag": "span",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "field",
+            "id": "generated-input",
+            "max": "4",
+            "min": "1",
+            "step": "1",
+            "type": "number",
+            "value": "4",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "This layer is already at the front.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Move",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "initial": {
+      "attributes": {
+        "aria-label": "Warp reach",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Warp reach",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Reach",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "33",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "0.2",
+            "min": "0.005",
+            "step": "0.001",
+            "type": "range",
+            "value": "0.07",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "0.07",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "field.reach",
+  },
+  {
+    "input": "field.reach",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Warp reach",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Warp reach",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Reach",
+              "tag": "span",
+            },
+            {
+              "attributes": {
+                "class": "readout",
+                "for": "generated-input",
+              },
+              "children": "0.0",
+              "tag": "output",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "slider",
+            "id": "generated-input",
+            "max": "0.2",
+            "min": "0.005",
+            "step": "0.001",
+            "type": "range",
+            "value": "0.07",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "The value is outside the supported range.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Apply",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "initial": {
+      "attributes": {
+        "aria-label": "Rename preset",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Rename preset",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Preset name",
+              "tag": "span",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "field",
+            "id": "generated-input",
+            "maxlength": "120",
+            "type": "text",
+            "value": "Look",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "Look",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Rename",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "preset.rename",
+  },
+  {
+    "input": "preset.rename",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Rename preset",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Rename preset",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Preset name",
+              "tag": "span",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "field",
+            "id": "generated-input",
+            "maxlength": "120",
+            "type": "text",
+            "value": "Look",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "Enter a name; it cannot be blank.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Rename",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "initial": {
+      "attributes": {
+        "aria-label": "Move preset",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Move preset",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Position (1–1)",
+              "tag": "span",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "field",
+            "id": "generated-input",
+            "max": "1",
+            "min": "1",
+            "step": "1",
+            "type": "number",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "1",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Move",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "preset.move",
+  },
+  {
+    "input": "preset.move",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Move preset",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Move preset",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Position (1–1)",
+              "tag": "span",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "field",
+            "id": "generated-input",
+            "max": "1",
+            "min": "1",
+            "step": "1",
+            "type": "number",
+            "value": "1",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "-999",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "This preset is already first.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Move",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
+  {
+    "initial": {
+      "attributes": {
+        "aria-label": "Rename collection",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Rename collection",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Collection name",
+              "tag": "span",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "field",
+            "id": "generated-input",
+            "maxlength": "120",
+            "type": "text",
+            "value": "Current",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "Current",
+        },
+        {
+          "attributes": {
+            "class": "popover-note hint",
+            "role": "status",
+          },
+          "children": "",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "type": "submit",
+              },
+              "children": "Rename",
+              "disabled": false,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+    "input": "collection.rename",
+  },
+  {
+    "input": "collection.rename",
+    "invalid": {
+      "attributes": {
+        "aria-label": "Rename collection",
+        "class": "popover",
+        "role": "dialog",
+      },
+      "children": [
+        {
+          "attributes": {
+            "class": "popover-title",
+          },
+          "children": "Rename collection",
+          "tag": "div",
+        },
+        {
+          "attributes": {
+            "class": "popover-field",
+            "for": "generated-input",
+          },
+          "children": [
+            {
+              "attributes": {},
+              "children": "Collection name",
+              "tag": "span",
+            },
+          ],
+          "tag": "label",
+        },
+        {
+          "attributes": {
+            "class": "field",
+            "id": "generated-input",
+            "maxlength": "120",
+            "type": "text",
+            "value": "Current",
+          },
+          "children": "",
+          "disabled": false,
+          "tag": "input",
+          "value": "",
+        },
+        {
+          "attributes": {
+            "class": "popover-note",
+            "role": "status",
+          },
+          "children": "Enter a name; it cannot be blank.",
+          "tag": "p",
+        },
+        {
+          "attributes": {
+            "class": "popover-actions",
+          },
+          "children": [
+            {
+              "attributes": {
+                "class": "btn",
+                "type": "button",
+              },
+              "children": "Cancel",
+              "disabled": false,
+              "tag": "button",
+            },
+            {
+              "attributes": {
+                "class": "btn primary",
+                "disabled": "",
+                "type": "submit",
+              },
+              "children": "Rename",
+              "disabled": true,
+              "tag": "button",
+            },
+          ],
+          "tag": "div",
+        },
+      ],
+      "tag": "form",
+    },
+  },
 ]
 `;
 
