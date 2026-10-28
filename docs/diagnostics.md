@@ -19,7 +19,7 @@ Each host keeps everything in a `diagnostics/` folder inside its own data folder
 | `trace/*.jsonl` | The rolling detail window | 30 minutes and 8 MB normally; 3 hours and 64 MB in diagnostic mode |
 | `mode.json` | Present only while diagnostic mode is on | Removed when it lapses after 24 hours |
 
-The page keeps a ring of at most 50 entries it couldn't send to its host, and at most 100 waiting to be sent; beyond that the oldest are dropped and one line says how many. Both live in memory only, and the ring appears in a report.
+The page keeps a ring of at most 50 entries it couldn't send to its host, and at most 100 waiting to be sent; beyond that the oldest are dropped and one line says how many. Both live in memory only, and the ring appears in a report. On page release, log delivery remains separate from cancellable reports and reads. Queued batches are handed to the browser synchronously as keepalive POSTs, even beside a batch already in flight; those POSTs receive no lifetime abort signal. A failed final handoff retains the whole finite accepted tail for inspection rather than truncating or clearing it. Normal admission and host limits remain unchanged; this is not a persistent journal or a guarantee of network delivery while the host is unavailable.
 
 ## The log
 

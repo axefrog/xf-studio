@@ -52,7 +52,7 @@ import { panelCommands } from "./panel-commands";
 import { createBrowserCreatorDevice } from "../character/browser/browser-cc-catalogue-device";
 import { readSavedV } from "../saves/save-reader";
 import { createBrowserViewportDevice } from "../preview/browser/browser-viewport-device";
-import { createBrowserWorkspaceSession, loadCompositionWorkspace } from "../app/browser/browser-workspace-device";
+import { createBrowserWorkspaceLifetime, createBrowserWorkspaceSession, loadCompositionWorkspace } from "../app/browser/browser-workspace-device";
 import { collectionTransport, collectionVersions } from "../library/browser/collection-transport";
 import type { LocalSetupActions } from "../setup/local-setup-actions";
 import type { DesktopAppActions } from "../setup/desktop-app";
@@ -150,14 +150,8 @@ export function startStudio(host: StudioHost, options: { composition?: StudioSta
   const root = byId("studio");
   // Selection is validated before any root-owned device or store can start.
   const composition = selectStartupComposition(location.search, options.composition);
-  const life = new AbortController();
-  const abort = () => life.abort();
-  options.signal?.addEventListener("abort", abort, { once: true });
-  life.signal.addEventListener("abort", () => options.signal?.removeEventListener("abort", abort), { once: true });
-  // Existing pagehide owners flush synchronously before the lifetime retires them.
-  window.addEventListener("pagehide", event => { if (!event.persisted) queueMicrotask(abort); }, { signal: life.signal });
-  if (options.signal?.aborted) abort();
-  return start(host, root, composition, { signal: life.signal, abort }).then(lifetime => {
+  const life = createBrowserWorkspaceLifetime(window, options.signal), { abort } = life;
+  return start(host, root, composition, { signal: life.signal, abort }, life.beforeRelease).then(lifetime => {
     if (new URLSearchParams(location.search).get("verify") === "1") Object.assign(window, { xfStudioLifetime: lifetime });
     return lifetime;
   }).catch(error => {
@@ -172,7 +166,8 @@ export function startStudio(host: StudioHost, options: { composition?: StudioSta
   });
 }
 
-async function start(host: StudioHost, root: HTMLElement, composition: StudioStartupComposition, lifetime: StudioLifetime): Promise<StudioLifetime> {
+async function start(host: StudioHost, root: HTMLElement, composition: StudioStartupComposition, lifetime: StudioLifetime,
+  beforeRelease: (flush: () => boolean) => void): Promise<StudioLifetime> {
   const { signal } = lifetime;
   signal.throwIfAborted();
   const verification = new URLSearchParams(location.search).has("verify");
@@ -235,6 +230,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
       budget: host.storageBudget, reserved: () => documents.outbox.storedSize(), model: composition.documents,
       ...(lease ? { canWrite: () => lease.draining() } : {}) });
     early.activate();
+    beforeRelease(() => early.flush());
     signal.addEventListener("abort", () => early.retire(), { once: true });
     await startProfilesMigration({ endpoint: `${base}/profiles/migrate`, send: fetch, workspace: documents.workspace, fence: documents.fence,
       model: composition.documents, state: () => workspace, marks: workspace, flush: () => early.flush(), signal: life.signal, initial: layouts.initial,
@@ -385,6 +381,10 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     sources: [preferences, sessionState, views, ...(starterShapes ? [starterShapes] : [])], window, document,
     onStatus: save => { status = { ...status, workspace: save }; statusSource.changed(); },
     canWrite: lease ? () => lease.draining() : undefined,
+  });
+  beforeRelease(() => {
+    profileAuthoring.contexts.settleEdits(); lookEditor.commit();
+    return session.release();
   });
   // Flush every wanted look, including unseen pinned inspectors, through the single context owner.
   host.onFlushRequest?.(() => { if (!signal.aborted) { lookEditor.commit(); session.flush(); } });

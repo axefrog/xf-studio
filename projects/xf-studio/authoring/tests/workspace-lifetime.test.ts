@@ -1,5 +1,5 @@
 import { afterEach, expect, jest, test } from "bun:test";
-import { createBrowserWorkspaceSession } from "../src/app/browser/browser-workspace-device";
+import { createBrowserWorkspaceLifetime, createBrowserWorkspaceSession } from "../src/app/browser/browser-workspace-device";
 import { loadWorkspace } from "../src/app/workspace/workspace-state";
 import { STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 
@@ -17,36 +17,64 @@ class Events {
   }
   count() { return [...this.listeners.values()].reduce((count, listeners) => count + listeners.size, 0); }
   emit(type: string) { for (const listener of this.listeners.get(type) ?? []) listener(new Event(type)); }
+  async nativePagehide() {
+    const listeners = this.listeners.get("pagehide") ?? new Set<EventListener>();
+    for (const listener of [...listeners]) {
+      if (listeners.has(listener)) listener(Object.assign(new Event("pagehide"), { persisted: false }));
+      // Model a native microtask checkpoint between callbacks, unlike synchronous dispatchEvent.
+      await Promise.resolve();
+    }
+  }
 }
 
-for (const end of ["abort", "retire", "already-aborted"] as const) test(`workspace ${end} releases subscriptions, DOM triggers and debounce without a late write`, () => {
+for (const end of ["abort", "release", "pagehide", "upstream", "already-aborted"] as const) test(`workspace ${end} saves pending work before releasing sources and debounce`, async () => {
   jest.useFakeTimers();
-  const life = new AbortController(), page = new Events(), doc = new Events();
+  const upstream = new AbortController(), page = new Events(), doc = new Events();
+  if (end === "already-aborted") upstream.abort();
+  const life = createBrowserWorkspaceLifetime(page as unknown as Pick<Window, "addEventListener">, upstream.signal);
   const listeners = new Set<() => void>();
   const source = { subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; } };
-  let writes = 0, statuses = 0;
+  let writes = 0, statuses = 0, disposed = false, commits = 0;
   let size: 512 | 1024 = 512;
-  const storage = { getItem: () => null, setItem: () => { writes++; } };
+  const stored = new Map<string, string>(), writeAfterAbort: boolean[] = [];
+  const storage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => {
+    writeAfterAbort.push(life.signal.aborted); stored.set(key, value); writes++;
+  } };
   const restored = loadWorkspace(storage, true, STUDIO_DOCUMENTS), workspace = restored.state;
-  if (end === "already-aborted") life.abort();
   const session = createBrowserWorkspaceSession({ signal: life.signal, workspace, restored, storage, verification: true, model: STUDIO_DOCUMENTS,
-    capture: { editor: () => ({ features: workspace.liveFeatures, history: workspace.history }),
-      uvView: () => workspace.uvView, savedV: () => undefined, collections: () => undefined, quality: () => size, preview: () => undefined },
+    capture: { editor: () => { if (disposed) throw Error("Capture source was disposed before saving"); return { features: workspace.liveFeatures, history: workspace.history }; },
+      uiPreferences: () => workspace.uiPreferences, uvView: () => workspace.uvView, savedV: () => undefined,
+      collections: () => undefined, quality: () => size, preview: () => undefined },
     sources: [source], window: page, document: doc, onStatus: () => { statuses++; } });
+  life.beforeRelease(() => { commits++; return session.release(); });
+  life.signal.addEventListener("abort", () => { disposed = true; }, { once: true });
   session.activate();
   if (end !== "already-aborted") {
-    expect([listeners.size, page.count(), doc.count()]).toEqual([1, 1, 4]);
+    expect([listeners.size, page.count(), doc.count()]).toEqual([1, 2, 4]);
     session.flush();
     expect(writes).toBe(1);
     size = 1024;
+    workspace.uiPreferences.theme = "dark";
+    workspace.uiPreferences.layout = { format: "fixture", version: 1, state: { ratio: .7 } };
     for (const listener of listeners) listener();
     expect(jest.getTimerCount()).toBe(1);
     const off = session.watch(source);
     expect(listeners.size).toBe(2); off(); off();
     expect(listeners.size).toBe(1);
   }
+  if (end === "pagehide") await page.nativePagehide();
+  else if (end === "upstream") upstream.abort();
+  else if (end === "release") expect(session.release()).toBe(true);
+  else life.abort();
+  life.abort();
+  if (end !== "already-aborted") {
+    expect(writes).toBe(2); expect(commits).toBe(1);
+    const saved = loadWorkspace(storage, true, STUDIO_DOCUMENTS).state;
+    expect(saved.preview.textureSize).toBe(1024);
+    expect(saved.uiPreferences).toMatchObject({ theme: "dark", layout: { state: { ratio: .7 } } });
+    expect(writeAfterAbort).toEqual([false, false]);
+  } else expect(writes).toBe(0);
   const written = writes, published = statuses;
-  if (end === "abort") life.abort(); else session.retire();
   expect([listeners.size, page.count(), doc.count(), jest.getTimerCount()]).toEqual([0, 0, 0, 0]);
   session.retire(); life.abort();
   const off = session.watch(source); off();
@@ -55,4 +83,23 @@ for (const end of ["abort", "retire", "already-aborted"] as const) test(`workspa
   for (const type of ["input", "change", "click", "visibilitychange"]) doc.emit(type);
   page.emit("pagehide"); jest.advanceTimersByTime(60_000);
   expect([writes, statuses, listeners.size, jest.getTimerCount()]).toEqual([written, published, 0, 0]);
+});
+
+test("a refused final workspace save keeps the lifetime and capture sources alive for retry", () => {
+  jest.useFakeTimers();
+  const page = new Events(), doc = new Events(), life = createBrowserWorkspaceLifetime(page as unknown as Pick<Window, "addEventListener">);
+  let refused = true, writes = 0, disposed = false;
+  const storage = { getItem: () => null, setItem: () => { if (refused) throw Error("Storage temporarily unavailable"); writes++; } };
+  const restored = loadWorkspace(storage, true, STUDIO_DOCUMENTS), workspace = restored.state;
+  const session = createBrowserWorkspaceSession({ signal: life.signal, workspace, restored, storage, verification: true, model: STUDIO_DOCUMENTS,
+    capture: { editor: () => { if (disposed) throw Error("Released too early"); return { features: workspace.liveFeatures, history: workspace.history }; },
+      uvView: () => workspace.uvView, savedV: () => undefined, collections: () => undefined, quality: () => 1024, preview: () => undefined },
+    sources: [], window: page, document: doc, onStatus() {} });
+  life.beforeRelease(session.release);
+  life.signal.addEventListener("abort", () => { disposed = true; }, { once: true });
+  session.activate(); session.request(); life.abort();
+  expect([life.signal.aborted, disposed, writes]).toEqual([false, false, 0]);
+  expect(session.status().kind).toBe("unavailable"); expect(doc.count()).toBe(4);
+  refused = false; life.abort();
+  expect([life.signal.aborted, disposed, writes, doc.count(), jest.getTimerCount()]).toEqual([true, true, 1, 0, 0]);
 });

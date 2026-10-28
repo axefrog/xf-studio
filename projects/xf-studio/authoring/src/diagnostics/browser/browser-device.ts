@@ -45,15 +45,36 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
   };
   let uninstall: (() => void) | undefined;
   let queue: DiagnosticEntry[] = [], ring: DiagnosticEntry[] = [], timer: ReturnType<typeof setTimeout> | null = null;
+  let closing = false;
+  const deliveries = new Set<DiagnosticEntry[]>();
   let windowStart = 0, sentInWindow = 0, droppedFromQueue = 0;
   const hostRefs: { ref: string; at: number; claimed: boolean }[] = [];
   let gpu: { renderer: string | null; webgl2: boolean } | null = null;
 
   const keep = (entries: DiagnosticEntry[]) => {
-    if (!life.signal.aborted) ring = [...ring, ...entries].slice(-DIAGNOSTIC_LIMITS.ring);
+    const kept = [...ring, ...entries];
+    // Once admission closes there can be no further growth beyond the already accepted queue and batch.
+    ring = closing ? kept : kept.slice(-DIAGNOSTIC_LIMITS.ring);
   };
   /** A POST is on its way: the next flush waits for it, and `again` asks for one as soon as it ends (DIAG-07). */
   let flushing = false, again = false;
+  const noteDropped = () => {
+    if (!droppedFromQueue) return;
+    queue.unshift(diagnosticEntry({ level: "warn", area: "page", code: "entries_dropped", origin: "page",
+      message: "The window noticed more problems than it could pass on; the oldest were left out.", details: { count: droppedFromQueue } }));
+    droppedFromQueue = 0;
+  };
+  async function deliver(batch: DiagnosticEntry[]) {
+    deliveries.add(batch);
+    try {
+      // Logs already accepted have their own delivery lifetime. Never attach the report/read abort signal.
+      const response = await originalSend(`${endpoint}/entries`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schema: DIAGNOSTIC_FORWARD_SCHEMA, entries: batch }), keepalive: true });
+      // Normal malformed batches retain their existing refusal policy; shutdown preserves every refused handoff.
+      if (!response.ok && (closing || response.status >= 500)) throw Error(String(response.status));
+    } catch { keep(batch); }
+    finally { deliveries.delete(batch); }
+  }
   /**
    * Send the next batch. One at a time: entries forwarded while a batch is on its way stay queued behind it (never overwritten by
    * what the flush took), and a flush asked for meanwhile runs when it ends (DIAG-07).
@@ -61,15 +82,11 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
   async function flush() {
     if (timer !== null) clearTimeout(timer);
     timer = null;
-    if (life.signal.aborted) return;
+    if (closing) return;
     if (flushing) { again = true; return; }
     flushing = true;
     try {
-      if (droppedFromQueue) {
-        queue.unshift(diagnosticEntry({ level: "warn", area: "page", code: "entries_dropped", origin: "page",
-          message: "The window noticed more problems than it could pass on; the oldest were left out.", details: { count: droppedFromQueue } }));
-        droppedFromQueue = 0;
-      }
+      noteDropped();
       // What couldn't be sent earlier goes first, once the host answers again. The rest stays queued, and anything forwarded during
       // the request joins it.
       const waiting = [...ring, ...queue];
@@ -80,19 +97,14 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
       if (now - windowStart > 60_000) { windowStart = now; sentInWindow = 0; }
       if (sentInWindow + batch.length > DIAGNOSTIC_LIMITS.perMinute) { keep(batch); schedule(10_000); return; }
       sentInWindow += batch.length;
-      try {
-        const response = await send(`${endpoint}/entries`, { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ schema: DIAGNOSTIC_FORWARD_SCHEMA, entries: batch }), keepalive: true });
-        // The host refused this batch (malformed, too large): resending it would only be refused again, so it is dropped.
-        if (!response.ok && response.status >= 500) throw Error(String(response.status));
-      } catch { keep(batch); }
+      await deliver(batch);
       if (queue.length) schedule(again ? 0 : 250);
     } finally {
       flushing = false;
       if (again) { again = false; if (queue.length) schedule(0); }
     }
   }
-  const schedule = (ms = 250) => { if (!life.signal.aborted && timer === null) timer = setTimeout(() => void flush(), ms); };
+  const schedule = (ms = 250) => { if (!closing && !life.signal.aborted && timer === null) timer = setTimeout(() => void flush(), ms); };
 
   async function api<T>(path: string, body?: unknown, failure = UNREACHABLE): Promise<T> {
     let response: Response;
@@ -132,12 +144,12 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
 
   const device: DiagnosticsDevice = {
     forward(entries) {
-      if (life.signal.aborted) return;
+      if (closing || life.signal.aborted) return;
       queue.push(...entries);
       if (queue.length > PAGE_QUEUE) { droppedFromQueue += queue.length - PAGE_QUEUE; queue = queue.slice(-PAGE_QUEUE); }
       schedule(entries.some(entry => entry.level === "error") ? 0 : 250);
     },
-    pending: () => [...ring],
+    pending: () => closing ? [...ring, ...[...deliveries].flat(), ...queue] : [...ring],
     claimHostRef() {
       const now = Date.now(), found = [...hostRefs].reverse().find(item => !item.claimed && now - item.at <= HOST_REF_MS);
       if (!found) return null;
@@ -240,10 +252,17 @@ export function createBrowserDiagnostics(options: BrowserDiagnosticsOptions) {
   }
 
   const dispose = () => {
-    if (life.signal.aborted) return;
-    life.abort();
+    if (closing) return;
+    closing = true;
     if (timer !== null) clearTimeout(timer);
-    timer = null; queue = []; ring = []; hostRefs.length = 0; again = false;
+    timer = null;
+    noteDropped();
+    const waiting = [...ring, ...queue]; ring = []; queue = [];
+    // Hand every queued batch to the browser now, even beside an in-flight batch: a closing page cannot wait for its reply.
+    // These keepalive requests are not aborted. Failed handoffs remain available through pending().
+    for (let at = 0; at < waiting.length; at += DIAGNOSTIC_LIMITS.batch) void deliver(waiting.slice(at, at + DIAGNOSTIC_LIMITS.batch));
+    life.abort();
+    hostRefs.length = 0; again = false;
     uninstall?.();
     options.signal?.removeEventListener("abort", dispose);
   };

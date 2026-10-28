@@ -16,6 +16,23 @@ export function loadCompositionWorkspace(storage: Pick<Storage, "getItem">, veri
 type Observable = { subscribe(listener: () => void): () => void };
 type EventSource = { addEventListener(type: string, listener: EventListener, options?: AddEventListenerOptions): void };
 
+/** Save before publishing release, regardless of native event/microtask ordering. A refused save keeps sources alive for retry. */
+export function createBrowserWorkspaceLifetime(page: Pick<Window, "addEventListener">, upstream?: AbortSignal) {
+  const life = new AbortController();
+  let prepare = () => true, releasing = false;
+  const abort = () => {
+    if (life.signal.aborted || releasing) return;
+    releasing = true;
+    try { if (prepare()) life.abort(); }
+    finally { releasing = false; }
+  };
+  upstream?.addEventListener("abort", abort, { once: true });
+  life.signal.addEventListener("abort", () => upstream?.removeEventListener("abort", abort), { once: true });
+  page.addEventListener("pagehide", event => { if (!event.persisted) abort(); }, { signal: life.signal });
+  if (upstream?.aborted) abort();
+  return { signal: life.signal, abort, beforeRelease: (flush: () => boolean) => { prepare = flush; } };
+}
+
 /** The key is selected before services are built so the verification draft stays isolated. */
 export function loadBrowserWorkspace(storage: Pick<Storage, "getItem">, verification: boolean, model: DocumentModel & { readonly live: string }) {
   return loadWorkspace(storage, verification, model);
@@ -44,7 +61,7 @@ export function createBrowserWorkspaceSession<W extends WorkspaceInput = Workspa
   model: DocumentModel;
   /** Whether this window may write its workspace now (the workspace lease); always, without one. */
   canWrite?: () => boolean;
-  /** The page lifetime; abort retires autosave without requesting a final write. */
+  /** The page lifetime; abort flushes before retiring autosave. */
   signal?: AbortSignal;
 }) {
   const life = new AbortController();
@@ -68,15 +85,28 @@ export function createBrowserWorkspaceSession<W extends WorkspaceInput = Workspa
     life.abort();
     for (const release of subscriptions) release();
     subscriptions.clear();
-    options.signal?.removeEventListener("abort", retire);
+    options.signal?.removeEventListener("abort", release);
+  };
+  let releasing = false;
+  const release = () => {
+    if (life.signal.aborted) return true;
+    if (releasing) return false;
+    releasing = true;
+    try {
+      if (!flush()) return false;
+      retire();
+      return true;
+    } finally { releasing = false; }
   };
   for (const source of options.sources) watch(source);
   options.window.addEventListener("pagehide", () => { flush(); }, { signal: life.signal });
   options.document.addEventListener("visibilitychange", () => { if (options.document.hidden) flush(); }, { signal: life.signal });
   for (const event of ["input", "change", "click"]) options.document.addEventListener(event, request, { signal: life.signal });
-  options.signal?.addEventListener("abort", retire, { once: true });
-  if (options.signal?.aborted) retire();
-  return { request, flush, activate: () => persistence.activate(), retire,
+  options.signal?.addEventListener("abort", release, { once: true });
+  if (options.signal?.aborted) release();
+  return { request, flush, activate: () => persistence.activate(), release,
+    /** Confirmed lease handover only: its final flush already succeeded while the lease was held. */
+    retire,
     /** Add a content source created after the session (for example the collection library). */
     watch,
     setPreviewReady: () => composer.setPreviewReady(),
