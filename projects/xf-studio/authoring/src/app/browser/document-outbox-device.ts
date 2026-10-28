@@ -4,8 +4,8 @@
  *
  * - **Opened only by the window holding its workspace:** a read-only window records and sends nothing, and leaves the stored entries to
  *   the holder.
- * - **Release** (§2.3 step 3): the outbox drains first (every queued entry acknowledged; stored conflicts stay for the next holder), then
- *   any background copy of its keys is stored (the desktop host's); once released, it stops for good.
+ * - **Release** (§2.3 step 3): drain, protect every backup (including conflicts), then settle background copies before releasing.
+ *   Confirmed-release cleanup performs no storage writes or retries; stored conflicts stay for the next holder.
  * - **Revision checks** (A7): every 10 s while the window is visible, and whenever it gains focus; the outbox checks again by itself once
  *   the host answers after failing (a host restart).
  */
@@ -40,7 +40,7 @@ export function startDocumentOutbox(options: {
   page?: { addEventListener(type: string, listener: () => void): void; removeEventListener(type: string, listener: () => void): void; visible(): boolean };
 }): StartedOutbox {
   const lease = options.lease;
-  let accepting = true, stopping: Promise<boolean> | undefined;
+  let accepting = true, released = false, stopping: Promise<boolean> | undefined;
   const fence = (): WorkspaceFence | null => { const generation = lease?.generation() ?? null; return generation === null ? null : { workspace: options.workspace, generation }; };
   // `fetch` is called on its own, never as a method of `options` (the browser refuses that: "Illegal invocation").
   const send = options.send;
@@ -55,20 +55,21 @@ export function startDocumentOutbox(options: {
   const timer = setInterval(() => { if (page?.visible() ?? true) check(); }, REVISION_CHECK_MS);
   page?.addEventListener("focus", check);
   const prepareRelease = () => { if (outbox.status().stopped) return true; outbox.store(); return outbox.protect(); };
+  const withdraw = () => { if (!accepting) return; accepting = false; clearInterval(timer); page?.removeEventListener("focus", check); };
   const stop = (): Promise<boolean> => {
+    if (released) return Promise.resolve(true);
     if (stopping) return stopping;
     // No later command may bypass the outbox through this retained transport.
-    accepting = false;
-    clearInterval(timer); page?.removeEventListener("focus", check);
+    withdraw();
     if (!outbox.stop()) return Promise.resolve(false);
     stopping = (async () => await options.storage.settle?.() ?? true)()
       .catch(error => { options.report?.(error); return false; }).finally(() => { stopping = undefined; });
     return stopping;
   };
   if (lease) {
-    lease.onRelease(() => outbox.settle());
+    lease.onRelease(async () => await outbox.settle() && prepareRelease());
     if (options.storage.settle) lease.onRelease(() => options.storage.settle!());
-    lease.onReleased(() => { void stop(); });
+    lease.onReleased(() => { released = true; withdraw(); outbox.retire(); });
   }
   return { outbox, documents, workspace: options.workspace, fence, prepareRelease, stop };
 }

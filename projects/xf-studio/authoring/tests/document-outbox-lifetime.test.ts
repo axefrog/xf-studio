@@ -59,6 +59,28 @@ test("a failed synchronous backup refuses stop and preserves pending work until 
   expect(JSON.parse(storage.load().get("sample/a")!).entries[0].writes[0].value).toBe(7); expect(time.waiting.size).toBe(0);
 });
 
+test("a superseded command stops sending even when its recovery backup still fails", async () => {
+  const storage = memoryOutboxStorage(), time = timers(); let attempts = 0, writes = 0, broken = true, safetyTripped = false;
+  const outbox = new DocumentOutbox({ transact: async () => { attempts++; return { ok: false, reason: "superseded" }; },
+    revisions: async () => ({}), read: async () => ({}) }, { ...storage, write: (...args) => {
+      // Bound the unfixed microtask-loop reproduction to twelve backup attempts.
+      if (broken && ++writes <= 12) throw Error("Backup unavailable");
+      if (broken) safetyTripped = true;
+      storage.write(...args);
+    } }, { schedule: time.schedule });
+  outbox.open(); const entry = outbox.commit("edit", [{ ...ref, value: 11 }]);
+  try {
+    await tick(); outbox.retry(); await tick();
+    expect({ attempts, safetyTripped }).toEqual({ attempts: 1, safetyTripped: false });
+    expect(outbox.status()).toMatchObject({ stopped: false, pending: 1, unprotectedWarning: true });
+    expect(outbox.pendingEntries()[0]?.id).toBe(entry.id); expect(outbox.document(ref)?.value).toBe(11);
+    expect(await outbox.settled(entry.id)).toBe("stopped");
+    expect(await outbox.flush()).toMatchObject({ pending: 1, unprotectedWarning: true });
+    expect(() => outbox.commit("late", [{ ...ref, value: 12 }])).toThrow("workspace was released");
+    expect(time.waiting.size).toBe(0);
+  } finally { broken = false; outbox.stop(); }
+});
+
 test("revision and required-content reads are aborted and publish no late state after stop", async () => {
   const read = Promise.withResolvers<Record<string, { revision: number; value: unknown }>>(), time = timers();
   const events: OutboxEvent[] = [], signals: AbortSignal[] = [];

@@ -275,6 +275,8 @@ export class DocumentOutbox {
   private seq = 0;
   private stamp = 0;
   private stopped = false;
+  /** Admission and sending end even if recovery storage refuses retirement; pending values remain available for protection/recovery. */
+  private suspended = false;
   private opened = false;
   private failing = false;
   private failures = 0;
@@ -294,11 +296,12 @@ export class DocumentOutbox {
 
   private newId() { return (this.options.newId ?? (() => `o-${crypto.randomUUID()}`))(); }
   private now() { return (this.options.now ?? Date.now)(); }
-  private writable() { return !this.stopped && (this.options.writable?.() ?? true); }
-  private sendable() { return !this.stopped && (this.options.sendable ?? this.options.writable)?.() !== false; }
+  private writable() { return !this.suspended && (this.options.writable?.() ?? true); }
+  private sendable() { return !this.suspended && (this.options.sendable ?? this.options.writable)?.() !== false; }
   private immutable(kind: string) { return this.options.immutable?.(kind) ?? false; }
   private schedule(ms: number, run: () => void) {
-    const timer = (this.options.schedule ?? defaultSchedule)(ms, () => { this.timers.delete(owned); if (!this.stopped) run(); });
+    if (this.suspended) return { cancel() {} };
+    const timer = (this.options.schedule ?? defaultSchedule)(ms, () => { this.timers.delete(owned); if (!this.suspended) run(); });
     const owned = { cancel: () => { timer.cancel(); this.timers.delete(owned); } };
     this.timers.add(owned);
     return owned;
@@ -312,7 +315,7 @@ export class DocumentOutbox {
    * its own ID. Call once, when this page holds its workspace.
    */
   open(): void {
-    if (this.stopped) throw Error("This workspace was released, so its outbox cannot be opened again.");
+    if (this.suspended) throw Error("This workspace was released, so its outbox cannot be opened again.");
     if (this.opened) return;
     this.opened = true;
     const parse = (texts: ReadonlyMap<string, string>, sizes?: Map<string, number>) => {
@@ -457,7 +460,7 @@ export class DocumentOutbox {
    * the document has; later, a clean document takes a newer revision.
    */
   hold(ref: DocumentRef, stored: CurrentDocument): void {
-    if (this.stopped) return;
+    if (this.suspended) return;
     const held = this.local(ref), pending = this.entriesFor(documentKey(ref)).length > 0;
     const revision = stored?.revision ?? 0;
     if (!held.known) {
@@ -545,7 +548,7 @@ export class DocumentOutbox {
    * to the entry that now carries their value, so every caller hears.
    */
   settled(entryId: string): Promise<OutboxOutcome> {
-    if (this.stopped) return Promise.resolve("stopped");
+    if (this.suspended) return Promise.resolve("stopped");
     if (!this.entries.some(entry => entry.id === entryId)) return Promise.resolve("acknowledged");
     return new Promise(resolve => { const list = this.waits.get(entryId) ?? []; list.push(resolve); this.waits.set(entryId, list); });
   }
@@ -664,7 +667,7 @@ export class DocumentOutbox {
    * Try again: sends what waits now (restored changes, changes waiting for the library), and looks again for missing sources.
    */
   retry(): void {
-    if (this.stopped) return;
+    if (this.suspended) return;
     this.retryTimer?.cancel(); this.retryTimer = null;
     // A hung attempt is abandoned and its command sent again (under its own ID: a late answer to the old attempt is ignored).
     for (const attempt of this.attempts.values()) attempt.abort(RETRIED);
@@ -723,7 +726,7 @@ export class DocumentOutbox {
         const lookup = new AbortController();
         this.looking.set(key, lookup);
         const ref = refOfKey(key);
-        const current = () => !this.stopped && this.looking.get(key) === lookup && !lookup.signal.aborted;
+        const current = () => !this.suspended && this.looking.get(key) === lookup && !lookup.signal.aborted;
         const deadline = this.schedule(this.options.attemptMs ?? ATTEMPT_MS, () => {
           if (!current()) return;
           lookup.abort(EXPIRED); this.looking.delete(key); this.later();
@@ -801,7 +804,7 @@ export class DocumentOutbox {
       void this.send(entry);
     }
   }
-  private later() { if (!this.stopped) this.retryTimer ??= this.schedule(this.options.retryMs ?? 1000, () => { this.retryTimer = null; this.pump(); }); }
+  private later() { if (!this.suspended) this.retryTimer ??= this.schedule(this.options.retryMs ?? 1000, () => { this.retryTimer = null; this.pump(); }); }
 
   private async send(entry: OutboxEntry): Promise<void> {
     this.frozenIds.add(entry.id); // A1: from here its ID, bases and values are fixed.
@@ -824,7 +827,7 @@ export class DocumentOutbox {
       if (this.attempts.get(entry.id) === attempt) this.attempts.delete(entry.id);
       this.inFlight.delete(entry.id);
       this.forget.push(...forget);
-      if (this.stopped) return;
+      if (this.suspended) return;
       this.failures++;
       if (!this.failing) { this.failing = true; this.emit({ kind: "status" }); } else this.wake();
       this.options.report?.(error);
@@ -835,10 +838,10 @@ export class DocumentOutbox {
     deadline.cancel();
     if (this.attempts.get(entry.id) === attempt) this.attempts.delete(entry.id);
     this.inFlight.delete(entry.id);
-    if (this.stopped) return;
+    if (this.suspended) return;
     const recovered = this.failing;
     if (this.failing) { this.failing = false; this.emit({ kind: "status" }); }
-    if (!this.entries.includes(entry) || this.stopped) { this.forget.push(...forget); return; }
+    if (!this.entries.includes(entry) || this.suspended) { this.forget.push(...forget); return; }
     // A receipt's answer carries what the command committed: the baseline is that, never a stored copy's older version of the command.
     if (answer.ok) this.acknowledge(entry, answer.revisions, answer.replayed,
       answer.committed ? Object.fromEntries(Object.entries(answer.committed).map(([key, value]) => [key, { revision: answer.revisions[key] ?? 0, value }])) : undefined, answer.own);
@@ -848,7 +851,7 @@ export class DocumentOutbox {
       this.acknowledge(entry, revisions, "equal", answer.current);
     } else if (answer.reason === "stale") this.toConflict(entry, { ...answer.current });
     else if (answer.reason === "missing") { this.forget.push(...forget); this.restore(answer.missing); }
-    else { this.forget.push(...forget); this.stop(); }
+    else { this.forget.push(...forget); this.stop(); return; }
     // A put that landed (or was already there) is what commands waiting for a missing source wait for.
     if (!this.entries.includes(entry) && entry.writes.every(write => this.immutable(write.kind)))
       for (const write of entry.writes) if (this.missing.delete(documentKey(write))) this.emit({ kind: "status" });
@@ -1101,38 +1104,48 @@ export class DocumentOutbox {
     const aborted = signal ? new Promise<void>(resolve => signal.addEventListener("abort", () => resolve(), { once: true })) : null;
     this.store();
     this.pump();
-    while (!signal?.aborted && !this.stopped && this.entries.some(entry => entry.state === "queued" || this.inFlight.has(entry.id)))
+    while (!signal?.aborted && !this.suspended && this.entries.some(entry => entry.state === "queued" || this.inFlight.has(entry.id)))
       await Promise.race([this.changed(), ...(aborted ? [aborted] : [])]);
     return this.status();
   }
   /**
-   * Stops for good: what waits to be stored soon is stored first, then nothing is written or sent again (the page released or lost its
-   * workspace, or the library said a newer holder superseded it). Stored entries stay for the next holder.
+   * Ends admission/sending first, then secures pending recovery before retirement. Failed protection retains the values and permits
+   * an explicit backup retry, but never resumes sending. Confirmed handover uses `retire` instead: it must not persist after release.
    */
   stop(): boolean {
     if (this.stopped) return true;
-    // Persist first, then stop: what waits to be stored soon (`store: "soon"`) is written now, so the next holder recovers it (on every
-    // path that stops: a release, a lease lost, a command superseded). Nothing more is sent.
-    this.storeTimer?.cancel(); this.storeTimer = null;
+    this.suspend();
     if (this.deferred.size) this.persist([...this.deferred]);
     for (const [key, protection] of [...this.unprotectedKeys]) if (protection.failed) this.persistKey(key);
     // A failed synchronous backup still belongs to this owner. Keep it and the lease available for retry/recovery.
-    if ([...this.unprotectedKeys.values()].some(protection => protection.failed)) return false;
+    if ([...this.unprotectedKeys.values()].some(protection => protection.failed)) { this.emit({ kind: "status" }); return false; }
+    this.retire();
+    return true;
+  }
+  /** The backups were secured before confirmed handover. Cleanup here and every subsequent call performs no persistence. */
+  retire(): void {
+    if (this.stopped) return;
+    this.suspend();
     this.stopped = true;
+    this.emit({ kind: "status" });
+    this.listeners.clear(); this.membership.clear();
+  }
+  private suspend() {
+    if (this.suspended) return;
+    this.suspended = true;
     this.life.abort();
     for (const attempt of this.attempts.values()) attempt.abort();
     for (const lookup of this.looking.values()) lookup.abort();
     this.attempts.clear(); this.looking.clear(); this.inFlight.clear();
     for (const timer of this.timers) timer.cancel();
     this.timers.clear();
+    this.storeTimer = null;
     this.retryTimer?.cancel(); this.retryTimer = null;
     for (const id of [...this.waits.keys()]) this.finish(id, "stopped");
-    this.emit({ kind: "status" });
-    this.listeners.clear(); this.membership.clear();
-    return true;
+    this.wake();
   }
   private requireWritable() {
-    if (this.stopped) throw Error("This workspace was released, so this change can't be saved here.");
+    if (this.suspended) throw Error("This workspace was released, so this change can't be saved here.");
     if (!this.writable() || !this.opened) throw Error("This workspace is open elsewhere, so this change can't be made here.");
   }
 }
