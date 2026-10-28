@@ -163,6 +163,44 @@ test("lost-lease comparison permits release when trimming leaves the normal save
   writer.retire();
 });
 
+test("unchanged lost-lease release uses the successful quota-fallback plan", () => {
+  jest.useFakeTimers();
+  const workspace = { ...freshWorkspace(), history: fullHistory(initialRecipe()) }, storage = memoryStorage();
+  const normal = fitWorkspace(workspace, STUDIO_DOCUMENTS), limit = Math.floor(normal.size * .6);
+  let canWrite = true, attempts = 0;
+  const writer = new WorkspacePersistence({ key, writable: true, model: STUDIO_DOCUMENTS, capture: () => workspace, canWrite: () => canWrite,
+    storage: { setItem: (name, text) => {
+      attempts++;
+      if (text.length > limit) throw Object.assign(Error("Quota exceeded"), { name: "QuotaExceededError" });
+      storage.setItem(name, text);
+    } } });
+  writer.activate(); expect(writer.flush()).toBe(true);
+  const written = storage.stored.get(key)!, savedAttempts = attempts;
+  expect(savedAttempts).toBeGreaterThan(1); expect(written.length).toBeLessThanOrEqual(limit);
+  expect(written).not.toBe(normal.encoded);
+  writer.request(); canWrite = false;
+  expect(writer.flushForRelease()).toBe(true);
+  expect(attempts).toBe(savedAttempts); expect(storage.writes()).toBe(1); expect(storage.stored.get(key)).toBe(written);
+  writer.retire(); expect(jest.getTimerCount()).toBe(0);
+});
+
+for (const direction of ["increased", "decreased"] as const) test(`unchanged lost-lease release keeps the saved plan when reservation ${direction}`, () => {
+  jest.useFakeTimers();
+  const workspace = { ...freshWorkspace(), history: fullHistory(initialRecipe()) }, storage = memoryStorage();
+  const budget = fitWorkspace(workspace, STUDIO_DOCUMENTS).size, reservation = Math.floor(budget * .5);
+  let canWrite = true, reads = 0, reserved = direction === "increased" ? 0 : reservation;
+  const writer = new WorkspacePersistence({ storage, key, writable: true, model: STUDIO_DOCUMENTS, budget,
+    capture: () => workspace, canWrite: () => canWrite, reserved: () => { reads++; return reserved; } });
+  writer.activate(); expect(writer.flush()).toBe(true);
+  const written = storage.stored.get(key), savedReads = reads;
+  reserved = direction === "increased" ? reservation : 0;
+  expect(fitWorkspace(workspace, STUDIO_DOCUMENTS, budget - reserved).encoded).not.toBe(written);
+  writer.request(); canWrite = false;
+  expect(writer.flushForRelease()).toBe(true);
+  expect(reads).toBe(savedReads); expect(storage.writes()).toBe(1); expect(storage.stored.get(key)).toBe(written);
+  writer.retire(); expect(jest.getTimerCount()).toBe(0);
+});
+
 // ---- CORE-02: realistic scale ----
 
 function eightLayerRecipe(): Recipe {

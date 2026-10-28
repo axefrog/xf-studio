@@ -1,5 +1,5 @@
 import type { DocumentModel } from "./collection-workspace";
-import { fitWorkspace, WORKSPACE_STORAGE_BUDGET, type WorkspacePlan } from "./workspace-budget";
+import { encodeWorkspacePlan, fitWorkspace, WORKSPACE_STORAGE_BUDGET, type WorkspacePlan } from "./workspace-budget";
 import type { WorkspaceState as LookWorkspaceState } from "./workspace-state";
 import type { WorkspaceState as MakeupWorkspaceState } from "./makeup-workspace";
 type WorkspaceState = LookWorkspaceState | MakeupWorkspaceState;
@@ -39,8 +39,8 @@ export class WorkspacePersistence {
   /** The exact text last written; an unchanged workspace is never rewritten. */
   private written?: string;
   private lastSize = 0;
-  /** The plan the last write fitted: the next budget search starts there (CORE-41). */
-  private lastPlan?: WorkspacePlan;
+  /** Exact plan that produced `written`; also a search hint for the next ordinary save (CORE-41). */
+  private savedPlan?: WorkspacePlan;
   constructor(private options: { storage: WorkspacePersistencePort; key: string; writable: boolean;
     restoreError?: string; restoreWarning?: string; capture(): WorkspaceState; delayMs?: number; budget?: number;
     /** What else in the same storage counts against the budget now (the outbox's keys, profiles design §2.2). */
@@ -74,9 +74,10 @@ export class WorkspacePersistence {
   flushForRelease(): boolean {
     if (this.options.canWrite?.() !== false) return this.flush();
     if (this.saveState === "clean") return true;
-    if (this.saveState !== "requested" || this.written === undefined) return false;
+    const { written, savedPlan } = this;
+    if (this.saveState !== "requested" || written === undefined || savedPlan === undefined) return false;
     try {
-      if (fitWorkspace(this.options.capture(), this.options.model, this.budget(), this.lastPlan).encoded === this.written) {
+      if (encodeWorkspacePlan(this.options.capture(), savedPlan, this.options.model) === written) {
         this.saveState = "clean";
         return true;
       }
@@ -107,7 +108,7 @@ export class WorkspacePersistence {
     // it (other keys share the quota), fit a smaller budget before reporting that autosave stopped.
     let quota = false, budget = this.budget();
     for (let attempt = 0; attempt < 12; attempt++) {
-      const fitted = fitWorkspace(state, this.options.model, budget, this.lastPlan);
+      const fitted = fitWorkspace(state, this.options.model, budget, this.savedPlan);
       // Unchanged content is not rewritten, so status or view refreshes cannot cause writes.
       if (fitted.encoded === this.written) { this.saveState = "clean"; return true; }
       try {
@@ -119,7 +120,7 @@ export class WorkspacePersistence {
         budget = Math.min(budget, Math.floor(fitted.size * 0.75));
         continue;
       }
-      this.written = fitted.encoded; this.lastSize = fitted.size; this.lastPlan = fitted.plan;
+      this.written = fitted.encoded; this.lastSize = fitted.size; this.savedPlan = fitted.plan;
       this.saveState = "clean";
       this.publish(fitted.trimmed || fitted.overBudget
         ? { kind: "nearly-full", message: SAVE_MESSAGES.nearlyFull }
