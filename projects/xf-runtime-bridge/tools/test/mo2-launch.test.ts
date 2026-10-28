@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "./helpers.ts";
-import { createMo2Launcher, mo2Failure, mo2LogAppended, mo2LogCursor, windowsArgument, type Mo2Port } from "../testing/host.ts";
+import { createMo2Launcher, mo2Failure, mo2ProcessQuery, mo2LogAppended, mo2LogCursor, windowsArgument, type Mo2Port } from "../testing/host.ts";
 
 const spec = { exe: "C:\\mods\\O'Brien MO2\\ModOrganizer.exe", profile: "Test profile", executable: "Game", arguments: "-skipStartScreen" };
 function fake(states = ["", "starting", "ready"]) {
@@ -46,8 +46,8 @@ test("an existing starting MO2 is awaited without starting a second instance", a
 });
 test("window wait is bounded, with no game forwarding on timeout", async () => {
   const f = fake(["starting"]);
-  expect((await createMo2Launcher(f.port).launch(spec)).error).toContain("30 seconds");
-  expect(f.time()).toBe(30_000);
+  expect((await createMo2Launcher(f.port).launch(spec)).error).toContain("2 minutes");
+  expect(f.time()).toBe(120_000);
   expect(f.forwarded).toHaveLength(0);
 });
 test("WMI failure does not forward", async () => {
@@ -108,4 +108,18 @@ test("missing, truncated and large logs are tolerated with a bounded tail", () =
   writeFileSync(path, "x".repeat(100_000) + "\nError 2 ERROR_FILE_NOT_FOUND");
   expect(mo2LogAppended(path, null).length).toBeLessThanOrEqual(65536);
   expect(mo2LogAppended(path, null)).toEndWith("ERROR_FILE_NOT_FOUND");
+});
+
+// The fake port above never runs PowerShell, which hid two launch bugs (29 Oct): "MO2 not running" exited 1,
+// and a forward-slash fixture path never matched Get-Process's backslash path. These run the real query.
+const runPs = (command: string) => Bun.spawnSync(["powershell", "-NoProfile", "-NonInteractive", "-Command", command]);
+test.skipIf(process.platform !== "win32")("the MO2 process query exits 0 with no output when MO2 isn't running", () => {
+  const r = runPs(mo2ProcessQuery("Z:/no-such-folder/xf-test/ModOrganizer.exe"));
+  expect(r.exitCode).toBe(0);
+  expect(r.stdout.toString().trim()).toBe("");
+});
+test.skipIf(process.platform !== "win32")("the MO2 process query normalises slashes before comparing paths", () => {
+  expect(mo2ProcessQuery("F:/Games/MO2/ModOrganizer.exe")).toContain("[IO.Path]::GetFullPath($_.Path) -eq [IO.Path]::GetFullPath('F:/Games/MO2/ModOrganizer.exe')");
+  const r = runPs(String.raw`[IO.Path]::GetFullPath('F:/Games/MO2/ModOrganizer.exe') -eq [IO.Path]::GetFullPath('F:\Games\MO2\ModOrganizer.exe')`);
+  expect(r.stdout.toString().trim()).toBe("True");
 });
