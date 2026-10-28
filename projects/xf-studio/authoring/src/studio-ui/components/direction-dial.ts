@@ -180,7 +180,7 @@ export class DirectionDial {
     this.bar = new SizeBar({ label: options.label, target: this.dial, minHeight: DIAL_MIN_SIZE / ASPECT, defaultHeight: DIAL_DEFAULT_SIZE / ASPECT,
       maxHeight: () => this.fitted(Number.POSITIVE_INFINITY) / ASPECT, step: RESIZE_STEP / ASPECT, scale: ASPECT,
       valueText: (height, isDefault) => `${this.fitted(height * ASPECT)} pixels wide${isDefault ? ", default" : ""}`,
-      apply: () => this.applySize(), onResize: (_height, final) => this.options.onResize?.(this.shownSize, final) });
+      apply: () => this.applySize(), onResize: (_height, final) => this.options.onResize?.(this.shownSize, final) }, signal);
     this.grip = this.bar.element;
     this.grip.classList.add("dial-grip");
     const readout = (label: string, set: (value: number) => Direction) => new ReadoutField({ label, returnFocus: () => this.dial,

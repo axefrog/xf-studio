@@ -1,6 +1,6 @@
 // The component library's controls (UI-112): behaviour, states and accessibility of the components features compose, in the light DOM.
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
-import { installLightDom, lightEvent, uninstallLightDom, type LightElement } from "./light-dom";
+import { installLightDom, lightDocument, lightEvent, uninstallLightDom, type LightElement } from "./light-dom";
 
 beforeAll(() => installLightDom());
 afterAll(() => uninstallLightDom());
@@ -311,6 +311,62 @@ test("size bar: drag, keys, Home/End, double-click and Delete; bounded by the mi
   // A new bar under the same key starts at the kept height.
   key(bar.element, "ArrowDown");
   expect(new SizeBar({ label: "Notes", target: document.createElement("div") as unknown as HTMLElement, key: "test:notes", minHeight: 60, defaultHeight: 120 }).height).toBe(148);
+});
+
+for (const preAborted of [false, true]) test(`size bar retirement drops active resize without callbacks or persistence (pre-aborted: ${preAborted})`, async () => {
+  const { SizeBar } = await lib();
+  const { MemoryViewState, bindViewState } = await import("../src/studio-ui/view-state");
+  class Store extends MemoryViewState {
+    writes = 0;
+    override setSize(key: string, height: number | undefined) { this.writes++; super.setSize(key, height); }
+  }
+  const store = new Store(); store.setSize("test:retire", 180); store.writes = 0; bindViewState(store);
+  const life = new AbortController(), heard: unknown[] = [], captures = new Set<number>(); let applies = 0;
+  if (preAborted) life.abort();
+  const baseline = lightDocument.listenerCount("keydown");
+  const bar = new SizeBar({ label: "Notes", target: document.createElement("div"), key: "test:retire", minHeight: 60, defaultHeight: 120,
+    maxHeight: () => 300, apply: () => { applies++; }, onResize: (...args) => heard.push(args) }, life.signal);
+  const grip = bar.element as unknown as LightElement & { setPointerCapture(id: number): void; releasePointerCapture(id: number): void };
+  grip.setPointerCapture = id => { captures.add(id); };
+  grip.releasePointerCapture = id => { captures.delete(id); grip.dispatchEvent(lightEvent("lostpointercapture", { pointerId: id })); };
+  const pointer = (type: string, clientY: number) => grip.dispatchEvent(lightEvent(type, { button: 0, pointerId: 7, clientY }));
+  try {
+    pointer("pointerdown", 100); pointer("pointermove", 60);
+    expect(lightDocument.listenerCount("keydown")).toBe(baseline + (preAborted ? 0 : 1));
+    expect(grip.classList.contains("dragging")).toBe(!preAborted);
+    expect(bar.chosen).toBe(preAborted ? 180 : 140);
+    expect([applies, heard.length, store.writes]).toEqual(preAborted ? [0, 0, 0] : [2, 1, 0]);
+    const before = { applies, heard: [...heard] };
+    life.abort();
+    expect([lightDocument.listenerCount("keydown"), captures.size, bar.chosen, grip.classList.contains("dragging")]).toEqual([baseline, 0, 180, false]);
+    lightDocument.dispatchEvent(lightEvent("keydown", { key: "Escape" }));
+    for (const type of ["pointermove", "pointerup", "pointercancel", "lostpointercapture", "pointerdown"]) pointer(type, 250);
+    key(bar.element, "ArrowDown"); fire(bar.element, "dblclick");
+    bar.resizeTo(240, true); bar.reset(); bar.setChosen(260); bar.refresh();
+    expect({ applies, heard }).toEqual(before);
+    expect([store.writes, store.size("test:retire"), lightDocument.listenerCount("keydown")]).toEqual([0, 180, baseline]);
+  } finally { life.abort(); bindViewState(); }
+});
+
+test("direction dial retirement also releases its active nested size bar", async () => {
+  const { DirectionDial } = await lib();
+  const life = new AbortController(), resized: unknown[] = [], transaction = log();
+  const baseline = lightDocument.listenerCount("keydown");
+  const dial = new DirectionDial({ label: "Direction", transaction: transaction.t, onResize: (...args) => resized.push(args) }, life.signal);
+  dial.layout(600); dial.setSize(400);
+  const grip = dial.grip as unknown as LightElement;
+  const pointer = (type: string, clientY: number) => grip.dispatchEvent(lightEvent(type, { button: 0, pointerId: 7, clientY }));
+  try {
+    pointer("pointerdown", 100); pointer("pointermove", 80);
+    expect(lightDocument.listenerCount("keydown")).toBe(baseline + 1);
+    expect(resized.length).toBe(1);
+    const before = [...resized];
+    life.abort();
+    expect(lightDocument.listenerCount("keydown")).toBe(baseline);
+    lightDocument.dispatchEvent(lightEvent("keydown", { key: "Escape" }));
+    pointer("pointerup", 80); pointer("pointermove", 400); key(dial.grip, "ArrowDown"); fire(dial.grip, "dblclick");
+    expect(resized).toEqual(before); expect(transaction.calls).toEqual([]);
+  } finally { life.abort(); }
 });
 
 test("tree view with a size bar: six rows by default, the chosen height replaces maxRows, never past its rows or under the floor", async () => {

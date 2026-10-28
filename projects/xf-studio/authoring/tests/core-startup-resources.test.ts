@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { runInNewContext } from "node:vm";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { launch, startServer } from "../tools/cdp";
 import { CHROME, chromeInstalled } from "./webgl-harness";
 import { oracleTest } from "./optional-oracles";
@@ -7,13 +9,29 @@ import { STARTUP_RESOURCES, type StartupResourceCounts } from "./fixtures/startu
 import { DEFAULT_CHARACTER } from "../src/character/character-detail-request";
 import { FACIAL_ENDPOINT, FACIAL_STATE_SCHEMA } from "../src/platform/api/facial";
 import { prepareReleaseHead } from "./fixtures/startup-head-preparation";
+import { LocalSettingsStore } from "../src/setup/host/local-settings-store";
+import { packageToolPaths } from "../src/setup/host/local-settings-readiness";
+import { WolvenKitSetupHost } from "../src/setup/host/wolvenkit-setup-host";
+import { localToolsRoot } from "../src/host/package-server";
 
-const browserTest = oracleTest(chromeInstalled(), `Chrome is unavailable at ${CHROME} (set CHROME)`);
+function gameSetupAvailable(): boolean {
+  try {
+    const settings = new LocalSettingsStore().load().settings, paths = packageToolPaths(settings);
+    if (!paths.gamepath || !existsSync(join(paths.gamepath, "archive", "pc", "content"))) return false;
+    // Same configured/managed tool resolution as the disposable server, read-only (never install or prepare here).
+    return !!new WolvenKitSetupHost({ root: localToolsRoot(), configured: () => paths.wolvenkit }).usable();
+  } catch { return false; }
+}
+const chrome = chromeInstalled(), missingChrome = `Chrome is unavailable at ${CHROME} (set CHROME)`;
+const browserTest = oracleTest(chrome, missingChrome);
+const paintedTest = oracleTest(chrome && gameSetupAvailable(), chrome
+  ? "the real-head release proof needs configured game files and usable WolvenKit (Studio settings or XFS_PACKAGE_GAMEPATH/XFS_PACKAGE_WOLVENKIT)."
+  : missingChrome);
 const FACE = { schema: FACIAL_STATE_SCHEMA, rig: { phase: "unconfigured", reason: "Release fixture" },
   solver: { phase: "missing", reason: "Release fixture" }, expressions: { phase: "ready", count: 0 }, blink: { available: false }, samples: [] };
 
 for (const composition of ["normal", "empty"] as const) for (const partial of [false, true])
-  browserTest(`real ${composition} ${partial ? "partial startup" : "painted mount"} returns resources to baseline in the same page`, async () => {
+  (partial ? browserTest : paintedTest)(`real ${composition} ${partial ? "partial startup" : "painted mount"} returns resources to baseline in the same page`, async () => {
     const reservation = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
     const port = reservation.port!; reservation.stop(true);
     // Copy settings into an isolated host. Mounted rows require the coordinator's prepared game setup,
@@ -45,6 +63,16 @@ for (const composition of ["normal", "empty"] as const) for (const partial of [f
         // Reuse 13b's independent decoded-pixel gate, including its transparent-shell negative control.
         const { verifyShellPaint } = await import("./fixtures/startup-shell-paint");
         await verifyShellPaint(page);
+        await page.evaluate(`window.xfStudioShell.runtime.dock.reveal('lighting')`);
+        await page.waitFor(`document.querySelector('#studio .direction-dial .dial-grip')`);
+        const resizing = await page.evaluate(`(() => {
+          const grip = window.releaseResizeGrip = document.querySelector('#studio .direction-dial .dial-grip');
+          const before = window.xfsReleaseProbe.counts().listeners;
+          grip.dispatchEvent(new PointerEvent('pointerdown', { button: 0, pointerId: 7303, clientY: 100, bubbles: true }));
+          grip.dispatchEvent(new PointerEvent('pointermove', { pointerId: 7303, clientY: 80, bubbles: true }));
+          return { dragging: grip.classList.contains('dragging'), listeners: window.xfsReleaseProbe.counts().listeners - before };
+        })()`);
+        expect(resizing).toEqual({ dragging: true, listeners: 1 });
         await page.evaluate(`(() => {
           const rt = window.xfStudioShell.runtime;
           rt.feedback.toast('info', 'Release proof', 'Pending feedback');
@@ -85,19 +113,24 @@ for (const composition of ["normal", "empty"] as const) for (const partial of [f
         const probe = window.xfsReleaseProbe;
         const before = document.body.innerHTML, theme = document.documentElement.getAttribute('style'), activity = window.xfStudioShell?.runtime.feedback.log.length;
         const history = JSON.stringify(window.xfStudioPresentation?.authoring.historyTimeline());
+        const preferences = JSON.stringify(window.xfStudioShell?.runtime.port.preferences.snapshot());
         probe.watch();
         for (const row of probe.held) row.release();
         // New global input cannot wake a retired shell or write a history step.
         window.dispatchEvent(new Event('resize')); window.dispatchEvent(new Event('focus'));
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        for (const type of ['pointermove', 'pointerup', 'lostpointercapture'])
+          window.releaseResizeGrip?.dispatchEvent(new PointerEvent(type, { pointerId: 7303, clientY: 200, bubbles: true }));
         await probe.settle(); await probe.wait(650); await probe.settle();
         return { counts: probe.counts(), baseline: probe.baseline, writes: probe.writes, draws: probe.draws, deliveries: probe.deliveries, domWrites: probe.domWrites,
           dom: document.body.innerHTML === before, theme: document.documentElement.getAttribute('style') === theme,
           activity: window.xfStudioShell?.runtime.feedback.log.length === activity,
+          preferences: JSON.stringify(window.xfStudioShell?.runtime.port.preferences.snapshot()) === preferences,
           history: JSON.stringify(window.xfStudioPresentation?.authoring.historyTimeline()) === history, error: !!document.querySelector('.boot-error') };
       })()`) as { counts: StartupResourceCounts; baseline: StartupResourceCounts; writes: string[]; draws: string[]; deliveries: string[]; domWrites: string[];
-        dom: boolean; theme: boolean; activity: boolean; history: boolean; error: boolean };
-      expect(late).toMatchObject({ writes: [], draws: [], deliveries: [], domWrites: [], dom: true, theme: true, activity: true, history: true, error: false });
+        dom: boolean; theme: boolean; activity: boolean; preferences: boolean; history: boolean; error: boolean };
+      expect(late).toMatchObject({ writes: [], draws: [], deliveries: [], domWrites: [], dom: true, theme: true, activity: true, preferences: true, history: true, error: false });
       expect(late.counts).toEqual(late.baseline);
       expect(page.console.filter(line => ["error", "exception"].includes(line.type))).toEqual([]);
       console.log(JSON.stringify({ composition, partial, live, retired, late }));

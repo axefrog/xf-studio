@@ -112,15 +112,16 @@ export class SizeBar {
   readonly region: HTMLElement;
   private chosenHeight: number | undefined;
   private dragging: ((commit: boolean) => void) | null = null;
-  constructor(private readonly options: SizeBarOptions) {
+  constructor(private readonly options: SizeBarOptions, private readonly signal?: AbortSignal) {
     const stored = options.key ? viewState().size(options.key) : undefined;
     this.chosenHeight = stored !== undefined && Number.isFinite(stored) ? stored : undefined;
     this.element = h("div", { class: "size-bar", role: "separator", tabindex: "0", "aria-orientation": "horizontal", "aria-label": `Resize ${options.label}`,
       title: SIZE_BAR_TITLE });
     this.region = h("div", { class: "size-region" }, options.target, this.element);
-    this.element.addEventListener("pointerdown", event => this.drag(event));
-    this.element.addEventListener("keydown", event => this.key(event));
-    this.element.addEventListener("dblclick", event => { event.preventDefault(); this.reset(); });
+    this.element.addEventListener("pointerdown", event => this.drag(event), { signal });
+    this.element.addEventListener("keydown", event => this.key(event), { signal });
+    this.element.addEventListener("dblclick", event => { event.preventDefault(); this.reset(); }, { signal });
+    signal?.addEventListener("abort", () => this.dragging?.(false), { once: true });
     this.apply();
   }
   /** The height the person chose, or undefined for the default. */
@@ -142,6 +143,7 @@ export class SizeBar {
   private get panel() { return Math.max(this.minHeight, panelLimit(this.element, (this.element.offsetHeight || 12) + PANEL_RESERVE)); }
   /** Lay the region out at `height` and say it on the bar (the owner calls this after its content changes, when it passes `apply`). */
   refresh() {
+    if (this.signal?.aborted) return;
     const shown = this.height, max = Math.min(this.maxHeight, this.panel), k = this.options.scale ?? 1, say = (n: number) => String(Math.round(n * k));
     setAttr(this.element, "aria-valuemin", say(this.minHeight));
     setAttr(this.element, "aria-valuemax", say(Number.isFinite(max) ? Math.max(shown, Math.round(max)) : shown));
@@ -150,6 +152,7 @@ export class SizeBar {
     setAttr(this.element, "aria-valuetext", this.options.valueText ? this.options.valueText(shown, isDefault) : `${shown} pixels tall${isDefault ? ", default" : ""}`);
   }
   private apply() {
+    if (this.signal?.aborted) return;
     if (this.options.apply) this.options.apply();
     // Fitting: the region is as tall as its content up to the height, so rows that open later fill it without a new choice.
     else if (this.options.fit) this.options.target.style.maxHeight = `${this.wanted}px`;
@@ -161,6 +164,7 @@ export class SizeBar {
    * remembered. A grow that the region's content caps changes nothing.
    */
   resizeTo(requested: number, final: boolean, from: { chosen: number | undefined; shown: number } = { chosen: this.chosenHeight, shown: this.height }) {
+    if (this.signal?.aborted) return;
     const before = from.chosen ?? Math.max(this.minHeight, this.defaultHeight);
     const next = chooseHeight(requested, { chosen: before, shown: from.shown }, { min: this.minHeight, holds: this.maxHeight, panel: this.panel });
     const chosen = from.chosen === undefined && next === before ? undefined : next;
@@ -172,12 +176,14 @@ export class SizeBar {
   }
   /** Set the chosen height from the owner's own memory (a kept preference; `undefined`: the default), without telling it back. */
   setChosen(height: number | undefined) {
+    if (this.signal?.aborted) return;
     if (height === this.chosenHeight) return;
     this.chosenHeight = height;
     this.apply();
   }
   /** Back to the default height, forgetting the chosen one. */
   reset() {
+    if (this.signal?.aborted) return;
     this.dragging?.(true);
     if (this.chosenHeight === undefined) return;
     this.chosenHeight = undefined;
@@ -186,6 +192,7 @@ export class SizeBar {
     this.options.onResize?.(undefined, true);
   }
   private key(event: KeyboardEvent) {
+    if (this.signal?.aborted) return;
     if (event.key === "Delete" || event.key === "Backspace") { event.preventDefault(); this.reset(); return; }
     const step = this.options.step ?? SIZE_BAR_STEP;
     const next = event.key === "ArrowDown" ? this.height + step : event.key === "ArrowUp" ? this.height - step
@@ -195,15 +202,15 @@ export class SizeBar {
     this.resizeTo(next, true);
   }
   private drag(event: PointerEvent) {
-    if (event.button !== 0) return;
+    if (this.signal?.aborted || event.button !== 0) return;
     event.preventDefault();
     this.dragging?.(true);
-    const pointer = event.pointerId, y0 = event.clientY, from = { chosen: this.chosenHeight, shown: this.height };
+    const doc = document, pointer = event.pointerId, y0 = event.clientY, from = { chosen: this.chosenHeight, shown: this.height };
     try { this.element.setPointerCapture(pointer); } catch { /* Ends on release, a lost capture or a new press. */ }
     this.element.classList.add("dragging");
     const reserve = () => { this.element.style.marginBottom = `${Math.max(0, from.shown - this.height)}px`; };
     const move = (e: PointerEvent) => {
-      if (e.pointerId !== pointer) return;
+      if (this.signal?.aborted || e.pointerId !== pointer) return;
       this.resizeTo(snapHeight(from.shown + (e.clientY - y0), this.options.snap), false, from);
       reserve();
     };
@@ -212,9 +219,15 @@ export class SizeBar {
       this.dragging = null;
       this.element.removeEventListener("pointermove", move); this.element.removeEventListener("pointerup", up);
       this.element.removeEventListener("pointercancel", cancel); this.element.removeEventListener("lostpointercapture", up);
-      document.removeEventListener("keydown", escape, true);
+      doc.removeEventListener("keydown", escape, true);
       this.element.classList.remove("dragging");
       this.element.style.marginBottom = "";
+      if (this.signal?.aborted) {
+        // Retirement drops the transient resize without calling the owner's apply/onResize or writing view memory.
+        this.chosenHeight = from.chosen;
+        try { this.element.releasePointerCapture(pointer); } catch { /* The panel/capture may already have gone. */ }
+        return;
+      }
       if (!commit) {
         const changed = this.chosenHeight !== from.chosen;
         this.chosenHeight = from.chosen;
@@ -230,10 +243,10 @@ export class SizeBar {
     const cancel = (e: PointerEvent) => { if (e.pointerId === pointer) finish(false); };
     const escape = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); } };
     this.dragging = finish;
-    this.element.addEventListener("pointermove", move);
-    this.element.addEventListener("pointerup", up);
-    this.element.addEventListener("pointercancel", cancel);
-    this.element.addEventListener("lostpointercapture", up);
-    document.addEventListener("keydown", escape, true);
+    this.element.addEventListener("pointermove", move, { signal: this.signal });
+    this.element.addEventListener("pointerup", up, { signal: this.signal });
+    this.element.addEventListener("pointercancel", cancel, { signal: this.signal });
+    this.element.addEventListener("lostpointercapture", up, { signal: this.signal });
+    doc.addEventListener("keydown", escape, { capture: true, signal: this.signal });
   }
 }

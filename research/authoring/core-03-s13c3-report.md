@@ -1,6 +1,6 @@
 # CORE-03 slice 13c3 report
 
-Implemented from `73de0a0d` and committed by the coordinator as `46e905ec`. The review corrections below remain **uncommitted**. CORE-03 remains **High**. CPU validation passes; the integrated release proof needs a coordinator rerun after the reported mounted-listener failure. No 13d implementation is included.
+Implemented from `73de0a0d`; the implementation and browser-proof fixes are committed through `d91dd544`. The latest review corrections below remain **uncommitted**. CORE-03 remains **High**. CPU validation passes; the integrated release proof needs a coordinator rerun after the reported mounted-listener failure. No 13d implementation is included.
 
 ## Owners and release order
 
@@ -162,6 +162,37 @@ $env:XFS_REQUIRE_ORACLES = '1'
 
 Require all four rows, unchanged-page baseline and late-publication assertions, real head paint and a measured peak below 4 GB. GPU exposure is limited to camera controls connection/disconnection: scene-dispose, scene-runtimes and renderer-device rows. A manual detached-shell release with Control held is useful; no shader/texture/pixel algorithm changes or game check. Final checks: **0 broken links/source paths across 505 Markdown files**, **0 tracked-text or new-file private-path findings**, clean `git diff --check`, and eight LF-normalized snapshot files equal to HEAD. The checkpoint/wrap-up footprint scan reports **200.0 GB free on C**, rounded **0.0 GB** peak under a 1 GB guard; the unrelated inaccessible worktree scan remains incomplete. This correction creates no scratch/capture payload, retains nothing over 5 GB, and all owned test/check/guard processes have ended. All nine correction files remain uncommitted.
 
-**Knowledge used:** knowledge index and WebGL program linking (updated with source/CPU ownership evidence and browser limits); CORE-03 plan/as-built notes and 13c1/13c2 reports; architecture contract, UI architecture boundary, view-graph design, developer orientation and project/status/backlog context. The UI boundary's stale 13c2 public-signal wording is corrected. No game-engine fact was contradicted; integrated browser/GPU release evidence remains incomplete until coordinator execution.
 
-**Memory budget (coordinator measurement).** `tests/core-startup-resources.test.ts` peaks at about 5.3 GB under the memory guard: each painted case runs a real Studio server that prepares the head from game files plus Chrome with a WebGL context, and memory returns to about 1.5 GB between cases (no growth across cases, so not a leak). It therefore runs as its own coordinator step under `memory_guard.py --limit 6` with `XFS_REQUIRE_ORACLES=1`, and is excluded from the 4 GB suite batches; it skips cleanly without Chrome.
+**Memory budget (coordinator measurement).** `tests/core-startup-resources.test.ts` peaks at about 5.3 GB under the memory guard: each painted case runs a real Studio server that prepares the head from game files plus Chrome with a WebGL context, and memory returns to about 1.5 GB between cases (no growth across cases, so not a leak). It therefore runs as its own coordinator step under `memory_guard.py --limit 6` with `XFS_REQUIRE_ORACLES=1`, and is excluded from the 4 GB suite batches; painted rows skip without Chrome or configured game/WolvenKit readiness, while asset-free partial rows require only Chrome.
+
+## Review corrections after `d91dd544`
+
+Both Medium findings are fixed and left uncommitted:
+
+- `src/studio-ui/components/direction-dial.ts` passes its existing owner signal to the nested `SizeBar`. `src/studio-ui/components/size-bar.ts` bounds static and active pointer/document Escape handlers by that signal. Retirement first drops the active drag and handlers, clears transient grip state, restores only the private chosen value and releases capture. It calls neither owner `apply` nor `onResize`, and writes no view memory. Retained resize/reset/set/refresh calls refuse after abort. Ordinary commit/Escape/reset behaviour remains unchanged. These are the two authorised lifecycle-only component edits; no markup, style or style-guide edit.
+- `tests/ui-components.test.ts` adds three regressions: active resize retirement, pre-aborted construction and the actual DirectionDial → SizeBar path. They check original memory, independent writer/callback counts, document listener baseline, capture release, late Escape/pointer events and retained entry points.
+- `tests/core-startup-resources.test.ts` uses the existing `oracleTest` twice: Chrome alone gates partial starts; Chrome plus configured game files and usable configured/managed WolvenKit gates painted mounts. Read-only readiness uses the same settings, path and tool owners as the isolated server. A missing prerequisite skips normally and fails when `XFS_REQUIRE_ORACLES=1`; an available setup still must actually prepare and paint. Both painted rows now reveal the real lighting panel, arm its mounted dial grip, assert an extra document listener, then retire with resize active. Late Escape/pointer input must preserve preferences as well as the existing storage/history/DOM/draw checks. Resource instrumentation and all original assertions remain intact.
+- Plan, High CORE-03 row, UI lifecycle allowance and WebGL ownership knowledge are updated. The coordinator's approximately 5.3 GB measurement supersedes the earlier 3–3.5 GB estimate; the existing standalone 6 GB coordinator budget is unchanged.
+
+| Sequential 4 GB guarded gate | Result |
+|---|---|
+| Original component-owner regressions | **3 expected fail**, 45 filtered out, nine assertions, 34 ms, rounded **0.0 GB** peak. |
+| Corrected components and release fixture | **52 pass, 4 Chrome skips, 0 fail**, two files, 350 assertions, 768 ms, **0.2 GB** peak. |
+| Chrome-present/no-settings registration check | **2 painted skips, 0 fail**, 98 ms, rounded **0.0 GB** peak. A harmless existing executable stood in for Chrome and only painted names were selected; no browser/server/preparation ran. |
+| Same missing setup, required-oracle mode | **2 expected prerequisite failures**, six filtered out, 104 ms, rounded **0.0 GB** peak. Failures name game/WolvenKit readiness, before any browser/server/preparation. |
+| Final permitted targeted selection | **135 pass, 7 skips, 0 fail**, 17 files, **17 matching snapshots**, 1,264 assertions, **13.55 s**, **0.7 GB** peak. Includes import boundaries, bootstrap, view contributions and all CORE-03 parity/startup files. |
+
+No Chrome, GPU set, heavy gate or typecheck ran. Six final skips require Chrome; one requires private raster inputs. All eight retained snapshot files/hashes and the protected panel/binding/history APIs, catalogue IDs and 3/11 import allowances are unchanged. No bound-panel/capture implementation or root release-order change. CORE-03 remains High; 13d remains unchanged.
+
+Coordinator rerun from `projects/xf-studio/authoring/`, using the existing separately recorded browser budget:
+
+```powershell
+$env:XFS_REQUIRE_ORACLES = '1'
+& "$env:LOCALAPPDATA/Python/pythoncore-3.14-64/python.exe" ../../../tools/memory_guard.py --limit 6 -- bun test tests/core-startup-resources.test.ts
+```
+
+Require both resize-armed painted cases and both partial starts. A manual `?verify=1` check can hold the lighting resize grip through abort, then send Escape/release: no resize callback, preference write or surviving document listener. No shader, renderer or asset-decoding change; the affected browser row is the resource-release proof, with existing scene-dispose/renderer-device checks remaining coordinator-owned.
+
+Final checks: **0 broken links/source paths across 505 Markdown files**, **0 tracked or changed-file private-path findings**, clean `git diff --check`, and all eight normalized snapshot files and recorded SHA-256 hashes match HEAD. Checkpoint/wrap-up footprint: **199.6 GB free on C**, rounded **0.0 GB** peak under a 1 GB guard; the unrelated inaccessible worktree scan remains incomplete. No scratch folder or capture payload was created, no task data over 5 GB is retained, and all owned processes have ended. The nine correction files remain uncommitted. The pre-existing `public/style-guide.html` modification is untouched.
+
+**Knowledge used:** knowledge index and WebGL program linking (updated with source/CPU ownership evidence and browser limits); CORE-03 plan/as-built notes and 13c1/13c2 reports; architecture contract, UI architecture boundary, view-graph design, developer orientation and project/status/backlog context. The UI boundary's stale 13c2 public-signal wording is corrected. No game-engine fact was contradicted; integrated browser/GPU release evidence remains incomplete until coordinator execution. SizeBar retirement and oracle readiness findings are incorporated; the previous memory estimate is corrected to the coordinator measurement.
