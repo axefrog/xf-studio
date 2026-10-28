@@ -217,7 +217,7 @@ describe("0.8.9 the senses, the surfaces, the answer keys and the probes", () =>
     const probe = read("redscript-probes", "XFRuntimeBridgeProbeEvents.reds");
     expect(probe).toContain("if Equals(text, this.m_lastIndex) {");
     expect(probe).toContain("if Equals(text, this.m_lastCall) {");
-    expect((probe.match(/\\"attitude\\":" \+ XFJson\.Str\(XFProbeOut\.Attitude\(this\)\)/g) ?? []).length).toBe(2);
+    expect((read("redscript", "XFRuntimeBridgeWorldHooks.reds").match(/\\"attitude\\":" \+ XFJson\.Str\(XFProbeOut\.Attitude\(victim\)\)/g) ?? []).length).toBe(2);
     expect(JSON.stringify(findCommand("test.events")!.input)).toContain('"kinds"');
   });
 });

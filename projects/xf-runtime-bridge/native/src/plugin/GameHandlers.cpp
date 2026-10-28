@@ -2185,6 +2185,8 @@ void RegisterMethods(Dispatcher& aDispatcher)
     RegisterMethodsNpc(aDispatcher);
     RegisterInputChoices(aDispatcher);
     RegisterRecording(aDispatcher);
+    RegisterJournalTrack(aDispatcher);
+    worldevents::Register(aDispatcher, Get().worldEvents);
     RegisterIncidents(aDispatcher);
     RegisterSupervisor(aDispatcher);
     RegisterMethodsDm(aDispatcher);

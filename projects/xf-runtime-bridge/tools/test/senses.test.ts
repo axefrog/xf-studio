@@ -124,14 +124,15 @@ describe("the senses are read-only", () => {
     expect(code).not.toContain("CityAreaType");
   });
 
-  test("the three commands are read-only in the catalogue and each has refusals", () => {
-    expect(SENSES_COMMANDS.map((c) => c.name)).toEqual(["world.facts", "world.district", "player.status"]);
+  test("the four commands are read-only in the catalogue and each has refusals", () => {
+    expect(SENSES_COMMANDS.map((c) => c.name)).toEqual(["world.events", "world.facts", "world.district", "player.status"]);
     for (const command of SENSES_COMMANDS) {
       expect(command.permission, command.name).toBe("read");
       const listed = CATALOGUE.find((c) => c.name === command.name);
       expect(listed, command.name).toBeDefined();
       expect(listed!.refusals?.length, command.name).toBeGreaterThan(0);
-      expect(listed!.refusals).toContain("game_not_ready");
+      if (command.name === "world.events") expect(listed!.refusals).toContain("bad_params");
+      else expect(listed!.refusals).toContain("game_not_ready");
     }
   });
 });
@@ -309,7 +310,7 @@ describe("the senses through the self-test host", () => {
   });
 
   test("the catalogue and the docs name both refusals: game_loading (the gate) and game_not_ready (the script)", () => {
-    for (const command of SENSES_COMMANDS) {
+    for (const command of SENSES_COMMANDS.filter(c => c.name !== "world.events")) {
       expect(command.description, command.name).toMatch(/game_loading/);
       expect(command.description, command.name).toMatch(/game_not_ready/);
     }

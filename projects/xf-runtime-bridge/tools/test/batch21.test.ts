@@ -301,7 +301,7 @@ describe("0.8.7 the pin mark, the save lock's notice, the probes", () => {
 
   test("the probes: their scripts live apart from the main ones (staged only in the -writes package), every native is declared as registered, and each test method is refused without the test hooks", () => {
     expect(readdirSync(join(projectDir, "redscript")).some((f) => /Probe/.test(f))).toBe(false);
-    expect(readdirSync(join(projectDir, "redscript-probes")).filter(f => f.endsWith(".reds")).sort()).toEqual(["XFRuntimeBridgeProbeEvents.reds", "XFRuntimeBridgeProbePersist.reds", "XFRuntimeBridgeProbeSave.reds"]);
+    expect(readdirSync(join(projectDir, "redscript-probes")).filter(f => f.endsWith(".reds")).sort()).toEqual(["XFRuntimeBridgeProbeEvents.reds", "XFRuntimeBridgeProbeModule.reds", "XFRuntimeBridgeProbePersist.reds", "XFRuntimeBridgeProbeSave.reds"]);
     const declared = read("redscript", "Natives.reds");
     for (const line of [
       "public static native func XFBridge_SaveRefused(ours: Bool) -> Bool",
@@ -316,8 +316,11 @@ describe("0.8.7 the pin mark, the save lock's notice, the probes", () => {
       expect(handlers).toContain(`RequireTestHooks("${method}");`);
       expect(findCommand(method)?.description).toContain("only in the -writes package");
     }
-    // No probe hook calls into the game from the plugin: the redscript pushes records; XFBridge_Event refuses without the hooks.
-    expect(read("native", "src", "plugin", "Natives.cpp")).toContain("if (!state.config.allowTestHooks || !probes::KindOk(what) || raw.size() > 4096)");
+    // Native ingress separates all-build world bookkeeping from the legacy gated probe ring.
+    const ingress = read("native", "src", "plugin", "Natives.cpp");
+    expect(ingress).toContain("if (!probes::KindOk(what) || raw.size() > 4096 || JsonNestingDepth(raw, 8) > 8)");
+    expect(ingress).toContain("if (!state.config.allowTestHooks) return;");
+    expect(ingress.indexOf('if (parsed.value("world_feed", false))')).toBeLessThan(ingress.indexOf("if (!state.config.allowTestHooks) return;"));
     // Spoiler-safe: the dialogue and journal records carry ids, states and counts, never text.
     const events = read("redscript-probes", "XFRuntimeBridgeProbeEvents.reds");
     expect(events).not.toMatch(/localizedName|\.title\b|GetText\(|ShowDialogLine/);

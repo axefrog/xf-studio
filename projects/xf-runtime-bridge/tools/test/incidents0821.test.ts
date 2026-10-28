@@ -81,7 +81,8 @@ describe("0.8.21 the sampler in the autonomous build", () => {
     for (const variant of ["default", "diagnostic", "writes"]) {
       const text = packageScripts(projectDir, variant, false).map(s => s.text).join("\n");
       expect(text).not.toContain("XFBridge_IncidentSightPlan");
-      expect(text).not.toContain("XFIncidentTap");
+      expect(text).not.toContain("public abstract class XFIncidentTap");
+      expect(text).toContain('@if(ModuleExists("XFRuntimeBridge.Autonomous"))');
     }
     const text = autonomous.map(s => s.text).join("\n");
     expect(text).toContain("public static native func XFBridge_IncidentSightPlan() -> String");

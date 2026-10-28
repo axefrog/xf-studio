@@ -1,6 +1,7 @@
 #pragma once
 #include "core/InputChoices.hpp"
 #include "core/Recording.hpp"
+#include "core/WorldEvents.hpp"
 #include "core/Supervisor.hpp"
 #include "selftest/SimNpc.hpp"
 namespace xfb::selftest
@@ -18,6 +19,7 @@ private:
     input::Ops Ops();
     input::Service m_service;
     recording::Service m_recording;
+    worldevents::Feed m_worldEvents;
     supervisor::Service m_supervisor;
     Dispatcher& m_dispatcher;
     SimNpc& m_npc;
@@ -27,6 +29,7 @@ private:
     std::function<uint64_t()> m_connection;
     bool m_hooks;
     uint64_t m_recordTick = 0;
+    uint32_t m_trackedJournal = 0;
     bool m_changed = true, m_modal = true, m_confirmation = false, m_offered = false;
     int m_generation = 100;
 };

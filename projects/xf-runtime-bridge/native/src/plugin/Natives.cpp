@@ -19,6 +19,7 @@
 #include <Windows.h>
 
 #include <chrono>
+#include <cmath>
 
 #include "core/Win32.hpp"
 #include "core/Writes.hpp"
@@ -669,6 +670,7 @@ void InkEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, i
         *aOut = false;
     }
     Guarded("XFBridge_InkEvent", [&] {
+        if (kind.Length() > 40 || data.Length() > 4096) return;
         const auto what = ToStd(kind);
         if (!inkui::InkEventKindOk(what))
         {
@@ -837,7 +839,11 @@ void SaveAnyway(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, RED4ext::CS
 }
 
 // XFBridge_Event(kind: String, data: String) -> Bool   (0.8.7, test probes: one record into the probe ring, test.events).
-// Refused (false) unless [bridge] allow_test_hooks; data must be a JSON object of at most 4 KiB.
+// 0.8.25: marked passive messages use their independent all-build feed; legacy probes retain allow_test_hooks.
+// JSON caps at 4 KiB/depth 8 before parsing or copying; all work here is native bookkeeping.
+thread_local std::string g_worldAdmission;
+thread_local double g_worldAdmissionUntil = 0;
+thread_local uint64_t g_worldAdmissionWorld = 0;
 void ProbeEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut, int64_t)
 {
     RED4ext::CString kind;
@@ -853,7 +859,7 @@ void ProbeEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut,
         auto& state = Get();
         const auto what = ToStd(kind);
         const auto raw = ToStd(data);
-        if (!state.config.allowTestHooks || !probes::KindOk(what) || raw.size() > 4096)
+        if (!probes::KindOk(what) || raw.size() > 4096 || JsonNestingDepth(raw, 8) > 8)
         {
             return;
         }
@@ -862,6 +868,41 @@ void ProbeEvent(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, bool* aOut,
         {
             parsed = json{{"bad_json", Sanitize(raw, 200)}};
         }
+        if (parsed.value("world_admit", false))
+        {
+            g_worldAdmission.clear();
+            const auto admissionSource = recording::Now();
+            if (state.config.bridgeEnabled && state.bridge && !state.bridge->GetDispatcher().IsKilled() && state.scriptLayer.Ready() && state.worldEvents.Admit(what, admissionSource)) {
+                g_worldAdmission = what; g_worldAdmissionUntil = std::floor(admissionSource) + 1;
+                g_worldAdmissionWorld = state.scriptLayer.Describe().value("detaches", uint64_t{0});
+                if (aOut) *aOut = true;
+            }
+            return;
+        }
+        if (parsed.value("world_feed", false))
+        {
+            if (!state.config.bridgeEnabled || !state.bridge || state.bridge->GetDispatcher().IsKilled()) return;
+            if (what != "session" && !state.scriptLayer.Ready()) return;
+            const auto epoch = state.worldEvents.CaptureEpoch(what, parsed, [&state] {
+                return state.scriptLayer.Describe().value("detaches", uint64_t{0});
+            });
+            if (!state.scriptLayer.Ready()) parsed["game_time_s"] = nullptr;
+            if (what == "death") {
+                const auto incident = TakeWorldIncident(parsed.value("incident_token", std::string()));
+                parsed.erase("incident_token"); parsed["incident_id"] = incident.empty() ? json(nullptr) : json(incident);
+            }
+            const auto source = recording::Now();
+            const bool admitted = g_worldAdmission == what && source < g_worldAdmissionUntil && epoch.world == g_worldAdmissionWorld;
+            g_worldAdmission.clear();
+            if (auto event = state.worldEvents.Push(what, std::move(parsed), source, epoch, admitted))
+            {
+                (*event)["event"] = "world." + what;
+                RecordingIngress("events", SerializeJson(*event));
+                if (aOut) *aOut = true;
+            }
+            return;
+        }
+        if (!state.config.allowTestHooks) return;
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
         if (state.scriptLayer.Ready() && (what.starts_with("choice.") || what.starts_with("input.photo.")))
             InputService().Observe(what, parsed);
@@ -901,7 +942,7 @@ void PinDrawn(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aOut
 }
 
 // XFBridge_ProbeFlags() -> Int32   (0.8.7, test probes: 1 the hooks are on ([bridge] allow_test_hooks), 2 the stim tap, 4 the
-// save-identity probe's BeforeSave write armed, 8 the autonomous build, 16 the incident taps on; 0 without the test hooks).
+// save-identity probe's BeforeSave write armed, 8 the autonomous build, 16 the incident taps on; 32 the passive feed).
 void ProbeFlags(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aOut, int64_t)
 {
     aFrame->code++; // skip ParamEnd
@@ -920,6 +961,7 @@ void ProbeFlags(RED4ext::IScriptable*, RED4ext::CStackFrame* aFrame, int32_t* aO
             }
 #endif
         }
+        if (state.config.bridgeEnabled && state.bridge && !state.bridge->GetDispatcher().IsKilled()) flags |= 32;
     });
     if (aOut)
     {

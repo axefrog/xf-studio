@@ -2,6 +2,7 @@
 #include "core/Win32.hpp"
 #include "core/Lifecycle.hpp"
 #include "core/Params.hpp"
+#include "core/JournalTrack.hpp"
 namespace xfb::selftest
 {
 namespace { double Now() { return static_cast<double>(win32::MonotonicMs()) / 1000.0; } }
@@ -9,6 +10,37 @@ SimInput::SimInput(Dispatcher& d, SimNpc& npc, EventLog& events, bool hooks, std
                    std::function<uint64_t()> world, std::function<bool()> live, std::function<uint64_t()> connection, const Session& session)
     : m_service(events), m_dispatcher(d), m_npc(npc), m_context(std::move(context)), m_world(std::move(world)), m_live(std::move(live)), m_connection(std::move(connection)), m_hooks(hooks)
 {
+    bool journalEnabled = false;
+#ifdef XFB_AUTONOMOUS_TEST_HOOKS
+    journalEnabled = hooks;
+#endif
+    journal::RegisterTrack(d, journalEnabled, [this](const journal::Entry& entry, const std::string&) {
+        if (!m_live()) throw MethodError("game_loading", "Simulation gate closed");
+        const uint32_t hash = entry.path == "quests/fixture/quest_a" ? 1001 : entry.path == "quests/fixture/quest_b" ? 1002 : entry.path.empty() ? entry.hash : 0;
+        if (hash != 1001 && hash != 1002) throw MethodError("bad_params", "No active simulated journal quest matches entry");
+        if (hash == m_trackedJournal) throw MethodError("precondition_failed", "Choose a different entry");
+        const auto previous = m_trackedJournal; m_trackedJournal = hash;
+        nlohmann::json data{{"what", "tracked"}, {"hash", hash}, {"path", hash == 1001 ? "quests/fixture/quest_a" : "quests/fixture/quest_b"}, {"path_complete", true}, {"state", 1}, {"game_time_s", 120}, {"simulated", true}};
+        const auto epoch = m_worldEvents.CaptureEpoch("journal", data, m_world);
+        if (auto event = m_worldEvents.Push("journal", std::move(data), recording::Now(), epoch)) {
+            (*event)["event"] = "world.journal";
+            m_recording.Ingress("events", SerializeJson(*event), recording::Now(), epoch.world, m_connection(), m_recordTick);
+        }
+        return nlohmann::json{{"submitted", true}, {"requested_hash", hash}, {"previous_hash", previous ? nlohmann::json(previous) : nlohmann::json(nullptr)}, {"tracked_hash", hash}, {"simulated", true}};
+    });
+    worldevents::Register(d, m_worldEvents);
+    d.Register({"selftest.world.event", Access::Write, RunOn::BridgeThread, "Simulated producer fixture, never registered by the retail plugin", [this](const MethodContext& c) {
+        if (!m_hooks) throw MethodError("test_hooks_off", "Fixture gate closed");
+        params::RequireOnly(c.params, {"kind", "data"});
+        const auto kind = params::CheckText(c.params, "kind", 16).value_or("");
+        auto data = c.params.value("data", nlohmann::json::object()); data["simulated"] = true;
+        const auto epoch = m_worldEvents.CaptureEpoch(kind, data, m_world);
+        const auto event = m_worldEvents.Push(kind, std::move(data), recording::Now(), epoch);
+        if (!event) throw MethodError("bad_params", "Unknown kind, invalid data or rate refusal");
+        auto record = *event; record["event"] = "world." + kind;
+        m_recording.Ingress("events", SerializeJson(record), recording::Now(), m_world(), m_connection(), m_recordTick);
+        return record;
+    }});
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
     d.Register({"game.lifecycle.probe", Access::Read, RunOn::BridgeThread, "Read-only lifecycle plan with unavailable simulated UI observer.", [this, &events](const MethodContext& c) {
         if (!m_hooks) throw MethodError("test_hooks_off", "Lifecycle probe requires test hooks.");

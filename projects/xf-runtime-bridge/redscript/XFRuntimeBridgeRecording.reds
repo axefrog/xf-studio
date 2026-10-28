@@ -5,10 +5,7 @@ module XFRuntimeBridge
 public abstract class XFRecording {
   // The same TimeSystem route as XFWorld.SetTime, independent of photo mode's time-of-day slider.
   public static func GameTimeSeconds() -> String {
-    let time = GameInstance.GetTimeSystem(GetGameInstance());
-    if !IsDefined(time) { return "null"; }
-    let now = time.GetGameTime();
-    return IntToString(GameTime.GetSeconds(now));
+    return XFWorldOut.GameTimeSeconds();
   }
   // Read only the puppet/record already resolved by this sample. No display-name native or localisation lookup.
   public static func ActorIdentity(puppet: ref<ScriptedPuppet>) -> String {

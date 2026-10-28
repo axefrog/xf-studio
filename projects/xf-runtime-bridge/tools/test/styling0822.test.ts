@@ -538,8 +538,8 @@ describe("0.8.22 documentation hooks", () => {
     expect(page).toContain("`CheckboxSelectedBg`");
   });
 
-  test("the version is 0.8.24 in the build and the tools", () => {
-    expect(read("native", "CMakeLists.txt")).toMatch(/VERSION 0\.8\.24/);
-    expect(JSON.parse(read("package.json")).version).toBe("0.8.24");
+  test("the version is 0.8.25 in the build and the tools", () => {
+    expect(read("native", "CMakeLists.txt")).toMatch(/VERSION 0\.8\.25/);
+    expect(JSON.parse(read("package.json")).version).toBe("0.8.25");
   });
 });

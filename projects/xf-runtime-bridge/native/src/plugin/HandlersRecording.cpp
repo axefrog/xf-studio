@@ -85,12 +85,33 @@ void TickRecording(bool ready)
     ops.guard = Guard;
     ops.sample = [](const std::string& channel, const std::vector<std::string>& actors) {
         if (channel == "supervisor") return nlohmann::json{{"valid", true}, {"event", "supervisor.coverage"}, {"continuous_contact", false}, {"no_contact_proof", false}};
+        if (channel == "events") return nlohmann::json{{"valid", true}, {"event", "world.coverage"}, {"feed", Get().worldEvents.Read({{"limit", 1}})["coverage"]}};
         if (channel == "incidents") return IncidentCoverage(); // 0.8.20: native bookkeeping only, no game read
         RED4ext::CString name(channel.c_str());
         std::string joined;
         for (const auto& a : actors) joined += (joined.empty() ? "" : ",") + a;
         RED4ext::CString whos(joined.c_str());
-        return ScriptCall("XFRecording", "Sample", {"String", "String"}, {&name, &whos}, "source-recorder");
+        auto& feed = Get().worldEvents;
+        const auto epoch = channel == "v" ? feed.CaptureEpoch("time", nlohmann::json::object(), World) : worldevents::Epoch{};
+        static worldevents::ClockJumps clock;
+        nlohmann::json sample;
+        try { sample = ScriptCall("XFRecording", "Sample", {"String", "String"}, {&name, &whos}, "source-recorder"); }
+        catch (...) {
+            // A failed V sample breaks continuity: no jump may be inferred across it.
+            if (channel == "v") clock.Observe(nlohmann::json(), recording::Now(), epoch, Recorder().SamplingRun());
+            throw;
+        }
+        if (channel == "v") {
+            const auto after = feed.CaptureEpoch("time", nlohmann::json::object(), World);
+            const auto source = recording::Now();
+            if (auto data = clock.Observe(epoch.world == after.world && epoch.session == after.session ? sample : nlohmann::json(), source, epoch, Recorder().SamplingRun())) {
+                if (auto event = feed.Push("time", std::move(*data), source, epoch)) {
+                    (*event)["event"] = "world.time";
+                    RecordingIngress("events", SerializeJson(*event));
+                }
+            }
+        }
+        return sample;
     };
     Recorder().Tick(recording::Now(), World(), Connection(), live, s.runningTicks.load(), ops);
 #else

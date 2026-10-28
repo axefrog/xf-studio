@@ -187,6 +187,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "inventory.equip": [...INVENTORY, "timeout"],
   "inventory.list": ["unavailable", "game_not_ready"],
   "test.save.delay": ["test_hooks_off"],
+  "test.journal.track": ["test_hooks_off", "bad_params", "precondition_failed", "game_loading", "game_not_ready"],
   "test.events": ["test_hooks_off"],
   "test.save.identity": ["test_hooks_off", "game_not_ready"],
   "test.companion.probe": ["test_hooks_off", "not_in_this_package", "companion_running", "failed"],
@@ -228,6 +229,7 @@ export const REFUSALS: Readonly<Record<string, readonly string[]>> = {
   "cyberware.unequip": [...INVENTORY, "arms_drawn", "not_added_by_bridge"],
   "world.state": ["game_not_ready"],
   // The senses for the Story Engine (catalogueSenses.ts): game_not_ready on the main menu and during a load.
+  "world.events": ["bad_params"],
   "world.facts": ["game_not_ready", "unavailable"],
   "world.district": ["game_not_ready", "no_district", "unavailable"],
   "player.status": ["game_not_ready", "not_in_gameplay"],

@@ -13,6 +13,7 @@ std::string RecordingIdentity(const std::string& channel); // the active run's i
 bool RecordingIngress(const std::string& channel, const std::string& payload);
 // 0.8.20 (HandlersIncidents.cpp): the incident taps' observations and ticks (XFBridge_IncidentSeen), whether the taps are on
 // (XFBridge_ProbeFlags bit 16), and the recorder's incidents-channel coverage sample.
+std::string TakeWorldIncident(const std::string& token);
 bool IncidentSeen(const std::string& payload);
 bool IncidentAdmit(const std::string& evidence, const std::string& key);
 bool IncidentTapOn();

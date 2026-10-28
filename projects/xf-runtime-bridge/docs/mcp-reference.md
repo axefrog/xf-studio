@@ -2,7 +2,7 @@
 
 # XF Runtime Bridge MCP tool reference
 
-Every tool the XF Runtime Bridge MCP server publishes: 164 tools, 92 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
+Every tool the XF Runtime Bridge MCP server publishes: 166 tools, 93 of which change the game. The [MCP guide](mcp.md) explains installing the server, the safety model and a worked session; this page is generated from the command catalogue, so it always matches what the server lists.
 
 Tool names are the catalogue's command names with dots as underscores (`photo.camera.set` is `photo_camera_set`). Every tool's description, parameters and refusals are written for the person using the AI client as much as for the model. A successful answer is JSON text with the `result`, an `undo` when the tool changed something, and a correlation id (`cid`) that matches the bridge's logs; captures also return a small preview image. A refusal is an error result with a plain sentence, the code in brackets and the correlation id.
 
@@ -18,14 +18,14 @@ Tool names are the catalogue's command names with dots as underscores (`photo.ca
 - [Player](#player) (8)
 - [Behaviours](#behaviours) (6)
 - [Live direction](#live-direction) (26)
-- [World](#world) (9)
+- [World](#world) (10)
 - [Wardrobe, clothing and cyberware](#wardrobe-clothing-and-cyberware) (8)
 - [XF Finish Showroom](#xf-finish-showroom) (5)
 - [NPC direction](#npc-direction) (17)
 - [Capture and the agent's view](#capture-and-the-agents-view) (9)
 - [Saves](#saves) (3)
 - [Overlay and in-game UI](#overlay-and-in-game-ui) (4)
-- [Other tools](#other-tools) (19)
+- [Other tools](#other-tools) (20)
 - [Refusal codes](#refusal-codes)
 
 ## Permission classes
@@ -35,7 +35,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | Class | Label | Tools | Changes the game | What it covers | Game-side switch |
 |---|---|---|---|---|---|
 | `display` | Draw on the canvas | 3 | Yes | Changes only XF canvas drawing, without game writes; allowed on observer connections. | Draws only XF canvas primitives; allowed on observer connections and needs no game write gate. |
-| `read` | Look | 60 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
+| `read` | Look | 61 | No | Reads what the game is doing, or takes a screenshot of its window. Changes nothing. | Always allowed while the bridge is on. |
 | `notify` | Show messages in the game | 5 | No: it shows or moves the bridge's own messages and panel | Shows short messages to the player in the game (the ink panel while the HUD shows, the XF box (the small box with the yellow heading) in photo mode and menus, the CET line (one line with a coloured dot at the far top left) when neither can draw; none on a loading screen), and shows, hides or moves the ink panel. Changes nothing in the game; the messages fade by themselves. | Always allowed while the bridge is on, read-only builds included. |
 | `write-photo` | Control photo mode | 16 | Yes | Opens and closes photo mode and changes its camera, lights, expression and on-screen menu. Nothing outlives photo mode. | `allow_writes = true` and `photo` in `allow_write_classes` (on by default once writes are allowed). |
 | `write-world` | Change the world | 6 | Yes | Changes the in-game time of day or stops time, and places XF map pins (a test feature). Undo by setting it back or removing the pins. | `allow_writes = true` and `world` in `allow_write_classes` (on by default once writes are allowed). |
@@ -46,7 +46,7 @@ Each tool belongs to one class. The MCP server can withhold classes (`--read-onl
 | `write-player` | Move V | 8 | Yes | Moves and turns V (teleports with ground checks, glides along walkable paths), turns her view, crouches and stands, draws or holsters her weapon and opens menus. Reversible; the kill switch and loading a save undo it. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `player` listed by name (the test profile's build lists it). |
 | `write-npc` | Direct NPCs | 15 | Yes | Brings XF's own passers-by into the world near V and directs them and other NPCs close by: walking, following, lines of text and the game's own voice lines, where they look, their faces and gestures, and dialogue choices for V. Nothing is saved: releasing them, the kill switch or loading a save removes them, and saving waits until they are gone. Story characters, vendors, police and children are never touched. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `npc` listed by name (the test profile's build lists it); spawning also needs Codeware and the -writes package's XF actor records (TweakXL). |
 | `write-dm` | Direct the scene | 21 | Yes | Brings props, vehicles and lights into the world near V and changes doors and vehicles; plays sounds and a vehicle's radio; shows message toasts and a real incoming call from a contact the player has, with subtitle lines; puts an XF quest in the HUD's tracker; shows the game's own banners and quest toasts; and arms watchers that run micro-actions inside the game without the agent. Nothing is saved: the answers' undos, the kill switch, the pause, a handover or loading a save take it all back, and saving waits until the spawned things and changed doors are gone. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `dm` listed by name (the test profile's build lists it); bringing things in and the subtitle lines also need Codeware, and the toolkit's scripts ship in the -writes package only. |
-| `act-player` | Act for V | 2 | Yes | Irreversible actions in the world for V: using devices, choosing dialogue, consuming items. Reserved: no command uses it yet. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name. Reserved: no tool uses it yet. |
+| `act-player` | Act for V | 3 | Yes | Explicit game actions for V without automatic undo, including tracking an existing journal quest in autonomous test builds. Off in the bridge's settings except in the XF test profile. | `allow_writes = true` and `act` listed by name; current tools also require the autonomous test build and test hooks. |
 | `control` | Stop the bridge | 7 | Only the bridge's own work: it stops or pauses it | Switches the game bridge off until it is reconnected from inside the game (test builds) or the game restarts. Always allowed. | Always allowed; every MCP configuration includes it. |
 
 ## Refusals any tool can give
@@ -826,7 +826,7 @@ No parameters.
 
 ### `test_record_start`
 
-**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Default channels include supervisor interventions and contacts: V car-hit entry plus landing/wall controller reports (ground included, other identity unknown), with partial uncommissioned coverage; absence is never full no-contact proof. Optional face (F) submissions and ui (U) consumer snapshots observe intent and actual widget state, never evaluated facial output. Optional incidents (0.8.20) records each witness.report (an incident V saw or heard, with its people, place, time and perception) as it closes, plus a one-second coverage heartbeat of the incident counters; passive, never a default channel. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. V carries game_time_s (total TimeSystem seconds, unavailable if the clock cannot be read). First samples emit actor.identity records with entity, character record, affiliation, crowd and the record display-name key, once per entity per run/world, capped at 2048; actor_identity_omitted counts attempts beyond the cap. Manifest start_at/start_sync and each chunk sync map QPC to UTC, with uncertainty_ms. Stop and drain before another start.
+**Start source recording.** Autonomous -writes test build and allow_test_hooks only. One bounded owner samples fresh V, selected actors and camera on 100 ms game-update deadlines. Default channels include supervisor interventions and contacts: V car-hit entry plus landing/wall controller reports (ground included, other identity unknown), with partial uncommissioned coverage; absence is never full no-contact proof. Optional face (F) submissions and ui (U) consumer snapshots observe intent and actual widget state, never evaluated facial output. Optional incidents (0.8.20) records each witness.report (an incident V saw or heard, with its people, place, time and perception) as it closes, plus a one-second coverage heartbeat of the incident counters; passive, never a default channel. Optional events (0.8.25) copies each retained world.events envelope at ingress, plus a coverage heartbeat; no polling, no default channel. Optional subtitles and voice channels record callback events with 1 Hz coverage heartbeats; voice means covered script requests, never audibility. Reports achieved cadence, missed deadlines, QPC source times, age and drops; never resamples the NPC cache. V carries game_time_s (total TimeSystem seconds, unavailable if the clock cannot be read). First samples emit actor.identity records with entity, character record, affiliation, crowd and the record display-name key, once per entity per run/world, capped at 2048; actor_identity_omitted counts attempts beyond the cap. Manifest start_at/start_sync and each chunk sync map QPC to UTC, with uncertainty_ms. Stop and drain before another start.
 
 - **Command:** `test.record.start`, the bridge method `test.record.start`
 - **Permission:** Look (`read`)
@@ -836,7 +836,7 @@ No parameters.
 
 | Parameter | Type | Allowed | Description |
 |---|---|---|---|
-| `channels` | array of string | 1 to 10 items; each `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts`, `supervisor`, `incidents` | Source channels to sample |
+| `channels` | array of string | 1 to 11 items; each `v`, `actors`, `camera`, `subtitles`, `voice`, `face`, `ui`, `contacts`, `supervisor`, `incidents`, `events` | Source channels to sample |
 | `actors` | array of string | at most 16 items; each matches `^[ap][0-9]{1,15}$` | Selected returned actor or pick handles |
 | `rate_hz` | integer | exactly 10 | Source target (10 only) |
 | `duration_s` | integer | 1 to 1800 | Maximum recording lifetime |
@@ -1972,6 +1972,22 @@ Read the world's state, probe the ground and streaming around V, and set the clo
 | `blend_s` | number | 0 to 60 | Blend time, 0 to 60 seconds. Default 2. |
 | `cycle` | boolean | `true`, `false` | Give the weather back to the game's own cycle (after setting name, if given). |
 
+### `world_events`
+
+**Read the passive world event feed.** Bounded read-only feed in every build, also during loads. since is an inclusive sequence cursor; resume at next, including across filtered rows. Kinds: session, death (including defeated and knockdown), combat, heat, dialogue, journal, fact, call, district, vehicle (mount/unmount/theft), vehicle.acquired, time (menu skip or inferred recorder-sample jump). Other clock jumps require active V recording; no new poll. Inference compares contiguous valid samples in one run/world/session, with a threshold above max(300 game seconds, 60 times real elapsed seconds) and a 30-second maximum gap; it does not establish the cause. Each carries QPC s, nullable game_time_s, world_generation, session_counter and dropped since its kind's last kept event. 2048 entries, 20 admissions per kind per QPC second; 100 records and 48 KiB per page. missed and evicted expose retention loss; dropped counts rate and contention loss. Codeware supplies early session/load/save callbacks. Without it coverage.session_callbacks is script_layer_only, with no early load/start or save notifications. Dialogue copies at most two hubs/four choices/48 characters and marks truncation; partner is unavailable because the checked hub schema provides no entity. Journal paths cap at 16 segments and mark path_complete. Source/offline until commissioned. Optional recorder events channel carries these same envelopes; game.catchup includes them in channels.events. Cursors restart with the bridge process/session.
+
+- **Command:** `world.events`, the bridge method `world.events`
+- **Permission:** Look (`read`)
+- **Changes the game:** No
+- **Undo:** nothing to undo
+- **Refusals:** [`bad_params`](#refusal-bad-params)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `since` | integer | 0 to 1000000000000 | Inclusive cursor returned as next |
+| `limit` | integer | 1 to 100 | Page size, also bounded to 48 KiB |
+| `kinds` | array of string | at most 12 items; each `session`, `death`, `combat`, `heat`, `dialogue`, `journal`, `fact`, `call`, `district`, `vehicle`, `vehicle.acquired`, `time` | Filter to these event families |
+
 ### `world_facts`
 
 **Read quest facts in a batch.** Reads many named quest facts in one call: facts (a list of at most 128 names) and/or preset. The preset main_story is the 93 main-story facts of the 2.31 quest data (research/story-engine/main-story-facts.json; the answer also groups them by category), final_boards the 29 the game's final boards read. Names are letters, digits, _ and . only. A fact the game never set reads 0, the same as one set to 0. Read only; world_state reads up to 16 facts beside the clock and weather. With no world to read it is refused game_loading (the bridge's gate, on the main menu, between sessions and during a load) or, if the gate is open but the game has no world yet, game_not_ready.
@@ -3021,6 +3037,26 @@ Tools not yet sorted into an area above.
 | `diagnostics_open` | boolean | `true`, `false` | Open (true) or close (false) the DIAGNOSTICS header. |
 | `press` | string | `pause_changes`, `resume_changes` | Press the window's Pause changes or Resume changes button (test builds only). |
 | `undo` | integer | 1 to 9007199254740991 | Put back what that request (its id) changed; takes no other option. |
+
+### `test_journal_track`
+
+**Track an existing journal quest.** Autonomous -writes test build only, with allow_test_hooks and the act write class. Selects an existing active journal quest or objective, by unique journal path or unsigned 32-bit hash. Does not create entries or change quest state/counters. Choose an entry different from the current tracked one. Returns submitted plus requested_hash, previous_hash and the observed tracked_hash; verify the journal tracked event through world_events. State and Counter callbacks remain opportunistic during normal play. Normal builds and disabled test hooks refuse this command. Optional when compares live conditions immediately before each native changing frame; unmet conditions return precondition_failed with observed state. Autonomous test candidate only. Multi-step actions can refuse after earlier steps; external key routes cannot provide this guarantee.
+
+- **Command:** `test.journal.track`, the bridge method `test.journal.track`
+- **Permission:** Act for V (`act-player`)
+- **Changes the game:** Yes
+- **Undo:** Track previous_hash with this command if it is still active, or restore the previous tracked quest in the game journal. No automatic undo.
+- **Refusals:** [`test_hooks_off`](#refusal-test-hooks-off), [`bad_params`](#refusal-bad-params), [`precondition_failed`](#refusal-precondition-failed), [`game_loading`](#refusal-game-loading), [`game_not_ready`](#refusal-game-not-ready), [`precondition_unavailable`](#refusal-precondition-unavailable)
+
+| Parameter | Type | Allowed | Description |
+|---|---|---|---|
+| `entry` (required) | string or integer | 1 to 256 characters; or 0 to 4294967295 | Existing quest/objective journal path or Uint32 hash |
+| `when` | object | the fields below | Conditions compared on each executing game frame |
+| `when.phase` | string | `gameplay`, `photo_mode`, `main_menu`, `menu`, `paused`, `character_menu` | Required phase |
+| `when.vehicle` | boolean | `true`, `false` | V must be mounted/unmounted |
+| `when.combat` | boolean | `true`, `false` | V must be in/out of combat |
+| `when.photo_mode` | boolean | `true`, `false` | Photo mode must be active/inactive |
+| `when.spawned` | array of integer | 1 to 16 items; each 1 to 2147483647 | Returned spawn handles that must still resolve |
 
 ### `supervisor_set`
 

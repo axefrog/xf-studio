@@ -137,8 +137,14 @@ bool IncidentAdmit(const std::string& aEvidence, const std::string& aKey)
 #endif
 }
 
+namespace { thread_local worldevents::IncidentReceipt g_worldReceipt; }
+std::string TakeWorldIncident(const std::string& token)
+{
+    return g_worldReceipt.Take(token, World());
+}
 bool IncidentSeen(const std::string& aPayload)
 {
+    g_worldReceipt.Clear();
 #ifdef XFB_AUTONOMOUS_TEST_HOOKS
     if (!IncidentTapOn() || !Get().scriptLayer.Ready())
     {
@@ -190,6 +196,11 @@ bool IncidentSeen(const std::string& aPayload)
         return false;
     }
     auto outcome = Incidents().Observe(*observation, wall);
+    const auto token = wire.find("world_event");
+    if (outcome.accepted && wire.value("ev", std::string()) == "death" && token != wire.end() && token->is_string() && token->get_ref<const std::string&>().size() <= 32)
+    {
+        g_worldReceipt.Set(token->get<std::string>(), outcome.incident, World());
+    }
     Deliver(std::move(outcome.reports));
     return outcome.accepted;
 #else

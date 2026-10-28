@@ -51,6 +51,8 @@ public:
     // Who is recording: "r<run>.w<world>.c<connection>" while an active run wants the channel, else empty. A stop and a
     // fast restart between two looks always change it, so an observer can drop state that belonged to the old run.
     std::string Identity(const std::string& channel) const;
+    // For an adapter already executing ops.sample: sampled channels are not in the event-ingress mask.
+    uint64_t SamplingRun() const { return m_identityRun.load(); }
     bool Ingress(const std::string& channel, const std::string& payload, double now,
                  uint64_t world, uint64_t connection, uint64_t tick);
 private:
